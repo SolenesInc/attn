@@ -734,20 +734,20 @@ task source:
   --brief <text>              delegate a short task; it becomes the seed's body
   --brief-file <path>         delegate a task file; it becomes the seed's body
 
-placement:
-  (no flags)                 add a pane to the source workspace; Git repositories
-                             get a new worktree automatically, and a
-                             non-repository source is refused — place it with a
-                             flag below or pass --no-worktree
-  --new-workspace            create a workspace using the source directory
-  --workspace <id>           add a pane to an existing workspace
-  --cwd <path>               create a workspace at an existing directory
-  --worktree <branch>        choose the new worktree's branch
-  --no-worktree              reuse the resolved checkout instead
+workspace placement (where the pane appears):
+  (no flags)                 add a pane to the source workspace
+  --new-workspace            create a workspace for the delegated pane
+  --workspace <id>           add a pane to an existing workspace; this does not
+                             choose that workspace's repository
+  --cwd <path>               create a workspace and use this checkout/repository
 
-worktree options:
-  combine with any placement (current, --workspace, or --new-workspace);
-  combining with --cwd creates a worktree of the repo at that directory
+repository placement (where the agent runs):
+  (no flags)                 create a worktree from the source checkout; a
+                             non-repository source is refused — pass --cwd or
+                             --no-worktree
+  --no-worktree              reuse the source checkout; with --workspace, only
+                             the pane moves to the target workspace
+  --worktree <branch>        choose the new worktree's branch
   --repo <path>              main repository (defaults to the repository the
                              target workspace's sessions are in)
   --from <ref>               branch or ref to start from

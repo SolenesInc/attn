@@ -153,6 +153,32 @@ func (d *Daemon) defaultDelegationEffort(agent, effort string) string {
 	return ""
 }
 
+func resolveDelegationRepository(path, flagName string) (string, error) {
+	root, err := git.GetRepoRoot(path)
+	if err != nil {
+		return "", fmt.Errorf("%s %s is not in a Git repository", flagName, git.CanonicalizePath(path))
+	}
+	return git.ResolveMainRepoPath(root), nil
+}
+
+func validateDelegationRepositoryInputs(cwd string, request *protocol.DelegateWorktreeRequest) error {
+	if request == nil || strings.TrimSpace(cwd) == "" || strings.TrimSpace(protocol.Deref(request.Repo)) == "" {
+		return nil
+	}
+	cwdRepo, err := resolveDelegationRepository(cwd, "--cwd")
+	if err != nil {
+		return err
+	}
+	explicitRepo, err := resolveDelegationRepository(protocol.Deref(request.Repo), "--repo")
+	if err != nil {
+		return err
+	}
+	if git.CanonicalizePath(cwdRepo) == git.CanonicalizePath(explicitRepo) {
+		return nil
+	}
+	return fmt.Errorf("repository placement conflict: --cwd resolves to %s, but --repo resolves to %s; remove --repo to branch from --cwd, or make both flags point to the same repository", cwdRepo, explicitRepo)
+}
+
 func delegationPlacement(msg *protocol.DelegateMessage) string {
 	placement := strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Placement)))
 	if placement != "" {
@@ -435,6 +461,9 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 	}
 	expectedPath = git.CanonicalizePath(expectedPath)
 	if _, statErr := os.Stat(expectedPath); statErr == nil {
+		if pathRepo, pathErr := resolveDelegationRepository(expectedPath, "--worktree-path"); pathErr == nil && git.CanonicalizePath(pathRepo) != git.CanonicalizePath(repo) {
+			return "", false, fmt.Errorf("repository placement conflict: selected repository resolves to %s, but --worktree-path resolves to %s; choose a worktree path from the selected repository or correct --repo/--cwd", repo, pathRepo)
+		}
 		wt := d.discoverWorktree(expectedPath)
 		if wt == nil || strings.TrimSpace(wt.Branch) != branch {
 			return "", false, fmt.Errorf("worktree path already exists and is not branch %q: %s", branch, expectedPath)
@@ -658,12 +687,21 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 				return nil, cwdErr
 			}
 			directory = validatedCwd
+			if repoErr := validateDelegationRepositoryInputs(directory, msg.Worktree); repoErr != nil {
+				return nil, repoErr
+			}
 		}
 		if directory == "" {
 			directory = source.Directory
 		}
 	default:
 		return nil, fmt.Errorf("unsupported placement %q", placement)
+	}
+
+	// A workspace places the pane, never the checkout: without a worktree or an
+	// explicit --cwd, the agent stays in the source session's checkout.
+	if msg.Worktree == nil && strings.TrimSpace(protocol.Deref(msg.Cwd)) == "" {
+		directory = source.Directory
 	}
 
 	if err := d.applyDefaultDelegationWorktree(msg, placement, workspaceID, directory, sessionID, name); err != nil {

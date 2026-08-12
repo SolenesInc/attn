@@ -117,6 +117,13 @@ If no existing workspace fits: no placement flag adds the session to the
 current workspace, `--new-workspace` creates a separate workspace from the
 source directory, and `--cwd` creates one at an existing directory.
 
+A workspace decides where the pane appears. It never decides which checkout the
+agent edits. `--workspace` with `--no-worktree` reuses the source session's
+current checkout, even when that workspace holds sessions from another
+repository. `--cwd` is the one flag that moves the checkout, and it creates a
+new workspace there. `attn delegate` refuses conflicting repository flags
+before an agent starts, and the error names both repositories it resolved.
+
 `attn list` marks sessions in hidden workspaces with `workspace_muted: true`.
 When the source session is the chief of staff, delegating into a muted existing
 workspace automatically unmutes it so the new agent is visible in the sidebar.
