@@ -19,7 +19,7 @@ func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
 		t.Fatalf("bare launch should append the always-on garden block: %v", off.Args)
 	}
 	offPrompt := argvValueAfter(off.Args, "--append-system-prompt")
-	if !strings.Contains(offPrompt, "attn seed plant") {
+	if !strings.Contains(offPrompt, "attn seed prime") {
 		t.Fatalf("bare launch system prompt missing the garden block: %q", offPrompt)
 	}
 	if strings.Contains(offPrompt, workflowGuidanceMarker) {

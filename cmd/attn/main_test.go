@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/transcript"
@@ -22,6 +23,8 @@ type fakeWorkspaceContextCheckoutClient struct {
 	failures int
 	calls    int
 	path     string
+	ready    *protocol.SeedReadyResult
+	readyErr error
 }
 
 func (f *fakeWorkspaceContextCheckoutClient) CheckoutWorkspaceContext(string, bool) (*protocol.WorkspaceContextResult, error) {
@@ -30,6 +33,10 @@ func (f *fakeWorkspaceContextCheckoutClient) CheckoutWorkspaceContext(string, bo
 		return nil, fmt.Errorf("source session not found")
 	}
 	return &protocol.WorkspaceContextResult{Path: f.path}, nil
+}
+
+func (f *fakeWorkspaceContextCheckoutClient) SeedReady(string, string, bool) (*protocol.SeedReadyResult, error) {
+	return f.ready, f.readyErr
 }
 
 func TestWritePrivateFileReplacesPublicFileWithOwnerOnlyPermissions(t *testing.T) {
@@ -513,6 +520,58 @@ func TestWorkspaceContextSessionStartOutputReturnsLastCheckoutError(t *testing.T
 	}
 	if output != "" {
 		t.Fatalf("hook output = %q, want empty", output)
+	}
+}
+
+func TestSessionStartContextsCarriesPrimeOnStartupAndCompact(t *testing.T) {
+	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "developer_instructions")
+	t.Setenv("ATTN_CHIEF_GUIDANCE", "")
+	ready := &protocol.SeedReadyResult{Seeds: []protocol.Seed{{ID: "s-ready1", Title: "ready now"}}}
+
+	for _, event := range []string{"startup", "compact"} {
+		t.Run(event, func(t *testing.T) {
+			c := &fakeWorkspaceContextCheckoutClient{path: "/tmp/context.md", ready: ready}
+			contexts, contextErr, primeErr := sessionStartContexts(c, "session-1", 1, 0)
+			if contextErr != nil || primeErr != nil {
+				t.Fatalf("SessionStart %s errors = (%v, %v)", event, contextErr, primeErr)
+			}
+			raw := hooks.SessionStartOutput(contexts...)
+			var output struct {
+				HookSpecificOutput struct {
+					HookEventName     string `json:"hookEventName"`
+					AdditionalContext string `json:"additionalContext"`
+				} `json:"hookSpecificOutput"`
+			}
+			if err := json.Unmarshal([]byte(raw), &output); err != nil {
+				t.Fatalf("SessionStart %s output is not JSON: %v", event, err)
+			}
+			if output.HookSpecificOutput.HookEventName != "SessionStart" {
+				t.Fatalf("SessionStart %s event = %q", event, output.HookSpecificOutput.HookEventName)
+			}
+			if got, want := output.HookSpecificOutput.AdditionalContext, strings.TrimSpace(seedPrimeFromReady(ready)); got != want {
+				t.Fatalf("SessionStart %s primer differs:\n%s", event, firstDifference(got, want))
+			}
+		})
+	}
+}
+
+func TestSessionStartContextsOutpostAddsNoPrimer(t *testing.T) {
+	const home = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	c := &fakeWorkspaceContextCheckoutClient{
+		readyErr: fmt.Errorf("seed garden is unavailable on this outpost; home is %s", home),
+	}
+	contexts, contextErr, primeErr := sessionStartContexts(c, "session-1", 1, 0)
+	if contextErr != nil {
+		t.Fatalf("workspace context error = %v", contextErr)
+	}
+	if primeErr == nil || !strings.Contains(primeErr.Error(), home) {
+		t.Fatalf("garden error = %v, want the home named", primeErr)
+	}
+	if output := hooks.SessionStartOutput(contexts...); output != "" {
+		t.Fatalf("outpost SessionStart output = %q, want no injected context", output)
+	}
+	if got := hooks.AgentInstructions("", false); got != hooks.GardenAwarenessGuidance() {
+		t.Fatalf("outpost launch pointer = %q, want exact Y", got)
 	}
 }
 

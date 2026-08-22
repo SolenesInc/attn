@@ -5,33 +5,15 @@ import (
 	"testing"
 )
 
-// The guide is where the craft lives; the references point here instead of
-// carrying it. It has to actually hold that craft, or the pointer is a dead end.
-func TestSeedGuideCarriesTheCraft(t *testing.T) {
+// Copy receipt for the text between BEGIN guide and END guide in
+// /Users/victor/.attn/crew/trellis/working/2026-08-21-eval-r1/trellis-sections.md.
+// normalizedCopyHash converts CRLF to LF and removes only surrounding LF bytes.
+func TestSeedGuideMatchesFinalMarkedBlock(t *testing.T) {
 	var b strings.Builder
 	writeSeedGuide(&b)
-	guide := b.String()
-	for _, section := range []string{
-		"WRITING A BODY",
-		"DELIVERABLE TYPES BEND THE SHAPE",
-		"ARTIFACTS",
-		"HANDOFFS AND STEERING",
-	} {
-		if !strings.Contains(guide, section) {
-			t.Fatalf("guide is missing %q", section)
-		}
-	}
-	for _, phrase := range []string{
-		"zero warm context",
-		"A verification contract.",
-		"Evidence decides when to harvest",
-		"attn seed attach",
-		"--handoff",
-		"attn agent msg",
-	} {
-		if !strings.Contains(guide, phrase) {
-			t.Fatalf("guide does not carry %q:\n%s", phrase, guide)
-		}
+	const want = "ceac0918d5b55f1a96e7d4f5d64c707b3088ad70c9ad20369735b238c76b9ce9"
+	if got := normalizedCopyHash(b.String()); got != want {
+		t.Fatalf("normalized BEGIN guide copy SHA-256 = %s, want %s", got, want)
 	}
 }
 

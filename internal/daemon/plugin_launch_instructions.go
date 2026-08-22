@@ -40,7 +40,6 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
 				NotebookRoot: root,
-				Garden:       d.gardenPrimeForLaunch(sessionID),
 				Crew:         d.crewPrimeForLaunch(sessionID),
 			}.Instructions(),
 			WorkspaceID:  workspaceID,
@@ -68,24 +67,12 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 		Content: hooks.Launch{
 			WorkspaceContextPath: result.Path,
 			InjectWorkflow:       parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
-			Garden:               d.gardenPrimeForLaunch(sessionID),
 			Crew:                 d.crewPrimeForLaunch(sessionID),
 		}.Instructions(),
 		WorkspaceID:     workspaceID,
 		ContextPath:     result.Path,
 		ContextRevision: result.CanonicalRevision,
 	}, rollback, nil
-}
-
-// gardenPrimeForLaunch is what a launching agent is primed with, or nil when
-// this daemon has no garden to prime from — an outpost, where every seed
-// command refuses, must not hand its agents a loop they cannot run.
-func (d *Daemon) gardenPrimeForLaunch(sessionID string) *hooks.GardenPrime {
-	prime, err := d.gardenPrime(sessionID)
-	if err != nil {
-		return nil
-	}
-	return prime
 }
 
 // crewPrimeForLaunch is the crew block for a plugin-driver launch, the same one

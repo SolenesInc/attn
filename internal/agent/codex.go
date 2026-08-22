@@ -408,7 +408,6 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 			NotebookRoot:         opts.NotebookRoot,
 			WorkspaceContextPath: opts.WorkspaceContextPath,
 			InjectWorkflow:       opts.InjectWorkflowGuidance,
-			Garden:               opts.Garden,
 			Crew:                 opts.CrewPriming,
 		},
 	)

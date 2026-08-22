@@ -1,0 +1,8 @@
+kind: changed
+area: garden
+change: >
+  Agents now learn the garden through `attn seed prime` at every session start
+  and context reset. Garden listings show plots by default, ready output keeps
+  plot structure visible, discovered work can record its origin, and every
+  lifecycle move refuses to take a live holder's seed unless `--force` is
+  explicit and recorded.

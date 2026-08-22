@@ -241,11 +241,6 @@ type SpawnOpts struct {
 	// driver's repository trust gate; interactive launches leave it false.
 	TrustWorkingDirectory bool
 
-	// Garden is what the launch resolved for the garden primer — the ready
-	// count, and the plot when this session was dispatched at a crown. Nil when
-	// the daemon had no answer: no garden reachable from here.
-	Garden *hooks.GardenPrime
-
 	// CrewPriming is the composed block that makes this session its crew member
 	// — charter, the freshest letter, the verbs of the member's home. The daemon
 	// composes it (and logs its size); empty for every session that is nobody.
@@ -270,14 +265,13 @@ func (o SpawnOpts) addDirArgs() []string {
 }
 
 // launchGuidance is the system-prompt block for this launch: chief guidance or
-// the workspace agent's, plus the garden primer. hasSelfMonitor is the driver's
-// own capability, which is why the driver composes rather than the caller.
+// the workspace agent's. hasSelfMonitor is the driver's own capability, which
+// is why the driver composes rather than the caller.
 func (o SpawnOpts) launchGuidance() string {
 	return hooks.Launch{
 		NotebookRoot:         o.NotebookRoot,
 		WorkspaceContextPath: o.WorkspaceContextPath,
 		InjectWorkflow:       o.InjectWorkflowGuidance,
-		Garden:               o.Garden,
 		Crew:                 o.CrewPriming,
 	}.Instructions()
 }
