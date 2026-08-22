@@ -51,11 +51,70 @@ A plan is a plot: the body is the plan, each child is one unit somebody can
 tend alone, and ` + "`blocks`" + ` is the only ordering. Leave children parallel unless
 one truly needs another's result; every edge is a wait.
 
+The body is read by whoever comes next with none of what you know now: an
+agent starting cold, or the user at the end of a long day. Both skim it to
+decide what to do and what to change. Every section survives a skim: the
+point first, short prose, the smallest picture that makes it clear. Lead
+with the choices the user would change on review (the data model, the
+interfaces, what people will see); the mechanical work goes last. A body is
+a review surface before it is a to-do list.
+
+The default shape, trimmed or grown as the work needs:
+
+- Goal. What done looks like, as an outcome. One paragraph.
+- Shape. The implementation shape in repo terms, not generic layers, as a
+  picture (below).
+- Data model and interfaces. Only when the work crosses a boundary: the
+  records, config, state and messages that cross it, and which side
+  creates, owns, or only reads each. Loose pseudocode beats exact types.
+- Boundaries. What each component owns and what it must not know about.
+- Decisions. Three to five, each with its reason: the choices that would
+  surprise the next implementer, or where a plausible alternative was
+  rejected.
+- Open questions. What is a blocker and needs the user, versus a call the
+  tender makes.
+
+A call stack is usually the cheapest picture with the most payoff: who calls
+whom, in what order, where the boundaries sit.
+
+    handleSubmit
+      createSession
+        persistPrompt
+        launchAgent
+      navigateToSession
+
+When the code exists, show what changes as a diff over its shape rather than
+before and after copies.
+
+    handleSubmit
+      createSession
+        persistPrompt
+    +   expandSkillMention
+        launchAgent
+
+Pick the picture by what the reader must see: a call stack for control flow
+and ownership; a shallow file tree with one-line responsibilities for a broad
+refactor; a component tree for UI; a mermaid sequence diagram for anything
+crossing a process, network or queue. Text trees and mermaid both render when
+the body is opened in attn. Show production and test wiring when they
+differ. One or two pictures is typical; a picture that needs studying has
+failed. Prose that restates a picture is waste: a sentence introduces it and
+stops. Put each picture next to the claim it supports, never in an appendix.
+Use pseudocode and small code examples freely when they tell the simpler
+story.
+
+The children are the steps. Their bodies follow the rules for any body and
+do not repeat the plan; they point at it. Their states are the progress, so
+the plan carries no checklist. When the work forces a deviation, take the
+conservative option, note it on the plot with what triggered it, and keep
+going; a silent deviation is how the next plan repeats the mistake. Deferred
+work is a seed, planted under the plot or beside it, not a paragraph.
+
     attn seed plot -f plan.json              all of it in one move; plan.json looks like
 
     {
       "title": "Search moves to the daemon",
-      "body": "Outcome: the app asks the daemon for search results... (the plan)",
+      "body": "# Search moves to the daemon\n\n## Goal\n... (the plan, as above)",
       "children": [
         {"title": "Daemon search endpoint", "body": "..."},
         {"title": "App calls the endpoint", "body": "...", "blocks": ["remove-the-client-index"]},
@@ -67,10 +126,11 @@ one truly needs another's result; every edge is a wait.
     attn delegate --brief "…" --plot <plot>  a tender for the whole plot; its ready
                                              answers from the plot, oldest first
     attn seed edit <id> -m "…"               the plan changed; say what in a note
+    attn open <plot>                         read it rendered, the way the user does
 
-A child's body follows the same rules as any body. The plot's body holds what
-the children share: the goal, the constraints, where the copy or the design
-lives.
+Before planting, check: can an implementer name the first files to edit from
+the body alone? Would a thirty-second skim of the headings and pictures give
+the goal and the shape? Is prose doing work a small tree would do better?
 
 WHAT DONE IS, BY DELIVERABLE
 
