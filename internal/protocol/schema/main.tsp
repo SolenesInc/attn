@@ -4391,6 +4391,9 @@ model SeedPlantMessage {
   // A crown to plant under: the seed is born part of that plot. Refused when
   // no such seed is planted.
   "part_of"?: string;
+  // A seed this work was discovered while tending. Refused before planting
+  // when no such seed is planted.
+  "discovered_from"?: string;
   // The crew member planting, free-string until the crew primitive lands.
   "member"?: string;
   "resume_session_id"?: string;
@@ -4592,6 +4595,9 @@ model SeedReadyMessage {
 
 model SeedReadyResult {
   "seeds": Seed[];
+  // Plot headers needed to nest a garden-wide ready answer. These are context,
+  // not ready pickups, so they do not count toward seeds.
+  "plots"?: Seed[];
   // What the answer was scoped to: garden | plot, and the crown's id when it
   // was a plot.
   "scope": string;
@@ -4620,10 +4626,9 @@ model SeedTransitionMessage {
   "reason"?: string;
   // The crew member asking, recorded as the tender on a claim.
   "member"?: string;
-  // Yes, take it from whoever holds it. A seed somebody else still holds is
-  // taken rather than moved, so every verb refuses without this; the CLI
-  // spells it --confirm. Ignored when nobody else holds the seed.
-  "confirm"?: boolean;
+  // Yes, act even though somebody else holds it. Ignored when nobody else
+  // holds the seed.
+  "force"?: boolean;
 }
 
 // SeedTransitionResultMessage replies to a WebSocket seed_transition,

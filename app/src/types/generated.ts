@@ -6360,6 +6360,7 @@ export interface SeedPlotResultObject {
 export interface SeedReadyResultObject {
     crown?:    SeedElement;
     handoffs?: Note[];
+    plots?:    SeedElement[];
     scope:     string;
     scope_id:  string;
     seeds:     SeedElement[];
@@ -6885,6 +6886,7 @@ export interface SeedNotesResult {
 export interface SeedPlantMessage {
     body?:              string;
     cmd:                SeedPlantMessageCmd;
+    discovered_from?:   string;
     member?:            string;
     part_of?:           string;
     resume_agent?:      string;
@@ -6964,6 +6966,7 @@ export enum SeedReadyMessageCmd {
 export interface SeedReadyResult {
     crown?:    SeedElement;
     handoffs?: Note[];
+    plots?:    SeedElement[];
     scope:     string;
     scope_id:  string;
     seeds:     SeedElement[];
@@ -7047,7 +7050,7 @@ export interface SeedShowResult {
 
 export interface SeedTransitionMessage {
     cmd:                SeedTransitionMessageCmd;
-    confirm?:           boolean;
+    force?:             boolean;
     member?:            string;
     reason?:            string;
     request_id?:        string;
@@ -17354,6 +17357,7 @@ const typeMap: any = {
     "SeedReadyResultObject": o([
         { json: "crown", js: "crown", typ: u(undefined, r("SeedElement")) },
         { json: "handoffs", js: "handoffs", typ: u(undefined, a(r("Note"))) },
+        { json: "plots", js: "plots", typ: u(undefined, a(r("SeedElement"))) },
         { json: "scope", js: "scope", typ: "" },
         { json: "scope_id", js: "scope_id", typ: "" },
         { json: "seeds", js: "seeds", typ: a(r("SeedElement")) },
@@ -17711,6 +17715,7 @@ const typeMap: any = {
     "SeedPlantMessage": o([
         { json: "body", js: "body", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("SeedPlantMessageCmd") },
+        { json: "discovered_from", js: "discovered_from", typ: u(undefined, "") },
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "part_of", js: "part_of", typ: u(undefined, "") },
         { json: "resume_agent", js: "resume_agent", typ: u(undefined, "") },
@@ -17762,6 +17767,7 @@ const typeMap: any = {
     "SeedReadyResult": o([
         { json: "crown", js: "crown", typ: u(undefined, r("SeedElement")) },
         { json: "handoffs", js: "handoffs", typ: u(undefined, a(r("Note"))) },
+        { json: "plots", js: "plots", typ: u(undefined, a(r("SeedElement"))) },
         { json: "scope", js: "scope", typ: "" },
         { json: "scope_id", js: "scope_id", typ: "" },
         { json: "seeds", js: "seeds", typ: a(r("SeedElement")) },
@@ -17813,7 +17819,7 @@ const typeMap: any = {
     ], "any"),
     "SeedTransitionMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedTransitionMessageCmd") },
-        { json: "confirm", js: "confirm", typ: u(undefined, true) },
+        { json: "force", js: "force", typ: u(undefined, true) },
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },

@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -63,6 +62,8 @@ func runSeed() {
 		runSeedLink(os.Args[2] == "unlink", args)
 	case "ready":
 		runSeedReady(args)
+	case "prime":
+		runSeedPrime(args)
 	case "guide":
 		runSeedGuide(args)
 	default:
@@ -76,17 +77,16 @@ func writeSeedHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn seed <command>
 
 A seed is the unit of work: one document, one short id, planted in the garden.
-Anything worth handing off, parking, or attributing is a seed; in-session
-scratch is not.
+Anything worth handing off, parking, or attributing is a seed.
 
 The garden lives at the home daemon. On an outpost every command here refuses,
 naming the home to run it on.
 
 commands:
-  plant "<title>" [-m <body>] [--part-of <crown>] [resume flags] [flags]
+  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [resume flags] [flags]
         plant a seed and print its id. -m takes markdown, or - to read stdin —
-        on a crown that body is the plan itself. --part-of plants it under a
-        crown, born part of that plot. --resume-session-id, --cwd and --agent
+        if the seed gains children, that body is the plot's plan. --part-of
+        plants it under a plot. --resume-session-id, --cwd and --agent
         together make a dead conversation resumable without a dispatch record.
 
   plot [-f <path>] [--json]
@@ -94,27 +94,28 @@ commands:
         {"title": …, "body": …, "children": [{"title": …, "body": …,
         "blocks": ["<sibling step slug>"]}]}. Children are parallel by
         default; blocks names the siblings a child holds back. Prints the
-        crown's id and each child's id and step slug.
+        plot's id and each child's id and step slug.
 
-  ls [--stale [--window <duration>]] [--tree] [--json]
-        the garden, newest first. --tree nests each seed under the crown it is
-        part of. --stale narrows to the open seeds whose log has not moved
+  ls [--stale [--window <duration>]] [--flat] [--json]
+        the garden, newest first, with children nested under their plot.
+        --flat prints one list. --stale narrows to open seeds whose log has not moved
         for the window (default %s) — a query for your judgment, never a
         reaper.
 
-  ready [--plot <crown> | --all] [--json]
+  ready [--plot <plot> | --all] [--json]
         what you can tend right now, oldest first: nothing open blocks it,
-        nobody is holding it, and it is not a crown — a plot's work is its
+        nobody is holding it, and it is not a plot — a plot's work is its
         children. With no flags the scope is the whole garden — unless this
-        session was dispatched at a crown, and then its plot; --all steps back
+        session was dispatched at a plot, and then that plot; --all steps back
         out to the garden.
 
-  link <a> blocks <b> | link <a> part-of <b>
+  link <a> blocks <b> | link <a> part-of <b> | link <a> discovered-from <b>
         relate two seeds. "a blocks b" keeps b out of ready until a closes;
-        "a part-of b" puts a in b's plot, and b is then the crown. A cycle is
-        refused, naming both seeds and the edge to remove.
+        "a part-of b" puts a under b; b is then a plot. "a discovered-from b"
+        records where work came from without ordering it. A structural cycle
+        is refused, naming both seeds and the edge to remove.
 
-  unlink <a> blocks <b>
+  unlink <a> blocks <b> | unlink <a> part-of <b> | unlink <a> discovered-from <b>
         remove the edge. Every link has one.
 
   show <id> [--json]
@@ -134,23 +135,23 @@ commands:
         set or clear the seed-owned fallback used when attn has no dispatch
         record for the conversation. The three identity fields move together.
 
-  tend <id> [--member <name>]
+  tend <id> [--member <name>] [--force]
         claim the seed and start growing it. One tender at a time: tending a
         seed somebody else still holds is refused, naming them, and takes
-        --confirm to go through anyway. The freshest handoff prints on the
+        --force to go through anyway. The freshest handoff prints on the
         claim, so picking a seed up primes you.
 
-  park <id>
+  park <id> [--member <name>] [--force]
         pause the seed deliberately — it goes dormant and lets go of its
         tender. Tending it again picks it back up.
 
-  harvest <id> -m "<what got done>"
+  harvest <id> -m "<what got done>" [--member <name>] [--force]
         close the seed as done. The reason is the point of the record.
 
-  wither <id> [-m "<why>"]
+  wither <id> [-m "<why>"] [--member <name>] [--force]
         close the seed as abandoned. Nobody is picking this up.
 
-  replant <id>
+  replant <id> [--member <name>] [--force]
         put the seed back in the pool — planted, unclaimed, ready for whoever
         is free. Reopens a closed seed, un-parks a dormant one, and hands back
         one being grown.
@@ -178,6 +179,10 @@ commands:
         print the craft: writing a body, deliverable types and what "done" is
         for each, artifacts, and handoffs and steering.
 
+  prime
+        print the garden primer injected when an agent session starts or its
+        context is reset.
+
   export <id> [--out <path>] [--json]
         write the seed's body to markdown, stamped as generated from the seed —
         the file to open, read and annotate. --out - writes to stdout; the
@@ -185,13 +190,14 @@ commands:
         edit the seed and export again, never the file.
 
 flags:
-  --part-of <crown>  plant under a crown (plant)
+  --part-of <plot>   plant under a plot (plant)
+  --discovered-from <seed>  record the seed this work came from (plant)
   --resume-session-id <id>  agent-native conversation id (plant, set-resume)
   --cwd <path>        directory to reopen in (plant, set-resume)
   --agent <name>      agent driver to reopen with (plant, set-resume)
   --clear             remove the fallback identity (set-resume)
-  --plot <crown>     scope a ready answer to one plot
-  --tree             nest a listing under its crowns
+  --plot <plot>      scope a ready answer to one plot
+  --flat             print a listing without nesting
   --stale            only open seeds whose log has not moved (ls)
   --window <d>       the stale window, like 72h or 14d (ls --stale)
   -f <path>          the plot payload to read (plot; default stdin)
@@ -201,8 +207,8 @@ flags:
   --repo <name>      the repository that path lives in (attach, detach)
   --notebook <id>    a Notebook document (attach, detach)
   --url <url>        anything reachable by URL (attach, detach)
-  --confirm          go through with a move that takes a seed from whoever
-                     still holds it (tend, park, harvest, wither, replant)
+  --force            act even though somebody else holds the seed; the log
+                     records it (tend, park, harvest, wither, replant)
   --member <name>    the crew member asking, recorded as planter, tender or
                      note author
   --session <id>     the session asking (defaults to ATTN_SESSION_ID)
@@ -215,31 +221,55 @@ func seedClient() *client.Client {
 	return client.New(config.SocketPath())
 }
 
-// gardenPrimeFromReady carries a flag-free ready answer into the launch primer.
-// The daemon already inferred the scope — plot when the session was dispatched
-// at a crown, the whole garden otherwise — so this is rendering, not policy.
-func gardenPrimeFromReady(ready *protocol.SeedReadyResult) *hooks.GardenPrime {
-	prime := &hooks.GardenPrime{Ready: len(ready.Seeds)}
-	if ready.Crown == nil {
-		return prime
-	}
-	crown := &hooks.CrownPrime{ID: ready.Crown.ID, Title: ready.Crown.Title, Body: ready.Crown.Body}
-	handoffs := make(map[string]protocol.SeedNote, len(ready.Handoffs))
-	for _, handoff := range ready.Handoffs {
-		if _, seen := handoffs[handoff.SeedID]; !seen {
-			handoffs[handoff.SeedID] = handoff
+const seedPrimeText = "attn keeps work as seeds in the garden. A seed is one unit of work: a short id like `s-7k3f9m`, a title, a markdown body, a state. A plot is a seed with children: its body is the execution plan, and the children are parallel unless a `blocks` edge orders them. Any seed can be a plot. Seed packets are templates for plots; if you are told to use packets, or the task calls for one, the attn skill says how they work.\n\nTrack work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant it before you start on it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. When it fell out of a seed you were working on, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.\n\nA delegated session reports to one seed: the seed planted for its brief, or the seed it was dispatched at with `--plot`. Flag-free `attn seed ready` answers from that seed's plot, a delegation started from it is planted under it, and its report lands on its log. Every other verb takes the id you give it.\n\nThe loop:\n\n    attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it; inside your plot when you report to one. A plot is never ready itself, its children are\n    attn seed ready --all            the same across the whole garden; use it to look past your plot\n    attn seed show <id>              body, state, tender, edges, children, freshest handoff\n    attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name\n    attn seed note <id> -m \"…\"       what happened and what you learned, tending it or not; --handoff addresses the next tender; --ring tells watchers to look\n    attn seed harvest <id> -m \"…\"    done; the reason is required and fits in 400 characters, the long version goes in a note\n    attn seed wither <id> [-m \"…\"]   abandoned, nobody will pick it up\n    attn seed park <id>              put down, claim released; tend it again to resume\n    attn seed replant <id>           a harvested or withered seed back to planted\n    attn seed plant \"<title>\" -m \"…\" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id\n\nTend, park, harvest, wither and replant all check who holds the seed: one held by a live session or a crew member refuses you by name, and `--force` acts anyway, with the log recording who forced it. A seed whose session ended is not held. `--member <name>` on any of these acts as a crew member instead of this session, and a member's claim never expires.\n\nPlans:\n\n    attn seed plot -f <file.json>    a whole plot in one move, - reads stdin: {\"title\": …, \"body\": …, \"children\": [{\"title\": …, \"body\": …, \"blocks\": [\"<sibling-slug>\"]}]}; a slug is the sibling's title lowercased, anything not an ASCII letter or digit becomes one dash; `attn seed guide` has a full example\n    attn seed link <a> blocks <b>    b waits until a closes; unlink removes the edge\n    attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time\n    attn seed link <a> discovered-from <b>    a fell out of working on b; a record, it never orders or blocks anything\n    attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list\n    attn seed edit <id> -m \"…\"       replace the body; say what changed in a note\n\nKeeping up:\n\n    attn seed notes <id>             the whole log, newest first\n    attn seed watch <id>             ring this session when the seed or anything in its plot moves; unwatch stops it\n    attn seed attach <id> --path <file.md> | --notebook <doc-id> | --url <url>    point the seed at a document where it already lives; detach removes the pointer\n    attn seed export <id> [--out <path>]    the seed and its log as one markdown file\n    attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it\n\nDelegating:\n\n    attn delegate --brief \"…\" --model <m>   starts a visible agent session the user can inspect and steer (not a native subagent), and plants a seed bound to it: the brief is its body, the delegate is its tender, its report lands on the seed's log\n        --plot <seed>                       dispatch at an existing seed instead of planting one; the delegate becomes its tender and reports to it\n        --brief-file <path>                 the brief from a file; --effort <level> sets reasoning where the agent supports it\n        --new-workspace | --workspace <id> | --cwd <path>    where it runs; --worktree <branch> gives it its own checkout\n    attn agent msg <seed-id> \"…\"            reaches whoever tends it now; an untended seed refuses by name\n    attn seed show <id>                     the delegate's report, once it lands; no need to watch the session\n\n`attn seed --help` has every flag. `attn seed guide` has how to write a body worth handing to somebody else."
+
+// seedPrimeFromReady renders the standing primer and the tail selected by the
+// exact flag-free ready answer the daemon returned.
+func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
+	var tail strings.Builder
+	switch {
+	case ready.Crown == nil:
+		switch len(ready.Seeds) {
+		case 0:
+			tail.WriteString("Nothing is ready now.")
+		case 1:
+			tail.WriteString("One seed is ready now.")
+		default:
+			fmt.Fprintf(&tail, "%d seeds are ready now.", len(ready.Seeds))
+		}
+	case ready.Crown.PlotProgress == nil:
+		fmt.Fprintf(&tail, "You were dispatched to work on seed `%s`, %q. Read it with `attn seed show %s`.",
+			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
+	case len(ready.Seeds) == 0:
+		fmt.Fprintf(&tail, "Nothing in this plot is ready now; its seeds are blocked, held, or done. `attn seed show %s` shows what blocks what.", ready.Crown.ID)
+	default:
+		fmt.Fprintf(&tail, "You were dispatched to work at plot `%s`, %q. Read the plan with `attn seed show %s`. Tend or plant anything, here or elsewhere.\n\nReady in this plot now, oldest first:\n",
+			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
+		handoffs := freshestHandoffs(ready.Handoffs)
+		for _, seed := range ready.Seeds {
+			fmt.Fprintf(&tail, "\n- `%s` %s", seed.ID, seed.Title)
+			if handoff, ok := handoffs[seed.ID]; ok && strings.TrimSpace(handoff.Body) != "" {
+				author := crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)
+				if author == "" {
+					author = "a previous tender"
+				}
+				fmt.Fprintf(&tail, "\n  handoff from %s: %s", author, strings.TrimSpace(handoff.Body))
+			}
 		}
 	}
-	for _, seed := range ready.Seeds {
-		line := hooks.SeedPrime{ID: seed.ID, Title: seed.Title}
-		if handoff, ok := handoffs[seed.ID]; ok {
-			line.Handoff = handoff.Body
-			line.HandoffAuthor = crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)
-		}
-		crown.ReadySeeds = append(crown.ReadySeeds, line)
+	return seedPrimeText + "\n\n" + tail.String() + "\n"
+}
+
+func runSeedPrime(args []string) {
+	f := newSeedFlags("prime")
+	if positionals := f.parse("prime", args); len(positionals) != 0 {
+		seedFail("prime", fmt.Errorf("takes no arguments, got %q", positionals[0]))
 	}
-	prime.Crown = crown
-	return prime
+	ready, err := seedClient().SeedReady(f.sessionID(), "", false)
+	if err != nil {
+		seedFail("prime", err)
+	}
+	fmt.Print(seedPrimeFromReady(ready))
 }
 
 func seedFail(verb string, err error) {
@@ -251,62 +281,64 @@ func seedFail(verb string, err error) {
 // best-effort: a headless caller with no session is a real case, and only the
 // commands that need a scope refuse it.
 type seedFlags struct {
-	fs       *flag.FlagSet
-	session  *string
-	member   *string
-	json     *bool
-	all      *bool
-	tree     *bool
-	stale    *bool
-	window   *string
-	plot     *string
-	partOf   *string
-	file     *string
-	message  *string
-	out      *string
-	limit    *int
-	handoff  *bool
-	ring     *bool
-	path     *string
-	repo     *string
-	notebook *string
-	url      *string
-	resumeID *string
-	cwd      *string
-	agent    *string
-	clear    *bool
-	confirm  *bool
+	fs             *flag.FlagSet
+	session        *string
+	member         *string
+	json           *bool
+	all            *bool
+	flat           *bool
+	stale          *bool
+	window         *string
+	plot           *string
+	partOf         *string
+	discoveredFrom *string
+	file           *string
+	message        *string
+	out            *string
+	limit          *int
+	handoff        *bool
+	ring           *bool
+	path           *string
+	repo           *string
+	notebook       *string
+	url            *string
+	resumeID       *string
+	cwd            *string
+	agent          *string
+	clear          *bool
+	force          *bool
 }
 
 func newSeedFlags(verb string) *seedFlags {
 	fs := flag.NewFlagSet("seed "+verb, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	return &seedFlags{
-		fs:       fs,
-		session:  fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)"),
-		member:   fs.String("member", "", "crew member planting this seed"),
-		json:     fs.Bool("json", false, "print the result as JSON"),
-		all:      fs.Bool("all", false, "the whole garden, overriding a dispatched session's plot"),
-		tree:     fs.Bool("tree", false, "nest seeds under the crown they are part of"),
-		stale:    fs.Bool("stale", false, "only open seeds whose log has not moved for the window"),
-		window:   fs.String("window", "", "the stale window, like 72h or 14d"),
-		plot:     fs.String("plot", "", "scope to one plot, by its crown"),
-		partOf:   fs.String("part-of", "", "plant under this crown"),
-		file:     fs.String("f", "", "the plot payload to read (- or empty reads stdin)"),
-		message:  fs.String("m", "", "the seed's body, as markdown (- reads stdin)"),
-		out:      fs.String("out", "", "file to write (- for stdout)"),
-		limit:    fs.Int("limit", 0, "how many log entries to read"),
-		handoff:  fs.Bool("handoff", false, "write this note to whoever tends the seed next"),
-		ring:     fs.Bool("ring", false, "ring the seed's watchers after this note lands"),
-		path:     fs.String("path", "", "a markdown document at this path"),
-		repo:     fs.String("repo", "", "the repository the path lives in"),
-		notebook: fs.String("notebook", "", "a Notebook document, by its id"),
-		url:      fs.String("url", "", "anything reachable by URL"),
-		resumeID: fs.String("resume-session-id", "", "agent-native conversation id"),
-		cwd:      fs.String("cwd", "", "directory to reopen in"),
-		agent:    fs.String("agent", "", "agent driver to reopen with"),
-		clear:    fs.Bool("clear", false, "remove the seed-owned resume identity"),
-		confirm:  fs.Bool("confirm", false, "move a seed somebody else still holds, taking it from them"),
+		fs:             fs,
+		session:        fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)"),
+		member:         fs.String("member", "", "crew member planting this seed"),
+		json:           fs.Bool("json", false, "print the result as JSON"),
+		all:            fs.Bool("all", false, "the whole garden, overriding a dispatched session's plot"),
+		flat:           fs.Bool("flat", false, "print seeds as one list without nesting"),
+		stale:          fs.Bool("stale", false, "only open seeds whose log has not moved for the window"),
+		window:         fs.String("window", "", "the stale window, like 72h or 14d"),
+		plot:           fs.String("plot", "", "scope to one plot"),
+		partOf:         fs.String("part-of", "", "plant under this plot"),
+		discoveredFrom: fs.String("discovered-from", "", "record the seed this work came from"),
+		file:           fs.String("f", "", "the plot payload to read (- or empty reads stdin)"),
+		message:        fs.String("m", "", "the seed's body, as markdown (- reads stdin)"),
+		out:            fs.String("out", "", "file to write (- for stdout)"),
+		limit:          fs.Int("limit", 0, "how many log entries to read"),
+		handoff:        fs.Bool("handoff", false, "write this note to whoever tends the seed next"),
+		ring:           fs.Bool("ring", false, "ring the seed's watchers after this note lands"),
+		path:           fs.String("path", "", "a markdown document at this path"),
+		repo:           fs.String("repo", "", "the repository the path lives in"),
+		notebook:       fs.String("notebook", "", "a Notebook document, by its id"),
+		url:            fs.String("url", "", "anything reachable by URL"),
+		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
+		cwd:            fs.String("cwd", "", "directory to reopen in"),
+		agent:          fs.String("agent", "", "agent driver to reopen with"),
+		clear:          fs.Bool("clear", false, "remove the seed-owned resume identity"),
+		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
 	}
 }
 
@@ -415,7 +447,7 @@ func runSeedPlant(args []string) {
 		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
 	result, err := seedClient().SeedPlant(
-		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.member),
+		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member),
 		strings.TrimSpace(*f.resumeID), strings.TrimSpace(*f.cwd), strings.TrimSpace(*f.agent),
 	)
 	if err != nil {
@@ -461,7 +493,7 @@ func runSeedList(args []string) {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSTATUS\tTENDER\tPLANTED\tTITLE")
-	for _, row := range seedRows(result.Seeds, *f.tree) {
+	for _, row := range seedRows(result.Seeds, *f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed))
@@ -482,7 +514,7 @@ func staleWindowLabel(seconds *int) string {
 	return formatWindow(time.Duration(*seconds) * time.Second)
 }
 
-// plotProgressSuffix is how a crown wears its plot in a listing: the counts
+// plotProgressSuffix is how a plot wears its progress in a listing: the counts
 // that say whether the plot is draining, and where it is stuck.
 func plotProgressSuffix(seed protocol.Seed) string {
 	if seed.PlotProgress == nil {
@@ -546,18 +578,18 @@ func readPlotPayload(path string) []byte {
 	return payload
 }
 
-// seedRow is one printed line: the seed and how deep it sits under its crown.
+// seedRow is one printed line: the seed and how deep it sits under its plot.
 type seedRow struct {
 	seed  protocol.Seed
 	depth int
 }
 
-// seedRows orders a listing. Flat keeps the daemon's order; --tree hands the
-// ordering to the garden package, so the CLI and a future in-app tree cannot
-// disagree about what nests under what.
-func seedRows(seeds []protocol.Seed, tree bool) []seedRow {
+// seedRows orders a listing. --flat keeps the daemon's order; the default hands
+// the hierarchy to the garden package, so the CLI and app cannot disagree
+// about what nests under what.
+func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
 	rows := make([]seedRow, 0, len(seeds))
-	if !tree {
+	if flat {
 		for _, seed := range seeds {
 			rows = append(rows, seedRow{seed: seed})
 		}
@@ -767,7 +799,7 @@ func runSeedLink(unlink bool, args []string) {
 func runSeedReady(args []string) {
 	f := newSeedFlags("ready")
 	if positionals := f.parse("ready", args); len(positionals) != 0 {
-		seedFail("ready", fmt.Errorf("takes no arguments, got %q; scope it with --plot <crown> or --all", positionals[0]))
+		seedFail("ready", fmt.Errorf("takes no arguments, got %q; scope it with --plot <plot> or --all", positionals[0]))
 	}
 	result, err := seedClient().SeedReady(f.sessionID(), strings.TrimSpace(*f.plot), *f.all)
 	if err != nil {
@@ -777,25 +809,46 @@ func runSeedReady(args []string) {
 		writeJSON(result)
 		return
 	}
+	fprintSeedReady(os.Stdout, result)
+}
+
+func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Printf("%s  %s%s\n\n", result.Crown.ID, result.Crown.Title, plotProgressSuffix(*result.Crown))
+		fmt.Fprintf(out, "%s  %s%s\n\n", result.Crown.ID, result.Crown.Title, plotProgressSuffix(*result.Crown))
 	}
 	if len(result.Seeds) == 0 {
-		fmt.Printf("nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
+		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
 		return
 	}
 	handoffs := freshestHandoffs(result.Handoffs)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSTATUS\tPLANTED\tTITLE")
-	for _, seed := range result.Seeds {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", seed.ID, seed.Status, shortStamp(seed.CreatedAt), seed.Title)
+	rows := make([]seedRow, 0, len(result.Plots)+len(result.Seeds))
+	if result.Scope == "garden" && len(result.Plots) > 0 {
+		rows = seedRows(append(slices.Clone(result.Plots), result.Seeds...), false)
+	} else {
+		for _, seed := range result.Seeds {
+			rows = append(rows, seedRow{seed: seed})
+		}
+	}
+	plotIDs := make(map[string]bool, len(result.Plots))
+	for _, plot := range result.Plots {
+		plotIDs[plot.ID] = true
+	}
+	for _, row := range rows {
+		seed, status := row.seed, string(row.seed.Status)
+		if plotIDs[seed.ID] {
+			status = "plot"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s%s%s\n", seed.ID, status, shortStamp(seed.CreatedAt),
+			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t↳ %s: %s\n",
 				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
 		}
 	}
 	w.Flush()
-	fmt.Printf("\n%d ready %s — `attn seed tend <id>` claims one\n", len(result.Seeds), readyScopeName(result))
+	fmt.Fprintf(out, "\n%d ready %s — `attn seed tend <id>` claims one\n", len(result.Seeds), readyScopeName(result))
 }
 
 // freshestHandoffs keeps the first handoff per seed; the daemon sends them
@@ -878,7 +931,7 @@ func runSeedTransition(verb string, args []string) {
 		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
 	}
 	result, err := seedClient().SeedTransition(
-		f.sessionID(), positionals[0], verb, f.text(verb), strings.TrimSpace(*f.member), *f.confirm)
+		f.sessionID(), positionals[0], verb, f.text(verb), strings.TrimSpace(*f.member), *f.force)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -897,7 +950,7 @@ func runSeedTransition(verb string, args []string) {
 func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult) {
 	fmt.Fprintln(w, transitionLine(result.Seed))
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
-		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed crown over open work reads as done; close them too, or replant this one\n", open)
+		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
 	if result.Handoff != nil {
 		fmt.Fprintln(w)
@@ -910,7 +963,7 @@ func closedSeedStatus(status string) bool {
 	return status == "harvested" || status == "withered"
 }
 
-// openPlotSeeds is how many of a crown's children are still open; zero for a
+// openPlotSeeds is how many of a plot's children are still open; zero for a
 // seed with no plot.
 func openPlotSeeds(seed protocol.Seed) int {
 	p := seed.PlotProgress
@@ -1160,7 +1213,7 @@ func runSeedExport(args []string) {
 
 // gardenSeedFromWire carries a wire seed back into the domain type, which is
 // where rendering and hierarchy live — so the CLI and a future in-app renderer
-// cannot disagree about what a crown looks like or what nests under it.
+// cannot disagree about what a plot looks like or what nests under it.
 func gardenSeedFromWire(seed protocol.Seed) garden.Seed {
 	out := garden.Seed{
 		ID: seed.ID, Title: seed.Title, Body: seed.Body, Status: seed.Status,

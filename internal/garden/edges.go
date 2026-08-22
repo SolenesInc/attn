@@ -11,9 +11,8 @@ import (
 // the whole rule set is one readable table and one table-driven test; the daemon
 // reads the garden, calls in here, and writes back what it is handed.
 
-// Edge kinds. `blocks` and `part-of` are the two a caller may link; the others
-// are declared so a body written by a later slice stays readable, and so a kind
-// that arrives later is additive rather than a migration.
+// Edge kinds. Some are declared ahead of their verbs so a body written by a
+// later attn stays readable and adding a verb remains additive.
 const (
 	EdgeBlocks         = "blocks"
 	EdgePartOf         = "part-of"
@@ -24,7 +23,7 @@ const (
 
 // LinkableKinds is what `attn seed link` accepts, in the order a refusal lists
 // them.
-var LinkableKinds = []string{EdgeBlocks, EdgePartOf}
+var LinkableKinds = []string{EdgeBlocks, EdgePartOf, EdgeDiscoveredFrom}
 
 // ParseEdgeKind reads a kind off the command line, naming the whole set when it
 // is not one — including the kinds that exist in the schema but cannot be
@@ -34,7 +33,7 @@ func ParseEdgeKind(raw string) (string, error) {
 	if slices.Contains(LinkableKinds, kind) {
 		return kind, nil
 	}
-	if slices.Contains([]string{EdgeSownFrom, EdgeDiscoveredFrom, EdgeRelatesTo}, kind) {
+	if slices.Contains([]string{EdgeSownFrom, EdgeRelatesTo}, kind) {
 		return "", fmt.Errorf("%q is a real edge kind but nothing links one yet; the kinds you can link are %s",
 			kind, strings.Join(LinkableKinds, " and "))
 	}
@@ -64,8 +63,10 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 				from.ID, parent, from.ID, parent, to.ID)
 		}
 	}
-	if path := reaches(seeds, to.ID, kind, from.ID); len(path) > 0 {
-		return Seed{}, false, cycleRefusal(from.ID, kind, to.ID, path)
+	if kind == EdgeBlocks || kind == EdgePartOf {
+		if path := reaches(seeds, to.ID, kind, from.ID); len(path) > 0 {
+			return Seed{}, false, cycleRefusal(from.ID, kind, to.ID, path)
+		}
 	}
 	next := from
 	next.Edges = append(slices.Clone(from.Edges), Edge{Kind: kind, To: to.ID})
@@ -257,8 +258,9 @@ type Relation struct {
 // anything else is reported as inbound rather than given a word this repo does
 // not use yet.
 var inboundLabels = map[string]string{
-	EdgeBlocks: "blocked-by",
-	EdgePartOf: "has-part",
+	EdgeBlocks:         "blocked-by",
+	EdgePartOf:         "has-part",
+	EdgeDiscoveredFrom: "discovered",
 }
 
 func inboundLabel(kind string) string {
@@ -289,8 +291,38 @@ func Relations(seeds []Seed, id string) []Relation {
 	return out
 }
 
-// TreeRow is one line of `attn seed ls --tree`: a seed and how deep it sits
-// under its crown.
+// PlotHeaders returns the ancestors needed to place selected seeds in their
+// plots. The given order survives, which lets callers choose newest-first for a
+// listing or oldest-first for a ready queue.
+func PlotHeaders(seeds []Seed, selected map[string]bool) []Seed {
+	index := byID(seeds)
+	headers := map[string]bool{}
+	for id := range selected {
+		seed, ok := index[id]
+		seen := map[string]bool{}
+		for ok {
+			parent, hasParent := parentOf(seed)
+			if !hasParent || seen[parent] {
+				break
+			}
+			seen[parent] = true
+			seed, ok = index[parent]
+			if ok {
+				headers[parent] = true
+			}
+		}
+	}
+	out := make([]Seed, 0, len(headers))
+	for _, seed := range seeds {
+		if headers[seed.ID] {
+			out = append(out, seed)
+		}
+	}
+	return out
+}
+
+// TreeRow is one line of the default `attn seed ls`: a seed and how deep it sits
+// under its plot.
 type TreeRow struct {
 	Seed  Seed
 	Depth int

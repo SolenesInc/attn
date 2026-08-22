@@ -8,9 +8,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A closed crown over open work must never close silently: the harvest that
+// A closed plot over open work must never close silently: the harvest that
 // strands growing children says so on the same screen that confirmed the move.
-func TestFprintTransitionWarnsOnClosingACrownWithOpenChildren(t *testing.T) {
+func TestFprintTransitionWarnsOnClosingAPlotWithOpenChildren(t *testing.T) {
 	var buf bytes.Buffer
 	fprintTransition(&buf, &protocol.SeedTransitionResult{
 		Seed: protocol.Seed{
@@ -23,7 +23,7 @@ func TestFprintTransitionWarnsOnClosingACrownWithOpenChildren(t *testing.T) {
 		t.Fatalf("the move itself is not confirmed:\n%s", out)
 	}
 	if !strings.Contains(out, "1 open seed") {
-		t.Fatalf("closing a crown with open children says nothing about them:\n%s", out)
+		t.Fatalf("closing a plot with open children says nothing about them:\n%s", out)
 	}
 }
 
@@ -33,11 +33,11 @@ func TestFprintTransitionStaysQuietWhenNothingIsStranded(t *testing.T) {
 		seed protocol.Seed
 	}{
 		{"childless harvest", protocol.Seed{ID: "s-aaaaaa", Status: "harvested"}},
-		{"open crown keeps growing", protocol.Seed{
+		{"open plot keeps growing", protocol.Seed{
 			ID: "s-bbbbbb", Status: "growing",
 			PlotProgress: &protocol.SeedPlotProgress{Total: 2, Growing: 2},
 		}},
-		{"crown closed after its plot", protocol.Seed{
+		{"plot closed after its children", protocol.Seed{
 			ID: "s-cccccc", Status: "harvested",
 			PlotProgress: &protocol.SeedPlotProgress{Total: 2, Done: 1, Withered: 1},
 		}},

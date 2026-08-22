@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"net"
+	"slices"
 	"strings"
 	"testing"
 
@@ -122,6 +123,37 @@ func TestGardenEdges_ShowListsBothDirections(t *testing.T) {
 
 	if got := show(t, d, a.ID).Relations; len(got) != 1 || got[0].Label != garden.EdgeBlocks || got[0].SeedID != b.ID {
 		t.Fatalf("the blocking side reads %+v, want one outbound blocks edge", got)
+	}
+}
+
+func TestGardenEdges_DiscoveredFromLinksShowsAndUnlinksFromBothEnds(t *testing.T) {
+	d := newGardenDaemon(t)
+	origin := plant(t, d, protocol.SeedPlantMessage{Title: "the work in hand"})
+	found := plant(t, d, protocol.SeedPlantMessage{Title: "the follow-up"})
+
+	mustLink(t, d, found.ID, garden.EdgeDiscoveredFrom, origin.ID)
+	assertRelation := func(seedID, label, relatedID string) {
+		t.Helper()
+		relations := show(t, d, seedID).Relations
+		if len(relations) != 1 || relations[0].Label != label || relations[0].SeedID != relatedID {
+			t.Fatalf("show %s relations = %+v, want %s %s", seedID, relations, label, relatedID)
+		}
+	}
+	assertRelation(found.ID, garden.EdgeDiscoveredFrom, origin.ID)
+	assertRelation(origin.ID, "discovered", found.ID)
+	if got := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); !slices.Contains(got, found.ID) || !slices.Contains(got, origin.ID) {
+		t.Fatalf("discovered-from changed readiness: %v", got)
+	}
+
+	resp := link(t, d, found.ID, garden.EdgeDiscoveredFrom, origin.ID, true)
+	if !resp.Ok {
+		t.Fatalf("unlink discovered-from: %v", protocol.Deref(resp.Error))
+	}
+	if got := show(t, d, found.ID).Relations; len(got) != 0 {
+		t.Fatalf("found seed kept relations after unlink: %+v", got)
+	}
+	if got := show(t, d, origin.ID).Relations; len(got) != 0 {
+		t.Fatalf("origin kept relations after unlink: %+v", got)
 	}
 }
 
@@ -284,6 +316,27 @@ func TestGardenEdges_ReadyHandsOverTheOldestFirst(t *testing.T) {
 	}
 }
 
+func TestGardenEdges_ReadyCarriesPlotHeadersAndLooseSeeds(t *testing.T) {
+	d := newGardenDaemon(t)
+	firstPlot := plant(t, d, protocol.SeedPlantMessage{Title: "first plot"})
+	firstChild := plant(t, d, protocol.SeedPlantMessage{Title: "first child", PartOf: protocol.Ptr(firstPlot.ID)})
+	secondPlot := plant(t, d, protocol.SeedPlantMessage{Title: "second plot"})
+	secondChild := plant(t, d, protocol.SeedPlantMessage{Title: "second child", PartOf: protocol.Ptr(secondPlot.ID)})
+	loose := plant(t, d, protocol.SeedPlantMessage{Title: "loose work"})
+
+	result := ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})
+	plotIDs := make([]string, 0, len(result.Plots))
+	for _, plot := range result.Plots {
+		plotIDs = append(plotIDs, plot.ID)
+	}
+	if want := []string{firstPlot.ID, secondPlot.ID}; !slices.Equal(plotIDs, want) {
+		t.Fatalf("plot headers = %v, want %v", plotIDs, want)
+	}
+	if got, want := readyIDs(result), []string{firstChild.ID, secondChild.ID, loose.ID}; !slices.Equal(got, want) {
+		t.Fatalf("ready seeds = %v, want %v", got, want)
+	}
+}
+
 // A tender holds its seed only while its session is one the daemon knows. A
 // session that is gone must not park work forever.
 func TestGardenEdges_ReadyReleasesASeedWhoseSessionIsGone(t *testing.T) {
@@ -315,11 +368,11 @@ func TestGardenEdges_LaunchPrimerCountsTheSameReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gardenPrime: %v", err)
 	}
-	if want := len(ready(t, d, protocol.SeedReadyMessage{SourceSessionID: protocol.Ptr("sess-a")}).Seeds); prime.Ready != want {
-		t.Fatalf("primer count = %d, want %d", prime.Ready, want)
+	if want := len(ready(t, d, protocol.SeedReadyMessage{SourceSessionID: protocol.Ptr("sess-a")}).Seeds); len(prime.Seeds) != want {
+		t.Fatalf("primer count = %d, want %d", len(prime.Seeds), want)
 	}
-	if prime.Ready != 1 {
-		t.Fatalf("primer count = %d, want 1", prime.Ready)
+	if len(prime.Seeds) != 1 {
+		t.Fatalf("primer count = %d, want 1", len(prime.Seeds))
 	}
 	if prime.Crown != nil {
 		t.Fatalf("an undispatched session was primed with a plot: %+v", prime.Crown)
@@ -342,7 +395,7 @@ func TestGardenEdges_OutpostRefusesLinkAndReady(t *testing.T) {
 	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), garden.Surface) {
 		t.Fatalf("seed ready on an outpost: %+v", resp)
 	}
-	if primer := d.gardenPrimeForLaunch("sess-a"); primer != nil {
-		t.Fatalf("an outpost primed a launching agent with %+v", primer)
+	if primer, err := d.gardenPrime("sess-a"); err == nil || primer != nil {
+		t.Fatalf("an outpost primed a launching agent with %+v, %v", primer, err)
 	}
 }

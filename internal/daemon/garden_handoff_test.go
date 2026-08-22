@@ -40,7 +40,7 @@ func TestGarden_AHandoffReachesTheNextTender(t *testing.T) {
 		SourceSessionID: protocol.Ptr("sess-a"), Title: "carry this across sessions",
 	})
 
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "trellis")
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 	note(t, d, "sess-a", seed.ID, "read the docstore compiler first", "trellis")
 	left := handoff(t, d, "sess-a", seed.ID,
 		"the join test is the gate; run it before touching wireProjections", "trellis")

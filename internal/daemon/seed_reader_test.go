@@ -65,7 +65,7 @@ func TestSeedDocumentGetNamesUnknownID(t *testing.T) {
 func TestSeedDocumentGetReportsWhetherTheStoredTenderStillHolds(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Held only while live"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "trellis")
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 
 	read := func(requestID string) protocol.SeedDocumentGetResultMessage {
 		client := newWorkspaceProtocolTestClient()
@@ -92,7 +92,7 @@ func TestOpenSeedUsesPlacementPaneAndTenderBinding(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, _, workspaceID := setupMarkdownWorkspaceOn(t, d)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Read me"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "trellis")
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 
 	gotWorkspace, tileID, err := d.openSeedTile(seed.ID, "session-1")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestOpenSeedUsesPlacementPaneAndTenderBinding(t *testing.T) {
 	if len(leaves) != 1 || leaves[0].TileKind != string(workspacelayout.TileKindSeed) || leaves[0].TileParams != seed.ID || leaves[0].TileSessionID != "sess-a" {
 		t.Fatalf("seed tile = %+v, want seed params and tender binding", leaves)
 	}
-	move(t, d, "sess-a", seed.ID, garden.VerbPark, "", "trellis")
+	move(t, d, "sess-a", seed.ID, garden.VerbPark, "", "")
 	if _, reopenedTileID, err := d.openSeedTile(seed.ID, "session-1"); err != nil || reopenedTileID != tileID {
 		t.Fatalf("reopen = (%q, %v), want existing %q", reopenedTileID, err, tileID)
 	}

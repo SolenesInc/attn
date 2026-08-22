@@ -18,8 +18,8 @@ import (
 // Growing column dispatches an agent instead of claiming a seed.
 //
 // An unnamed actor is never the holder, so a card somebody else is still
-// tending refuses every verb until the drop confirms it. That is what the
-// composer's takeover line asks for, and `confirm` is how the answer travels.
+// tending refuses every verb until the drop forces it. That is what the
+// composer's takeover line asks for, and `force` is how the answer travels.
 //
 // Prototype: docs/plans/2026-08-20-garden-kanban-board-prototype.md.
 
@@ -41,13 +41,14 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		fail(err)
 		return
 	}
-	seed, doc, err := d.applySeedTransition(msg.SeedID, verb, garden.Ask{
-		Reason:    protocol.Deref(msg.Reason),
-		Confirmed: protocol.Deref(msg.Confirm),
-	})
+	ask := garden.Ask{Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
+	seed, doc, audit, err := d.applySeedTransitionDetailed(msg.SeedID, verb, ask)
 	if err != nil {
 		fail(err)
 		return
+	}
+	if audit != nil {
+		d.mirrorSeedNoteOntoTicket("", seed.ID, audit.Body)
 	}
 	wire := seedToProtocol(seed, doc, false)
 	if read, err := d.readGarden(); err == nil {

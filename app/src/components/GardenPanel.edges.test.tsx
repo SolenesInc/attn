@@ -91,6 +91,26 @@ describe('GardenPanel edges', () => {
     expect(relations?.textContent).toContain('the blocker');
   });
 
+  it('renders a discovered-from edge from the work and its origin', () => {
+    const origin = seed({ id: 's-origin1', title: 'the origin' });
+    const found = seed({
+      id: 's-found11',
+      title: 'the discovered work',
+      edges: [{ kind: 'discovered-from', to: origin.id }],
+    });
+    const { container } = render(
+      <GardenPanel isOpen onClose={vi.fn()} seedsTotal={2} seeds={[found, origin]} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /the discovered work/ }));
+    expect(container.querySelector('.garden-relations')?.textContent).toContain('discovered from');
+    expect(container.querySelector('.garden-relations')?.textContent).toContain('the origin');
+
+    fireEvent.click(screen.getByRole('button', { name: /the origin/ }));
+    expect(container.querySelector('.garden-relations')?.textContent).toContain('discovered');
+    expect(container.querySelector('.garden-relations')?.textContent).toContain('the discovered work');
+  });
+
   // A blocker in another plot still blocks. Walking into a plot scopes what is
   // listed, but edges are read against the whole push — or a seed held up from
   // outside reads as free.

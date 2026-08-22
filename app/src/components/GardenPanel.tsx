@@ -198,7 +198,13 @@ function indexGarden(seeds: Seed[]): GardenIndex {
       index.roots.push(seed);
     }
     for (const edge of seed.edges ?? []) {
-      const label = edge.kind === 'blocks' ? 'blocked by' : edge.kind === 'part-of' ? 'has part' : '';
+      const label = edge.kind === 'blocks'
+        ? 'blocked by'
+        : edge.kind === 'part-of'
+          ? 'has part'
+          : edge.kind === 'discovered-from'
+            ? 'discovered'
+            : '';
       if (!label) continue;
       index.inbound.set(edge.to, [...(index.inbound.get(edge.to) ?? []), { label, seed }]);
       if (edge.kind === 'blocks' && !isClosed(seed)) {
@@ -220,8 +226,9 @@ function relationsOf(index: GardenIndex, id: string): Relation[] {
     if (!other) continue;
     if (edge.kind === 'blocks') rows.push({ label: 'blocks', seed: other });
     if (edge.kind === 'part-of') rows.push({ label: 'part of', seed: other });
+    if (edge.kind === 'discovered-from') rows.push({ label: 'discovered from', seed: other });
   }
-  return rows.concat((index.inbound.get(id) ?? []).filter((relation) => relation.label === 'blocked by'));
+  return rows.concat((index.inbound.get(id) ?? []).filter((relation) => relation.label !== 'has part'));
 }
 
 // A crown's plot and every plot under it. A search from inside a plot covers all

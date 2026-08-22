@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/ptybackend"
 
 	"github.com/victorarias/attn/internal/docstore"
@@ -297,11 +296,11 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 	})
 	outside := plant(t, d, protocol.SeedPlantMessage{Title: "somewhere else"})
 
-	var primed *hooks.GardenPrime
+	var primed *protocol.SeedReadyResult
 	backend.onSpawn = func(ptybackend.SpawnOptions) {
 		// Read where the launch guidance reads it: after the dispatch is
 		// recorded and while the session is spawning.
-		primed = d.gardenPrimeForLaunch(delegatedSessionID(t, d, sourceSessionID))
+		primed, _ = d.gardenPrime(delegatedSessionID(t, d, sourceSessionID))
 	}
 
 	result, err := d.delegate(&protocol.DelegateMessage{
@@ -317,7 +316,7 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 	if primed == nil || primed.Crown == nil {
 		t.Fatalf("the delegate launched without its plot: %+v", primed)
 	}
-	if primed.Crown.ID != planted.Crown.ID || len(primed.Crown.ReadySeeds) != 1 {
+	if primed.Crown.ID != planted.Crown.ID || len(primed.Seeds) != 1 {
 		t.Fatalf("primed with %+v, want the crown and its one ready child", primed.Crown)
 	}
 
@@ -400,7 +399,7 @@ func TestGardenPlot_ThePrimerAndReadyAgreeInsideAPlot(t *testing.T) {
 		t.Fatal("a dispatched session was primed without its plot")
 	}
 	var primed []string
-	for _, seed := range prime.Crown.ReadySeeds {
+	for _, seed := range prime.Seeds {
 		primed = append(primed, seed.ID)
 	}
 	var offered []string
@@ -413,7 +412,35 @@ func TestGardenPlot_ThePrimerAndReadyAgreeInsideAPlot(t *testing.T) {
 	if len(offered) != 2 {
 		t.Fatalf("the plot offered %v, want the two unblocked children", offered)
 	}
-	if prime.Ready != len(offered) {
-		t.Fatalf("primer count = %d, want %d", prime.Ready, len(offered))
+	if len(prime.Seeds) != len(offered) {
+		t.Fatalf("primer count = %d, want %d", len(prime.Seeds), len(offered))
+	}
+}
+
+func TestGardenPlot_PrimeCarriesReadyChildrenAndTheFreshestHandoff(t *testing.T) {
+	d := newGardenDaemon(t)
+	planted := plot(t, d, protocol.SeedPlotMessage{
+		Title: "ship the thing",
+		Children: []protocol.SeedPlotChild{
+			{Title: "first step"},
+			{Title: "second step"},
+		},
+	})
+	first := planted.Children[0]
+	handoff(t, d, "sess-a", first.ID, "old direction", "trellis")
+	newest := handoff(t, d, "sess-a", first.ID, "the fixture is seeded", "trellis")
+	if err := d.recordGardenDispatch("sess-b", planted.Crown.ID, "", "", "", false); err != nil {
+		t.Fatalf("recordGardenDispatch: %v", err)
+	}
+
+	prime, err := d.gardenPrime("sess-b")
+	if err != nil {
+		t.Fatalf("gardenPrime: %v", err)
+	}
+	if got, want := readyIDs(*prime), []string{planted.Children[0].ID, planted.Children[1].ID}; !slices.Equal(got, want) {
+		t.Fatalf("prime ready children = %v, want %v", got, want)
+	}
+	if len(prime.Handoffs) != 1 || prime.Handoffs[0].ID != newest.ID || prime.Handoffs[0].Body != newest.Body {
+		t.Fatalf("prime handoffs = %+v, want freshest %+v", prime.Handoffs, newest)
 	}
 }
