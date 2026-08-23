@@ -1,0 +1,1 @@
+[attn] The user has been away long enough that your day should end rather than carry on warm. Close it now: write your letter to whoever wakes as you next, what you were doing, what is load-bearing, what you would pick up first, and file it with `attn handoff --sleep -m "<your letter>"`. Your session ends when it lands; nobody wakes behind it.

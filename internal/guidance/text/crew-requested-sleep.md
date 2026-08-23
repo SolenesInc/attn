@@ -1,0 +1,1 @@
+[attn] Victor is asking you to close your day and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff --sleep -m "<your letter>"`. This is consented closure, not a hard stop; nobody wakes behind you when the letter lands.

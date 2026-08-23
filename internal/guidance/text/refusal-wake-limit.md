@@ -1,0 +1,1 @@
+{{member_name}} has been woken {{wake_count}} times without the user in the last {{window}}, and the limit is {{limit}}. Nothing was woken. Wake it yourself from the sidebar, or raise `crew.wake_limit`.

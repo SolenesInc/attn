@@ -1,0 +1,8 @@
+kind: internal
+area: tooling
+change: >
+  A dev-only guidance atlas explores one typed Go catalogue for every place
+  attn puts prose in front of an agent. It evaluates launch, hook, first-prompt,
+  nudge, handoff, CLI and skill units against a selected scenario; shows their
+  ordered payloads and typed dynamic fields; and draws plain, delegate and crew
+  lifecycles. Editing stays a mock in this spike.

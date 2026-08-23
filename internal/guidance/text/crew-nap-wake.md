@@ -1,0 +1,1 @@
+Your predecessor just closed their day and left you the letter above. Pick the thread up: orient from it, verify anything load-bearing that may have moved, then tell Victor in a few lines who you are, where things stand, and what you are doing next.

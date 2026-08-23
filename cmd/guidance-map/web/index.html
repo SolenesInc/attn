@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>attn guidance atlas</title>
+  <style>
+    :root {
+      --ink: #121612;
+      --night: #0b0f0d;
+      --night-2: #141a16;
+      --paper: #ece9df;
+      --paper-2: #dcd9ce;
+      --line: #363d37;
+      --muted: #899188;
+      --acid: #d8ff4f;
+      --mint: #5ad4bc;
+      --orange: #ff8e5b;
+      --red: #ff665f;
+      --display: "Iowan Old Style", "Baskerville", Georgia, serif;
+      --sans: "Avenir Next Condensed", "Avenir Next", sans-serif;
+      --mono: "Berkeley Mono", "SFMono-Regular", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--night); color: var(--paper); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      background:
+        linear-gradient(90deg, rgba(216,255,79,.035) 1px, transparent 1px) 0 0 / 48px 48px,
+        linear-gradient(rgba(216,255,79,.025) 1px, transparent 1px) 0 0 / 48px 48px,
+        var(--night);
+    }
+
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+    .mono { font-family: var(--mono); }
+
+    .masthead {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: 252px 1fr auto;
+      min-height: 92px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11,15,13,.96);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      padding: 15px 20px;
+      border-right: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 13px;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--acid);
+      font: 700 12px var(--mono);
+      color: var(--acid);
+      transform: rotate(-3deg);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font: 600 21px/1 var(--display);
+      letter-spacing: -.02em;
+    }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 6px;
+      font: 700 9px/1 var(--mono);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--mint);
+    }
+
+    .scenario-controls {
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+    }
+
+    .axis {
+      min-width: max-content;
+      padding: 13px 16px 11px;
+      border-right: 1px solid var(--line);
+    }
+
+    .axis-label {
+      display: block;
+      margin-bottom: 9px;
+      font: 700 9px/1 var(--mono);
+      letter-spacing: .12em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .segments { display: flex; gap: 3px; }
+    .segments button {
+      border: 0;
+      padding: 5px 8px;
+      background: transparent;
+      font: 700 10px/1 var(--mono);
+      text-transform: uppercase;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .segments button:hover { color: var(--paper); }
+    .segments button.active {
+      color: var(--night);
+      background: var(--acid);
+    }
+
+    .build-stamp {
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-end;
+      font: 10px/1.45 var(--mono);
+      color: var(--muted);
+    }
+    .build-stamp strong { color: var(--paper); font-weight: 500; }
+
+    .aux-strip {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      min-height: 42px;
+      padding: 7px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--night-2);
+      color: var(--muted);
+      font: 10px var(--mono);
+    }
+    .aux-strip .lead { color: var(--mint); text-transform: uppercase; letter-spacing: .12em; }
+    .check { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+    .check input { accent-color: var(--acid); }
+
+    .page-intro {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 38px;
+      padding: 30px 28px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .page-intro h2 {
+      max-width: 840px;
+      margin: 0;
+      font: 500 clamp(31px, 4vw, 58px)/.96 var(--display);
+      letter-spacing: -.045em;
+    }
+    .page-intro h2 i { color: var(--acid); font-weight: 400; }
+    .intro-note {
+      align-self: end;
+      max-width: 560px;
+      margin: 0;
+      font: 14px/1.45 var(--sans);
+      color: #b9beb8;
+    }
+    .intro-note code { color: var(--mint); font-family: var(--mono); }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    .search {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      padding: 9px 11px;
+      color: var(--paper);
+      background: #0e1310;
+      outline: none;
+      font: 11px var(--mono);
+    }
+    .search:focus { border-color: var(--mint); }
+    .toolbar button {
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      background: transparent;
+      color: var(--muted);
+      font: 10px var(--mono);
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .toolbar button.active { border-color: var(--acid); color: var(--acid); }
+    .counts { font: 10px var(--mono); color: var(--muted); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      min-height: 700px;
+    }
+    #stage { min-width: 0; border-right: 1px solid var(--line); }
+
+    .inspector {
+      position: sticky;
+      top: 134px;
+      align-self: start;
+      max-height: calc(100vh - 134px);
+      overflow: auto;
+      background: var(--paper);
+      color: var(--ink);
+    }
+    .inspector-head {
+      padding: 16px 18px;
+      color: var(--paper);
+      background: var(--ink);
+      border-bottom: 4px solid var(--acid);
+    }
+    .inspector-head h3 {
+      margin: 6px 0 5px;
+      font: 600 25px/1 var(--display);
+    }
+    .unit-id { font: 10px var(--mono); color: var(--mint); }
+    .inspector-body { padding: 17px 18px 76px; }
+    .meta-line {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #c8c5bb;
+      font-size: 12px;
+    }
+    .meta-line dt { font: 9px var(--mono); text-transform: uppercase; color: #70766f; }
+    .meta-line dd { margin: 0; }
+    .meta-line code { font: 10px/1.4 var(--mono); word-break: break-word; }
+
+    .subhead {
+      margin: 21px 0 9px;
+      font: 800 9px var(--mono);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .condition {
+      display: grid;
+      grid-template-columns: 14px 1fr;
+      gap: 8px;
+      margin: 8px 0;
+      font-size: 12px;
+    }
+    .condition .lamp {
+      width: 9px; height: 9px; margin-top: 4px;
+      border: 1px solid #838980;
+      background: transparent;
+    }
+    .condition.match .lamp { border-color: #4f6b00; background: #8aac19; }
+    .condition small { display: block; margin-top: 2px; font: 9px var(--mono); color: #737970; }
+
+    .placeholder {
+      margin: 8px 0;
+      padding: 8px 9px;
+      border-left: 3px solid var(--orange);
+      background: #dedbd0;
+    }
+    .placeholder strong { font: 10px var(--mono); }
+    .placeholder span { float: right; font: 9px var(--mono); color: #6f756e; }
+    .placeholder small { display: block; clear: both; margin-top: 5px; font: 9px/1.4 var(--mono); color: #555b55; }
+
+    .editor {
+      display: block;
+      width: 100%;
+      min-height: 250px;
+      resize: vertical;
+      border: 1px solid #242924;
+      border-radius: 0;
+      padding: 12px;
+      outline: none;
+      background: #111511;
+      color: #e8eadf;
+      font: 10px/1.55 var(--mono);
+    }
+    .editor:focus { border-color: var(--orange); }
+    .edit-actions { display: flex; gap: 7px; margin-top: 8px; }
+    .edit-actions button {
+      flex: 1;
+      border: 1px solid var(--ink);
+      padding: 9px;
+      background: transparent;
+      color: var(--ink);
+      font: 700 9px var(--mono);
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .edit-actions .save { background: var(--ink); color: var(--acid); }
+    .mock-note { margin: 8px 0 0; font: 9px/1.4 var(--mono); color: #696f69; }
+
+    .composition-board { padding: 22px 28px 4px; }
+    .section-kicker { margin: 0 0 11px; font: 800 9px var(--mono); color: var(--mint); letter-spacing: .14em; text-transform: uppercase; }
+    .composition-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .composition {
+      min-height: 154px;
+      padding: 15px;
+      background: var(--night);
+    }
+    .composition.dim { opacity: .42; }
+    .composition h3 { margin: 0; font: 600 18px var(--display); }
+    .composition > p { min-height: 30px; margin: 7px 0 12px; font-size: 11px; color: var(--muted); }
+    .stack { display: flex; flex-wrap: wrap; gap: 4px; }
+    .stack button {
+      border: 1px solid var(--line);
+      padding: 5px 6px;
+      background: #171d18;
+      color: var(--muted);
+      font: 9px var(--mono);
+      cursor: pointer;
+    }
+    .stack button.on { border-color: var(--mint); color: var(--paper); }
+    .stack button::before { content: attr(data-order) "·"; margin-right: 4px; color: var(--orange); }
+
+    .moment-section { padding: 20px 28px 6px; }
+    .moment-head { display: grid; grid-template-columns: 56px 1fr auto; align-items: end; gap: 12px; margin-bottom: 11px; }
+    .moment-index { font: 32px/1 var(--display); color: var(--acid); }
+    .moment-head h3 { margin: 0; font: 600 25px/1 var(--display); }
+    .moment-head span:last-child { font: 9px var(--mono); color: var(--muted); }
+    .unit-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .unit-card {
+      position: relative;
+      min-height: 145px;
+      padding: 13px 14px 13px 18px;
+      border: 1px solid var(--line);
+      background: #111613;
+      cursor: pointer;
+    }
+    .unit-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #303630; }
+    .unit-card.eligible::before { background: var(--acid); }
+    .unit-card.selected { outline: 1px solid var(--orange); outline-offset: -3px; }
+    .unit-card:hover { background: #161c17; }
+    .card-top { display: flex; justify-content: space-between; gap: 12px; }
+    .card-top h4 { margin: 0; font: 600 17px/1.1 var(--display); }
+    .state-label { font: 8px var(--mono); color: var(--muted); text-transform: uppercase; }
+    .eligible .state-label { color: var(--acid); }
+    .unit-card p { margin: 8px 0 12px; font-size: 12px; line-height: 1.35; color: #aeb5ae; }
+    .card-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .badge { border: 1px solid #384038; padding: 4px 6px; font: 8px var(--mono); color: var(--muted); }
+    .badge.delivery { color: var(--mint); }
+    .badge.fields { color: var(--orange); }
+
+    .ledger-wrap { padding: 22px 28px 90px; overflow-x: auto; }
+    .ledger { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .ledger th {
+      position: sticky; top: 134px; z-index: 2;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--paper);
+      text-align: left;
+      background: var(--night);
+      color: var(--muted);
+      font: 8px var(--mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .ledger td { padding: 10px 8px; border-bottom: 1px solid #252b26; vertical-align: top; }
+    .ledger tr { cursor: pointer; }
+    .ledger tr:hover td { background: #151a16; }
+    .ledger tr.selected td { background: #21271f; }
+    .ledger .signal { width: 8px; height: 8px; display: inline-block; border: 1px solid var(--muted); }
+    .ledger .signal.on { background: var(--acid); border-color: var(--acid); box-shadow: 0 0 0 3px rgba(216,255,79,.09); }
+    .ledger code { font: 9px/1.45 var(--mono); color: var(--mint); }
+    .ledger .why { max-width: 270px; color: #abb2ab; }
+
+    .lifecycle-wrap { padding: 26px 28px 100px; overflow-x: auto; }
+    .life-note { max-width: 780px; margin: 0 0 26px; color: #aab1aa; font-size: 13px; line-height: 1.45; }
+    .lane { min-width: 820px; display: grid; grid-template-columns: 128px 1fr; border-top: 1px solid var(--line); }
+    .lane:last-child { border-bottom: 1px solid var(--line); }
+    .lane-name { padding: 22px 12px 22px 0; font: 600 21px var(--display); }
+    .lane-steps { display: flex; gap: 28px; align-items: stretch; padding: 18px 0; }
+    .life-step {
+      position: relative;
+      min-width: 140px;
+      max-width: 210px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      background: #121713;
+    }
+    .life-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -22px;
+      top: 50%;
+      color: var(--acid);
+      font: 16px var(--mono);
+    }
+    .life-step.branch::after { content: "↗"; }
+    .life-step h4 { margin: 0 0 7px; font: 600 16px var(--display); }
+    .life-step .moment { font: 8px var(--mono); color: var(--muted); text-transform: uppercase; }
+    .life-units { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+    .life-units button {
+      border: 0;
+      border-left: 2px solid #3b423c;
+      padding: 3px 0 3px 7px;
+      background: transparent;
+      color: #8c948c;
+      text-align: left;
+      font: 8px/1.3 var(--mono);
+      cursor: pointer;
+    }
+    .life-units button.on { border-color: var(--mint); color: var(--paper); }
+    .life-units button:hover { color: var(--acid); }
+    .legend { display: flex; gap: 16px; margin-top: 22px; font: 9px var(--mono); color: var(--muted); }
+    .legend i { display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: middle; background: var(--line); }
+    .legend .on i { background: var(--mint); }
+
+    .variant-switcher {
+      position: fixed;
+      z-index: 40;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: 38px minmax(190px, auto) 38px;
+      border: 1px solid #697269;
+      background: #080b09;
+      box-shadow: 0 12px 38px rgba(0,0,0,.45);
+    }
+    .variant-switcher button {
+      border: 0;
+      padding: 10px 12px;
+      background: transparent;
+      cursor: pointer;
+      font: 11px var(--mono);
+    }
+    .variant-switcher button:hover { background: var(--acid); color: var(--night); }
+    .variant-label { display: grid; place-items: center; padding: 0 18px; border-inline: 1px solid var(--line); font: 9px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+
+    .toast {
+      position: fixed;
+      z-index: 60;
+      top: 112px;
+      right: 18px;
+      max-width: 420px;
+      padding: 12px 14px;
+      border-left: 4px solid var(--acid);
+      background: var(--paper);
+      color: var(--ink);
+      font: 10px/1.45 var(--mono);
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      display: none;
+    }
+    .toast.show { display: block; }
+    .empty { padding: 50px 28px; color: var(--muted); font: 13px var(--mono); }
+
+    @media (max-width: 1100px) {
+      .masthead { grid-template-columns: 220px 1fr; }
+      .build-stamp { display: none; }
+      .workspace { grid-template-columns: 1fr; }
+      #stage { border-right: 0; }
+      .inspector { position: relative; top: 0; max-height: none; border-top: 5px solid var(--orange); }
+      .composition-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 720px) {
+      .masthead { position: relative; grid-template-columns: 1fr; }
+      .brand { border-right: 0; border-bottom: 1px solid var(--line); }
+      .page-intro { grid-template-columns: 1fr; padding-inline: 18px; }
+      .toolbar, .composition-board, .moment-section, .ledger-wrap, .lifecycle-wrap { padding-inline: 18px; }
+      .unit-grid, .composition-grid { grid-template-columns: 1fr; }
+      .aux-strip { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <div class="brand-mark">A/01</div>
+      <div><span class="eyebrow">attn dev instrument</span><h1>Guidance atlas</h1></div>
+    </div>
+    <div class="scenario-controls" id="scenario-controls">
+      <div class="axis"><span class="axis-label">Topology</span><div class="segments" data-axis="home"><button data-value="true">Home</button><button data-value="false">Outpost</button></div></div>
+      <div class="axis"><span class="axis-label">Agent</span><div class="segments" data-axis="agent"><button data-value="claude">Claude</button><button data-value="codex">Codex</button><button data-value="plugin">Plugin</button></div></div>
+      <div class="axis"><span class="axis-label">Role</span><div class="segments" data-axis="role"><button data-value="plain">Plain</button><button data-value="delegate">Delegate</button><button data-value="crew">Crew</button><button data-value="chief">Chief</button></div></div>
+      <div class="axis"><span class="axis-label">Garden</span><div class="segments" data-axis="garden"><button data-value="no_plot">No plot</button><button data-value="at_seed">Seed</button><button data-value="at_plot">Plot</button><button data-value="empty_plot">Empty plot</button></div></div>
+    </div>
+    <div class="build-stamp"><span>branch source</span><strong>92afcd3 · #990 rework</strong><span id="registry-count">loading registry…</span></div>
+  </header>
+
+  <div class="aux-strip">
+    <span class="lead">Extra launch signals</span>
+    <label class="check"><input type="checkbox" id="has-context" checked> context checkout</label>
+    <label class="check"><input type="checkbox" id="workflow-enabled"> workflows enabled</label>
+    <label class="check"><input type="checkbox" id="launch-guidance" checked> launch marker present</label>
+	<label class="check"><input type="checkbox" id="plugin-launch" checked> plugin launch instructions</label>
+	<label class="check"><input type="checkbox" id="plugin-initial" checked> plugin initial prompt</label>
+	<label class="check"><input type="checkbox" id="plugin-messages" checked> plugin message delivery</label>
+    <span>Eligibility is identity/state only. Each card names its runtime trigger.</span>
+  </div>
+
+  <section class="page-intro">
+    <h2>Every word an agent meets, <i>before it meets it.</i></h2>
+    <p class="intro-note">The Go registry decides eligibility, placeholder types, order, and delivery. The browser only renders its answer. Pick a scenario, then inspect the proposed copy file and the production symbol it shadows. Editing is intentionally a mock; Save reports the file a real round trip would write.</p>
+  </section>
+
+  <div class="toolbar">
+    <input class="search" id="search" type="search" placeholder="Filter unit, source, trigger, or copy…  ( / )" aria-label="Filter guidance units">
+    <button id="eligible-only">eligible only</button>
+    <span class="counts" id="visible-count"></span>
+  </div>
+
+  <div class="workspace">
+    <main id="stage"><div class="empty">Reading the typed registry…</div></main>
+    <aside class="inspector" id="inspector"></aside>
+  </div>
+
+  <nav class="variant-switcher" aria-label="Prototype variants">
+    <button id="variant-prev" aria-label="Previous variant">←</button>
+    <div class="variant-label" id="variant-label"></div>
+    <button id="variant-next" aria-label="Next variant">→</button>
+  </nav>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const variants = [
+      { key: 'map', label: 'A · Signal map' },
+      { key: 'ledger', label: 'B · Scenario ledger' },
+      { key: 'lifecycle', label: 'C · Lifecycle story' },
+    ];
+    const state = {
+      data: null,
+      selected: 'launch.garden',
+      search: '',
+      eligibleOnly: false,
+      drafts: new Map(),
+      loading: false,
+    };
+
+    const $ = (selector) => document.querySelector(selector);
+    const esc = (value = '') => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    const compact = (value = '') => String(value).replace(/\s+/g, ' ').trim();
+    const variant = () => {
+      const key = new URLSearchParams(location.search).get('variant') || 'map';
+      return variants.find(item => item.key === key) || variants[0];
+    };
+    const unitMap = () => new Map((state.data?.units || []).map(unit => [unit.id, unit]));
+    const selectedUnit = () => unitMap().get(state.selected) || state.data?.units?.[0];
+
+    function scenarioQuery() {
+      const active = axis => document.querySelector(`[data-axis="${axis}"] button.active`)?.dataset.value;
+      const query = new URLSearchParams();
+      query.set('home', active('home') ?? 'true');
+      query.set('agent', active('agent') ?? 'codex');
+      query.set('role', active('role') ?? 'delegate');
+      query.set('garden', active('garden') ?? 'at_plot');
+      query.set('context', $('#has-context').checked ? '1' : '0');
+      query.set('workflow', $('#workflow-enabled').checked ? '1' : '0');
+      query.set('launch_guidance', $('#launch-guidance').checked ? '1' : '0');
+	  query.set('plugin_launch', $('#plugin-launch').checked ? '1' : '0');
+	  query.set('plugin_initial', $('#plugin-initial').checked ? '1' : '0');
+	  query.set('plugin_messages', $('#plugin-messages').checked ? '1' : '0');
+      return query;
+    }
+
+    function seedControlsFromURL() {
+      const query = new URLSearchParams(location.search);
+      const defaults = { home: 'true', agent: 'codex', role: 'delegate', garden: 'at_plot' };
+      for (const [axis, fallback] of Object.entries(defaults)) {
+        const value = query.get(axis) || fallback;
+        document.querySelectorAll(`[data-axis="${axis}"] button`).forEach(button => button.classList.toggle('active', button.dataset.value === value));
+      }
+      $('#has-context').checked = (query.get('context') ?? '1') !== '0';
+      $('#workflow-enabled').checked = query.get('workflow') === '1';
+      $('#launch-guidance').checked = (query.get('launch_guidance') ?? '1') !== '0';
+	  $('#plugin-launch').checked = (query.get('plugin_launch') ?? '1') !== '0';
+	  $('#plugin-initial').checked = (query.get('plugin_initial') ?? '1') !== '0';
+	  $('#plugin-messages').checked = (query.get('plugin_messages') ?? '1') !== '0';
+    }
+
+    async function loadCatalog() {
+      if (state.loading) return;
+      state.loading = true;
+      try {
+        const query = scenarioQuery();
+        const response = await fetch('/api/catalog?' + query);
+        if (!response.ok) throw new Error(await response.text());
+        state.data = await response.json();
+        if (!unitMap().has(state.selected)) state.selected = state.data.units[0]?.id;
+        const url = new URL(location.href);
+        const currentVariant = variant().key;
+        url.search = query;
+        url.searchParams.set('variant', currentVariant);
+        history.replaceState(null, '', url);
+        render();
+		requestAnimationFrame(() => scrollTo(0, 0));
+      } catch (error) {
+        $('#stage').innerHTML = `<div class="empty">Registry refused to load: ${esc(error.message)}</div>`;
+      } finally {
+        state.loading = false;
+      }
+    }
+
+    function filteredUnits() {
+      if (!state.data) return [];
+      const needle = state.search.toLowerCase();
+      return state.data.units.filter(unit => {
+        if (state.eligibleOnly && !unit.eligible) return false;
+        if (!needle) return true;
+        return [unit.id, unit.name, unit.summary, unit.trigger, unit.source_path, unit.copy, unit.delivery].some(value => String(value).toLowerCase().includes(needle));
+      });
+    }
+
+    function render() {
+      if (!state.data) return;
+      $('#registry-count').textContent = `${state.data.units.length} units · ${state.data.compositions.length} assemblies`;
+      $('#visible-count').textContent = `${filteredUnits().length} / ${state.data.units.length}`;
+      $('#eligible-only').classList.toggle('active', state.eligibleOnly);
+      $('#variant-label').textContent = variant().label;
+      if (variant().key === 'ledger') renderLedger();
+      else if (variant().key === 'lifecycle') renderLifecycle();
+      else renderMap();
+      renderInspector();
+    }
+
+    function renderMap() {
+      const units = filteredUnits();
+      const byMoment = new Map(state.data.moments.map(moment => [moment, []]));
+      units.forEach(unit => byMoment.get(unit.moment)?.push(unit));
+      const compositions = state.data.compositions.map(item => `
+        <article class="composition ${item.eligible ? '' : 'dim'}">
+          <span class="eyebrow">${esc(item.moment)}</span>
+          <h3>${esc(item.name)}</h3>
+          <p>${esc(item.trigger)}</p>
+          <div class="stack">${item.blocks.map(block => `<button class="${block.eligible ? 'on' : ''}" data-unit="${esc(block.unit_id)}" data-order="${block.order}">${esc(block.name)}</button>`).join('')}</div>
+        </article>`).join('');
+      const moments = state.data.moments.map((moment, index) => {
+        const items = byMoment.get(moment) || [];
+        if (!items.length) return '';
+        return `<section class="moment-section">
+          <div class="moment-head"><span class="moment-index">${String(index + 1).padStart(2, '0')}</span><h3>${esc(moment)}</h3><span>${items.length} units</span></div>
+          <div class="unit-grid">${items.map(unitCard).join('')}</div>
+        </section>`;
+      }).join('');
+      $('#stage').innerHTML = `<section class="composition-board"><p class="section-kicker">Ordered payloads · inactive blocks remain visible</p><div class="composition-grid">${compositions}</div></section>${moments || '<div class="empty">No units match this filter.</div>'}`;
+      wireUnitClicks();
+    }
+
+    function unitCard(unit) {
+      return `<article class="unit-card ${unit.eligible ? 'eligible' : ''} ${unit.id === state.selected ? 'selected' : ''}" data-unit="${esc(unit.id)}">
+        <div class="card-top"><h4>${esc(unit.name)}</h4><span class="state-label">${unit.eligible ? 'eligible' : 'gated'}</span></div>
+        <p>${esc(unit.summary)}</p>
+        <div class="card-foot"><span class="badge delivery">${esc(unit.delivery)}</span>${unit.placeholders.length ? `<span class="badge fields">${unit.placeholders.length} typed fields</span>` : ''}<span class="badge">${esc(unit.source_path)}</span></div>
+      </article>`;
+    }
+
+    function renderLedger() {
+      const rows = filteredUnits().map(unit => `<tr class="${unit.id === state.selected ? 'selected' : ''}" data-unit="${esc(unit.id)}">
+        <td><span class="signal ${unit.eligible ? 'on' : ''}"></span></td>
+        <td>${esc(unit.moment)}</td>
+        <td><strong>${esc(unit.name)}</strong><br><code>${esc(unit.id)}</code></td>
+        <td class="why">${esc(unit.trigger)}</td>
+        <td>${esc(unit.delivery)}</td>
+        <td>${unit.conditions.map(condition => `<span class="badge">${condition.matches ? '✓' : '×'} ${esc(condition.label)}</span>`).join(' ')}</td>
+        <td>${unit.placeholders.map(field => `<code>{{${esc(field.name)}}}:${esc(field.type)}</code>`).join('<br>') || 'none'}</td>
+        <td><code>${esc(unit.source_path)}</code></td>
+      </tr>`).join('');
+      $('#stage').innerHTML = `<div class="ledger-wrap"><p class="section-kicker">One row per guidance unit · conditions evaluated by Go</p><table class="ledger"><thead><tr><th>Now</th><th>Moment</th><th>Unit</th><th>Runtime trigger</th><th>Delivery</th><th>Scenario predicates</th><th>Typed fields</th><th>Current source</th></tr></thead><tbody>${rows}</tbody></table>${rows ? '' : '<div class="empty">No units match this filter.</div>'}</div>`;
+      wireUnitClicks();
+    }
+
+    function renderLifecycle() {
+      const units = unitMap();
+      const lanes = state.data.lifecycle.map(lane => `<section class="lane"><h3 class="lane-name">${esc(lane.name)}</h3><div class="lane-steps">${lane.steps.map((step, index) => {
+		const stepUnits = (step.unit_ids || []).map(id => units.get(id)).filter(Boolean);
+        const branch = step.next?.length > 1 ? 'branch' : '';
+        return `<article class="life-step ${branch}"><span class="moment">${esc(step.moment)}</span><h4>${esc(step.label)}</h4><div class="life-units">${stepUnits.map(unit => `<button class="${unit.eligible ? 'on' : ''}" data-unit="${esc(unit.id)}">${esc(unit.name)}</button>`).join('') || '<span class="state-label">state transition</span>'}</div></article>`;
+      }).join('')}</div></section>`).join('');
+      $('#stage').innerHTML = `<div class="lifecycle-wrap"><p class="section-kicker">Lifecycle · logical order, not a wall-clock promise</p><p class="life-note">Launch instructions exist before the harness starts. SessionStart and the first prompt follow in the harness's own startup choreography; the current code does not promise a tighter ordering between those two. Crew turnover always starts a fresh conversation, with the filed letter in the next system block.</p>${lanes}<div class="legend"><span class="on"><i></i>eligible in selected scenario</span><span><i></i>present but gated</span></div></div>`;
+      wireUnitClicks();
+    }
+
+    function wireUnitClicks() {
+      document.querySelectorAll('[data-unit]').forEach(element => element.addEventListener('click', () => {
+        state.selected = element.dataset.unit;
+        render();
+      }));
+    }
+
+    function renderInspector() {
+      const unit = selectedUnit();
+      if (!unit) { $('#inspector').innerHTML = ''; return; }
+      const conditions = unit.conditions.map(condition => `<div class="condition ${condition.matches ? 'match' : ''}"><i class="lamp"></i><div>${esc(condition.label)}<small>${esc(condition.source)}</small></div></div>`).join('');
+      const placeholders = unit.placeholders.map(field => `<div class="placeholder"><strong>{{${esc(field.name)}}}</strong><span>${esc(field.type)} · ${esc(field.source_kind)}</span><small>${esc(field.source)}<br>sample: ${esc(field.example)}</small></div>`).join('');
+      const deliveryChoices = unit.delivery_choices?.length ? unit.delivery_choices.map(choice => `${choice.agent}: ${choice.delivery}`).join(' · ') : unit.delivery;
+      const draft = state.drafts.has(unit.id) ? state.drafts.get(unit.id) : unit.copy;
+      $('#inspector').innerHTML = `<div class="inspector-head"><span class="unit-id">${esc(unit.id)}</span><h3>${esc(unit.name)}</h3><span class="state-label">${unit.eligible ? 'eligible now' : 'gated in this scenario'}</span></div><div class="inspector-body">
+        <dl><div class="meta-line"><dt>Moment</dt><dd>${esc(unit.moment)}</dd></div><div class="meta-line"><dt>Trigger</dt><dd>${esc(unit.trigger)}</dd></div><div class="meta-line"><dt>Delivery</dt><dd>${esc(deliveryChoices)}</dd></div><div class="meta-line"><dt>Source</dt><dd><code>${esc(unit.source_path)}</code></dd></div><div class="meta-line"><dt>Copy file</dt><dd><code>${esc(unit.copy_path)}</code></dd></div></dl>
+        <h4 class="subhead">Scenario predicates</h4>${conditions || '<span class="state-label">none</span>'}
+        <h4 class="subhead">Typed placeholders</h4>${placeholders || '<span class="state-label">static copy, no fields</span>'}
+        <h4 class="subhead">Copy template</h4><textarea class="editor" id="copy-editor" spellcheck="false">${esc(draft)}</textarea>
+        <div class="edit-actions"><button id="reset-copy">Reset</button><button class="save" id="save-copy">Mock save</button></div>
+        <p class="mock-note">No file is changed in this spike. The endpoint returns the exact path a real write would update.</p>
+      </div>`;
+      $('#copy-editor').addEventListener('input', event => state.drafts.set(unit.id, event.target.value));
+      $('#reset-copy').addEventListener('click', () => { state.drafts.delete(unit.id); renderInspector(); });
+      $('#save-copy').addEventListener('click', () => mockSave(unit));
+    }
+
+    async function mockSave(unit) {
+      const copy = $('#copy-editor').value;
+      const response = await fetch('/api/mock-save', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({unit_id: unit.id, copy}) });
+      if (!response.ok) return showToast(await response.text());
+      const result = await response.json();
+      showToast(`${result.changed ? 'CHANGED' : 'UNCHANGED'} · ${result.bytes} bytes · would write ${result.would_write}`);
+    }
+
+    function showToast(message) {
+      const toast = $('#toast');
+      toast.textContent = 'MOCK ONLY · ' + message;
+      toast.classList.add('show');
+      toast.title = 'Click to dismiss';
+    }
+
+    function cycleVariant(direction) {
+      const current = variants.findIndex(item => item.key === variant().key);
+      const next = variants[(current + direction + variants.length) % variants.length];
+      const url = new URL(location.href);
+      url.searchParams.set('variant', next.key);
+      history.pushState(null, '', url);
+      render();
+    }
+
+    $('#scenario-controls').addEventListener('click', event => {
+      const button = event.target.closest('button[data-value]');
+      if (!button) return;
+      button.parentElement.querySelectorAll('button').forEach(candidate => candidate.classList.remove('active'));
+      button.classList.add('active');
+      loadCatalog();
+    });
+    ['has-context','workflow-enabled','launch-guidance','plugin-launch','plugin-initial','plugin-messages'].forEach(id => $('#' + id).addEventListener('change', loadCatalog));
+    $('#search').addEventListener('input', event => { state.search = event.target.value; render(); });
+    $('#eligible-only').addEventListener('click', () => { state.eligibleOnly = !state.eligibleOnly; render(); });
+    $('#variant-prev').addEventListener('click', () => cycleVariant(-1));
+    $('#variant-next').addEventListener('click', () => cycleVariant(1));
+    $('#toast').addEventListener('click', event => event.currentTarget.classList.remove('show'));
+    addEventListener('popstate', render);
+    addEventListener('keydown', event => {
+      const tag = event.target.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || event.target.isContentEditable) return;
+      if (event.key === 'ArrowLeft') cycleVariant(-1);
+      if (event.key === 'ArrowRight') cycleVariant(1);
+      if (event.key === '/') { event.preventDefault(); $('#search').focus(); }
+    });
+
+    seedControlsFromURL();
+    loadCatalog();
+  </script>
+</body>
+</html>
