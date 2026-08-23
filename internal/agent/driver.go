@@ -241,6 +241,9 @@ type SpawnOpts struct {
 	// driver's repository trust gate; interactive launches leave it false.
 	TrustWorkingDirectory bool
 
+	// Garden is true when this launch's daemon is the garden's home.
+	Garden bool
+
 	// CrewPriming is the composed block that makes this session its crew member
 	// — charter, the freshest letter, the verbs of the member's home. The daemon
 	// composes it (and logs its size); empty for every session that is nobody.
@@ -272,6 +275,7 @@ func (o SpawnOpts) launchGuidance() string {
 		NotebookRoot:         o.NotebookRoot,
 		WorkspaceContextPath: o.WorkspaceContextPath,
 		InjectWorkflow:       o.InjectWorkflowGuidance,
+		Garden:               o.Garden,
 		Crew:                 o.CrewPriming,
 	}.Instructions()
 }

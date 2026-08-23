@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -221,11 +222,11 @@ func seedClient() *client.Client {
 	return client.New(config.SocketPath())
 }
 
-const seedPrimeText = "attn keeps work as seeds in the garden. A seed is one unit of work: a short id like `s-7k3f9m`, a title, a markdown body, a state. A plot is a seed with children: its body is the execution plan, and the children are parallel unless a `blocks` edge orders them. Any seed can be a plot. Seed packets are templates for plots; if you are told to use packets, or the task calls for one, the attn skill says how they work.\n\nTrack work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant it before you start on it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. When it fell out of a seed you were working on, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.\n\nA delegated session reports to one seed: the seed planted for its brief, or the seed it was dispatched at with `--plot`. Flag-free `attn seed ready` answers from that seed's plot, a delegation started from it is planted under it, and its report lands on its log. Every other verb takes the id you give it.\n\nThe loop:\n\n    attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it; inside your plot when you report to one. A plot is never ready itself, its children are\n    attn seed ready --all            the same across the whole garden; use it to look past your plot\n    attn seed show <id>              body, state, tender, edges, children, freshest handoff\n    attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name\n    attn seed note <id> -m \"…\"       what happened and what you learned, tending it or not; --handoff addresses the next tender; --ring tells watchers to look\n    attn seed harvest <id> -m \"…\"    done; the reason is required and fits in 400 characters, the long version goes in a note\n    attn seed wither <id> [-m \"…\"]   abandoned, nobody will pick it up\n    attn seed park <id>              put down, claim released; tend it again to resume\n    attn seed replant <id>           a harvested or withered seed back to planted\n    attn seed plant \"<title>\" -m \"…\" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id\n\nTend, park, harvest, wither and replant all check who holds the seed: one held by a live session or a crew member refuses you by name, and `--force` acts anyway, with the log recording who forced it. A seed whose session ended is not held. `--member <name>` on any of these acts as a crew member instead of this session, and a member's claim never expires.\n\nPlans:\n\n    attn seed plot -f <file.json>    a whole plot in one move, - reads stdin: {\"title\": …, \"body\": …, \"children\": [{\"title\": …, \"body\": …, \"blocks\": [\"<sibling-slug>\"]}]}; a slug is the sibling's title lowercased, anything not an ASCII letter or digit becomes one dash; `attn seed guide` has a full example\n    attn seed link <a> blocks <b>    b waits until a closes; unlink removes the edge\n    attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time\n    attn seed link <a> discovered-from <b>    a fell out of working on b; a record, it never orders or blocks anything\n    attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list\n    attn seed edit <id> -m \"…\"       replace the body; say what changed in a note\n\nKeeping up:\n\n    attn seed notes <id>             the whole log, newest first\n    attn seed watch <id>             ring this session when the seed or anything in its plot moves; unwatch stops it\n    attn seed attach <id> --path <file.md> | --notebook <doc-id> | --url <url>    point the seed at a document where it already lives; detach removes the pointer\n    attn seed export <id> [--out <path>]    the seed and its log as one markdown file\n    attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it\n\nDelegating:\n\n    attn delegate --brief \"…\" --model <m>   starts a visible agent session the user can inspect and steer (not a native subagent), and plants a seed bound to it: the brief is its body, the delegate is its tender, its report lands on the seed's log\n        --plot <seed>                       dispatch at an existing seed instead of planting one; the delegate becomes its tender and reports to it\n        --brief-file <path>                 the brief from a file; --effort <level> sets reasoning where the agent supports it\n        --new-workspace | --workspace <id> | --cwd <path>    where it runs; --worktree <branch> gives it its own checkout\n    attn agent msg <seed-id> \"…\"            reaches whoever tends it now; an untended seed refuses by name\n    attn seed show <id>                     the delegate's report, once it lands; no need to watch the session\n\n`attn seed --help` has every flag. `attn seed guide` has how to write a body worth handing to somebody else."
+const seedPrimeText = hooks.GardenGuidance
 
-// seedPrimeFromReady renders the standing primer and the tail selected by the
-// exact flag-free ready answer the daemon returned.
-func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
+// seedPrimeTailFromReady renders the live tail selected by the exact flag-free
+// ready answer the daemon returned.
+func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	var tail strings.Builder
 	switch {
 	case ready.Crown == nil:
@@ -257,7 +258,12 @@ func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
 			}
 		}
 	}
-	return seedPrimeText + "\n\n" + tail.String() + "\n"
+	return tail.String() + "\n"
+}
+
+// seedPrimeFromReady renders the standing launch guidance plus the live tail.
+func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
+	return seedPrimeText + "\n\n" + seedPrimeTailFromReady(ready)
 }
 
 func runSeedPrime(args []string) {

@@ -264,42 +264,48 @@ func TestGenerateCodexConfigOverrides_OmitsEmptySocketButKeepsSessionIdentity(t 
 func TestAgentInstructionsComposition(t *testing.T) {
 	workflow := WorkflowTriggerGuidance()
 	context := WorkspaceContextGuidance("/tmp/context.md")
-	garden := GardenAwarenessGuidance()
 
-	// The garden pointer is always-on: even with no checkout and no workflow
-	// guidance, AgentInstructions returns exactly the garden block.
-	if got := AgentInstructions("", false); got != garden {
-		t.Fatalf("AgentInstructions(empty, false) = %q, want the garden block %q", got, garden)
+	if got := AgentInstructions("", false); got != "" {
+		t.Fatalf("AgentInstructions(empty, false) = %q, want empty", got)
 	}
 
-	// Workspace context, then the always-on garden block.
 	contextOnly := AgentInstructions("/tmp/context.md", false)
-	if want := strings.Join([]string{context, garden}, "\n\n"); contextOnly != want {
-		t.Fatalf("context-only instructions = %q, want %q", contextOnly, want)
+	if contextOnly != context {
+		t.Fatalf("context-only instructions = %q, want %q", contextOnly, context)
 	}
 	if strings.Contains(contextOnly, "hypercode") {
 		t.Fatalf("context-only instructions leaked workflow guidance: %q", contextOnly)
 	}
 
-	// Workflow guidance (no checkout), then the always-on garden block.
 	workflowOnly := AgentInstructions("", true)
-	if want := strings.Join([]string{workflow, garden}, "\n\n"); workflowOnly != want {
-		t.Fatalf("workflow-only instructions = %q, want %q", workflowOnly, want)
+	if workflowOnly != workflow {
+		t.Fatalf("workflow-only instructions = %q, want %q", workflowOnly, workflow)
 	}
 
-	// Both, joined with a blank line, context first, garden block last.
 	both := AgentInstructions("/tmp/context.md", true)
-	if want := strings.Join([]string{context, workflow, garden}, "\n\n"); both != want {
+	if want := strings.Join([]string{context, workflow}, "\n\n"); both != want {
 		t.Fatalf("combined instructions = %q, want %q", both, want)
 	}
 }
 
-func TestGardenAwarenessGuidancePointsAtPrime(t *testing.T) {
-	// Exact BEGIN Y block in trellis-sections.md, kept inline because it is one
-	// sentence rather than the 5KB copy pinned by hash in cmd/attn.
-	const want = "attn keeps work as seeds in the garden. Run `attn seed prime` to understand how it works."
-	if got := GardenAwarenessGuidance(); got != want {
-		t.Fatalf("GardenAwarenessGuidance() = %q, want %q", got, want)
+func TestLaunchInstructionsGateGardenGuidance(t *testing.T) {
+	if got := (Launch{Garden: true}).Instructions(); got != GardenGuidance {
+		t.Fatalf("bare home launch = %q, want exact garden guidance", got)
+	}
+
+	withoutGarden := Launch{WorkspaceContextPath: "/tmp/context.md"}.Instructions()
+	if strings.Contains(withoutGarden, GardenGuidance) {
+		t.Fatalf("launch without home flag carried garden guidance:\n%s", withoutGarden)
+	}
+
+	withGarden := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}.Instructions()
+	if want := strings.Join([]string{WorkspaceContextGuidance("/tmp/context.md"), GardenGuidance}, "\n\n"); withGarden != want {
+		t.Fatalf("home launch instructions differ: %q", withGarden)
+	}
+
+	chief := Launch{NotebookRoot: "/tmp/notebook", Garden: true}.Instructions()
+	if !strings.Contains(chief, "You are the chief of staff") || !strings.Contains(chief, GardenGuidance) {
+		t.Fatalf("home chief launch dropped a guidance block:\n%s", chief)
 	}
 }
 
@@ -368,10 +374,9 @@ func TestChiefGuidanceEmptyWithoutRoot(t *testing.T) {
 	}
 }
 
-func TestChiefGuidanceUsesTheStandingGardenPointer(t *testing.T) {
+func TestChiefGuidanceLeavesGardenToLaunch(t *testing.T) {
 	guidance := ChiefGuidance("/tmp/notebook")
 	for _, want := range []string{
-		GardenAwarenessGuidance(),
 		"End your turn after delegating",
 		"Never park a blocking Monitor on attn activity",
 		"attn seed show <seed-id>",
@@ -381,8 +386,8 @@ func TestChiefGuidanceUsesTheStandingGardenPointer(t *testing.T) {
 			t.Fatalf("chief guidance dropped %q:\n%s", want, guidance)
 		}
 	}
-	if count := strings.Count(guidance, GardenAwarenessGuidance()); count != 1 {
-		t.Fatalf("chief guidance carries exact Y %d times, want once:\n%s", count, guidance)
+	if strings.Contains(guidance, GardenGuidance) || strings.Contains(guidance, "attn seed prime") {
+		t.Fatalf("chief guidance duplicated the launch-owned garden block:\n%s", guidance)
 	}
 	for _, removed := range []string{
 		"When you delegate, attn plants a seed",
@@ -405,10 +410,11 @@ func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 
 	launch := Launch{
 		WorkspaceContextPath: "/tmp/context.md",
+		Garden:               true,
 		Crew:                 block,
 	}.Instructions()
 
-	if !strings.Contains(launch, GardenAwarenessGuidance()) {
+	if !strings.Contains(launch, GardenGuidance) {
 		t.Fatalf("the crew block replaced the launch guidance:\n%s", launch)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(launch), strings.TrimSpace(block)) {

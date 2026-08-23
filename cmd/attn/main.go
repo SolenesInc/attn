@@ -3108,6 +3108,11 @@ func runAgentDirectly(requestedAgent string) {
 			}
 		}
 	}
+	// A successful ready answer proves this daemon is the garden's home. Launch
+	// owns standing guidance; SessionStart refreshes live state.
+	if _, err := c.SeedReady(sessionID, "", false); err == nil {
+		opts.Garden = true
+	}
 	// The crew priming rides the same injection. The daemon composes it from
 	// the member's own home and logs its size at that moment, so what a member
 	// was told and what the receipt says are the same bytes. A session that is
@@ -3344,7 +3349,7 @@ func runHookSessionStart() {
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	// The SessionStart hook syncs the agent's native session ID back to attn for
 	// resume, then emits the launch-independent workspace-context fallback and
-	// the live garden primer. The launch path sets
+	// the live garden tail. The launch path sets
 	// ATTN_WORKSPACE_CONTEXT_GUIDANCE / ATTN_CHIEF_GUIDANCE so only the workspace
 	// block is suppressed when guidance was already injected.
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
@@ -3354,7 +3359,7 @@ func runHookSessionStart() {
 		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", contextErr)
 	}
 	if primeErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load garden primer: %v\n", primeErr)
+		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
 	}
 
 	if output := hooks.SessionStartOutput(contexts...); output != "" {
@@ -3369,8 +3374,7 @@ type sessionStartClient interface {
 
 // sessionStartContexts builds the reset-safe context blocks independently of
 // either agent's hook envelope. A garden fence is non-fatal and contributes no
-// block, so an outpost still receives the standing launch pointer without a
-// primer it cannot use.
+// block.
 func sessionStartContexts(
 	c sessionStartClient,
 	sessionID string,
@@ -3386,7 +3390,7 @@ func sessionStartContexts(
 
 	ready, primeErr := c.SeedReady(sessionID, "", false)
 	if primeErr == nil {
-		contexts = append(contexts, seedPrimeFromReady(ready))
+		contexts = append(contexts, seedPrimeTailFromReady(ready))
 	}
 	return contexts, contextErr, primeErr
 }

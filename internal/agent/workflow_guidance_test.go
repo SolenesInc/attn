@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/hooks"
 )
 
 // workflowGuidanceMarker is a phrase unique to the workflow-trigger guidance —
@@ -12,14 +14,14 @@ import (
 const workflowGuidanceMarker = "hypercode"
 
 func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
-	// Disabled, no checkout: the launch still appends a system prompt carrying the
-	// always-on garden-awareness pointer — but never the gated workflow guidance.
-	off := (&Claude{}).BuildCommand(SpawnOpts{SessionID: "s", Executable: "claude"})
+	// A home launch carries garden guidance but never workflow guidance while the
+	// workflow flag is disabled.
+	off := (&Claude{}).BuildCommand(SpawnOpts{SessionID: "s", Executable: "claude", Garden: true})
 	if !slices.Contains(off.Args, "--append-system-prompt") {
-		t.Fatalf("bare launch should append the always-on garden block: %v", off.Args)
+		t.Fatalf("home launch should append the garden block: %v", off.Args)
 	}
 	offPrompt := argvValueAfter(off.Args, "--append-system-prompt")
-	if !strings.Contains(offPrompt, "attn seed prime") {
+	if !strings.Contains(offPrompt, hooks.GardenGuidance) {
 		t.Fatalf("bare launch system prompt missing the garden block: %q", offPrompt)
 	}
 	if strings.Contains(offPrompt, workflowGuidanceMarker) {

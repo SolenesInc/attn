@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -28,6 +29,7 @@ type pluginLaunchInstructions struct {
 // created; an existing or locally modified checkout is never removed.
 func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief bool) (*pluginLaunchInstructions, func(), error) {
 	rollback := func() {}
+	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
@@ -40,6 +42,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
 				NotebookRoot: root,
+				Garden:       gardenHome,
 				Crew:         d.crewPrimeForLaunch(sessionID),
 			}.Instructions(),
 			WorkspaceID:  workspaceID,
@@ -67,6 +70,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 		Content: hooks.Launch{
 			WorkspaceContextPath: result.Path,
 			InjectWorkflow:       parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
+			Garden:               gardenHome,
 			Crew:                 d.crewPrimeForLaunch(sessionID),
 		}.Instructions(),
 		WorkspaceID:     workspaceID,

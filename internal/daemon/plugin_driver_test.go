@@ -95,7 +95,7 @@ func TestPluginDriverRegister_ReturnsOnlyActiveRunsOwnedByPlugin(t *testing.T) {
 }
 
 func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newEnrolledDaemon(t, "")
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
@@ -126,7 +126,7 @@ func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
 			t.Error("spawn run_id is empty, want daemon-assigned run identity")
 			return
 		}
-		if params.Instructions == nil || params.Instructions.Kind != pluginInstructionKindWorkspace || !strings.Contains(params.Instructions.Content, hooks.GardenAwarenessGuidance()) {
+		if params.Instructions == nil || params.Instructions.Kind != pluginInstructionKindWorkspace || !strings.Contains(params.Instructions.Content, hooks.GardenGuidance) {
 			t.Errorf("spawn instructions=%+v, want workspace guidance", params.Instructions)
 			return
 		}

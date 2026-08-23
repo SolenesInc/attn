@@ -1,8 +1,9 @@
 kind: changed
 area: garden
 change: >
-  Agents now learn the garden through `attn seed prime` at every session start
-  and context reset. Garden listings show plots by default, ready output keeps
-  plot structure visible, discovered work can record its origin, and every
-  lifecycle move refuses to take a live holder's seed unless `--force` is
-  explicit and recorded.
+  Agents now receive the standing garden contract in their launch instructions
+  and a live position from every session start and context reset; `attn seed
+  prime` prints both on demand. Garden listings show plots by default, ready
+  output keeps plot structure visible, discovered work can record its origin,
+  and every lifecycle move refuses to take a live holder's seed unless
+  `--force` is explicit and recorded.

@@ -548,8 +548,11 @@ func TestSessionStartContextsCarriesPrimeOnStartupAndCompact(t *testing.T) {
 			if output.HookSpecificOutput.HookEventName != "SessionStart" {
 				t.Fatalf("SessionStart %s event = %q", event, output.HookSpecificOutput.HookEventName)
 			}
-			if got, want := output.HookSpecificOutput.AdditionalContext, strings.TrimSpace(seedPrimeFromReady(ready)); got != want {
-				t.Fatalf("SessionStart %s primer differs:\n%s", event, firstDifference(got, want))
+			if got, want := output.HookSpecificOutput.AdditionalContext, strings.TrimSpace(seedPrimeTailFromReady(ready)); got != want {
+				t.Fatalf("SessionStart %s tail differs:\n%s", event, firstDifference(got, want))
+			}
+			if strings.Contains(output.HookSpecificOutput.AdditionalContext, seedPrimeText) || strings.Contains(output.HookSpecificOutput.AdditionalContext, "attn seed prime") {
+				t.Fatalf("SessionStart %s re-injected standing guidance: %q", event, output.HookSpecificOutput.AdditionalContext)
 			}
 		})
 	}
@@ -570,8 +573,8 @@ func TestSessionStartContextsOutpostAddsNoPrimer(t *testing.T) {
 	if output := hooks.SessionStartOutput(contexts...); output != "" {
 		t.Fatalf("outpost SessionStart output = %q, want no injected context", output)
 	}
-	if got := hooks.AgentInstructions("", false); got != hooks.GardenAwarenessGuidance() {
-		t.Fatalf("outpost launch pointer = %q, want exact Y", got)
+	if got := (hooks.Launch{}).Instructions(); got != "" {
+		t.Fatalf("outpost launch guidance = %q, want no garden block", got)
 	}
 }
 

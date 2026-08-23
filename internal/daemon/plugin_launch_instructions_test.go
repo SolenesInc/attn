@@ -2,15 +2,15 @@ package daemon
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
 	addTestWorkspace(d, "workspace-a", t.TempDir())
 	if _, _, err := d.store.UpdateWorkspaceContext("workspace-a", "# Shared\ncurrent decision\n", "source", 0); err != nil {
@@ -27,7 +27,7 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	if instructions.Kind != pluginInstructionKindWorkspace || instructions.ContextRevision != 1 {
 		t.Fatalf("instructions = %+v, want workspace revision 1", instructions)
 	}
-	if !strings.Contains(instructions.Content, instructions.ContextPath) || !strings.Contains(instructions.Content, "attn seed prime") {
+	if !strings.Contains(instructions.Content, instructions.ContextPath) || !strings.Contains(instructions.Content, hooks.GardenGuidance) {
 		t.Fatalf("instructions content did not compose existing guidance: %q", instructions.Content)
 	}
 	if got, err := os.ReadFile(instructions.ContextPath); err != nil || string(got) != "# Shared\ncurrent decision\n" {
@@ -62,7 +62,7 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 }
 
 func TestPreparePluginLaunchInstructionsPreservesExistingCheckout(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
 	setupWorkspaceContextSession(t, d, "session-a", "workspace-a")
 	checkout, err := d.checkoutWorkspaceContext(&protocol.WorkspaceContextCheckoutMessage{SourceSessionID: "session-a"})
@@ -84,7 +84,7 @@ func TestPreparePluginLaunchInstructionsPreservesExistingCheckout(t *testing.T) 
 }
 
 func TestPreparePluginChiefInstructionsUsesNotebookNotWorkspace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
 	addTestWorkspace(d, "workspace-a", t.TempDir())
 	notebookRoot := t.TempDir()
@@ -97,10 +97,27 @@ func TestPreparePluginChiefInstructionsUsesNotebookNotWorkspace(t *testing.T) {
 	if instructions.Kind != pluginInstructionKindChief || instructions.NotebookRoot != notebookRoot || instructions.ContextPath != "" {
 		t.Fatalf("chief instructions = %+v", instructions)
 	}
-	if !strings.Contains(instructions.Content, "You are the chief of staff") || !strings.Contains(instructions.Content, notebookRoot) {
+	if !strings.Contains(instructions.Content, "You are the chief of staff") || !strings.Contains(instructions.Content, notebookRoot) || !strings.Contains(instructions.Content, hooks.GardenGuidance) {
 		t.Fatalf("chief guidance = %q", instructions.Content)
 	}
 	if _, err := os.Stat(workspaceContextCheckoutDir(d.dataRoot, "session-a")); !os.IsNotExist(err) {
 		t.Fatalf("chief preparation created workspace checkout: %v", err)
+	}
+}
+
+func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
+	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	t.Cleanup(func() { _ = d.store.Close() })
+	addTestWorkspace(d, "workspace-a", t.TempDir())
+
+	instructions, _, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false)
+	if err != nil {
+		t.Fatalf("preparePluginLaunchInstructions: %v", err)
+	}
+	if strings.Contains(instructions.Content, hooks.GardenGuidance) {
+		t.Fatalf("outpost launch carried home garden guidance: %q", instructions.Content)
+	}
+	if !strings.Contains(instructions.Content, instructions.ContextPath) {
+		t.Fatalf("outpost launch lost workspace guidance: %q", instructions.Content)
 	}
 }
