@@ -404,10 +404,9 @@ func TestCrew_TenderNamesResolveWhereAMemberExists(t *testing.T) {
 	}
 }
 
-// The slice's safety property: nothing changes for a session with no binding.
-// A worker plants, tends and hands off exactly as it did before the registry
-// existed, and its broadcast carries no crew field at all.
-func TestCrew_UnboundSessionsBehaveExactlyAsBefore(t *testing.T) {
+// An explicit unregistered --member still acts as that durable member identity;
+// registry lookup is normalization, not a requirement to claim work by name.
+func TestCrew_ExplicitUnregisteredMemberActsAsMember(t *testing.T) {
 	d := newGardenDaemon(t)
 	d.ensureCrewCollections()
 	writeCrewHomes(t, d.dataRoot)
@@ -419,8 +418,8 @@ func TestCrew_UnboundSessionsBehaveExactlyAsBefore(t *testing.T) {
 	if tended.TenderMember != "some-worker" {
 		t.Fatalf("tender member = %q, want the free string as typed", tended.TenderMember)
 	}
-	if tended.TenderSession != "sess-a" {
-		t.Fatalf("tender session = %q, want sess-a", tended.TenderSession)
+	if tended.TenderSession != "" {
+		t.Fatalf("tender session = %q, want explicit member to act instead", tended.TenderSession)
 	}
 	// The claim still holds against another session: an unconfirmed take is
 	// refused by name, unchanged for tenders the registry knows nothing about.

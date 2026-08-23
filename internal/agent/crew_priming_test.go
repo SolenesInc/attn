@@ -8,8 +8,8 @@ import (
 const crewBlock = "You are **Trellis**, a crew member of this attn home."
 
 // A woken member is its member on both built-in harnesses: the priming rides the
-// same launch-guidance path the garden primer does, and a session nobody woke as
-// a member is primed with no crew block at all.
+// same launch-guidance path as the standing guidance, and a session nobody woke
+// as a member is primed with no crew block at all.
 func TestBuiltinAgentsCarryTheCrewPriming(t *testing.T) {
 	opts := SpawnOpts{SessionID: "s", Executable: "claude", CrewPriming: crewBlock}
 

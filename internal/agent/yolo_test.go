@@ -73,6 +73,7 @@ func TestClaudeBuildCommand_AppendsWorkspaceContextSystemPrompt(t *testing.T) {
 		SessionID:            "sess-1",
 		Executable:           "claude",
 		WorkspaceContextPath: "/tmp/context.md",
+		Garden:               true,
 	}
 	cmd := (&Claude{}).BuildCommand(opts)
 	flagIndex := slices.Index(cmd.Args, "--append-system-prompt")
@@ -80,12 +81,12 @@ func TestClaudeBuildCommand_AppendsWorkspaceContextSystemPrompt(t *testing.T) {
 		t.Fatalf("args = %#v, want --append-system-prompt with guidance", cmd.Args)
 	}
 	// A non-chief workspace agent gets the production composition as the
-	// system-prompt value: its workspace-context guidance plus the always-on
-	// ticket-awareness pointer — no journaling directive. Pin the exact value so a
+	// system-prompt value: its workspace-context guidance plus the home-gated
+	// garden contract — no journaling directive. Pin the exact value so a
 	// re-introduced directive (composed or as a separate arg) is caught.
-	want := hooks.AgentInstructions("/tmp/context.md", false)
+	want := (hooks.Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}).Instructions()
 	if cmd.Args[flagIndex+1] != want {
-		t.Fatalf("system prompt = %q, want the workspace-context + ticket composition", cmd.Args[flagIndex+1])
+		t.Fatalf("system prompt = %q, want the workspace-context + garden composition", cmd.Args[flagIndex+1])
 	}
 	// The same launch sets the suppression marker, so the SessionStart fallback does
 	// not re-emit the guidance on resume/compact.
@@ -174,12 +175,13 @@ func TestCodexConfigOverrides_ChiefGuidanceTakesPrecedence(t *testing.T) {
 }
 
 // A non-chief Codex launch carries its workspace-context guidance plus the
-// always-on ticket-awareness pointer in a single developer_instructions
-// override — no journaling directive is appended.
+// home-gated garden contract in a single developer_instructions override. No
+// journaling directive is appended.
 func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	overrides := (&Codex{}).GenerateConfigOverrides(SpawnOpts{
 		SessionID:            "sess-1",
 		WorkspaceContextPath: "/tmp/context.md",
+		Garden:               true,
 	})
 	var devInstr []string
 	for _, o := range overrides {
@@ -188,17 +190,17 @@ func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 		}
 	}
 	// Exactly one developer_instructions entry, equal to the value the codex path
-	// composes: the workspace-context guidance plus the ticket-awareness pointer.
+	// composes: the workspace-context guidance plus the garden contract.
 	if len(devInstr) != 1 {
 		t.Fatalf("want exactly one developer_instructions override, got %d: %q", len(devInstr), overrides)
 	}
-	want := "developer_instructions=" + strconv.Quote(hooks.AgentInstructions("/tmp/context.md", false))
+	want := "developer_instructions=" + strconv.Quote((hooks.Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}).Instructions())
 	if devInstr[0] != want {
 		t.Fatalf("developer_instructions = %q, want the workspace + garden composition %q", devInstr[0], want)
 	}
-	// Still carries the workspace context path and the always-on garden block.
-	if !strings.Contains(devInstr[0], "/tmp/context.md") || !strings.Contains(devInstr[0], "attn seed plant") {
-		t.Fatalf("developer_instructions should carry workspace-context guidance and the garden pointer: %q", devInstr[0])
+	// Still carries the workspace context path and the home garden block.
+	if !strings.Contains(devInstr[0], "/tmp/context.md") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
+		t.Fatalf("developer_instructions should carry workspace-context and garden guidance: %q", devInstr[0])
 	}
 	// The journaling directive must NOT be appended for non-chief agents.
 	if strings.Contains(devInstr[0], "notable moments, not routine steps") {

@@ -55,7 +55,7 @@ export interface GardenBoardProps {
   /** False until the first daemon push lands — an empty board is not an empty garden. */
   loaded: boolean;
   /** Perform one real lifecycle move. Rejects with the daemon's own sentence. */
-  onTransition: (seedId: string, verb: Verb, reason?: string, confirm?: boolean) => Promise<unknown>;
+  onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean) => Promise<unknown>;
   /** Write on a seed's log — where park and replant put their sentence. */
   onNote: (seedId: string, body: string) => Promise<unknown>;
   /** The list/board switch, owned by the surface so both views show the same one. */
@@ -826,7 +826,7 @@ function Composer({
 }: {
   compose: { seed: Seed; verb: Verb; column: ColumnKey };
   // Who still holds this seed, when that is somebody. The line it draws is the
-  // board's --confirm: there is no way to commit without having read it.
+  // board's --force: there is no way to commit without having read it.
   takenFrom: string;
   busy: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;

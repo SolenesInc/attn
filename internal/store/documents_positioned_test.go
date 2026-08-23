@@ -102,6 +102,70 @@ func TestAWriteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	}
 }
 
+// A batch is one commit, not a loop around the single-write method. Refusing
+// the second fact must roll back its document and the first pair that had
+// already run inside the transaction.
+func TestDocumentWriteBatchDoesNotSurviveItsSecondFactFailure(t *testing.T) {
+	s, base := storeWithRequests(t, map[string]string{})
+	schema := requestsDecl(t, s)
+
+	if _, err := s.db.Exec(`CREATE TRIGGER refuse_second_fact BEFORE INSERT ON bus_events
+	                        WHEN NEW.subject = 'app/approval-gate/requests/b'
+	                        BEGIN SELECT RAISE(ABORT, 'the second fact failed'); END`); err != nil {
+		t.Fatalf("installing the failing append: %v", err)
+	}
+	absent := docstore.ExpectAbsent
+	_, err := s.CommitDocumentWrites([]DocumentCommit{
+		{
+			Write: DocumentWrite{Schema: schema, ID: "a", Body: []byte(`{"status":"pending"}`), Expected: &absent},
+			Fact:  changeFact("a", false),
+		},
+		{
+			Write: DocumentWrite{Schema: schema, ID: "b", Body: []byte(`{"status":"pending"}`), Expected: &absent},
+			Fact:  changeFact("b", false),
+		},
+	}, base)
+	if err == nil || !strings.Contains(err.Error(), "second fact failed") {
+		t.Fatalf("batch error = %v, want the second fact failure", err)
+	}
+	for _, id := range []string{"a", "b"} {
+		if _, found, readErr := s.GetDocument(schema, id); readErr != nil || found {
+			t.Fatalf("document %s survived the batch: found=%v err=%v", id, found, readErr)
+		}
+	}
+	if events := factsOnLog(t, s); len(events) != 0 {
+		t.Fatalf("the failed batch left %d fact(s) on the log", len(events))
+	}
+}
+
+func TestDocumentWriteBatchReportsEachFactsPosition(t *testing.T) {
+	s, base := storeWithRequests(t, map[string]string{})
+	schema := requestsDecl(t, s)
+	absent := docstore.ExpectAbsent
+
+	written, err := s.CommitDocumentWrites([]DocumentCommit{
+		{
+			Write: DocumentWrite{Schema: schema, ID: "a", Body: []byte(`{"status":"pending"}`), Expected: &absent},
+			Fact:  changeFact("a", false),
+		},
+		{
+			Write: DocumentWrite{Schema: schema, ID: "b", Body: []byte(`{"status":"pending"}`), Expected: &absent},
+			Fact:  changeFact("b", false),
+		},
+	}, base)
+	if err != nil {
+		t.Fatalf("commit batch: %v", err)
+	}
+	if len(written) != 2 || written[0].Rev != docstore.FirstRev || written[1].Rev != docstore.FirstRev ||
+		written[0].Seq == 0 || written[1].Seq != written[0].Seq+1 {
+		t.Fatalf("batch results = %+v", written)
+	}
+	events := factsOnLog(t, s)
+	if len(events) != 2 || events[0].Seq != written[0].Seq || events[1].Seq != written[1].Seq {
+		t.Fatalf("facts = %+v for results %+v", events, written)
+	}
+}
+
 // The delete half of the same contract: a removal that failed to announce must
 // leave the document there.
 func TestADeleteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {

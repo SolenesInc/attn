@@ -1,55 +1,56 @@
 # The garden: seeds, plots, and reporting
 
-The garden is where work lives. A **seed** is one unit of work — a short id
-(`s-7k3f9m`), a title, a markdown body, and a state. Anything worth handing off,
-parking, or attributing is a seed; in-session scratch is not. A **plot** is a
-seed with children, and its children are parallel by default: only `blocks`
-edges sequence them.
+The garden is where work lives. Run `attn seed prime` for the rules an agent
+follows while working, and `attn seed guide` for the craft of writing a body,
+planning a plot, deciding what done means, and handing work over. Syntax lives
+in `attn seed --help`.
 
-Two commands hold everything else:
+## Planting work
 
-- **`attn seed --help`**: the whole surface and the authority on syntax.
-- **`attn seed guide`**: the craft — writing a seed's body, deliverable types
-  and what "done" is for each, artifacts, handoffs and steering. Run it before
-  writing a body or deciding where a seed belongs; it is the single source of
-  truth for that judgment, so this reference does not repeat it.
+Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.
 
-## The loop
+## Planting a plot
 
-- **`attn seed ready`** — what you can pick up right now: nothing open blocks
-  it, nobody holds it, and it is not a crown (a plot's work is its children).
-- **`attn seed tend <id>`** — claim it. One tender at a time, so the claim is
-  how every other agent learns it is taken. The freshest handoff prints on the
-  claim, so picking work up primes you.
-- **`attn seed note <id> -m "…"`** — what happened and what you learned, for
-  whoever tends it next.
-- **`attn seed harvest <id> -m "what got done"`** — close it as done.
-  `attn seed wither` closes one nobody will pick up; `attn seed park` puts it
-  down without giving up on it.
+`attn seed plot -f <payload.json>` plants a plot and its children in one move.
+The payload names sibling blockers by slug:
 
-`attn seed plant "<title>" -m "<body>"` starts one and prints its id.
-`attn seed plot -f <payload.json>` plants a whole crown and its children in one
-move.
+```json
+{
+  "title": "Search moves to the daemon",
+  "body": "Outcome: the app asks the daemon for search results...",
+  "children": [
+    {"title": "Daemon search endpoint", "body": "..."},
+    {"title": "App calls the endpoint", "body": "...", "blocks": ["remove-the-client-index"]},
+    {"title": "Remove the client index", "body": "..."}
+  ]
+}
+```
+
+The slug is the sibling title lowercased. Each run of characters that are not
+ASCII letters or digits becomes one dash. Pass `-` to read the payload from stdin.
 
 ## Rings and watches
 
 Lifecycle moves ring the sessions with a stake in the seed. Notes stay quiet
-unless you add `--ring`: ring when somebody needs to look, and let ordinary
-progress accumulate silently on the log. `attn seed watch <id>` gives this
-session a stake; watching a crown covers everything in its plot. `attn seed
-unwatch <id>` is the way out.
+unless you add `--ring`. `attn seed watch <id>` gives this session a stake;
+watching a plot covers every seed in it. `attn seed unwatch <id>` is the way
+out.
 
 A bell carries only the seed and what moved, so read it with `attn seed show`;
 `show` or `notes` resets the bell for the next meaningful move.
 
-## Only when the user asks
+## Artifacts
 
-You may surface that something is worth planting. You never plant a seed on
-your own initiative to park work you noticed.
+Attach a document where it already lives, and detach the pointer when it stops
+being current:
 
-## Tickets retired
+    attn seed attach <id> --path <file.md> [--repo <repository>]
+    attn seed attach <id> --notebook <document-id>
+    attn seed attach <id> --url <url>
+    attn seed detach <id> --path <file.md>
 
-`attn ticket`'s write verbs are signposts now: each names the garden command
-that replaced it and exits nonzero. `attn ticket show` and `attn ticket list`
-still read the archived board forever, because a done ticket has no garden
-equivalent to point at.
+## Packets
+
+A packet is a plot flagged as a template with declared variables.
+Nothing sows one yet.
+`attn seed show` says `packet yes`, and `attn seed ready` skips its subtree.

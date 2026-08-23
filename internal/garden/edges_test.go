@@ -11,8 +11,9 @@ func seedWith(id string, edges ...Edge) Seed {
 	return Seed{ID: id, Title: id, Status: StatusPlanted, Edges: edges}
 }
 
-func blocks(to string) Edge { return Edge{Kind: EdgeBlocks, To: to} }
-func partOf(to string) Edge { return Edge{Kind: EdgePartOf, To: to} }
+func blocks(to string) Edge         { return Edge{Kind: EdgeBlocks, To: to} }
+func partOf(to string) Edge         { return Edge{Kind: EdgePartOf, To: to} }
+func discoveredFrom(to string) Edge { return Edge{Kind: EdgeDiscoveredFrom, To: to} }
 func ids(seeds []Seed) []string {
 	out := make([]string, 0, len(seeds))
 	for _, seed := range seeds {
@@ -248,6 +249,12 @@ func TestLinkRefusals(t *testing.T) {
 			from:  "s-a", kind: EdgeBlocks, to: "s-c",
 			changed: true, ok: true,
 		},
+		{
+			name:  "discovered work records its origin",
+			seeds: []Seed{seedWith("s-a"), seedWith("s-b")},
+			from:  "s-a", kind: EdgeDiscoveredFrom, to: "s-b",
+			changed: true, ok: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -274,6 +281,40 @@ func TestLinkRefusals(t *testing.T) {
 				t.Fatalf("edge %s %s missing from %v", test.kind, test.to, seed.Edges)
 			}
 		})
+	}
+}
+
+func TestDiscoveredFromDoesNotAffectReadiness(t *testing.T) {
+	seeds := []Seed{seedWith("s-found", discoveredFrom("s-origin")), seedWith("s-origin")}
+	if got, want := ids(Ready(seeds, noSession)), []string{"s-found", "s-origin"}; !equal(got, want) {
+		t.Fatalf("Ready = %v, want %v", got, want)
+	}
+}
+
+func TestDiscoveredFromRelationsNameBothEnds(t *testing.T) {
+	seeds := []Seed{seedWith("s-found", discoveredFrom("s-origin")), seedWith("s-origin")}
+	found := Relations(seeds, "s-found")
+	if len(found) != 1 || found[0] != (Relation{Label: EdgeDiscoveredFrom, Seed: "s-origin"}) {
+		t.Fatalf("found relations = %+v", found)
+	}
+	origin := Relations(seeds, "s-origin")
+	if len(origin) != 1 || origin[0] != (Relation{Label: "discovered", Seed: "s-found"}) {
+		t.Fatalf("origin relations = %+v", origin)
+	}
+}
+
+func TestPlotHeadersCarriesOnlyAncestorsOfSelectedSeeds(t *testing.T) {
+	seeds := []Seed{
+		seedWith("s-loose"),
+		seedWith("s-child", partOf("s-inner")),
+		seedWith("s-inner", partOf("s-plot")),
+		seedWith("s-plot"),
+		seedWith("s-unrelated-child", partOf("s-unrelated")),
+		seedWith("s-unrelated"),
+	}
+	got := ids(PlotHeaders(seeds, map[string]bool{"s-child": true, "s-loose": true}))
+	if want := []string{"s-inner", "s-plot"}; !equal(got, want) {
+		t.Fatalf("PlotHeaders = %v, want %v", got, want)
 	}
 }
 
@@ -340,7 +381,7 @@ func TestParseEdgeKind(t *testing.T) {
 	}
 }
 
-// Tree is what `attn seed ls --tree` renders: parents before children, and
+// Tree is what `attn seed ls` renders: parents before children, and
 // nothing dropped — a scoped list holds children whose crown is out of scope,
 // and a garden that already stored a cycle still has to render.
 func TestTree(t *testing.T) {

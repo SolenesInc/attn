@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
 func TestGenerateHooks(t *testing.T) {
@@ -117,16 +116,16 @@ func TestGenerateHooks_HasStopHook(t *testing.T) {
 }
 
 func TestGenerateHooks_HasSessionStartHook(t *testing.T) {
-	hooks := Generate("test", "/tmp/test.sock", "/tmp/attn", nil)
-
-	for _, expected := range []string{
-		"SessionStart",
-		"startup|resume|clear|compact",
-		"_hook-session-start",
-	} {
-		if !strings.Contains(hooks, expected) {
-			t.Fatalf("Claude hooks should include %q", expected)
-		}
+	var parsed SettingsConfig
+	if err := json.Unmarshal([]byte(Generate("test", "/tmp/test.sock", "/tmp/attn", nil)), &parsed); err != nil {
+		t.Fatalf("invalid Claude hook JSON: %v", err)
+	}
+	entries := parsed.Hooks["SessionStart"]
+	if len(entries) != 1 || entries[0].Matcher != "startup|resume|clear|compact" || len(entries[0].Hooks) != 1 {
+		t.Fatalf("Claude SessionStart hook = %+v", entries)
+	}
+	if command := entries[0].Hooks[0].Command; !strings.Contains(command, `_hook-session-start "test"`) {
+		t.Fatalf("Claude SessionStart command = %q", command)
 	}
 }
 
@@ -222,7 +221,7 @@ func TestGenerateCodexConfigOverrides_UsesStableEnvBasedCommands(t *testing.T) {
 	if !strings.Contains(joined, "_hook-session-start") {
 		t.Fatal("codex overrides should sync session id on start")
 	}
-	if !strings.Contains(joined, "startup|resume|clear|compact") {
+	if !strings.Contains(joined, `hooks.SessionStart=[{ matcher = "startup|resume|clear|compact"`) {
 		t.Fatal("codex SessionStart hook should run after context resets")
 	}
 	if strings.Contains(joined, "_hook-session-start session-1") ||
@@ -265,51 +264,48 @@ func TestGenerateCodexConfigOverrides_OmitsEmptySocketButKeepsSessionIdentity(t 
 func TestAgentInstructionsComposition(t *testing.T) {
 	workflow := WorkflowTriggerGuidance()
 	context := WorkspaceContextGuidance("/tmp/context.md")
-	garden := GardenAwarenessGuidance()
 
-	// The garden pointer is always-on: even with no checkout and no workflow
-	// guidance, AgentInstructions returns exactly the garden block.
-	if got := AgentInstructions("", false); got != garden {
-		t.Fatalf("AgentInstructions(empty, false) = %q, want the garden block %q", got, garden)
+	if got := AgentInstructions("", false); got != "" {
+		t.Fatalf("AgentInstructions(empty, false) = %q, want empty", got)
 	}
 
-	// Workspace context, then the always-on garden block.
 	contextOnly := AgentInstructions("/tmp/context.md", false)
-	if want := strings.Join([]string{context, garden}, "\n\n"); contextOnly != want {
-		t.Fatalf("context-only instructions = %q, want %q", contextOnly, want)
+	if contextOnly != context {
+		t.Fatalf("context-only instructions = %q, want %q", contextOnly, context)
 	}
 	if strings.Contains(contextOnly, "hypercode") {
 		t.Fatalf("context-only instructions leaked workflow guidance: %q", contextOnly)
 	}
 
-	// Workflow guidance (no checkout), then the always-on garden block.
 	workflowOnly := AgentInstructions("", true)
-	if want := strings.Join([]string{workflow, garden}, "\n\n"); workflowOnly != want {
-		t.Fatalf("workflow-only instructions = %q, want %q", workflowOnly, want)
+	if workflowOnly != workflow {
+		t.Fatalf("workflow-only instructions = %q, want %q", workflowOnly, workflow)
 	}
 
-	// Both, joined with a blank line, context first, garden block last.
 	both := AgentInstructions("/tmp/context.md", true)
-	if want := strings.Join([]string{context, workflow, garden}, "\n\n"); both != want {
+	if want := strings.Join([]string{context, workflow}, "\n\n"); both != want {
 		t.Fatalf("combined instructions = %q, want %q", both, want)
 	}
 }
 
-// The always-on garden block keeps its standing wording and gains only the
-// pointer to the verb that holds the craft.
-func TestGardenAwarenessGuidancePointsAtTheGuide(t *testing.T) {
-	garden := GardenAwarenessGuidance()
-	for _, phrase := range []string{
-		"attn seed plant",
-		"never park work in the garden on your own initiative",
-		"attn seed note",
-		"attn ticket",
-		"garden reference has the how and what makes a good seed",
-		"attn seed guide",
-	} {
-		if !strings.Contains(garden, phrase) {
-			t.Fatalf("garden guidance does not carry %q:\n%s", phrase, garden)
-		}
+func TestLaunchInstructionsGateGardenGuidance(t *testing.T) {
+	if got := (Launch{Garden: true}).Instructions(); got != GardenGuidance {
+		t.Fatalf("bare home launch = %q, want exact garden guidance", got)
+	}
+
+	withoutGarden := Launch{WorkspaceContextPath: "/tmp/context.md"}.Instructions()
+	if strings.Contains(withoutGarden, GardenGuidance) {
+		t.Fatalf("launch without home flag carried garden guidance:\n%s", withoutGarden)
+	}
+
+	withGarden := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}.Instructions()
+	if want := strings.Join([]string{WorkspaceContextGuidance("/tmp/context.md"), GardenGuidance}, "\n\n"); withGarden != want {
+		t.Fatalf("home launch instructions differ: %q", withGarden)
+	}
+
+	chief := Launch{NotebookRoot: "/tmp/notebook", Garden: true}.Instructions()
+	if !strings.Contains(chief, "You are the chief of staff") || !strings.Contains(chief, GardenGuidance) {
+		t.Fatalf("home chief launch dropped a guidance block:\n%s", chief)
 	}
 }
 
@@ -355,6 +351,20 @@ func TestWorkspaceContextSessionStartOutputWrapsGuidance(t *testing.T) {
 	}
 }
 
+func TestSessionStartOutputJoinsContextBlocks(t *testing.T) {
+	raw := SessionStartOutput("workspace", "", "  garden  ")
+	var output sessionStartHookOutput
+	if err := json.Unmarshal([]byte(raw), &output); err != nil {
+		t.Fatalf("SessionStartOutput returned invalid JSON: %v", err)
+	}
+	if got, want := output.HookSpecificOutput.AdditionalContext, "workspace\n\ngarden"; got != want {
+		t.Fatalf("additional context = %q, want %q", got, want)
+	}
+	if got := SessionStartOutput("", "  "); got != "" {
+		t.Fatalf("empty SessionStartOutput = %q, want empty", got)
+	}
+}
+
 func TestChiefGuidanceEmptyWithoutRoot(t *testing.T) {
 	if got := ChiefGuidance(""); got != "" {
 		t.Fatalf("ChiefGuidance(\"\") = %q, want empty", got)
@@ -364,129 +374,32 @@ func TestChiefGuidanceEmptyWithoutRoot(t *testing.T) {
 	}
 }
 
-// NOTE: AskUserQuestion PostToolUse hook was removed because it fires
-// AFTER the user responds, not when the question is displayed.
-// See: https://github.com/anthropics/claude-code/issues/10168
-
-// The primer is what makes an attn-launched agent a gardener: it arrives
-// knowing the vocabulary, the loop, and whether there is anything to pick up.
-func TestGardenPrimer(t *testing.T) {
-	// No garden reachable — an outpost, or a daemon that could not answer.
-	// Telling an agent to run a command that refuses is worse than silence.
-	if got := GardenPrimer(nil); got != "" {
-		t.Fatalf("GardenPrimer(nil) = %q, want nothing", got)
-	}
-
-	counts := map[int]string{
-		0: "Nothing was ready in the garden",
-		1: "One seed was ready in the garden",
-		4: "4 seeds were ready in the garden",
-	}
-	for count, want := range counts {
-		primer := GardenPrimer(&GardenPrime{Ready: count})
-		if !strings.Contains(primer, want) {
-			t.Fatalf("primer for %d does not say %q:\n%s", count, want, primer)
-		}
-		// The loop, and where the live answer is: the count is a starting
-		// position, composed once at launch.
-		for _, phrase := range []string{"attn seed ready", "attn seed tend", "attn seed harvest", "live answer"} {
-			if !strings.Contains(primer, phrase) {
-				t.Fatalf("primer does not name %q:\n%s", phrase, primer)
-			}
-		}
-	}
-}
-
-// A delegate dispatched at a crown launches knowing its plot: the crown, the
-// plan in its body, the ready seeds, and the freshest handoff on each.
-func TestGardenPrimerPrimesADispatchedDelegate(t *testing.T) {
-	primer := GardenPrimer(&GardenPrime{
-		Ready: 2,
-		Crown: &CrownPrime{
-			ID: "s-crown", Title: "ship the thing", Body: "# the plan\n\nstep by step",
-			ReadySeeds: []SeedPrime{
-				{ID: "s-aaa", Title: "first step", Handoff: "the fixture is seeded", HandoffAuthor: "trellis"},
-				{ID: "s-bbb", Title: "second step"},
-			},
-		},
-	})
+func TestChiefGuidanceLeavesGardenToLaunch(t *testing.T) {
+	guidance := ChiefGuidance("/tmp/notebook")
 	for _, want := range []string{
-		"s-crown", "ship the thing", "step by step",
-		"s-aaa", "first step", "handoff from trellis: the fixture is seeded",
-		"s-bbb", "second step",
-		"attn seed ready --all", "nothing fences you in", "per-seed tender",
+		"End your turn after delegating",
+		"Never park a blocking Monitor on attn activity",
+		"attn seed show <seed-id>",
+		"Record the delegation in the journal",
 	} {
-		if !strings.Contains(primer, want) {
-			t.Fatalf("dispatched primer does not carry %q:\n%s", want, primer)
+		if !strings.Contains(guidance, want) {
+			t.Fatalf("chief guidance dropped %q:\n%s", want, guidance)
 		}
 	}
-}
-
-// A crown body is a plan, and a plan can be long. It is capped so one seed
-// cannot crowd out the rest of an agent's launch guidance, and the cap says
-// where the whole body is.
-func TestGardenPrimerCapsACrownBody(t *testing.T) {
-	primer := GardenPrimer(&GardenPrime{
-		Crown: &CrownPrime{ID: "s-crown", Title: "big", Body: strings.Repeat("x", crownPrimeBodyLimit*2)},
-	})
-	if len(primer) > crownPrimeBodyLimit*2 {
-		t.Fatalf("an oversized crown body was not capped: %d chars", len(primer))
+	if strings.Contains(guidance, GardenGuidance) || strings.Contains(guidance, "attn seed prime") {
+		t.Fatalf("chief guidance duplicated the launch-owned garden block:\n%s", guidance)
 	}
-	if !strings.Contains(primer, "attn seed show s-crown") {
-		t.Fatalf("the cap does not say where the whole body is:\n%s", primer)
-	}
-}
-
-// The cap is in bytes and a plan is markdown, so the cut lands wherever it
-// lands. The body is three-byte runes against an even limit, so the cut is
-// guaranteed to fall mid-rune: a two-byte rune divides into 4000 and would let
-// a plain byte slice pass this.
-func TestGardenPrimerCapsACrownBodyWithoutSplittingARune(t *testing.T) {
-	primer := GardenPrimer(&GardenPrime{
-		Crown: &CrownPrime{ID: "s-crown", Title: "big", Body: strings.Repeat("€", crownPrimeBodyLimit)},
-	})
-	if !utf8.ValidString(primer) {
-		t.Fatal("the capped primer is not valid UTF-8")
-	}
-	if !strings.Contains(primer, "attn seed show s-crown") {
-		t.Fatalf("the cap does not say where the whole body is:\n%s", primer)
-	}
-}
-
-// A plot with nothing ready is a real state — everything blocked, held, or done
-// — and saying so beats an empty list the reader has to interpret.
-func TestGardenPrimerSaysAnEmptyPlotIsEmpty(t *testing.T) {
-	primer := GardenPrimer(&GardenPrime{Crown: &CrownPrime{ID: "s-crown", Title: "done already"}})
-	if !strings.Contains(primer, "Nothing in this plot was ready") {
-		t.Fatalf("primer does not name the empty plot:\n%s", primer)
-	}
-}
-
-// Every attn-launched agent lives in the same garden, so the primer rides with
-// chief guidance and workspace guidance alike — and never replaces either.
-func TestLaunchInstructionsCarryTheGardenPrimer(t *testing.T) {
-	prime := &GardenPrime{Ready: 2}
-
-	workspace := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: prime}.Instructions()
-	if want := AgentInstructions("/tmp/context.md", false); !strings.HasPrefix(workspace, want) {
-		t.Fatalf("workspace launch dropped the agent instructions:\n%s", workspace)
-	}
-	if !strings.Contains(workspace, "2 seeds were ready") {
-		t.Fatalf("workspace launch dropped the primer:\n%s", workspace)
-	}
-
-	chief := Launch{NotebookRoot: "/tmp/notebook", Garden: prime}.Instructions()
-	if want := ChiefGuidance("/tmp/notebook"); !strings.HasPrefix(chief, want) {
-		t.Fatalf("chief launch dropped the chief guidance:\n%s", chief)
-	}
-	if !strings.Contains(chief, "2 seeds were ready") {
-		t.Fatalf("chief launch dropped the primer:\n%s", chief)
-	}
-
-	// Nothing to prime with leaves the rest exactly as it was.
-	bare := Launch{WorkspaceContextPath: "/tmp/context.md"}.Instructions()
-	if bare != AgentInstructions("/tmp/context.md", false) {
-		t.Fatalf("a garden-less launch changed the instructions:\n%s", bare)
+	for _, removed := range []string{
+		"When you delegate, attn plants a seed",
+		"Track work in seeds",
+		"attn seed ls",
+		"attn seed ready",
+		"attn seed tend",
+		"attn seed harvest",
+	} {
+		if strings.Contains(guidance, removed) {
+			t.Fatalf("chief guidance kept removed garden copy %q:\n%s", removed, guidance)
+		}
 	}
 }
 
@@ -497,12 +410,12 @@ func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 
 	launch := Launch{
 		WorkspaceContextPath: "/tmp/context.md",
-		Garden:               &GardenPrime{Ready: 2},
+		Garden:               true,
 		Crew:                 block,
 	}.Instructions()
 
-	if !strings.Contains(launch, "2 seeds were ready") {
-		t.Fatalf("the crew block replaced the primer:\n%s", launch)
+	if !strings.Contains(launch, GardenGuidance) {
+		t.Fatalf("the crew block replaced the launch guidance:\n%s", launch)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(launch), strings.TrimSpace(block)) {
 		t.Fatalf("the crew block is not the last thing injected:\n%s", launch)

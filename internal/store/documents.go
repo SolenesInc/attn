@@ -324,15 +324,43 @@ type DocumentWriteResult struct {
 	Changed bool
 }
 
+// DocumentCommit pairs one document mutation with the fact that describes it.
+// CommitDocumentWrites commits a slice of these as one transaction.
+type DocumentCommit struct {
+	Write DocumentWrite
+	Fact  BusEvent
+}
+
 // CommitDocumentWrite writes a document and appends the fact describing it in
 // ONE transaction — a fact that cannot be made durable fails the whole write,
 // so the data and the log cannot diverge. The store stays fact-agnostic: the
 // caller builds the fact. A write that changed nothing appends NO fact and
 // returns no seq.
 func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Time) (DocumentWriteResult, error) {
-	table, err := s.documentTable(w.Schema)
+	results, err := s.commitDocumentWrites([]DocumentCommit{{Write: w, Fact: fact}}, now, true)
 	if err != nil {
 		return DocumentWriteResult{}, err
+	}
+	return results[0], nil
+}
+
+// CommitDocumentWrites writes every document and appends each write's fact in
+// one transaction. A refusal or failed fact rolls the whole slice back.
+func (s *Store) CommitDocumentWrites(commits []DocumentCommit, now time.Time) ([]DocumentWriteResult, error) {
+	return s.commitDocumentWrites(commits, now, false)
+}
+
+func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, single bool) ([]DocumentWriteResult, error) {
+	if len(commits) == 0 {
+		return []DocumentWriteResult{}, nil
+	}
+	tables := make([]string, len(commits))
+	for i, commit := range commits {
+		table, err := s.documentTable(commit.Write.Schema)
+		if err != nil {
+			return nil, err
+		}
+		tables[i] = table
 	}
 
 	s.mu.Lock()
@@ -340,45 +368,57 @@ func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Tim
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return DocumentWriteResult{}, fmt.Errorf("store: writing %s/%s/%s: %w",
+		w := commits[0].Write
+		return nil, fmt.Errorf("store: writing %s/%s/%s: %w",
 			w.Schema.Namespace, w.Schema.Collection, w.ID, err)
 	}
-	// Also rolls back the no-error paths: a delete that removed nothing has
-	// nothing to commit.
+	// Also rolls back the no-error path where every delete removed nothing.
 	defer func() { _ = tx.Rollback() }()
 
-	var out DocumentWriteResult
-	if w.Delete {
-		existed, err := deleteDocumentWith(tx, w.Schema, table, w.ID, w.Expected)
-		if err != nil {
-			return DocumentWriteResult{}, err
+	results := make([]DocumentWriteResult, len(commits))
+	changed := false
+	for i, commit := range commits {
+		w := commit.Write
+		out := &results[i]
+		if w.Delete {
+			existed, err := deleteDocumentWith(tx, w.Schema, tables[i], w.ID, w.Expected)
+			if err != nil {
+				return nil, err
+			}
+			out.Changed = existed
+		} else {
+			rev, err := putDocumentWith(tx, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
+			if err != nil {
+				return nil, err
+			}
+			out.Rev = rev
+			out.Changed = true
 		}
-		out.Changed = existed
-	} else {
-		rev, err := putDocumentWith(tx, w.Schema, table, w.ID, w.Body, now, w.Expected)
-		if err != nil {
-			return DocumentWriteResult{}, err
+
+		if !out.Changed {
+			continue
 		}
-		out.Rev = rev
-		out.Changed = true
+		changed = true
+		seq, err := appendBusEventWith(tx, commit.Fact, now)
+		if err != nil {
+			return nil, fmt.Errorf("store: announcing the write to %s/%s/%s: %w",
+				w.Schema.Namespace, w.Schema.Collection, w.ID, err)
+		}
+		out.Seq = seq
 	}
-
-	if !out.Changed {
-		return out, nil
+	if !changed {
+		return results, nil
 	}
-
-	seq, err := appendBusEventWith(tx, fact, now)
-	if err != nil {
-		return DocumentWriteResult{}, fmt.Errorf("store: announcing the write to %s/%s/%s: %w",
-			w.Schema.Namespace, w.Schema.Collection, w.ID, err)
-	}
-	out.Seq = seq
 
 	if err := tx.Commit(); err != nil {
-		return DocumentWriteResult{}, fmt.Errorf("store: committing the write to %s/%s/%s: %w",
-			w.Schema.Namespace, w.Schema.Collection, w.ID, err)
+		if single {
+			w := commits[0].Write
+			return nil, fmt.Errorf("store: committing the write to %s/%s/%s: %w",
+				w.Schema.Namespace, w.Schema.Collection, w.ID, err)
+		}
+		return nil, fmt.Errorf("store: committing %d document writes: %w", len(commits), err)
 	}
-	return out, nil
+	return results, nil
 }
 
 // queryDocuments runs an already-compiled query; only docstore-checked

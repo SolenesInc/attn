@@ -6671,6 +6671,9 @@ type SeedPlantMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
+	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
 
@@ -6780,6 +6783,9 @@ type SeedReadyResult struct {
 
 	// Handoffs corresponds to the JSON schema field "handoffs".
 	Handoffs []SeedNote `json:"handoffs,omitempty,omitzero"`
+
+	// Plots corresponds to the JSON schema field "plots".
+	Plots []Seed `json:"plots,omitempty,omitzero"`
 
 	// Scope corresponds to the JSON schema field "scope".
 	Scope string `json:"scope"`
@@ -6902,8 +6908,8 @@ type SeedTransitionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Confirm corresponds to the JSON schema field "confirm".
-	Confirm *bool `json:"confirm,omitempty,omitzero"`
+	// Force corresponds to the JSON schema field "force".
+	Force *bool `json:"force,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`

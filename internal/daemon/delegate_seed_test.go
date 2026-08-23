@@ -92,9 +92,14 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	if !strings.Contains(prompt, seedID) {
 		t.Fatalf("the delegate's prompt never names its seed %s:\n%s", seedID, prompt)
 	}
-	for _, verb := range []string{"attn seed note", "attn seed attach", "attn seed detach"} {
+	for _, verb := range []string{"attn seed show", "attn seed note", "attn seed harvest"} {
 		if !strings.Contains(prompt, verb) {
-			t.Fatalf("the delegate's prompt never offers %q", verb)
+			t.Fatalf("the delegate's prompt omits %q", verb)
+		}
+	}
+	for _, removed := range []string{"attn seed attach", "attn seed detach", "attn seed link", "attn seed wither", "attn ticket"} {
+		if strings.Contains(prompt, removed) {
+			t.Fatalf("the delegate's prompt kept standing garden copy %q", removed)
 		}
 	}
 	// Nothing else is bound: a dispatch is a seed and nothing more now.

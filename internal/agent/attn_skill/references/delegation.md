@@ -23,7 +23,7 @@ Attn delegation starts another agent with a focused brief; it does not create
 durable parent-child lineage. Every delegation binds a **seed** to the delegated
 session — the brief is its body, the session is its tender — and the seed is the
 channel in both directions: the agent writes what happened onto its log, and you
-reach the agent by seed id with `attn agent msg <seed-id> -m "<note>"`. Read the
+reach the agent by seed id with `attn agent msg <seed-id> "<note>"`. Read the
 work back with `attn seed show <seed-id>`. See [garden.md](garden.md).
 
 Follow-up: read the seed. Never park a blocking Monitor on attn activity: a
@@ -60,7 +60,7 @@ short paragraphs, sketches where they say more ([showing.md](showing.md)).
 
 Use `--brief <text>` only for short, simple tasks.
 
-> The same brief is the seed's body. To capture work *without* delegating, plant a seed — `attn seed plant "<title>" -m "<brief>"` (see [garden.md](garden.md)); do this only when the user asks.
+> The same brief is the seed's body. To capture work *without* delegating, plant a seed — `attn seed plant "<title>" -m "<brief>"` (see [garden.md](garden.md)).
 
 ## Dispatch at an Existing Seed
 
@@ -71,7 +71,7 @@ When the work is already planted, dispatch at it instead of planting a duplicate
 The delegate binds that seed rather than a new one, launches knowing it, and
 becomes its tender. A seed a live session is already tending refuses the
 dispatch, naming who holds it, before any worktree or agent exists.
-Aimed at a **crown**, a flag-free `attn seed ready` inside the delegate answers
+Aimed at a **plot**, a flag-free `attn seed ready` inside the delegate answers
 with that plot's ready seeds. `--name`, placement, and worktree flags behave as
 usual.
 
@@ -92,7 +92,7 @@ default is not applied to them.
 For work involving a Git repository, `attn delegate` creates a new worktree by
 default—even for read-only investigation or discussion. Use `--from` when the
 task needs a particular starting branch; otherwise attn uses the repository's
-default branch. Pass `--no-worktree` only when the user asks to reuse the current
+default branch. Pass `--no-worktree` when the user asks to reuse the current
 checkout, the delegation clearly continues work already happening there, or more
 specific repository or agent guidance requires it.
 

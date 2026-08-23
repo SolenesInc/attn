@@ -472,20 +472,18 @@ The **garden** is where work lives: all seeds, and the space they live in. It
 belongs to a home daemon, because one garden shared across a fleet is its whole
 point — an outpost has none and passes its asks home.
 
-A **seed** is the unit of work — one document with one short id, a title, a
-markdown body, and a state. Anything worth handing off, parking, or attributing
-is a seed; in-session scratch is not. **Planting** creates one, and costs a
-single line that returns the id (`attn seed plant "what this is"`), because a
-capture that costs ceremony does not happen.
+A **seed** is the unit of work: one document with one short id, a title, a
+markdown body, and a state. **Planting** creates one and returns its id
+(`attn seed plant "what this is"`). Work that outlives the current turn belongs
+in a seed, including a bug found along the way, a deferred follow-up, or a piece
+split off for somebody else. `attn seed prime` gives every agent the working
+rules and current ready answer.
 
-A **plot** is a seed with children plus the intent to execute them — the whole
-subtree, not just the parent. A plot has no id of its own: its root seed, the
-**crown**, is how it is addressed. Picture a garden bed with a labeled plant
-at its head: the bed is the plot, the head plant is the crown, and its label —
-the crown's body — says what the bed grows. You never point at the bed; you
-point at the labeled plant. A **packet** is a plot flagged as a template
-with declared variables, so a proven shape can be planted again with its blanks
-filled.
+A **plot** is a seed with children, addressed by that seed's id. Its body is the
+execution plan. Its children are parallel unless a `blocks` edge orders them.
+Any seed can become a plot when it gains a child. A **packet** is a plot flagged
+as a template with declared variables, so a proven shape can be planted again
+with its blanks filled.
 
 Seed ids are `s-` plus six Crockford base32 characters (`s-7k3f9m`) — short
 enough to say out loud, with no character pair anyone confuses, and no `/`, so
@@ -499,44 +497,47 @@ growing in one move, and a seed has one tender at a time. **Parking** pauses a
 seed deliberately (`dormant`) and lets go of the claim; tending it again picks
 it back up. **Harvesting** closes it as done, with a reason, and **withering**
 closes it as abandoned. **Replanting** puts a seed back in the pool: it is the
-one move that lands on `planted`, so it reopens a closed seed — which is why
-replant is the only verb a harvested seed answers — un-parks a dormant one, and
-hands back one being grown without closing it.
+one move that lands on `planted`, so it reopens a harvested or withered seed.
 
-A seed somebody else still holds is **taken**, not merely moved, so every verb
-refuses it unless the caller confirms (`--confirm`). The refusal names the
-holder. A tender moving its own seed never meets that guard, and neither does
-anyone moving a seed whose holder's session has ended — a seat somebody walked
-away from stays reachable with no flag.
+A seed somebody else still holds is **taken**, not merely moved. Tend, park,
+harvest, wither, and replant refuse it by naming the holder; `--force` acts
+anyway and the log records who forced it. A tender moving its own seed never
+meets that guard. Neither does anyone moving a seed whose holder's session has
+ended. A claim made with `--member <name>` never expires.
 
 An **edge** is one typed relation between two seeds, stored on the seed it
-points from. Two kinds carry meaning today: **blocks** (`a blocks b` — b waits
-for a) and **part-of** (`b part-of c` — b is one of the crown c's children, and
-a seed sits in at most one plot). `sown-from`, `discovered-from` and
-`relates-to` are declared and inert. A cycle in either kind is refused when it
-is created, naming both seeds and the edge to remove.
+points from. Three kinds carry meaning today: **blocks** (`a blocks b`, so b
+waits for a), **part-of** (`b part-of c`, so b is one of plot c's children and
+a seed sits in at most one plot), and **discovered-from** (`a discovered-from
+b`, recording that a was discovered while working on b). A seed may name
+several origins;
+the relation never orders work or affects readiness. `sown-from` and
+`relates-to` remain declared and inert. A cycle in an ordering or containment
+edge is refused when created, naming both seeds and the edge to remove.
 
-**Ready** is the answer to "what can I pick up right now": an open seed nothing
-blocks, nobody holds, and nothing is part of — a crown's work is its children,
-not the crown. It is computed when asked and never stored, so harvesting a
-blocker frees its dependent at the next call, with nobody clearing anything.
-`attn seed ready` answers for the whole garden unless told otherwise — a
-delegation dispatched at a crown is the exception, scoped to its plot — and
-every attn-launched agent starts knowing the garden's count. The garden is one
-space: it has no workspace dimension at all, and plots are its only grouping
-(ruled 2026-08-13).
+**Ready** is the answer to "what can I pick up right now": an open seed that is
+not parked, blocked, held, a gate, a packet, or under a packet. A plot itself is
+never ready; only its children can be. Readiness is computed when asked and
+never stored, so harvesting a blocker frees its dependent at the next call,
+with nobody clearing anything.
+`attn seed ready` answers for the whole garden unless the session reports to a
+seed. Without flags, it then shows that seed's plot; `--all` steps back out to
+the whole garden. `attn seed prime` combines the standing launch guidance with
+the same live answer SessionStart injects, including after compaction. The
+garden is one space: it has no workspace dimension at all, and plots are its
+only grouping (ruled 2026-08-13).
 
 **Dispatch-at-plot** aims a delegation at an existing seed (`attn delegate
---plot <crown>`). The delegate becomes that seed's tender — its launch prompt
+--plot <seed>`). The delegate becomes that seed's tender — its launch prompt
 says so, so the claim has to match — and the dispatch refuses before creating
 anything when a live session already holds it. A tender whose session the
-daemon no longer knows does not hold it (the same liveness `ready` reads), and
+daemon no longer knows does not hold it (the same liveness `attn seed ready` uses), and
 the delegating session's own claim is a hand-over, not a conflict.
 
-Beyond that one seed it is scope inference: inside that session a flag-free
-`ready` answers with the plot, and its launch guidance starts from the crown —
-the plan in the crown's body, the plot's ready seeds, the freshest handoff on
-each. It is not a fence over the plot. The delegate may tend or plant anything
+Beyond that one seed it is scope inference: inside that session, `attn seed ready`
+without flags shows the plot, and `attn seed prime` points at the plot seed for
+the plan, then lists the plot's ready seeds and the freshest handoff on each.
+It is not a fence over the plot. The delegate may tend or plant anything
 (`--all` steps back out to the garden), several agents may work one plot at
 once, and who holds each of its children is always that seed's own tender.
 
@@ -559,7 +560,7 @@ they are read where the tender already looks, in the seed's own `show`. Adding
 bell tells the seed's watchers to look.
 
 A **watch** is one session's standing interest in a seed. Every lifecycle move
-rings watchers automatically; a note rings only by choice. Watching a crown
+rings watchers automatically; a note rings only by choice. Watching a plot
 covers its whole plot by following `part-of` edges upward when activity lands,
 including children planted after the watch. A delegation automatically makes
 its dispatcher a watcher of the seed it was aimed at. One unread bell per

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/crew"
 )
@@ -84,9 +85,10 @@ func (t Tender) Is(other Tender) bool {
 // `ready` and then refused by `tend` naming a session that no longer exists —
 // an answer nobody can act on.
 //
-// A tender that names only a crew member always holds: attn has no signal that
-// a person in a terminal pane walked away, and handing their seed to somebody
-// else on a guess is worse than leaving it claimed. A tender with a session
+// An explicit --member acts instead of the source session, so that tender names
+// only a crew member and always holds: attn has no signal that a person in a
+// terminal pane walked away, and handing their seed to somebody else on a guess
+// is worse than leaving it claimed. Without --member, a tender with a session
 // holds while the daemon still knows it, `recoverable` included — revive brings
 // that session back to the seed it was tending.
 func (t Tender) Holds(sessionLive func(sessionID string) bool) bool {
@@ -100,14 +102,13 @@ func (t Tender) Holds(sessionLive func(sessionID string) bool) bool {
 }
 
 // Ask is one caller's request to move a seed: who is asking, why, and whether
-// they have said yes to taking a seed somebody else still holds.
+// they are forcing a move past somebody else's live claim.
 type Ask struct {
 	Actor  Tender
 	Reason string
-	// Confirmed is the CLI's --confirm, and it is read only when somebody else
-	// still holds the seed. Every ordinary move — including the tender closing
-	// its own work — never reaches it.
-	Confirmed bool
+	// Force is read only when somebody else still holds the seed. Every ordinary
+	// move, including the tender closing its own work, never reaches it.
+	Force bool
 }
 
 // move is one verb's rule: which states it accepts, where it lands, and what it
@@ -191,10 +192,10 @@ func ParseVerb(raw string) (Verb, error) {
 //
 // Every verb reads the live claim, and reads it the same way: a seed somebody
 // else still holds is taken, not merely moved, so the move is refused unless
-// the caller confirmed it. All five, because all five take the work away —
+// the caller forces it. All five, because all five take the work away —
 // withering another agent's live seed is more destructive than putting it back
 // in the pool. Guarding only `tend` would not hold either: a takeover refused
-// there is a takeover performed as `replant --confirm` and then a `tend` that
+// there is a takeover performed as `replant --force` and then a `tend` that
 // no longer sees a holder, which launders the same act into two steps and
 // loses the name of who was displaced.
 //
@@ -221,7 +222,7 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string
 		return Seed{}, fmt.Errorf(
 			"tending %s records who holds it and this call named nobody; run it from an attn session, or pass --member <name>", seed.ID)
 	}
-	if held := seed.Tender(); held.Holds(sessionLive) && !held.Is(ask.Actor) && !ask.Confirmed {
+	if held := seed.Tender(); held.Holds(sessionLive) && !held.Is(ask.Actor) && !ask.Force {
 		return Seed{}, refuseTakeover(seed, verb, held)
 	}
 	if rule.needsReason && reason == "" {
@@ -236,7 +237,7 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID string
 			"%s records no reason — harvest and wither are the moves that close a seed with one. Put it on the log instead: attn seed note %s -m \"…\"",
 			verb, seed.ID)
 	}
-	if n := len(reason); n > MaxReasonChars {
+	if n := utf8.RuneCountInString(reason); n > MaxReasonChars {
 		return Seed{}, fmt.Errorf(
 			"that reason is %d characters and the limit is %d; the detail belongs on the log (`attn seed note %s -m …`)",
 			n, MaxReasonChars, seed.ID)
@@ -275,7 +276,7 @@ func (s Seed) Tender() Tender {
 func refuseTakeover(seed Seed, verb Verb, held Tender) error {
 	return fmt.Errorf(
 		"%s is being tended by %s, and `attn seed %s` takes it from them.\n"+
-			"Run it again with --confirm if that is what you mean, or say what you need on the log: attn seed note %s -m \"…\"",
+			"Pass --force to act anyway; the log will record it. Or say what you need on the log: attn seed note %s -m \"…\"",
 		seed.ID, held.DisplayName(), verb, seed.ID)
 }
 

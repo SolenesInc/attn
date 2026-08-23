@@ -42,9 +42,9 @@ func TestTransitionMatrix(t *testing.T) {
 		// refusal must carry. Exactly one of them is set.
 		want   string
 		refuse string
-		// confirm is the caller saying yes to taking a seed somebody else
+		// force is the caller saying yes to taking a seed somebody else
 		// holds. Only the contested rows set it.
-		confirm bool
+		force bool
 	}{
 		{name: "planted/tend", seed: seedIn(StatusPlanted, Tender{}), verb: VerbTend, want: StatusGrowing},
 		{name: "planted/park", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, want: StatusDormant},
@@ -72,15 +72,15 @@ func TestTransitionMatrix(t *testing.T) {
 		// it is about to take before it decides.
 		{name: "growing by another/tend names them", seed: seedIn(StatusGrowing, held), verb: VerbTend, refuse: "tended by Alder"},
 
-		{name: "confirmed/tend", seed: seedIn(StatusGrowing, held), verb: VerbTend, confirm: true, want: StatusGrowing},
-		{name: "confirmed/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, confirm: true, want: StatusDormant},
-		{name: "confirmed/harvest", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, confirm: true, want: StatusHarvested},
-		{name: "confirmed/wither", seed: seedIn(StatusGrowing, held), verb: VerbWither, confirm: true, want: StatusWithered},
-		{name: "confirmed/replant", seed: seedIn(StatusGrowing, held), verb: VerbReplant, confirm: true, want: StatusPlanted},
+		{name: "forced/tend", seed: seedIn(StatusGrowing, held), verb: VerbTend, force: true, want: StatusGrowing},
+		{name: "forced/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, force: true, want: StatusDormant},
+		{name: "forced/harvest", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, force: true, want: StatusHarvested},
+		{name: "forced/wither", seed: seedIn(StatusGrowing, held), verb: VerbWither, force: true, want: StatusWithered},
+		{name: "forced/replant", seed: seedIn(StatusGrowing, held), verb: VerbReplant, force: true, want: StatusPlanted},
 
-		// A confirm nobody needed is not an error. The flag is read only when
+		// A force nobody needed is not an error. The flag is read only when
 		// somebody else holds the seed, so passing it anyway changes nothing.
-		{name: "confirm with nobody to take from", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, confirm: true, want: StatusDormant},
+		{name: "force with nobody to take from", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, force: true, want: StatusDormant},
 
 		{name: "dormant/tend", seed: seedIn(StatusDormant, Tender{}), verb: VerbTend, want: StatusGrowing},
 		{name: "dormant/park", seed: seedIn(StatusDormant, Tender{}), verb: VerbPark, refuse: "already dormant"},
@@ -110,7 +110,7 @@ func TestTransitionMatrix(t *testing.T) {
 			if tc.verb == VerbHarvest || tc.verb == VerbWither {
 				reason = "because"
 			}
-			next, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Confirmed: tc.confirm}, alive)
+			next, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, alive)
 			// A move never edits the seed it was handed: the daemon writes the
 			// result against the revision it read, and a mutated input would make
 			// a refused move leave a changed seed behind.
@@ -323,6 +323,22 @@ func TestTendReleasesASeedWhoseTenderSessionIsGone(t *testing.T) {
 	}
 }
 
+func TestEveryMoveAllowsASeedWhoseTenderSessionEnded(t *testing.T) {
+	actor := Tender{Session: me, Member: "trellis"}
+	for _, verb := range Verbs {
+		t.Run(string(verb), func(t *testing.T) {
+			reason := ""
+			if verb == VerbHarvest || verb == VerbWither {
+				reason = "done"
+			}
+			if _, err := Transition(seedIn(StatusGrowing, Tender{Session: other, Member: "alder"}), verb,
+				Ask{Actor: actor, Reason: reason}, gone); err != nil {
+				t.Fatalf("%s refused after the holder session ended: %v", verb, err)
+			}
+		})
+	}
+}
+
 func TestTendRefusalFallsBackToTheSessionID(t *testing.T) {
 	held := seedIn(StatusGrowing, Tender{Session: other})
 	_, err := Transition(held, VerbTend, Ask{Actor: Tender{Session: me}}, alive)
@@ -363,6 +379,22 @@ func TestReasonLimitNamesItselfAndPointsAtTheLog(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("the limit refusal does not name %q: %s", want, err)
 		}
+	}
+}
+
+func TestReasonLimitCountsUnicodeCharacters(t *testing.T) {
+	seed := seedIn(StatusPlanted, Tender{})
+	if _, err := Transition(seed, VerbHarvest, Ask{
+		Actor: Tender{Session: me}, Reason: strings.Repeat("🌱", MaxReasonChars),
+	}, alive); err != nil {
+		t.Fatalf("%d Unicode characters were refused: %v", MaxReasonChars, err)
+	}
+
+	_, err := Transition(seed, VerbHarvest, Ask{
+		Actor: Tender{Session: me}, Reason: strings.Repeat("🌱", MaxReasonChars+1),
+	}, alive)
+	if err == nil || !strings.Contains(err.Error(), "401 characters") {
+		t.Fatalf("Unicode over-limit error = %v", err)
 	}
 }
 

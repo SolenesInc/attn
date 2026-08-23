@@ -166,7 +166,7 @@ func TestGarden_FullLifeIsVisibleAtEveryStep(t *testing.T) {
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "live a life"})
 
 	tended := move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "trellis")
-	if tended.Status != garden.StatusGrowing || tended.TenderMember != "trellis" || tended.TenderSession != "sess-a" {
+	if tended.Status != garden.StatusGrowing || tended.TenderMember != "trellis" || tended.TenderSession != "" {
 		t.Fatalf("tend did not claim the seed: %+v", tended)
 	}
 
@@ -281,14 +281,14 @@ func TestGarden_ASecondSessionCannotTakeALiveClaim(t *testing.T) {
 	// And the claim did not move: a refused tend must leave the seed exactly
 	// where the first session left it.
 	still := show(t, d, seed.ID).Seed
-	if still.TenderSession != "sess-a" || still.TenderMember != "trellis" {
+	if still.TenderSession != "" || still.TenderMember != "trellis" {
 		t.Fatalf("the refused claim changed the tender: %+v", still)
 	}
 
 	// The way through is the first session letting go, not a flag.
 	move(t, d, "sess-a", seed.ID, garden.VerbPark, "", "trellis")
 	taken := move(t, d, "sess-b", seed.ID, garden.VerbTend, "", "alder")
-	if taken.TenderSession != "sess-b" {
+	if taken.TenderSession != "" || taken.TenderMember != "alder" {
 		t.Fatalf("a parked seed did not hand over: %+v", taken)
 	}
 }
@@ -784,11 +784,42 @@ func TestGarden_CollectionsAreDeclaredOnStartup(t *testing.T) {
 	}
 }
 
-// The confirm flag is the only way a caller can take a seed somebody else still
+func TestSeedPlantRecordsDiscoveredFromBeforeMinting(t *testing.T) {
+	d := newGardenDaemon(t)
+	origin := plant(t, d, protocol.SeedPlantMessage{Title: "the work where this surfaced"})
+	found := plant(t, d, protocol.SeedPlantMessage{
+		Title: "the follow-up", DiscoveredFrom: protocol.Ptr(origin.ID),
+	})
+	if len(found.Edges) != 1 || found.Edges[0].Kind != garden.EdgeDiscoveredFrom || found.Edges[0].To != origin.ID {
+		t.Fatalf("planted edges = %+v", found.Edges)
+	}
+
+	before, err := d.readGarden()
+	if err != nil {
+		t.Fatalf("read garden before refusal: %v", err)
+	}
+	resp := gardenCall(t, func(c net.Conn) {
+		d.handleSeedPlant(c, &protocol.SeedPlantMessage{
+			Cmd: protocol.CmdSeedPlant, Title: "must not land", DiscoveredFrom: protocol.Ptr("s-miss11"),
+		})
+	})
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "s-miss11") {
+		t.Fatalf("missing origin response = %+v", resp)
+	}
+	after, err := d.readGarden()
+	if err != nil {
+		t.Fatalf("read garden after refusal: %v", err)
+	}
+	if len(after.seeds) != len(before.seeds) {
+		t.Fatalf("missing origin planted a seed: before=%d after=%d", len(before.seeds), len(after.seeds))
+	}
+}
+
+// The force flag is the only way a caller can take a seed somebody else still
 // holds, so it has to survive the trip: CLI flag, wire field, and the Ask the
 // daemon hands the garden. A rule enforced in `internal/garden` and dropped on
 // the way in refuses every take-over, including the legitimate ones.
-func TestSeedTransitionCarriesTheConfirmToTheGarden(t *testing.T) {
+func TestSeedTransitionCarriesForceAndRecordsTheTakeover(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-a")
 	addGardenSession(t, d, "sess-b")
@@ -798,9 +829,9 @@ func TestSeedTransitionCarriesTheConfirmToTheGarden(t *testing.T) {
 
 	refused := transition(t, d, "sess-b", seed.ID, garden.VerbWither, "", "")
 	if refused.Ok {
-		t.Fatal("another session withered a live claim without confirming it")
+		t.Fatal("another session withered a live claim without forcing it")
 	}
-	if !strings.Contains(protocol.Deref(refused.Error), "--confirm") {
+	if !strings.Contains(protocol.Deref(refused.Error), "--force") {
 		t.Fatalf("the refusal does not say how to go through with it: %v", protocol.Deref(refused.Error))
 	}
 
@@ -809,17 +840,128 @@ func TestSeedTransitionCarriesTheConfirmToTheGarden(t *testing.T) {
 		SeedID:          seed.ID,
 		Verb:            string(garden.VerbWither),
 		SourceSessionID: protocol.Ptr("sess-b"),
-		Confirm:         protocol.Ptr(true),
+		Force:           protocol.Ptr(true),
 	}
-	confirmed := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
-	if !confirmed.Ok {
-		t.Fatalf("a confirmed take-over was refused: %v", protocol.Deref(confirmed.Error))
+	forced := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	if !forced.Ok {
+		t.Fatalf("a forced take-over was refused: %v", protocol.Deref(forced.Error))
 	}
-	if got := confirmed.SeedTransitionResult.Seed.Status; got != garden.StatusWithered {
+	if got := forced.SeedTransitionResult.Seed.Status; got != garden.StatusWithered {
 		t.Fatalf("status = %q, want withered", got)
 	}
 	// Every move but `tend` releases the claim, so the seed it took is nobody's.
-	if got := confirmed.SeedTransitionResult.Seed.TenderSession; got != "" {
+	if got := forced.SeedTransitionResult.Seed.TenderSession; got != "" {
 		t.Fatalf("tender session = %q, want the claim released", got)
+	}
+	notes, _, err := d.readNotes(seed.ID, 10)
+	if err != nil {
+		t.Fatalf("read forced-move note: %v", err)
+	}
+	if len(notes) != 1 || !strings.Contains(notes[0].Body, "sess-b forced") || !strings.Contains(notes[0].Body, "sess-a held") {
+		t.Fatalf("forced-move notes = %+v", notes)
+	}
+}
+
+func TestSeedTransitionExplicitMemberOutlivesItsSourceSession(t *testing.T) {
+	d := newGardenDaemon(t)
+	addGardenSession(t, d, "sess-b")
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "member work"})
+	claimed := move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "alder")
+	if claimed.TenderMember != "alder" || claimed.TenderSession != "" {
+		t.Fatalf("explicit member claim = member %q session %q", claimed.TenderMember, claimed.TenderSession)
+	}
+
+	d.store.Remove("sess-a")
+	refused := transition(t, d, "sess-b", seed.ID, garden.VerbTend, "", "")
+	if refused.Ok || !strings.Contains(protocol.Deref(refused.Error), "Alder") {
+		t.Fatalf("second session after source ended = %+v, want member-held refusal", refused)
+	}
+
+	msg := protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, SeedID: seed.ID, Verb: string(garden.VerbTend),
+		SourceSessionID: protocol.Ptr("sess-b"), Force: protocol.Ptr(true),
+	}
+	forced := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	if !forced.Ok {
+		t.Fatalf("forced member takeover: %v", protocol.Deref(forced.Error))
+	}
+	if got := forced.SeedTransitionResult.Seed; got.TenderSession != "sess-b" || got.TenderMember != "" {
+		t.Fatalf("forced claim = member %q session %q", got.TenderMember, got.TenderSession)
+	}
+}
+
+func TestForcedSeedMoveRollsBackWhenItsAuditNoteCannotLand(t *testing.T) {
+	d := newGardenDaemon(t)
+	addGardenSession(t, d, "sess-a")
+	addGardenSession(t, d, "sess-b")
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "held work"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+
+	d.gardenMintNoteID = func() (string, error) { return "n-000000", nil }
+	note(t, d, "sess-a", seed.ID, "the note that already owns this id", "")
+	beforeFacts, err := d.store.BusEventsSince(0, 1000)
+	if err != nil {
+		t.Fatalf("read facts before forced move: %v", err)
+	}
+
+	msg := protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, SeedID: seed.ID, Verb: string(garden.VerbWither),
+		SourceSessionID: protocol.Ptr("sess-b"), Force: protocol.Ptr(true),
+	}
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "every one was taken") {
+		t.Fatalf("forced move response = %+v", resp)
+	}
+
+	got, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatalf("read seed after refused batch: %v", err)
+	}
+	if got.Status != garden.StatusGrowing || got.TenderSession != "sess-a" {
+		t.Fatalf("seed moved without its audit: %+v", got)
+	}
+	notes, _, err := d.readNotes(seed.ID, 10)
+	if err != nil {
+		t.Fatalf("read notes after refused batch: %v", err)
+	}
+	if len(notes) != 1 || notes[0].Body != "the note that already owns this id" {
+		t.Fatalf("failed batch left a false audit: %+v", notes)
+	}
+	afterFacts, err := d.store.BusEventsSince(0, 1000)
+	if err != nil {
+		t.Fatalf("read facts after forced move: %v", err)
+	}
+	if len(afterFacts) != len(beforeFacts) {
+		t.Fatalf("failed batch announced facts: before=%d after=%d", len(beforeFacts), len(afterFacts))
+	}
+}
+
+func TestEveryForcedSeedMoveRecordsWhoForcedAndWhoHeld(t *testing.T) {
+	for _, verb := range garden.Verbs {
+		t.Run(string(verb), func(t *testing.T) {
+			d := newGardenDaemon(t)
+			addGardenSession(t, d, "sess-a")
+			addGardenSession(t, d, "sess-b")
+			seed := plant(t, d, protocol.SeedPlantMessage{Title: "held work"})
+			move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+			msg := protocol.SeedTransitionMessage{
+				Cmd: protocol.CmdSeedTransition, SeedID: seed.ID, Verb: string(verb),
+				SourceSessionID: protocol.Ptr("sess-b"), Force: protocol.Ptr(true),
+			}
+			if verb == garden.VerbHarvest || verb == garden.VerbWither {
+				msg.Reason = protocol.Ptr("done")
+			}
+			resp := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+			if !resp.Ok {
+				t.Fatalf("forced %s: %v", verb, protocol.Deref(resp.Error))
+			}
+			notes, _, err := d.readNotes(seed.ID, 10)
+			if err != nil {
+				t.Fatalf("read notes: %v", err)
+			}
+			if len(notes) != 1 || !strings.Contains(notes[0].Body, "sess-b forced") || !strings.Contains(notes[0].Body, "sess-a held") {
+				t.Fatalf("%s notes = %+v", verb, notes)
+			}
+		})
 	}
 }

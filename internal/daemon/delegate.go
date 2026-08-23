@@ -985,15 +985,8 @@ func withLeafIdentity(prompt string) string {
 	return leafIdentityPreamble + "\n\n---\n\n" + strings.TrimSpace(prompt)
 }
 
-// delegatedTicketPrompt augments every delegated agent's brief with the self-report
-// contract: the agent's work is bound to an attn ticket (assignee == session), and
-// it moves that ticket across the board by reporting its own work state. The
-// delegator, the agent, and the chief of staff all read that board.
-// delegatedBriefPrompt is a delegate's whole initial prompt: the brief, and —
-// when a seed bound — where that work lives in the garden and the verbs that
-// move it. Tickets retired, so the brief stands alone when no seed bound (an
-// outpost, where the garden's fence refuses every write); the delegate still
-// works, it just has nowhere to report, and the launch log says so.
+// delegatedBriefPrompt is a delegate's brief plus the reporting contract for
+// its bound seed. An outpost has no seed, so its brief stands alone.
 func delegatedBriefPrompt(brief, seedID string) string {
 	brief = strings.TrimSpace(brief)
 	if strings.TrimSpace(seedID) == "" {
@@ -1003,48 +996,19 @@ func delegatedBriefPrompt(brief, seedID string) string {
 
 ---
 Your work is seed ` + "`" + seedID + "`" + ` in the garden — the brief above is its body, and
-you are its tender. The log is how anyone else sees what is happening, so write
-what you learned, not just what you did:
+you are its tender. Read the body and log with:
+
+    attn seed show ` + seedID + `
+
+Report progress, what you learned, and decisions needed on the log:
 
     attn seed note ` + seedID + ` -m "<what happened and what you learned>"
 
-Say it when you need a decision, and say it plainly — a note is the only channel
-back to whoever is watching:
+Harvest only when the requested outcome is settled — the user accepted the work
+or the requested PR merged. If implementation is finished but acceptance or
+review is pending, note that and leave the seed open:
 
-    attn seed note ` + seedID + ` -m "<the decision you need and why it blocks you>"
-
-Close it yourself when the outcome is settled. Harvest when the requested
-outcome is done and no review or decision remains — the user accepted the work,
-the requested PR merged. If you finished implementing but acceptance or review
-is still pending, say that in a note and leave the seed open:
-
-    attn seed harvest ` + seedID + ` -m "<what got done>"
-    attn seed wither ` + seedID + ` -m "<why nobody should pick this up>"
-
-Associate a document you produced or are working from, and take it back when it
-stops being current:
-
-    attn seed attach ` + seedID + ` --path <file.md> [--repo <repository>]
-    attn seed attach ` + seedID + ` --notebook <document-id>
-    attn seed attach ` + seedID + ` --url <url>
-    attn seed detach ` + seedID + ` --path <file.md>
-
-Read it back with ` + "`" + `attn seed show ` + seedID + "`" + `, and leave whoever tends it after
-you a ` + "`" + `--handoff` + "`" + ` note. Continue the assigned work after reporting unless you
-are blocked or waiting on the user.
-
-Delegating a slice of this work onward? A delegation that plants a new seed is
-linked under ` + "`" + seedID + "`" + ` automatically. Dispatching at a seed that already
-exists (--plot) nests nothing — when your delegation owns that work, keep the
-lineage visible yourself:
-
-    attn seed link <that-seed-id> part-of ` + seedID + `
-
-Nest only seeds your delegations create or own; a seed you merely reviewed or
-touched is not yours to nest.
-
-` + "`" + `attn ticket` + "`" + ` retired: every write verb now prints the garden command that
-replaced it. Only ` + "`" + `attn ticket show` + "`" + ` and ` + "`" + `attn ticket list` + "`" + ` still read.`
+    attn seed harvest ` + seedID + ` -m "<what got done>"`
 }
 
 func (d *Daemon) handleDelegate(conn net.Conn, msg *protocol.DelegateMessage) {

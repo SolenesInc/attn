@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -28,6 +29,7 @@ type pluginLaunchInstructions struct {
 // created; an existing or locally modified checkout is never removed.
 func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief bool) (*pluginLaunchInstructions, func(), error) {
 	rollback := func() {}
+	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
@@ -40,7 +42,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
 				NotebookRoot: root,
-				Garden:       d.gardenPrimeForLaunch(sessionID),
+				Garden:       gardenHome,
 				Crew:         d.crewPrimeForLaunch(sessionID),
 			}.Instructions(),
 			WorkspaceID:  workspaceID,
@@ -68,24 +70,13 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 		Content: hooks.Launch{
 			WorkspaceContextPath: result.Path,
 			InjectWorkflow:       parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
-			Garden:               d.gardenPrimeForLaunch(sessionID),
+			Garden:               gardenHome,
 			Crew:                 d.crewPrimeForLaunch(sessionID),
 		}.Instructions(),
 		WorkspaceID:     workspaceID,
 		ContextPath:     result.Path,
 		ContextRevision: result.CanonicalRevision,
 	}, rollback, nil
-}
-
-// gardenPrimeForLaunch is what a launching agent is primed with, or nil when
-// this daemon has no garden to prime from — an outpost, where every seed
-// command refuses, must not hand its agents a loop they cannot run.
-func (d *Daemon) gardenPrimeForLaunch(sessionID string) *hooks.GardenPrime {
-	prime, err := d.gardenPrime(sessionID)
-	if err != nil {
-		return nil
-	}
-	return prime
 }
 
 // crewPrimeForLaunch is the crew block for a plugin-driver launch, the same one

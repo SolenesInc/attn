@@ -839,11 +839,11 @@ session options:
                              unique; defaults to the directory name)
   --source-session <id>      source session (defaults to ATTN_SESSION_ID)
   --yolo                     bypass agent approval prompts
-  --plot <crown>             dispatch the delegate at an existing seed instead of
+  --plot <seed>              dispatch the delegate at an existing seed instead of
                              planting a new one. The delegate becomes that seed's
                              tender, and the dispatch refuses before creating
                              anything if a live session already holds it. Aimed
-                             at a crown it launches knowing that plot, and a
+                             at a plot it launches knowing that plan, and a
                              flag-free "attn seed ready" inside it answers with
                              the plot's ready seeds. Beyond that seed it is
                              scope, not a fence: who holds each child stays that
@@ -2366,7 +2366,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	name := fs.String("name", "", "name for the agent and, when a new workspace is created, the workspace")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to ATTN_SESSION_ID)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
-	plot := fs.String("plot", "", "dispatch the delegate at a crown: its plot is what flag-free `attn seed ready` answers with")
+	plot := fs.String("plot", "", "dispatch the delegate at a plot: it is what flag-free `attn seed ready` answers with")
 	newWorkspace := fs.Bool("new-workspace", false, "create a new workspace for the delegated agent")
 	workspaceID := fs.String("workspace", "", "place the delegated agent in an existing workspace")
 	cwd := fs.String("cwd", "", "use an existing directory in a new workspace")
@@ -3113,15 +3113,10 @@ func runAgentDirectly(requestedAgent string) {
 			}
 		}
 	}
-	// The garden primer rides the same launch injection as the guidance above,
-	// for chief and workspace agents alike. The answer comes from the daemon
-	// rather than a copy of the rule, so what an agent is primed with and what
-	// `attn seed ready` answers cannot drift apart: the whole garden, or — for a
-	// delegate dispatched at a crown — its plot, crown body and handoffs
-	// included. A refusal — an outpost, whose garden lives at its home — primes
-	// nothing rather than teaching a loop this session cannot run.
-	if ready, err := c.SeedReady(sessionID, "", false); err == nil {
-		opts.Garden = gardenPrimeFromReady(ready)
+	// A successful ready answer proves this daemon is the garden's home. Launch
+	// owns standing guidance; SessionStart refreshes live state.
+	if _, err := c.SeedReady(sessionID, "", false); err == nil {
+		opts.Garden = true
 	}
 	// The crew priming rides the same injection. The daemon composes it from
 	// the member's own home and logs its size at that moment, so what a member
@@ -3358,20 +3353,51 @@ func runHookSessionStart() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	// The SessionStart hook syncs the agent's native session ID back to attn for
-	// resume, then emits workspace-context guidance as a fallback for sessions that
-	// did not receive it at launch (--append-system-prompt / developer_instructions).
-	// The launch path sets ATTN_WORKSPACE_CONTEXT_GUIDANCE / ATTN_CHIEF_GUIDANCE so
-	// workspaceContextGuidanceProvidedAtLaunch suppresses the fallback when guidance
-	// was already injected.
+	// resume, then emits the launch-independent workspace-context fallback and
+	// the live garden tail. The launch path sets
+	// ATTN_WORKSPACE_CONTEXT_GUIDANCE / ATTN_CHIEF_GUIDANCE so only the workspace
+	// block is suppressed when guidance was already injected.
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
-	output, err := workspaceContextSessionStartOutput(c, sessionID, 40, 25*time.Millisecond)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", err)
-		return
+
+	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, 40, 25*time.Millisecond)
+	if contextErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", contextErr)
 	}
-	if output != "" && !workspaceContextGuidanceProvidedAtLaunch() {
+	if primeErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
+	}
+
+	if output := hooks.SessionStartOutput(contexts...); output != "" {
 		fmt.Fprintln(os.Stdout, output)
 	}
+}
+
+type sessionStartClient interface {
+	workspaceContextCheckoutClient
+	SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error)
+}
+
+// sessionStartContexts builds the reset-safe context blocks independently of
+// either agent's hook envelope. A garden fence is non-fatal and contributes no
+// block.
+func sessionStartContexts(
+	c sessionStartClient,
+	sessionID string,
+	attempts int,
+	retryDelay time.Duration,
+) (contexts []string, contextErr, primeErr error) {
+	contextPath, contextErr := workspaceContextCheckoutPath(c, sessionID, attempts, retryDelay)
+	if contextErr == nil && !workspaceContextGuidanceProvidedAtLaunch() {
+		if guidance := hooks.WorkspaceContextGuidance(contextPath); guidance != "" {
+			contexts = append(contexts, guidance)
+		}
+	}
+
+	ready, primeErr := c.SeedReady(sessionID, "", false)
+	if primeErr == nil {
+		contexts = append(contexts, seedPrimeTailFromReady(ready))
+	}
+	return contexts, contextErr, primeErr
 }
 
 // workspaceContextSessionStartOutput checks out this session's workspace context
