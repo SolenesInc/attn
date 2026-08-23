@@ -195,7 +195,7 @@ func (s *Session) runShellForegroundPoller(interval time.Duration) {
 // the child as session leader (Setsid), so its group id is its pid; asking the
 // kernel first covers any arrangement where it is not.
 func (s *Session) childProcessGroup() int {
-	pid := s.cmd.Process.Pid
+	pid := s.child.processID()
 	if pgid, err := syscall.Getpgid(pid); err == nil && pgid > 0 {
 		return pgid
 	}
@@ -211,7 +211,12 @@ func (s *Session) foregroundProcessGroup() (int, bool) {
 	if s.ptmxClosed || s.ptmx == nil {
 		return 0, false
 	}
-	pgid, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	var pgid int
+	err := s.withPTMXFd(func(fd uintptr) error {
+		var ioctlErr error
+		pgid, ioctlErr = unix.IoctlGetInt(int(fd), unix.TIOCGPGRP)
+		return ioctlErr
+	})
 	if err != nil || pgid <= 0 {
 		return 0, false
 	}

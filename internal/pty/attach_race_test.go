@@ -48,7 +48,7 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
 		ghostty:     gt,
 		wireFeed:    newWireFeeder(gt, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),
@@ -186,7 +186,7 @@ func TestScreenSnapshotSeqConsistency(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
 		ghostty:     gt,
 		wireFeed:    newWireFeeder(gt, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),

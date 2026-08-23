@@ -45,7 +45,7 @@ func newLifetimeRaceSession(t *testing.T, id string, cols, rows int) (*Session, 
 		cols:        uint16(cols),
 		rows:        uint16(rows),
 		ptmx:        r,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() errors, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() errors, never panics
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),

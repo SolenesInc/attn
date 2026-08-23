@@ -253,3 +253,64 @@ func TestSpikeTrackedRefResolvesWhileAltScreenActive(t *testing.T) {
 		t.Fatalf("alt-screen restore misalignment at y=%d: src=%q restored=%q", y, srcLines[y], got)
 	}
 }
+
+// TestTrackPointPinsAScreenRow covers the pin a worker makes when it adopts a
+// session after an in-place upgrade: the grid came back from a VT replay, so
+// every OSC 133 anchor has to be re-pinned from a row number alone. The
+// coordinate space must be the same one ScreenPoint reports, and the pin must
+// then follow its row like any other.
+func TestTrackPointPinsAScreenRow(t *testing.T) {
+	base := LiveTrackedRefs()
+	term := newT(t, 80, 10)
+	feedLines(term, 0, 30)
+
+	lines := screenLines(term)
+	const want = "line-0007"
+	row := -1
+	for i, l := range lines {
+		if l == want {
+			row = i
+		}
+	}
+	if row < 0 {
+		t.Fatalf("fixture line %q not on screen", want)
+	}
+
+	ref := term.TrackPoint(3, row)
+	if ref == nil {
+		t.Fatalf("TrackPoint(3, %d) returned nil", row)
+	}
+	defer ref.Free()
+	x, y, ok := ref.ScreenPoint()
+	if !ok || x != 3 || y != row {
+		t.Fatalf("ScreenPoint = (%d,%d,%v), want (3,%d,true)", x, y, ok, row)
+	}
+
+	// Scrolling more content in moves the row; the pin must move with it.
+	feedLines(term, 30, 40)
+	_, y, ok = ref.ScreenPoint()
+	if !ok {
+		t.Fatal("the pin stopped resolving after more output")
+	}
+	if got := screenLines(term)[y]; got != want {
+		t.Errorf("the pin drifted: row %d now reads %q, want %q", y, got, want)
+	}
+
+	ref.Free()
+	if got := LiveTrackedRefs(); got != base {
+		t.Errorf("live refs = %d, want %d", got, base)
+	}
+}
+
+func TestTrackPointRejectsARowThatIsNotThere(t *testing.T) {
+	term := newT(t, 80, 10)
+	term.Write([]byte("one line\r\n"))
+	if ref := term.TrackPoint(0, 5000); ref != nil {
+		ref.Free()
+		t.Error("TrackPoint pinned a row far past the end of the screen")
+	}
+	if ref := term.TrackPoint(0, -1); ref != nil {
+		ref.Free()
+		t.Error("TrackPoint pinned a negative row")
+	}
+}

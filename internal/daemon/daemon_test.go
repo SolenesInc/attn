@@ -1624,6 +1624,43 @@ type fakeSpawnBackend struct {
 	// "no answer yet", so a test that does not set it sees no stale verdict.
 	terminalBuild      string
 	terminalBuildKnown bool
+	// upgradeErr is what UpgradeWorker answers, and onUpgrade stands in for the
+	// re-handshake a real swap ends with — the fake's chance to start reporting
+	// the new build.
+	upgradeErr  error
+	onUpgrade   func(*fakeSpawnBackend)
+	upgraded    []string
+	upgradeDone chan string
+	// upgradeEntered is closed-over by the fake to announce that a swap is
+	// under way, and upgradeGate holds it there — together they let a test put
+	// a second caller against an upgrade that is genuinely in flight.
+	upgradeEntered chan string
+	upgradeGate    chan struct{}
+}
+
+// UpgradeWorker makes the fake a ptybackend.WorkerUpgrader: the daemon swaps a
+// mismatched worker in place rather than asking the user to reload.
+func (f *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
+	f.mu.Lock()
+	f.upgraded = append(f.upgraded, sessionID)
+	err := f.upgradeErr
+	if err == nil && f.onUpgrade != nil {
+		f.onUpgrade(f)
+	}
+	done := f.upgradeDone
+	entered := f.upgradeEntered
+	gate := f.upgradeGate
+	f.mu.Unlock()
+	if entered != nil {
+		entered <- sessionID
+	}
+	if gate != nil {
+		<-gate
+	}
+	if done != nil {
+		done <- sessionID
+	}
+	return err
 }
 
 // SessionTerminalBuild makes the fake a ptybackend.TerminalBuildProvider, which
@@ -5074,4 +5111,10 @@ func TestHandleStop_SkipsClassificationForForcedStopSession(t *testing.T) {
 			t.Fatal("forced-stop suppression token should be consumed by handleStop")
 		}
 	})
+}
+
+func (f *fakeSpawnBackend) upgradedSessions() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.upgraded...)
 }

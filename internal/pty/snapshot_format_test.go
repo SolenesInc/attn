@@ -18,7 +18,7 @@ func TestInfoStampsSnapshotFormat(t *testing.T) {
 			id:          "snapshot-format",
 			cols:        80,
 			rows:        24,
-			cmd:         &exec.Cmd{},
+			child:       &childProcess{cmd: &exec.Cmd{}},
 			subscribers: make(map[string]*sessionSubscriber),
 			running:     true,
 			exited:      make(chan struct{}),

@@ -24,7 +24,7 @@ func newOSCTestSession(t *testing.T) (s *Session, peer *os.File) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        ptmx,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),
@@ -84,7 +84,7 @@ func TestOSCColorQuerySeededAtSpawnAnswersWithoutSetTheme(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        ptmx,
-		cmd:         &exec.Cmd{},
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),

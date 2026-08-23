@@ -50,9 +50,16 @@ func (t *Terminal) TrackCursor() *TrackedRef {
 		return nil
 	}
 	cx, cy := t.cursorXYLocked()
-	p := C.ghosttyvt_point(C.GHOSTTY_POINT_TAG_ACTIVE, C.uint16_t(cx), C.uint32_t(cy))
+	return trackLocked(t.term, C.GHOSTTY_POINT_TAG_ACTIVE, cx, cy)
+}
+
+// trackLocked pins one cell and counts it. Both public pins go through here so
+// liveTrackedRefs — which the block-table tests assert against a baseline — has
+// exactly one increment site. Caller holds t.mu.
+func trackLocked(term C.GhosttyTerminal, tag C.GhosttyPointTag, x, y int) *TrackedRef {
+	p := C.ghosttyvt_point(tag, C.uint16_t(x), C.uint32_t(y))
 	var ref C.GhosttyTrackedGridRef
-	if rc := C.ghostty_terminal_grid_ref_track(t.term, p, &ref); rc != C.GHOSTTY_SUCCESS {
+	if rc := C.ghostty_terminal_grid_ref_track(term, p, &ref); rc != C.GHOSTTY_SUCCESS {
 		return nil
 	}
 	liveTrackedRefs.Add(1)
@@ -82,4 +89,19 @@ func (r *TrackedRef) Free() {
 	C.ghostty_tracked_grid_ref_free(r.ref)
 	r.ref = nil
 	liveTrackedRefs.Add(-1)
+}
+
+// TrackPoint pins an arbitrary SCREEN-space cell (scrollback + active area,
+// 0-indexed from the top of retained scrollback) — the coordinate space
+// AttachBlockData rows are resolved in. It is how a worker that adopted a
+// session after an in-place upgrade re-pins the OSC 133 blocks it was handed:
+// the replayed grid has the same rows, but none of the old image's refs.
+// Returns nil if the terminal is closed or the cell does not exist.
+func (t *Terminal) TrackPoint(x, y int) *TrackedRef {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed || x < 0 || y < 0 {
+		return nil
+	}
+	return trackLocked(t.term, C.GHOSTTY_POINT_TAG_SCREEN, x, y)
 }

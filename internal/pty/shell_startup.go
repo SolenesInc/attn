@@ -12,7 +12,19 @@ import (
 type shellPaneLaunch struct {
 	command *exec.Cmd
 	env     []string
-	cleanup func()
+	// overlayDir is the startup overlay to remove when the session ends, "" when
+	// there is nothing to remove. A path, not a closure, so an in-place worker
+	// upgrade can hand the removal to the image that adopts the session.
+	overlayDir string
+}
+
+// removeShellOverlay is the one way a startup overlay goes away, on the spawn
+// failure paths and at session end alike.
+func removeShellOverlay(dir string) {
+	if dir == "" {
+		return
+	}
+	_ = os.RemoveAll(dir)
 }
 
 type shellStartupStrategy func(shellPath string, env []string) (shellPaneLaunch, error)
@@ -42,7 +54,6 @@ func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, er
 	return shellPaneLaunch{
 		command: exec.Command(shellPath, "-l"),
 		env:     append([]string(nil), env...),
-		cleanup: func() {},
 	}, nil
 }
 
@@ -67,7 +78,6 @@ func prepareFishShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch
 		// action before it accepts terminal input.
 		command: exec.Command(shellPath, "-l", "-C", "set -gx PATH "+shellQuote(path)),
 		env:     env,
-		cleanup: func() {},
 	}, nil
 }
 
@@ -111,9 +121,9 @@ func prepareZshShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch,
 		"ATTN_SHELL_USER_ZDOTDIR_IS_SET=" + boolEnvValue(zdotdirSet),
 	})
 	return shellPaneLaunch{
-		command: exec.Command(shellPath, "-l"),
-		env:     launchEnv,
-		cleanup: cleanup,
+		command:    exec.Command(shellPath, "-l"),
+		env:        launchEnv,
+		overlayDir: overlay,
 	}, nil
 }
 
@@ -341,9 +351,9 @@ func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunc
 		"ATTN_SHELL_INIT_DIR=" + overlay,
 	})
 	return shellPaneLaunch{
-		command: exec.Command(shellPath, "-l"),
-		env:     launchEnv,
-		cleanup: cleanup,
+		command:    exec.Command(shellPath, "-l"),
+		env:        launchEnv,
+		overlayDir: overlay,
 	}, nil
 }
 

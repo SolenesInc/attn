@@ -29,7 +29,7 @@ func runShellIntegrationScenario(t *testing.T, shellPath string, env []string, c
 	if err != nil {
 		t.Fatalf("prepare shell pane launch: %v", err)
 	}
-	t.Cleanup(launch.cleanup)
+	t.Cleanup(func() { removeShellOverlay(launch.overlayDir) })
 	launch.command.Env = launch.env
 	launch.command.Dir = t.TempDir()
 

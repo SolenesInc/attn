@@ -68,9 +68,10 @@ type terminalBuildHarness struct {
 	listener  net.Listener
 	served    <-chan struct{}
 
-	mu       sync.Mutex
-	format   string
-	reported []string
+	mu              sync.Mutex
+	format          string
+	reported        []string
+	reportedFormats []string
 }
 
 func newTerminalBuildHarness(t *testing.T, sessionID, format string) *terminalBuildHarness {
@@ -82,10 +83,11 @@ func newTerminalBuildHarness(t *testing.T, sessionID, format string) *terminalBu
 		DataRoot:         root,
 		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BinaryPath:       "/bin/true",
-		OnTerminalBuild: func(id string) {
+		OnTerminalBuild: func(id, format string) {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			h.reported = append(h.reported, id)
+			h.reportedFormats = append(h.reportedFormats, format)
 		},
 	})
 	if err != nil {
@@ -162,6 +164,12 @@ func (h *terminalBuildHarness) reports() []string {
 	return append([]string(nil), h.reported...)
 }
 
+func (h *terminalBuildHarness) reportedFormatsCopy() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.reportedFormats...)
+}
+
 func TestWorkerBackendRecordsTheFormatItsWorkerReports(t *testing.T) {
 	h := newTerminalBuildHarness(t, "sess-terminal-build", "0123456789ab")
 	h.handshake(t)
@@ -172,6 +180,11 @@ func TestWorkerBackendRecordsTheFormatItsWorkerReports(t *testing.T) {
 	}
 	if got := h.reports(); len(got) != 1 || got[0] != h.sessionID {
 		t.Fatalf("OnTerminalBuild fired %v, want exactly one call for %s", got, h.sessionID)
+	}
+	// The format travels with the call: the daemon acts on it before the
+	// session is readable back from the map.
+	if got := h.reportedFormatsCopy(); len(got) != 1 || got[0] != "0123456789ab" {
+		t.Fatalf("OnTerminalBuild carried %v, want [\"0123456789ab\"]", got)
 	}
 }
 

@@ -37,20 +37,21 @@ function ReloadHint() {
 }
 
 // Shown when the daemon says this session's pty-worker holds a different
-// libghostty-vt than the app. Nothing is broken yet, and the session keeps
-// running; the two terminals just stop agreeing about the grid, which shows up
-// as a garbled pane after an image or a redraw. A reload replaces the worker.
+// libghostty-vt than the app AND could not be upgraded in place. Nothing is
+// broken yet, and the session keeps running; the two terminals just stop
+// agreeing about the grid, which shows up as a garbled pane after an image or a
+// redraw. A reload replaces the worker.
 export function TerminalStaleBuildNotice({ onDismiss }: TerminalStaleBuildNoticeProps) {
   return (
     <div className="terminal-stale-build-notice" role="status" data-testid="terminal-stale-build-notice">
       <ReloadHint />
       <div className="terminal-stale-build-notice-body">
         <p className="terminal-stale-build-notice-lead">
-          This session started before the last update and is running an older terminal.
+          This session is running an older terminal.
         </p>
         <p>Reload it to bring it up to date.</p>
         <p className="terminal-stale-build-notice-aside">
-          A one-off from a terminal-engine upgrade. Future updates handle it automatically.
+          An update normally swaps this out on its own. This one could not.
         </p>
       </div>
       <button

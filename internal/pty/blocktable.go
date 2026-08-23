@@ -157,7 +157,13 @@ func (bt *blockTable) complete(p *trackedBlock, endRef *sharedRef, exitCode *int
 	p.endRef = endRef
 	endRef.acquire()
 	p.exitCode = exitCode
-	bt.completed = append(bt.completed, p)
+	bt.appendCompleted(p)
+}
+
+// appendCompleted pushes a finished block and enforces the cap oldest-first,
+// freeing every evicted block's refs.
+func (bt *blockTable) appendCompleted(b *trackedBlock) {
+	bt.completed = append(bt.completed, b)
 	if len(bt.completed) > maxBlocks {
 		evicted := bt.completed[:len(bt.completed)-maxBlocks]
 		bt.completed = append([]*trackedBlock(nil), bt.completed[len(bt.completed)-maxBlocks:]...)
@@ -183,6 +189,77 @@ func (bt *blockTable) SnapshotBlocks() []AttachBlockData {
 		}
 	}
 	return out
+}
+
+// Restore rebuilds the table from an attach snapshot's blocks, re-pinning each
+// anchor with pin. It is the adopt half of an in-place worker upgrade: the new
+// image's grid comes from a VT replay, which rebuilds no OSC 133 state and
+// leaves none of the old image's native refs alive, so rows are all there is
+// to pin from. A row pin can fail (the row scrolled out between the dump and
+// the replay); a block whose prompt anchor will not pin is dropped, the same
+// correct-or-absent rule SnapshotBlocks applies.
+// pinAnchor pins one optional block anchor, already acquired. nil row or a row
+// that no longer exists yields nil — the acquire lives here so a caller cannot
+// take a ref and forget to hold it.
+func pinAnchor(pin func(x, y int) blockRef, row *int32, col int) *sharedRef {
+	if row == nil {
+		return nil
+	}
+	r := pinShared(pin, col, int(*row))
+	if r == nil {
+		return nil
+	}
+	r.acquire()
+	return r
+}
+
+func (bt *blockTable) Restore(blocks []AttachBlockData, pin func(x, y int) blockRef) {
+	for _, d := range blocks {
+		promptRef := pinShared(pin, 0, int(d.PromptRow))
+		if promptRef == nil {
+			continue
+		}
+		b := &trackedBlock{id: d.ID, promptRef: promptRef}
+		promptRef.acquire()
+		inputCol := 0
+		if d.InputCol != nil {
+			inputCol = int(*d.InputCol)
+		}
+		b.inputRef = pinAnchor(pin, d.InputRow, inputCol)
+		b.outputRef = pinAnchor(pin, d.OutputStartRow, 0)
+		b.endRef = pinAnchor(pin, d.EndRow, 0)
+		if d.Command != nil {
+			cmd := *d.Command
+			b.command = &cmd
+			b.hasCommand = true
+		}
+		if d.ExitCode != nil {
+			code := *d.ExitCode
+			b.exitCode = &code
+		}
+		if d.ID >= bt.nextID {
+			bt.nextID = d.ID + 1
+		}
+		if d.Pending {
+			// At most one block is pending; a later one replaces an earlier,
+			// which must not leak its refs.
+			if bt.pending != nil {
+				bt.pending.release()
+			}
+			bt.pending = b
+			continue
+		}
+		bt.appendCompleted(b)
+	}
+}
+
+// pinShared pins one anchor, returning nil when the row is no longer there.
+func pinShared(pin func(x, y int) blockRef, x, y int) *sharedRef {
+	ref := pin(x, y)
+	if ref == nil {
+		return nil
+	}
+	return newSharedRef(ref)
 }
 
 // Close frees every held ref. The table is unusable afterwards.

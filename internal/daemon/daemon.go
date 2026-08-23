@@ -165,6 +165,10 @@ type Daemon struct {
 	warnings           []protocol.DaemonWarning
 	warningsMu         sync.RWMutex
 	ptyBackend         ptybackend.Backend
+	// upgradingWorkers holds the sessions whose pty-worker is being swapped
+	// right now; see handleTerminalBuildChanged.
+	upgradingMu      sync.Mutex
+	upgradingWorkers map[string]bool
 	// hostSessions runs the conversation sessions — the ones whose agent lives
 	// in a headless host process rather than a PTY. See host_session.go.
 	hostSessions    *hostsession.Manager
@@ -1119,9 +1123,7 @@ func (d *Daemon) Start() error {
 			DaemonInstanceID: d.daemonInstanceID,
 			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
 			Logf:             d.logf,
-			OnTerminalBuild: func(sessionID string) {
-				d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
-			},
+			OnTerminalBuild:  d.handleTerminalBuildChanged,
 		})
 		if err != nil {
 			d.logf("failed to initialize worker PTY backend: %v; falling back to embedded", err)

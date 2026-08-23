@@ -1,0 +1,10 @@
+kind: internal
+area: terminal
+change: >
+  A pty-worker can replace its own binary in place: it stops accepting,
+  captures the session, and execve's the new executable, which keeps the
+  pid so the agent stays its child. The PTY master and the listening
+  socket cross as inherited descriptors, so the socket never stops
+  answering and a call made during the swap is served by the new image.
+  Reached over the worker RPC as `upgrade`; a worker that predates it
+  answers "unknown method" and the caller degrades.

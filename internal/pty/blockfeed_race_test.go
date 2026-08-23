@@ -47,6 +47,14 @@ func (t *pinningBlockTable) SnapshotBlocks() []AttachBlockData {
 	return out
 }
 
+func (t *pinningBlockTable) Restore(blocks []AttachBlockData, pin func(x, y int) blockRef) {
+	for _, b := range blocks {
+		if ref := pin(0, int(b.PromptRow)); ref != nil {
+			t.refs = append(t.refs, ref)
+		}
+	}
+}
+
 func (t *pinningBlockTable) Close() {
 	for _, r := range t.refs {
 		r.Free()
@@ -83,7 +91,7 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),

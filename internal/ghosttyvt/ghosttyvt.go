@@ -149,6 +149,12 @@ static GhosttyFormatterTerminalOptions ghosttyvt_make_opts(GhosttyFormatterForma
 	return o;
 }
 
+static size_t ghosttyvt_get_usize(GhosttyTerminal t, GhosttyTerminalData data) {
+	size_t v = 0;
+	ghostty_terminal_get(t, data, &v);
+	return v;
+}
+
 static uint16_t ghosttyvt_get_u16(GhosttyTerminal t, GhosttyTerminalData data) {
 	uint16_t v = 0;
 	ghostty_terminal_get(t, data, &v);
@@ -592,16 +598,97 @@ func (t *Terminal) SerializeViewport() Snapshot {
 		return Snapshot{Cols: t.cols, Rows: t.rows}
 	}
 
-	// The formatter emits its cursor CUP before tabstop resets, so append the
-	// true position last (0-indexed native coords → 1-based CUP).
+	return Snapshot{Cols: t.cols, Rows: t.rows, VTDump: t.appendCursorLocked(dump)}
+}
+
+// appendCursorLocked writes the true cursor position and visibility onto a
+// formatted dump. The formatter emits its own cursor CUP before the tabstop
+// resets, so this has to go last (0-indexed native coords → 1-based CUP).
+// Caller holds t.mu.
+func (t *Terminal) appendCursorLocked(dump []byte) []byte {
 	cx, cy := t.cursorXYLocked()
 	dump = fmt.Appendf(dump, "\x1b[%d;%dH", cy+1, cx+1)
 	if C.ghosttyvt_cursor_visible(t.term) {
-		dump = append(dump, "\x1b[?25h"...)
-	} else {
-		dump = append(dump, "\x1b[?25l"...)
+		return append(dump, "\x1b[?25h"...)
+	}
+	return append(dump, "\x1b[?25l"...)
+}
+
+// HandoffVT serializes the terminal as plain VT: escape sequences that replay
+// into a fresh terminal of any libghostty-vt version, scrollback included.
+// Unlike Serialize's binary payload it carries no encoder version with it,
+// which is what lets a worker hand its screen to its own replacement across a
+// bump.
+//
+// It CONSUMES the terminal. Reaching the primary screen means leaving the
+// alternate one, which destroys the alternate screen's contents. Call it only
+// on a terminal that is about to be discarded.
+func (t *Terminal) HandoffVT() Snapshot {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return Snapshot{Cols: t.cols, Rows: t.rows}
+	}
+
+	alt := C.ghosttyvt_active_screen(t.term) == C.int(C.GHOSTTY_TERMINAL_SCREEN_ALTERNATE)
+	var altDump []byte
+	if alt {
+		altDump = t.dumpActiveLocked()
+		// DECRST 1049 restores the primary screen and its saved cursor; the
+		// alternate screen's contents are gone after this, which is why the
+		// caller may not keep using this terminal.
+		t.writeLocked([]byte("\x1b[?1049l"))
+	}
+
+	dump := t.dumpActiveLocked()
+	if alt {
+		dump = append(dump, "\x1b[?1049h"...)
+		dump = append(dump, altDump...)
 	}
 	return Snapshot{Cols: t.cols, Rows: t.rows, VTDump: dump}
+}
+
+// dumpActiveLocked serializes the active screen: the formatter's own output,
+// the rows it drops, and the cursor. Caller holds t.mu.
+func (t *Terminal) dumpActiveLocked() []byte {
+	dump := t.format(C.GHOSTTY_FORMATTER_FORMAT_VT)
+	if dump == nil {
+		return nil
+	}
+
+	// The formatter stops at the last non-blank row, so a grid whose bottom
+	// rows are blank replays short: the cursor then sits ON the last line of
+	// output instead of below it, and everything the child prints next
+	// overwrites a row it believes is still there. Measure the shortfall
+	// against a replay rather than predicting it — it does not follow the
+	// cursor, so a cursor moved up-screen hides it entirely.
+	//
+	// A screen with a scrolling region set below a blank bottom row keeps its
+	// shortfall: the line feeds land outside the region and scroll nothing.
+	// Programs that set a region keep the screen full, so the combination is
+	// not one a real session reaches.
+	if deficit := t.replayDeficitLocked(dump); deficit > 0 {
+		dump = fmt.Appendf(dump, "\x1b[%d;1H", t.rows)
+		dump = append(dump, strings.Repeat("\r\n", deficit)...)
+	}
+
+	return t.appendCursorLocked(dump)
+}
+
+// replayDeficitLocked reports how many grid rows a replay of dump comes up
+// short of this terminal. Caller holds t.mu.
+func (t *Terminal) replayDeficitLocked(dump []byte) int {
+	probe, err := New(t.cols, t.rows, Options{})
+	if err != nil {
+		return 0
+	}
+	defer probe.Close()
+	probe.Write(dump)
+	deficit := int(C.ghosttyvt_get_usize(t.term, C.GHOSTTY_TERMINAL_DATA_TOTAL_ROWS)) - probe.TotalRows()
+	if deficit < 0 {
+		return 0
+	}
+	return deficit
 }
 
 // Serialize produces a Snapshot of the whole terminal.
@@ -644,6 +731,18 @@ func (t *Terminal) encodeSnapshotLocked() []byte {
 func (t *Terminal) cursorXYLocked() (x, y int) {
 	return int(C.ghosttyvt_get_u16(t.term, C.GHOSTTY_TERMINAL_DATA_CURSOR_X)),
 		int(C.ghosttyvt_get_u16(t.term, C.GHOSTTY_TERMINAL_DATA_CURSOR_Y))
+}
+
+// TotalRows is the whole grid height of the active screen: scrollback plus
+// viewport. It is how two terminals are compared for scroll depth, which
+// PlainText cannot show — it trims trailing blank rows away.
+func (t *Terminal) TotalRows() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return 0
+	}
+	return int(C.ghosttyvt_get_usize(t.term, C.GHOSTTY_TERMINAL_DATA_TOTAL_ROWS))
 }
 
 // AltScreenActive reports whether the alternate screen (DEC 1049/1047/47) is

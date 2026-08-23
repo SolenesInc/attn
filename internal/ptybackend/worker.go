@@ -93,7 +93,7 @@ type WorkerBackendConfig struct {
 	// against its own and re-publishes the session; without the callback a
 	// worker recovered after startup would never reach the wire, since the
 	// handshake lands after the broadcast.
-	OnTerminalBuild func(sessionID string)
+	OnTerminalBuild func(sessionID, snapshotFormat string)
 }
 
 type workerSession struct {
@@ -844,7 +844,7 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 			b.mu.Lock()
 			delete(b.sessions, sessionID)
 			b.mu.Unlock()
-			b.pruneRegistryAndSocket(session.RegistryPath, session.SocketPath)
+			b.pruneSessionFiles(sessionID, session.RegistryPath, session.SocketPath)
 			b.reapWorkerPID(workerPID, sessionID)
 		}
 		return callErr
@@ -1201,6 +1201,91 @@ func (b *WorkerBackend) KittyImage(ctx context.Context, sessionID string, imageI
 	}
 }
 
+// errUpgradeUnsupported says the worker predates the upgrade method, so it can
+// only be replaced by killing it. Nothing branches on it — it exists so the
+// daemon's failure log names the reason instead of a bare RPC error.
+var errUpgradeUnsupported = errors.New("worker does not support in-place upgrade")
+
+// UpgradeWorker replaces a session's worker image with the binary this backend
+// spawns today, then re-handshakes so the recorded terminal build is the new
+// image's. The daemon calls this when a worker reports a libghostty-vt that no
+// longer matches, in place of offering the user a reload.
+func (b *WorkerBackend) UpgradeWorker(ctx context.Context, sessionID string) error {
+	if _, err := b.upgrade(ctx, sessionID, b.resolveBinaryPath()); err != nil {
+		return err
+	}
+	session, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	// The connection queues in the kernel until the new image accepts it, so
+	// this is also the proof the swap landed. Its hello re-records the format
+	// and fires OnTerminalBuild, which is how the stale flag clears.
+	conn, _, _, err := b.connectAuthed(ctx, session)
+	if err != nil {
+		return fmt.Errorf("re-handshake after upgrade: %w", err)
+	}
+	_ = conn.Close()
+	return nil
+}
+
+// upgrade tells a worker to replace its own binary with executable, keeping its
+// PTY, its agent child, and its screen. It is how a session survives a terminal
+// library bump: the worker execs, the socket keeps answering from the inherited
+// listener, and the daemon's next connection sees the new snapshot format.
+//
+// Unexported on purpose: the daemon names the binary, and a worker never
+// resolves its own replacement. UpgradeWorker is the only way in.
+//
+// A one-shot connection on purpose. The exec ends every connection the worker
+// holds, so a persistent control connection would be left poisoned; this one is
+// expected to die and is closed either way.
+func (b *WorkerBackend) upgrade(ctx context.Context, sessionID, executable string) (ptyworker.UpgradeResult, error) {
+	session, err := b.getSession(sessionID)
+	if err != nil {
+		return ptyworker.UpgradeResult{}, err
+	}
+	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
+	defer cancel()
+	conn, enc, dec, err := b.connectAuthed(rpcCtx, session)
+	if err != nil {
+		return ptyworker.UpgradeResult{}, err
+	}
+	defer conn.Close()
+	if err := applyConnDeadline(conn, rpcCtx); err != nil {
+		return ptyworker.UpgradeResult{}, err
+	}
+
+	reqID := b.nextReqID("upgrade")
+	if err := writeRequest(enc, reqID, ptyworker.MethodUpgrade, ptyworker.UpgradeParams{Executable: executable}); err != nil {
+		return ptyworker.UpgradeResult{}, err
+	}
+	for {
+		frameType, res, _, err := readFrame(dec)
+		if err != nil {
+			return ptyworker.UpgradeResult{}, err
+		}
+		if frameType != "res" || res.ID != reqID {
+			continue
+		}
+		if !res.OK {
+			if res.Error != nil && strings.Contains(strings.ToLower(res.Error.Message), "unknown method") {
+				return ptyworker.UpgradeResult{}, errUpgradeUnsupported
+			}
+			return ptyworker.UpgradeResult{}, b.rpcError(sessionID, res.Error)
+		}
+		var result ptyworker.UpgradeResult
+		if err := json.Unmarshal(res.Result, &result); err != nil {
+			return ptyworker.UpgradeResult{}, fmt.Errorf("decode upgrade result: %w", err)
+		}
+		// The worker is mid-exec now: its persistent control connection and any
+		// attach stream are about to drop, so drop our cached ones rather than
+		// let the next call find them dead.
+		b.closePersistentControlConn(session, "upgrade")
+		return result, nil
+	}
+}
+
 func (b *WorkerBackend) SessionLikelyAlive(ctx context.Context, sessionID string) (bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1336,14 +1421,14 @@ func (b *WorkerBackend) getSession(sessionID string) (*workerSession, error) {
 		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
 	}
 	if !pidAlive(entry.WorkerPID) {
-		b.pruneRegistryAndSocket(registryPath, socketPath)
+		b.pruneSessionFiles(sessionID, registryPath, socketPath)
 		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
 	}
 	if _, err := os.Stat(socketPath); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			b.cfg.Logf("worker backend getSession: stat socket failed: session=%s path=%s err=%v", sessionID, socketPath, err)
 		}
-		b.pruneRegistryAndSocket(registryPath, socketPath)
+		b.pruneSessionFiles(sessionID, registryPath, socketPath)
 		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
 	}
 	session = &workerSession{
@@ -1358,7 +1443,7 @@ func (b *WorkerBackend) getSession(sessionID string) (*workerSession, error) {
 	cancel()
 	if probeErr != nil {
 		if errors.Is(probeErr, pty.ErrSessionNotFound) || errors.Is(probeErr, os.ErrNotExist) {
-			b.pruneRegistryAndSocket(registryPath, socketPath)
+			b.pruneSessionFiles(sessionID, registryPath, socketPath)
 			return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
 		}
 		return nil, probeErr
@@ -1673,7 +1758,10 @@ func (b *WorkerBackend) connectWithIdentity(
 		session.snapshotFormat = hello.SnapshotFormat
 		session.mu.Unlock()
 		if changed && b.cfg.OnTerminalBuild != nil {
-			b.cfg.OnTerminalBuild(session.SessionID)
+			// The format travels with the call: this can run before the session
+			// is in b.sessions (getSession probes a recovered worker, then
+			// stores it), and a consumer reading it back would be told "unknown".
+			b.cfg.OnTerminalBuild(session.SessionID, hello.SnapshotFormat)
 		}
 		break
 	}
@@ -1850,7 +1938,7 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 	)
 	if err != nil {
 		if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) || !pidAlive(entry.WorkerPID) {
-			b.pruneRegistryAndSocket(registryPath, expectedSocketPath)
+			b.pruneSessionFiles(entry.SessionID, registryPath, expectedSocketPath)
 			b.cfg.Logf(
 				"worker recovery ownership mismatch for session %s: stale owner reclaimed after terminal worker absence (owner_pid=%d worker_pid=%d)",
 				entry.SessionID,
@@ -1862,7 +1950,7 @@ func (b *WorkerBackend) reclaimOwnershipMismatch(ctx context.Context, registryPa
 		return false, fmt.Errorf("stale-owner reclaim remove rpc failed: %w", err)
 	}
 
-	b.pruneRegistryAndSocket(registryPath, expectedSocketPath)
+	b.pruneSessionFiles(entry.SessionID, registryPath, expectedSocketPath)
 	b.cfg.Logf(
 		"worker recovery ownership mismatch for session %s: reclaimed stale worker via authenticated remove (owner_pid=%d worker_pid=%d)",
 		entry.SessionID,
@@ -1978,9 +2066,14 @@ func (b *WorkerBackend) workerProcessAlive(session *workerSession) bool {
 	return alive
 }
 
-func (b *WorkerBackend) pruneRegistryAndSocket(registryPath, socketPath string) {
+// pruneSessionFiles removes what a worker leaves on disk once it is gone: its
+// registry entry, its socket, and any handoff a swap wrote but no image ever
+// consumed. Nothing else globs the handoff directory, so a worker that died
+// between writing those files and exec'ing would litter it forever.
+func (b *WorkerBackend) pruneSessionFiles(sessionID, registryPath, socketPath string) {
 	_ = os.Remove(registryPath)
 	_ = os.Remove(socketPath)
+	ptyworker.RemoveHandoff(registryPath, sessionID)
 }
 
 func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
@@ -1991,7 +2084,7 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 	b.mu.Lock()
 	delete(b.sessions, session.SessionID)
 	b.mu.Unlock()
-	b.pruneRegistryAndSocket(session.RegistryPath, session.SocketPath)
+	b.pruneSessionFiles(session.SessionID, session.RegistryPath, session.SocketPath)
 	b.reapWorkerPID(workerPID, session.SessionID)
 }
 

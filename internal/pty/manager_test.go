@@ -469,7 +469,7 @@ command -v attn > "$RESULT_PATH"
 	if err != nil {
 		t.Fatalf("prepare shell pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	launch.command.Env = launch.env
 	if err := launch.command.Run(); err != nil {
 		t.Fatalf("run shell pane: %v", err)
@@ -519,7 +519,7 @@ func TestPrepareShellPaneLaunch_ReassertsPathAfterRealZshStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare shell pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	launch.command = exec.Command("/bin/zsh", "-l", "-i", "-c", "[[ -o login ]] || exit 8; command -v attn > \"$RESULT_PATH\"")
 	launch.command.Env = launch.env
 	if output, err := launch.command.CombinedOutput(); err != nil {
@@ -582,7 +582,7 @@ command -v attn > "$RESULT_PATH"
 	if err != nil {
 		t.Fatalf("prepare shell pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	launch.command.Env = launch.env
 	if err := launch.command.Run(); err != nil {
 		t.Fatalf("run shell pane: %v", err)
@@ -638,7 +638,7 @@ func TestPrepareShellPaneLaunch_ReassertsPathAfterRealBashStartup(t *testing.T) 
 	if err != nil {
 		t.Fatalf("prepare bash pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	args := append([]string(nil), launch.command.Args[1:]...)
 	args = append(args, "-i", "-c", "shopt -q login_shell || exit 8; command -v attn > \"$RESULT_PATH\"")
 	launch.command = exec.Command(launch.command.Path, args...)
@@ -695,7 +695,7 @@ func TestPrepareShellPaneLaunch_ReassertsPathAfterRealFishStartup(t *testing.T) 
 	if err != nil {
 		t.Fatalf("prepare fish pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	args := append([]string(nil), launch.command.Args[1:]...)
 	args = append(args, "-i", "-c", "status is-login; or exit 8; command -v attn > $RESULT_PATH")
 	launch.command = exec.Command(launch.command.Path, args...)
@@ -724,7 +724,7 @@ func TestPrepareShellPaneLaunch_UnknownShellPreservesConfiguredLoginShell(t *tes
 	if err != nil {
 		t.Fatalf("prepare custom shell pane launch: %v", err)
 	}
-	defer launch.cleanup()
+	defer removeShellOverlay(launch.overlayDir)
 	if launch.command.Path != loginShell {
 		t.Fatalf("shell command path = %q, want configured shell %q", launch.command.Path, loginShell)
 	}

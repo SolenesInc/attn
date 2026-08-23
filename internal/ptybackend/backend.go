@@ -281,6 +281,14 @@ type TerminalBuildProvider interface {
 	SessionTerminalBuild(sessionID string) (format string, known bool)
 }
 
+// WorkerUpgrader replaces a session's pty-worker process image in place —
+// same pid, same PTY, same agent child — with the binary the backend would
+// spawn today. Implemented only by the worker backend; the embedded one has no
+// separate process to upgrade.
+type WorkerUpgrader interface {
+	UpgradeWorker(ctx context.Context, sessionID string) error
+}
+
 type SessionLivenessProber interface {
 	SessionLikelyAlive(ctx context.Context, sessionID string) (bool, error)
 }

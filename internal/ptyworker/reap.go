@@ -71,7 +71,13 @@ func ReapDataDir(dataDir string) []ReapResult {
 		if err != nil {
 			continue
 		}
-		results = append(results, reapEntry(entry, path))
+		res := reapEntry(entry, path)
+		// Only once the worker is provably gone. ReapUnidentified means it may
+		// still be running, and a live worker mid-swap needs its handoff.
+		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone || res.Outcome == ReapSignalled {
+			RemoveHandoff(path, entry.SessionID)
+		}
+		results = append(results, res)
 	}
 	return results
 }

@@ -1,0 +1,9 @@
+kind: internal
+area: terminal
+change: >
+  A pty session can be handed from one process image to another: the read
+  loop stops at a chunk boundary with the rest of the output still in the
+  kernel, the screen leaves as a VT dump, and the image that adopts it
+  keeps the same PTY, the same agent child, and the same attach stream.
+  The PTY master is now held pollable, which is what makes that stop
+  possible without closing it.

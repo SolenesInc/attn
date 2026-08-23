@@ -63,6 +63,9 @@ type workerBlockTable interface {
 	// SnapshotBlocks resolves all blocks to SCREEN-space rows, dropping any
 	// whose essential refs no longer resolve: correct-or-absent.
 	SnapshotBlocks() []AttachBlockData
+	// Restore rebuilds the table from a snapshot's blocks, re-pinning each
+	// anchor row with pin. Only an adopted session calls it, on a fresh table.
+	Restore(blocks []AttachBlockData, pin func(x, y int) blockRef)
 	// Close frees every held ref. The table is unusable afterwards.
 	Close()
 }
@@ -112,6 +115,18 @@ func (f *blockFeeder) mark(marker *osc133Marker) {
 // replayMu — the same hold that serializes the VT dump and reads the watermark.
 func (f *blockFeeder) snapshotBlocks() []AttachBlockData {
 	return f.table.SnapshotBlocks()
+}
+
+// restore rebuilds the block table from a handoff snapshot, pinning each row
+// in the terminal the VT dump was replayed into. Caller holds replayMu.
+func (f *blockFeeder) restore(blocks []AttachBlockData) {
+	f.table.Restore(blocks, func(x, y int) blockRef {
+		// A nil *TrackedRef must not become a non-nil blockRef holding it.
+		if r := f.term.TrackPoint(x, y); r != nil {
+			return r
+		}
+		return nil
+	})
 }
 
 // close frees the table's native refs. Called from closePTY before the

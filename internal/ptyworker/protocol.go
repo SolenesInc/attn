@@ -47,6 +47,13 @@ const (
 	// MethodSnapshot precedent: an older worker rejects it with ErrBadRequest
 	// ("unknown method"), which reads the same as an image it cannot serve.
 	MethodKittyImage = "kitty_image"
+	// MethodUpgrade replaces the worker's own binary in place, keeping the PTY,
+	// the agent child, and the screen. The daemon calls it when the worker's
+	// terminal snapshot format no longer matches its own. Added without an RPC
+	// version bump, following the MethodSnapshot precedent: a worker built
+	// before this rejects it with ErrBadRequest, and the daemon degrades to the
+	// stale-build notice — which is what such a worker's client already shows.
+	MethodUpgrade = "upgrade"
 )
 
 const (
@@ -298,6 +305,26 @@ type AttachResult struct {
 	// GhosttyScrollbackTruncated reports whether the ghostty terminal dropped
 	// scrollback lines at its cap before GhosttySnapshot was serialized.
 	GhosttyScrollbackTruncated bool `json:"ghostty_scrollback_truncated,omitempty"`
+}
+
+// UpgradeParams names the binary the worker must become. A worker never
+// resolves its own replacement: after an install, os.Executable() can point at
+// a path that was replaced underneath it, and the daemon already knows which
+// binary it is running.
+type UpgradeParams struct {
+	Executable string `json:"executable"`
+}
+
+// UpgradeResult is sent BEFORE the exec, because the exec ends the connection.
+// It says the handoff was captured and the swap is under way; a caller that
+// gets it should expect the connection to drop and reconnect.
+type UpgradeResult struct {
+	// ChildPID is the agent the upgraded worker keeps. Unchanged by design —
+	// the exec keeps the worker's pid, so the child stays its child.
+	ChildPID int `json:"child_pid"`
+	// DumpBytes and BlockCount are what crossed, for the log on both sides.
+	DumpBytes  int `json:"dump_bytes"`
+	BlockCount int `json:"block_count"`
 }
 
 // SnapshotResult is the lean read-only viewport seed returned by MethodSnapshot.

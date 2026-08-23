@@ -79,6 +79,8 @@ func (t *Terminal) LeftRightMarginMode() bool { return false }
 func (t *Terminal) ViewportText() string { return "" }
 
 func (t *Terminal) SerializeViewport() Snapshot { return Snapshot{Cols: t.cols, Rows: t.rows} }
+func (t *Terminal) HandoffVT() Snapshot         { return Snapshot{Cols: t.cols, Rows: t.rows} }
+func (t *Terminal) TotalRows() int              { return t.rows }
 
 func (t *Terminal) Close() {}
 
@@ -94,6 +96,9 @@ func (r *TrackedRef) Free() {}
 // TrackCursor always fails on the stub; callers already treat a nil ref as
 // "position unpinnable" and degrade to serving no blocks.
 func (t *Terminal) TrackCursor() *TrackedRef { return nil }
+
+// TrackPoint always fails on the stub, for the same reason as TrackCursor.
+func (t *Terminal) TrackPoint(x, y int) *TrackedRef { return nil }
 
 // AltScreenActive is always false on the stub.
 func (t *Terminal) AltScreenActive() bool { return false }

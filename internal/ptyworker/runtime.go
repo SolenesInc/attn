@@ -120,7 +120,15 @@ type Config struct {
 	OwnerStartedAt string
 	OwnerNonce     string
 
-	Logf func(format string, args ...interface{})
+	Logf func(format string, args ...interface{}) `json:"-"`
+
+	// AdoptHandoff names the file a previous image of this process left behind
+	// when it replaced itself; the fds are what it passed alongside. Set only
+	// on the adopt half of an in-place upgrade, where every other field in this
+	// struct comes from that file rather than from argv. See upgrade.go.
+	AdoptHandoff    string
+	AdoptPtmxFD     int
+	AdoptListenerFD int
 
 	// Debug gates verbose per-output-chunk worker logging. When false the
 	// hot-path log call (and its byte-preview allocation) is skipped entirely;
@@ -130,8 +138,15 @@ type Config struct {
 }
 
 type Runtime struct {
-	cfg      Config
-	manager  *pty.Manager
+	cfg     Config
+	manager *pty.Manager
+	// adopt is the session this image inherited from the one it replaced; nil
+	// on an ordinary launch, where the worker spawns its own. See upgrade.go.
+	// adopt is handed to the manager once and then released: it carries the
+	// whole screen as VT (measured 590KB on a full 8MB scrollback), and this
+	// process lives for days.
+	adopt    *pty.HandoffState
+	adopted  bool
 	listener net.Listener
 	logf     func(format string, args ...interface{})
 	capture  *debugCapture
@@ -157,6 +172,11 @@ type Runtime struct {
 
 	connSeq atomic.Uint64
 
+	// upgradeResume is non-nil only while an in-place upgrade has stopped the
+	// accept loop; see pauseAccept.
+	upgradeMu     sync.Mutex
+	upgradeResume chan net.Listener
+
 	watchMu   sync.RWMutex
 	watchConn map[*connCtx]struct{}
 }
@@ -166,7 +186,36 @@ func Run(ctx context.Context, cfg Config) error {
 	if logf == nil {
 		logf = func(string, ...interface{}) {}
 	}
+	var adopt *pty.HandoffState
+	if cfg.AdoptHandoff != "" {
+		hf, err := readHandoff(cfg.AdoptHandoff)
+		if err != nil {
+			return err
+		}
+		// The handoff carries the session's whole configuration; argv carries
+		// only where to find it and which descriptors it arrived on. The JSON
+		// is therefore the entire contract: a Config field that does not
+		// serialize reaches an adopted session as its zero value while a
+		// spawned one gets the real thing, which is what
+		// TestHandoffCarriesEveryConfigField pins.
+		inherited := cfg
+		cfg = hf.Config
+		cfg.Logf = logf
+		cfg.Debug = inherited.Debug
+		cfg.AdoptHandoff = inherited.AdoptHandoff
+		cfg.AdoptPtmxFD = inherited.AdoptPtmxFD
+		cfg.AdoptListenerFD = inherited.AdoptListenerFD
+
+		state := hf.PTY
+		state.PtmxFD = inherited.AdoptPtmxFD
+		adopt = &state
+		logf("worker adopt: session=%s child=%d dump=%dB blocks=%d last_seq=%d blackout=%s",
+			cfg.SessionID, state.ChildPID, len(state.VTDump), len(state.Blocks), state.LastSeq,
+			time.Since(hf.HandedOverAt).Round(time.Millisecond))
+	}
 	rt := &Runtime{
+		adopt:     adopt,
+		adopted:   adopt != nil,
 		cfg:       cfg,
 		state:     "working",
 		stopCh:    make(chan struct{}),
@@ -256,15 +305,26 @@ func (r *Runtime) run(ctx context.Context) error {
 		return fmt.Errorf("create registry dir: %w", err)
 	}
 
-	_ = os.Remove(r.cfg.SocketPath)
 	r.logf("worker startup: session=%s socket=%s registry=%s", r.cfg.SessionID, r.cfg.SocketPath, r.cfg.RegistryPath)
-	listener, err := net.Listen("unix", r.cfg.SocketPath)
-	if err != nil {
-		return fmt.Errorf("listen unix socket: %w", err)
+	var listener net.Listener
+	if r.adopted {
+		// Inherited, not rebound: rebinding leaves a measured ~12ms hole where
+		// a daemon dial fails, and the socket path answering without a pause is
+		// what makes the upgrade invisible.
+		var err error
+		if listener, err = adoptListener(r.cfg.AdoptListenerFD); err != nil {
+			return err
+		}
+	} else {
+		_ = os.Remove(r.cfg.SocketPath)
+		var err error
+		if listener, err = net.Listen("unix", r.cfg.SocketPath); err != nil {
+			return fmt.Errorf("listen unix socket: %w", err)
+		}
+		_ = os.Chmod(r.cfg.SocketPath, 0600)
 	}
 	r.listener = listener
-	_ = os.Chmod(r.cfg.SocketPath, 0600)
-	r.logf("worker startup: listener ready session=%s socket=%s", r.cfg.SessionID, r.cfg.SocketPath)
+	r.logf("worker startup: listener ready session=%s socket=%s adopted=%v", r.cfg.SessionID, r.cfg.SocketPath, r.adopted)
 
 	defer func() {
 		r.requestStop()
@@ -286,7 +346,13 @@ func (r *Runtime) run(ctx context.Context) error {
 		r.cleanup()
 	}()
 
-	if err := r.manager.Spawn(pty.SpawnOptions{
+	if r.adopted {
+		state := *r.adopt
+		r.adopt = nil
+		if err := r.manager.Adopt(state); err != nil {
+			return fmt.Errorf("adopt PTY session: %w", err)
+		}
+	} else if err := r.manager.Spawn(pty.SpawnOptions{
 		ID:                r.cfg.SessionID,
 		CWD:               r.cfg.CWD,
 		Agent:             r.cfg.Agent,
@@ -315,7 +381,7 @@ func (r *Runtime) run(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("spawn PTY session: %w", err)
 	}
-	r.logf("worker startup: pty session ready session=%s", r.cfg.SessionID)
+	r.logf("worker startup: pty session ready session=%s adopted=%v", r.cfg.SessionID, r.adopted)
 	r.capture = newDebugCapture(r.cfg, r.logf)
 	if r.capture != nil {
 		r.capture.recordNote("capture enabled")
@@ -409,6 +475,14 @@ func (r *Runtime) run(ctx context.Context) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			// An upgrade closes the listener on purpose, so new connections
+			// queue in the kernel for the image that is about to take over. The
+			// wait ends when the exec replaces this process, or — if the upgrade
+			// rolled back — with the same socket handed back.
+			if resumed, ok := r.awaitUpgradeListener(); ok {
+				listener = resumed
+				continue
+			}
 			select {
 			case <-r.stopCh:
 				return nil
@@ -1061,6 +1135,13 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			len(img.Data),
 		)
 		c.sendResult(req.ID, result)
+	case MethodUpgrade:
+		var params UpgradeParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			c.sendError(req.ID, ErrBadRequest, "invalid upgrade params")
+			return
+		}
+		c.runtime.handleUpgrade(c, req.ID, params)
 	case MethodSignal:
 		var params SignalParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -1253,4 +1334,67 @@ func isTemporary(err error) bool {
 		return netErr.Temporary()
 	}
 	return false
+}
+
+// pauseAccept stops the accept loop and returns the listening socket's
+// descriptor, with CLOEXEC cleared so it crosses an execve. The socket stays
+// bound and keeps queueing connections in the kernel, so a daemon that dials
+// during the swap waits instead of failing — and is served by the image that
+// takes over.
+//
+// It runs before the session is captured: between the capture and the exec,
+// this worker no longer owns the session and would answer "session not found".
+func (r *Runtime) pauseAccept() (int, error) {
+	r.upgradeMu.Lock()
+	defer r.upgradeMu.Unlock()
+	if r.upgradeResume != nil {
+		return 0, fmt.Errorf("an upgrade is already in progress")
+	}
+	fd, err := dupListener(r.listener)
+	if err != nil {
+		return 0, err
+	}
+	r.upgradeResume = make(chan net.Listener, 1)
+	// Closing this listener only ends the accept loop's wait: the dup above
+	// keeps the socket itself open, backlog and all.
+	_ = r.listener.Close()
+	return fd, nil
+}
+
+// resumeAccept undoes pauseAccept when the upgrade never happened, handing the
+// accept loop the same socket back.
+func (r *Runtime) resumeAccept(fd int) {
+	listener, err := adoptListener(fd)
+	if err != nil {
+		r.logf("worker upgrade: cannot resume accepting session=%s err=%v", r.cfg.SessionID, err)
+		_ = syscall.Close(fd)
+		r.requestStop()
+		return
+	}
+	r.upgradeMu.Lock()
+	resume := r.upgradeResume
+	r.upgradeResume = nil
+	r.listener = listener
+	r.upgradeMu.Unlock()
+	if resume != nil {
+		resume <- listener
+	}
+}
+
+// awaitUpgradeListener parks the accept loop for the duration of an upgrade. It
+// reports false when no upgrade is pausing accepts, which is every other reason
+// Accept can fail.
+func (r *Runtime) awaitUpgradeListener() (net.Listener, bool) {
+	r.upgradeMu.Lock()
+	resume := r.upgradeResume
+	r.upgradeMu.Unlock()
+	if resume == nil {
+		return nil, false
+	}
+	select {
+	case listener := <-resume:
+		return listener, true
+	case <-r.stopCh:
+		return nil, false
+	}
 }

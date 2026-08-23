@@ -36,7 +36,7 @@ func wireSession(t *testing.T, id string, cols, rows int, sub *collectingSubscri
 		cols:        uint16(cols),
 		rows:        uint16(rows),
 		ptmx:        ptmx,
-		cmd:         &exec.Cmd{}, // unstarted: readLoop's Wait() errors, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() errors, never panics
 		ghostty:     term,
 		wireFeed:    newWireFeeder(term, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),

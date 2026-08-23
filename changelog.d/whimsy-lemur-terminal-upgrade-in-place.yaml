@@ -1,0 +1,20 @@
+kind: added
+area: terminal
+change: >
+  An update that moves the terminal engine now upgrades each running
+  session's pty-worker underneath it. The worker swaps its own binary
+  while keeping the pane, the scrollback, the shell or agent running in
+  it, and its place in the sidebar. Nothing to click and nothing to
+  notice.
+symptom: >
+  A session started before such an update was left parsing with the old
+  terminal, and the only way out was reloading it by hand — which
+  restarts whatever was running in the pane.
+notes: >
+  The notice from the previous release is now the fallback: it appears
+  only if the swap fails, so a stranded session still has a way out.
+  Measured on a real swap: about 8ms during which the pane produces no
+  output, and no output lost — the worker stops reading at a chunk
+  boundary and hands the rest to the image that takes over.
+  ATTN_WORKER_INPLACE_UPGRADE=0 turns the swap off and restores the
+  notice, for a bump where swapping turns out to be the wrong answer.

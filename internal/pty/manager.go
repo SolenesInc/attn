@@ -193,6 +193,15 @@ func (m *Manager) SetStateHandler(handler func(sessionID string, obs Observation
 	m.onState = handler
 }
 
+// agentHarnessSignals names which state observers an agent gets; the driver
+// decides, this only reads it.
+func agentHarnessSignals(agent string) agentdriver.HarnessSignalKind {
+	if d := agentdriver.Get(agent); d != nil {
+		return agentdriver.EffectiveCapabilities(d).HarnessSignals
+	}
+	return agentdriver.HarnessSignalsNone
+}
+
 func (m *Manager) Spawn(opts SpawnOptions) error {
 	if opts.ID == "" {
 		return errors.New("missing session id")
@@ -250,15 +259,14 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	cmdEnv := buildSpawnEnv(loginShell, opts, agent, attnPath, m.logf)
 
 	var (
-		cmd          *exec.Cmd
-		ptmx         *os.File
-		lastErr      error
-		usedShell    string
-		deferCleanup func()
+		cmd        *exec.Cmd
+		ptmx       *os.File
+		lastErr    error
+		usedShell  string
+		overlayDir string
 	)
 	for i, shellPath := range shellCandidates {
 		attemptEnv := cmdEnv
-		var cleanup func()
 		if agent == "shell" {
 			launch, err := prepareShellPaneLaunch(shellPath, cmdEnv)
 			if err != nil {
@@ -267,7 +275,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 			}
 			cmd = launch.command
 			attemptEnv = launch.env
-			cleanup = launch.cleanup
+			overlayDir = launch.overlayDir
 		} else {
 			cmd = buildSpawnCommand(opts, agent, shellPath, attnPath, cmdEnv)
 		}
@@ -283,14 +291,10 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		})
 		if lastErr == nil {
 			usedShell = shellPath
-			if cleanup != nil {
-				deferCleanup = cleanup
-			}
 			break
 		}
-		if cleanup != nil {
-			cleanup()
-		}
+		removeShellOverlay(overlayDir)
+		overlayDir = ""
 
 		if i < len(shellCandidates)-1 && shouldFallbackShell(lastErr) {
 			m.logf("pty spawn: failed with shell=%s id=%s err=%v; trying fallback shell", shellPath, opts.ID, lastErr)
@@ -298,6 +302,18 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		}
 		return fmt.Errorf("spawn session %s: %w", opts.ID, lastErr)
 	}
+	// Held pollable from here on: the read loop must be stoppable at a chunk
+	// boundary without closing the master. See ptmx.go.
+	pollable, pollErr := pollablePTMX(ptmx)
+	if pollErr != nil {
+		if cmd != nil && cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+		removeShellOverlay(overlayDir)
+		return fmt.Errorf("spawn session %s: %w", opts.ID, pollErr)
+	}
+	ptmx = pollable
 	if usedShell != "" && usedShell != loginShell {
 		m.logf("pty spawn: using fallback shell=%s (preferred=%s) id=%s", usedShell, loginShell, opts.ID)
 	}
@@ -309,13 +325,14 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		cols:        opts.Cols,
 		rows:        opts.Rows,
 		ptmx:        ptmx,
-		cmd:         cmd,
+		child:       &childProcess{cmd: cmd, pid: cmd.Process.Pid},
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),
+		quiesced:    make(chan struct{}),
 		startedAt:   time.Now(),
 		theme:       opts.Theme,
-		cleanup:     deferCleanup,
+		cleanupDir:  overlayDir,
 	}
 	// The Ghostty terminal backs the classifier, CPR, tiles, and attach restore;
 	// a session without it is not viable.
@@ -331,9 +348,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 			_ = cmd.Process.Kill()
 			_ = cmd.Wait()
 		}
-		if deferCleanup != nil {
-			deferCleanup()
-		}
+		removeShellOverlay(overlayDir)
 		return fmt.Errorf("ghostty terminal construction failed: %w", err)
 	}
 	session.ghostty = gt
@@ -346,9 +361,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 			_ = cmd.Process.Kill()
 			_ = cmd.Wait()
 		}
-		if deferCleanup != nil {
-			deferCleanup()
-		}
+		removeShellOverlay(overlayDir)
 		return fmt.Errorf("ghostty terminal theme failed: %w", err)
 	}
 	// One epoch per terminal, held by both halves that hand a generation out:
@@ -358,22 +371,29 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	session.kittyEpoch = mintKittyEpoch()
 	session.wireFeed = newWireFeeder(gt, session.kittyEpoch, m.logf, kittyLimit)
 
+	m.logf("pty spawn: id=%s agent=%s cwd=%s pid=%d", opts.ID, agent, opts.CWD, cmd.Process.Pid)
+	m.start(session, opts.LifecycleID)
+	return nil
+}
+
+// start registers a fully built session and brings it to life: the observers
+// it reports state through, the shell heartbeat, and the read loop. Spawn and
+// Adopt share it so a session the upgrade rebuilt gets everything a freshly
+// spawned one gets — the adopt path only runs after a terminal-engine bump, so
+// anything missing there would sit unnoticed for months.
+func (m *Manager) start(session *Session, lifecycleID string) {
 	m.mu.Lock()
-	m.sessions[opts.ID] = session
+	m.sessions[session.id] = session
 	onExit := m.onExit
 	onState := m.onState
 	m.mu.Unlock()
 
-	// The driver names which observers this agent gets; this only builds them.
-	harnessSignalKind := agentdriver.HarnessSignalsNone
-	if d := agentdriver.Get(agent); d != nil {
-		harnessSignalKind = agentdriver.EffectiveCapabilities(d).HarnessSignals
-	}
-	session.harnessSignals = newHarnessSignalObserver(harnessSignalKind)
-	isShellPane := agent == "shell"
+	session.harnessSignals = newHarnessSignalObserver(agentHarnessSignals(session.agent))
+	isShellPane := session.agent == "shell"
 	if (session.harnessSignals != nil || isShellPane) && onState != nil {
+		id := session.id
 		session.onState = func(obs Observation) {
-			onState(opts.ID, obs)
+			onState(id, obs)
 		}
 	}
 	// A shell has no harness to signal for it, so its heartbeat comes from the
@@ -385,15 +405,12 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		go session.runShellForegroundPoller(shellForegroundPollInterval)
 	}
 
-	m.logf("pty spawn: id=%s agent=%s cwd=%s pid=%d", opts.ID, agent, opts.CWD, cmd.Process.Pid)
 	go session.readLoop(func(exitCode int, signal string) {
 		m.logf("pty exited: id=%s code=%d signal=%s", session.id, exitCode, signal)
 		if onExit != nil {
-			onExit(ExitInfo{ID: session.id, ExitCode: exitCode, Signal: signal, LifecycleID: opts.LifecycleID})
+			onExit(ExitInfo{ID: session.id, ExitCode: exitCode, Signal: signal, LifecycleID: lifecycleID})
 		}
 	}, m.logf)
-
-	return nil
 }
 
 // Attach registers a subscriber for the session's byte stream and returns the
@@ -475,10 +492,7 @@ func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) er
 	session.metaMu.RLock()
 	prevCols, prevRows := session.cols, session.rows
 	session.metaMu.RUnlock()
-	pid := 0
-	if session.cmd != nil && session.cmd.Process != nil {
-		pid = session.cmd.Process.Pid
-	}
+	pid := session.child.processID()
 	resizeErr := session.resize(cols, rows, xpixel, ypixel)
 	m.logf("pty resize: id=%s prev=%dx%d new=%dx%d px=%dx%d pid=%d err=%v", sessionID, prevCols, prevRows, cols, rows, xpixel, ypixel, pid, resizeErr)
 	return resizeErr

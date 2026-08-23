@@ -584,6 +584,13 @@ func (f *wireFeeder) snapshotPlacements() ([]ghosttyvt.KittyPlacement, bool) {
 	return f.readPlacements(), true
 }
 
+// restoreBlocks seeds the block table from a handoff snapshot, for a session
+// adopted after an in-place worker upgrade. Caller holds replayMu; the VT dump
+// must already be replayed, or there are no rows to pin.
+func (f *wireFeeder) restoreBlocks(blocks []AttachBlockData) {
+	f.blocks.restore(blocks)
+}
+
 // close frees the native refs the block table holds. Called from closePTY
 // before the terminal itself is closed.
 func (f *wireFeeder) close() {

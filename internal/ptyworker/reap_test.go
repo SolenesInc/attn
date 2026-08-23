@@ -229,6 +229,37 @@ func TestReapDataDirReportsAlreadyGone(t *testing.T) {
 	}
 }
 
+// A worker that died between writing its handoff and exec'ing leaves both files
+// behind, and nothing else globs that directory. The reap that disposes of its
+// registry entry disposes of them too.
+func TestReapDataDirRemovesTheHandoffOfADeadWorker(t *testing.T) {
+	dataDir := t.TempDir()
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("run true: %v", err)
+	}
+	registryPath := writeEntry(t, dataDir, "sess-dead", RegistryEntry{
+		Version: 1, SessionID: "sess-dead", WorkerPID: cmd.Process.Pid,
+	})
+	jsonPath, dumpPath := HandoffPaths(registryPath, "sess-dead")
+	if err := os.MkdirAll(filepath.Dir(jsonPath), 0700); err != nil {
+		t.Fatalf("mkdir handoff: %v", err)
+	}
+	for _, path := range []string{jsonPath, dumpPath} {
+		if err := os.WriteFile(path, []byte("{}"), 0600); err != nil {
+			t.Fatalf("seed %s: %v", path, err)
+		}
+	}
+
+	ReapDataDir(dataDir)
+
+	for _, path := range []string{jsonPath, dumpPath} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s survived the reap (err=%v)", path, err)
+		}
+	}
+}
+
 // The fallback that matters: no control socket, but the live process is
 // positively identified as this entry's worker, so it is signalled and dies.
 func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {

@@ -14,8 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	creackpty "github.com/creack/pty"
-
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
@@ -89,10 +87,12 @@ type Session struct {
 	cellW uint16
 	cellH uint16
 
-	ptmx *os.File
-	cmd  *exec.Cmd
-	// cleanup removes spawn-time resources that must outlive shell startup.
-	cleanup func()
+	ptmx  *os.File
+	child *childProcess
+	// cleanupDir is the shell-startup overlay to remove when the session ends;
+	// "" for the agents that need none. A path, not a closure, because an
+	// in-place worker upgrade hands it to the image that adopts the session.
+	cleanupDir string
 
 	// ghostty is the server-authoritative parsed terminal (libghostty-vt):
 	// approval detection, query replies, screen snapshots, attach restore.
@@ -144,6 +144,15 @@ type Session struct {
 	// typed. Written by both emitters, read from the info RPC.
 	lastSignalMu sync.RWMutex
 	lastSignal   *Observation
+
+	// quiescing/quiesced stop the read loop at a chunk boundary for an
+	// in-place worker upgrade; handoffCarryover is the unfinished escape the
+	// loop was holding, and initialCarryover the one an adopted session starts
+	// with. See handoff.go.
+	quiescing        atomic.Bool
+	quiesced         chan struct{}
+	handoffCarryover []byte
+	initialCarryover []byte
 
 	exitMu     sync.RWMutex
 	running    bool
@@ -305,11 +314,15 @@ func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration)
 }
 
 func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(string, ...interface{})) {
+	// A handed-over session keeps its PTY and its overlay: the image that
+	// adopts it owns both.
+	handedOver := false
 	defer func() {
-		s.closePTMX()
-		if s.cleanup != nil {
-			s.cleanup()
+		if handedOver {
+			return
 		}
+		s.closePTMX()
+		removeShellOverlay(s.cleanupDir)
 	}()
 
 	reads := make(chan ptyRead, 4)
@@ -325,6 +338,10 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	}()
 
 	carryover := make([]byte, 0, 64)
+	if len(s.initialCarryover) > 0 {
+		carryover = append(carryover, s.initialCarryover...)
+		s.initialCarryover = nil
+	}
 
 	for {
 		batch, err := nextCoalescedRead(reads, ptyCoalesceMaxBytes, ptyCoalesceWindow)
@@ -427,6 +444,16 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			}
 		}
 		if err != nil {
+			// A deadline we asked for is a handoff, not an ending: everything
+			// the reader had already pulled came back with it and is applied
+			// above, and what is left sits in the kernel for the next image.
+			// The child is NOT reaped — it is still running, and still ours.
+			if errors.Is(err, os.ErrDeadlineExceeded) && s.quiescing.Load() {
+				handedOver = true
+				s.handoffCarryover = append([]byte(nil), carryover...)
+				close(s.quiesced)
+				return
+			}
 			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && logf != nil {
 				logf("pty read error for session %s: %v", s.id, err)
 			}
@@ -461,7 +488,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 		}
 	}
 
-	waitErr := s.cmd.Wait()
+	waitErr := s.child.wait()
 	exitCode, signal := parseExitStatus(waitErr)
 	s.markExited(exitCode, signal)
 
@@ -565,6 +592,47 @@ func isOSCColorReport(seq []byte) bool {
 	return (seq[3] == '0' || seq[3] == '1' || seq[3] == '2') && seq[4] == ';'
 }
 
+// childProcess is the agent on the far end of the PTY. A spawned session owns
+// an *exec.Cmd. A session ADOPTED after an in-place worker upgrade holds only
+// a pid — which is enough, because the upgrade replaced the worker's image
+// with execve and that keeps the pid: the agent is still this process's child,
+// so waiting on it still yields its status. Receipts:
+// docs/plans/2026-08-22-worker-inplace-upgrade.md.
+type childProcess struct {
+	cmd *exec.Cmd // nil when adopted
+	pid int
+}
+
+func (c *childProcess) processID() int {
+	if c == nil {
+		return 0
+	}
+	return c.pid
+}
+
+// wait reports the child's exit the way exec does, so parseExitStatus reads
+// both origins the same way.
+func (c *childProcess) wait() error {
+	if c == nil {
+		return errors.New("no child process")
+	}
+	if c.cmd != nil {
+		return c.cmd.Wait()
+	}
+	proc, err := os.FindProcess(c.pid)
+	if err != nil {
+		return err
+	}
+	state, err := proc.Wait()
+	if err != nil {
+		return err
+	}
+	if state.Success() {
+		return nil
+	}
+	return &exec.ExitError{ProcessState: state}
+}
+
 func parseExitStatus(waitErr error) (int, string) {
 	if waitErr == nil {
 		return 0, ""
@@ -643,10 +711,7 @@ func (s *Session) info() AttachInfo {
 	}
 	s.exitMu.RUnlock()
 
-	pid := 0
-	if s.cmd != nil && s.cmd.Process != nil {
-		pid = s.cmd.Process.Pid
-	}
+	pid := s.child.processID()
 
 	// Serialize the ghostty terminal and read the watermark atomically: every
 	// byte in the dump has seq <= LastSeq, every live chunk to apply has
@@ -835,15 +900,17 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) error {
 		s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
 	}
 
-	// The ioctl resolves ptmx.Fd(), so it must not overlap the close.
+	// The ioctl reaches the master's fd, so it must not overlap the close.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if s.ptmxClosed {
 		return nil
 	}
-	// X/Y are ws_xpixel/ws_ypixel: the pane's total pixel size, which an image
-	// emitter reads through TIOCGWINSZ to decide how large to draw.
-	return creackpty.Setsize(s.ptmx, &creackpty.Winsize{Cols: cols, Rows: rows, X: xpixel, Y: ypixel})
+	// xpixel/ypixel are ws_xpixel/ws_ypixel: the pane's total pixel size, which
+	// an image emitter reads through TIOCGWINSZ to decide how large to draw.
+	return s.withPTMXFd(func(fd uintptr) error {
+		return setWinsize(fd, cols, rows, xpixel, ypixel)
+	})
 }
 
 // closePTMX closes the pty exactly once, shutting out the writers and the
@@ -871,15 +938,13 @@ func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 		return nil
 	}
 
-	if s.cmd == nil || s.cmd.Process == nil {
+	pid := s.child.processID()
+	if pid <= 0 {
 		return errors.New("process unavailable")
 	}
 
-	pgid := s.cmd.Process.Pid
-	if pgid <= 0 {
-		return errors.New("invalid process id")
-	}
-	if actualPGID, err := syscall.Getpgid(s.cmd.Process.Pid); err == nil && actualPGID > 0 {
+	pgid := pid
+	if actualPGID, err := syscall.Getpgid(pid); err == nil && actualPGID > 0 {
 		pgid = actualPGID
 	}
 

@@ -465,6 +465,11 @@ func runPTYWorker() {
 	fs.StringVar(&externalCommandJSON, "external-command-json", "", "external plugin driver argv as JSON")
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
+	// An adopting worker takes its whole configuration from the handoff file the
+	// image it replaced left behind; these three are all argv carries.
+	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
+	fs.IntVar(&cfg.AdoptPtmxFD, "adopt-ptmx-fd", 0, "inherited pty master descriptor")
+	fs.IntVar(&cfg.AdoptListenerFD, "adopt-listener-fd", 0, "inherited unix listener descriptor")
 	fs.StringVar(&cfg.RegistryPath, "registry-path", "", "registry path")
 	fs.StringVar(&cfg.SocketPath, "socket-path", "", "socket path")
 	fs.StringVar(&cfg.ControlToken, "control-token", "", "control token")
