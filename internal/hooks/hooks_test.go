@@ -309,6 +309,19 @@ func TestLaunchInstructionsGateGardenGuidance(t *testing.T) {
 	}
 }
 
+func TestGardenGuidanceRequiresReadingUpdateNotificationsWithoutActing(t *testing.T) {
+	for _, want := range []string{
+		"run the suggested command to read it",
+		"Reading acknowledges the update",
+		"does not authorize or require acting on the update",
+		"Only act or interrupt the user when attention is genuinely needed",
+	} {
+		if !strings.Contains(GardenGuidance, want) {
+			t.Fatalf("garden guidance dropped %q:\n%s", want, GardenGuidance)
+		}
+	}
+}
+
 func TestGenerateCodexConfigOverrides_InjectsWorkflowGuidanceWhenEnabled(t *testing.T) {
 	off := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{WorkspaceContextPath: "/tmp/context.md"}), "\n")
 	if strings.Contains(off, "hypercode") {
