@@ -43,11 +43,12 @@ func TestParseStateExplainArgs(t *testing.T) {
 func TestPrintStateExplainShowsEveryOutcome(t *testing.T) {
 	var out bytes.Buffer
 	printStateExplain(&out, &protocol.StateExplainResult{
-		SessionID:  "sess-1",
-		Agent:      "claude",
-		State:      "working",
-		StateSince: protocol.Ptr("2026-07-25T10:00:00Z"),
-		Capacity:   256,
+		SessionID:          "sess-1",
+		Agent:              "claude",
+		State:              "working",
+		StateSince:         protocol.Ptr("2026-07-25T10:00:00Z"),
+		LastModelRequestAt: protocol.Ptr("2026-07-25T09:59:58Z"),
+		Capacity:           256,
 		Observations: []protocol.StateExplainEntry{
 			{
 				Source: "screen", Claim: "working", Outcome: "applied",
@@ -71,6 +72,7 @@ func TestPrintStateExplainShowsEveryOutcome(t *testing.T) {
 	for _, want := range []string{
 		"session sess-1 (claude)",
 		"state:   working",
+		"model request:",
 		"applied",
 		"vetoed",
 		"driver_transition_filter",

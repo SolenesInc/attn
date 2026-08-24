@@ -22,7 +22,7 @@ func TestDecide(t *testing.T) {
 	// also asserts that a member attn cannot measure is never asked to close on
 	// that ground.
 	base := Signals{
-		AwayLimit: limit, Lead: lead, Reachable: true, Settled: true,
+		AwayLimit: limit, Lead: lead, Reachable: true,
 		HeartbeatEnabled: true, AutoSleepEnabled: true, ContextHandoffEnabled: true,
 	}
 	full := ContextPressure{Tokens: 160000, Budget: 160000}
@@ -75,19 +75,9 @@ func TestDecide(t *testing.T) {
 			want:    ActionHeartbeat,
 		},
 		{
-			// A heartbeat is not an answer to anything, so it waits for a session
-			// that owes nobody one: typed at a member holding a question for the
-			// user, it answers that question with filler and buries it.
-			name:    "an unsettled session is not heartbeated",
-			signals: with(func(s *Signals) { s.Cache = expiring; s.Settled = false }),
-			want:    ActionNone,
-		},
-		{
-			// Ending the day IS an answer to whatever the member was waiting for,
-			// which is why this half asks only that the session take input.
-			name:    "an unsettled session is still put to sleep",
-			signals: with(func(s *Signals) { s.Cache = expiring; s.AwayFor = 3 * time.Hour; s.Settled = false }),
-			want:    ActionSleep,
+			name:    "an open user turn can still be heartbeated safely",
+			signals: with(func(s *Signals) { s.Cache = expiring }),
+			want:    ActionHeartbeat,
 		},
 		{
 			// A prompt typed at a session mid-turn queues behind work nobody asked
@@ -138,13 +128,6 @@ func TestDecide(t *testing.T) {
 			name:    "a context with room left decides nothing on its own",
 			signals: with(func(s *Signals) { s.Cache = warm; s.Context = roomy }),
 			want:    ActionNone,
-		},
-		{
-			// Closing IS an answer, so an unsettled member gets asked — the same rule
-			// auto-sleep follows, for the same reason.
-			name:    "an unsettled session with a full context is still asked to close",
-			signals: with(func(s *Signals) { s.Cache = warm; s.Context = full; s.Settled = false }),
-			want:    ActionContextHandoff,
 		},
 		{
 			// Unreachable here means an approval is up, and the paste would answer

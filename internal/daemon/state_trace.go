@@ -175,6 +175,9 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 	if strings.TrimSpace(session.StateSince) != "" {
 		result.StateSince = protocol.Ptr(session.StateSince)
 	}
+	if strings.TrimSpace(protocol.Deref(session.LastModelRequestAt)) != "" {
+		result.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
+	}
 	return result
 }
 

@@ -1,15 +1,14 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleMarkdownAnnotationsSubmit formats the persisted annotation draft for
-// a document and delivers it to exactly one typed destination: a session via
-// typeDoorbell, or the source seed's own log as a note.
+// handleMarkdownAnnotationsSubmit delivers one persisted annotation draft.
 //
 // Drafts are tombstone-cleared ONLY after a successful delivery; every other
 // outcome (validation error, unknown session, pending_approval skip, PTY
@@ -84,23 +83,24 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			fail("session not found: " + targetSession)
 			return
 		}
-		// UX pre-check; typeDoorbell re-checks under doorbellMu — that in-lock
-		// check is the fence, this one only avoids formatting for nothing.
-		if !isNudgeDeliveryAllowed(string(session.State)) {
+		if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 			result.Status = annotationSubmitStatusSkipped
 			d.sendToClient(client, result)
 			return
 		}
-		if err := d.typeDoorbell(targetSession, payload); err != nil {
-			if doorbellDeferred(err) {
+		delivery := userConversationSessionInput(msg.RequestID, targetSession, payload, sessionInputAtTurnBoundary)
+		attempt := d.sessionInputs().try(context.Background(), delivery)
+		if attempt.err != nil {
+			if sessionInputDeferredError(attempt.err) {
 				result.Status = annotationSubmitStatusSkipped
 				d.sendToClient(client, result)
 				return
 			}
-			d.logf("markdown_annotations_submit: %s -> %s: delivery failed: %v", source.draftKey, targetSession, err)
-			fail(err.Error())
+			d.logf("markdown_annotations_submit: %s -> %s: delivery failed: %v", source.draftKey, targetSession, attempt.err)
+			fail(attempt.err.Error())
 			return
 		}
+		d.sessionInputs().release(targetSession, delivery.id)
 		result.Status = annotationSubmitStatusDelivered
 	} else {
 		if _, err := d.appendSeedNote(targetSeed, payload, "", "", "", nil); err != nil {

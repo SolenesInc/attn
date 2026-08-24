@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -70,14 +71,6 @@ func (d *Daemon) handleSessionAnnotationsClear(client *wsClient, msg *protocol.S
 	handler.clear("session_annotations_clear", msg.SessionID, msg.Generation)
 }
 
-// handleSessionAnnotationsSubmit delivers composed annotation feedback through
-// typeDoorbell — bracketed paste, the measured gap, then Enter. The daemon owns
-// delivery for three reasons only reachable here: the approval guard (Enter in
-// pending_approval would answer the prompt, so the submit is refused and the
-// client keeps its marks), the PTY write fence, and the gap itself (an Enter in
-// the same read as the paste terminator is folded into the pasted text — see
-// doorbellSubmitDelay's receipt). Annotations are not cleared here; the client
-// composed the payload and clears its own list on a delivered result.
 func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.SessionAnnotationsSubmitMessage) {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	result := protocol.SessionAnnotationsSubmitResultMessage{
@@ -102,16 +95,19 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		fail("session_annotations_submit: unknown session " + sessionID)
 		return
 	}
-	if err := d.typeDoorbell(sessionID, msg.Text); err != nil {
-		if doorbellDeferred(err) {
+	delivery := userConversationSessionInput(msg.RequestID, sessionID, msg.Text, sessionInputAtTurnBoundary)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		if sessionInputDeferredError(attempt.err) {
 			result.Status = annotationSubmitStatusSkipped
 			d.sendToClient(client, result)
 			return
 		}
-		d.logf("session_annotations_submit: %s: delivery failed: %v", sessionID, err)
-		fail(err.Error())
+		d.logf("session_annotations_submit: %s: delivery failed: %v", sessionID, attempt.err)
+		fail(attempt.err.Error())
 		return
 	}
+	d.sessionInputs().release(sessionID, delivery.id)
 	result.Success = true
 	result.Status = annotationSubmitStatusDelivered
 	d.sendToClient(client, result)

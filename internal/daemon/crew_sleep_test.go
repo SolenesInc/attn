@@ -27,9 +27,9 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 		t.Fatalf("wake: %v", err)
 	}
 	d.runPostInitialPrompt(woken.SessionID, protocol.StateWorking)
-	oldWindow := agentMessageTakenWindow
-	agentMessageTakenWindow = 0
-	t.Cleanup(func() { agentMessageTakenWindow = oldWindow })
+	oldWindow := sessionInputTakenWindow
+	sessionInputTakenWindow = 0
+	t.Cleanup(func() { sessionInputTakenWindow = oldWindow })
 
 	var mu sync.Mutex
 	var typed bytes.Buffer
@@ -95,9 +95,9 @@ func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 		t.Fatal("ordinary wake did not gate messages behind its first prompt")
 	}
 
-	oldWindow := agentMessageTakenWindow
-	agentMessageTakenWindow = 0
-	t.Cleanup(func() { agentMessageTakenWindow = oldWindow })
+	oldWindow := sessionInputTakenWindow
+	sessionInputTakenWindow = 0
+	t.Cleanup(func() { sessionInputTakenWindow = oldWindow })
 	var mu sync.Mutex
 	var typed bytes.Buffer
 	backend.onInput = func(id string, data []byte) {

@@ -43,6 +43,7 @@ async function runPlugin(): Promise<void> {
       suiteReportState: (params: unknown) => driver.suiteReportState(params),
       suiteReportStop: (params: unknown) => driver.suiteReportStop(params),
       suiteReportDenial: (params: unknown) => driver.suiteReportDenial(params),
+      suiteReportInputTaken: (params: unknown) => driver.suiteReportInputTaken(params),
     },
   });
   driver = new PiDriver({ rpc, relay, suitePath: suitePath() });

@@ -39,6 +39,7 @@ export type AgentMessageContentBlock = { type: string; text?: string };
 // assistant message.
 export type AgentMessageLike = { role: string; content: AgentMessageContentBlock[]; stopReason?: string };
 export type AgentEndEvent = { type: "agent_end"; messages: AgentMessageLike[] };
+export type MessageStartEvent = { type: "message_start"; message: AgentMessageLike };
 
 export type SessionManagerLike = { getSessionId(): string };
 
@@ -53,6 +54,7 @@ export type ExtensionHandler<TEvent> = (event: TEvent, ctx: ExtensionContextLike
 export type ExtensionAPILike = {
   on(event: "session_start", handler: ExtensionHandler<SessionStartEvent>): void;
   on(event: "agent_start", handler: ExtensionHandler<AgentStartEvent>): void;
+  on(event: "message_start", handler: ExtensionHandler<MessageStartEvent>): void;
   on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
   on(event: "agent_settled", handler: ExtensionHandler<AgentSettledEvent>): void;
   sendUserMessage(content: string, options?: { deliverAs?: "steer" | "followUp" }): void;
@@ -103,6 +105,7 @@ export class RelaySuiteClient {
   // The newest state report the driver has not acknowledged, re-sent once the
   // channel is back. See report().
   private retained: RetainedReport | undefined;
+  private readonly retainedFacts = new Map<string, RetainedReport>();
   // Reports this client could not hand over since the last hello. Nothing here
   // can log — a stray write corrupts pi's TUI, and the one channel out is the
   // one that just failed — so the count rides the next hello and the driver
@@ -135,6 +138,9 @@ export class RelaySuiteClient {
         this.writeHello(socket, params);
         const retained = this.retained;
         if (retained && !retained.inFlight) void this.deliver(retained);
+        for (const [key, fact] of this.retainedFacts) {
+          if (!fact.inFlight) void this.deliverFact(key, fact);
+        }
       })
       .catch(() => {
         // ensureConnected already scheduled the next attempt.
@@ -168,6 +174,28 @@ export class RelaySuiteClient {
       // Stays retained. The socket's close schedules a reconnect, and the
       // hello that follows flushes it.
       this.dropped += 1;
+    } finally {
+      entry.inFlight = false;
+    }
+  }
+
+  reportFact(key: string, method: string, params: unknown): void {
+    const entry: RetainedReport = { method, params, inFlight: false };
+    this.retainedFacts.set(key, entry);
+    void this.deliverFact(key, entry);
+  }
+
+  private async deliverFact(key: string, entry: RetainedReport): Promise<void> {
+    entry.inFlight = true;
+    let socket: Socket | undefined;
+    try {
+      socket = await this.ensureConnected();
+      this.sayHello(socket);
+      await this.request(socket, entry.method, entry.params);
+      if (this.retainedFacts.get(key) === entry) this.retainedFacts.delete(key);
+    } catch {
+      this.dropped += 1;
+      if (socket && this.socket === socket) socket.destroy();
     } finally {
       entry.inFlight = false;
     }
@@ -423,6 +451,7 @@ export class AttnPiSuite {
   // Whether this session is currently blocked on a question for the user, so
   // the pair of reports around one window is never sent twice.
   private approvalOpen = false;
+  private readonly pendingInputs: Array<{ inputID: string; text: string }> = [];
 
   constructor(env: SuiteEnv) {
     this.piVersion = env.piVersion;
@@ -490,6 +519,20 @@ export class AttnPiSuite {
     pi.on("agent_start", (_event, ctx) => {
       this.currentContext = ctx;
       relay.client.report(relayMethods.reportState, { token: relay.token, state: "working" });
+    });
+
+    pi.on("message_start", (event, ctx) => {
+      this.currentContext = ctx;
+      if (event.message.role !== "user") return;
+      const text = messageText(event.message);
+      const index = this.pendingInputs.findIndex((candidate) => candidate.text === text);
+      if (index < 0) return;
+      const [candidate] = this.pendingInputs.splice(index, 1);
+      if (!candidate) return;
+      relay.client.reportFact(candidate.inputID, relayMethods.reportInputTaken, {
+        token: relay.token,
+        input_id: candidate.inputID,
+      });
     });
 
     pi.on("agent_end", (event, ctx) => {
@@ -564,10 +607,14 @@ export class AttnPiSuite {
     const pi = this.currentPi;
     const ctx = this.currentContext;
     if (!pi || !ctx) return { delivered: false }; // no live pi context yet
+    const candidate = { inputID: params.input_id, text: params.text };
+    this.pendingInputs.push(candidate);
     try {
       pi.sendUserMessage(params.text, ctx.isIdle() ? undefined : { deliverAs: "steer" });
       return { delivered: true };
     } catch {
+      const index = this.pendingInputs.indexOf(candidate);
+      if (index >= 0) this.pendingInputs.splice(index, 1);
       // A stale pi/ctx from a superseded session generation throws here on
       // any use; that is an ordinary "can't deliver right now" outcome for
       // the driver, not a suite bug, so it is not rethrown across the wire.
@@ -585,6 +632,13 @@ function lastAssistantMessage(messages: AgentMessageLike[]): AgentMessageLike | 
 }
 
 function assistantText(message: AgentMessageLike): string {
+  return message.content
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function messageText(message: AgentMessageLike): string {
   return message.content
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text)

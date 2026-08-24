@@ -1759,3 +1759,38 @@ func TestMigration118CarriesTicketBoardScaleToGardenScale(t *testing.T) {
 		})
 	}
 }
+
+func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	observed := "2026-08-23T10:15:00Z"
+	s.Add(&protocol.Session{
+		ID: "legacy-session", State: protocol.SessionStateWaitingInput,
+		StateSince: observed, StateUpdatedAt: observed, LastSeen: observed,
+	})
+	if _, err := s.db.Exec(`UPDATE sessions SET last_model_request_at = NULL WHERE id = 'legacy-session'`); err != nil {
+		t.Fatalf("clear request clock: %v", err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = 121`); err != nil {
+		t.Fatalf("unrecord migration 121: %v", err)
+	}
+
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("first migrateDB: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("second migrateDB: %v", err)
+	}
+	var requestAt string
+	if err := s.db.QueryRow(`SELECT last_model_request_at FROM sessions WHERE id = 'legacy-session'`).Scan(&requestAt); err != nil {
+		t.Fatalf("read request clock: %v", err)
+	}
+	if requestAt != observed {
+		t.Fatalf("last_model_request_at = %q, want state observation %q", requestAt, observed)
+	}
+}

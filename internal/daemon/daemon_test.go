@@ -104,16 +104,13 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("ATTN_PTY_BACKEND", "embedded")
 	_ = os.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
 
-	// Doorbell delivery waits out a real composer's paste-settle window before
-	// sending Enter. No fake PTY needs that wait, so tests run without it —
-	// TestTypeDoorbellDelaysEnterAfterThePaste restores a delay to pin the gap.
-	doorbellSubmitDelay = 0
+	sessionInputSubmitDelay = 0
 
 	// Same reason for the other half of a delivery: a fake PTY never reports
 	// working, so confirmation would time out on every send. Zero trusts the
 	// write, which is what the daemon did before confirmation existed —
 	// TestAgentMsgQueuesWhenTheTargetNeverTakesIt restores a window to pin it.
-	agentMessageTakenWindow = 0
+	sessionInputTakenWindow = 0
 
 	// Plugin-process helper subprocesses (TestDaemonPluginProcessHelper,
 	// TestPluginDriverFixtureProcess) re-exec this same test binary with a
@@ -998,7 +995,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLivePluginReportedSt
 	if !d.store.BeginAgentDriverRun("plugin-live", "snipe-plugin", "run-live") {
 		t.Fatal("BeginAgentDriverRun(plugin-live) failed")
 	}
-	if !d.store.ApplyAgentDriverState("plugin-live", "run-live", 1, protocol.StateWaitingInput) {
+	if !d.store.ApplyAgentDriverState("plugin-live", "run-live", 1, protocol.StateWaitingInput, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState(plugin-live) failed")
 	}
 	d.ptyBackend = &fakeWorkerReconcileBackend{
@@ -1603,23 +1600,22 @@ func (b *fakeAttachBackend) SetAttachInfo(info ptybackend.AttachInfo) {
 }
 
 type fakeSpawnBackend struct {
-	mu           sync.Mutex
-	spawnOpts    []ptybackend.SpawnOptions
-	killed       []string
-	removed      []string
-	onSpawn      func(ptybackend.SpawnOptions)
-	onInput      func(string, []byte)
-	onKill       func()
-	killErr      error
-	spawnErr     error
-	sessionIDs   []string
-	themeCalls   []pty.TerminalTheme
-	themeCallIDs []string
-	setThemeErr  error
-	// screen is what Snapshot renders. Empty means the backend answers like a
-	// worker with no frame yet, which is how every test that does not care
-	// about the screen keeps its old behavior.
-	screen string
+	mu                sync.Mutex
+	spawnOpts         []ptybackend.SpawnOptions
+	killed            []string
+	removed           []string
+	onSpawn           func(ptybackend.SpawnOptions)
+	onInput           func(string, []byte)
+	onInputResult     func(string, []byte) error
+	onKill            func()
+	killErr           error
+	spawnErr          error
+	sessionIDs        []string
+	themeCalls        []pty.TerminalTheme
+	themeCallIDs      []string
+	setThemeErr       error
+	screen            string
+	screenUnavailable bool
 	// terminalBuild is what SessionTerminalBuild answers. The zero value is
 	// "no answer yet", so a test that does not set it sees no stale verdict.
 	terminalBuild      string
@@ -1676,10 +1672,14 @@ func (f *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
 func (b *fakeSpawnBackend) Snapshot(_ context.Context, _ string) (pty.SnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.screen == "" {
+	if b.screenUnavailable {
 		return pty.SnapshotInfo{}, nil
 	}
-	return pty.SnapshotInfo{Screen: &pty.ViewportSnapshot{Text: b.screen, HasText: true}}, nil
+	text := b.screen
+	if text == "" {
+		text = "❯"
+	}
+	return pty.SnapshotInfo{Screen: &pty.ViewportSnapshot{Text: text, HasText: true}}, nil
 }
 
 func (b *fakeSpawnBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
@@ -1699,9 +1699,13 @@ func (b *fakeSpawnBackend) Attach(context.Context, string, string) (ptybackend.A
 func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) error {
 	b.mu.Lock()
 	onInput := b.onInput
+	onInputResult := b.onInputResult
 	b.mu.Unlock()
 	if onInput != nil {
 		onInput(id, data)
+	}
+	if onInputResult != nil {
+		return onInputResult(id, data)
 	}
 	return nil
 }

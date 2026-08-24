@@ -1,0 +1,13 @@
+kind: fixed
+area: crew
+change: >
+  Crew heartbeats can now keep a member warm while it is waiting on the user,
+  without treating the heartbeat as the user's answer or settling the open
+  turn. Every daemon-injected session message now crosses one route-aware input
+  boundary that distinguishes placement from the agent actually taking it;
+  cache age advances only on the latter.
+symptom: >
+  A crew member left in `waiting_input` during a long human read received no
+  heartbeat, so its prompt cache expired even while the user was actively
+  attending to the session. Allowing the old typed heartbeat through directly
+  would also have armed auto-settle as though the user had replied.

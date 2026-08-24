@@ -30,12 +30,13 @@ import (
 const (
 	// Session facts; subject is the session id. Registered (first appearance) and
 	// reregistered (re-announcement) produce different wire events.
-	FactSessionRegistered   = "session.registered"
-	FactSessionReregistered = "session.reregistered"
-	FactSessionStateChanged = "session.state.changed"
-	FactSessionRenamed      = "session.renamed"
-	FactSessionUnregistered = "session.unregistered"
-	FactSessionTodosChanged = "session.todos.changed"
+	FactSessionRegistered          = "session.registered"
+	FactSessionReregistered        = "session.reregistered"
+	FactSessionStateChanged        = "session.state.changed"
+	FactSessionModelRequestStarted = "session.model_request.started"
+	FactSessionRenamed             = "session.renamed"
+	FactSessionUnregistered        = "session.unregistered"
+	FactSessionTodosChanged        = "session.todos.changed"
 	// FactSessionAssistantWindowChanged: the canonical annotatable window for
 	// this session changed. It is a pure invalidation and compactable by subject.
 	FactSessionAssistantWindowChanged = "session.assistant_window.changed"
@@ -334,7 +335,7 @@ func buildWireProjections() []projection {
 		},
 		{
 			// A pin changes only what the session says about itself.
-			filter: bus.Filter{FactSessionPinChanged, FactSessionCapChanged},
+			filter: bus.Filter{FactSessionPinChanged, FactSessionCapChanged, FactSessionModelRequestStarted},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{

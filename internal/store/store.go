@@ -220,6 +220,9 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 			s.sessions = make(map[string]*protocol.Session)
 		}
 		stored := cloneSession(session)
+		if stored.LastModelRequestAt == nil && stored.StateUpdatedAt != "" {
+			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
+		}
 		// pinned_at, the context-window cap and the activity pair are absent from
 		// the SQLite upsert below, so a re-add never disturbs them there. Carrying
 		// the stored values forward here is what makes the memory branch say the
@@ -227,6 +230,9 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 		// SetSessionContextWindowCap, UpdateSessionActivity), and a respawn cannot
 		// silently clear any of them.
 		if existing := s.sessions[session.ID]; existing != nil {
+			if existing.LastModelRequestAt != nil {
+				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
+			}
 			if existing.PinnedAt != nil {
 				stored.PinnedAt = protocol.Ptr(protocol.Deref(existing.PinnedAt))
 			}
@@ -251,13 +257,17 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 		normalizedAgent = string(protocol.SessionAgentCodex)
 	}
 	session.Agent = protocol.SessionAgent(normalizedAgent)
+	lastModelRequestAt := protocol.Deref(session.LastModelRequestAt)
+	if lastModelRequestAt == "" {
+		lastModelRequestAt = session.StateUpdatedAt
+	}
 	// pinned_at is deliberately absent from both the column list and the
 	// conflict update: the pin is owned by SetSessionPinned, and leaving it out
 	// is what makes a respawn or a state re-add unable to clear it.
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, parent_session_id, todos, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
@@ -270,6 +280,10 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 			state = excluded.state,
 			state_since = excluded.state_since,
 			state_updated_at = excluded.state_updated_at,
+			last_model_request_at = CASE
+				WHEN sessions.last_model_request_at IS NULL OR sessions.last_model_request_at = '' THEN excluded.last_model_request_at
+				ELSE sessions.last_model_request_at
+			END,
 			parent_session_id = excluded.parent_session_id,
 			todos = excluded.todos,
 			last_seen = excluded.last_seen`,
@@ -285,6 +299,7 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 		string(session.State),
 		session.StateSince,
 		session.StateUpdatedAt,
+		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
 		string(todosJSON),
 		session.LastSeen,
@@ -309,10 +324,10 @@ func (s *Store) Get(id string) *protocol.Session {
 	var stateSince, stateUpdatedAt, lastSeen string
 	var isWorktree int
 	var contextWindowCap int
-	var endpointID, workspaceID, branch, mainRepo, pinnedAt, parentSessionID, activity, activityAt sql.NullString
+	var endpointID, workspaceID, branch, mainRepo, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ?`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -326,6 +341,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&session.State,
 		&stateSince,
 		&stateUpdatedAt,
+		&lastModelRequestAt,
 		&pinnedAt,
 		&contextWindowCap,
 		&parentSessionID,
@@ -366,6 +382,9 @@ func (s *Store) Get(id string) *protocol.Session {
 	}
 	session.StateSince = stateSince
 	session.StateUpdatedAt = stateUpdatedAt
+	if lastModelRequestAt.Valid && lastModelRequestAt.String != "" {
+		session.LastModelRequestAt = protocol.Ptr(lastModelRequestAt.String)
+	}
 	session.LastSeen = lastSeen
 	if todosJSON != "" && todosJSON != "null" {
 		if err := json.Unmarshal([]byte(todosJSON), &session.Todos); err != nil {
@@ -458,11 +477,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -477,7 +496,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var stateSince, stateUpdatedAt, lastSeen string
 		var isWorktree int
 		var contextWindowCap int
-		var endpointID, workspaceID, branch, mainRepo, pinnedAt, parentSessionID, activity, activityAt sql.NullString
+		var endpointID, workspaceID, branch, mainRepo, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
@@ -492,6 +511,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.State,
 			&stateSince,
 			&stateUpdatedAt,
+			&lastModelRequestAt,
 			&pinnedAt,
 			&contextWindowCap,
 			&parentSessionID,
@@ -532,6 +552,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		}
 		session.StateSince = stateSince
 		session.StateUpdatedAt = stateUpdatedAt
+		if lastModelRequestAt.Valid && lastModelRequestAt.String != "" {
+			session.LastModelRequestAt = protocol.Ptr(lastModelRequestAt.String)
+		}
 		session.LastSeen = lastSeen
 		if todosJSON != "" && todosJSON != "null" {
 			if err := json.Unmarshal([]byte(todosJSON), &session.Todos); err != nil {
@@ -613,6 +636,43 @@ func (s *Store) UpdateState(id, state string) bool {
 	}
 	updated, err := result.RowsAffected()
 	return err == nil && updated == 1
+}
+
+// MarkModelRequestStarted advances the request clock monotonically.
+func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(id) == "" || at.IsZero() {
+		return false
+	}
+	stamp := string(protocol.NewTimestamp(at))
+	if s.db == nil {
+		session := s.sessions[id]
+		if session == nil {
+			return false
+		}
+		current := protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
+		if !current.IsZero() && !at.After(current) {
+			return false
+		}
+		session.LastModelRequestAt = protocol.Ptr(stamp)
+		return true
+	}
+	var current sql.NullString
+	if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {
+		return false
+	}
+	currentAt := protocol.Timestamp(current.String).Time()
+	if !currentAt.IsZero() && !at.After(currentAt) {
+		return false
+	}
+	result, err := s.db.Exec("UPDATE sessions SET last_model_request_at = ? WHERE id = ?", stamp, id)
+	if err != nil {
+		log.Printf("[store] MarkModelRequestStarted: failed for session %s: %v", id, err)
+		return false
+	}
+	updated, _ := result.RowsAffected()
+	return updated == 1
 }
 
 // UpdateTodos updates a session's todo list
@@ -1066,7 +1126,7 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 }
 
 // ApplyAgentDriverState applies an ordered status report for the active external-driver run.
-func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string) bool {
+func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1086,16 +1146,33 @@ func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string
 		session.State = protocol.SessionState(state)
 		session.StateSince = now
 		session.StateUpdatedAt = now
+		current := protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
+		if !requestStartedAt.IsZero() && (current.IsZero() || requestStartedAt.After(current)) {
+			session.LastModelRequestAt = protocol.Ptr(string(protocol.NewTimestamp(requestStartedAt)))
+		}
 		return true
+	}
+	requestStamp := ""
+	if !requestStartedAt.IsZero() {
+		var current sql.NullString
+		if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {
+			return false
+		}
+		currentAt := protocol.Timestamp(current.String).Time()
+		if currentAt.IsZero() || requestStartedAt.After(currentAt) {
+			requestStamp = string(protocol.NewTimestamp(requestStartedAt))
+		}
 	}
 	result, err := s.db.Exec(`
 		UPDATE sessions
-		SET state = ?, state_since = ?, state_updated_at = ?, agent_driver_report_seq = ?
+		SET state = ?, state_since = ?, state_updated_at = ?, agent_driver_report_seq = ?,
+			last_model_request_at = COALESCE(NULLIF(?, ''), last_model_request_at)
 		WHERE id = ? AND agent_driver_run_id = ? AND agent_driver_report_seq < ?`,
 		state,
 		now,
 		now,
 		seq,
+		requestStamp,
 		id,
 		runID,
 		seq,

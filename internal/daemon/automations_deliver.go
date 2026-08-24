@@ -848,7 +848,7 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 			screen := stripANSIForPromptMatch(payload)
 			if strings.Contains(screen, codexDirectoryTrustPrompt) {
 				if !acknowledged {
-					if err := d.writePTY(req.IDs.SessionID, []byte("\r")); err != nil {
+					if err := d.writeSessionPTY(req.IDs.SessionID, []byte("\r"), "automation"); err != nil {
 						return fmt.Errorf("accept Codex directory trust: %w", err)
 					}
 					acknowledged = true

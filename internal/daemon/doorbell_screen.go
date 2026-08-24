@@ -56,26 +56,20 @@ func screenShowsSelector(text string) (string, bool) {
 	return "", false
 }
 
-// doorbellSelectorOnScreen reads the session's authoritative viewport and
-// reports the selector line if one is up.
-//
-// A backend that cannot answer — an older worker, a session with no rendered
-// frame yet — reports nothing and delivery proceeds as it did before this
-// guard existed. Failing closed on a missing capability would turn a snapshot
-// outage into a silent nudge outage, a bigger hole than the one this closes.
-func (d *Daemon) doorbellSelectorOnScreen(sessionID string) (string, bool) {
+func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (line string, known, selector bool) {
 	if d.ptyBackend == nil {
-		return "", false
+		return "", false, false
 	}
 	provider, ok := d.ptyBackend.(ptybackend.SnapshotProvider)
 	if !ok {
-		return "", false
+		return "", false, false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), doorbellScreenTimeout)
+	ctx, cancel := context.WithTimeout(parent, doorbellScreenTimeout)
 	defer cancel()
 	snapshot, err := provider.Snapshot(ctx, sessionID)
 	if err != nil || snapshot.Screen == nil || !snapshot.Screen.HasText {
-		return "", false
+		return "", false, false
 	}
-	return screenShowsSelector(snapshot.Screen.Text)
+	line, selector = screenShowsSelector(snapshot.Screen.Text)
+	return line, true, selector
 }

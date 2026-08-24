@@ -270,6 +270,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 			return fmt.Errorf("activate plugin run failed for %s: %w", sessionID, commitErr)
 		}
 	}
+	d.sessionInputs().forgetSession(sessionID)
 
 	// Success. Do NOT clear the flag here — the killed worker's exit consumes it.
 	// AfterFunc is a backstop only (never-arriving exit), so the flag cannot wedge.

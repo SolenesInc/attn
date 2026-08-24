@@ -89,6 +89,22 @@ func (s *Store) UndeliveredAgentMessages(targetSessionID string) ([]AgentMessage
 	return messages, rows.Err()
 }
 
+// AgentMessageQueued reports whether one message still needs delivery.
+func (s *Store) AgentMessageQueued(id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var queued bool
+	if err := s.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM agent_messages WHERE id = ? AND delivered_at = ''
+		)
+	`, id).Scan(&queued); err != nil {
+		return false, fmt.Errorf("failed to check queued agent message: %w", err)
+	}
+	return queued, nil
+}
+
 // TargetsWithQueuedAgentMessages names every session that still owes a
 // delivery. Read once at daemon startup: the rows outlive the process.
 func (s *Store) TargetsWithQueuedAgentMessages() ([]string, error) {

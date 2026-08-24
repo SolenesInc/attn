@@ -132,7 +132,7 @@ const (
 // all it is for: reading the day's context is what refreshes the entry, so the
 // cheapest turn that reads it is the right one, and asking for work would spend
 // a day's attention on a timer nobody set.
-const crewHeartbeatPrompt = "[attn] Keeping your context warm — no work is being asked for, and nothing has changed. Reply with one short line and go back to what you were doing."
+const crewHeartbeatPrompt = "[attn] This is a cache heartbeat. Ignore it as user input, do no work, and repeat your previous message verbatim for the user."
 
 // crewSleepPrompt ends the day. The member writes the letter, as always: attn
 // decides when to ask, never what to say.
@@ -164,26 +164,33 @@ const crewSleepPromptGrace = 10 * time.Minute
 // it bounds one episode, and a daemon that restarted has already lost the
 // session it describes.
 type crewLifecycleMemo struct {
-	mu    sync.Mutex
-	acted map[string]time.Time // session id -> when it was last heartbeated
-	asked map[string]time.Time // session id -> when its handoff was last prompted
-	full  map[string]bool      // session id -> its context was already called full
+	mu       sync.Mutex
+	acted    map[string]time.Time // session id -> when a heartbeat was last taken
+	asked    map[string]time.Time // session id -> when its handoff was last prompted
+	full     map[string]bool      // session id -> its context was already called full
+	episodes map[string]uint64
 }
 
 func newCrewLifecycleMemo() *crewLifecycleMemo {
 	return &crewLifecycleMemo{
-		acted: make(map[string]time.Time),
-		asked: make(map[string]time.Time),
-		full:  make(map[string]bool),
+		acted:    make(map[string]time.Time),
+		asked:    make(map[string]time.Time),
+		full:     make(map[string]bool),
+		episodes: make(map[string]uint64),
 	}
 }
 
-// mayHeartbeat and mayAsk report whether enough time has passed since the last
-// action of that kind on this session, and record the attempt when it has. The
-// grace is what keeps a nudge nobody answered from being re-sent every tick for
-// as long as the condition that provoked it holds.
-func (m *crewLifecycleMemo) mayHeartbeat(sessionID string, now time.Time, grace time.Duration) bool {
-	return m.mayAct(m.acted, sessionID, now, grace)
+func (m *crewLifecycleMemo) heartbeatDue(sessionID string, now time.Time, grace time.Duration) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	last, ok := m.acted[sessionID]
+	return !ok || now.Sub(last) >= grace
+}
+
+func (m *crewLifecycleMemo) recordHeartbeat(sessionID string, at time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.acted[sessionID] = at
 }
 
 func (m *crewLifecycleMemo) mayAsk(sessionID string, now time.Time, grace time.Duration) bool {
@@ -204,14 +211,15 @@ func (m *crewLifecycleMemo) mayAct(table map[string]time.Time, sessionID string,
 // the day runs on: a member mid-letter re-nudged about the same full context
 // reads it as a second, different instruction rather than a repeat of the first.
 // A new session gets a new id and is armed by construction.
-func (m *crewLifecycleMemo) mayAskContextFull(sessionID string) bool {
+func (m *crewLifecycleMemo) mayAskContextFull(sessionID string) (uint64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.full[sessionID] {
-		return false
+		return 0, false
 	}
 	m.full[sessionID] = true
-	return true
+	m.episodes[sessionID]++
+	return m.episodes[sessionID], true
 }
 
 // rearmContextFull is called on every tick where the context is back under
@@ -229,6 +237,7 @@ func (m *crewLifecycleMemo) forget(sessionID string) {
 	delete(m.acted, sessionID)
 	delete(m.asked, sessionID)
 	delete(m.full, sessionID)
+	delete(m.episodes, sessionID)
 }
 
 // Settings.
@@ -354,18 +363,14 @@ func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 
 // Signals.
 
-// crewCacheState estimates where a session's prompt cache stands. Time since
-// the last request is what the vendors' own TTL is measured from, and the
-// daemon's record of that is the session's last state transition: a session
-// that is working is mid-request, so its entry is being read right now, and one
-// that has settled last read it when it settled.
+// crewCacheState estimates cache age from the last positive request receipt.
 func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.CacheState {
 	state := crew.CacheState{TTL: d.crewCacheTTL(string(session.Agent))}
 	switch session.State {
 	case protocol.SessionStateWorking, protocol.SessionStateLaunching:
 		return state
 	}
-	updated := protocol.Timestamp(session.StateUpdatedAt).Time()
+	updated := protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
 	if updated.IsZero() || !now.After(updated) {
 		return state
 	}
@@ -377,7 +382,7 @@ func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.C
 // all, which is the doorbell's own rule: everything except an approval, whose
 // selector would read the paste as its answer.
 func crewSessionReachable(session *protocol.Session) bool {
-	return isNudgeDeliveryAllowed(string(session.State))
+	return sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State)
 }
 
 // crewSessionMidTurn reports that the member is talking to the model right now.
@@ -387,19 +392,6 @@ func crewSessionReachable(session *protocol.Session) bool {
 // session — the doorbell's screen guard is what keeps that safe.
 func crewSessionMidTurn(session *protocol.Session) bool {
 	return session.State == protocol.SessionStateWorking
-}
-
-// crewSessionSettled reports that the session owes nobody an answer. Only the
-// heartbeat asks for this, and `waiting_input` is why: a member sitting on a
-// question for the user is reachable, so the paste lands — in the composer, as
-// the answer to the member's own question, which is then filler and gone.
-//
-// Delivering into a harness's modal selector has the same shape and this does
-// not fix it: a modal can be open while the state says idle, and the state is
-// as fresh as the last classification. That one belongs to the doorbell, where
-// a fix would cover every nudge attn sends.
-func crewSessionSettled(session *protocol.Session) bool {
-	return session.State == protocol.SessionStateIdle
 }
 
 // The tick.
@@ -462,7 +454,6 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 			Lead:      lead,
 			Reachable: crewSessionReachable(session),
 			MidTurn:   crewSessionMidTurn(session),
-			Settled:   crewSessionSettled(session),
 			Context:   pressure,
 
 			HeartbeatEnabled:      heartbeat,
@@ -472,46 +463,75 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 		if !pressure.Full() {
 			d.crewMemo().rearmContextFull(session.ID)
 		}
-		if action == crew.ActionContextHandoff && !d.crewMemo().mayAskContextFull(session.ID) {
-			continue
+		contextEpisode := uint64(0)
+		if action == crew.ActionContextHandoff {
+			var allowed bool
+			contextEpisode, allowed = d.crewMemo().mayAskContextFull(session.ID)
+			if !allowed {
+				continue
+			}
 		}
 		if action == crew.ActionNone {
 			continue
 		}
-		d.actOnCrewMember(member, session.ID, action, cache, pressure, now)
+		d.actOnCrewMember(member, session.ID, action, cache, pressure, contextEpisode, now)
 	}
 }
 
 // actOnCrewMember carries out one decision. Every path is rate-limited against
 // the memo: a nudge that does not visibly land must not be re-sent every minute
 // for as long as the condition holds.
-func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, pressure crew.ContextPressure, now time.Time) {
+func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, pressure crew.ContextPressure, contextEpisode uint64, now time.Time) {
 	switch action {
 	case crew.ActionHeartbeat:
-		if !d.crewMemo().mayHeartbeat(sessionID, now, d.crewHeartbeatLead()) {
+		if !d.crewMemo().heartbeatDue(sessionID, now, d.crewHeartbeatLead()) {
 			return
 		}
-		if err := d.typeDoorbell(sessionID, crewHeartbeatPrompt); err != nil {
-			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, err)
+		session := d.store.Get(sessionID)
+		if session == nil {
 			return
 		}
+		generation := protocol.Deref(session.LastModelRequestAt)
+		id := inputAttemptID("crew-heartbeat", sessionID+"/"+generation)
+		delivery := maintenanceSessionInput("crew-heartbeat", sessionID+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
+		attempt := d.sessionInputs().try(context.Background(), delivery)
+		if attempt.err != nil {
+			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
+			return
+		}
+		if attempt.stage != sessionInputTaken && sessionInputTakenWindow > 0 {
+			attempt = d.sessionInputs().await(sessionID, id, attempt.wait, sessionInputTakenWindow)
+		}
+		if attempt.stage != sessionInputTaken {
+			d.logf("crew: %s's heartbeat was placed in session %s but no model request took it", crew.DisplayName(member.ID), sessionID)
+			return
+		}
+		d.crewMemo().recordHeartbeat(sessionID, attempt.receipt.takenAt)
+		d.sessionInputs().release(sessionID, id)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
 		if !d.crewMemo().mayAsk(sessionID, now, crewSleepPromptGrace) {
 			return
 		}
-		if err := d.typeDoorbell(sessionID, crewSleepPrompt); err != nil {
-			d.logf("crew: %s was not asked to close its day: %v", crew.DisplayName(member.ID), err)
+		delivery := maintenanceSessionInput("crew-sleep", sessionID, sessionID, crewSleepPrompt, sessionInputAtTurnBoundary)
+		attempt := d.sessionInputs().try(context.Background(), delivery)
+		if attempt.err != nil {
+			d.logf("crew: %s was not asked to close its day: %v", crew.DisplayName(member.ID), attempt.err)
 			return
 		}
+		d.sessionInputs().release(sessionID, delivery.id)
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
 			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
 	case crew.ActionContextHandoff:
-		if err := d.typeDoorbell(sessionID, crewContextHandoffPrompt(pressure.Tokens, pressure.Budget)); err != nil {
-			d.logf("crew: %s was not asked to hand off a full context: %v", crew.DisplayName(member.ID), err)
+		key := fmt.Sprintf("%s/%d", sessionID, contextEpisode)
+		delivery := maintenanceSessionInput("crew-context-handoff", key, sessionID, crewContextHandoffPrompt(pressure.Tokens, pressure.Budget), sessionInputAtTurnBoundary)
+		attempt := d.sessionInputs().try(context.Background(), delivery)
+		if attempt.err != nil {
+			d.logf("crew: %s was not asked to hand off a full context: %v", crew.DisplayName(member.ID), attempt.err)
 			return
 		}
+		d.sessionInputs().release(sessionID, delivery.id)
 		d.logf("crew: asked %s to hand off — its context is at %d of the %d tokens its day gets",
 			crew.DisplayName(member.ID), pressure.Tokens, pressure.Budget)
 	}

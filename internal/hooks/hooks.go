@@ -224,7 +224,7 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					Hooks: []Hook{
 						{
 							Type:    "command",
-							Command: fmt.Sprintf(`ATTN_SOCKET_PATH=%s %s _hook-state "%s" "working"`, socketCmd, wrapperCmd, sessionID),
+							Command: fmt.Sprintf(`ATTN_SOCKET_PATH=%s %s _hook-state "%s" "working" "user_prompt_submit"`, socketCmd, wrapperCmd, sessionID),
 						},
 					},
 				},

@@ -174,10 +174,16 @@ func (d *Daemon) spawnHostSession(opts ptybackend.SpawnOptions) error {
 // spawnSessionRuntime starts whichever runtime this session's agent asked for.
 func (d *Daemon) spawnSessionRuntime(req *spawnRequest, opts ptybackend.SpawnOptions) error {
 	opts.DaemonEnv = d.spawnRoutingEnv()
+	var err error
 	if req.hasPluginDriver && req.pluginDriver.Capabilities[pluginDriverConversationCapability] {
-		return d.spawnHostSession(opts)
+		err = d.spawnHostSession(opts)
+	} else {
+		err = d.ptyBackend.Spawn(context.Background(), opts)
 	}
-	return d.ptyBackend.Spawn(context.Background(), opts)
+	if err == nil {
+		d.sessionInputs().forgetSession(opts.ID)
+	}
+	return err
 }
 
 // killSessionRuntime stops a session's runtime, whichever kind it is.
@@ -230,6 +236,13 @@ func (d *Daemon) handleHostEvent(event hostsession.Event) {
 	}
 	if event.Kind == "model_changed" && event.Seq > 0 {
 		d.handleHostModelChanged(event)
+	}
+	if event.Kind == "input_taken" && event.Seq > 0 {
+		inputID, _ := event.Body["input_id"].(string)
+		active := d.store.GetAgentDriverRun(event.SessionID)
+		if strings.TrimSpace(inputID) != "" && active.RunID == event.LifecycleID {
+			d.observeStructuredInputTaken(event.SessionID, strings.TrimSpace(inputID), time.Now())
+		}
 	}
 }
 
@@ -381,16 +394,8 @@ func (d *Daemon) reloadConversationSession(session *protocol.Session) error {
 	return nil
 }
 
-// deliverToHostSession lands a message in a conversation session's agent.
-//
-// It is the conversation half of message delivery, and the reason a doorbell
-// for one of these sessions types nothing: there is no composer to paste into
-// and no Enter to send, only a verb down a pipe the daemon already owns. A
-// steer is the right default for every nudge — it is read at the agent's next
-// turn boundary rather than after everything it had planned to do — and it is
-// safe on an idle session, where the host opens a run for it instead.
-func (d *Daemon) deliverToHostSession(sessionID string, how hostsession.Delivery, text string) error {
-	return d.ensureHostSessions().Deliver(sessionID, how, text)
+func (d *Daemon) deliverToHostSessionWithInput(sessionID string, how hostsession.Delivery, text, inputID string) error {
+	return d.ensureHostSessions().DeliverWithInput(sessionID, how, text, inputID)
 }
 
 // hostDeliveryFor maps the app's delivery request onto a host verb. An absent
@@ -410,9 +415,14 @@ func hostDeliveryFor(mode string) hostsession.Delivery {
 // handleAgentPrompt answers the agent_prompt command.
 func (d *Daemon) handleAgentPrompt(client *wsClient, msg *protocol.AgentPromptMessage) {
 	sessionID := strings.TrimSpace(msg.ID)
+	inputID := strings.TrimSpace(msg.InputID)
 	text := strings.TrimSpace(msg.Text)
 	if sessionID == "" {
 		d.sendCommandError(client, protocol.CmdAgentPrompt, "agent_prompt is missing a session id")
+		return
+	}
+	if inputID == "" {
+		d.sendCommandError(client, protocol.CmdAgentPrompt, "agent_prompt is missing an input id")
 		return
 	}
 	if text == "" {
@@ -420,8 +430,11 @@ func (d *Daemon) handleAgentPrompt(client *wsClient, msg *protocol.AgentPromptMe
 		return
 	}
 	how := hostDeliveryFor(protocol.Deref(msg.Mode))
-	if err := d.deliverToHostSession(sessionID, how, text); err != nil {
-		d.logf("agent_prompt (%s) for session %s failed: %v", how, sessionID, err)
+	delivery := userConversationSessionInput(inputID, sessionID, text, sessionInputAtTurnBoundary)
+	delivery.hostDelivery = how
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		d.logf("agent_prompt (%s) for session %s failed: %v", how, sessionID, attempt.err)
 		d.sendCommandError(client, protocol.CmdAgentPrompt, "no live conversation host for session "+sessionID)
 		if how != hostsession.DeliveryPrompt {
 			// A steer or follow-up left the composer open and no run to settle;
@@ -437,7 +450,9 @@ func (d *Daemon) handleAgentPrompt(client *wsClient, msg *protocol.AgentPromptMe
 			Kind:      "run_settled",
 			Body:      map[string]interface{}{"error": "this conversation's agent is no longer running"},
 		})
+		return
 	}
+	d.sessionInputs().release(sessionID, delivery.id)
 }
 
 // handleAgentToolDetail answers the agent_tool_detail command.

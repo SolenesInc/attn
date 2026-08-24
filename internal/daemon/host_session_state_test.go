@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,12 +66,16 @@ func TestHostDeclarationsMoveTheSessionAndOpenItsTurn(t *testing.T) {
 		t.Fatal("a conversation session sitting at its prompt owes no turn")
 	}
 
+	initialRequestAt := protocol.Deref(d.store.Get("conv-1").LastModelRequestAt)
 	declare(d, "conv-1", 2, "run_started", protocol.StateWorking)
 	if got := stateOf(t, d, "conv-1"); got != protocol.StateWorking {
 		t.Fatalf("state after run_started = %q, want working", got)
 	}
 	if !owed(t, d, "conv-1") {
 		t.Fatal("prompting the agent settled its turn; only the user settles")
+	}
+	if requestAt := protocol.Deref(d.store.Get("conv-1").LastModelRequestAt); requestAt == "" || requestAt == initialRequestAt {
+		t.Fatalf("run_started left model-request clock at %q", requestAt)
 	}
 
 	declare(d, "conv-1", 3, "run_settled", protocol.StateIdle)
@@ -315,8 +320,9 @@ func TestTypeDoorbellSteersAConversationSession(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Kill("conv-6") })
 
-	if err := d.typeDoorbell("conv-6", "a ticket needs you"); err != nil {
-		t.Fatalf("typeDoorbell error = %v, want nil", err)
+	delivery := maintenanceSessionInput("host-test", "conv-6", "conv-6", "a ticket needs you", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("session input error = %v, want nil", attempt.err)
 	}
 
 	select {
@@ -331,6 +337,6 @@ func TestTypeDoorbellSteersAConversationSession(t *testing.T) {
 		t.Fatal("the doorbell never reached the host")
 	}
 	if ptyInput {
-		t.Fatal("typeDoorbell typed into a PTY for a conversation session")
+		t.Fatal("session input typed into a PTY for a conversation session")
 	}
 }

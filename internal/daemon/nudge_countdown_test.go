@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -269,10 +270,7 @@ func TestNudgeCountdownCancelsOnPendingApproval(t *testing.T) {
 	}
 }
 
-// Boundary-bound: the fence being tested is doorbellMu, and the state goroutine
-// proves it by parking on that mutex. A bubble cannot see a goroutine waiting
-// for a lock, so it has no way to say "held" rather than "not yet run".
-func TestDoorbellWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
+func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := "doorbell-state-fence"
 	now := protocol.TimestampNow().String()
@@ -301,8 +299,9 @@ func TestDoorbellWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 		})
 	}}
 
-	doorbellDone := make(chan error, 1)
-	go func() { doorbellDone <- d.typeDoorbell(sessionID, ticketNudgePrompt) }()
+	inputDone := make(chan error, 1)
+	delivery := maintenanceSessionInput("input-test", "countdown-splice", sessionID, ticketNudgePrompt, sessionInputAtTurnBoundary)
+	go func() { inputDone <- d.sessionInputs().try(context.Background(), delivery).err }()
 	<-inputStarted
 
 	stateDone := make(chan struct{})
@@ -322,16 +321,16 @@ func TestDoorbellWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	}
 
 	close(releaseInput)
-	if err := <-doorbellDone; err != nil {
-		t.Fatalf("typeDoorbell() error = %v", err)
+	if err := <-inputDone; err != nil {
+		t.Fatalf("session input error = %v", err)
 	}
 	<-stateDone
-	wantPaste := bracketedPasteStart + ticketNudgePrompt + bracketedPasteEnd
+	wantPaste := sessionInputPasteStart + ticketNudgePrompt + sessionInputPasteEnd
 	if got := <-inputs; got != wantPaste {
 		t.Fatalf("doorbell paste = %q, want %q", got, wantPaste)
 	}
 	if got := <-inputs; got != "\r" {
-		t.Fatalf("doorbell submit = %q, want a lone Enter", got)
+		t.Fatalf("session-input submit = %q, want a lone Enter", got)
 	}
 }
 
@@ -348,8 +347,8 @@ func TestNudgeDeliveryStatePolicy(t *testing.T) {
 		{name: "flashing approval", state: protocol.StatePendingApproval, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isNudgeDeliveryAllowed(tc.state); got != tc.want {
-				t.Fatalf("isNudgeDeliveryAllowed(%q) = %v, want %v", tc.state, got, tc.want)
+			if got := sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(tc.state)); got != tc.want {
+				t.Fatalf("sessionInputPhaseAllows(%q) = %v, want %v", tc.state, got, tc.want)
 			}
 		})
 	}

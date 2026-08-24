@@ -120,7 +120,7 @@ func TestMarkdownAnnotationsSubmitDelivered(t *testing.T) {
 		t.Fatalf("generation = %v, want floor 5", res.Generation)
 	}
 	wantPayload := formatMarkdownAnnotationPayload(fileAnnotationSource(submitTestPath), anns, map[string]bool{})
-	wantPaste := bracketedPasteStart + wantPayload + bracketedPasteEnd
+	wantPaste := sessionInputPasteStart + wantPayload + sessionInputPasteEnd
 	mu.Lock()
 	got := append([]string(nil), inputs...)
 	mu.Unlock()

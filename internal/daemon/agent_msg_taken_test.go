@@ -3,6 +3,7 @@ package daemon
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -13,9 +14,9 @@ import (
 // every delivery in the package.
 func withAgentMessageTakenWindow(t *testing.T, window time.Duration) {
 	t.Helper()
-	previous := agentMessageTakenWindow
-	agentMessageTakenWindow = window
-	t.Cleanup(func() { agentMessageTakenWindow = previous })
+	previous := sessionInputTakenWindow
+	sessionInputTakenWindow = window
+	t.Cleanup(func() { sessionInputTakenWindow = previous })
 }
 
 // The bug this exists for: a PTY write returning proves the bytes reached the
@@ -66,21 +67,29 @@ func TestAgentMsgRedeliveryPressesEnterRatherThanRepasting(t *testing.T) {
 		t.Fatalf("result = %+v, want queued", result)
 	}
 
+	prompts := doorbell.pasted()
+	if len(prompts) != 1 {
+		t.Fatalf("pasted %d prompts before retry, want 1: %q", len(prompts), prompts)
+	}
+	retried := make(chan struct{})
+	d.ptyBackend = &fakeSpawnBackend{onInput: func(_ string, data []byte) {
+		if string(data) == "\r" {
+			select {
+			case <-retried:
+			default:
+				close(retried)
+			}
+		}
+	}}
 	drained := make(chan int, 1)
 	d.agentMessageDrainHook = func(_ string, delivered int) { drained <- delivered }
 	go func() {
-		// The drain's Enter is what lets this delivery confirm; without the state
-		// change it would report not-taken again.
-		<-time.After(20 * time.Millisecond)
-		d.applyState(sessionStateChange{
-			sessionID: "target-session-id",
-			state:     protocol.StateWorking,
-			cause:     liveSignal{},
-		})
+		<-retried
+		d.observePromptTaken("target-session-id", prompts[0], time.Now())
 	}()
 	if !d.applyState(sessionStateChange{
 		sessionID: "target-session-id",
-		state:     protocol.StateIdle,
+		state:     protocol.StateWorking,
 		cause:     liveSignal{},
 	}) {
 		t.Fatal("applyState did not apply")
@@ -99,58 +108,79 @@ func TestAgentMsgRedeliveryPressesEnterRatherThanRepasting(t *testing.T) {
 	}
 }
 
-// The confirmed path: the target starts working, so the message is delivered
-// and nothing stays queued behind it.
-func TestAgentMsgDeliversWhenTheTargetStartsWorking(t *testing.T) {
-	withAgentMessageTakenWindow(t, 2*time.Second)
-	d, _ := newAgentMsgDaemon(t)
+func TestAgentMsgTakenReceiptCoalescesRacingStateChangeDrain(t *testing.T) {
+	d, recorder := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 
-	typed := make(chan struct{})
-	d.ptyBackend = &fakeSpawnBackend{onInput: func(sessionID string, _ []byte) {
-		if sessionID == "target-session-id" {
-			select {
-			case <-typed:
-			default:
-				close(typed)
+	synctest.Test(t, func(t *testing.T) {
+		withAgentMessageTakenWindow(t, 2*time.Second)
+		typed := make(chan string, 1)
+		record := recorder.backend().onInput
+		d.ptyBackend = &fakeSpawnBackend{onInput: func(sessionID string, data []byte) {
+			record(sessionID, data)
+			text := string(data)
+			if sessionID == "target-session-id" && strings.HasPrefix(text, sessionInputPasteStart) && strings.HasSuffix(text, sessionInputPasteEnd) {
+				prompt := strings.TrimSuffix(strings.TrimPrefix(text, sessionInputPasteStart), sessionInputPasteEnd)
+				select {
+				case typed <- prompt:
+				default:
+				}
 			}
-		}
-	}}
-	go func() {
-		<-typed
-		d.applyState(sessionStateChange{
-			sessionID: "target-session-id",
-			state:     protocol.StateWorking,
-			cause:     liveSignal{},
-		})
-	}()
+		}}
+		go func() {
+			prompt := <-typed
+			d.applyState(sessionStateChange{
+				sessionID: "target-session-id",
+				state:     protocol.StateWorking,
+				cause:     liveSignal{},
+			})
+			d.observePromptTaken("target-session-id", prompt, time.Now())
+		}()
 
-	resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "rebase when you surface")
-	result := resp.AgentMsgResult
-	if result == nil || result.Status != protocol.AgentMsgStatusDelivered {
-		t.Fatalf("result = %+v, want delivered", result)
-	}
-	queued, err := d.store.UndeliveredAgentMessages("target-session-id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(queued) != 0 {
-		t.Fatalf("a confirmed delivery is still queued: %+v", queued)
-	}
+		resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "rebase when you surface")
+		result := resp.AgentMsgResult
+		if result == nil || result.Status != protocol.AgentMsgStatusDelivered {
+			t.Fatalf("result = %+v, want delivered", result)
+		}
+		queued, err := d.store.UndeliveredAgentMessages("target-session-id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(queued) != 0 {
+			t.Fatalf("a confirmed delivery is still queued: %+v", queued)
+		}
+		synctest.Wait()
+		if prompts := recorder.pasted(); len(prompts) != 1 {
+			t.Fatalf("live send and state-change drain pasted %d copies, want 1: %q", len(prompts), prompts)
+		}
+	})
 }
 
-// A target already mid-turn queues the paste in its composer and answers when
-// the turn ends — no new turn opens, so there is nothing to confirm. Waiting
-// for one would report queued and redeliver, doubling the message.
-func TestAgentMsgToAWorkingTargetDoesNotWaitForConfirmation(t *testing.T) {
-	withAgentMessageTakenWindow(t, time.Hour)
+func TestAgentMsgToAWorkingTargetUsesPromptReceiptWithoutAStateEdge(t *testing.T) {
+	withAgentMessageTakenWindow(t, 2*time.Second)
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateWorking)
 
+	typed := make(chan struct{})
+	record := doorbell.backend().onInput
+	d.ptyBackend = &fakeSpawnBackend{onInput: func(sessionID string, data []byte) {
+		record(sessionID, data)
+		select {
+		case <-typed:
+		default:
+			close(typed)
+		}
+	}}
 	done := make(chan protocol.Response, 1)
 	go func() { done <- callAgentMsg(t, d, "target-session-id", "sender-session-id", "when you land, ping me") }()
+	<-typed
+	prompts := doorbell.pasted()
+	if len(prompts) != 1 {
+		t.Fatalf("pasted %d prompts, want 1: %q", len(prompts), prompts)
+	}
+	d.observePromptTaken("target-session-id", prompts[0], time.Now())
 
 	select {
 	case resp := <-done:

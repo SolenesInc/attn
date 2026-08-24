@@ -9,6 +9,7 @@ import type {
   RelayHelloState,
   RelayHelloResult,
   RelayReportDenialParams,
+  RelayReportInputTakenParams,
   RelayReportStateParams,
   RelayReportStopParams,
 } from "./relay-protocol";
@@ -286,6 +287,17 @@ export class PiDriver {
     });
   }
 
+  async suiteReportInputTaken(rawParams: unknown): Promise<void> {
+    const params = parseRelayReportInputTaken(rawParams);
+    const run = this.requireRunByToken(params.token);
+    await this.rpc.request("session.report_input_taken", {
+      session_id: run.sessionID,
+      run_id: run.runID,
+      seq: this.nextSeq(run),
+      input_id: params.input_id,
+    });
+  }
+
   // Called for the daemon's driver.deliver_message request.
   async deliverMessage(rawParams: unknown): Promise<{ ok: boolean }> {
     const params = parseDeliverMessageParams(rawParams);
@@ -297,7 +309,7 @@ export class PiDriver {
     if (!run.connection) throw new Error(`no live pi suite connection for session ${params.session_id}`);
     const result = await this.relay.deliverMessage<RelayDeliverMessageParams, RelayDeliverMessageResult>(
       run.connection,
-      { text: params.text },
+      { input_id: params.input_id, text: params.text },
       deliverMessageTimeoutMs,
     );
     return { ok: result.delivered };
@@ -582,16 +594,28 @@ function textField(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function parseDeliverMessageParams(value: unknown): { session_id: string; run_id: string; text: string } {
+function parseDeliverMessageParams(value: unknown): { session_id: string; run_id: string; input_id: string; text: string } {
   if (typeof value !== "object" || value === null) throw new Error("driver.deliver_message params must be an object");
   const record = value as Record<string, unknown>;
   const sessionID = record.session_id;
   const runID = record.run_id;
+  const inputID = record.input_id;
   const text = record.text;
   if (typeof sessionID !== "string" || sessionID.trim() === "") throw new Error("driver.deliver_message is missing session_id");
   if (typeof runID !== "string" || runID.trim() === "") throw new Error("driver.deliver_message is missing run_id");
+  if (typeof inputID !== "string" || inputID.trim() === "") throw new Error("driver.deliver_message is missing input_id");
   if (typeof text !== "string") throw new Error("driver.deliver_message is missing text");
-  return { session_id: sessionID.trim(), run_id: runID.trim(), text };
+  return { session_id: sessionID.trim(), run_id: runID.trim(), input_id: inputID.trim(), text };
+}
+
+function parseRelayReportInputTaken(value: unknown): RelayReportInputTakenParams {
+  if (typeof value !== "object" || value === null) throw new Error("suite.report_input_taken params must be an object");
+  const record = value as Record<string, unknown>;
+  const token = record.token;
+  const inputID = record.input_id;
+  if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_input_taken is missing token");
+  if (typeof inputID !== "string" || inputID.trim() === "") throw new Error("suite.report_input_taken is missing input_id");
+  return { token: token.trim(), input_id: inputID.trim() };
 }
 
 function thinkingFor(effort: string | undefined): string | undefined {

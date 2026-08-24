@@ -309,15 +309,15 @@ describe("suite <-> driver relay integration", () => {
     const suite = await FakeSuiteClient.connect(socketPath);
     suite.responder = (method, params) => {
       expect(method).toBe("driver.deliver_message");
-      expect(params).toEqual({ text: "hey, are you there?" });
+      expect(params).toEqual({ input_id: "heartbeat/1", text: "hey, are you there?" });
       return { delivered: true };
     };
     await suite.request("suite.hello", { token, pi_session_id: "native-1", pi_version: "0.80.10", reason: "session_start" });
 
-    const result = await driver.deliverMessage({ session_id: "session-1", run_id: "run-1", text: "hey, are you there?" });
+    const result = await driver.deliverMessage({ session_id: "session-1", run_id: "run-1", input_id: "heartbeat/1", text: "hey, are you there?" });
 
     expect(result).toEqual({ ok: true });
-    expect(suite.received).toContainEqual({ method: "driver.deliver_message", params: { text: "hey, are you there?" } });
+    expect(suite.received).toContainEqual({ method: "driver.deliver_message", params: { input_id: "heartbeat/1", text: "hey, are you there?" } });
 
     suite.close();
   });
@@ -327,7 +327,7 @@ describe("suite <-> driver relay integration", () => {
     const { driver } = await buildHarness(rpc);
 
     await expect(
-      driver.deliverMessage({ session_id: "no-such-session", run_id: "run-1", text: "hi" }),
+      driver.deliverMessage({ session_id: "no-such-session", run_id: "run-1", input_id: "test/1", text: "hi" }),
     ).rejects.toThrow(/no active pi run/);
   });
 
@@ -337,7 +337,7 @@ describe("suite <-> driver relay integration", () => {
     await driver.spawn(spawnParams());
 
     await expect(
-      driver.deliverMessage({ session_id: "session-1", run_id: "run-1", text: "hi" }),
+      driver.deliverMessage({ session_id: "session-1", run_id: "run-1", input_id: "test/1", text: "hi" }),
     ).rejects.toThrow(/no live pi suite connection/);
   });
 });

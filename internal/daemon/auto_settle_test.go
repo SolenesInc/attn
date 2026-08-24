@@ -49,7 +49,28 @@ func seedAutoSettleSession(t *testing.T, d *Daemon, dir string) string {
 	if !d.store.OpenTurnIfClosed(id, time.Now()) {
 		t.Fatal("OpenTurnIfClosed() = false; the fixture owes no turn")
 	}
+	creditUserInput(t, d, id)
 	return id
+}
+
+func creditUserInput(t *testing.T, d *Daemon, sessionID string) {
+	t.Helper()
+	lane := d.sessionInputs().lane(sessionID)
+	lane.mu.Lock()
+	lane.userGeneration++
+	lane.userSubmit = true
+	lane.mu.Unlock()
+	d.observePromptTaken(sessionID, "user steer", time.Now())
+}
+
+func creditUserInputForNextWorking(t *testing.T, d *Daemon, sessionID string) {
+	t.Helper()
+	lane := d.sessionInputs().lane(sessionID)
+	lane.mu.Lock()
+	lane.userGeneration++
+	lane.userSubmit = true
+	lane.mu.Unlock()
+	d.sessionInputs().observePromptTaken(sessionID, "user steer", time.Now())
 }
 
 func autoSettlePending(d *Daemon, sessionID string) (*autoSettleTimer, bool) {
@@ -219,6 +240,7 @@ func TestAutoSettle_CancelKeepsTheTurnAndDoesNotReArm(t *testing.T) {
 	// Steering the agent again is a new decision, so leaving and re-entering
 	// `working` arms a fresh countdown.
 	d.syncAutoSettle(id, protocol.StateWaitingInput)
+	creditUserInputForNextWorking(t, d, id)
 	d.syncAutoSettle(id, protocol.StateWorking)
 	if _, ok := autoSettlePending(d, id); !ok {
 		t.Fatal("no fresh arm after the session left and re-entered working")
@@ -270,6 +292,7 @@ func TestAutoSettle_ArmedBeforeTheSteerDismissesTheNextSettle(t *testing.T) {
 	if !turnIsOwed(d, id) {
 		t.Fatal("the turn was settled despite a standing dismissal")
 	}
+	creditUserInputForNextWorking(t, d, id)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}

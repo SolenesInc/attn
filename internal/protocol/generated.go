@@ -204,6 +204,9 @@ type AgentPromptMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// InputID corresponds to the JSON schema field "input_id".
+	InputID string `json:"input_id"`
+
 	// Mode corresponds to the JSON schema field "mode".
 	Mode *string `json:"mode,omitempty,omitzero"`
 
@@ -7059,6 +7062,10 @@ type Session struct {
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
 
+	// LastModelRequestAt corresponds to the JSON schema field
+	// "last_model_request_at".
+	LastModelRequestAt *string `json:"last_model_request_at,omitempty,omitzero"`
+
 	// LastSeen corresponds to the JSON schema field "last_seen".
 	LastSeen string `json:"last_seen"`
 
@@ -7823,6 +7830,10 @@ type StateExplainResult struct {
 	// Capacity corresponds to the JSON schema field "capacity".
 	Capacity int `json:"capacity"`
 
+	// LastModelRequestAt corresponds to the JSON schema field
+	// "last_model_request_at".
+	LastModelRequestAt *string `json:"last_model_request_at,omitempty,omitzero"`
+
 	// Observations corresponds to the JSON schema field "observations".
 	Observations []StateExplainEntry `json:"observations"`
 
@@ -7840,11 +7851,17 @@ type StateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// HookEvent corresponds to the JSON schema field "hook_event".
+	HookEvent *string `json:"hook_event,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
 	// PermissionMode corresponds to the JSON schema field "permission_mode".
 	PermissionMode *string `json:"permission_mode,omitempty,omitzero"`
+
+	// Prompt corresponds to the JSON schema field "prompt".
+	Prompt *string `json:"prompt,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`

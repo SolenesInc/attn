@@ -15,18 +15,18 @@ func TestSeedNudges_DeliverThroughTheAgentMessageDoorbell(t *testing.T) {
 	fixture.d.ptyBackend = &fakeSpawnBackend{onInput: func(_ string, data []byte) {
 		writes <- string(data)
 	}}
-	previousWindow := agentMessageTakenWindow
-	agentMessageTakenWindow = 0
-	t.Cleanup(func() { agentMessageTakenWindow = previousWindow })
+	previousWindow := sessionInputTakenWindow
+	sessionInputTakenWindow = 0
+	t.Cleanup(func() { sessionInputTakenWindow = previousWindow })
 	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
 
 	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "look now", true)
 	for {
 		write := <-writes
-		if !strings.HasPrefix(write, bracketedPasteStart) {
+		if !strings.HasPrefix(write, sessionInputPasteStart) {
 			continue
 		}
-		prompt := strings.TrimSuffix(strings.TrimPrefix(write, bracketedPasteStart), bracketedPasteEnd)
+		prompt := strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd)
 		if !strings.Contains(prompt, fixture.leaf.ID+" moved: note") || strings.Contains(prompt, "look now") {
 			t.Fatalf("doorbell = %q", prompt)
 		}

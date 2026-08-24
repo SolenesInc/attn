@@ -30,8 +30,7 @@ func TestCancelCountdown_StopsBothCountdownsOnOneSession(t *testing.T) {
 	if !d.store.OpenTurnIfClosed(agentID, time.Now()) {
 		t.Fatal("OpenTurnIfClosed() = false; the fixture owes no turn")
 	}
-	// Working is what sustains an auto-settle, and it keeps the nudge armed too
-	// (only a pending approval blocks a doorbell), so both run at once.
+	creditUserInputForNextWorking(t, d, agentID)
 	if !d.applyState(sessionStateChange{sessionID: agentID, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}

@@ -145,10 +145,14 @@ one; in particular, looking at an agent is not acting on it. `turn_owed` is deri
 at broadcast from the persisted `turn_opened_at`/`turn_settled_at` stamps and is
 never stored. The predicates live in `internal/attention`.
 
-**Auto-settle** closes a turn the user already dealt with by steering the agent
-back to work: the session holds `working` through an invisible arm delay, then a
-visible countdown, then the turn settles. It applies only to sessions the queue
-includes — the exclusions below are also the exclusions here.
+**Auto-settle** closes a turn the user already dealt with by sending conversation
+input that the agent positively took. The session then holds `working` through an
+invisible arm delay, a visible countdown, and the settle. A heartbeat, ticket
+nudge, peer message, generic `working` observation, or unclassified input never
+grants that credit. Several inputs may join one uninterrupted working stretch;
+user credit joins the facts already present rather than replacing them. Auto-settle
+applies only to sessions the queue includes — the exclusions below are also the
+exclusions here.
 
 A **standing dismissal** is the user answering that settle, whether the countdown
 is on screen or has not started yet: the session's next auto-settle does not run.
@@ -174,6 +178,31 @@ Attachment is judged at read — the parent must still exist and still be in the
 workspace — so a satellite whose agent closed, or whose pane moved, gets its own
 row back with no cascade. A satellite with no live parent is an **orphan**, and
 orphans keep their rows.
+
+## Session input
+
+**Session input** is the daemon boundary every live-session mutation crosses:
+real user PTY bytes, replay and automation bytes, PTY paste plus Enter, a
+conversation-host message, or a plugin driver's structured message. Product
+domains decide what to say, when it is obsolete, and when to retry. Session input
+owns the per-session order, current route, safe-surface check, same-attempt
+mechanics, and correlation between the submitted input and the agent taking it.
+
+An input attempt has one of four evidence stages:
+
+- **deferred** proves the target was not mutated;
+- **placed** proves a complete input is owned by its adapter, not that the model
+  read it;
+- **taken** is a positive observation that the agent started reading that exact
+  input;
+- **indeterminate** means the target may have changed but the result cannot be
+  attributed safely.
+
+Origin belongs to each taken input, not to a whole working run: user
+conversation, user control, attn maintenance, peer agent, or unknown. Only user
+conversation can grant auto-settle credit, and unknown fails safe. The durable
+`last_model_request_at` clock advances monotonically from positive request-start
+observations; state and classifier timestamps do not move it.
 
 ## Agent conversation
 
@@ -691,9 +720,11 @@ Cache pressure gates everything, which is what keeps the subsystem silent: a
 member whose cache is fresh is left alone whoever is around. Once it is close,
 who is here decides — the user present means a **heartbeat**, a nudge that reads
 the day's context so its lifetime starts over; the user gone means the member is
-asked to close its day. Wakes attn starts on its own are bounded per member by
-the **wake limit**, so an unattended night has a ceiling and every refusal names
-it.
+asked to close its day. A heartbeat may reach an `idle` or `waiting_input` member
+only after session input proves the current route or composer is safe. It is
+charged as successful only when taken, and its maintenance-only run never settles
+the open turn. Wakes attn starts on its own are bounded per member by the **wake
+limit**, so an unattended night has a ceiling and every refusal names it.
 
 Tending is not a crew privilege: workers and errand sessions tend seeds too,
 under any free-string name. Where a tender's name happens to match a registered

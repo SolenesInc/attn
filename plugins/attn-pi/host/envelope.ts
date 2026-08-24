@@ -15,6 +15,7 @@ export const SEMANTIC_KINDS = [
   "session_ready",
   "run_started",
   "run_settled",
+  "input_taken",
   "tool_started",
   "tool_finished",
   "model_changed",
@@ -138,6 +139,10 @@ export interface RunStartedBody extends DeclarationBody {}
 export interface RunSettledBody extends DeclarationBody {
   /** pi's last-run error text, when the run ended badly. Never keyed on. */
   error?: string;
+}
+
+export interface InputTakenBody {
+  input_id: string;
 }
 
 export interface MessageStartBody {
@@ -596,6 +601,7 @@ export class PiEventMapper {
   /** The role of the message pi currently has open, for the id it will mint. */
   private currentRole = "assistant";
   private noticeCounter = 0;
+  private pendingInputs: Array<{ inputID: string; text: string }> = [];
   /**
    * The open notice per concern, by the id it was minted with.
    *
@@ -780,6 +786,8 @@ export class PiEventMapper {
       }
 
       case "message_start": {
+        const role = messageRole(event.message);
+        if (role === "user") this.takeInput(messageText(event.message));
         // Nothing is emitted here. pi opens a message before anyone knows
         // whether it will have anything to say: an assistant turn that only
         // calls tools ends with empty text, and its tool RESULT arrives as a
@@ -792,7 +800,7 @@ export class PiEventMapper {
         // end.
         this.deltas.flush();
         this.currentMessageID = null;
-        this.currentRole = messageRole(event.message);
+        this.currentRole = role;
         return;
       }
 
@@ -838,6 +846,23 @@ export class PiEventMapper {
           this.onUnknown(event.type);
         }
     }
+  }
+
+  /** Registers daemon-owned identity before the host gives text to pi. */
+  expectInput(inputID: string, text: string): void {
+    if (inputID.trim() === "") return;
+    this.pendingInputs.push({ inputID, text });
+  }
+
+  forgetInput(inputID: string): void {
+    this.pendingInputs = this.pendingInputs.filter((candidate) => candidate.inputID !== inputID);
+  }
+
+  private takeInput(text: string): void {
+    const index = this.pendingInputs.findIndex((candidate) => candidate.text === text);
+    if (index < 0) return;
+    const [candidate] = this.pendingInputs.splice(index, 1);
+    this.stream.emit("input_taken", { input_id: candidate.inputID } satisfies InputTakenBody);
   }
 
   /**
@@ -1634,7 +1659,7 @@ export function launchPromptIsUndelivered(
  *                `model_changed` envelope, which the daemon also reads so a
  *                later revive does not put the conversation back on the old one.
  */
-export type HostVerbWithText = { verb: "prompt" | "steer" | "follow_up"; text: string };
+export type HostVerbWithText = { verb: "prompt" | "steer" | "follow_up"; text: string; inputID?: string };
 export type HostVerb =
   | HostVerbWithText
   | { verb: "shutdown" }
@@ -1655,7 +1680,15 @@ export function parseVerb(line: string): HostVerb {
   if (typeof verb === "string" && TEXT_VERBS.has(verb)) {
     const text = (value as { text?: unknown }).text;
     if (typeof text !== "string" || text.trim() === "") throw new Error(`${verb} verb needs non-empty text`);
-    return { verb: verb as HostVerbWithText["verb"], text };
+    const inputID = (value as { input_id?: unknown }).input_id;
+    if (inputID !== undefined && (typeof inputID !== "string" || inputID.trim() === "")) {
+      throw new Error(`${verb} verb has an invalid input_id`);
+    }
+    return {
+      verb: verb as HostVerbWithText["verb"],
+      text,
+      ...(typeof inputID === "string" ? { inputID: inputID.trim() } : {}),
+    };
   }
   if (verb === "shutdown") return { verb: "shutdown" };
   if (verb === "clear_queue") return { verb: "clear_queue" };

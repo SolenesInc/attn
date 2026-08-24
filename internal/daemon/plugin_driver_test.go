@@ -403,7 +403,7 @@ func TestHandlePTYExit_PluginDriverIgnoresSupersededExitAfterRelaunch(t *testing
 	if session := d.store.Get("snipe-delayed-exit"); session == nil || session.State != protocol.SessionStateWorking {
 		t.Fatalf("stored session=%+v, want replacement session still working", session)
 	}
-	if !d.store.ApplyAgentDriverState("snipe-delayed-exit", "run-new", 1, protocol.StatePendingApproval) {
+	if !d.store.ApplyAgentDriverState("snipe-delayed-exit", "run-new", 1, protocol.StatePendingApproval, time.Time{}) {
 		t.Fatal("replacement run rejected report after stale exit")
 	}
 }
@@ -496,6 +496,9 @@ func TestPluginDriverReports_StateStopAndMetadataAreOwnedByRegisteredAgent(t *te
 	})
 	if got := d.store.Get("snipe-report").State; got != protocol.SessionStateWorking {
 		t.Fatalf("state=%q, want working", got)
+	}
+	if got := protocol.Deref(d.store.Get("snipe-report").LastModelRequestAt); got == "" || got == now {
+		t.Fatalf("working request declaration left last_model_request_at=%q (launch stamp %q)", got, now)
 	}
 
 	sendPluginMethod(t, client, 5, "session.report_stop", pluginReportStopParams{
@@ -849,7 +852,7 @@ func TestPluginDriverSessionClosed_KillNotifiesOwnerAfterExit(t *testing.T) {
 	ws := &wsClient{send: make(chan outboundMessage, 1), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleKillSession(ws, &protocol.KillSessionMessage{ID: "session-close"})
 	<-requestDone
-	if d.store.ApplyAgentDriverState("session-close", "run-close", 1, protocol.StateIdle) {
+	if d.store.ApplyAgentDriverState("session-close", "run-close", 1, protocol.StateIdle, time.Time{}) {
 		t.Fatal("report from closed run was accepted")
 	}
 }

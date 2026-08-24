@@ -37,6 +37,46 @@ func TestStore_AddAndGet(t *testing.T) {
 	}
 }
 
+func TestStore_MarkModelRequestStartedIsMonotonicAndIndependentOfState(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		open func(*testing.T) *Store
+	}{
+		{name: "memory", open: func(t *testing.T) *Store { return New() }},
+		{name: "sqlite", open: func(t *testing.T) *Store {
+			s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+			if err != nil {
+				t.Fatalf("NewWithDB: %v", err)
+			}
+			return s
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := tc.open(t)
+			defer s.Close()
+			observedAt := time.Date(2026, 8, 23, 9, 0, 0, 0, time.UTC)
+			s.Add(&protocol.Session{
+				ID: "session", State: protocol.SessionStateWaitingInput,
+				StateSince: string(protocol.NewTimestamp(observedAt)), StateUpdatedAt: string(protocol.NewTimestamp(observedAt)),
+			})
+			requestAt := observedAt.Add(40 * time.Minute)
+			if !s.MarkModelRequestStarted("session", requestAt) {
+				t.Fatal("newer request receipt was refused")
+			}
+			if s.MarkModelRequestStarted("session", observedAt.Add(20*time.Minute)) {
+				t.Fatal("older request receipt moved the clock backwards")
+			}
+			got := s.Get("session")
+			if got == nil || !protocol.Timestamp(protocol.Deref(got.LastModelRequestAt)).Time().Equal(requestAt) {
+				t.Fatalf("last_model_request_at = %v, want %s", got, requestAt)
+			}
+			if !protocol.Timestamp(got.StateUpdatedAt).Time().Equal(observedAt) {
+				t.Fatalf("state_updated_at = %s, want unchanged %s", got.StateUpdatedAt, observedAt)
+			}
+		})
+	}
+}
+
 func TestStore_AddAndGet_PreservesAgent(t *testing.T) {
 	s := New()
 
@@ -154,13 +194,13 @@ func TestStore_AgentDriverRunRejectsWrongRunAndStaleSequence(t *testing.T) {
 	if cursor := s.GetAgentDriverRun("plugin-run"); cursor.PluginName != "snipe-plugin" || cursor.RunID != "run-a" {
 		t.Fatalf("GetAgentDriverRun()=%+v, want snipe-plugin/run-a", cursor)
 	}
-	if !s.ApplyAgentDriverState("plugin-run", "run-a", 2, protocol.StateWorking) {
+	if !s.ApplyAgentDriverState("plugin-run", "run-a", 2, protocol.StateWorking, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState() rejected current run sequence")
 	}
-	if s.ApplyAgentDriverState("plugin-run", "run-a", 1, protocol.StateIdle) {
+	if s.ApplyAgentDriverState("plugin-run", "run-a", 1, protocol.StateIdle, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState() accepted stale sequence")
 	}
-	if s.ApplyAgentDriverState("plugin-run", "run-b", 3, protocol.StateIdle) {
+	if s.ApplyAgentDriverState("plugin-run", "run-b", 3, protocol.StateIdle, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState() accepted wrong run")
 	}
 	if got := s.Get("plugin-run").State; got != protocol.SessionStateWorking {
@@ -170,7 +210,7 @@ func TestStore_AgentDriverRunRejectsWrongRunAndStaleSequence(t *testing.T) {
 	if ended := s.EndAgentDriverRun("plugin-run"); ended.PluginName != "snipe-plugin" || ended.RunID != "run-a" {
 		t.Fatalf("EndAgentDriverRun()=%+v, want snipe-plugin/run-a", ended)
 	}
-	if s.ApplyAgentDriverState("plugin-run", "run-a", 3, protocol.StateIdle) {
+	if s.ApplyAgentDriverState("plugin-run", "run-a", 3, protocol.StateIdle, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState() accepted report after run ended")
 	}
 }
@@ -188,7 +228,7 @@ func TestStore_ListAgentDriverRunsFiltersByOwnerAndIncludesMetadata(t *testing.T
 	if !s.ApplyAgentDriverMetadata("session-a", "run-a", 1, `{"native":"one"}`) {
 		t.Fatal("ApplyAgentDriverMetadata failed")
 	}
-	if !s.ApplyAgentDriverState("session-a", "run-a", 4, protocol.StateWorking) {
+	if !s.ApplyAgentDriverState("session-a", "run-a", 4, protocol.StateWorking, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState failed")
 	}
 
@@ -242,7 +282,7 @@ func TestStore_ListAgentDriverRunsCarriesThePersistedReportCursor(t *testing.T) 
 	if !s.BeginAgentDriverRun("session-a", "attn-example", "run-a") {
 		t.Fatal("BeginAgentDriverRun failed")
 	}
-	if !s.ApplyAgentDriverState("session-a", "run-a", 7, protocol.StateWorking) {
+	if !s.ApplyAgentDriverState("session-a", "run-a", 7, protocol.StateWorking, time.Time{}) {
 		t.Fatal("ApplyAgentDriverState failed")
 	}
 

@@ -33,6 +33,7 @@ export interface Session {
     readonly id: string;
     readonly is_worktree?: boolean;
     readonly label: string;
+    readonly last_model_request_at?: string;
     readonly last_seen: string;
     readonly main_repo?: string;
     readonly nudge_fires_at?: string;

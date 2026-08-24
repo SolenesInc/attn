@@ -338,6 +338,7 @@ func TestSnoozeCancelsAPendingAutoSettle(t *testing.T) {
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
 
 	moveTo(d, "s1", protocol.StateWaitingInput)
+	creditUserInputForNextWorking(t, d, "s1")
 	moveTo(d, "s1", protocol.StateWorking)
 
 	d.autoSettleMu.Lock()

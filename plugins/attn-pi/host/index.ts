@@ -373,11 +373,12 @@ async function main(): Promise<void> {
   let running = false;
   let shuttingDown = false;
 
-  const runPrompt = async (text: string) => {
+  const runPrompt = async (text: string, inputID?: string) => {
     running = true;
     try {
       await session.prompt(text);
     } catch (error) {
+      if (inputID) mapper.forgetInput(inputID);
       // A prompt can fail before pi opens a run at all — an unauthenticated
       // provider is the common one — in which case no agent_start and no
       // agent_settled ever arrive and the app would sit on a closed composer
@@ -408,24 +409,27 @@ async function main(): Promise<void> {
    * when the whole run would otherwise settle.
    */
   const deliver = async (verb: HostVerbWithText) => {
+    if (verb.inputID) mapper.expectInput(verb.inputID, verb.text);
     if (!running) {
-      if (verb.verb === "prompt") return runPrompt(verb.text);
+      if (verb.verb === "prompt") return runPrompt(verb.text, verb.inputID);
       // Not a violation and not a queue: the message opens the run it would
       // have interrupted.
       console.error(`[nisse] ${verb.verb} on an idle session: starting a run`);
-      return runPrompt(verb.text);
+      return runPrompt(verb.text, verb.inputID);
     }
     if (verb.verb === "prompt") {
       // The app's composer sends steer while a run is open, so a plain prompt
       // arriving mid-run is a contract violation worth naming rather than a
       // case to guess an intent for.
       console.error("[nisse] refused prompt: a run is already open");
+      if (verb.inputID) mapper.forgetInput(verb.inputID);
       return;
     }
     try {
       if (verb.verb === "steer") await session.steer(verb.text);
       else await session.followUp(verb.text);
     } catch (error) {
+      if (verb.inputID) mapper.forgetInput(verb.inputID);
       // Queueing can refuse the text outright (pi rejects extension commands
       // here). Say so in the log; the run itself is unharmed and the queue the
       // app is drawing simply never gained an entry.

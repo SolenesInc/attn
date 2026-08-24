@@ -247,22 +247,14 @@ type Daemon struct {
 	// place a real doorbell happens, and only if no genuine user keystroke landed in
 	// the guard window (the anti-splice guarantee). All maps lazy-init so a
 	// directly-constructed test daemon is nil-safe.
-	// doorbellMu serializes authoritative session-state commits with a complete
-	// doorbell write. This keeps a pending_approval report from interleaving
-	// between the prompt and its trailing Enter.
-	doorbellMu sync.Mutex
-	// ptyWriteFences serializes writes into each session's PTY so nothing can
-	// land inside a multi-write delivery — see pty_write_fence.go.
-	ptyWriteFencesMu sync.Mutex
-	ptyWriteFences   map[string]*sync.Mutex
-	// Which sessions owe an agent-message delivery, and which are draining one
-	// right now. The first keeps the state-report path off the database when
-	// nothing is queued, which is nearly always — see agent_msg.go.
-	agentMessageMu              sync.Mutex
-	queuedAgentMessages         map[string]bool
-	drainingAgentMessages       map[string]bool
-	agentMessageTaken           map[string][]chan struct{}
-	agentMessagesAwaitingSubmit map[string]bool
+	sessionInputOnce  sync.Once
+	sessionInputState *sessionInputModule
+	// Sessions with queued messages, active drains, and same-message calls
+	// coalesced while a receipt is pending. See agent_msg.go.
+	agentMessageMu         sync.Mutex
+	queuedAgentMessages    map[string]bool
+	drainingAgentMessages  map[string]bool
+	agentMessageDeliveries map[string]*agentMessageDeliveryFlight
 	// Every crew wake gates doorbells until the new day has submitted its first
 	// prompt. The optional callback carries ticket work that starts at that seam.
 	postInitialPrompt map[string]func()
@@ -2044,6 +2036,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	d.sessionInputs().forgetSession(info.ID)
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
 
@@ -2253,7 +2246,7 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.forgetPostInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
 	d.clearSnoozeState(sessionID)
-	d.clearPTYWriteFence(sessionID)
+	d.sessionInputs().forgetSession(sessionID)
 	d.forgetPluginDriverSilenceWatch(sessionID)
 	d.store.Remove(sessionID)
 	// After the row is gone, not before: recordStateObservation gates on the row,
@@ -3172,6 +3165,10 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 // refreshing — was reachable only by a source that did not write state itself.
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.logf("hook evidence: id=%s state=%s", msg.ID, msg.State)
+	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
+		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
+		d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
+	}
 	d.noteInitialAgentMessageSubmitted(msg.ID, msg.State)
 	d.runPostInitialPrompt(msg.ID, msg.State)
 	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))

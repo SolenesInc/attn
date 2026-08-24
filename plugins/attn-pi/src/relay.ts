@@ -28,6 +28,7 @@ export type RelayDelegate = {
   suiteReportState(params: unknown): Promise<void>;
   suiteReportStop(params: unknown): Promise<void>;
   suiteReportDenial(params: unknown): Promise<void>;
+  suiteReportInputTaken(params: unknown): Promise<void>;
 };
 
 // One RelayConnection per suite that dials in. Mirrors attn-rpc.ts's
@@ -145,6 +146,11 @@ export class RelayConnection {
       case relayMethods.reportDenial:
         return async (params) => {
           await this.delegate.suiteReportDenial(params);
+          return { ok: true };
+        };
+      case relayMethods.reportInputTaken:
+        return async (params) => {
+          await this.delegate.suiteReportInputTaken(params);
           return { ok: true };
         };
       default:

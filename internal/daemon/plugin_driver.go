@@ -117,11 +117,19 @@ type pluginDriverSessionClosedResult struct {
 type pluginDeliverMessageParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
+	InputID   string `json:"input_id"`
 	Text      string `json:"text"`
 }
 
 type pluginDeliverMessageResult struct {
 	OK bool `json:"ok"`
+}
+
+type pluginReportInputTakenParams struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	Seq       uint64 `json:"seq"`
+	InputID   string `json:"input_id"`
 }
 
 // One call a driver's agent refused under auto mode. No seq: a denial is an
@@ -316,6 +324,23 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			d.applyPluginReportedMetadata(params)
 		}
 		return struct{}{}, true, nil
+	case "session.report_input_taken":
+		var params pluginReportInputTakenParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_input_taken params: %w", err)
+		}
+		if strings.TrimSpace(params.InputID) == "" {
+			return nil, true, errors.New("session.report_input_taken input_id is required")
+		}
+		if err := validatePluginReportCursor(params.RunID, params.Seq); err != nil {
+			return nil, true, err
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		d.observeStructuredInputTaken(params.SessionID, strings.TrimSpace(params.InputID), time.Now())
+		return struct{}{}, true, nil
 	case "session.report_automode_denial":
 		var params pluginReportAutoModeDenialParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -415,9 +440,14 @@ func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) bool {
 		}
 		d.logf("plugin driver restates session=%s run=%s as %s after unknown", params.SessionID, params.RunID, state)
 	}
+	var requestStartedAt time.Time
+	if state == protocol.StateWorking {
+		requestStartedAt = time.Now()
+	}
 	if !d.applyState(sessionStateChange{
-		sessionID: params.SessionID,
-		state:     state,
+		sessionID:        params.SessionID,
+		state:            state,
+		requestStartedAt: requestStartedAt,
 		cause: pluginReport{
 			runID: params.RunID,
 			seq:   params.Seq,
@@ -655,25 +685,15 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 	return result, nil
 }
 
-// deliverDoorbellViaPluginDriver delivers prompt in-band through session's
-// active plugin driver run when that run's registered driver declares
-// message_delivery, reporting delivered=true so typeDoorbell never falls back
-// to PTY typing for it (a typed fallback would reintroduce the splice risk
-// in-band delivery removes). delivered=false means the caller should use the
-// PTY paste path instead.
-func (d *Daemon) deliverDoorbellViaPluginDriver(session *protocol.Session, prompt string) (bool, error) {
+func (d *Daemon) deliverSessionInputViaPluginDriver(session *protocol.Session, inputID, prompt string) (bool, error) {
+	if !d.sessionUsesPluginMessageDelivery(session) {
+		return false, nil
+	}
 	cursor := d.store.GetAgentDriverRun(session.ID)
-	if cursor.PluginName == "" {
-		return false, nil
-	}
-	driver, ok := d.ensurePluginRegistry().driver(string(session.Agent))
-	if !ok || driver.PluginName != cursor.PluginName || !driver.Capabilities["message_delivery"] {
-		return false, nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), pluginDeliverMessageTimeout)
 	defer cancel()
 	var result pluginDeliverMessageResult
-	params := pluginDeliverMessageParams{SessionID: session.ID, RunID: cursor.RunID, Text: prompt}
+	params := pluginDeliverMessageParams{SessionID: session.ID, RunID: cursor.RunID, InputID: inputID, Text: prompt}
 	if err := d.callPlugin(ctx, cursor.PluginName, "driver.deliver_message", params, &result); err != nil {
 		return true, fmt.Errorf("deliver message via plugin %q: %w", cursor.PluginName, err)
 	}
@@ -681,6 +701,18 @@ func (d *Daemon) deliverDoorbellViaPluginDriver(session *protocol.Session, promp
 		return true, fmt.Errorf("plugin %q declined message delivery for session %s", cursor.PluginName, session.ID)
 	}
 	return true, nil
+}
+
+func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) bool {
+	if session == nil {
+		return false
+	}
+	cursor := d.store.GetAgentDriverRun(session.ID)
+	if cursor.PluginName == "" {
+		return false
+	}
+	driver, ok := d.ensurePluginRegistry().driver(string(session.Agent))
+	return ok && driver.PluginName == cursor.PluginName && driver.Capabilities["message_delivery"]
 }
 
 func pluginCommandEnv(values map[string]string) ([]string, error) {

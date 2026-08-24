@@ -43,6 +43,9 @@ func TestAgentMessagesQueueUntilDeliveryIsStamped(t *testing.T) {
 	if len(queued) != 2 || queued[0].ID != "first" || queued[1].ID != "second" {
 		t.Fatalf("queue is not oldest-first: %+v", queued)
 	}
+	if pending, err := s.AgentMessageQueued("first"); err != nil || !pending {
+		t.Fatalf("AgentMessageQueued(first) = %v, %v, want true, nil", pending, err)
+	}
 	if queued[0].Content != "earlier" || queued[0].SenderSessionID != "sender" {
 		t.Fatalf("row = %+v", queued[0])
 	}
@@ -64,6 +67,9 @@ func TestAgentMessagesQueueUntilDeliveryIsStamped(t *testing.T) {
 	}
 	if len(queued) != 1 || queued[0].ID != "second" {
 		t.Fatalf("after delivery, queue = %+v", queued)
+	}
+	if pending, err := s.AgentMessageQueued("first"); err != nil || pending {
+		t.Fatalf("AgentMessageQueued(first) = %v, %v, want false, nil", pending, err)
 	}
 }
 

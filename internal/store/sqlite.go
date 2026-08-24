@@ -1250,6 +1250,11 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			PRIMARY KEY(watcher_session_id, seed_id)
 		);
 	`},
+	{121, "record the last observed model request per session", `
+		ALTER TABLE sessions ADD COLUMN last_model_request_at TEXT;
+		UPDATE sessions SET last_model_request_at = state_updated_at
+			WHERE last_model_request_at IS NULL OR last_model_request_at = '';
+	`},
 }
 
 // migration99SQL is everything migration 99 does after its guarded ALTER.
@@ -1664,6 +1669,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 121 {
+			if err := applyMigration121(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 114 {
 			if err := applyMigration114(tx); err != nil {
 				tx.Rollback()
@@ -1691,6 +1701,21 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	}
 
 	return nil
+}
+
+func applyMigration121(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "last_model_request_at")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN last_model_request_at TEXT"); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`UPDATE sessions SET last_model_request_at = state_updated_at
+		WHERE last_model_request_at IS NULL OR last_model_request_at = ''`)
+	return err
 }
 
 // applyMigration107 records the newest ticket event covered by a delivery. Old

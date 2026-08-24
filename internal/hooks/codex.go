@@ -38,7 +38,7 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	}
 
 	sessionStart := command("_hook-session-start")
-	userPromptSubmit := command("_hook-state", "working")
+	userPromptSubmit := command("_hook-state", "working", "user_prompt_submit")
 	permissionRequest := command("_hook-state", "pending_approval")
 	preToolUse := command("_hook-state", "working")
 	// Sets "working" like the other state hooks, and records markdown the tool

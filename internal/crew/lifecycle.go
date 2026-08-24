@@ -79,12 +79,6 @@ type Signals struct {
 	// spent inside the turn, and a turn that ends past the harness's own
 	// threshold ends after the compaction it was meant to prevent.
 	MidTurn bool
-	// Settled is whether the session owes nobody an answer. A session holding a
-	// question for the user is reachable but not settled, and the two halves
-	// want opposite things from it: a heartbeat delivered there answers the
-	// member's own question with filler and buries it, while the handoff ask is
-	// precisely the answer an absence has for an open question.
-	Settled bool
 	// Context is how full the member's context is against its budget. Read
 	// independently of everything above: a full context is a full context whether
 	// the user is here, the cache is fresh, or the member is mid-thought.
@@ -172,7 +166,7 @@ func Decide(s Signals) Action {
 		}
 		return ActionSleep
 	}
-	if !s.HeartbeatEnabled || !s.Settled {
+	if !s.HeartbeatEnabled {
 		return ActionNone
 	}
 	return ActionHeartbeat

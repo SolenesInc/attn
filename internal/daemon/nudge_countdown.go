@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -311,14 +313,14 @@ func (d *Daemon) deliverNudgeOrReArm(sessionID string) {
 // session, still unread, and past the splice guard — a recent keystroke re-arms
 // rather than drops.
 func (d *Daemon) runNudgeDelivery(sessionID string) string {
-	if d.ptyBackend == nil || d.store == nil {
+	if d.store == nil {
 		return "noop"
 	}
 	if d.initialPromptPending(sessionID) {
 		return "priming"
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || !isNudgeDeliveryAllowed(string(session.State)) {
+	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 		return "blocked"
 	}
 	if d.currentlySelectedSession() == sessionID {
@@ -347,17 +349,28 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 		d.nudgeMu.Unlock()
 		return "rearm"
 	}
-	if err := d.typeDoorbell(sessionID, ticketNudgePrompt); err != nil {
-		d.logf("nudge countdown doorbell %s: %v", sessionID, err)
-		return "doorbell-error"
-	}
 	deliveredThroughSeq, err := d.newestUnreadTicketSeq(sessionID)
 	if err != nil {
 		d.logf("nudge delivered-through scan %s: %v", sessionID, err)
+		return "error"
+	}
+	delivery := maintenanceSessionInput(
+		"ticket-nudge",
+		fmt.Sprintf("%s/%d", sessionID, deliveredThroughSeq),
+		sessionID,
+		ticketNudgePrompt,
+		sessionInputAtTurnBoundary,
+	)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		d.logf("nudge countdown input %s: %v", sessionID, attempt.err)
+		return "doorbell-error"
 	}
 	if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
 		d.logf("nudge attention update %s: %v", sessionID, err)
+		return "error"
 	}
+	d.sessionInputs().release(sessionID, delivery.id)
 	return "doorbell"
 }
 
@@ -366,7 +379,7 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 func (d *Daemon) updateNudgeSelection(oldID, newID string) {
 	resumeOld := false
 	if oldID != "" && oldID != newID && d.store != nil {
-		if s := d.store.Get(oldID); s != nil && isNudgeDeliveryAllowed(string(s.State)) {
+		if s := d.store.Get(oldID); s != nil && sessionInputPhaseAllows(sessionInputAtTurnBoundary, s.State) {
 			resumeOld = true
 		}
 	}
@@ -403,13 +416,6 @@ func (d *Daemon) refreshTicketUnread(sessionID string) {
 	d.markTicketUnread(sessionID, unread > 0)
 }
 
-// isNudgeDeliveryAllowed is the sole session-state gate for every doorbell:
-// pending approval is the only unsafe target, because a trailing Enter could
-// answer it.
-func isNudgeDeliveryAllowed(state string) bool {
-	return state != protocol.StatePendingApproval
-}
-
 // handleTriggerNudge is the user clicking the indicator: deliver now, exempt from
 // the keystroke guard, respecting only unread.
 func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
@@ -421,11 +427,11 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 		return
 	}
 	d.cancelNudgeCountdown(sessionID, "user triggered")
-	if d.ptyBackend == nil || d.store == nil {
+	if d.store == nil {
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || !isNudgeDeliveryAllowed(string(session.State)) {
+	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 		return
 	}
 	d.deliveryMu.Lock()
@@ -436,16 +442,26 @@ func (d *Daemon) handleTriggerNudge(msg *protocol.TriggerNudgeMessage) {
 		d.markTicketUnread(sessionID, false)
 		return
 	}
-	if err := d.typeDoorbell(sessionID, ticketNudgePrompt); err != nil {
-		d.logf("trigger_nudge doorbell %s: %v", sessionID, err)
+	deliveredThroughSeq, scanErr := d.newestUnreadTicketSeq(sessionID)
+	if scanErr != nil {
+		d.logf("trigger_nudge delivered-through scan %s: %v", sessionID, scanErr)
+		d.broadcastSessionStateChanged(sessionID)
+		return
+	}
+	delivery := maintenanceSessionInput(
+		"ticket-nudge",
+		fmt.Sprintf("%s/%d", sessionID, deliveredThroughSeq),
+		sessionID,
+		ticketNudgePrompt,
+		sessionInputAtTurnBoundary,
+	)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		d.logf("trigger_nudge input %s: %v", sessionID, attempt.err)
+	} else if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
+		d.logf("trigger_nudge attention update %s: %v", sessionID, err)
 	} else {
-		deliveredThroughSeq, scanErr := d.newestUnreadTicketSeq(sessionID)
-		if scanErr != nil {
-			d.logf("trigger_nudge delivered-through scan %s: %v", sessionID, scanErr)
-		}
-		if err := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sessionID), time.Now(), deliveredThroughSeq); err != nil {
-			d.logf("trigger_nudge attention update %s: %v", sessionID, err)
-		}
+		d.sessionInputs().release(sessionID, delivery.id)
 	}
 	d.broadcastSessionStateChanged(sessionID)
 }

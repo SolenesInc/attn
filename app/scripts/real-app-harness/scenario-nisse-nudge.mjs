@@ -5,7 +5,7 @@
  * through.
  *
  * A `nisse` session has no PTY, so every way attn interrupts an agent —
- * the composer's Steer button, a ticket doorbell, a Present notice — becomes a
+ * the composer's Steer button, a ticket nudge, a Present notice — becomes a
  * verb down the host's own pipe. This scenario proves the two that matter, in
  * the packaged app, against a real agent:
  *
@@ -14,14 +14,14 @@
  *      queue strip (sent, not yet read), then leaves it as the user message it
  *      delivered appears in the transcript, then the reply answers it,
  *   2. the same verb sent to an idle session starts a run instead of
- *      disappearing — which is what makes a doorbell safe to ring at any time.
+ *      disappearing — which is what makes an in-band nudge safe at any time.
  *
  * Alongside both, the session's own state is asserted from the daemon: working
  * while a run is open, idle when it settles, and a turn owed to the user at the
  * end, exactly like a PTY agent that stopped.
  *
  * The idle nudge is sent as a raw `agent_prompt` with `mode: steer` because
- * that is precisely what the daemon's doorbell does — the composer never sends
+ * that is precisely what the daemon's session-input route does — the composer never sends
  * steer while idle, so driving the UI could not reach this path.
  *
  * Prereqs: a non-production profile install with the attn-pi plugin installed
@@ -264,9 +264,13 @@ async function main() {
     });
 
     await runner.step('nudge_on_idle_starts_a_run', async () => {
-      // Exactly what typeDoorbell sends: the steer verb at a session with no
-      // run open. The host resolves it into a fresh run rather than dropping it.
-      observer.send({ cmd: 'agent_prompt', id: sessionId, text: IDLE_NUDGE_TEXT, mode: 'steer' });
+      observer.send({
+        cmd: 'agent_prompt',
+        id: sessionId,
+        input_id: `nisse-nudge:${runner.runId}`,
+        text: IDLE_NUDGE_TEXT,
+        mode: 'steer',
+      });
       const session = await observer.waitFor(
         () => {
           const current = observer.getSession(sessionId);

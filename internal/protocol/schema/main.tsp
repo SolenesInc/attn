@@ -153,6 +153,7 @@ model Session {
   state: SessionState;
   state_since: string;          // ISO timestamp, always set
   state_updated_at: string;     // ISO timestamp, always set
+  last_model_request_at?: string; // ISO timestamp of the newest positively observed model request. Unlike state_updated_at, evidence refreshes and classifications never move it.
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
   chief_of_staff?: boolean;     // True when this session holds the profile-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
@@ -674,6 +675,13 @@ model StateMessage {
   // and Shift+Tab changes it mid-session. Absent from agents that do not
   // report it.
   permission_mode?: string;
+  // The harness event that produced this state observation. UserPromptSubmit is
+  // a request-start receipt; a generic working hook is not.
+  hook_event?: string;
+  // The exact prompt accepted by UserPromptSubmit when the harness provides it.
+  // The daemon correlates it against registered session inputs before assigning
+  // origin. It is never parsed for product meaning.
+  prompt?: string;
 }
 
 // HookNotificationMessage carries Claude's `Notification` hook. The hook is
@@ -1939,6 +1947,7 @@ model TerminalPointerActivityMessage {
 model AgentPromptMessage {
   cmd: "agent_prompt";
   id: string;
+  input_id: string;
   text: string;
   mode?: string;
 }
@@ -5622,6 +5631,7 @@ model StateExplainResult {
   agent: string;
   state: string;
   state_since?: string;
+  last_model_request_at?: string;
   observations: StateExplainEntry[];
   // capacity is the ring size, so a full ring can be reported as truncated
   // rather than read as the whole history.

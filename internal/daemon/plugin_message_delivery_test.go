@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -19,7 +20,7 @@ func TestValidatePluginDriverCapabilities_AcceptsMessageDelivery(t *testing.T) {
 	}
 }
 
-func TestTypeDoorbell_DeliversViaPluginWhenDriverSupportsMessageDelivery(t *testing.T) {
+func TestSessionInput_DeliversViaPluginAndWaitsForTakenReceipt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	var inputRecorded bool
@@ -61,23 +62,53 @@ func TestTypeDoorbell_DeliversViaPluginWhenDriverSupportsMessageDelivery(t *test
 			t.Errorf("decode deliver_message params: %v", err)
 			return
 		}
-		if params.SessionID != "pi-doorbell" || params.RunID != "run-doorbell" || params.Text != "ping from the chief" {
-			t.Errorf("deliver_message params=%+v, want session/run/text match", params)
+		if params.SessionID != "pi-doorbell" || params.RunID != "run-doorbell" ||
+			params.InputID != "plugin-test/delivered" || params.Text != "ping from the chief" {
+			t.Errorf("deliver_message params=%+v, want session/run/input/text match", params)
 		}
 		respondPluginRequest(t, client, request, pluginDeliverMessageResult{OK: true})
 	}()
 
-	if err := d.typeDoorbell("pi-doorbell", "ping from the chief"); err != nil {
-		t.Fatalf("typeDoorbell error=%v, want nil", err)
+	delivery := maintenanceSessionInput("plugin-test", "delivered", "pi-doorbell", "ping from the chief", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("session input error=%v, want nil", attempt.err)
 	}
 	<-requestDone
+	if got := d.sessionInputs().lookup(delivery.sessionID, delivery.id).stage; got != sessionInputPlaced {
+		t.Fatalf("plugin acceptance produced stage %v, want Placed until the agent takes it", got)
+	}
+	stale := sendPluginMethodResponse(t, client, 2, "session.report_input_taken", pluginReportInputTakenParams{
+		SessionID: "pi-doorbell", RunID: "run-stale", Seq: 1, InputID: delivery.id.String(),
+	})
+	if stale.Error == nil {
+		t.Fatal("input-taken report from a stale run was accepted")
+	}
+	if got := d.sessionInputs().lookup(delivery.sessionID, delivery.id).stage; got != sessionInputPlaced {
+		t.Fatalf("stale report produced stage %v, want Placed", got)
+	}
+	sendPluginMethod(t, client, 3, "session.report_state", pluginReportStateParams{
+		SessionID: "pi-doorbell", RunID: "run-doorbell", Seq: 2, State: protocol.StateWorking,
+	})
+	sendPluginMethod(t, client, 4, "session.report_input_taken", pluginReportInputTakenParams{
+		SessionID: "pi-doorbell", RunID: "run-doorbell", Seq: 1, InputID: delivery.id.String(),
+	})
+	if got := d.sessionInputs().lookup(delivery.sessionID, delivery.id).stage; got != sessionInputTaken {
+		t.Fatalf("input-taken report produced stage %v, want Taken", got)
+	}
+	requestAt := protocol.Deref(d.store.Get("pi-doorbell").LastModelRequestAt)
+	sendPluginMethod(t, client, 5, "session.report_input_taken", pluginReportInputTakenParams{
+		SessionID: "pi-doorbell", RunID: "run-doorbell", Seq: 1, InputID: delivery.id.String(),
+	})
+	if got := protocol.Deref(d.store.Get("pi-doorbell").LastModelRequestAt); got != requestAt {
+		t.Fatalf("duplicate report moved request clock from %s to %s", requestAt, got)
+	}
 
 	if inputRecorded {
-		t.Fatal("typeDoorbell wrote to the PTY for a message_delivery driver, want in-band delivery only")
+		t.Fatal("session input wrote to the PTY for a message_delivery driver, want in-band delivery only")
 	}
 }
 
-func TestTypeDoorbell_KeepsPTYPasteWithoutMessageDeliveryCapability(t *testing.T) {
+func TestSessionInput_KeepsPTYPasteWithoutMessageDeliveryCapability(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	var recordedInput []byte
@@ -106,18 +137,19 @@ func TestTypeDoorbell_KeepsPTYPasteWithoutMessageDeliveryCapability(t *testing.T
 		t.Fatal("failed to begin plugin run")
 	}
 
-	if err := d.typeDoorbell("pi-no-delivery", "ping from the chief"); err != nil {
-		t.Fatalf("typeDoorbell error=%v, want nil", err)
+	delivery := maintenanceSessionInput("plugin-test", "pty-fallback", "pi-no-delivery", "ping from the chief", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("session input error=%v, want nil", attempt.err)
 	}
 	if len(recordedInput) == 0 {
-		t.Fatal("typeDoorbell did not write to the PTY, want bracketed-paste fallback")
+		t.Fatal("session input did not write to the PTY, want bracketed-paste fallback")
 	}
-	if got := string(recordedInput); len(got) < len(bracketedPasteStart) || got[:len(bracketedPasteStart)] != bracketedPasteStart {
+	if got := string(recordedInput); len(got) < len(sessionInputPasteStart) || got[:len(sessionInputPasteStart)] != sessionInputPasteStart {
 		t.Fatalf("input=%q, want bracketed-paste prefix", got)
 	}
 }
 
-func TestTypeDoorbell_DeliverMessageFailureSurfacesErrorWithoutPTYFallback(t *testing.T) {
+func TestSessionInput_DeliverMessageFailureSurfacesErrorWithoutPTYFallback(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	var inputRecorded bool
@@ -153,13 +185,55 @@ func TestTypeDoorbell_DeliverMessageFailureSurfacesErrorWithoutPTYFallback(t *te
 		respondPluginRequest(t, client, request, pluginDeliverMessageResult{OK: false})
 	}()
 
-	err := d.typeDoorbell("pi-delivery-fails", "ping from the chief")
+	delivery := maintenanceSessionInput("plugin-test", "failure", "pi-delivery-fails", "ping from the chief", sessionInputAtTurnBoundary)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
 	<-requestDone
-	if err == nil {
-		t.Fatal("typeDoorbell error=nil, want deliver_message ok=false to surface as an error")
+	if attempt.err == nil {
+		t.Fatal("session input error=nil, want deliver_message ok=false to surface as an error")
 	}
 	if inputRecorded {
-		t.Fatal("typeDoorbell fell back to the PTY after a message_delivery failure, want no fallback")
+		t.Fatal("session input fell back to the PTY after a message_delivery failure, want no fallback")
+	}
+}
+
+func TestSessionInput_UserBytesProceedWhilePluginPlacementIsInFlight(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	userWritten := make(chan struct{}, 1)
+	d.ptyBackend = &fakeSpawnBackend{onInput: func(string, []byte) { userWritten <- struct{}{} }}
+
+	client, done := startPluginPipe(t, d, "pi-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "pi", map[string]bool{"message_delivery": true})
+
+	now := protocol.TimestampNow().String()
+	d.store.Add(&protocol.Session{
+		ID: "pi-user-wins", Label: "pi", Agent: "pi", Directory: t.TempDir(),
+		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	if !d.store.BeginAgentDriverRun("pi-user-wins", "pi-plugin", "run-user-wins") {
+		t.Fatal("failed to begin plugin run")
+	}
+
+	requestSeen := make(chan struct{})
+	go func() {
+		request := decodeJSONRPCMessage(t, client)
+		close(requestSeen)
+		<-userWritten
+		respondPluginRequest(t, client, request, pluginDeliverMessageResult{OK: true})
+	}()
+
+	delivery := maintenanceSessionInput("plugin-test", "slow-placement", "pi-user-wins", "maintenance", sessionInputAtTurnBoundary)
+	result := make(chan sessionInputAttempt, 1)
+	go func() { result <- d.sessionInputs().try(context.Background(), delivery) }()
+	<-requestSeen
+	if err := d.writeSessionPTY("pi-user-wins", []byte("the user's live bytes"), "user"); err != nil {
+		t.Fatalf("user input: %v", err)
+	}
+	if attempt := <-result; attempt.err != nil || attempt.stage != sessionInputPlaced {
+		t.Fatalf("plugin placement = %+v, want Placed", attempt)
 	}
 }
 

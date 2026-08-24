@@ -41,10 +41,10 @@ func (r *recordingDoorbell) pasted() []string {
 	defer r.mu.Unlock()
 	prompts := []string{}
 	for _, write := range r.writes {
-		if !strings.HasPrefix(write, bracketedPasteStart) {
+		if !strings.HasPrefix(write, sessionInputPasteStart) {
 			continue
 		}
-		prompts = append(prompts, strings.TrimSuffix(strings.TrimPrefix(write, bracketedPasteStart), bracketedPasteEnd))
+		prompts = append(prompts, strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd))
 	}
 	return prompts
 }

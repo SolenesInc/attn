@@ -74,6 +74,10 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
 	},
+	FactSessionModelRequestStarted: {
+		events:  []string{protocol.EventSessionStateChanged},
+		subject: (*wireWorld).session,
+	},
 	FactSessionActivityChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,

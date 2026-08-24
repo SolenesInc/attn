@@ -717,7 +717,7 @@ func TestNotebookSendToChiefAppendsAndNudges(t *testing.T) {
 	got := append([]string(nil), inputs...)
 	mu.Unlock()
 	wantNudge := chiefInboxNudgePrompt(d.store.GetSetting(SettingNotebookRoot))
-	wantPaste := bracketedPasteStart + wantNudge + bracketedPasteEnd
+	wantPaste := sessionInputPasteStart + wantNudge + sessionInputPasteEnd
 	if len(got) != 2 || got[0] != wantPaste || got[1] != "\r" {
 		t.Fatalf("PTY inputs = %q, want a bracketed nudge-prompt write followed by Enter", got)
 	}

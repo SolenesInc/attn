@@ -25,6 +25,7 @@ export type RelayHelloResult = { ok: true };
 // suite simply never had a window to report it from.
 export type RelaySuiteState = "working" | "pending_approval";
 export type RelayReportStateParams = { token: string; state: RelaySuiteState };
+export type RelayReportInputTakenParams = { token: string; input_id: string };
 // `aborted` is the user having taken the turn back (pi's stopReason). It exists
 // so the driver reports `idle` instead of paying a classifier to answer a
 // question the session already knows the answer to.
@@ -43,7 +44,7 @@ export type RelayReportDenialParams = {
 };
 
 // driver -> suite request
-export type RelayDeliverMessageParams = { text: string };
+export type RelayDeliverMessageParams = { input_id: string; text: string };
 export type RelayDeliverMessageResult = { delivered: boolean };
 
 export const relayMethods = {
@@ -51,5 +52,6 @@ export const relayMethods = {
   reportState: "suite.report_state",
   reportStop: "suite.report_stop",
   reportDenial: "suite.report_denial",
+  reportInputTaken: "suite.report_input_taken",
   deliverMessage: "driver.deliver_message",
 } as const;

@@ -283,7 +283,7 @@ export interface RateLimitState {
 
 // Protocol version - must match daemon's ProtocolVersion
 // Increment when making breaking changes to the protocol
-export const PROTOCOL_VERSION = '270';
+export const PROTOCOL_VERSION = '271';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 // Identifies this app process to the daemon across its own reconnects, so a
@@ -3389,8 +3389,11 @@ export function useDaemonSocket({
   // for it to finish. The host resolves a steer or follow-up on an idle session
   // into a run of its own, so the caller does not have to check first.
   const sendAgentPrompt = useCallback((id: string, text: string, mode?: AgentPromptMode) => {
-    sendOrQueueCommand({ cmd: 'agent_prompt', id, text, ...(mode ? { mode } : {}) }, { waitForInitialState: true });
-  }, [sendOrQueueCommand]);
+    sendOrQueueCommand(
+      { cmd: 'agent_prompt', id, input_id: nextRequestID('agent-input'), text, ...(mode ? { mode } : {}) },
+      { waitForInitialState: true },
+    );
+  }, [nextRequestID, sendOrQueueCommand]);
 
   // Asks the host for what one tool call actually read, wrote or printed. Sent
   // when a tool card is opened, and again with `full` when the user asks for the

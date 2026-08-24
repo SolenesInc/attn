@@ -244,7 +244,7 @@ func (d *Daemon) notifyTicketSession(sessionID string, now time.Time) {
 // approval. Leaving that state rechecks unread activity so a previously deferred
 // nudge is armed as soon as it is safe.
 func (d *Daemon) syncNudgeForState(sessionID, state string) {
-	if !isNudgeDeliveryAllowed(state) {
+	if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(state)) {
 		d.cancelNudgeCountdown(sessionID, "waiting for approval")
 		return
 	}
@@ -270,7 +270,7 @@ func (d *Daemon) notifyUnreadTicketSessionLocked(sessionID string, now time.Time
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || d.initialPromptPending(sessionID) || !isNudgeDeliveryAllowed(string(session.State)) {
+	if session == nil || d.initialPromptPending(sessionID) || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 		return
 	}
 	pending := make(map[int64]struct{})

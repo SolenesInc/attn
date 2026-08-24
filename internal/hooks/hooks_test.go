@@ -148,10 +148,16 @@ func TestGenerateHooks_HasNotificationHook(t *testing.T) {
 }
 
 func TestGenerateHooks_HasUserPromptSubmitHook(t *testing.T) {
-	hooks := Generate("test", "/tmp/test.sock", "/tmp/attn", nil)
-
-	if !strings.Contains(hooks, "UserPromptSubmit") {
-		t.Error("hooks should include UserPromptSubmit event for working state")
+	var parsed SettingsConfig
+	if err := json.Unmarshal([]byte(Generate("test", "/tmp/test.sock", "/tmp/attn", nil)), &parsed); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	entries := parsed.Hooks["UserPromptSubmit"]
+	if len(entries) != 1 || len(entries[0].Hooks) != 1 {
+		t.Fatalf("want one UserPromptSubmit hook, got %+v", entries)
+	}
+	if cmd := entries[0].Hooks[0].Command; !strings.Contains(cmd, `_hook-state "test" "working" "user_prompt_submit"`) {
+		t.Fatalf("UserPromptSubmit command = %q, want a distinct prompt receipt marker", cmd)
 	}
 }
 

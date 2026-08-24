@@ -752,10 +752,11 @@ export interface AgentPeekScreen {
 }
 
 export interface AgentPromptMessage {
-    cmd:   AgentPromptMessageCmd;
-    id:    string;
-    mode?: string;
-    text:  string;
+    cmd:      AgentPromptMessageCmd;
+    id:       string;
+    input_id: string;
+    mode?:    string;
+    text:     string;
     [property: string]: any;
 }
 
@@ -2033,6 +2034,7 @@ export interface SessionObject {
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
+    last_model_request_at?:     string;
     last_seen:                  string;
     main_repo?:                 string;
     nudge_fires_at?:            string;
@@ -6444,12 +6446,13 @@ export interface EventElement {
 }
 
 export interface StateExplainResultObject {
-    agent:        string;
-    capacity:     number;
-    observations: ObservationElement[];
-    session_id:   string;
-    state:        string;
-    state_since?: string;
+    agent:                  string;
+    capacity:               number;
+    last_model_request_at?: string;
+    observations:           ObservationElement[];
+    session_id:             string;
+    state:                  string;
+    state_since?:           string;
     [property: string]: any;
 }
 
@@ -7132,6 +7135,7 @@ export interface Session {
     id:                         string;
     is_worktree?:               boolean;
     label:                      string;
+    last_model_request_at?:     string;
     last_seen:                  string;
     main_repo?:                 string;
     nudge_fires_at?:            string;
@@ -7705,19 +7709,22 @@ export enum StateExplainMessageCmd {
 }
 
 export interface StateExplainResult {
-    agent:        string;
-    capacity:     number;
-    observations: ObservationElement[];
-    session_id:   string;
-    state:        string;
-    state_since?: string;
+    agent:                  string;
+    capacity:               number;
+    last_model_request_at?: string;
+    observations:           ObservationElement[];
+    session_id:             string;
+    state:                  string;
+    state_since?:           string;
     [property: string]: any;
 }
 
 export interface StateMessage {
     cmd:              StateMessageCmd;
+    hook_event?:      string;
     id:               string;
     permission_mode?: string;
+    prompt?:          string;
     state:            string;
     [property: string]: any;
 }
@@ -13860,6 +13867,7 @@ const typeMap: any = {
     "AgentPromptMessage": o([
         { json: "cmd", js: "cmd", typ: r("AgentPromptMessageCmd") },
         { json: "id", js: "id", typ: "" },
+        { json: "input_id", js: "input_id", typ: "" },
         { json: "mode", js: "mode", typ: u(undefined, "") },
         { json: "text", js: "text", typ: "" },
     ], "any"),
@@ -14678,6 +14686,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
+        { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
         { json: "nudge_fires_at", js: "nudge_fires_at", typ: u(undefined, "") },
@@ -17423,6 +17432,7 @@ const typeMap: any = {
     "StateExplainResultObject": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "capacity", js: "capacity", typ: 0 },
+        { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "observations", js: "observations", typ: a(r("ObservationElement")) },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: "" },
@@ -17877,6 +17887,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "is_worktree", js: "is_worktree", typ: u(undefined, true) },
         { json: "label", js: "label", typ: "" },
+        { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "main_repo", js: "main_repo", typ: u(undefined, "") },
         { json: "nudge_fires_at", js: "nudge_fires_at", typ: u(undefined, "") },
@@ -18198,6 +18209,7 @@ const typeMap: any = {
     "StateExplainResult": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "capacity", js: "capacity", typ: 0 },
+        { json: "last_model_request_at", js: "last_model_request_at", typ: u(undefined, "") },
         { json: "observations", js: "observations", typ: a(r("ObservationElement")) },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: "" },
@@ -18205,8 +18217,10 @@ const typeMap: any = {
     ], "any"),
     "StateMessage": o([
         { json: "cmd", js: "cmd", typ: r("StateMessageCmd") },
+        { json: "hook_event", js: "hook_event", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "permission_mode", js: "permission_mode", typ: u(undefined, "") },
+        { json: "prompt", js: "prompt", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
     ], "any"),
     "StopMessage": o([

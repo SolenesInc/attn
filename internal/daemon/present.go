@@ -1,14 +1,15 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/bus"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/bus"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/present"
 	"github.com/victorarias/attn/internal/protocol"
@@ -609,13 +610,23 @@ func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, ve
 	}
 
 	session := d.store.Get(pres.SessionID)
-	if session == nil || !isNudgeDeliveryAllowed(string(session.State)) {
+	if session == nil || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
 		d.logf("present handback: session %s is waiting for approval, skipping doorbell for presentation %s", pres.SessionID, pres.ID)
 		return
 	}
-	if err := d.typeDoorbell(pres.SessionID, "\U0001F4FD "+notice+"."); err != nil {
-		d.logf("present handback: doorbell failed for session %s: %v", pres.SessionID, err)
+	delivery := maintenanceSessionInput(
+		"present-handback",
+		fmt.Sprintf("%s/%d", pres.ID, seq),
+		pres.SessionID,
+		"\U0001F4FD "+notice+".",
+		sessionInputAtTurnBoundary,
+	)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		d.logf("present handback: input failed for session %s: %v", pres.SessionID, attempt.err)
+		return
 	}
+	d.sessionInputs().release(pres.SessionID, delivery.id)
 }
 
 // handlePresentClose dismisses a presentation without a review: the

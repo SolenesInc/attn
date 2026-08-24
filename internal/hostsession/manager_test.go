@@ -193,6 +193,32 @@ done
 	}
 }
 
+func TestTrackedDeliveryCarriesTheDaemonInputID(t *testing.T) {
+	manager, rec := newManager(t)
+	script := writeScript(t, `
+echo '{"session_id":"s1","seq":1,"kind":"session_ready","body":{}}' >&3
+read -r line
+printf '{"session_id":"s1","seq":2,"kind":"message_end","body":{"echo":%s}}\n' "$(printf '%s' "$line" | sed 's/"/\\"/g; s/^/"/; s/$/"/')" >&3
+`)
+
+	if err := manager.Spawn(SpawnOptions{SessionID: "s1", Command: []string{script}}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if err := manager.DeliverWithInput("s1", DeliverySteer, "hello host", "crew-heartbeat/generation-7"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	waitForExit(t, rec)
+
+	events, _ := rec.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("expected the ready envelope and the echo, got %+v", events)
+	}
+	echoed, _ := events[1].Body["echo"].(string)
+	if !strings.Contains(echoed, `"input_id":"crew-heartbeat/generation-7"`) {
+		t.Fatalf("host delivery lost its input id: %q", echoed)
+	}
+}
+
 func TestDeliveryRejectsAnUnknownVerb(t *testing.T) {
 	manager, _ := newManager(t)
 	if err := manager.Deliver("s1", Delivery("shout"), "hi"); err == nil {

@@ -263,6 +263,11 @@ func (c *Client) UpdateState(id, state string) error {
 // UpdateStateFromHook is UpdateState plus the agent's resolved permission mode,
 // which only a hook payload knows. An empty mode is simply not reported.
 func (c *Client) UpdateStateFromHook(id, state, permissionMode string) error {
+	return c.UpdateStateFromHookEvidence(id, state, permissionMode, "", "")
+}
+
+// UpdateStateFromHookEvidence reports state with its producing hook fact.
+func (c *Client) UpdateStateFromHookEvidence(id, state, permissionMode, hookEvent, prompt string) error {
 	msg := protocol.StateMessage{
 		Cmd:   protocol.CmdState,
 		ID:    id,
@@ -270,6 +275,12 @@ func (c *Client) UpdateStateFromHook(id, state, permissionMode string) error {
 	}
 	if strings.TrimSpace(permissionMode) != "" {
 		msg.PermissionMode = protocol.Ptr(permissionMode)
+	}
+	if strings.TrimSpace(hookEvent) != "" {
+		msg.HookEvent = protocol.Ptr(strings.TrimSpace(hookEvent))
+	}
+	if strings.TrimSpace(prompt) != "" {
+		msg.Prompt = protocol.Ptr(prompt)
 	}
 	_, err := c.send(msg)
 	return err

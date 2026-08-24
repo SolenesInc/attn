@@ -21,8 +21,10 @@ import (
 // doorbellRecorder collects what a nudge typed into a session. The paste and
 // its Enter arrive as two writes; only the first carries the prompt.
 type doorbellRecorder struct {
-	mu     sync.Mutex
-	writes []string
+	mu       sync.Mutex
+	writes   []string
+	autoTake bool
+	taken    chan struct{}
 }
 
 // The prompt promises that an unattended day ends without buying a successor.
@@ -45,33 +47,74 @@ func (r *doorbellRecorder) prompts() []string {
 	defer r.mu.Unlock()
 	out := make([]string, 0, len(r.writes))
 	for _, write := range r.writes {
-		if !strings.HasPrefix(write, bracketedPasteStart) {
+		if !strings.HasPrefix(write, sessionInputPasteStart) {
 			continue
 		}
-		out = append(out, strings.TrimSuffix(strings.TrimPrefix(write, bracketedPasteStart), bracketedPasteEnd))
+		out = append(out, strings.TrimSuffix(strings.TrimPrefix(write, sessionInputPasteStart), sessionInputPasteEnd))
 	}
 	return out
+}
+
+func (r *doorbellRecorder) setAutoTake(enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.autoTake = enabled
+}
+
+func (r *doorbellRecorder) expectTake() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.taken = make(chan struct{})
+	return r.taken
 }
 
 // newLifecycleDaemon is an awake member on a fast doorbell, with every prompt
 // the tick delivers recorded.
 func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 	t.Helper()
-	previous := doorbellSubmitDelay
-	doorbellSubmitDelay = time.Millisecond
-	t.Cleanup(func() { doorbellSubmitDelay = previous })
+	previous := sessionInputSubmitDelay
+	sessionInputSubmitDelay = time.Millisecond
+	t.Cleanup(func() { sessionInputSubmitDelay = previous })
+	previousTakenWindow := sessionInputTakenWindow
+	sessionInputTakenWindow = 100 * time.Millisecond
+	t.Cleanup(func() { sessionInputTakenWindow = previousTakenWindow })
 
 	d, backend, _ := newWakeableDaemon(t)
-	recorder := &doorbellRecorder{}
+	recorder := &doorbellRecorder{autoTake: true}
+	var submitted string
+	var sessionID string
 	backend.onInput = func(_ string, data []byte) {
 		recorder.mu.Lock()
-		defer recorder.mu.Unlock()
 		recorder.writes = append(recorder.writes, string(data))
+		if strings.HasPrefix(string(data), sessionInputPasteStart) {
+			submitted = strings.TrimSuffix(strings.TrimPrefix(string(data), sessionInputPasteStart), sessionInputPasteEnd)
+		}
+		prompt := submitted
+		autoTake := recorder.autoTake
+		var taken chan struct{}
+		if autoTake && string(data) == "\r" && prompt != "" && sessionID != "" {
+			taken = recorder.taken
+			recorder.taken = nil
+		}
+		recorder.mu.Unlock()
+		if autoTake && string(data) == "\r" && prompt != "" && sessionID != "" {
+			go func() {
+				d.observePromptTaken(sessionID, prompt, time.Now())
+				if taken != nil {
+					close(taken)
+				}
+			}()
+		}
 	}
 	woken, err := d.crewWake("trellis", "")
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
+	sessionID = woken.SessionID
+	d.agentMessageMu.Lock()
+	delete(d.postInitialPrompt, woken.SessionID)
+	delete(d.agentMessageInitialPrompt, woken.SessionID)
+	d.agentMessageMu.Unlock()
 	return d, woken.SessionID, recorder
 }
 
@@ -88,7 +131,13 @@ func setSessionActivity(t *testing.T, d *Daemon, sessionID string, state protoco
 	session.State = state
 	session.StateSince = string(protocol.NewTimestamp(at))
 	session.StateUpdatedAt = string(protocol.NewTimestamp(at))
+	session.LastModelRequestAt = protocol.Ptr(string(protocol.NewTimestamp(at)))
+	d.store.Remove(sessionID)
 	d.store.Add(session)
+	got := d.store.Get(sessionID)
+	if got == nil || protocol.Deref(got.LastModelRequestAt) != protocol.Deref(session.LastModelRequestAt) {
+		t.Fatalf("last model request fixture = %v, want %s", got, protocol.Deref(session.LastModelRequestAt))
+	}
 }
 
 // crewMemberRecord reads a member's registry row. The wake ledger is stored,
@@ -157,6 +206,43 @@ func TestCrewLifecycleTick_WarmsAContextThatIsAboutToLapse(t *testing.T) {
 	}
 }
 
+func TestCrewLifecycleTick_UntakenHeartbeatLeavesClockAndRetryDoesNotRepaste(t *testing.T) {
+	d, sessionID, recorder := newLifecycleDaemon(t)
+	recorder.setAutoTake(false)
+	now := time.Now()
+	setSessionActivity(t, d, sessionID, protocol.SessionStateWaitingInput, now.Add(-58*time.Minute))
+	requestAt := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)
+	requestTime := protocol.Timestamp(requestAt).Time()
+
+	d.crewLifecycleTick(now)
+	if got := recorder.prompts(); len(got) != 1 {
+		t.Fatalf("first attempt pasted %q, want one heartbeat", got)
+	}
+	if !d.crewMemo().heartbeatDue(sessionID, now.Add(time.Minute), d.crewHeartbeatLead()) {
+		t.Fatal("an untaken heartbeat was charged as a cache warm")
+	}
+	if got := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt); got != requestAt {
+		t.Fatalf("untaken heartbeat moved last_model_request_at from %s to %s", requestAt, got)
+	}
+
+	d.crewLifecycleTick(now.Add(time.Minute))
+	if got := recorder.prompts(); len(got) != 1 {
+		t.Fatalf("untaken retry repasted the heartbeat: %q", got)
+	}
+	if got := protocol.Deref(d.store.Get(sessionID).LastModelRequestAt); got != requestAt {
+		t.Fatalf("untaken retry moved last_model_request_at from %s to %s", requestAt, got)
+	}
+
+	recorder.setAutoTake(true)
+	d.crewLifecycleTick(now.Add(2 * time.Minute))
+	if d.crewMemo().heartbeatDue(sessionID, now.Add(3*time.Minute), d.crewHeartbeatLead()) {
+		t.Fatal("a positively taken heartbeat did not start its grace")
+	}
+	if got := protocol.Timestamp(protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)).Time(); !got.After(requestTime) {
+		t.Fatalf("taken heartbeat left last_model_request_at at %s, want after %s", got, requestTime)
+	}
+}
+
 // The other half of the acceptance: the user is gone, the cache is about to
 // lapse, and the day should end rather than be kept warm for nobody.
 func TestCrewLifecycleTick_AsksForTheHandoffWhenTheUserIsGone(t *testing.T) {
@@ -205,23 +291,24 @@ func TestCrewLifecycleTick_LeavesAnUnreachableSessionAlone(t *testing.T) {
 	}
 }
 
-// The witness for the split: a member holding a question for the user takes the
-// handoff ask, because ending the day is an answer to what it is waiting for —
-// and never takes a heartbeat, which would answer that question with filler.
-func TestCrewLifecycleTick_WillEndAWaitingDayButNeverWarmOne(t *testing.T) {
+func TestCrewLifecycleTick_WarmsAWaitingDaySafely(t *testing.T) {
 	d, sessionID, recorder := newLifecycleDaemon(t)
 	now := time.Now()
 	setSessionActivity(t, d, sessionID, protocol.SessionStateWaitingInput, now.Add(-58*time.Minute))
 
 	d.crewLifecycleTick(now)
-	if got := recorder.prompts(); len(got) != 0 {
-		t.Fatalf("a member holding a question for the user was sent %q", got)
+	if got := recorder.prompts(); len(got) != 1 || got[0] != crewHeartbeatPrompt {
+		t.Fatalf("a waiting member was sent %q, want one heartbeat", got)
 	}
 
 	setUserAway(d, now.Add(-3*time.Hour))
 	d.crewLifecycleTick(now.Add(time.Minute))
+	if got := recorder.prompts(); len(got) != 1 {
+		t.Fatalf("a successful heartbeat was followed immediately by %q, want the warmed cache left alone", got)
+	}
+	d.crewLifecycleTick(now.Add(58 * time.Minute))
 	prompts := recorder.prompts()
-	if len(prompts) != 1 || prompts[0] != crewSleepPrompt {
+	if len(prompts) != 2 || prompts[1] != crewSleepPrompt {
 		t.Fatalf("the tick sent %q, want the handoff ask", prompts)
 	}
 }
@@ -475,17 +562,21 @@ func TestCrewHandoff_SleepIsExplicitEvenWithTheUserHere(t *testing.T) {
 func TestCrewLifecycleMemo_ForgetsAClosedSession(t *testing.T) {
 	memo := newCrewLifecycleMemo()
 	now := time.Now()
-	if !memo.mayHeartbeat("a", now, time.Hour) {
+	if !memo.heartbeatDue("a", now, time.Hour) {
 		t.Fatal("the first heartbeat was refused")
 	}
-	if memo.mayHeartbeat("a", now.Add(time.Minute), time.Hour) {
+	if !memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
+		t.Fatal("an unconfirmed heartbeat was charged against the grace")
+	}
+	memo.recordHeartbeat("a", now)
+	if memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
 		t.Fatal("a second heartbeat slipped through the grace")
 	}
 	if !memo.mayAsk("a", now, time.Hour) {
 		t.Fatal("a heartbeat's grace blocked the handoff ask; they are separate acts")
 	}
 	memo.forget("a")
-	if !memo.mayHeartbeat("a", now.Add(time.Minute), time.Hour) {
+	if !memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
 		t.Fatal("a forgotten session is still holding its grace")
 	}
 }
@@ -567,11 +658,15 @@ func TestCrewLifecycleTick_ReArmsAfterAContextThatCameBackUnderBudget(t *testing
 	setSessionActivity(t, d, sessionID, protocol.SessionStateIdle, now.Add(-2*time.Minute))
 
 	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
+	firstTaken := recorder.expectTake()
 	d.crewLifecycleTick(now)
+	<-firstTaken
 	setSessionContextOccupancy(t, d, sessionID, 20000, 0)
 	d.crewLifecycleTick(now.Add(time.Minute))
 	setSessionContextOccupancy(t, d, sessionID, crewContextBudgetDefault, 0)
+	secondTaken := recorder.expectTake()
 	d.crewLifecycleTick(now.Add(2 * time.Minute))
+	<-secondTaken
 
 	if got := recorder.prompts(); len(got) != 2 {
 		t.Fatalf("the tick sent %d asks across two separate fills: %q", len(got), got)

@@ -665,9 +665,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			strings.TrimSpace(protocol.Deref(msg.Source)),
 		)
 	}
-	// Under the session's write fence: a keystroke that races a doorbell's
-	// paste-then-Enter pair lands after it, never inside it.
-	writeErr := d.writePTY(msg.ID, []byte(msg.Data))
+	writeErr := d.writeSessionPTY(msg.ID, []byte(msg.Data), source)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {
 			d.logf("pty_input failed for %s: %v", msg.ID, writeErr)

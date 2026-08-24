@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,11 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// agent_msg is the delivery half of agents conversing. The sender hands the
-// daemon words; the daemon persists them, composes the attribution, and types
-// the result into the target's conversation through the one doorbell primitive.
-// The sender never touches the target's PTY, so attribution cannot be forged
-// beyond what the sender puts in its own content.
+// agent_msg persists and delivers attributed input between sessions.
 
 const (
 	// The inbound guard's three tripwires. A healthy exchange never feels them:
@@ -31,22 +28,6 @@ const (
 	agentMessageRateLimit    = 8
 	agentMessageQueueCap     = 50
 )
-
-// agentMessageTakenWindow is how long a delivery waits for its target to start
-// the turn it asked for.
-//
-// A PTY write returning says the bytes reached the terminal, not that the agent
-// read them: a session showing a modal, an overlay, or a composer that does not
-// have focus yet reports the same settled title as one waiting at its prompt,
-// and swallows the paste whole. Submitting a message always starts a turn, so
-// `working` is the receipt; without it the row stays queued for the drain and
-// the sender is told so. Measured end to end against Claude Code 2.1.228 on a
-// live session: 181ms and 187ms once warm, 1.06s for the first message to a
-// freshly spawned target. This is a tripwire well past that, not a budget — a
-// healthy delivery never feels it, and the cost of it being too small is a
-// redelivery, not a lost message. It is a package var only so tests can drop
-// it to zero, which trusts the write as the daemon did before.
-var agentMessageTakenWindow = 3 * time.Second
 
 // errDoorbellNotTaken is a delivery whose target never picked it up.
 var errDoorbellNotTaken = errors.New("doorbell typed but the target did not take it")
@@ -249,170 +230,100 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, errAgentMessageInitialPromptPending) {
 		return "queued (target is waking and still reading its priming — lands immediately after its first prompt starts)"
 	}
-	if errors.Is(err, errDoorbellBlockedByApproval) {
+	if errors.Is(err, errSessionInputBlockedByApproval) {
 		return "queued (target is waiting on an approval — lands when the approval clears)"
 	}
-	if errors.Is(err, errDoorbellBlockedBySelector) {
+	if errors.Is(err, errSessionInputBlockedBySelector) {
 		return "queued (target's screen is waiting on a keypress, so typed words would answer it — lands once that clears)"
+	}
+	if errors.Is(err, errSessionInputComposerDirty) {
+		return "queued (you are composing a message in the target; lands after that input is taken)"
+	}
+	if errors.Is(err, errSessionInputScreenUnavailable) {
+		return "queued (attn cannot see a safe prompt on the target yet; lands on its next state change)"
 	}
 	if errors.Is(err, errDoorbellNotTaken) {
 		return fmt.Sprintf(
 			"queued (typed it, but the target did not start a turn within %s — something in front of its prompt ate it; lands on its next state change)",
-			agentMessageTakenWindow)
+			sessionInputTakenWindow)
 	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 }
 
-// deliverAgentMessage types one message into its target, confirms the target
-// took it, and stamps the row. Shared by the send path and the redelivery drain
-// so a queued message and a live one land identically.
+type agentMessageDeliveryFlight struct {
+	done chan struct{}
+	err  error
+}
+
+// deliverAgentMessage coalesces live sends and state-change drains by durable
+// message id so only one call crosses the session-input boundary.
 func (d *Daemon) deliverAgentMessage(record store.AgentMessage) error {
+	d.agentMessageMu.Lock()
+	if d.agentMessageDeliveries == nil {
+		d.agentMessageDeliveries = make(map[string]*agentMessageDeliveryFlight)
+	}
+	if flight := d.agentMessageDeliveries[record.ID]; flight != nil {
+		d.agentMessageMu.Unlock()
+		<-flight.done
+		return flight.err
+	}
+	flight := &agentMessageDeliveryFlight{done: make(chan struct{})}
+	d.agentMessageDeliveries[record.ID] = flight
+	d.agentMessageMu.Unlock()
+
+	err := d.deliverAgentMessageOnce(record)
+	d.agentMessageMu.Lock()
+	flight.err = err
+	delete(d.agentMessageDeliveries, record.ID)
+	close(flight.done)
+	d.agentMessageMu.Unlock()
+	return err
+}
+
+// deliverAgentMessageOnce types one message into its target, confirms the
+// target took it, and stamps the row.
+func (d *Daemon) deliverAgentMessageOnce(record store.AgentMessage) error {
+	queued, err := d.store.AgentMessageQueued(record.ID)
+	if err != nil {
+		return err
+	}
+	if !queued {
+		return nil
+	}
 	if d.initialPromptPending(record.TargetSessionID) {
 		return errAgentMessageInitialPromptPending
 	}
 	sender := d.store.Get(record.SenderSessionID)
-	target := d.store.Get(record.TargetSessionID)
-	confirmable := target != nil && string(target.State) != protocol.StateWorking
-
-	taken, disarm := d.armAgentMessageTaken(record.TargetSessionID)
-	defer disarm()
-
-	// A row typed into a composer once and never taken is still sitting in it.
-	// Submitting that is the whole redelivery: typing it again would stack a
-	// second copy, and a target stuck behind a dialog would collect one per
-	// state change until it cleared and read them all.
-	if d.agentMessageAwaitsSubmit(record.ID) && agentMessageTakenWindow > 0 {
-		if err := d.submitDoorbell(record.TargetSessionID); err != nil {
-			return err
-		}
-		if awaitSignal(taken, agentMessageTakenWindow) {
-			return d.stampAgentMessageDelivered(record.ID)
-		}
-		d.logf("agent msg still unsubmitted after enter; retyping: id=%s", record.ID)
+	id := inputAttemptID("agent-message", record.ID)
+	delivery := peerAgentSessionInput(record.ID, record.SenderSessionID, record.TargetSessionID, d.composeAgentMessage(sender, record))
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		return attempt.err
 	}
-
-	composer, err := d.typeDoorbellRoute(record.TargetSessionID, d.composeAgentMessage(sender, record))
-	if err != nil {
-		return err
-	}
-	if confirmable && !d.awaitAgentMessageTaken(record.TargetSessionID, taken) {
-		if composer {
-			d.noteAgentMessageAwaitsSubmit(record.ID)
+	if sessionInputTakenWindow > 0 && attempt.stage == sessionInputPlaced {
+		attempt = d.sessionInputs().await(record.TargetSessionID, id, attempt.wait, sessionInputTakenWindow)
+		if attempt.stage != sessionInputTaken {
+			attempt = d.sessionInputs().try(context.Background(), delivery)
+			if attempt.err != nil {
+				return attempt.err
+			}
+			attempt = d.sessionInputs().await(record.TargetSessionID, id, attempt.wait, sessionInputTakenWindow)
 		}
+	}
+	if sessionInputTakenWindow > 0 && attempt.stage != sessionInputTaken {
 		return errDoorbellNotTaken
 	}
-	return d.stampAgentMessageDelivered(record.ID)
+	return d.stampAgentMessageDelivered(record.TargetSessionID, record.ID)
 }
 
-func (d *Daemon) stampAgentMessageDelivered(id string) error {
-	d.forgetAgentMessageAwaitsSubmit(id)
+func (d *Daemon) stampAgentMessageDelivered(sessionID, id string) error {
+	d.sessionInputs().release(sessionID, inputAttemptID("agent-message", id))
 	if err := d.store.MarkAgentMessageDelivered(id, time.Now()); err != nil {
 		// The words already landed; failing to stamp would redeliver them, which
 		// is worse than losing the receipt.
 		d.logf("agent msg delivered but not stamped: id=%s err=%v", id, err)
 	}
 	return nil
-}
-
-// awaitAgentMessageTaken waits for the target to start the turn the message
-// asked for. A composer that never took the Enter gets one more — the paste is
-// still sitting in it, so pressing again submits it, while repasting would
-// double the text. Only a target that takes neither is reported queued.
-func (d *Daemon) awaitAgentMessageTaken(sessionID string, taken <-chan struct{}) bool {
-	if agentMessageTakenWindow <= 0 {
-		return true
-	}
-	if awaitSignal(taken, agentMessageTakenWindow) {
-		return true
-	}
-	d.logf("agent msg not taken within %s; pressing enter again: session=%s", agentMessageTakenWindow, sessionID)
-	// Through submitDoorbell rather than a raw write: the wait is long enough for
-	// a dialog to have opened over the composer since the paste, and that is the
-	// one target Enter must not reach.
-	if err := d.submitDoorbell(sessionID); err != nil {
-		d.logf("agent msg re-submit failed: session=%s err=%v", sessionID, err)
-		return false
-	}
-	return awaitSignal(taken, agentMessageTakenWindow)
-}
-
-func awaitSignal(signal <-chan struct{}, window time.Duration) bool {
-	timer := time.NewTimer(window)
-	defer timer.Stop()
-	select {
-	case <-signal:
-		return true
-	case <-timer.C:
-		return false
-	}
-}
-
-// armAgentMessageTaken registers interest in a target's next turn before the
-// doorbell is typed, so a target that starts working between the write and the
-// wait is still seen. The returned func always runs; nothing else clears it.
-func (d *Daemon) armAgentMessageTaken(sessionID string) (<-chan struct{}, func()) {
-	signal := make(chan struct{})
-	d.agentMessageMu.Lock()
-	if d.agentMessageTaken == nil {
-		d.agentMessageTaken = make(map[string][]chan struct{})
-	}
-	d.agentMessageTaken[sessionID] = append(d.agentMessageTaken[sessionID], signal)
-	d.agentMessageMu.Unlock()
-
-	return signal, func() {
-		d.agentMessageMu.Lock()
-		defer d.agentMessageMu.Unlock()
-		waiters := d.agentMessageTaken[sessionID]
-		for i, waiter := range waiters {
-			if waiter == signal {
-				d.agentMessageTaken[sessionID] = append(waiters[:i], waiters[i+1:]...)
-				break
-			}
-		}
-		if len(d.agentMessageTaken[sessionID]) == 0 {
-			delete(d.agentMessageTaken, sessionID)
-		}
-	}
-}
-
-// The rows whose paste reached a composer and was not taken. Memory only, and
-// deliberately: after a restart nothing can know what is still sitting in a
-// target's composer, and retyping is the safe assumption. Bounded by the
-// per-target queue cap, and every stamped delivery clears its own entry.
-func (d *Daemon) noteAgentMessageAwaitsSubmit(id string) {
-	d.agentMessageMu.Lock()
-	defer d.agentMessageMu.Unlock()
-	if d.agentMessagesAwaitingSubmit == nil {
-		d.agentMessagesAwaitingSubmit = make(map[string]bool)
-	}
-	d.agentMessagesAwaitingSubmit[id] = true
-}
-
-func (d *Daemon) agentMessageAwaitsSubmit(id string) bool {
-	d.agentMessageMu.Lock()
-	defer d.agentMessageMu.Unlock()
-	return d.agentMessagesAwaitingSubmit[id]
-}
-
-func (d *Daemon) forgetAgentMessageAwaitsSubmit(id string) {
-	d.agentMessageMu.Lock()
-	defer d.agentMessageMu.Unlock()
-	delete(d.agentMessagesAwaitingSubmit, id)
-}
-
-// noteAgentMessageTaken is the receipt side: a target that starts working has
-// taken whatever was typed into it. Called from applyState for every cause.
-func (d *Daemon) noteAgentMessageTaken(sessionID, state string) {
-	if state != protocol.StateWorking {
-		return
-	}
-	d.agentMessageMu.Lock()
-	waiters := d.agentMessageTaken[sessionID]
-	delete(d.agentMessageTaken, sessionID)
-	d.agentMessageMu.Unlock()
-	for _, waiter := range waiters {
-		close(waiter)
-	}
 }
 
 func (d *Daemon) noteInitialAgentMessage(sessionID, messageID string) {
@@ -489,7 +400,7 @@ func (d *Daemon) noteInitialAgentMessageSubmitted(sessionID, state string) {
 	if messageID == "" {
 		return
 	}
-	_ = d.stampAgentMessageDelivered(messageID)
+	_ = d.stampAgentMessageDelivered(sessionID, messageID)
 	// Another sender can address this now-live member while its initial prompt
 	// is still blocked on priming. Keep the queue armed and drain anything behind
 	// the initial message now that the prompt-submit receipt opened the gate.
@@ -597,14 +508,12 @@ func (d *Daemon) seedQueuedAgentMessages() {
 // sent to a session waiting on an approval would sit queued until someone sent
 // another one.
 func (d *Daemon) drainAgentMessagesAfterStateChange(sessionID, state string) {
-	if d.initialPromptPending(sessionID) || !isNudgeDeliveryAllowed(state) || !d.hasQueuedAgentMessages(sessionID) {
+	if d.initialPromptPending(sessionID) || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(state)) || !d.hasQueuedAgentMessages(sessionID) {
 		return
 	}
 	if d.agentMessageDrainScheduledHook != nil {
 		d.agentMessageDrainScheduledHook(sessionID)
 	}
-	// Never inline: typeDoorbell takes doorbellMu and sleeps between the paste
-	// and its Enter, and applyState is on the state-report path.
 	go d.drainQueuedAgentMessages(sessionID)
 }
 

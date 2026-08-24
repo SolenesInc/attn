@@ -57,9 +57,10 @@ func (startupRecovery) isSessionStateCause()     {}
 func (hostExitRecovery) isSessionStateCause()    {}
 
 type sessionStateChange struct {
-	sessionID string
-	state     string
-	cause     sessionStateCause
+	sessionID        string
+	state            string
+	cause            sessionStateCause
+	requestStartedAt time.Time
 	// origin describes the evidence behind the change for the diagnostic trace;
 	// optional (zero traces under the cause name) and never affects the commit.
 	origin stateOrigin
@@ -134,17 +135,18 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		return false
 	}
 
-	if profile.syncNudge {
-		d.doorbellMu.Lock()
-	}
 	// Unconditional: every state write must be ordered against a timer that may
-	// be deciding to settle right now. See autoSettleFireMu.
 	d.autoSettleFireMu.Lock()
-	applied := d.commitSessionState(change)
-	d.autoSettleFireMu.Unlock()
+	var inputLane *sessionInputLane
 	if profile.syncNudge {
-		d.doorbellMu.Unlock()
+		inputLane = d.sessionInputs().lane(change.sessionID)
+		inputLane.mu.Lock()
 	}
+	applied := d.commitSessionState(change)
+	if inputLane != nil {
+		inputLane.mu.Unlock()
+	}
+	d.autoSettleFireMu.Unlock()
 	if !applied {
 		d.logf(
 			"state update discarded: session=%s state=%s cause=%s",
@@ -183,10 +185,6 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if profile.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
-	// A target that starts working has taken what was typed into it; this is the
-	// receipt a delivery in flight is waiting on. Before the drain, so a message
-	// still being confirmed is not counted as one owed.
-	d.noteAgentMessageTaken(change.sessionID, change.state)
 	// Last, and only for a target that owes one: a message that could not be
 	// typed when it was sent has no other rail back.
 	d.drainAgentMessagesAfterStateChange(change.sessionID, change.state)
@@ -198,7 +196,13 @@ func (d *Daemon) commitSessionState(change sessionStateChange) bool {
 	case liveSignal, startupRecovery, resolverObservation, hostExitRecovery, pluginDriverSilent:
 		return d.store.UpdateState(change.sessionID, change.state)
 	case pluginReport:
-		return d.store.ApplyAgentDriverState(change.sessionID, cause.runID, cause.seq, change.state)
+		return d.store.ApplyAgentDriverState(
+			change.sessionID,
+			cause.runID,
+			cause.seq,
+			change.state,
+			change.requestStartedAt,
+		)
 	default:
 		return false
 	}

@@ -89,6 +89,9 @@ func printStateExplain(w io.Writer, result *protocol.StateExplainResult) {
 		fmt.Fprintf(w, " since %s", formatStateExplainTime(*result.StateSince))
 	}
 	fmt.Fprintln(w)
+	if result.LastModelRequestAt != nil && strings.TrimSpace(*result.LastModelRequestAt) != "" {
+		fmt.Fprintf(w, "model request: %s\n", formatStateExplainTime(*result.LastModelRequestAt))
+	}
 
 	if len(result.Observations) == 0 {
 		fmt.Fprintln(w, "\nNo state observations recorded. The daemon has seen no state evidence")

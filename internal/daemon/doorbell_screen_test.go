@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -104,31 +105,25 @@ func TestDoorbellHeldOffByAnOnScreenSelector(t *testing.T) {
 	})
 
 	backend.screen = readDoorbellScreen(t, "claude-question-selector")
-	if err := d.typeDoorbell(sessionID, "[attn] hand off now"); !errors.Is(err, errDoorbellBlockedBySelector) {
-		t.Fatalf("typing at a selector returned %v, want errDoorbellBlockedBySelector", err)
+	delivery := maintenanceSessionInput("screen-test", "selector", sessionID, "[attn] hand off now", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputBlockedBySelector) {
+		t.Fatalf("typing at a selector returned %v, want errSessionInputBlockedBySelector", attempt.err)
 	}
 	if len(typed) != 0 {
 		t.Fatalf("the doorbell wrote %q at a screen waiting for a keypress", typed)
 	}
-	if err := d.submitDoorbell(sessionID); !errors.Is(err, errDoorbellBlockedBySelector) {
-		t.Fatalf("submitting at a selector returned %v, want errDoorbellBlockedBySelector", err)
-	}
-
 	// Same session, same state, composer back: the guard is about the screen and
 	// nothing else, and it must not leave the nudge stuck once the selector goes.
 	backend.screen = readDoorbellScreen(t, "claude-composer-working")
-	if err := d.typeDoorbell(sessionID, "[attn] hand off now"); err != nil {
-		t.Fatalf("typing at a composer failed: %v", err)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
+		t.Fatalf("typing at a composer failed: %v", attempt.err)
 	}
 	if len(typed) == 0 {
 		t.Fatal("the doorbell wrote nothing at a composer")
 	}
 }
 
-// A backend that cannot render — an older worker, a session with no frame yet —
-// delivers as it did before the guard existed. Failing closed on a missing
-// capability would turn a snapshot outage into a silent nudge outage.
-func TestDoorbellDeliversWhenTheScreenIsUnavailable(t *testing.T) {
+func TestDoorbellDefersWhenTheScreenIsUnavailable(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	var typed [][]byte
 	backend.onInput = func(_ string, data []byte) { typed = append(typed, data) }
@@ -139,10 +134,12 @@ func TestDoorbellDeliversWhenTheScreenIsUnavailable(t *testing.T) {
 		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 
-	if err := d.typeDoorbell(sessionID, "[attn] hand off now"); err != nil {
-		t.Fatalf("typing without a screen failed: %v", err)
+	backend.screenUnavailable = true
+	delivery := maintenanceSessionInput("screen-test", "unavailable", sessionID, "[attn] hand off now", sessionInputAtTurnBoundary)
+	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputScreenUnavailable) {
+		t.Fatalf("typing without a screen returned %v, want errSessionInputScreenUnavailable", attempt.err)
 	}
-	if len(typed) == 0 {
-		t.Fatal("the doorbell wrote nothing when the backend had no screen to show it")
+	if len(typed) != 0 {
+		t.Fatal("the boundary wrote input without screen safety evidence")
 	}
 }

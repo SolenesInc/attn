@@ -52,6 +52,7 @@ var (
 type hookInput struct {
 	SessionID      string          `json:"session_id"`
 	TranscriptPath string          `json:"transcript_path"`
+	Prompt         string          `json:"prompt"`
 	ToolName       string          `json:"tool_name"`
 	ToolInput      json.RawMessage `json:"tool_input"`
 	// CWD is the agent's working directory, used to resolve a tool that
@@ -3452,7 +3453,7 @@ func workspaceContextCheckoutPath(
 }
 
 func runHookState() {
-	sessionID, state := parseHookStateArgs()
+	sessionID, state, hookEvent := parseHookStateArgs()
 	if sessionID == "" || state == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-state [session_id] <state>\n")
 		os.Exit(1)
@@ -3462,7 +3463,7 @@ func runHookState() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	if err := c.UpdateStateFromHook(sessionID, state, input.PermissionMode); err != nil {
+	if err := c.UpdateStateFromHookEvidence(sessionID, state, input.PermissionMode, hookEvent, input.Prompt); err != nil {
 		fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
 		os.Exit(1)
 	}
@@ -3679,14 +3680,36 @@ func hookSessionIDFromArgOrEnv(index int) string {
 	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 }
 
-func parseHookStateArgs() (sessionID string, state string) {
-	switch {
-	case len(os.Args) >= 4:
-		return strings.TrimSpace(os.Args[2]), strings.TrimSpace(os.Args[3])
-	case len(os.Args) >= 3:
-		return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")), strings.TrimSpace(os.Args[2])
+func parseHookStateArgs() (sessionID string, state string, hookEvent string) {
+	if len(os.Args) < 3 {
+		return "", "", ""
+	}
+	first := strings.TrimSpace(os.Args[2])
+	if hookStateValue(first) {
+		event := ""
+		if len(os.Args) >= 4 {
+			event = strings.TrimSpace(os.Args[3])
+		}
+		return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")), first, event
+	}
+	if len(os.Args) < 4 {
+		return "", "", ""
+	}
+	event := ""
+	if len(os.Args) >= 5 {
+		event = strings.TrimSpace(os.Args[4])
+	}
+	return first, strings.TrimSpace(os.Args[3]), event
+}
+
+func hookStateValue(value string) bool {
+	switch value {
+	case protocol.StateLaunching, protocol.StateWorking, protocol.StatePendingApproval,
+		protocol.StateWaitingInput, protocol.StateIdle, protocol.StateUnknown,
+		protocol.StateScheduled, "recoverable":
+		return true
 	default:
-		return "", ""
+		return false
 	}
 }
 

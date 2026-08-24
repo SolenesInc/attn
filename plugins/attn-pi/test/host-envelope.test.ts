@@ -182,6 +182,21 @@ describe("PiEventMapper", () => {
     expect(emitted[1].body).toEqual({ steering: [], followUp: [] });
   });
 
+  test("acknowledges the daemon input id only when pi takes that exact user message", () => {
+    const { emitted, mapper } = harness();
+    mapper.expectInput("crew-heartbeat/generation-1", "heartbeat text");
+
+    mapper.handle({ type: "message_start", message: { role: "user", content: "another message" } });
+    expect(emitted).toHaveLength(0);
+
+    mapper.handle({ type: "message_start", message: { role: "user", content: "heartbeat text" } });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      kind: "input_taken",
+      body: { input_id: "crew-heartbeat/generation-1" },
+    });
+  });
+
   test("flushes pending text before a queue update so the queue never overtakes the reply", () => {
     const { emitted, mapper } = harness();
 

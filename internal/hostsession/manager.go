@@ -350,12 +350,21 @@ const (
 // run open: it starts one. So a caller never has to know what the agent is
 // doing to reach it.
 func (m *Manager) Deliver(sessionID string, how Delivery, text string) error {
+	return m.DeliverWithInput(sessionID, how, text, "")
+}
+
+// DeliverWithInput sends input with the identity the host echoes when taken.
+func (m *Manager) DeliverWithInput(sessionID string, how Delivery, text, inputID string) error {
 	switch how {
 	case DeliveryPrompt, DeliverySteer, DeliveryFollowUp:
 	default:
 		return fmt.Errorf("unsupported host delivery %q", how)
 	}
-	return m.send(sessionID, map[string]interface{}{"verb": string(how), "text": text})
+	verb := map[string]interface{}{"verb": string(how), "text": text}
+	if inputID != "" {
+		verb["input_id"] = inputID
+	}
+	return m.send(sessionID, verb)
 }
 
 // ToolDetail asks a host for what an expanded tool card shows.

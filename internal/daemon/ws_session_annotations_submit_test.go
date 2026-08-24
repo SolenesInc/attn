@@ -43,7 +43,7 @@ func TestSessionAnnotationsSubmitDelivers(t *testing.T) {
 	if !res.Success || res.Status != annotationSubmitStatusDelivered || res.Error != nil {
 		t.Fatalf("result = %+v, want delivered", res)
 	}
-	wantPaste := bracketedPasteStart + submitAnnotationText + bracketedPasteEnd
+	wantPaste := sessionInputPasteStart + submitAnnotationText + sessionInputPasteEnd
 	mu.Lock()
 	defer mu.Unlock()
 	if len(inputs) != 2 || inputs[0] != wantPaste || inputs[1] != "\r" {

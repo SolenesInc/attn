@@ -2,48 +2,16 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
-var (
-	errDoorbellBlockedByApproval = errors.New("doorbell blocked by pending approval")
-	errDoorbellBlockedBySelector = errors.New("doorbell blocked by an on-screen selector")
-)
-
-// doorbellDeferred reports the two refusals that are not failures: the target
-// cannot take words right now, and will be able to. Every caller that queues a
-// message rather than reporting an error asks this, so a new reason to hold off
-// reaches all of them at once.
-func doorbellDeferred(err error) bool {
-	return errors.Is(err, errDoorbellBlockedByApproval) || errors.Is(err, errDoorbellBlockedBySelector)
-}
-
 const profileRoleChiefOfStaff = "chief_of_staff"
-
-const (
-	bracketedPasteStart = "\x1b[200~"
-	bracketedPasteEnd   = "\x1b[201~"
-)
-
-// doorbellSubmitDelay is how long Enter waits after the paste terminator.
-//
-// Agent composers finalize a paste on a timing boundary, not on the terminator
-// alone: Claude Code folds a CR that arrives in the same PTY read as the
-// paste-end marker into the pasted text, so the payload sits in the composer
-// and never submits. An immediate second write is coalesced into that same
-// read and fails the same way — the gap, not the write split, is what makes
-// Enter a keypress. Measured against Claude Code 2.1.x (0ms fails, 50ms
-// submits) and Codex; 150ms carries margin for a loaded machine. It is a
-// package var only so tests can drop it to zero.
-var doorbellSubmitDelay = 150 * time.Millisecond
 
 func (d *Daemon) chiefOfStaffSessionID() string {
 	if d.store == nil {
@@ -131,14 +99,8 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	}
 }
 
-// nudgeChiefOfStaff types a bounded prompt into the current chief-of-staff
-// session's PTY whenever a chief is set and it is not waiting for approval. It
-// re-confirms the role right before
-// typing (the role is a single-holder upsert that another promotion may have
-// moved). Returns true only when the nudge was actually delivered, so callers can
-// report whether the chief was pinged live versus only queued in the inbox.
-func (d *Daemon) nudgeChiefOfStaff(prompt string) bool {
-	if d.ptyBackend == nil || d.store == nil {
+func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
+	if d.store == nil {
 		return false
 	}
 	sessionID := d.chiefOfStaffSessionID()
@@ -149,99 +111,17 @@ func (d *Daemon) nudgeChiefOfStaff(prompt string) bool {
 	if session == nil {
 		return false
 	}
-	if !isNudgeDeliveryAllowed(string(session.State)) {
-		return false
-	}
 	if d.chiefOfStaffSessionID() != sessionID {
 		return false
 	}
-	if err := d.typeDoorbell(sessionID, prompt); err != nil {
-		d.logf("chief nudge: input failed for %s: %v", sessionID, err)
+	delivery := maintenanceSessionInput("chief-inbox", attemptKey, sessionID, prompt, sessionInputAtTurnBoundary)
+	attempt := d.sessionInputs().try(context.Background(), delivery)
+	if attempt.err != nil {
+		d.logf("chief nudge: input failed for %s: %v", sessionID, attempt.err)
 		return false
 	}
+	d.sessionInputs().release(sessionID, delivery.id)
 	return true
-}
-
-// typeDoorbell delivers a bounded prompt to sessionID — the shared primitive
-// behind the chief-of-staff doorbells (notebook activation, inbox nudge) and
-// the markdown-annotation submit payload.
-//
-// Three delivery paths, in descending order of how much the daemon owns. A
-// conversation session's agent runs in a host the daemon spawned, so the prompt
-// is a steer down that pipe: nothing is typed, nothing is spliced, and it is
-// read at the agent's next turn boundary. Failing that, when the session's
-// active plugin driver run declares the message_delivery capability, the prompt
-// is relayed in-band via the plugin (no PTY fallback on failure — see
-// deliverDoorbellViaPluginDriver). Otherwise it types the prompt as an
-// explicit bracketed-paste event — the terminator gives the agent a semantic
-// boundary, so the prompt lands in the composer as one pasted block — and
-// then, after doorbellSubmitDelay, sends Enter as its own write.
-//
-// Two fences cover the pair. doorbellMu keeps a pending_approval report from
-// committing between the prompt and its Enter. The session's PTY write fence
-// keeps anything else — the user typing — out of the gap: a keystroke racing
-// the delay is written after the Enter, so the doorbell submits what it
-// composed and never the user's half-typed line. Always a bounded,
-// user-initiated delivery — never arbitrary streamed content.
-func (d *Daemon) typeDoorbell(sessionID, prompt string) error {
-	_, err := d.typeDoorbellRoute(sessionID, prompt)
-	return err
-}
-
-// typeDoorbellRoute is typeDoorbell with the route it took. composer is true
-// only for the paste, the one route that can leave a prompt sitting unsubmitted
-// in a target; a host session and a plugin driver each take the whole message or
-// fail, with nothing left behind to press Enter on.
-func (d *Daemon) typeDoorbellRoute(sessionID, prompt string) (composer bool, err error) {
-	d.doorbellMu.Lock()
-	defer d.doorbellMu.Unlock()
-	session := d.store.Get(sessionID)
-	if session == nil || !isNudgeDeliveryAllowed(string(session.State)) {
-		return false, errDoorbellBlockedByApproval
-	}
-	if d.isHostSession(sessionID) {
-		return false, d.deliverToHostSession(sessionID, hostsession.DeliverySteer, prompt)
-	}
-	if delivered, err := d.deliverDoorbellViaPluginDriver(session, prompt); delivered {
-		return false, err
-	}
-	// The paste is the only route that types at a screen, so it is the only one
-	// that can be answering a selector instead of filling a composer.
-	if line, blocked := d.doorbellSelectorOnScreen(sessionID); blocked {
-		d.logf("doorbell held off session=%s: the screen is waiting on a keypress (%q)", sessionID, line)
-		return false, errDoorbellBlockedBySelector
-	}
-	input := make([]byte, 0, len(bracketedPasteStart)+len(prompt)+len(bracketedPasteEnd))
-	input = append(input, bracketedPasteStart...)
-	input = append(input, prompt...)
-	input = append(input, bracketedPasteEnd...)
-	return true, d.withPTYWriteFence(sessionID, func() error {
-		if err := d.ptyBackend.Input(context.Background(), sessionID, input); err != nil {
-			return err
-		}
-		time.Sleep(doorbellSubmitDelay)
-		return d.ptyBackend.Input(context.Background(), sessionID, []byte("\r"))
-	})
-}
-
-// submitDoorbell presses Enter into a target that already has a doorbell's
-// paste sitting in its composer, which is not the same act as typing one: the
-// words are already there, and pasting them again would leave two copies. The
-// gate is the same, because a session that cannot take input must not be poked.
-func (d *Daemon) submitDoorbell(sessionID string) error {
-	d.doorbellMu.Lock()
-	defer d.doorbellMu.Unlock()
-	session := d.store.Get(sessionID)
-	if session == nil || !isNudgeDeliveryAllowed(string(session.State)) {
-		return errDoorbellBlockedByApproval
-	}
-	// Enter is the half of the paste that commits, so a selector that came up
-	// while the words were sitting there is the worse moment to press it.
-	if line, blocked := d.doorbellSelectorOnScreen(sessionID); blocked {
-		d.logf("doorbell submit held off session=%s: the screen is waiting on a keypress (%q)", sessionID, line)
-		return errDoorbellBlockedBySelector
-	}
-	return d.writePTY(sessionID, []byte("\r"))
 }
 
 // maybeAssignChiefOnSpawn assigns the chief-of-staff role at a session's first

@@ -24,7 +24,7 @@ import (
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
 	t.Helper()
 	d := newCrewDaemon(t)
-	backend := &fakeSpawnBackend{}
+	backend := &fakeSpawnBackend{screen: "❯"}
 	d.ptyBackend = backend
 
 	logPath := filepath.Join(t.TempDir(), "daemon.log")

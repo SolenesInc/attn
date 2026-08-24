@@ -57,6 +57,8 @@ type autoSettleTimer struct {
 	phase   autoSettlePhase
 	resume  autoSettlePhase
 	firesAt time.Time
+	run     sessionInputRunRef
+	opened  time.Time
 }
 
 // visible reports whether clients can see this entry — only a countdown,
@@ -105,12 +107,31 @@ func resolveAutoSettleSeconds(stored string, fallbackSeconds int) time.Duration 
 // internal/sessionstate already absorbs the flickers it knows about.
 func (d *Daemon) syncAutoSettle(sessionID, state string) {
 	if state != protocol.StateWorking {
+		d.sessionInputs().observePhase(sessionID, protocol.SessionState(state))
 		d.retireAutoSettleDismissal(sessionID)
 		d.cancelAutoSettle(sessionID, "left working")
 		return
 	}
+	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWorking)
 	d.coverAutoSettleDismissal(sessionID)
-	d.armAutoSettle(sessionID)
+	if run, ok := d.sessionInputs().currentUserRun(sessionID); ok {
+		d.armAutoSettleForUserInput(run)
+	}
+}
+
+func (d *Daemon) armAutoSettleForUserInput(run sessionInputRunRef) {
+	if !run.valid() || d.store == nil {
+		return
+	}
+	current, credited := d.sessionInputs().currentUserRun(run.sessionID)
+	if !credited || current != run {
+		return
+	}
+	session := d.store.Get(run.sessionID)
+	if session == nil || session.State != protocol.SessionStateWorking {
+		return
+	}
+	d.armAutoSettle(run.sessionID)
 }
 
 // armAutoSettle starts the arm delay if the feature applies and nothing is
@@ -131,6 +152,9 @@ func (d *Daemon) armAutoSettle(sessionID string) {
 	// turnOwed carries the shell/chief/pinned/muted exclusions too, so those are
 	// out for the same reason they are out of the queue.
 	if !d.turnOwed(sessionID) {
+		return
+	}
+	if _, ok := d.sessionInputs().currentUserRun(sessionID); !ok {
 		return
 	}
 
@@ -190,13 +214,15 @@ func (d *Daemon) startAutoSettleLocked(sessionID string, phase autoSettlePhase, 
 		window = 0
 	}
 	firesAt := time.Now().Add(window)
+	run, _ := d.sessionInputs().currentUserRun(sessionID)
+	opened := d.store.TurnStamps(sessionID).OpenedAt
 	ready := make(chan struct{})
 	var timer *time.Timer
 	timer = time.AfterFunc(window, func() {
 		<-ready
 		d.autoSettleFire(sessionID, timer)
 	})
-	d.autoSettleTimers[sessionID] = &autoSettleTimer{timer: timer, phase: phase, firesAt: firesAt}
+	d.autoSettleTimers[sessionID] = &autoSettleTimer{timer: timer, phase: phase, firesAt: firesAt, run: run, opened: opened}
 	close(ready)
 }
 
@@ -257,11 +283,11 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 		d.autoSettleMu.Unlock()
 		return
 	}
-	phase, resume := entry.phase, entry.resume
+	phase, resume, run, opened := entry.phase, entry.resume, entry.run, entry.opened
 	delete(d.autoSettleTimers, sessionID)
 	d.autoSettleMu.Unlock()
 
-	action := d.runAutoSettle(sessionID, phase, resume)
+	action := d.runAutoSettleFor(sessionID, phase, resume, run, opened)
 	if d.debugLogging {
 		d.logf("auto-settle fire: session=%s phase=%d outcome=%s", sessionID, phase, action)
 	}
@@ -280,6 +306,11 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 // runAutoSettle is the fire-time decision, separated so its outcome is a single
 // string a test hook can assert. `resume` is read only in the held phase.
 func (d *Daemon) runAutoSettle(sessionID string, phase, resume autoSettlePhase) string {
+	run, _ := d.sessionInputs().currentUserRun(sessionID)
+	return d.runAutoSettleFor(sessionID, phase, resume, run, d.store.TurnStamps(sessionID).OpenedAt)
+}
+
+func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
 	// Held across the whole decision so no state write lands between the check
 	// and the settle — otherwise the timer could settle a turn a transition had
 	// just opened. applyState takes the same lock around its store write.
@@ -313,6 +344,13 @@ func (d *Daemon) runAutoSettle(sessionID string, phase, resume autoSettlePhase) 
 	// without a committed transition (restart mid-window, a write outside applyState).
 	if string(session.State) != protocol.StateWorking {
 		return "not-working"
+	}
+	currentRun, userTaken := d.sessionInputs().currentUserRun(sessionID)
+	if !userTaken || currentRun != armedRun {
+		return "wrong-run"
+	}
+	if opened := d.store.TurnStamps(sessionID).OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
+		return "wrong-turn"
 	}
 	if !d.turnOwed(sessionID) {
 		// Settled by hand, or excluded mid-window. Nothing left to close.
