@@ -1,29 +1,48 @@
-# attn agent guide
+# attn
 
-macOS only for the **app** (the Tauri UI). Do not add Linux or Windows app
-compatibility unless requested. The **headless daemon**, however, is supported on
-Linux (amd64/arm64) — the hub cross-compiles and runs it on Linux remotes — so
-daemon-side code (`cmd/attn`, `internal/**`) must build and run on Linux too. See
-"Native VT library" at the end.
+attn stands for Attention: an interface friendly to both human and agent
+brains, built as a harness augmenter. What it does today, and what each part
+asks of you as a maintainer:
+
+- Durability. App, daemon, and machine restarts bring every session and
+  terminal back.
+- Bring your own harness. attn wraps Claude Code, Codex, Copilot, and Pi as
+  they are; the user gets each harness's native experience and can use the
+  bare CLI at any time. Users can add new harnesses with plugins.
+- The queue mode sorts agents into "waiting for you" or "busy" and moves the
+  user to the next one after every prompt. State classification and turn
+  accounting exist to serve this.
+- Remote hosts. Everything the daemon does also works over SSH on a Linux
+  box, which is why `cmd/attn` and `internal/**` build on Linux.
+- The Garden is the work tracker: seeds planted, tended, harvested. It is
+  the unit agents hand off, work upon, and help them stay organized.
+- Visible orchestration. Delegations are full sessions the user can open and
+  steer, from any harness to any harness, and agents can message each other.
+- Crew members are permanent agents with charters; the Chief is one.
+- Automations start a steerable agent on a schedule or an event.
+- Annotations. The user selects text in a live terminal or in a natively
+  rendered markdown file, comments on it, and sends the batch to a session as
+  one message.
+
+The app (the Tauri UI) is mac only for now; Linux support is being worked upon.
+The daemon runs on Linux, so daemon code stays portable.
 
 ## What makes attn special?
 
 attn is Victor's most loved and most used piece of software. It is not widely
-used, by design — Victor doesn't want to carry a large user base — but the few
+used, by design (Victor doesn't want to carry a large user base) but the few
 people who run it matter to him. Maintain and iterate on it like something loved.
 
 The things we can never compromise on: frictionless experience, keyboard
-friendliness, and performance. They go hand in hand — a dropped frame or a
-forced reach for the mouse is friction. And attn runs all day, every day:
-memory that creeps or CPU burned while idle is a defect, not a footnote.
+friendliness, and performance. They go hand in hand. And attn runs all day,
+every day: memory that creeps or CPU burned while idle is a defect.
 
 ## Note from Victor
 
 I love ambitious ideas and strive for simple, elegant systems. Refactoring
 first so a new feature weaves in gracefully is the norm here, not an exception
-to argue for. I work iteratively, crafting boutique software — not IKEA
-software. Nothing wrong with IKEA; it just doesn't spark passion in me. attn is
-my passion software.
+to argue for. I work iteratively, crafting boutique software, not IKEA
+software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## You are probably running inside attn
 
@@ -34,7 +53,7 @@ production `~/.attn` database. A careless command ends your own session, or one 
 Victor's others.
 
 - Never kill by pattern. No `pkill -f attn`, no `pgrep | kill`, no killing a PID
-  you matched on a name, path, or worktree string — your own process and every
+  you matched on a name, path, or worktree string: your own process and every
   other live session carry those strings in their argv. Kill only a PID you
   captured at spawn, or a port/socket owner you confirmed by its working
   directory.
@@ -47,21 +66,22 @@ Victor's others.
 
 ## Language
 
-`docs/glossary.md` is the source of truth for attn's domain vocabulary —
+`docs/glossary.md` is the source of truth for attn's domain vocabulary:
 workspace context, the Notebook, tickets, delegations, turns, and friends. Read it
 before naming anything new, and when an implementation has drifted from a
 definition, fix one or the other in the same change.
 
 Several terms collide in this repo. Keep them apart:
 
-- **you** — the agent reading this file and changing attn.
-- **we**, **Victor** — who you are talking to; attn's maintainer.
-- **user** — the person using attn to direct agents. Usually Victor too, but the
-  distinction decides product questions.
-- **agent** — depending on context: you, the agent attn launches into a session
+- **you**: the agent reading this file and changing attn.
+- **we**, **Victor**: who you are talking to; attn's maintainer.
+- **user**: the person using attn to direct agents. Usually Victor too, but the
+  distinction decides product questions. Don't write "Victor" in prompts within
+  the codebase.
+- **agent**: depending on context: you, the agent attn launches into a session
   (Claude Code, Codex), or a delegated agent on the board. Say which whenever the
   sentence does not make it obvious.
-- **session** — one attn-managed agent process with a PTY. Not a delegation, not
+- **session**: one attn-managed agent process with a PTY. Not a delegation, not
   a workspace.
 
 ## Commands
@@ -108,14 +128,14 @@ permissions.
   - Anything under `app/` (frontend, `src-tauri`, plugins), a protocol change
     (`generated.ts` moves with `generated.go`), or bundle metadata → `make dev`,
     or `make install PROFILE=<name>`.
-  Escalate to the full build when unsure, or when a daemon-only install does not
-  show the change.
+    Escalate to the full build when unsure, or when a daemon-only install does not
+    show the change.
 - Named profile: select it with `eval "$(./attn profile-env <name>)"`, then run
   `make install PROFILE=<name>`. The shell's `ATTN_PROFILE` must match.
 - `profile-env` clears inherited routing overrides (`ATTN_DATA_DIR` included).
   Verify the emitted `[attn profile=…]` banner before acting.
 - `ATTN_PROFILE` set beside a data dir, socket, DB, config, plugin dir, or WS
-  port belonging to another profile is refused outright — the error names both
+  port belonging to another profile is refused outright. The error names both
   sides and the `env -u …` that fixes it. Your session inherits production
   routing, so scrub it (or `profile-env`) before any profile command.
 - Inspect with `attn profile`, `attn profile list`, or
@@ -125,7 +145,7 @@ permissions.
   days later. `attn profile clean <name>` reaps the workers, conversation
   hosts, and plugin runtime processes, stops the daemon, quits the app, and
   removes the bundle and data dir. `make install
-  PROFILE=<name>` records the worktree it ran from, so `attn profile list` tells
+PROFILE=<name>` records the worktree it ran from, so `attn profile list` tells
   you which profiles are yours, and a PostToolUse hook reminds you after you
   create or merge a PR.
 - Full model and per-agent recipe: [docs/profiles.md](docs/profiles.md).
@@ -137,18 +157,19 @@ non-production app/daemon. Exempt only:
 - a pure isolated change fully covered by unit tests, with no daemon lifecycle,
   protocol, PTY, background-runner, timing, or UI surface. State the reason.
 
-Match the verification tier to the behavior the change exposes, not to which
-directory it lives in. The cheapest tier applies only when the change has no
-app-observable behavior at all — a self-contained CLI command that never talks to
-the app or daemon can be verified by running the built binary directly (plus its
-unit tests). Example: `attn pr wait-ready` shells out to `gh` and touches no
-daemon or app surface, so exercising the binary against a real PR is sufficient.
+Match the verification tier to the behavior the change exposes. The cheapest
+tier applies only when the change has no app-observable behavior at all: a
+self-contained CLI command that never talks to the app or daemon can be
+verified by running the built binary directly (plus its unit tests). Example:
+`attn pr wait-ready` shells out to `gh` and touches no daemon or app surface,
+so exercising the binary against a real PR is sufficient.
 
-A daemon change is not automatically daemon-tier. Most daemon work reaches the app
-— protocol, persisted state and its broadcasts, WebSocket events, PTY, PR/git
-flows — and the app's reaction is part of the behavior, so it needs integrated
-verification in the running app even though the code lives under `internal/`.
-Reserve daemon-only verification for daemon internals with no path to the app.
+A daemon change is not automatically daemon-tier. Most daemon work reaches the
+app via protocol, persisted state and its broadcasts, WebSocket events, PTY,
+PR/git flows, and the app's reaction is part of the behavior, so it needs
+integrated verification in the running app even though the code lives under
+`internal/`. Reserve daemon-only verification for daemon internals with no path
+to the app.
 
 Daemon lifecycle, protocol, PTY, background-runner, and UI changes always need
 live verification. If the environment cannot run the tier the change requires,
@@ -164,24 +185,26 @@ profile_app="$(./attn profile resolve --field appPath)"
   --agent codex --model <model> --effort high --json
 ```
 
-Use the bundled CLI, not an unrelated `attn` on `PATH`. Preflight is diagnostic;
-fix reported tool/path/routing/daemon/protocol failures before treating scenario
-output as product evidence.
+Use the bundled CLI, not an unrelated `attn` on `PATH`. `attn preflight` is
+diagnostic; fix reported tool/path/routing/daemon/protocol failures before
+treating scenario output as product evidence.
 
 ### Packaged-app harness
 
 - Single-tenant: never run packaged-app scenarios in parallel.
 - Crew fixtures in harness and verification profiles use obviously synthetic
-  names, never real member names such as `keel`, `alder`, or `trellis`. Pin
-  synthetic members explicitly to `claude-haiku-4-5`; use a stronger model only
-  when the scenario is testing work that needs its intelligence.
+  names. Pin synthetic members explicitly to `claude-haiku-4-5`; use a stronger
+  model only when the scenario is testing work that needs its intelligence.
 - Multiple scenarios: `pnpm --dir app run real-app:serial-matrix`.
-- Rebuild before evidence-sensitive runs.
-- Harness uses active `ATTN_PROFILE`, otherwise `dev`;
-  `ATTN_HARNESS_PROFILE` overrides it.
+- The harness refuses a build whose source fingerprint differs from the
+  checkout, so a stale install fails by name.
+- Harness uses active `ATTN_PROFILE`, otherwise `dev`; `ATTN_HARNESS_PROFILE`
+  overrides it.
 - Production requires both `ATTN_HARNESS_PROFILE=` and `--run-against-prod`.
-- On failure, inspect captured pane text and native screenshots before diagnosis.
-- Remote scenarios target the local OrbStack VM (`attn-remote@orb`); provision with `pnpm --dir app run real-app:provision-remote`.
+- On failure, inspect captured pane text and native screenshots before
+  diagnosis.
+- Remote scenarios target the local OrbStack VM (`attn-remote@orb`); provision
+  with `pnpm --dir app run real-app:provision-remote`.
 
 ### Evidence recordings
 
@@ -193,8 +216,8 @@ description. Record the run, publish, paste the emitted markdown:
 ./scripts/pr-evidence.sh publish clip.mp4   # pushes mp4+gif to victorarias/attn-pr-evidence, prints the markdown
 ```
 
-`record` captures the window of the named profile's app (`attn-<name>.app`) —
-pass the profile you installed for this verification, the same name you will
+`record` captures the window of the named profile's app (`attn-<name>.app`).
+Pass the profile you installed for this verification, the same name you will
 `profile clean` later. `--app <owner>` overrides for a non-attn window.
 
 Harness runs record themselves: `ATTN_HARNESS_RECORD=1` makes every
@@ -202,12 +225,12 @@ Harness runs record themselves: `ATTN_HARNESS_RECORD=1` makes every
 `recording-NN.mp4` segments into its artifacts dir, publishable with the same
 `publish` command. Details in `app/scripts/real-app-harness/CLAUDE.md`.
 
-The evidence repo is public and the clip shows whatever the window shows —
+The evidence repo is public and the clip shows whatever the window shows:
 session names, transcripts, tickets. Watch the recording before publishing;
-re-record rather than push something that should not be on the open internet.
+re-record if it shows something that should stay private.
 
 The GIF renders inline in the PR; the mp4 beside it is the full-quality
-master. GitHub never inline-plays a repo-hosted mp4 — only the GIF embeds —
+master. GitHub never inline-plays a repo-hosted mp4, only the GIF embeds,
 and images render only under 10MB, so keep clips around 20s (the script warns
 past the limit). Rendering receipts, one section per embed form:
 [attn-pr-evidence#1](https://github.com/victorarias/attn-pr-evidence/issues/1).
@@ -220,17 +243,16 @@ this decides what you forgot. Before calling work done, walk the list and say
 which entries applied:
 
 - **CLI.** `cmd/attn`. Behavior reachable from the app is usually also expected
-  from the command line, and headless or remote users have only the CLI.
-- **Daemon and app.** Most `internal/**` work reaches the app — protocol,
+  from the command line.
+- **Daemon and app.** Most `internal/**` work reaches the app: protocol,
   persisted state and its broadcasts, WebSocket events, PTY, PR/git flows. The
-  app's reaction is part of the behavior, not a follow-up.
-- **Protocol.** `generated.ts` moves with `generated.go` and `ProtocolVersion`
-  increments. Never hand-edit either.
-- **Linux.** `cmd/attn` and `internal/**` cross-compile and run on Linux remotes.
-  Darwin-only code needs a build constraint and a stub, not an assumption.
-- **Plugins and SDK.** `plugins/` and `sdk/` consume the same surfaces.
-- **Docs.** New vocabulary in `docs/glossary.md`, design and gate decisions in
-  `docs/plans/`, user-visible behavior in a `changelog.d/` fragment.
+  app's reaction is part of the behavior.
+- **Protocol.** `generated.ts` moves with `generated.go` and
+  `ProtocolVersion`/`PROTOCOL_VERSION` increments.
+- **Linux.** `cmd/attn` and `internal/**` cross-compile and run on Linux
+  remotes.
+- **Docs.** New vocabulary in `docs/glossary.md`, changelog in a `changelog.d/`
+  fragment.
 
 If you added a way in, add the way out and the way to see it. Snooze needs
 unsnooze, an opened turn needs a way to settle, `bus disable` needs `bus enable`,
@@ -249,155 +271,77 @@ Tests must never resolve `config.DataDir()` or derived paths to production
 - Individual tests may add `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Under `go test`, missing `ATTN_DATA_DIR` intentionally panics.
 
-See [docs/plans/2026-07-18-db-loss-mitigation.md](docs/plans/2026-07-18-db-loss-mitigation.md).
-
 ## Testing tools
 
-Three adopted patterns; full receipts in
-[docs/plans/2026-08-09-testing-spike-synctest-rapid-toxiproxy.md](docs/plans/2026-08-09-testing-spike-synctest-rapid-toxiproxy.md).
-
 - A test that asserts elapsed time (backoff, debounce, recurrence) or that
-  something **never** happens runs under `synctest.Test` — no sleeps, no poll
-  loops. House rules, with receipts in `internal/daemon/synctest_test.go`:
-  build long-lived resources (daemon, store, DB handles) *outside* the bubble
-  and drive them *inside*; seed anything time-stamped inside the bubble (its
-  clock starts in 2000, so a fixture stamped with real `time.Now` is decades
-  in the future); tear down completely — any goroutine still alive at bubble
-  exit is a panic even when every assertion passed. A child process or
-  fsnotify watcher does not error — it silently pins the bubble clock to real
-  time; those tests stay outside. `synctest.Wait()` is a happens-before edge
-  for the race detector; `time.Sleep()` is not, so timer-written state still
-  needs its own lock.
-- A unit with a stated invariant and a large input space — especially when the
-  interesting failures need a *sequence* of operations — gets a
+  something **never** happens runs under `synctest.Test`: no sleeps, no poll
+  loops.
+- A unit with a stated invariant and a large input space gets a
   `pgregory.net/rapid` property beside its example tests. Rapid explores, it
   does not document. Commit the `testdata/rapid/` seeds it writes on failure.
-- Behavior that *is* the network being bad (backpressure, eviction, reconnect)
-  goes through the embedded Toxiproxy helper (`newToxiProxy(t, upstream)`,
-  `internal/daemon`). Anything a fake or direct channel write can express
-  does not — it costs real seconds.
+- Behavior that _is_ the network being bad (backpressure, eviction, reconnect)
+  goes through the embedded Toxiproxy helper (`newToxiProxy(t, upstream)`).
+  Anything a fake or direct channel write can express does not; it costs real
+  seconds.
 
 ## How changes ship
 
-How much process a change gets is a judgment call, not a rulebook. When in
+How much process a change gets is a judgment call. When in
 doubt, ask the maintainer.
 
-- **Plan docs are the norm.** Non-trivial work gets a plan doc first — often
-  written by the same agent that then implements it in the same session. Only a
-  genuinely small change goes straight to a PR with no plan.
-- **A plan becomes one or several PRs.** When the work changes existing
-  behavior, the PRs target an `epic/*` branch and the epic branch gets a full
-  review when it merges to main. When the work builds something new that
-  cannot break what already exists, PRs may merge directly to main as they
-  land. One question decides between the two — can this PR damage what already
-  works? — not how big the plan is.
-- **A spike answers a question.** It usually does not merge, but that is not a
-  hard rule. What is constant: the maintainer decides what happens after a
-  spike — merge it, discard it, or build on what it showed.
-
-### Merging
-
-Every PR merges once figgyster approved the current head, CI is green, and no
-review threads are unresolved. No per-PR permission needed.
-
-Wait for the maintainer's explicit OK only before:
-
-- merging an epic branch to main;
-- moving on from a spike;
-- changes that irreversibly destroy or convert existing user state;
-- one-way doors — a way in shipped without its way out;
-- production installs and releases (already covered above).
+- **Plan docs are the norm.** Non-trivial work gets a plan doc first, often
+  written by the same agent that then implements it in the same session, but not
+  necessarily. Only a genuinely small change goes straight to a PR with no plan.
+- **A plan becomes one or several PRs.** When the work changes existing behavior
+  visibly but lands on main on a multi-PR arc, make the PRs target an `epic/*`
+  branch and the epic branch gets a full review when it merges to main. When the
+  work builds something new that cannot break what already exists, PRs may merge
+  directly to main as they land.
+- **A spike answers a question.** The maintainer decides what happens after
+  a spike: merge it, discard it, or build on what it showed. Do not commit
+  spikes.
 
 ### Experience testing
 
 The maintainer tests how attn feels to use; the harness and figgyster cover
 correctness. That testing happens at two moments: very early on spikes (is the
-idea right?) and at the end of a substantial series of PRs (does the whole
-thing feel right?). It is never per-PR QA — do not hold an approved PR
-waiting for it.
+idea right?) and at the end of a substantial arc of PRs (does the whole thing
+feel right?).
 
-When a series gets there, prepare the test: a running profile installed from
-the branch, realistic data, and a short list of things to try, focused on what
-changed and what you could not judge yourself — feel, latency, keyboard flow.
-The maintainer should spend those minutes trying things, not setting up.
+When an arc gets there, prepare the test: a running profile installed from the
+branch, realistic data, and a short list of things to try, focused on what
+changed and what you could not judge yourself: feel, latency, keyboard flow. The
+maintainer should spend those minutes trying things.
 
 ### Protocol bumps and migrations
 
-Protocol version bumps and DB migrations are day-to-day work; their checklists
-are in this file. Do them, verify them, and do not present them as risks,
-blockers, or reasons to pause. They need the maintainer's attention only when
-they hit the wait list above — destroying user state, closing a door, touching
-production — never just because they are a migration or a protocol change.
+Protocol version bumps and DB migrations are day-to-day work. Do them, verify
+them, and do not present them as risks, blockers, or reasons to pause.
 
 ## Pull requests
 
-Ready-for-review (not draft) and rebase onto main first, per the global guide;
-when to merge is in "How changes ship" above. What is attn-specific is how you
-wait on one.
+Ready-for-review (not draft) and rebase onto main first.
 
 To wait on a GitHub PR, run `attn pr wait-ready <pr> --repo <owner/repo>
 --reviewer <login>` once; do not poll checks, reviews, and comments separately.
-It returns on the first poll with an actionable update and reports it by exit
-code: `0` approved, `1` checks failed, `3` changes requested, `4` human comment,
-`5` error, `6` bot comment, `124` timeout. One poll can see several of those at
-once; the exit code names the highest ranked (closed, checks failed, changes
-requested, human comment, approved, bot comment) and the rest are still reported
-— `also <event>:` on stdout, `events` in `--json`. Do not treat the exit code as
-the whole answer when you need to know everything that happened. The reviewer's
-own verdict is one event, not a verdict plus a comment. Comments already present
-when the wait starts are the baseline; `--ignore-author` drops an author of
-either kind. Your own comments are never events: the account `gh` is
-authenticated as is resolved once per run and its remarks are dropped, so posting
-a reply and then waiting does not wake you with your own text. Pass
-`--include-self` to watch a PR you also comment on.
 
-The output carries what was said — comment bodies with `file:line` when inline,
-the verdict's text, failing check names with URLs, the PR URL — so act on it
-instead of querying GitHub again. Successive waits on the same PR resume from
-what the previous one reported (recorded under the data dir), so a comment that
-lands while you are answering the last one is still reported, and a failing check
-you were already told about does not return instantly a second time. `--reset`
-forgets that position and `--since <RFC3339>` replays from an instant.
+Its `--help` explains exit codes, baselining, and resume; the output carries
+every comment body, verdict, and failing check URL, so act on it.
 
-## Change discipline
+## Misc expectations
 
-- Diagnose root cause. Do not remove requested behavior without explicit
-  approval. For refactors, list and verify behaviors that must survive.
-- Do not copy production code into tests or test compile-time guarantees.
-- Every PR adds a changelog fragment under `changelog.d/` — CI enforces it.
+- Before fixing a bug, first diagnose root cause. If you can't, resist blind
+  changes. Instead, propose adding instrumentation so next time you can
+  diagnose.
+- Do not copy production code into tests or test compile-time guarantees. Minimize
+  unit tests, prefer fast integration tests instead.
+- Every PR adds a changelog fragment under `changelog.d/`. CI enforces it.
   Do not edit `CHANGELOG.md` directly; it is compiled from fragments at
-  release time. Format and release process:
-  [docs/making-a-release.md](docs/making-a-release.md).
-- Complexity belongs at the boundary. The daemon owns orchestration and stays
-  authoritative (`applyState`, `wireProjections`); the frontend renders what it
-  is told.
-- Idle systems must be idle. Anything recurring — a timer, a watcher, a "did
-  it change?" gate — does real work (publishes, pushes, scans, repaints) only
-  when something moved; a gate comparing an unstable value (clock-derived,
-  sampled) fires forever while nothing changes. Verify new recurring work
-  stays silent on a quiet live session — and still fires on every real
-  change; never suppress work a consumer needs to save traffic.
-- No continuously repainting animations. attn renders GPU terminals, often on
-  high-refresh displays, beside agents that run all day — a permanent repaint
-  loop is a battery and thermal bug no test will catch.
-- Nothing invisible holds a GPU surface. A compositing layer, a canvas drawing
-  buffer, or an attachment the graphics API hands you by default all cost the
-  element's area in device pixels — whether it is ever drawn, and whether
-  anyone can see it. An always-mounted component must not hold one while it is
-  closed, and a pane behind another session must not hold one at all. `ps` RSS
-  cannot see any of this, so a change here is measured by physical footprint
-  and by which surfaces exist, never by RSS:
-  [docs/plans/2026-08-14-app-memory-floor.md](docs/plans/2026-08-14-app-memory-floor.md).
-- Comments state what the code cannot show — a constraint, an invariant, a
-  measured receipt — in one or two lines, and move when the code moves. A
-  comment claims only what this commit does: describing the design you
-  intend, then shipping the part in scope, quietly turns the comment into a
-  lie. An unbuilt intention belongs in the plan doc or as a named gap in the
-  PR body, never in a comment. Godoc on an exported symbol is one line. A
-  package header is a few lines plus a link to the design doc, never a
-  retelling of it. Never narrate the next line
-  or argue that the change is correct: that talk belongs in the PR, and a
-  comment addressed to the reviewer is a defect.
+  release time. Format and release process: docs/making-a-release.md.
+- The daemon is the source of truth and authoritative. Do not make the app the
+  source of truth for anything besides rendering.
+- Avoid continuously repainting animations. They tend to have high CPU usage and
+  drain battery.
 - Conventional commit titles with a scope, in plain language:
   `fix(queue): hand over the next agent however a turn closes`.
 
@@ -412,11 +356,11 @@ forgets that position and `--since <RFC3339>` replays from an instant.
   `internal/pty`, not inside the daemon
 - `internal/store`: SQLite plus in-memory cache
 - `internal/enrollment`: who this daemon is (`daemon-id`) and whose it is
-  (`enrollment.json`) — the two files that decide whether home-level state may
+  (`enrollment.json`), the two files that decide whether home-level state may
   live here. `Status.RequireHome` is the fence every garden/crew surface calls;
   reach it from the daemon through `Daemon.requireHome`, never by reading the
   record yourself
-- `internal/crew`: what a crew member IS — the id rule, the stored registry
+- `internal/crew`: what a crew member IS: the id rule, the stored registry
   record, and how a home directory under `~/.attn/crew/` becomes one. Files stay
   canonical: the registry records where a home lives, never what it says. The
   daemon half (`internal/daemon/crew.go`) owns the binding a session launches
@@ -427,10 +371,10 @@ forgets that position and `--since <RFC3339>` replays from an instant.
   compiles). A collection is its own table `doc_<id>`, minted from its registry
   row; a declared field is an indexed generated column over the body. Every
   identifier the store executes is derived here from an integer or a validated
-  field name — never from caller text
+  field name, never from caller text
 - `internal/jobs`: durable job queue (retry/backoff, coalescing, commit fence,
-  cron entries) — every background duty and every periodic tick runs on it
-- `internal/apps`: an app's identity — the name rule, and the bus consumer
+  cron entries). Every background duty and every periodic tick runs on it
+- `internal/apps`: an app's identity: the name rule, and the bus consumer
   (`app:<name>`) and document namespace (`app/<name>`) derived from it. An app's
   enabled state IS its consumer's enabled bit; there is no registry column for
   it, and nothing stores the derived names. Registry tables and the lifecycle
@@ -442,7 +386,7 @@ forgets that position and `--since <RFC3339>` replays from an instant.
   a start function; the package knows nothing about what it supervises. The
   plugin runtime is one consumer, the app runtime's sidecar is the other
 - `internal/automode`: pi auto mode's config value and the rules about what may
-  be written into it — the Go mirror of `plugins/attn-pi/automode/config.ts`,
+  be written into it, the Go mirror of `plugins/attn-pi/automode/config.ts`,
   and the JSON handed to a driver at launch. Storage is
   `internal/store/automode.go`, whose `PromoteAutoModeProposal` is the ONLY way
   a pattern or a model reaches the config; every CLI-reachable verb writes a
@@ -451,14 +395,13 @@ forgets that position and `--since <RFC3339>` replays from an instant.
 - `internal/transcript`: assistant-message extraction from JSONL
 - `app`: Tauri frontend; WebSocket `ws://localhost:9849`
 
-Frontend map (`app/src`) — `app/CLAUDE.md` covers components and test patterns;
+Frontend map (`app/src`). `app/AGENTS.md` covers components and test patterns;
 this is where daemon traffic lands:
 
 - `hooks/useDaemonSocket.ts`: the socket. Connection, reconnect/circuit breaker,
   the event switch, and every `send*` command. Its return value is the frontend's
   entire daemon API. `App` is its only caller and publishes it through
-  `contexts/DaemonApiContext.tsx`; everything below reads it with `useDaemonApi()`
-  rather than receiving it as props.
+  `contexts/DaemonApiContext.tsx`; everything below reads it with `useDaemonApi()`.
 - `hooks/daemonPendingRequests.ts`: request/result correlation. A fallible
   command parks its promise under a key until the matching `*_result` event
   lands. `settlePendingRequest` is the typed way in. `sendRequest` (fresh request
@@ -476,27 +419,19 @@ this is where daemon traffic lands:
   `daemonMarkdownAnnotationEvents.ts` only decodes results.
 - `store/daemonSessions.ts`: Zustand store for session/PR state.
 - `pty/`: transport, attach planning, binary frame decode, runtime lifecycle.
-- Tests are topic-suffixed: `Source.concern.test.tsx`. Keep that — the suffix
+- Tests are topic-suffixed: `Source.concern.test.tsx`. Keep that: the suffix
   names the behavior, and the set of suffixes maps a large file's seams.
 
 States: `launching`, `working`, `pending_approval`, `waiting_input`, `idle`,
 `unknown`, `scheduled`, `recoverable`. A turn opens when a session reaches a
 state that wants the user (`internal/attention`) and closes only when the user
 settles it; `turn_owed` is derived at broadcast from the persisted
-`turn_opened_at`/`turn_settled_at` stamps, never stored.
+`turn_opened_at`/`turn_settled_at` stamps.
 
 IPC: `~/.attn/attn.sock`. WebSocket clients buffer 256 messages; sustained
 over-send may drop messages or disconnect slow clients.
 
-Every WebSocket client presents the profile's **client token** in
-`client_hello` — the socket has file permissions, the port had nothing. The
-daemon mints `<data-dir>/client-token` at startup; clients read it through one
-path per language (`config.ClientToken()`, `get_client_token`,
-`harnessClientHello()`). A new client that dials the daemon must send it, or
-the hello is refused by name. Nothing is pushed before that hello: hub
-registration and `initial_state` both happen in `admitClient`, so an
-unauthorized connection sees no broadcast at all, not merely refused commands.
-See `docs/glossary.md`.
+We avoid cross-profile app<>daemon contamination via the profile's client token.
 
 ## Cross-cutting contracts
 
@@ -506,12 +441,11 @@ For command/event/message-shape changes:
 
 1. edit `internal/protocol/schema/main.tsp`;
 2. run `make generate-types`;
-3. update `internal/protocol/constants.go` and increment `ProtocolVersion`;
-4. verify with a non-production install.
+3. Increment `ProtocolVersion` in `internal/protocol/constants.go` and
+   `PROTOCOL_VERSION` in app/src/hooks/useDaemonSocket.ts
 
-Never hand-edit generated `internal/protocol/generated.go` or
-`app/src/types/generated.ts`. The daemon survives app rebuilds; version skew
-must fail explicitly.
+Do not hand-edit generated `internal/protocol/generated.go` or
+`app/src/types/generated.ts`.
 
 ### The app SDK
 
@@ -523,149 +457,56 @@ materializes a types-only package under `<data-dir>/apps/sdk/<hash>`, linked
 into the app's `node_modules`.
 
 After editing `sdk/attn-app/src`, run `make generate-sdk` and commit
-`internal/appbuild/sdkdist/` — `//go:embed` reads from the Go tree, so the
-emitted `.d.ts` is generated *and* committed like `generated.go`. `make
+`internal/appbuild/sdkdist/`: `//go:embed` reads from the Go tree, so the
+emitted `.d.ts` is generated _and_ committed like `generated.go`. `make
 check-sdk` fails on a stale copy and runs in CI's Frontend job. React's own
 declarations are pinned in `appbuild.ReactTypesVersion` and must match what the
 frontend's lockfile resolves.
 
-### WebSocket and state
-
-- Fallible async UI actions use request/result: daemon emits `*_result`; frontend
-  returns a `Promise` and resolves/rejects it. See `sendPRAction`.
-- Persisted daemon state transitions go through `applyState` in
-  `internal/daemon/session_state.go`; never write state directly to the store.
-- Capture classifier observation time before async classification and pass it via
-  `classifierObservation`; reject stale results.
-- Prefer `internal/protocol/helpers.go` pointer/value helpers (`Ptr`, `Deref`,
-  `SessionsToValues`, `PRsToValues`).
-
 ### Event bus
 
-`internal/bus` is the durable spine. State-change broadcasts do not touch the
-hub directly: a producer publishes a **domain fact** (dotted `domain.verb`, an
-indexed subject naming the entity, a small payload), and the hub — an ephemeral
-consumer — runs the matching entry in `wireProjections`
-(`internal/daemon/bus.go`) to produce the wire traffic, often a snapshot
-re-push. Every state-change broadcast goes through it;
-`TestWireTrafficComesFromProjections` fails on a new one that does not, and
-carries the enumerated exception list. Its mirror,
-`TestEveryProjectedFactReachesTheWire`, publishes every fact that has a
-projection and reads the bytes the hub sent, so a projection that stops sending
-— or sends the wrong event — fails too. Both are driven by the live
-table, so a new projection cannot go unnoticed: it needs a one-line fixture
-naming the events it sends, the test fails by name until it has one, and a fact
-reaching no projection has to name the consumer that does read it.
+`internal/bus` is an append-only log of things that happened in the daemon. When
+changes happen, the code that changed it publishes a **fact** describing the
+change, and everyone who cares reads facts off the log in order. This is the
+foundation of event driven behavior that allows attn to grow without a linear
+increase in complexity.
 
-- A fact without a subject is a snapshot invalidation, not a fact. If the
-  producer does not know the entity id, that is the bug to fix — change the
-  signature, or diff around the mutation to recover what moved.
-- A projection writes to the wire and does nothing else. It must not mutate
-  state and it must not publish: the bus holds its publish lock across the
-  inline fan-out, so a nested publish deadlocks. Anything the old broadcaster
-  did beyond pushing bytes belongs on the producer side.
-- A bulk operation publishes one fact per entity and wraps them in
-  `coalesceSnapshots`, which collapses the resulting whole-list pushes into one
-  wire message per snapshot.
-- Publish subject-only when the entity is store-backed (the projection re-reads
-  it, and the synchronous fan-out means it sees the new value); carry a payload
-  when the entity is gone, transient, or a list the caller computed.
-- Byte streams stay off the bus by design: PTY output, PTY desync, attach
-  results, workspace tile content, and fs bursts keep their direct paths, as
-  does the remote relay (`broadcastRawWSMessage`), whose events were already
-  published as facts on the remote daemon. Attach traffic routes by a
-  per-client predicate, which pub/sub cannot express.
-- Durable consumers get ordered, at-least-once delivery from a persisted cursor,
-  so handlers must tolerate redelivery. A failing handler stalls its own
-  consumer rather than skipping the event.
-- Retention trims past the age window but never past an **enabled** consumer's
-  cursor or an **installed app** consumer's cursor. A disabled ordinary consumer
-  does not pin; a disabled installed app keeps its unread backlog until enable
-  or uninstall. The window is 30 days, so a trim over any database younger than
-  that removes nothing whatever the floor says: `ATTN_BUS_RETENTION` moves it,
-  and is the only way to watch a trim — or a consumer resuming below
-  `earliest` — happen at all. Set it for the daemon and for `attn bus trim`
-  together, or the hourly pass and the manual one keep different windows.
-- An enabled consumer that stops consuming therefore grows the log until someone
-  intervenes, so past `bus.DefaultPinAlarmAge` the pin is reported: a warning
-  notification, a `(PINNING …)` tag in `attn bus status`, and a badge on the
-  settings page, all from one predicate in `internal/bus`. Announced once per
-  episode — the cursor moving is what ends one. `ATTN_BUS_PIN_ALARM_AGE` moves
-  the tripwire (0 turns it off), which is also how the condition is demonstrated
-  without waiting an hour.
-- A durable consumer can register and unregister while the daemon runs.
-  `Unregister` cancels that consumer alone, waits for its delivery loop to exit,
-  and only then deletes the row: deleting first leaves a live loop reading a
-  registration that disappeared and retrying that error forever. It is
-  idempotent, and every uninstall path must call it — an abandoned enabled row
-  holds the retention floor down against a consumer nobody serves.
-- Operator surface: `attn bus status`, `attn bus disable|enable <consumer>`.
-  The enabled bit is database-only on purpose — the kill switch must not depend
-  on the daemon it kills.
+- A **fact** is one row on the log: a name (`session.state.changed`,
+  `garden.harvested`), a **subject** (the id of the thing that changed), and a
+  small JSON payload. Facts describe what happened; they never carry byte
+  streams (terminal output, attach data, file contents).
+- A **consumer** reads facts. A _durable_ consumer has a **cursor**, the seq of
+  the last fact it handled, stored in the DB, so it resumes where it left off
+  after a restart and never misses one. An _ephemeral_ consumer (the WebSocket
+  hub) starts at the head and has none.
+- A **projection** is the hub's rule for turning one fact into WebSocket
+  traffic for the app. The table is `wireProjections` in
+  `internal/daemon/bus.go`. Most projections re-read the entity and push it;
+  a **snapshot** projection pushes a whole list (all sessions, all seeds)
+  because that is what the app renders.
+- **Retention** trims old facts, but never past the cursor of an *enabled*
+  durable consumer or of an installed app, enabled or not. Such a consumer
+  that stops reading **pins** the log and it grows. A disabled ordinary
+  consumer holds nothing and can lose facts.
 
-Design and gate decisions:
-[docs/plans/2026-08-01-ext-a1-event-bus.md](docs/plans/2026-08-01-ext-a1-event-bus.md).
+What that means when you change things:
 
-### Terminal
-
-- The latest active interactive client owns PTY geometry.
-- `pty_resize` is authoritative; attach restore is provisional context.
-- The daemon worker's single parsed terminal (libghostty-vt) backs approval
-  classification, CPR replies, grid/automation snapshots, and attach restore.
-  Ghostty construction failure is spawn-fatal on supported platforms.
-- Restore is server-authoritative: the daemon worker encodes that terminal with
-  ghostty's snapshot API and the attach serves those bytes as the sole restore
-  payload (`attach_result.snapshot`). The client *decodes* them — nothing is
-  replayed, so no query can be answered and the grid comes from the snapshot
-  itself. The renderable prefix lands first and scrollback is prepended page by
-  page after the first paint. There is no raw-scrollback/screen-snapshot/segment
-  fallback — a snapshot-less attach keeps whatever the client has and dedups the
-  live stream against `last_seq`. See
-  [docs/plans/2026-08-16-snapshot-restore.md](docs/plans/2026-08-16-snapshot-restore.md).
-- A snapshot names the format it was written in
-  (`attach_result.snapshot.format`, derived at build time by
-  `scripts/snapshot-format.sh` from the two ghostty locks). A pty-worker
-  outlives an install, so an upgraded app is routinely offered bytes an older
-  encoder wrote; the client compares that tag against its own decoder and
-  treats anything else — a foreign tag or no tag — as no snapshot, which is
-  already a supported attach. Never decode a snapshot on the strength of the
-  field being present, and never route a decode failure to model-fault
-  recovery: the model is fine, the payload is not, and a new epoch reattaches
-  straight back into the same bytes. See
-  [docs/plans/2026-08-16-snapshot-format-skew.md](docs/plans/2026-08-16-snapshot-format-skew.md).
-- Encoding fails outright when the worker's parser sits mid-sequence and
-  continuation tracking was off, so the worker enables it at construction, not at
-  snapshot time.
-- OSC 133 command blocks are worker-owned state carried beside the payload as
-  structured `attach_result.snapshot.blocks` (a decode rebuilds none); the
-  frontend seeds `TerminalBlockStore` from them after the snapshot is adopted.
-- Do not use restore as redraw repair or infer PTY correctness from local `fit()`.
-- The daemon/worker alone answers CPR, DA1, and OSC 10/11/12; frontend strips
-  model replies and sends theme changes via `set_terminal_theme`.
-- Kitty images are worker-authoritative and **on by default**. The worker is the
-  only kitty parser in the system — ghostty hard-disables kitty on wasm, so the
-  client model never sees an APC and the worker's grid stays authoritative. The
-  worker describes what it stored: `kitty_placements` carries the active screen's
-  whole placement set, the app pulls pixels it lacks with `get_kitty_image`, and
-  the attach snapshot carries placements beside the snapshot bytes and the
-  OSC 133 blocks. `KittyImageStorageLimit` is 320MB at construction (ghostty's own app
-  default; receipt in the plan); `ATTN_KITTY_STORAGE_LIMIT` (bytes, read from the
-  daemon's environment at session spawn, inherited by the worker, forwarded to
-  remote daemons) tunes it, and **0 disables the protocol** — the escape hatch,
-  where a session stores no image and observes no placement. An image larger than
-  the whole limit is refused outright and silently by ghostty; the worker logs
-  that with the limit and the ask. Design:
-  [docs/plans/2026-08-02-terminal-kitty-images.md](docs/plans/2026-08-02-terminal-kitty-images.md).
-  Sixel does not exist in ghostty at all.
-- Two capabilities, not one. `kitty_images` means "describe images to me" and
-  gates the placement events; `binary_pty_output` decides only how a blob
-  TRAVELS (binary frame `0x02` vs base64 JSON `kitty_image_result`). The hub
-  relay advertises the first and never the second, because it is a text pipe —
-  collapsing them would either starve the relay of placements or corrupt it.
-- Session switching must retain utility-terminal focus. `App.tsx` may fit the
-  main terminal but focuses it only when utility is inactive;
-  `SessionTerminalWorkspace` prefers the active `GhosttyTerminal` handle.
-- Manually verify `Cmd+T` typing and switch-away/back utility focus.
+- To broadcast a change, publish a fact with a subject. If you do not know
+  the entity's id at that point, fix the code so you do; a subject-less fact
+  forces a whole-list re-push.
+- A projection only writes to the wire. It must not change state or publish
+  another fact; the bus holds its publish lock during fan-out, so a nested
+  publish deadlocks.
+- Changing many entities at once: one fact each, inside `coalesceSnapshots`,
+  so the app gets one list push instead of N.
+- A durable consumer's handler may see a fact twice; make it idempotent. A
+  handler that keeps failing stalls that consumer alone.
+- Everything that registers a durable consumer must also `Unregister` it on
+  uninstall, or the abandoned cursor pins retention forever.
+- `attn bus status` shows consumers, cursors, and who is pinning; Use `attn bus
+disable|enable <consumer>` to disable/enable consumers. `ATTN_BUS_RETENTION`
+  and `ATTN_BUS_PIN_ALARM_AGE` shorten the 30-day window and the pin alarm so
+  you can watch either happen.
 
 ### macOS shortcuts
 
@@ -695,55 +536,20 @@ Packaged-app default menu accelerators can consume shortcuts before DOM keydown.
 
 ## Native VT library
 
-`internal/ghosttyvt` links `libghostty-vt` (Ghostty's VT core) via cgo on
-darwin/arm64 **and** linux/amd64+arm64 (the daemon's restore path serializes on
-Linux too); every other target compiles a pure-Go stub. The `//go:build`
-constraint and the per-tuple `#cgo` directives in `ghosttyvt.go` must stay in
-lockstep with the supported-platform list in `scripts/lib/libghostty-vt.sh` and
-the Makefile. The static archive is **per platform**, living under gitignored
-`third_party/ghostty-vt/<goos>_<goarch>/`. On a fresh checkout it is absent, so
-the `build` target depends on the archive for the platform it targets and
-`scripts/build-libghostty-vt.sh` runs automatically on the first `make build`/
-`make dev`/`make install*` (and cross builds via `make build-linux-{amd64,arm64}`
-or `GOOS=… GOARCH=… make build`).
-
-**Download-first (no zig for most contributors, and none in CI/release).** The
-script fetches the prebuilt archive **for the target platform** — assets are
-named `libghostty-vt-<key>-<goos>_<goarch>.tar.gz`, keyed by the ghostty pin
-(`ghostty-vt.pin`) — from the rolling `native-vt-prebuilts` GitHub release and verifies it against the
-matching `sha256_<goos>_<goarch>` in `ghostty-vt-native.lock` (fail-closed). The
-key is shared across platforms (same source); the lock carries one sha per
-platform. The repo is public, so this needs only network access. A **source
-build (zig 0.16.x)** happens only when you have edited the pin (no
-published asset for the new key yet), when the download/verify fails, or when
-`ATTN_VT_FROM_SOURCE=1` forces it. `GHOSTTY_VT_GOOS`/`GHOSTTY_VT_GOARCH` scope the
-script to a target when cross-building (the Makefile sets them).
-
-**Changing the VT source.** The pin must be the commit upstream's rolling `tip`
-release was last built from, and never a ghostty tag: only `tip` publishes
-`ghostty-vt.wasm`, and its assets are overwritten on every commit to main, so
-the bytes for any older commit are simply gone. Read `tip`'s target commit,
-write it to `ghostty-vt.pin`, and mirror in the same sitting.
-
-Then, in order:
-
-1. `make publish-ghostty-vt-wasm` (`scripts/publish-ghostty-vt-wasm.sh`) mirrors
-   upstream's prebuilt browser module under a pin-keyed name we control and
-   rewrites `ghostty-vt-wasm.lock`. It refuses when the pin disagrees with tip.
-2. `make publish-native-vt` (`scripts/publish-libghostty-vt.sh`) cross-builds
-   **every** supported native target from one host (needs zig 0.16.x and an
-   authenticated `gh`), uploads the keyed assets, and rewrites
-   `ghostty-vt-native.lock` with the shared key + per-platform shas.
-
-**Commit both regenerated locks when the shared pin changes**: the build depends
-on them, so committing them is what makes every checkout reject stale artifacts.
-Shared native logic lives in `scripts/lib/libghostty-vt.sh`.
-
-A bump moves terminal behavior and can move the wasm ABI, so expect to re-take
-receipts rather than only re-run tests. `app/src/ghostty/abi.layout.test.ts`
-checks the transcribed struct offsets against the module's own
-`ghostty_type_json`; `go test ./internal/pty -run TestKittyWireRewriteCorpus
--update` regenerates the parity corpus, which the wasm side then has to agree
-with; and the tripwire comments in `internal/pty/wirefeed.go` cite measurements
-at a named pin. See
-[docs/plans/2026-07-22-server-authoritative-terminal.md](docs/plans/2026-07-22-server-authoritative-terminal.md).
+- `internal/ghosttyvt` links `libghostty-vt` via cgo on darwin/arm64 and
+  linux/amd64+arm64; everything else gets a pure-Go stub. `//go:build`, the
+  `#cgo` tuples, `scripts/lib/libghostty-vt.sh`, and the Makefile list the same
+  platforms. Change all four together.
+- The static archive is per platform, gitignored under
+  `third_party/ghostty-vt/<goos>_<goarch>/`, and fetched (sha-verified against
+  `ghostty-vt-native.lock`) on the first `make build`/`dev`/`install*`. Source
+  builds (zig 0.16.x) happen only on a fresh pin, a failed download, or
+  `ATTN_VT_FROM_SOURCE=1`.
+- Bumping: `ghostty-vt.pin` must be the commit upstream's rolling `tip` release
+  was built from: only `tip` ships `ghostty-vt.wasm`, and its assets are
+  overwritten on every commit. Then run
+  `make publish-ghostty-vt-wasm`, then `make publish-native-vt` (zig + `gh`),
+  and commit both regenerated locks.
+- A bump moves terminal behavior and can move the wasm ABI: re-take receipts
+  (`abi.layout.test.ts`, `go test ./internal/pty -run TestKittyWireRewriteCorpus
+-update`, tripwire comments in `internal/pty/wirefeed.go`).

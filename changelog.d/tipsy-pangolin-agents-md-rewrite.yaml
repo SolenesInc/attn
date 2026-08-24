@@ -1,0 +1,10 @@
+kind: internal
+area: docs
+change: >
+  README opens with attn's value proposition in Victor's words (durability,
+  bring your own harness, queue mode, remote hosts, the Garden, visible
+  orchestration, crew, automations) and lists Pi as a supported agent.
+  AGENTS.md carries the same list aimed at maintainers, compresses the event
+  bus and native VT sections, drops the pr wait-ready prose that --help
+  already covers, and sheds decorative "X, not Y" contrasts. Every CLAUDE.md
+  in the repo is now a symlink to its sibling AGENTS.md.

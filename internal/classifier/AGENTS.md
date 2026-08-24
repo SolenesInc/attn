@@ -1,26 +1,7 @@
-# Classifier Policy
+# Classifier
 
-This policy applies to stop-time assistant-message classification in this module.
-
-## Scope
-
-- In scope: deciding post-turn assistant state from assistant text (`idle`, `waiting_input`, `unknown`, and — for stops that yielded with background work still running — `parked`).
-- Out of scope: runtime/hook-driven state transitions such as `working` and `pending_approval`.
-
-## Requirements (In Scope)
-
-- Do not add deterministic state classification using hard-coded string matching lists.
-- Do not add regex or keyword heuristics that map assistant text directly to `idle`, `waiting_input`, or `unknown`.
-- Classifier outcomes must come from LLM outputs (Claude CLI, Copilot CLI, Codex CLI) and parser logic for those LLM responses.
-- This package owns prompt building and verdict parsing. The Claude backend's
-  process invocation lives in `internal/agent` (the Claude driver runs it through
-  the shared headless seam); Copilot and Codex still invoke their CLIs here.
-
-## Notes
-
-- Normalization/parsing of structured LLM outputs is allowed.
-- Retry/backoff and transport error handling are allowed.
-- When LLM output is missing/invalid, return `unknown` rather than substituting heuristic rules.
-- Hook/runtime transitions are allowed to remain deterministic:
-  - `PermissionRequest` -> `pending_approval`
-  - `UserPromptSubmit` / `PostToolUse` -> `working`
+This package decides an agent's state after a turn (`idle`, `waiting_input`,
+`parked`, `unknown`) from the assistant's last message. The verdict comes from
+an LLM and the parser of its reply. No keyword lists, no regex over the
+assistant text, no fallback heuristics: when the LLM output is missing or
+unparseable, return `unknown`.

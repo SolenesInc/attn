@@ -1,20 +1,8 @@
-# Daemon Protocol Test Policy
+# Daemon protocol tests
 
-This policy applies to daemon and websocket protocol integration tests in this directory.
-
-## Real-App Parity
-
-- Daemon/protocol scenarios must model real app usage, not invented command sequences.
-- When the app changes its workspace/session flow, update these tests to match that flow in the same PR.
-- If these tests pass while users can reproduce app-level workspace/session errors, treat that as a test design bug.
-- Do not preserve daemon compatibility paths just to keep old test flows passing.
-
-## Workspace Sessions
-
-- Workspace session lifecycle tests should use the same command ordering as the app:
-  - register the workspace
-  - add a session pane to the workspace layout
-  - spawn the session runtime
-  - close panes through workspace layout commands
-- Session panes should be daemon-owned lifecycle entities with explicit status transitions such as `spawning`, `ready`, and `failed`.
-- Tests should assert observable protocol state, not only internal store details, when the behavior is user-facing.
+A daemon or WebSocket test models what the app does, in the order the app does
+it: register the workspace, add a pane to the layout, spawn the session, close
+panes through layout commands. When the app's flow changes, the tests change in
+the same PR. A test that passes while a user can reproduce the error in the app
+is a test bug. Assert the protocol state the app sees, and do not keep a daemon
+compatibility path alive to spare an old test flow.
