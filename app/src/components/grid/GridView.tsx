@@ -7,10 +7,10 @@
 // against the snapshot's sequence watermark, or it would stay blank until the
 // session next emits.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { InputHandler } from 'ghostty-web';
+import { attachTerminalInput } from '../../ghostty';
 import { loadGhostty } from '../../ghostty/wasm';
 import { listenPtyEvents, ptyWrite } from '../../pty/bridge';
-import { installTerminalKeyHandler } from '../SessionTerminalWorkspace/terminalKeyHandler';
+import { createTerminalKeyInterceptor } from '../SessionTerminalWorkspace/terminalKeyHandler';
 import type { ScreenSnapshotResult } from '../../hooks/useDaemonSocket';
 import type { UISessionState } from '../../types/sessionState';
 import { getTerminalTheme, getTerminalAnsiPalette } from '../../utils/terminalSizing';
@@ -146,7 +146,7 @@ export function GridView({
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    let inputHandler: InputHandler | null = null;
+    let disposeInput: (() => void) | null = null;
     const metrics = measureCanonicalCell();
     const theme = getTerminalTheme(resolvedTheme);
     const renderer = new UnifiedGridRenderer(FONT_SIZE, FONT_FAMILY, metrics, {
@@ -183,17 +183,15 @@ export function GridView({
         const id = compRef.current?.zoomedId();
         if (id) void ptyWrite({ id, data });
       };
-      inputHandler = new InputHandler(
-        ghostty.keyInput,
-        stage,
-        forward,
-        () => {},
-        undefined,
-        (event) => !installTerminalKeyHandler(forward)(event),
-        (mode) => compRef.current?.getMode(mode) ?? false,
-      );
-      // Take focus off the hidden-but-mounted terminal so its InputHandler stops
-      // receiving keys; closing the grid re-focuses the active pane.
+      disposeInput = attachTerminalInput({
+        element: stage,
+        terminal: () => compRef.current?.inputTarget() ?? null,
+        send: forward,
+        interceptKey: createTerminalKeyInterceptor(forward),
+        onError: (operation, error) => {
+          console.error(`[grid] terminal ${operation} input failed`, error);
+        },
+      });
       stage.focus({ preventScroll: true });
 
       setGridAutomationHandle({
@@ -254,7 +252,7 @@ export function GridView({
     return () => {
       disposed = true;
       setGridAutomationHandle(null);
-      inputHandler?.dispose();
+      disposeInput?.();
       unlisten?.();
       // A rebuilt compositor must re-seed its fresh, blank tile models.
       seedGenRef.current.clear();

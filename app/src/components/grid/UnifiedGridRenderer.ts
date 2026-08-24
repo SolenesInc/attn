@@ -1,9 +1,3 @@
-// The unified renderer: ONE WebGL2 context, ONE 2048² glyph atlas, ONE vertex
-// buffer, ONE drawArrays for the WHOLE grid, regardless of tile count. This is
-// possible because ghostty-web's model is a pure VT state machine: we read each
-// tile's cells via getViewport() and composite them into sub-rectangles of a
-// single shared canvas.
-//
 // Derived from GhosttyWebGlRenderer.ts (shader, atlas, glyph, block-element logic
 // reused verbatim) with two deliberate changes:
 //   1. Per-tile scale+translate baked into a_position on the CPU (transform-in-

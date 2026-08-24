@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installTerminalKeyHandler } from './terminalKeyHandler';
+import { createTerminalKeyInterceptor } from './terminalKeyHandler';
 import { triggerShortcut, hasHandler } from '../../shortcuts/useShortcut';
 import { setShortcutOverrides } from '../../shortcuts/resolver';
 import { cancelLeader, isLeaderPending } from '../../shortcuts/chordState';
@@ -9,7 +9,7 @@ vi.mock('../../shortcuts/useShortcut', () => ({
   hasHandler: vi.fn(() => true),
 }));
 
-describe('installTerminalKeyHandler', () => {
+describe('createTerminalKeyInterceptor', () => {
   beforeEach(() => {
     vi.mocked(triggerShortcut).mockReset();
     vi.mocked(hasHandler).mockReturnValue(true);
@@ -22,49 +22,49 @@ describe('installTerminalKeyHandler', () => {
 
   it('sends Shift+Tab as terminal reverse-tab input', () => {
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'Tab',
       shiftKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(sendToPty).toHaveBeenCalledWith('\x1b[Z');
   });
 
   it('leaves plain Tab for Ghostty to encode', () => {
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'Tab',
     });
 
-    expect(handler(event)).toBe(true);
+    expect(handler(event)).toBe(false);
     expect(sendToPty).not.toHaveBeenCalled();
   });
 
   it('handles WebKit reverse-tab key names', () => {
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'ISO_Left_Tab',
       shiftKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(sendToPty).toHaveBeenCalledWith('\x1b[Z');
   });
 
   it('routes Cmd+T to new-workspace shortcut when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 't',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('session.newWorkspace');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -72,13 +72,13 @@ describe('installTerminalKeyHandler', () => {
   it('routes Cmd+Q to app quit when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'q',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('app.quit');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -86,13 +86,13 @@ describe('installTerminalKeyHandler', () => {
   it('routes Cmd+/ to the shortcuts cheatsheet when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: '/',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('ui.showShortcuts');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -100,14 +100,14 @@ describe('installTerminalKeyHandler', () => {
   it('routes Cmd+Shift+N to new horizontal session when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'N',
       metaKey: true,
       shiftKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('session.newHorizontal');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -115,14 +115,14 @@ describe('installTerminalKeyHandler', () => {
   it('routes Cmd+number to workspace selection when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: '™',
       code: 'Digit2',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('workspace.select2');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -130,13 +130,13 @@ describe('installTerminalKeyHandler', () => {
   it('routes Cmd+number by key when code is unavailable', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: '3',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenCalledWith('workspace.select3');
     expect(sendToPty).not.toHaveBeenCalled();
   });
@@ -144,13 +144,13 @@ describe('installTerminalKeyHandler', () => {
   it('falls back to session close for Cmd+W when no split-pane close handler is active', () => {
     vi.mocked(triggerShortcut).mockImplementation((shortcut) => shortcut === 'session.close');
     const sendToPty = vi.fn();
-    const handler = installTerminalKeyHandler(sendToPty);
+    const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
       key: 'w',
       metaKey: true,
     });
 
-    expect(handler(event)).toBe(false);
+    expect(handler(event)).toBe(true);
     expect(triggerShortcut).toHaveBeenNthCalledWith(1, 'terminal.close');
     expect(triggerShortcut).toHaveBeenNthCalledWith(2, 'session.close');
     expect(sendToPty).not.toHaveBeenCalled();
@@ -164,10 +164,10 @@ describe('installTerminalKeyHandler', () => {
     it('arms the leader and consumes it without leaking to the PTY', () => {
       setShortcutOverrides({ 'dock.attention': CHORD });
       const sendToPty = vi.fn();
-      const handler = installTerminalKeyHandler(sendToPty);
+      const handler = createTerminalKeyInterceptor(sendToPty);
 
       const leader = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
-      expect(handler(leader)).toBe(false);
+      expect(handler(leader)).toBe(true);
       expect(isLeaderPending()).toBe(true);
       expect(sendToPty).not.toHaveBeenCalled();
       expect(triggerShortcut).not.toHaveBeenCalled();
@@ -177,11 +177,11 @@ describe('installTerminalKeyHandler', () => {
       vi.mocked(triggerShortcut).mockReturnValue(true);
       setShortcutOverrides({ 'dock.attention': CHORD });
       const sendToPty = vi.fn();
-      const handler = installTerminalKeyHandler(sendToPty);
+      const handler = createTerminalKeyInterceptor(sendToPty);
 
       handler(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
       const follow = new KeyboardEvent('keydown', { key: 'd' });
-      expect(handler(follow)).toBe(false);
+      expect(handler(follow)).toBe(true);
       expect(triggerShortcut).toHaveBeenCalledWith('dock.attention');
       expect(sendToPty).not.toHaveBeenCalled();
       expect(isLeaderPending()).toBe(false);
@@ -190,11 +190,11 @@ describe('installTerminalKeyHandler', () => {
     it('consumes a non-matching follow key as a cancel, never reaching the PTY', () => {
       setShortcutOverrides({ 'dock.attention': CHORD });
       const sendToPty = vi.fn();
-      const handler = installTerminalKeyHandler(sendToPty);
+      const handler = createTerminalKeyInterceptor(sendToPty);
 
       handler(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
       const stray = new KeyboardEvent('keydown', { key: 'x' });
-      expect(handler(stray)).toBe(false);
+      expect(handler(stray)).toBe(true);
       expect(triggerShortcut).not.toHaveBeenCalled();
       expect(sendToPty).not.toHaveBeenCalled();
       expect(isLeaderPending()).toBe(false);
@@ -204,11 +204,11 @@ describe('installTerminalKeyHandler', () => {
       vi.mocked(hasHandler).mockReturnValue(false);
       setShortcutOverrides({ 'dock.attention': CHORD });
       const sendToPty = vi.fn();
-      const handler = installTerminalKeyHandler(sendToPty);
+      const handler = createTerminalKeyInterceptor(sendToPty);
 
       // ⌘K is a bound leader: it must be swallowed (never reach the PTY) even
       // though no follow action can currently fire — it just arms nothing.
-      expect(handler(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))).toBe(false);
+      expect(handler(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))).toBe(true);
       expect(isLeaderPending()).toBe(false);
       expect(sendToPty).not.toHaveBeenCalled();
     });

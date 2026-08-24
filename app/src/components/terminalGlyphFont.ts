@@ -1,16 +1,6 @@
 // Font selection for glyph rasterization, shared by attn's two WebGL terminal
 // renderers (GhosttyWebGlRenderer, UnifiedGridRenderer) so they stay in lockstep.
 //
-// THE PROBLEM. A multi-codepoint emoji grapheme cluster — a ZWJ sequence
-// (👨‍👩‍👧‍👦), a regional-indicator flag (🇺🇸), a skin-tone sequence (👍🏽), or a
-// keycap (1️⃣) — must be shaped as ONE Apple Color Emoji run for its ligature to
-// form. ghostty-web hands us the whole cluster in a single cell, but when we
-// rasterize it with a text-first font-family (Iosevka/Menlo/… , monospace),
-// WKWebView's canvas fallback resolves the cluster's joiner/scaffolding
-// codepoints per-character instead of shaping the cluster cohesively, so the
-// ligature never forms and the cluster decomposes into its component glyphs
-// (four separate heads, two boxed flag letters, a thumb plus a colour swatch).
-//
 // THE FIX. For graphemes that are emoji clusters, put "Apple Color Emoji" FIRST
 // so the entire cluster is shaped by it. Single emoji (which already render
 // fine via system fallback), text, box-drawing, and bundled Nerd Font PUA icons

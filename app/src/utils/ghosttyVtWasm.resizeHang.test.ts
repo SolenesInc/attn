@@ -15,8 +15,7 @@ import { fileURLToPath } from 'node:url';
 // narrow resizes never returned from ghostty_terminal_resize -- in the app that
 // is a frozen pane at 100% CPU, with no trap and so no recovery.
 //
-// The repro drives the real wasm through the real ghostty-web wrapper and
-// watchdogs each step from a worker thread; it must run in its own process
+// Each step runs under a worker-thread watchdog in its own process
 // because a synchronous wasm loop never yields the thread it runs on, so an
 // in-process assertion would hang the test runner instead of failing it.
 // Exit codes: 0 = every step returned, 1 = hang, 2 = trap/exception.

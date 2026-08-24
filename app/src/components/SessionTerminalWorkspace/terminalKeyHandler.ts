@@ -5,11 +5,6 @@ import { resolveBinding } from '../../shortcuts/resolver';
 import { enterLeader, resolvePendingThen } from '../../shortcuts/chordState';
 import { matchChordLeader } from '../../shortcuts/chordDispatch';
 
-// Shortcuts intercepted on the terminal's OWN input path (Ghostty's
-// InputHandler), in priority order. This is a second dispatch path separate
-// from the window-level listener, so it must read bindings through the resolver
-// to honor user rebinds/unbinds. ⌘W (close) is handled after the loop because
-// it falls back from closing the focused pane to closing the session.
 const TERMINAL_INTERCEPTS: ShortcutId[] = [
   'workspace.select1', 'workspace.select2', 'workspace.select3',
   'workspace.select4', 'workspace.select5', 'workspace.select6',
@@ -31,7 +26,7 @@ function matchesBinding(event: KeyboardEvent, id: ShortcutId): boolean {
   return def && !isChord(def) ? matchesShortcut(event, def) : false;
 }
 
-export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
+export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) {
   return (event: KeyboardEvent) => {
     // A pending leader owns the next keystroke; resolve it before any PTY
     // control-sequence handling so the follow key is never emitted as input.
@@ -41,7 +36,7 @@ export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
       const pendingThen = resolvePendingThen(event);
       if (pendingThen.kind !== 'none') {
         if (pendingThen.kind === 'fired') triggerShortcut(pendingThen.id);
-        return false; // fired / rearmed / cancelled all consume the follow key
+        return true; // fired / rearmed / cancelled all consume the follow key
       }
     }
 
@@ -54,7 +49,7 @@ export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
       && !event.altKey
     ) {
       sendToPty('\x1b[Z');
-      return false;
+      return true;
     }
     if (
       event.type === 'keydown'
@@ -68,21 +63,21 @@ export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
       // On macOS Ctrl+V is available for the agent image-paste trigger;
       // elsewhere it is the normal browser text-paste accelerator.
       sendToPty('\x16');
-      return false;
+      return true;
     }
 
     if (event.type === 'keydown') {
       for (const id of TERMINAL_INTERCEPTS) {
         if (matchesBinding(event, id)) {
-          return !triggerShortcut(id);
+          return triggerShortcut(id);
         }
       }
       // ⌘W: close the focused pane, falling back to closing the session.
       if (matchesBinding(event, 'terminal.close') && triggerShortcut('terminal.close')) {
-        return false;
+        return true;
       }
       if (matchesBinding(event, 'session.close')) {
-        return !triggerShortcut('session.close');
+        return triggerShortcut('session.close');
       }
       // Arm a chord leader AFTER the single-combo intercepts, mirroring the
       // window listener's combo-first precedence. A bound leader is always
@@ -94,7 +89,7 @@ export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
         if (fireable.length > 0) {
           enterLeader(chord.leader, fireable);
         }
-        return false;
+        return true;
       }
     }
 
@@ -102,8 +97,8 @@ export function installTerminalKeyHandler(sendToPty: (data: string) => void) {
       if (event.type === 'keydown') {
         sendToPty('\n');
       }
-      return false;
+      return true;
     }
-    return true;
+    return false;
   };
 }

@@ -10,10 +10,6 @@ import {
 // DECSET 2027 — the bytes we expect written to the model to enable clustering.
 const ENABLE_2027 = new TextEncoder().encode('\x1b[?2027h');
 const RIS = new TextEncoder().encode('\x1bc'); // ESC c, full reset
-// 👨‍👩‍👧‍👦 — a ZWJ family, the canonical multi-codepoint cluster. A 2027h written
-// before these bytes reach the model keeps them in one cell (ghostty-web
-// behaviour, exercised by the live app); a RIS in front of them turns 2027 off
-// and the model splits them across cells.
 const FAMILY = new TextEncoder().encode('\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}');
 
 // A terminal that records every write (copied, since writes are buffer views).

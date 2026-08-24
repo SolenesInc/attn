@@ -185,6 +185,11 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-terminal-context-menu'],
   },
   {
+    id: 'terminal-input',
+    label: 'Terminal input via packaged browser events, shortcuts, paste, and zoomed grid',
+    command: ['pnpm', 'run', 'real-app:scenario-terminal-input'],
+  },
+  {
     id: 'terminal-osc8-link',
     label: 'OSC 8 hyperlink Cmd+click via native click + local HTTP probe',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-osc8-link'],

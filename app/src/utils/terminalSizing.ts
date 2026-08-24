@@ -7,12 +7,6 @@ export type ResolvedTheme = 'dark' | 'light';
 // reaches the symbols face only for codepoints the earlier faces lack.
 export const FONT_FAMILY =
   'Iosevka, Menlo, Monaco, "Courier New", "Symbols Nerd Font Mono", monospace';
-// Ghostty's `scrollbackLimit` is documented as lines but ghostty-web 0.4.0
-// passes it straight through to libghostty's `max_scrollback`, which is BYTES
-// of page data (and floors small values to ~1 MiB internally). This constant
-// is therefore an intentional byte budget — the previous value of 50000 was
-// "lines" in spirit but ~1 MiB in effect. Revisit if ghostty-web ever fixes
-// the unit pass-through.
 export const TERMINAL_SCROLLBACK_BYTES = 8 * 1024 * 1024;
 
 export const DARK_TERMINAL_THEME = {

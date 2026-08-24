@@ -4,9 +4,16 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Ghostty } from 'ghostty-web';
+import { createServer } from 'vite';
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const vite = await createServer({
+  root: APP_ROOT,
+  appType: 'custom',
+  logLevel: 'silent',
+  server: { middlewareMode: true },
+});
+const { Ghostty } = await vite.ssrLoadModule('/src/ghostty/index.ts');
 const wasm = await WebAssembly.compile(readFileSync(`${APP_ROOT}/vendor/ghostty-vt/ghostty-vt.wasm`));
 let instance;
 instance = await WebAssembly.instantiate(wasm, {
@@ -70,3 +77,4 @@ write('alternate-screen text', 'alternate');
 write('leave alternate screen', '\x1b[?1049l');
 
 terminal.free();
+await vite.close();

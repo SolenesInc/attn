@@ -61,11 +61,6 @@ const mocks = vi.hoisted(() => {
   return { MockRenderer, createTerminal, rendererConfig };
 });
 
-vi.mock('ghostty-web', () => ({
-  CellFlags: {},
-  Ghostty: { load: async () => ({ createTerminal: mocks.createTerminal }) },
-  InputHandler: class { dispose() {} },
-}));
 vi.mock('../ghostty/wasm', () => ({ loadGhostty: async () => ({ createTerminal: mocks.createTerminal }) }));
 vi.mock('./GhosttyWebGlRenderer', () => ({ WebGlTerminalRenderer: mocks.MockRenderer }));
 vi.mock('../utils/terminalIconFont', () => ({

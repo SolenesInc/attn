@@ -2127,6 +2127,91 @@ export function useUiAutomationBridge({
         }
         return { focused: true, tag: element.tagName };
       }
+      case 'dom_terminal_key': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const key = typeof payload.key === 'string' ? payload.key : null;
+        const code = typeof payload.code === 'string' ? payload.code : null;
+        if (!selector || !key || !code) {
+          throw new Error('dom_terminal_key requires selector, key, and code');
+        }
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_terminal_key selector not found in DOM: ${selector}`);
+        }
+        const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
+        const init: KeyboardEventInit = {
+          bubbles: true,
+          cancelable: true,
+          key,
+          code,
+          location: typeof payload.location === 'number' ? payload.location : 0,
+          metaKey: modifiers.meta ?? false,
+          ctrlKey: modifiers.ctrl ?? false,
+          shiftKey: modifiers.shift ?? false,
+          altKey: modifiers.alt ?? false,
+        };
+        element.focus();
+        element.dispatchEvent(new KeyboardEvent('keydown', init));
+        if (payload.repeat === true) {
+          element.dispatchEvent(new KeyboardEvent('keydown', { ...init, repeat: true }));
+        }
+        element.dispatchEvent(new KeyboardEvent('keyup', init));
+        await settleUi(2);
+        return { dispatched: true, repeat: payload.repeat === true };
+      }
+      case 'dom_terminal_paste': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const text = typeof payload.text === 'string' ? payload.text : '';
+        const image = payload.image === true;
+        if (!selector || (!text && !image)) {
+          throw new Error('dom_terminal_paste requires selector and text or image');
+        }
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_terminal_paste selector not found in DOM: ${selector}`);
+        }
+        const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'clipboardData', {
+          value: {
+            getData: (type: string) => type === 'text/plain' ? text : '',
+            items: image ? [{ kind: 'file', type: 'image/png' }] : [],
+          },
+        });
+        element.focus();
+        element.dispatchEvent(event);
+        await settleUi(2);
+        return { dispatched: true, defaultPrevented: event.defaultPrevented };
+      }
+      case 'dom_compose_text': {
+        // Keep composition checks independent of the active input source.
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const text = typeof payload.text === 'string' ? payload.text : null;
+        if (!selector || text === null) {
+          throw new Error('dom_compose_text requires selector and text');
+        }
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_compose_text selector not found in DOM: ${selector}`);
+        }
+        element.focus();
+        element.dispatchEvent(new CompositionEvent('compositionstart', {
+          bubbles: true,
+          cancelable: true,
+          data: '',
+        }));
+        element.dispatchEvent(new CompositionEvent('compositionupdate', {
+          bubbles: true,
+          cancelable: true,
+          data: text,
+        }));
+        element.dispatchEvent(new CompositionEvent('compositionend', {
+          bubbles: true,
+          cancelable: true,
+          data: text,
+        }));
+        await settleUi(2);
+        return { composed: true, text };
+      }
       case 'dom_hover': {
         // Pointer-over without a click, for affordances that only exist while
         // hovered — the sidebar's session-name reveal, hover-revealed row

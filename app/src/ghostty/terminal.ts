@@ -82,6 +82,11 @@ import {
   type GhosttyExports,
 } from './abi';
 import { installCallback } from './callback';
+import {
+  GhosttyKeyEncoder,
+  type GhosttyKeyAbi,
+  type TerminalKeyEvent,
+} from './keyEncoder';
 
 /** Attribute bits on GhosttyCell.flags. */
 export const CellFlags = {
@@ -233,11 +238,18 @@ export class GhosttyTerminal {
   private viewBuffer: ArrayBuffer;
 
   private readonly decoder = new TextDecoder();
-  private readonly encoder = new TextEncoder();
+  private readonly textEncoder = new TextEncoder();
+  private keyEncoder: GhosttyKeyEncoder | null = null;
 
   private freed = false;
 
-  constructor(exports: GhosttyExports, cols = 80, rows = 24, config: GhosttyTerminalConfig = {}) {
+  constructor(
+    exports: GhosttyExports,
+    private readonly keyAbi: GhosttyKeyAbi,
+    cols = 80,
+    rows = 24,
+    config: GhosttyTerminalConfig = {},
+  ) {
     this.e = exports;
     this._cols = cols;
     this._rows = rows;
@@ -355,7 +367,7 @@ export class GhosttyTerminal {
   }
 
   write(data: string | Uint8Array): void {
-    const bytes = typeof data === 'string' ? this.encoder.encode(data) : data;
+    const bytes = typeof data === 'string' ? this.textEncoder.encode(data) : data;
     if (bytes.length === 0) return;
     if (this.writeBufLen < bytes.length) {
       if (this.writeBufPtr) this.e.ghostty_wasm_free(this.writeBufPtr, this.writeBufLen);
@@ -412,6 +424,8 @@ export class GhosttyTerminal {
     }
     const handle = this.dv().getUint32(out, true);
 
+    this.keyEncoder?.free();
+    this.keyEncoder = null;
     e.ghostty_terminal_free(this.handle);
     this.handle = handle;
     e.ghostty_terminal_set(handle, TERMINAL_OPT_WRITE_PTY, this.writePtyFn);
@@ -462,6 +476,8 @@ export class GhosttyTerminal {
     if (this.freed) return;
     this.freed = true;
     this.history?.close();
+    this.keyEncoder?.free();
+    this.keyEncoder = null;
     this.e.ghostty_render_state_row_cells_free(this.cells);
     this.e.ghostty_render_state_row_iterator_free(this.iterator);
     this.e.ghostty_render_state_free(this.state);
@@ -767,6 +783,17 @@ export class GhosttyTerminal {
 
   hasBracketedPaste(): boolean {
     return this.getMode(2004);
+  }
+
+  encodeKey(event: TerminalKeyEvent): string {
+    if (this.freed) throw new Error('GhosttyTerminal is freed');
+    this.keyEncoder ??= new GhosttyKeyEncoder(this.e, this.handle, this.keyAbi);
+    return this.keyEncoder.encode(event);
+  }
+
+  formatPaste(text: string): string {
+    const normalized = text.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+    return this.hasBracketedPaste() ? `\x1b[200~${normalized}\x1b[201~` : normalized;
   }
 
   getMode(mode: number, isAnsi = false): boolean {

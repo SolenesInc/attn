@@ -1,23 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  constructedWith: [] as WebAssembly.Instance[],
-}));
-
-vi.mock('ghostty-web', () => ({
-  Ghostty: class {
-    constructor(instance: WebAssembly.Instance) {
-      mocks.constructedWith.push(instance);
-    }
-  },
-}));
+vi.mock('./keyEncoder', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./keyEncoder')>();
+  return {
+    ...actual,
+    readGhosttyKeyAbi: () => ({
+      keys: {},
+      actions: {},
+      encoderOptions: {},
+      optionAsAlt: {},
+    }),
+    assertGhosttyKeyNames: () => undefined,
+  };
+});
 
 import { loadGhostty, resetGhosttyModuleCacheForTests } from './wasm';
 
 describe('loadGhostty', () => {
   beforeEach(() => {
     resetGhosttyModuleCacheForTests();
-    mocks.constructedWith.length = 0;
   });
 
   it('compiles once and creates a separate WASM instance per caller', async () => {
@@ -37,11 +38,14 @@ describe('loadGhostty', () => {
       .mockResolvedValueOnce(instances[0])
       .mockResolvedValueOnce(instances[1]);
 
-    await Promise.all([loadGhostty(), loadGhostty()]);
+    const runtimes = await Promise.all([loadGhostty(), loadGhostty()]);
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(compile).toHaveBeenCalledTimes(1);
     expect(instantiate).toHaveBeenCalledTimes(2);
-    expect(mocks.constructedWith).toEqual(instances);
+    expect(runtimes.map((runtime) => runtime.exports.memory)).toEqual(
+      instances.map((instance) => instance.exports.memory),
+    );
+    expect(runtimes).toHaveLength(2);
   });
 });

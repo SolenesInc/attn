@@ -1,9 +1,3 @@
-// A tiny module-level registry so the UI automation bridge can introspect grid
-// mode without a reference into the conditionally-mounted GridView. GridView
-// publishes a handle while it's mounted and clears it on unmount; the bridge
-// reads through getGridAutomationHandle(). This is a test affordance only — it
-// exposes read state, zoom control, and (since zoomed tiles are interactive)
-// keyboard input into the zoomed tile, exercising the real InputHandler path.
 import type { CompositorStats, GridTileSummary } from './GridCompositor';
 
 export interface GridAutomationState {
@@ -20,7 +14,6 @@ export interface GridAutomationHandle {
   getTileText(id: string): string | null;
   zoom(id: string | null): void;
   hitTest(x: number, y: number): string | null;
-  // Type into the zoomed tile via the real keydown -> InputHandler -> PTY path.
   // Returns false if there is no stage to receive the keys.
   sendText(text: string): boolean;
 }

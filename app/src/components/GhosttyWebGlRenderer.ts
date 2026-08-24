@@ -121,8 +121,6 @@ const ROW_VERTEX_CACHE_MAX_BYTES = 2 * 1024 * 1024;
 const ROW_FG_QUADS_PER_CELL = 1;
 const ROW_BG_QUADS_PER_CELL = 0;
 
-// ghostty-web does not export DirtyState; PARTIAL is the only value the row cache
-// can serve.
 const DIRTY_NONE = 0;
 const DIRTY_PARTIAL = 1;
 
@@ -544,8 +542,6 @@ export class WebGlTerminalRenderer {
       let dirtyRows = 0;
       const markRow = (row: number) => {
         if (row < 0 || row >= terminal.rows) return;
-        // Include neighboring rows, as ghostty-web's canvas renderer does, so a grapheme
-        // crossing a row boundary is cleared and rebuilt.
         rowsToPaint[row] = 1;
         if (row > 0) rowsToPaint[row - 1] = 1;
         if (row + 1 < terminal.rows) rowsToPaint[row + 1] = 1;

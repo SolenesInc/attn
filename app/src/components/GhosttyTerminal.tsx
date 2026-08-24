@@ -7,8 +7,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { InputHandler } from 'ghostty-web';
-import { CellFlags, type GhosttyCell, type GhosttyTerminal as GhosttyModel, type SnapshotHistory } from '../ghostty';
+import {
+  attachTerminalInput,
+  CellFlags,
+  type GhosttyCell,
+  type GhosttyTerminal as GhosttyModel,
+  type SnapshotHistory,
+} from '../ghostty';
 import { loadGhostty } from '../ghostty/wasm';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { exists } from '@tauri-apps/plugin-fs';
@@ -125,7 +130,7 @@ import {
   type MessageRowAccess,
   type TerminalAnnotationStore,
 } from '../utils/terminalAnnotations';
-import { installTerminalKeyHandler } from './SessionTerminalWorkspace/terminalKeyHandler';
+import { createTerminalKeyInterceptor } from './SessionTerminalWorkspace/terminalKeyHandler';
 import {
   forgetTerminalInputLatencyRuntime,
   noteTerminalKeyEvent,
@@ -560,7 +565,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const rendererRef = useRef<WebGlTerminalRenderer | null>(null);
     // Belongs to the pane, not to a renderer instance: it outlives the rebuilds.
     const surfaceReleasedRef = useRef(false);
-    const inputRef = useRef<InputHandler | null>(null);
+    const inputRef = useRef<(() => void) | null>(null);
     const modelSizeRef = useRef({ cols: 80, rows: 24 });
     // False until fit() measures the container: the construction-default size
     // is provisional and must not be pushed to the PTY as geometry authority.
@@ -1597,10 +1602,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         return;
       }
       if (!text) return;
-      const normalized = text.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
-      onInputRef.current(terminalRef.current?.hasBracketedPaste()
-        ? `\x1b[200~${normalized}\x1b[201~`
-        : normalized, 'user');
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      onInputRef.current(terminal.formatPaste(text), 'user');
     }, []);
 
     const runBlockFilter = useCallback((blockId: number | null, caseSensitive: boolean) => {
@@ -2398,13 +2402,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           // remains larger than the visible pane across several sweeps.
           fitRef.current();
         });
-        inputRef.current = new InputHandler(
-          ghostty.keyInput,
-          container,
-          (data) => onInputRef.current(data, 'user'),
-          () => undefined,
-          undefined,
-          (event) => {
+        const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user'));
+        inputRef.current = attachTerminalInput({
+          element: container,
+          terminal: () => terminalRef.current,
+          send: (data) => onInputRef.current(data, 'user'),
+          interceptKey: (event) => {
             const meta = runtimeMetaRef.current;
             if (event.type === 'keydown' && meta) {
               noteTerminalKeyEvent(event, {
@@ -2413,10 +2416,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
                 paneId: meta.paneId,
               });
             }
-            return !installTerminalKeyHandler((data) => onInputRef.current(data, 'user'))(event);
+            return interceptKey(event);
           },
-          (mode) => terminal.getMode(mode),
-        );
+          onError: (operation, reason) => {
+            recoverFromModelFault(`input.${operation}`, reason);
+          },
+        });
         fit();
         // `fit()` contains WASM traps and schedules a fresh epoch. Do not mark
         // this model ready (or announce recovery) if its initial fit was the
@@ -2573,7 +2578,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         fitResizeCoalescerRef.current?.cancel();
         fitResizeCoalescerRef.current = null;
         try {
-          inputRef.current?.dispose();
+          inputRef.current?.();
           rendererRef.current?.dispose();
           terminalRef.current?.free();
         } catch (reason) {

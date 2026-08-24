@@ -8,7 +8,7 @@ not the question. The question is what separates our vendored build from
 what upstream now ships, and the answer turned out to be larger than a
 version bump.
 
-## Where we stand today
+## Where we stood when this was written
 
 The frontend uses the `ghostty-web` npm package (0.4.0) for its JavaScript
 terminal model, backed by a wasm binary we build ourselves from the shared
@@ -141,10 +141,12 @@ one seam.
    (`kittyWireRewrite.parity`, `ghosttyHyperlinks`, `kittyPlacements.store`,
    `ghosttyModelOpRing.replay`, `ghosttyVtWasm.resizeHang`) are the gate.
 
-   Narrowed while implementing: `ghostty-web` stays a dependency for its
-   key encoder alone, which `InputHandler` drives. Replacing the terminal
-   model and the DOM input bridge in one change puts typing at risk for no
-   gain; the encoder's exports all survive in the prebuilt module.
+   Narrowed while implementing: the first change kept `ghostty-web` for its
+   key encoder and DOM input bridge so the terminal-model migration could land
+   independently. A later follow-up removed that residual dependency: the
+   first-party binding reads key enums from libghostty's type manifest, owns
+   encoder allocation and retry behavior, and routes browser input through
+   `app/src/ghostty/input.ts`.
 2. **Native patch removal.** Delete `ghostty-vt-native.patch` in favour of
    upstream's snapshot API, and republish native prebuilts under the new
    key. Verified at step 1's pin that the patch still applies, so this is a

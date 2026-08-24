@@ -274,19 +274,17 @@ describe('GridCompositor', () => {
     expect(comp.isZoomed()).toBe(false);
   });
 
-  it('reports the zoomed tile\'s terminal mode for input encoding (off when nothing is zoomed)', () => {
+  it('returns the zoomed tile model as the input target', () => {
     const { comp, created } = makeCompositor();
     comp.syncTiles([tileSpec('a'), tileSpec('b')]);
-    created[0].modes[1] = true; // tile a: application cursor keys on; tile b: off
 
-    // Overview: no input target, so modes read off regardless of any model.
-    expect(comp.getMode(1)).toBe(false);
+    expect(comp.inputTarget()).toBeNull();
 
     comp.zoomTo('a');
-    expect(comp.getMode(1)).toBe(true);
+    expect(comp.inputTarget()).toBe(created[0]);
 
-    comp.zoomTo('b'); // switching the zoom switches the input target
-    expect(comp.getMode(1)).toBe(false);
+    comp.zoomTo('b');
+    expect(comp.inputTarget()).toBe(created[1]);
   });
 
   it('toggles tile visibility', () => {

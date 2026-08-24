@@ -304,13 +304,10 @@ export class GridCompositor {
     return this.zoomTarget === 1 ? this.zoomId : null;
   }
 
-  // Query a terminal mode (e.g. application cursor keys) of the current input
-  // target — the zoomed tile — so an InputHandler can encode keys the way that
-  // session expects. No target (overview) reports modes off.
-  getMode(mode: number): boolean {
+  inputTarget(): GhosttyTerminal | null {
     const id = this.zoomedId();
     const tile = id ? this.tileIndex.get(id) : null;
-    return tile ? tile.model.getMode(mode) : false;
+    return tile?.model ?? null;
   }
 
   // --- introspection (testing / automation; no pixels required) -------------

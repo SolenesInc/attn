@@ -1,8 +1,8 @@
 # Ghostty VT WASM
 
 `ghostty-vt.wasm` is ghostty-org's own prebuilt browser module. attn no longer
-builds it and no longer carries a compatibility adapter: `app/src/ghostty` is a
-first-party binding over libghostty-vt's current C API.
+builds it: `app/src/ghostty` is a first-party binding over libghostty-vt's
+current C API.
 
 - Ghostty source: `ghostty-vt.pin`
 - Provenance: `ghostty-vt-wasm.lock` (pin + SHA-256 of the mirrored bytes)
@@ -34,18 +34,21 @@ core reach a bundle. The binary itself is gitignored — the lock is the record.
 
 ## The binding
 
-`app/src/ghostty` holds it: `abi.ts` (enum values and struct offsets, asserted
-against the real module by `terminal.binding.test.ts`), `callback.ts` (a
-hand-assembled wasm shim that installs a JS callback in the function table,
-because JavaScriptCore has no `WebAssembly.Function`), `terminal.ts` (the model
-the renderers read), and `index.ts`.
+`app/src/ghostty` holds it: `abi.ts` (C ABI signatures and struct offsets),
+`callback.ts` (a hand-assembled wasm shim that installs a JS callback in the
+function table, because JavaScriptCore has no `WebAssembly.Function`),
+`terminal.ts` (the model the renderers read), `keyEncoder.ts` (the key ABI and
+encoder), `input.ts` (the browser input controller), and `index.ts`. Binding
+tests exercise the exact vendored module.
 
 Viewport reads go through the render state API. Scrollback reads go through grid
 references, which upstream warns are not render-loop material: measured at
 0.72ms for a full 200x50 scrolled-back viewport against 0.53ms for the same
 volume through the render state, so a scrolled pane stays inside a frame.
 
-`ghostty-web` remains a dependency for its key encoder alone, which
-`InputHandler` drives.
+The key binding reads enum values by name from the exact module's type manifest
+instead of copying ordinal values. `keyInput.binding.test.ts` drives real DOM
+arrow events through the first-party controller against the pinned module in
+normal and application-cursor modes.
 
 Ghostty is MIT licensed; the license text is included beside the binary.

@@ -145,4 +145,17 @@ describe('adoptSnapshot', () => {
     expect(viewportRows(terminal)[5]).toBe('prompt$ ok');
     terminal.free();
   });
+
+  it('rebinds key input to the terminal handle adopted from the snapshot', () => {
+    const terminal = ghostty.createTerminal(80, 24, {});
+    expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1b[A');
+
+    const history = terminal.adoptSnapshot(snapshot);
+    // Finish the fixture's open CSI before changing cursor mode.
+    terminal.write('m\x1b[?1h');
+    expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1bOA');
+
+    history.close();
+    terminal.free();
+  });
 });

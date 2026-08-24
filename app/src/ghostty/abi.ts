@@ -8,6 +8,7 @@
 
 /** GhosttyResult. Negative values are errors. */
 export const GHOSTTY_SUCCESS = 0;
+export const GHOSTTY_OUT_OF_SPACE = -3;
 /** Not an error: the asked-for value does not exist in the current state. */
 export const GHOSTTY_NO_VALUE = -4;
 
@@ -163,6 +164,30 @@ export interface GhosttyExports extends WebAssembly.Exports {
   ghostty_wasm_free_opaque(ptr: number): void;
   ghostty_wasm_alloc(len: number): number;
   ghostty_wasm_free(ptr: number, len: number): void;
+
+  ghostty_type_json(): number;
+
+  ghostty_key_event_new(allocator: number, out: number): number;
+  ghostty_key_event_free(event: number): void;
+  ghostty_key_event_set_action(event: number, action: number): void;
+  ghostty_key_event_set_key(event: number, key: number): void;
+  ghostty_key_event_set_mods(event: number, mods: number): void;
+  ghostty_key_event_set_consumed_mods(event: number, mods: number): void;
+  ghostty_key_event_set_composing(event: number, composing: number): void;
+  ghostty_key_event_set_utf8(event: number, ptr: number, len: number): void;
+  ghostty_key_event_set_unshifted_codepoint(event: number, codepoint: number): void;
+
+  ghostty_key_encoder_new(allocator: number, out: number): number;
+  ghostty_key_encoder_free(encoder: number): void;
+  ghostty_key_encoder_setopt(encoder: number, option: number, value: number): void;
+  ghostty_key_encoder_setopt_from_terminal(encoder: number, terminal: number): void;
+  ghostty_key_encoder_encode(
+    encoder: number,
+    event: number,
+    out: number,
+    outLen: number,
+    written: number,
+  ): number;
 
   ghostty_terminal_new(allocator: number, out: number, cols: number, rows: number): number;
   ghostty_terminal_free(terminal: number): void;
