@@ -1,11 +1,14 @@
-import { render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const createTerminalCalls: unknown[][] = [];
   const noteModelFaultCalls: unknown[][] = [];
   const recordUiDiagCalls: Array<Record<string, unknown>> = [];
   const writes: string[] = [];
+  const historyPageDecodeCalls: number[] = [];
+  const historyDecoderCloseCalls: number[] = [];
+  let snapshotMode: 'prefix-error' | 'history-error' = 'prefix-error';
 
   const createTerminal = () => {
     createTerminalCalls.push([]);
@@ -20,7 +23,20 @@ const mocks = vi.hoisted(() => {
         terminal.rows = rows;
       },
       adoptSnapshot: () => {
-        throw new Error('ghostty_snapshot_decoder_ready failed');
+        if (snapshotMode === 'prefix-error') {
+          throw new Error('ghostty_snapshot_decoder_ready failed');
+        }
+        let nextCall = 0;
+        return {
+          declaredRows: 107,
+          decodeNextPage: () => {
+            nextCall += 1;
+            historyPageDecodeCalls.push(nextCall);
+            if (nextCall === 1) return 39;
+            throw new Error('ghostty_snapshot_decoder_next failed: 2');
+          },
+          close: () => { historyDecoderCloseCalls.push(1); },
+        };
       },
       getMode: () => false,
       getScrollbackLength: () => 0,
@@ -61,6 +77,9 @@ const mocks = vi.hoisted(() => {
     noteModelFaultCalls,
     recordUiDiag: (event: Record<string, unknown>) => { recordUiDiagCalls.push(event); },
     recordUiDiagCalls,
+    historyPageDecodeCalls,
+    historyDecoderCloseCalls,
+    setSnapshotMode: (mode: 'prefix-error' | 'history-error') => { snapshotMode = mode; },
     writes,
   };
 });
@@ -96,6 +115,16 @@ import { GhosttyTerminal } from './GhosttyTerminal';
 // reattached, and was served the same bytes — 421 faults in six seconds on the
 // build that shipped it. See docs/plans/2026-08-16-snapshot-format-skew.md.
 describe('GhosttyTerminal snapshot decode', () => {
+  beforeEach(() => {
+    mocks.createTerminalCalls.length = 0;
+    mocks.noteModelFaultCalls.length = 0;
+    mocks.recordUiDiagCalls.length = 0;
+    mocks.historyPageDecodeCalls.length = 0;
+    mocks.historyDecoderCloseCalls.length = 0;
+    mocks.writes.length = 0;
+    mocks.setSnapshotMode('prefix-error');
+  });
+
   it('records an undecodable snapshot without faulting the model', async () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = class {
@@ -122,7 +151,9 @@ describe('GhosttyTerminal snapshot decode', () => {
         write: (data: string) => Promise<void>;
       };
 
-      await handle.restoreSnapshot(new Uint8Array([1, 2, 3, 4]));
+      await act(async () => {
+        await handle.restoreSnapshot(new Uint8Array([1, 2, 3, 4]));
+      });
 
       const rejected = mocks.recordUiDiagCalls.filter((event) => event.kind === 'snapshot_decode_rejected');
       expect(rejected).toHaveLength(1);
@@ -131,8 +162,70 @@ describe('GhosttyTerminal snapshot decode', () => {
       expect(mocks.noteModelFaultCalls).toHaveLength(0);
       // No new epoch: one model built, and it still takes writes.
       expect(mocks.createTerminalCalls).toHaveLength(1);
-      await handle.write('live output after the refused restore');
+      await act(async () => {
+        await handle.write('live output after the refused restore');
+      });
       expect(mocks.writes.join('')).toContain('live output after the refused restore');
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it('keeps the adopted prefix when a later history page is malformed', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    mocks.setSnapshotMode('history-error');
+
+    const onReady = vi.fn();
+    try {
+      render(
+        <GhosttyTerminal
+          fontSize={14}
+          debugName="snapshot-history-decode-test"
+          onInput={vi.fn()}
+          onReady={onReady}
+          onResize={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
+      const handle = onReady.mock.calls[0][0] as {
+        restoreSnapshot: (bytes: Uint8Array) => Promise<void>;
+        write: (data: string) => Promise<void>;
+      };
+
+      await act(async () => {
+        await handle.restoreSnapshot(new Uint8Array([1, 2, 3, 4]));
+      });
+      await waitFor(() => {
+        const rejected = mocks.recordUiDiagCalls.filter(
+          (event) => event.kind === 'snapshot_history_decode_rejected',
+        );
+        expect(rejected).toHaveLength(1);
+      });
+
+      const rejected = mocks.recordUiDiagCalls.find(
+        (event) => event.kind === 'snapshot_history_decode_rejected',
+      );
+      expect(rejected).toMatchObject({
+        bytes: 4,
+        declaredHistoryRows: 107,
+        restoredRows: 39,
+        error: 'ghostty_snapshot_decoder_next failed: 2',
+      });
+      expect(mocks.historyPageDecodeCalls).toEqual([1, 2]);
+      expect(mocks.historyDecoderCloseCalls).toHaveLength(1);
+      expect(mocks.noteModelFaultCalls).toHaveLength(0);
+      expect(mocks.createTerminalCalls).toHaveLength(1);
+
+      await act(async () => {
+        await handle.write('live output after the partial restore');
+      });
+      expect(mocks.writes.join('')).toContain('live output after the partial restore');
     } finally {
       globalThis.ResizeObserver = originalResizeObserver;
     }

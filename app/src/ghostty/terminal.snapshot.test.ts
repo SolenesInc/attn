@@ -47,10 +47,10 @@ function viewportRows(t: GhosttyTerminal): string[] {
 }
 
 /** A terminal of a deliberately different size, so adoption has to move it. */
-function adopted(): { terminal: GhosttyTerminal; history: ReturnType<GhosttyTerminal['adoptSnapshot']> } {
+function adopted(): { terminal: GhosttyTerminal; historyDecoder: ReturnType<GhosttyTerminal['adoptSnapshot']> } {
   const terminal = ghostty.createTerminal(80, 24, {});
   terminal.write('this content belongs to the session being replaced\r\n');
-  return { terminal, history: terminal.adoptSnapshot(snapshot) };
+  return { terminal, historyDecoder: terminal.adoptSnapshot(snapshot) };
 }
 
 describe('adoptSnapshot', () => {
@@ -79,8 +79,8 @@ describe('adoptSnapshot', () => {
   it('preserves extended indexed colors when restoring a themed terminal', () => {
     const palette = Array.from({ length: 16 }, (_, index) => index === 3 ? 0x123456 : 0);
     const terminal = ghostty.createTerminal(80, 24, { palette });
-    const history = terminal.adoptSnapshot(snapshot);
-    while (history.next() !== null) { /* drain */ }
+    const historyDecoder = terminal.adoptSnapshot(snapshot);
+    while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
 
     terminal.write('m\x1b[38;5;196mR\x1b[48;5;46mG\x1b[33mY');
     const cells = terminal.getLine(5)!;
@@ -99,24 +99,24 @@ describe('adoptSnapshot', () => {
   });
 
   it('leaves scrollback to the history pages', () => {
-    const { terminal, history } = adopted();
-    expect(history.rows).toBeGreaterThan(0);
-    expect(terminal.getScrollbackLength()).toBeLessThan(history.rows);
+    const { terminal, historyDecoder } = adopted();
+    expect(historyDecoder.declaredRows).toBeGreaterThan(0);
+    expect(terminal.getScrollbackLength()).toBeLessThan(historyDecoder.declaredRows);
 
     let pages = 0;
-    while (history.next() !== null) pages += 1;
+    while (historyDecoder.decodeNextPage() !== null) pages += 1;
     expect(pages).toBeGreaterThan(0);
-    expect(terminal.getScrollbackLength()).toBe(history.rows);
+    expect(terminal.getScrollbackLength()).toBe(historyDecoder.declaredRows);
     expect(text(terminal.getScrollbackLine(0), terminal.cols)).toBe('row-0001 tail');
     terminal.free();
   });
 
   it('is done once, and closing twice is harmless', () => {
-    const { terminal, history } = adopted();
-    while (history.next() !== null) { /* drain */ }
-    expect(history.next()).toBeNull();
-    history.close();
-    history.close();
+    const { terminal, historyDecoder } = adopted();
+    while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
+    expect(historyDecoder.decodeNextPage()).toBeNull();
+    historyDecoder.close();
+    historyDecoder.close();
     terminal.free();
   });
 
@@ -137,8 +137,8 @@ describe('adoptSnapshot', () => {
   });
 
   it('keeps the terminal usable for live input', () => {
-    const { terminal, history } = adopted();
-    while (history.next() !== null) { /* drain */ }
+    const { terminal, historyDecoder } = adopted();
+    while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
     // The fixture's parser stopped mid-CSI; 'm' completes that sequence rather
     // than printing, which is only true if the continuation came back with it.
     terminal.write('mok');
@@ -150,12 +150,12 @@ describe('adoptSnapshot', () => {
     const terminal = ghostty.createTerminal(80, 24, {});
     expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1b[A');
 
-    const history = terminal.adoptSnapshot(snapshot);
+    const historyDecoder = terminal.adoptSnapshot(snapshot);
     // Finish the fixture's open CSI before changing cursor mode.
     terminal.write('m\x1b[?1h');
     expect(terminal.encodeKey({ action: 'press', key: 'ARROW_UP' })).toBe('\x1bOA');
 
-    history.close();
+    historyDecoder.close();
     terminal.free();
   });
 });

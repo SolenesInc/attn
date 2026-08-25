@@ -12,7 +12,7 @@ export type {
   RGB,
   RenderStateColors,
   RenderStateCursor,
-  SnapshotHistory,
+  SnapshotHistoryDecoder,
 } from './terminal';
 export type { TerminalKeyAction, TerminalKeyEvent } from './keyEncoder';
 export { DIRTY_FALSE, DIRTY_FULL, DIRTY_PARTIAL } from './abi';

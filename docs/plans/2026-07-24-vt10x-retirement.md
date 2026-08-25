@@ -25,7 +25,7 @@ vt10x has exactly four consumers, all via `virtualScreen`
 |---|---|---|
 | Approval classifier | `session.go` `evaluateApproval` → `renderedText()` | plain text, viewport rows, trailing blanks trimmed |
 | CPR replies | `session.go` `writeCursorPositionResponse` → `Snapshot()` | cursor x,y (viewport, 0-indexed) |
-| Grid tiles / automation | `session.go` `screenSnapshot()` → `Snapshot()` → `get_screen_snapshot` → `GridCompositor.seedTile` | styled byte stream replayable into a fresh frontend Ghostty model + cols/rows |
+| Grid tiles / automation | `session.go` `screenSnapshot()` → `ScreenSnapshot()` → `get_screen_snapshot` → `TerminalGrid.seedTile` | styled byte stream replayable into a fresh frontend Ghostty model + cols/rows |
 | Shadow-divergence oracle | `logShadowDivergence` | deleted by PR #647 |
 
 `seedTile` resizes a frontend Ghostty model and writes raw bytes — exactly the
@@ -142,10 +142,10 @@ viewport-only as a follow-up.
 Both candidates turned out to be one coherent change and shipped together
 (ProtocolVersion 183):
 
-- Split the payload families per method: `Snapshot` returns `SnapshotInfo` with
+- Split the payload families per method: `ScreenSnapshot` returns `ScreenSnapshotInfo` with
   a nullable `ViewportSnapshot` (payload/cols/rows), `AttachInfo` keeps only
   the Ghostty attach family, and the worker RPC gained a dedicated lean
-  `SnapshotResult` (absent payload still means "observer stays unseeded").
+  `ScreenSnapshotResult` (absent payload still means "observer stays unseeded").
 - Slimmed the wire: deleted `screen_cursor_x/y`, `screen_cursor_visible`, and
   `screen_snapshot_fresh` from `get_screen_snapshot_result` and
   `WebSocketEvent`, plus the vestigial raw-replay `scrollback` string field.

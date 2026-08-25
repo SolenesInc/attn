@@ -212,8 +212,8 @@ node-eligible, with imports verified: 27 of 30 `src/utils` (all but `viewedDiffH
 `terminalDiagnosticsLog`, `verbatimTextEntry`), both `src/types`, 5 `src/pty`,
 `store/daemonSessions` + `workflowRuns`, `shortcuts/formatShortcut` + `cheatsheet`,
 `hooks/useWorkspaceSelectionController`, `components/DiffView`, `terminalGlyphFont`,
-`terminalGlyphProgram`, `terminalGraphemeMode`, `grid/GridCompositor`,
-`grid/UnifiedGridRenderer`, all 8 pure `components/notebook/*` test files,
+`terminalGlyphProgram`, `terminalGraphemeMode`, `grid/TerminalGrid`,
+`grid/WebGlGridRenderer`, all 8 pure `components/notebook/*` test files,
 `SessionTerminalWorkspace/dockTarget` + `paneRuntimeEventRouter`. Mechanism: extend the
 existing `environmentMatchGlobs` in `vite.config.ts` (or per-file
 `// @vitest-environment node` pragmas — more robust as files move). ~10s of CPU saved;

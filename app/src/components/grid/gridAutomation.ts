@@ -1,11 +1,11 @@
-import type { CompositorStats, GridTileSummary } from './GridCompositor';
+import type { TerminalGridStats, GridTileSummary } from './TerminalGrid';
 
 export interface GridAutomationState {
   active: boolean;
   tileCount: number;
   zoomedId: string | null;
   layout: { rows: number; cols: number };
-  stats: CompositorStats | null;
+  stats: TerminalGridStats | null;
   tiles: GridTileSummary[];
 }
 

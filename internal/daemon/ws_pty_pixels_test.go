@@ -25,15 +25,16 @@ type resizeCall struct {
 }
 
 type recordingResizeBackend struct {
-	mu    sync.Mutex
-	calls []resizeCall
+	mu      sync.Mutex
+	calls   []resizeCall
+	changed bool
 }
 
-func (b *recordingResizeBackend) Resize(_ context.Context, _ string, cols, rows, xpixel, ypixel uint16) error {
+func (b *recordingResizeBackend) Resize(_ context.Context, _ string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.calls = append(b.calls, resizeCall{cols, rows, xpixel, ypixel})
-	return nil
+	return b.changed, nil
 }
 
 func (b *recordingResizeBackend) lastCall(t *testing.T) resizeCall {
@@ -47,7 +48,7 @@ func (b *recordingResizeBackend) lastCall(t *testing.T) resizeCall {
 }
 
 func (b *recordingResizeBackend) Spawn(context.Context, ptybackend.SpawnOptions) error { return nil }
-func (b *recordingResizeBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *recordingResizeBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{}, nil, nil
 }
 func (b *recordingResizeBackend) Input(context.Context, string, []byte) error { return nil }
@@ -66,7 +67,7 @@ func newResizeDaemon(t *testing.T) (*Daemon, *recordingResizeBackend, *broadcast
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
-	backend := &recordingResizeBackend{}
+	backend := &recordingResizeBackend{changed: true}
 	d.ptyBackend = backend
 	return d, backend, captureBroadcasts(d)
 }
@@ -97,6 +98,25 @@ func TestPtyResizeCarriesPixelGeometryToTheBackendAndTheEcho(t *testing.T) {
 	event := resizedEvent(t, capture)
 	if protocol.Deref(event.Xpixel) != 720 || protocol.Deref(event.Ypixel) != 540 {
 		t.Fatalf("pty_resized echoed %v x %v pixels, want 720 x 540", event.Xpixel, event.Ypixel)
+	}
+}
+
+func TestPtyResizeDoesNotBroadcastAnUnchangedGeometry(t *testing.T) {
+	d, backend, capture := newResizeDaemon(t)
+	backend.changed = false
+
+	d.handlePtyResize(nil, &protocol.PtyResizeMessage{
+		ID: "sess-1", Cols: 40, Rows: 12,
+		Xpixel: protocol.Ptr(720), Ypixel: protocol.Ptr(540),
+	})
+
+	if got := backend.lastCall(t); got != (resizeCall{40, 12, 720, 540}) {
+		t.Fatalf("the backend was resized with %+v, want the reported geometry", got)
+	}
+	for _, event := range capture.snapshot() {
+		if event.Event == protocol.EventPtyResized {
+			t.Fatal("unchanged geometry reached the wire")
+		}
 	}
 }
 

@@ -18,11 +18,11 @@ import (
 type modelCaptureBackend struct {
 	*fakeSpawnBackend
 	mu        sync.Mutex
-	snapshots map[string]pty.SnapshotInfo
+	snapshots map[string]pty.ScreenSnapshotInfo
 	calls     map[string]int
 }
 
-func (b *modelCaptureBackend) Snapshot(_ context.Context, sessionID string) (pty.SnapshotInfo, error) {
+func (b *modelCaptureBackend) ScreenSnapshot(_ context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.calls[sessionID]++
@@ -43,7 +43,7 @@ func TestModelCapturePassIsOptInAndCapturesOnlyAgentViewports(t *testing.T) {
 	d.stateReasons().set("codex-session", "heartbeat_busy")
 	backend := &modelCaptureBackend{
 		fakeSpawnBackend: &fakeSpawnBackend{sessionIDs: []string{"codex-session", "shell-session"}},
-		snapshots: map[string]pty.SnapshotInfo{
+		snapshots: map[string]pty.ScreenSnapshotInfo{
 			"codex-session": {
 				LastSeq: 9,
 				Running: true,

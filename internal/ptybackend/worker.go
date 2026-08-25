@@ -657,7 +657,7 @@ func withoutEnvironmentKeys(env []string, keys ...string) []string {
 	return filtered
 }
 
-func (b *WorkerBackend) Attach(ctx context.Context, sessionID, subscriberID string) (AttachInfo, Stream, error) {
+func (b *WorkerBackend) Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return AttachInfo{}, nil, err
@@ -674,7 +674,11 @@ func (b *WorkerBackend) Attach(ctx context.Context, sessionID, subscriberID stri
 	}
 
 	attachReqID := b.nextReqID("attach")
-	if err := writeRequest(enc, attachReqID, ptyworker.MethodAttach, ptyworker.AttachParams{SubscriberID: subscriberID}); err != nil {
+	omitReplay := len(opts) > 0 && opts[len(opts)-1].OmitReplay
+	if err := writeRequest(enc, attachReqID, ptyworker.MethodAttach, ptyworker.AttachParams{
+		SubscriberID: subscriberID,
+		OmitReplay:   omitReplay,
+	}); err != nil {
 		_ = conn.Close()
 		return AttachInfo{}, nil, err
 	}
@@ -780,19 +784,37 @@ func (b *WorkerBackend) Input(ctx context.Context, sessionID string, data []byte
 	return err
 }
 
-func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) error {
+func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return b.callSimple(ctx, session, ptyworker.MethodResize, ptyworker.ResizeParams{
+	var result ptyworker.ResizeResult
+	retried, err := b.callResultPersistent(ctx, session, ptyworker.MethodResize, ptyworker.ResizeParams{
 		Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel,
-	})
+	}, &result)
+	if err != nil {
+		return false, err
+	}
+	// The first request may have applied before its connection failed; preserve
+	// the broadcast after any retry even when that retry reports a no-op.
+	if retried {
+		return true, nil
+	}
+	return resizeResultChanged(result), nil
+}
+
+func resizeResultChanged(result ptyworker.ResizeResult) bool {
+	// A missing field came from a worker that treated every resize as changed.
+	if result.Changed == nil {
+		return true
+	}
+	return *result.Changed
 }
 
 // SetTheme is best-effort: a worker that predates the set_theme method
 // rejects it with ErrBadRequest ("unknown method"), the same tolerance
-// pattern isLifecycleWatchUnsupported uses for MethodSnapshot/MethodWatch. A
+// pattern isLifecycleWatchUnsupported uses for MethodScreenSnapshot/MethodWatch. A
 // stale worker just keeps answering OSC 10/11/12 queries with whatever theme
 // it was spawned with.
 func (b *WorkerBackend) SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error {
@@ -1129,16 +1151,16 @@ func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, sessionID strin
 	}, nil
 }
 
-func (b *WorkerBackend) Snapshot(ctx context.Context, sessionID string) (pty.SnapshotInfo, error) {
+func (b *WorkerBackend) ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return pty.SnapshotInfo{}, err
+		return pty.ScreenSnapshotInfo{}, err
 	}
-	res, err := b.callSnapshot(ctx, session)
+	res, err := b.callScreenSnapshot(ctx, session)
 	if err != nil {
-		return pty.SnapshotInfo{}, err
+		return pty.ScreenSnapshotInfo{}, err
 	}
-	info := pty.SnapshotInfo{
+	info := pty.ScreenSnapshotInfo{
 		LastSeq: res.LastSeq,
 		Cols:    res.Cols,
 		Rows:    res.Rows,
@@ -1503,6 +1525,11 @@ func (b *WorkerBackend) callSimpleWithIdentity(
 }
 
 func (b *WorkerBackend) callSimplePersistent(ctx context.Context, session *workerSession, method string, params any) error {
+	_, err := b.callResultPersistent(ctx, session, method, params, nil)
+	return err
+}
+
+func (b *WorkerBackend) callResultPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
 
@@ -1511,18 +1538,18 @@ func (b *WorkerBackend) callSimplePersistent(ctx context.Context, session *worke
 
 	err := b.ensurePersistentControlConnLocked(rpcCtx, session)
 	if err != nil {
-		return err
+		return false, err
 	}
-	err = b.callSimpleOnPersistentConnLocked(rpcCtx, session, method, params)
+	err = b.callResultOnPersistentConnLocked(rpcCtx, session, method, params, result)
 	if err == nil || !isRetryablePersistentConnError(err) || rpcCtx.Err() != nil {
-		return err
+		return false, err
 	}
 
 	b.closePersistentControlConnLocked(session, "retry_after_error")
 	if err := b.ensurePersistentControlConnLocked(rpcCtx, session); err != nil {
-		return err
+		return true, err
 	}
-	return b.callSimpleOnPersistentConnLocked(rpcCtx, session, method, params)
+	return true, b.callResultOnPersistentConnLocked(rpcCtx, session, method, params, result)
 }
 
 func (b *WorkerBackend) ensurePersistentControlConnLocked(ctx context.Context, session *workerSession) error {
@@ -1547,6 +1574,10 @@ func (b *WorkerBackend) ensurePersistentControlConnLocked(ctx context.Context, s
 }
 
 func (b *WorkerBackend) callSimpleOnPersistentConnLocked(ctx context.Context, session *workerSession, method string, params any) error {
+	return b.callResultOnPersistentConnLocked(ctx, session, method, params, nil)
+}
+
+func (b *WorkerBackend) callResultOnPersistentConnLocked(ctx context.Context, session *workerSession, method string, params, result any) error {
 	if session.controlConn == nil || session.controlEnc == nil || session.controlDec == nil {
 		return errors.New("worker backend persistent control connection not initialized")
 	}
@@ -1577,6 +1608,11 @@ func (b *WorkerBackend) callSimpleOnPersistentConnLocked(ctx context.Context, se
 		}
 		if !res.OK {
 			return b.rpcError(session.SessionID, res.Error)
+		}
+		if result != nil {
+			if err := json.Unmarshal(res.Result, result); err != nil {
+				return fmt.Errorf("decode %s result: %w", method, err)
+			}
 		}
 		return nil
 	}
@@ -1654,36 +1690,36 @@ func (b *WorkerBackend) callInfo(ctx context.Context, session *workerSession) (p
 	}
 }
 
-func (b *WorkerBackend) callSnapshot(ctx context.Context, session *workerSession) (ptyworker.SnapshotResult, error) {
+func (b *WorkerBackend) callScreenSnapshot(ctx context.Context, session *workerSession) (ptyworker.ScreenSnapshotResult, error) {
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
 	conn, enc, dec, err := b.connectAuthed(rpcCtx, session)
 	if err != nil {
-		return ptyworker.SnapshotResult{}, err
+		return ptyworker.ScreenSnapshotResult{}, err
 	}
 	defer conn.Close()
 	if err := applyConnDeadline(conn, rpcCtx); err != nil {
-		return ptyworker.SnapshotResult{}, err
+		return ptyworker.ScreenSnapshotResult{}, err
 	}
 
 	reqID := b.nextReqID("snapshot")
-	if err := writeRequest(enc, reqID, ptyworker.MethodSnapshot, map[string]any{}); err != nil {
-		return ptyworker.SnapshotResult{}, err
+	if err := writeRequest(enc, reqID, ptyworker.MethodScreenSnapshot, map[string]any{}); err != nil {
+		return ptyworker.ScreenSnapshotResult{}, err
 	}
 	for {
 		frameType, res, _, err := readFrame(dec)
 		if err != nil {
-			return ptyworker.SnapshotResult{}, err
+			return ptyworker.ScreenSnapshotResult{}, err
 		}
 		if frameType != "res" || res.ID != reqID {
 			continue
 		}
 		if !res.OK {
-			return ptyworker.SnapshotResult{}, b.rpcError(session.SessionID, res.Error)
+			return ptyworker.ScreenSnapshotResult{}, b.rpcError(session.SessionID, res.Error)
 		}
-		var result ptyworker.SnapshotResult
+		var result ptyworker.ScreenSnapshotResult
 		if err := json.Unmarshal(res.Result, &result); err != nil {
-			return ptyworker.SnapshotResult{}, err
+			return ptyworker.ScreenSnapshotResult{}, err
 		}
 		return result, nil
 	}

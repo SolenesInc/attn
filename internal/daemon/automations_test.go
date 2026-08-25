@@ -46,13 +46,13 @@ func writeCodexRolloutFixture(t *testing.T, resumeID string) {
 	}
 }
 
-func (b *automationResumeBackend) Snapshot(context.Context, string) (pty.SnapshotInfo, error) {
+func (b *automationResumeBackend) ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error) {
 	b.snapshotCalls++
 	payload := []byte("reviewer ready")
 	if b.snapshotCalls == 1 {
 		payload = []byte(codexDirectoryTrustPrompt)
 	}
-	return pty.SnapshotInfo{Screen: &pty.ViewportSnapshot{Payload: payload}}, nil
+	return pty.ScreenSnapshotInfo{Screen: &pty.ViewportSnapshot{Payload: payload}}, nil
 }
 
 func TestStripANSIForPromptMatch_PreservesStyledSplitPrompt(t *testing.T) {

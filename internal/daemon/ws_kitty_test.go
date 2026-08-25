@@ -310,7 +310,7 @@ func TestHandleGetKittyImageReportsAMissingImageByID(t *testing.T) {
 	}
 }
 
-// KittyImageProvider is optional, like SnapshotProvider: the embedded backend
+// KittyImageProvider is optional, like ScreenSnapshotProvider: the embedded backend
 // and a worker built before the method existed both have to answer something.
 // Asserting the interface without checking is a nil-interface panic that takes
 // the daemon down over a missing image.
@@ -358,7 +358,7 @@ type placementAttachBackend struct {
 	info ptybackend.AttachInfo
 }
 
-func (b *placementAttachBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *placementAttachBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return b.info, newFakeOutputStream(), nil
 }
 

@@ -386,7 +386,7 @@ func (r *Runtime) run(ctx context.Context) error {
 	if r.capture != nil {
 		r.capture.recordNote("capture enabled")
 		r.capture.recordState("working")
-		_, err := r.manager.Attach(
+		_, err := r.manager.Subscribe(
 			r.cfg.SessionID,
 			debugCaptureSubscriberID,
 			func(data []byte, seq uint32) bool {
@@ -452,7 +452,7 @@ func (r *Runtime) run(ctx context.Context) error {
 	// away in the normal path) cancels it; it re-arms whenever the last authed
 	// connection drops.
 	r.noteOutputActivity()
-	if _, err := r.manager.Attach(
+	if _, err := r.manager.Subscribe(
 		r.cfg.SessionID,
 		orphanActivitySubscriberID,
 		func(_ []byte, _ uint32) bool {
@@ -876,8 +876,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			return
 		}
 		c.sendResult(req.ID, info)
-	case MethodSnapshot:
-		info, err := c.runtime.manager.Snapshot(c.runtime.cfg.SessionID)
+	case MethodScreenSnapshot:
+		info, err := c.runtime.manager.ScreenSnapshot(c.runtime.cfg.SessionID)
 		if err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
@@ -886,7 +886,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			c.sendError(req.ID, ErrInternal, err.Error())
 			return
 		}
-		result := SnapshotResult{
+		result := ScreenSnapshotResult{
 			LastSeq: info.LastSeq,
 			Cols:    info.Cols,
 			Rows:    info.Rows,
@@ -917,93 +917,100 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		if subID == "" {
 			subID = "conn-" + c.connID
 		}
-		info, err := c.runtime.manager.Attach(
-			c.runtime.cfg.SessionID,
-			subID,
-			func(data []byte, seq uint32) bool {
-				// Hot path: one call per output chunk. Gate the verbose log (and
-				// its preview allocation) so DEBUG-off runs don't write a line to
-				// the per-session worker .log for every chunk (an unbounded leak).
-				if c.runtime.cfg.Debug {
-					c.runtime.logf(
-						"worker output event: session=%s conn=%s sub=%s seq=%d bytes=%d preview=%q",
-						c.runtime.cfg.SessionID,
-						c.connID,
-						subID,
-						seq,
-						len(data),
-						previewWorkerBytesForLog(data),
-					)
-				}
-				encoded := base64.StdEncoding.EncodeToString(data)
-				ok := c.sendEvent(EventEnvelope{
-					Type:      "evt",
-					Event:     EventOutput,
-					SessionID: c.runtime.cfg.SessionID,
-					Seq:       &seq,
-					Data:      &encoded,
-				})
-				if !ok {
-					c.runtime.logf(
-						"worker output forward failed: session=%s conn=%s sub=%s seq=%d",
-						c.runtime.cfg.SessionID,
-						c.connID,
-						subID,
-						seq,
-					)
-				}
-				return ok
-			},
-			func(reason string) {
+		send := func(data []byte, seq uint32) bool {
+			// Hot path: one call per output chunk. Gate the verbose log (and
+			// its preview allocation) so DEBUG-off runs don't write a line to
+			// the per-session worker .log for every chunk (an unbounded leak).
+			if c.runtime.cfg.Debug {
 				c.runtime.logf(
-					"worker output desync: session=%s conn=%s sub=%s reason=%s",
+					"worker output event: session=%s conn=%s sub=%s seq=%d bytes=%d preview=%q",
+					c.runtime.cfg.SessionID,
+					c.connID,
+					subID,
+					seq,
+					len(data),
+					previewWorkerBytesForLog(data),
+				)
+			}
+			encoded := base64.StdEncoding.EncodeToString(data)
+			ok := c.sendEvent(EventEnvelope{
+				Type:      "evt",
+				Event:     EventOutput,
+				SessionID: c.runtime.cfg.SessionID,
+				Seq:       &seq,
+				Data:      &encoded,
+			})
+			if !ok {
+				c.runtime.logf(
+					"worker output forward failed: session=%s conn=%s sub=%s seq=%d",
+					c.runtime.cfg.SessionID,
+					c.connID,
+					subID,
+					seq,
+				)
+			}
+			return ok
+		}
+		onDrop := func(reason string) {
+			c.runtime.logf(
+				"worker output desync: session=%s conn=%s sub=%s reason=%s",
+				c.runtime.cfg.SessionID,
+				c.connID,
+				subID,
+				reason,
+			)
+			if !c.sendEvent(EventEnvelope{
+				Type:      "evt",
+				Event:     EventDesync,
+				SessionID: c.runtime.cfg.SessionID,
+				Reason:    &reason,
+			}) {
+				c.runtime.logf(
+					"worker output desync forward failed: session=%s conn=%s sub=%s reason=%s",
 					c.runtime.cfg.SessionID,
 					c.connID,
 					subID,
 					reason,
 				)
-				if !c.sendEvent(EventEnvelope{
-					Type:      "evt",
-					Event:     EventDesync,
-					SessionID: c.runtime.cfg.SessionID,
-					Reason:    &reason,
-				}) {
-					c.runtime.logf(
-						"worker output desync forward failed: session=%s conn=%s sub=%s reason=%s",
-						c.runtime.cfg.SessionID,
-						c.connID,
-						subID,
-						reason,
-					)
-				}
-			},
-			// Placements ride this connection's own queue, which is what keeps a
-			// set ordered behind the output event carrying the same seq.
-			//
-			// The success path does not log. While an image is on screen this
-			// fires for every chunk that scrolls it, so a line per update is
-			// hundreds a second through a plain `cat` — enough to bury the rest
-			// of the session log. Only a forward failure is worth a line, and it
-			// is bounded by the send queue giving up.
-			pty.OnPlacements(func(update pty.PlacementUpdate) {
-				seq := update.Seq
-				if !c.sendEvent(EventEnvelope{
-					Type:       "evt",
-					Event:      EventKittyPlacements,
-					SessionID:  c.runtime.cfg.SessionID,
-					Seq:        &seq,
-					Placements: placementsToWire(update.Placements),
-				}) {
-					c.runtime.logf(
-						"worker kitty placements forward failed: session=%s conn=%s sub=%s seq=%d",
-						c.runtime.cfg.SessionID,
-						c.connID,
-						subID,
-						update.Seq,
-					)
-				}
-			}),
-		)
+			}
+		}
+		// Placements ride this connection's own queue, which is what keeps a
+		// set ordered behind the output event carrying the same seq.
+		//
+		// The success path does not log. While an image is on screen this
+		// fires for every chunk that scrolls it, so a line per update is
+		// hundreds a second through a plain `cat` — enough to bury the rest
+		// of the session log. Only a forward failure is worth a line, and it
+		// is bounded by the send queue giving up.
+		onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
+			seq := update.Seq
+			if !c.sendEvent(EventEnvelope{
+				Type:       "evt",
+				Event:      EventKittyPlacements,
+				SessionID:  c.runtime.cfg.SessionID,
+				Seq:        &seq,
+				Placements: placementsToWire(update.Placements),
+			}) {
+				c.runtime.logf(
+					"worker kitty placements forward failed: session=%s conn=%s sub=%s seq=%d",
+					c.runtime.cfg.SessionID,
+					c.connID,
+					subID,
+					update.Seq,
+				)
+			}
+		})
+		var info pty.AttachInfo
+		var err error
+		if params.OmitReplay {
+			info, err = c.runtime.manager.Subscribe(
+				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements,
+			)
+		} else {
+			info, err = c.runtime.manager.Attach(
+				c.runtime.cfg.SessionID, subID, send, onDrop, onPlacements,
+			)
+		}
 		if err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
@@ -1072,7 +1079,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			c.sendError(req.ID, ErrBadRequest, "cols and rows must be > 0")
 			return
 		}
-		if err := c.runtime.manager.Resize(c.runtime.cfg.SessionID, params.Cols, params.Rows, params.XPixel, params.YPixel); err != nil {
+		changed, err := c.runtime.manager.Resize(c.runtime.cfg.SessionID, params.Cols, params.Rows, params.XPixel, params.YPixel)
+		if err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
 				return
@@ -1080,7 +1088,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			c.sendError(req.ID, ErrIO, err.Error())
 			return
 		}
-		c.sendResult(req.ID, map[string]any{"ok": true})
+		c.sendResult(req.ID, ResizeResult{OK: true, Changed: &changed})
 	case MethodSetTheme:
 		var params SetThemeParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -1251,14 +1259,8 @@ func (c *connCtx) send(v any) bool {
 	return c.enqueue(v, connResponseSendTimeout)
 }
 
-func (r *Runtime) sessionInfo() (pty.AttachInfo, error) {
-	tmpSubID := fmt.Sprintf("info-%d", time.Now().UnixNano())
-	info, err := r.manager.Attach(r.cfg.SessionID, tmpSubID, func([]byte, uint32) bool { return true }, nil)
-	if err != nil {
-		return pty.AttachInfo{}, err
-	}
-	r.manager.Detach(r.cfg.SessionID, tmpSubID)
-	return info, nil
+func (r *Runtime) sessionInfo() (pty.SessionInfo, error) {
+	return r.manager.SessionInfo(r.cfg.SessionID)
 }
 
 func (r *Runtime) infoResult() (InfoResult, error) {

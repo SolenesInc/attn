@@ -113,6 +113,12 @@ func screenOf(t *testing.T, m *Manager, id string) string {
 func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	const id = "handoff-basic"
 	before, beforeSub := spawnEchoSession(t, id)
+	const pixelW, pixelH = 720, 1080
+	if changed, err := before.Resize(id, 80, 24, pixelW, pixelH); err != nil {
+		t.Fatalf("Resize() before handoff: %v", err)
+	} else if !changed {
+		t.Fatal("the measured geometry was not applied before handoff")
+	}
 	if err := before.Input(id, []byte("first\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
@@ -140,11 +146,19 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	if state.LastSeq == 0 {
 		t.Error("handoff carried no sequence watermark")
 	}
+	if state.PixelW != pixelW || state.PixelH != pixelH {
+		t.Errorf("handoff pixels = %dx%d, want %dx%d", state.PixelW, state.PixelH, pixelW, pixelH)
+	}
 
 	after := NewManager(nil)
 	t.Cleanup(after.Shutdown)
 	if err := after.Adopt(state); err != nil {
 		t.Fatalf("Adopt() error: %v", err)
+	}
+	if changed, err := after.Resize(id, 80, 24, pixelW, pixelH); err != nil {
+		t.Fatalf("Resize() after adopt: %v", err)
+	} else if changed {
+		t.Fatal("adopt forgot the applied geometry and repeated its resize")
 	}
 	if got := screenOf(t, after, id); got != wantScreen {
 		t.Errorf("the adopted screen differs:\n got %q\nwant %q", got, wantScreen)

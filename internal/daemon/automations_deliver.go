@@ -831,7 +831,7 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 		return nil
 	}
 	snapshots, ok := d.ptyBackend.(interface {
-		Snapshot(context.Context, string) (pty.SnapshotInfo, error)
+		ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error)
 	})
 	if !ok {
 		return errors.New("automation launch cannot verify Codex directory trust gate")
@@ -839,7 +839,7 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	deadline := time.Now().Add(10 * time.Second)
 	acknowledged := false
 	for time.Now().Before(deadline) {
-		info, err := snapshots.Snapshot(context.Background(), req.IDs.SessionID)
+		info, err := snapshots.ScreenSnapshot(context.Background(), req.IDs.SessionID)
 		if err == nil {
 			var payload []byte
 			if info.Screen != nil {

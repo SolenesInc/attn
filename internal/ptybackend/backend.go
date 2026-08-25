@@ -150,6 +150,11 @@ type AttachInfo struct {
 	GhosttyScrollbackTruncated bool
 }
 
+// AttachOptions selects replay work; zero preserves mixed-version full attaches.
+type AttachOptions struct {
+	OmitReplay bool
+}
+
 type OutputEvent struct {
 	Kind   string
 	Data   []byte
@@ -204,10 +209,10 @@ type ExitInfo struct {
 
 type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
-	Attach(ctx context.Context, sessionID, subscriberID string) (AttachInfo, Stream, error)
+	Attach(ctx context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
 	Input(ctx context.Context, sessionID string, data []byte) error
 	// Resize applies a new grid; xpixel/ypixel are total device pixels, 0 when unknown.
-	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) error
+	Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error)
 	// SetTheme updates the OSC 10/11/12 answer colors. Best-effort: a worker
 	// predating the method returns nil.
 	SetTheme(ctx context.Context, sessionID string, theme pty.TerminalTheme) error
@@ -257,10 +262,10 @@ type WorkerProcessProvider interface {
 	WorkerPIDs(ctx context.Context) map[string]int
 }
 
-// SnapshotProvider returns the current rendered screen of a session without
+// ScreenSnapshotProvider returns the current rendered screen of a session without
 // attaching. Backends that cannot return an error; callers degrade gracefully.
-type SnapshotProvider interface {
-	Snapshot(ctx context.Context, sessionID string) (pty.SnapshotInfo, error)
+type ScreenSnapshotProvider interface {
+	ScreenSnapshot(ctx context.Context, sessionID string) (pty.ScreenSnapshotInfo, error)
 }
 
 // KittyImageProvider copies one stored image out of a session's terminal by

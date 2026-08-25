@@ -14,7 +14,7 @@ export type GridLayout =
 
 export const AUTO_LAYOUT: GridLayout = { mode: 'auto' };
 
-// Picker bounds. The unified renderer was proven to ~25 live tiles (5×5) in the
+// Picker bounds. The WebGL grid renderer was proven to ~25 live tiles (5×5) in the
 // grid spike, so that is the offered ceiling.
 export const MAX_GRID_ROWS = 5;
 export const MAX_GRID_COLS = 5;

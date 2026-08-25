@@ -68,9 +68,9 @@ func TestResponseEnvelopeErrorRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSnapshotResultRoundTrip(t *testing.T) {
+func TestScreenSnapshotResultRoundTrip(t *testing.T) {
 	screenText := "plain viewport"
-	original := SnapshotResult{
+	original := ScreenSnapshotResult{
 		LastSeq:        42,
 		Cols:           100,
 		Rows:           30,
@@ -84,7 +84,7 @@ func TestSnapshotResultRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal snapshot result: %v", err)
 	}
-	var decoded SnapshotResult
+	var decoded ScreenSnapshotResult
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("unmarshal snapshot result: %v", err)
 	}
@@ -154,5 +154,23 @@ func TestAttachResultCarriesSnapshotFormat(t *testing.T) {
 	}
 	if old.GhosttySnapshotFormat != "" {
 		t.Fatalf("legacy snapshot format = %q, want empty", old.GhosttySnapshotFormat)
+	}
+}
+
+func TestAdditiveAttachAndResizeFieldsPreserveLegacyDefaults(t *testing.T) {
+	var oldAttach AttachParams
+	if err := json.Unmarshal([]byte(`{"subscriber_id":"sub-1"}`), &oldAttach); err != nil {
+		t.Fatalf("unmarshal legacy attach params: %v", err)
+	}
+	if oldAttach.OmitReplay {
+		t.Fatal("legacy attach unexpectedly omitted its replay")
+	}
+
+	var oldResize ResizeResult
+	if err := json.Unmarshal([]byte(`{"ok":true}`), &oldResize); err != nil {
+		t.Fatalf("unmarshal legacy resize result: %v", err)
+	}
+	if oldResize.Changed != nil {
+		t.Fatalf("legacy resize changed = %v, want absent", *oldResize.Changed)
 	}
 }

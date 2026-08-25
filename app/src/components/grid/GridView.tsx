@@ -14,9 +14,9 @@ import { createTerminalKeyInterceptor } from '../SessionTerminalWorkspace/termin
 import type { ScreenSnapshotResult } from '../../hooks/useDaemonSocket';
 import type { UISessionState } from '../../types/sessionState';
 import { getTerminalTheme, getTerminalAnsiPalette } from '../../utils/terminalSizing';
-import { UnifiedGridRenderer } from './UnifiedGridRenderer';
+import { WebGlGridRenderer } from './WebGlGridRenderer';
 import { ensureTerminalIconFont } from '../../utils/terminalIconFont';
-import { GridCompositor, type GridTileSpec } from './GridCompositor';
+import { TerminalGrid, type GridTileSpec } from './TerminalGrid';
 import type { Rect } from './GridRenderer';
 import { GridHiddenSessions, type HiddenGridSession } from './GridHiddenSessions';
 import { setGridAutomationHandle, INACTIVE_GRID_STATE } from './gridAutomation';
@@ -77,7 +77,7 @@ export function GridView({
   getScreenSnapshot,
 }: GridViewProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const compRef = useRef<GridCompositor | null>(null);
+  const gridRef = useRef<TerminalGrid | null>(null);
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
 
@@ -102,7 +102,7 @@ export function GridView({
   getSnapshotRef.current = getScreenSnapshot;
 
   // Ref-stable (everything read from refs) so both effects share one instance.
-  const reconcileSeeding = useRef((comp: GridCompositor) => {
+  const reconcileSeeding = useRef((grid: TerminalGrid) => {
     const liveIds = new Set(tilesRef.current.map((t) => t.runtimeId));
     for (const id of [...seedGenRef.current.keys()]) {
       if (!liveIds.has(id)) seedGenRef.current.delete(id);
@@ -113,21 +113,21 @@ export function GridView({
       const gen = (seedCounterRef.current += 1);
       seedGenRef.current.set(id, gen);
       if (!fetchSnapshot) continue; // no daemon socket: live-fill only
-      comp.beginSeeding(id);
+      grid.beginSeeding(id);
       fetchSnapshot(id)
         .then((result) => {
           // Superseded by a remove+re-add, or torn down mid-flight.
           if (seedGenRef.current.get(id) !== gen) return;
-          if (compRef.current !== comp || !comp.hasTile(id)) return;
+          if (gridRef.current !== grid || !grid.hasTile(id)) return;
           if (!result) {
-            comp.cancelSeeding(id);
+            grid.cancelSeeding(id);
             return;
           }
           const bytes = result.screenSnapshot ? b64ToBytes(result.screenSnapshot) : new Uint8Array(0);
-          comp.seedTile(id, bytes, result.lastSeq, result.screenCols, result.screenRows);
+          grid.seedTile(id, bytes, result.lastSeq, result.screenCols, result.screenRows);
         })
         .catch(() => {
-          if (seedGenRef.current.get(id) === gen && compRef.current === comp) comp.cancelSeeding(id);
+          if (seedGenRef.current.get(id) === gen && gridRef.current === grid) grid.cancelSeeding(id);
         });
     }
   }).current;
@@ -138,7 +138,7 @@ export function GridView({
     [tiles],
   );
 
-  // One renderer + compositor per theme; unmount releases the single WebGL
+  // One renderer + terminal grid per theme; unmount releases the single WebGL
   // context deterministically.
   useEffect(() => {
     const stage = stageRef.current;
@@ -147,9 +147,10 @@ export function GridView({
     let disposed = false;
     let unlisten: (() => void) | null = null;
     let disposeInput: (() => void) | null = null;
+    let resizeObserver: ResizeObserver | null = null;
     const metrics = measureCanonicalCell();
     const theme = getTerminalTheme(resolvedTheme);
-    const renderer = new UnifiedGridRenderer(FONT_SIZE, FONT_FAMILY, metrics, {
+    const renderer = new WebGlGridRenderer(FONT_SIZE, FONT_FAMILY, metrics, {
       background: theme.background,
       foreground: theme.foreground,
       cursor: theme.cursor,
@@ -157,35 +158,40 @@ export function GridView({
 
     void loadGhostty().then((ghostty) => {
       if (disposed) return;
-      const comp = new GridCompositor(renderer, ghostty, stage, metrics, {
+      const grid = new TerminalGrid(renderer, ghostty, stage, metrics, {
         scrollbackLimit: TERMINAL_SCROLLBACK_BYTES,
         fgColor: colorNumber(theme.foreground),
         bgColor: colorNumber(theme.background),
         cursorColor: colorNumber(theme.cursor),
         palette: getTerminalAnsiPalette(resolvedTheme),
       });
-      compRef.current = comp;
+      gridRef.current = grid;
       const current = tilesRef.current;
-      comp.syncTiles(toSpecs(current));
-      comp.setLayout(layoutRef.current.rows, layoutRef.current.cols);
-      reconcileSeeding(comp);
-      comp.start();
+      grid.syncTiles(toSpecs(current));
+      grid.setLayout(layoutRef.current.rows, layoutRef.current.cols);
+      reconcileSeeding(grid);
+      grid.start();
+      resizeObserver = new ResizeObserver(() => grid.invalidate());
+      resizeObserver.observe(stage);
 
       // Drop blank icon glyphs cached before the Nerd Font loaded; the grid can
       // open before that completes on a cold start.
       void ensureTerminalIconFont(FONT_SIZE).then(() => {
-        if (!disposed) renderer.invalidateGlyphCache();
+        if (!disposed) {
+          renderer.invalidateGlyphCache();
+          grid.invalidate();
+        }
       });
 
       // With no tile zoomed there is no target, so overview keystrokes are
       // swallowed rather than leaked.
       const forward = (data: string) => {
-        const id = compRef.current?.zoomedId();
+        const id = gridRef.current?.zoomedId();
         if (id) void ptyWrite({ id, data });
       };
       disposeInput = attachTerminalInput({
         element: stage,
-        terminal: () => compRef.current?.inputTarget() ?? null,
+        terminal: () => gridRef.current?.inputTarget() ?? null,
         send: forward,
         interceptKey: createTerminalKeyInterceptor(forward),
         onError: (operation, error) => {
@@ -196,21 +202,21 @@ export function GridView({
 
       setGridAutomationHandle({
         getState: () => {
-          const c = compRef.current;
-          if (!c) return INACTIVE_GRID_STATE;
-          const tileStates = c.tileSummaries();
+          const grid = gridRef.current;
+          if (!grid) return INACTIVE_GRID_STATE;
+          const tileStates = grid.tileSummaries();
           return {
             active: true,
             tileCount: tileStates.length,
-            zoomedId: c.zoomedId(),
-            layout: c.currentLayout(),
-            stats: c.getStats(),
+            zoomedId: grid.zoomedId(),
+            layout: grid.currentLayout(),
+            stats: grid.getStats(),
             tiles: tileStates,
           };
         },
-        getTileText: (id) => compRef.current?.getTileText(id) ?? null,
-        zoom: (id) => compRef.current?.zoomTo(id),
-        hitTest: (x, y) => compRef.current?.hitTest(x, y) ?? null,
+        getTileText: (id) => gridRef.current?.getTileText(id) ?? null,
+        zoom: (id) => gridRef.current?.zoomTo(id),
+        hitTest: (x, y) => gridRef.current?.hitTest(x, y) ?? null,
         sendText: (text) => {
           const stageEl = stageRef.current;
           if (!stageEl) return false;
@@ -231,18 +237,18 @@ export function GridView({
 
     // One firehose listener for the grid's lifetime; untiled sessions are ignored.
     void listenPtyEvents((evt) => {
-      const comp = compRef.current;
-      if (!comp) return;
+      const grid = gridRef.current;
+      if (!grid) return;
       const p = evt.payload;
       if (p.event === 'data') {
-        if (comp.hasTile(p.id)) {
-          comp.writeBytes(p.id, typeof p.data === 'string' ? b64ToBytes(p.data) : p.data, p.seq);
+        if (grid.hasTile(p.id)) {
+          grid.writeBytes(p.id, typeof p.data === 'string' ? b64ToBytes(p.data) : p.data, p.seq);
         }
       } else if (p.event === 'local_resize') {
         // The snapshot and subsequent output are geometry-dependent.
-        if (comp.hasTile(p.id)) comp.resizeTile(p.id, p.cols, p.rows);
+        if (grid.hasTile(p.id)) grid.resizeTile(p.id, p.cols, p.rows);
       } else if (p.event === 'reset') {
-        if (comp.hasTile(p.id)) comp.writeBytes(p.id, RESET_BYTES);
+        if (grid.hasTile(p.id)) grid.writeBytes(p.id, RESET_BYTES);
       }
     }).then((dispose) => {
       if (disposed) dispose();
@@ -254,11 +260,12 @@ export function GridView({
       setGridAutomationHandle(null);
       disposeInput?.();
       unlisten?.();
-      // A rebuilt compositor must re-seed its fresh, blank tile models.
+      resizeObserver?.disconnect();
+      // A rebuilt terminal grid must re-seed its fresh, blank tile models.
       seedGenRef.current.clear();
-      const comp = compRef.current;
-      compRef.current = null;
-      if (comp) comp.dispose();
+      const grid = gridRef.current;
+      gridRef.current = null;
+      if (grid) grid.dispose();
       else renderer.dispose();
     };
   }, [resolvedTheme, reconcileSeeding]);
@@ -266,29 +273,29 @@ export function GridView({
   // setLayout here keeps the reflow snapshot aligned when a tile change also
   // shifts the Auto shape.
   useEffect(() => {
-    const comp = compRef.current;
-    if (!comp) return;
+    const grid = gridRef.current;
+    if (!grid) return;
     const current = tilesRef.current;
-    comp.syncTiles(toSpecs(current));
-    comp.setLayout(layoutRef.current.rows, layoutRef.current.cols);
-    reconcileSeeding(comp);
+    grid.syncTiles(toSpecs(current));
+    grid.setLayout(layoutRef.current.rows, layoutRef.current.cols);
+    reconcileSeeding(grid);
   }, [signature, reconcileSeeding]);
 
   // setLayout is idempotent on unchanged dims, so overlapping with the sync
   // effect above is a safe no-op.
   useEffect(() => {
-    compRef.current?.setLayout(layout.rows, layout.cols);
+    gridRef.current?.setLayout(layout.rows, layout.cols);
   }, [layout.rows, layout.cols]);
 
   // Click toggles zoom; Esc exits zoom.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      const comp = compRef.current;
-      if (comp?.isZoomed()) {
+      const grid = gridRef.current;
+      if (grid?.isZoomed()) {
         e.preventDefault();
         e.stopPropagation();
-        comp.zoomTo(null);
+        grid.zoomTo(null);
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -296,15 +303,15 @@ export function GridView({
   }, []);
 
   const onStageClick = (e: React.MouseEvent) => {
-    const comp = compRef.current;
-    if (!comp) return;
-    if (comp.isZoomed()) {
-      comp.zoomTo(null);
+    const grid = gridRef.current;
+    if (!grid) return;
+    if (grid.isZoomed()) {
+      grid.zoomTo(null);
       return;
     }
-    const id = comp.hitTest(e.clientX, e.clientY);
+    const id = grid.hitTest(e.clientX, e.clientY);
     if (id) {
-      comp.zoomTo(id);
+      grid.zoomTo(id);
       setRemoveTarget(null); // a zoomed tile shows no remove button
       // The zoomed tile only receives keys while the stage owns focus.
       stageRef.current?.focus({ preventScroll: true });
@@ -315,12 +322,12 @@ export function GridView({
   // on .grid-view, not the stage, so moving onto the × button — a .grid-view
   // child — fires no mouseleave and cannot flicker it.
   const updateRemoveTarget = (e: React.MouseEvent) => {
-    const comp = compRef.current;
-    if (!comp || !onRemoveTile || comp.isZoomed()) {
+    const grid = gridRef.current;
+    if (!grid || !onRemoveTile || grid.isZoomed()) {
       if (removeTarget) setRemoveTarget(null);
       return;
     }
-    const hit = comp.tileAt(e.clientX, e.clientY);
+    const hit = grid.tileAt(e.clientX, e.clientY);
     const sessionId = hit ? sessionIdByRuntime.get(hit.id) : undefined;
     if (!hit || !sessionId) {
       if (removeTarget) setRemoveTarget(null);

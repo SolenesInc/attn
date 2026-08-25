@@ -24,7 +24,7 @@ redaction, model inference, and fine-tuning.
 ```text
 PTY worker / embedded Session
   -> authoritative Ghostty terminal under replayMu
-    -> SnapshotInfo { styled viewport, plain viewport text, last_seq }
+    -> ScreenSnapshotInfo { styled viewport, plain viewport text, last_seq }
       -> daemon modelCaptureRecorder (enabled setting)
         -> filter Codex/Claude
         -> state-change / interval eligibility

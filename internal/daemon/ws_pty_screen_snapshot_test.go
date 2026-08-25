@@ -11,10 +11,10 @@ import (
 
 type snapshotBackend struct {
 	*fakeSpawnBackend
-	snapshot pty.SnapshotInfo
+	snapshot pty.ScreenSnapshotInfo
 }
 
-func (b *snapshotBackend) Snapshot(context.Context, string) (pty.SnapshotInfo, error) {
+func (b *snapshotBackend) ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error) {
 	return b.snapshot, nil
 }
 
@@ -22,7 +22,7 @@ func TestHandleGetScreenSnapshotSeedsFromViewportPayload(t *testing.T) {
 	d := NewForTesting(t.TempDir())
 	d.ptyBackend = &snapshotBackend{
 		fakeSpawnBackend: &fakeSpawnBackend{},
-		snapshot: pty.SnapshotInfo{
+		snapshot: pty.ScreenSnapshotInfo{
 			LastSeq: 42,
 			Cols:    100,
 			Rows:    30,
@@ -65,7 +65,7 @@ func TestHandleGetScreenSnapshotLeavesObserverUnseededWithoutViewport(t *testing
 	d := NewForTesting(t.TempDir())
 	d.ptyBackend = &snapshotBackend{
 		fakeSpawnBackend: &fakeSpawnBackend{},
-		snapshot:         pty.SnapshotInfo{LastSeq: 42, Cols: 100, Rows: 30, Running: true},
+		snapshot:         pty.ScreenSnapshotInfo{LastSeq: 42, Cols: 100, Rows: 30, Running: true},
 	}
 	client := &wsClient{send: make(chan outboundMessage, 1)}
 

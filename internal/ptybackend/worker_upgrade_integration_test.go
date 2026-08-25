@@ -90,9 +90,9 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 
 	// The socket keeps answering from the inherited listener, so the very next
 	// call goes through — there is no reconnect loop and no window to tolerate.
-	snap, err := backend.Snapshot(context.Background(), sessionID)
+	snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 	if err != nil {
-		t.Fatalf("Snapshot() right after the upgrade: %v", err)
+		t.Fatalf("ScreenSnapshot() right after the upgrade: %v", err)
 	}
 	if !snap.Running {
 		t.Fatal("the session is not running after the upgrade")
@@ -174,9 +174,9 @@ func TestWorkerBackend_UpgradeRefusesABinaryThatIsNotOne(t *testing.T) {
 	if _, err := backend.upgrade(context.Background(), sessionID, "/nonexistent/attn"); err == nil {
 		t.Fatal("Upgrade() accepted a path with no binary at it")
 	}
-	snap, err := backend.Snapshot(context.Background(), sessionID)
+	snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 	if err != nil {
-		t.Fatalf("Snapshot() after a refused upgrade: %v", err)
+		t.Fatalf("ScreenSnapshot() after a refused upgrade: %v", err)
 	}
 	if !snap.Running {
 		t.Fatal("a refused upgrade killed the session")
@@ -194,7 +194,7 @@ func waitForScreen(t *testing.T, backend *WorkerBackend, sessionID, marker, inpu
 	deadline := time.Now().Add(10 * time.Second)
 	var last string
 	for time.Now().Before(deadline) {
-		snap, err := backend.Snapshot(context.Background(), sessionID)
+		snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 		if err == nil && snap.Screen != nil {
 			last = snap.Screen.Text
 			if strings.Contains(last, marker) {

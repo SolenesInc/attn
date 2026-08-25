@@ -66,19 +66,12 @@ const STATE_COLORS: Record<UISessionState, Rgb> = {
   unknown: { r: 168, g: 85, b: 247 },
 };
 const FOCUS_BORDER_ALPHA = 0.95;
-const WAITING_INPUT_FLASH_PERIOD_MS = 1_600;
-const SCHEDULED_PULSE_PERIOD_MS = 3_200;
+const ATTENTION_EMPHASIS = 0.725;
 
-export function waitingInputFlash(now: number): number {
-  const wave = 0.5 + 0.5 * Math.sin((now / WAITING_INPUT_FLASH_PERIOD_MS) * Math.PI * 2);
-  return wave * wave;
-}
-
-// scheduledPulse is a gentle breathing wave in [0,1], slower and softer than
-// the waiting_input flash — it reads as "parked but alive, will auto-resume"
-// rather than "needs you now".
-export function scheduledPulse(now: number): number {
-  return 0.5 + 0.5 * Math.sin((now / SCHEDULED_PULSE_PERIOD_MS) * Math.PI * 2);
+export function staticStateEmphasis(state: UISessionState): number {
+  if (state === 'waiting_input') return 1;
+  if (state === 'scheduled') return 0.5;
+  return 0;
 }
 
 const BLOCK_ELEMENT_RECTS: Readonly<Record<number, readonly BlockRect[]>> = {
@@ -162,8 +155,8 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
   return program;
 }
 
-export class UnifiedGridRenderer implements GridRenderer {
-  readonly name = 'unified';
+export class WebGlGridRenderer implements GridRenderer {
+  readonly name = 'webgl';
 
   private readonly fontSize: number;
   private readonly fontFamily: string;
@@ -276,7 +269,7 @@ export class UnifiedGridRenderer implements GridRenderer {
     this.models = new Map(tiles.map((t) => [t.id, t.model]));
   }
 
-  frame(frames: TileFrame[], now: number): GridRenderStats {
+  frame(frames: TileFrame[], _now: number): GridRenderStats {
     const gl = this.gl;
     const canvas = this.canvas;
     const container = this.container;
@@ -298,9 +291,9 @@ export class UnifiedGridRenderer implements GridRenderer {
     // (it filled and was nuked), every quad written before the reset references
     // stale UVs — so re-walk the whole grid once against the fresh atlas.
     const genBefore = this.atlasGeneration;
-    this.walkAll(frames, now);
+    this.walkAll(frames);
     if (this.atlasGeneration !== genBefore) {
-      this.walkAll(frames, now);
+      this.walkAll(frames);
     }
 
     gl.useProgram(this.program);
@@ -350,19 +343,19 @@ export class UnifiedGridRenderer implements GridRenderer {
     gl.viewport(0, 0, w, h);
   }
 
-  private walkAll(frames: TileFrame[], now: number): void {
+  private walkAll(frames: TileFrame[]): void {
     this.vertices.reset();
     for (const frame of frames) {
       if (frame.hidden || frame.alpha <= 0.001) continue;
       const model = this.models.get(frame.id);
       if (!model) continue;
       model.update();
-      this.walkTile(model, frame, now);
+      this.walkTile(model, frame);
       model.markClean();
     }
   }
 
-  private walkTile(model: GhosttyTerminal, frame: TileFrame, now: number): void {
+  private walkTile(model: GhosttyTerminal, frame: TileFrame): void {
     const m = this.metrics;
     const s = frame.scale;
     const gs = this.dpr * s; // cell-geometry multiplier (logical metrics -> backing px)
@@ -384,15 +377,14 @@ export class UnifiedGridRenderer implements GridRenderer {
     const w = cols * cellW;
     const h = rows * cellH;
     const stateColor = STATE_COLORS[frame.state];
-    const waitingFlash = frame.state === 'waiting_input' ? waitingInputFlash(now) : 0;
-    const scheduledWave = frame.state === 'scheduled' ? scheduledPulse(now) : 0;
+    const stateEmphasis = staticStateEmphasis(frame.state);
 
     const pulse = frame.state === 'waiting_input'
-      ? 0.02 + 0.14 * waitingFlash
+      ? 0.02 + 0.14 * stateEmphasis
       : frame.state === 'scheduled'
-        ? 0.015 + 0.05 * scheduledWave
+        ? 0.015 + 0.05 * stateEmphasis
         : frame.attention > 0.001
-          ? frame.attention * (0.04 + 0.08 * (0.5 + 0.5 * Math.sin(now / 320)))
+          ? frame.attention * 0.1
           : 0;
     this.pushSolid(
       ox,
@@ -454,9 +446,9 @@ export class UnifiedGridRenderer implements GridRenderer {
         stateColor,
         (
           frame.state === 'waiting_input'
-            ? 0.28 + 0.72 * waitingFlash
+            ? 0.28 + 0.72 * stateEmphasis
             : frame.state === 'scheduled'
-              ? 0.4 + 0.35 * scheduledWave
+              ? 0.4 + 0.35 * stateEmphasis
               : this.stateBorderAlpha(frame.state)
         ) * alpha,
         Math.max(2 * this.dpr, 1.5),
@@ -466,7 +458,7 @@ export class UnifiedGridRenderer implements GridRenderer {
       frame.state !== 'waiting_input'
       && frame.attention > 0.001
     ) {
-      this.pushAttentionBorder(ox, oy, w, h, stateColor, frame.attention, now);
+      this.pushAttentionBorder(ox, oy, w, h, stateColor, frame.attention);
     }
   }
 
@@ -501,10 +493,16 @@ export class UnifiedGridRenderer implements GridRenderer {
     h: number,
     color: Rgb,
     intensity: number,
-    now: number,
   ): void {
-    const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 320));
-    this.pushBorder(x, y, w, h, color, Math.min(1, intensity) * pulse, Math.max(2 * this.dpr, 1.5));
+    this.pushBorder(
+      x,
+      y,
+      w,
+      h,
+      color,
+      Math.min(1, intensity) * ATTENTION_EMPHASIS,
+      Math.max(2 * this.dpr, 1.5),
+    );
   }
 
   // Draw a 1-quad-per-edge rectangular outline inset to sit on the content box.
@@ -575,10 +573,8 @@ export class UnifiedGridRenderer implements GridRenderer {
     return glyph;
   }
 
-  // Drop every cached glyph so the next frame re-rasterizes against the current
-  // document fonts. Used when the bundled Nerd Font finishes loading after some
-  // tiles already cached blank icon glyphs (grid runs a continuous RAF loop, so
-  // no explicit repaint is needed). No-op before mount, when there is nothing to
+  // Drop every cached glyph so the next requested frame re-rasterizes against
+  // the current document fonts. No-op before mount, when there is nothing to
   // invalidate.
   invalidateGlyphCache(): void {
     if (!this.gl || !this.atlasContext) return;

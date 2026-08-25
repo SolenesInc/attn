@@ -104,13 +104,13 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 // agentPeekScreen degrades to nil — never an error — when the backend cannot
 // serve a snapshot (no provider, old worker, no rendered frame yet).
 func (d *Daemon) agentPeekScreen(sessionID string) *protocol.AgentPeekScreen {
-	provider, ok := d.ptyBackend.(ptybackend.SnapshotProvider)
+	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), agentPeekSnapshotTimeout)
 	defer cancel()
-	snapshot, err := provider.Snapshot(ctx, sessionID)
+	snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
 	if err != nil {
 		d.logf("agent peek snapshot unavailable: session=%s err=%v", sessionID, err)
 		return nil

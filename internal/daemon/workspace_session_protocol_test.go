@@ -1052,12 +1052,12 @@ type failingSpawnBackend struct {
 func (b *failingSpawnBackend) Spawn(context.Context, ptybackend.SpawnOptions) error {
 	return b.err
 }
-func (b *failingSpawnBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *failingSpawnBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{}, nil, errors.New("attach unsupported")
 }
 func (b *failingSpawnBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) error {
-	return nil
+func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
+	return true, nil
 }
 func (b *failingSpawnBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil

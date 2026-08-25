@@ -34,7 +34,7 @@ func TestScreenSnapshot_IncludesScreenSnapshotWhenAvailable(t *testing.T) {
 	assertScreenSnapshotReplays(t, gt, info)
 }
 
-func assertScreenSnapshotReplays(t *testing.T, source *ghosttyvt.Terminal, info SnapshotInfo) {
+func assertScreenSnapshotReplays(t *testing.T, source *ghosttyvt.Terminal, info ScreenSnapshotInfo) {
 	t.Helper()
 	restored, err := ghosttyvt.New(int(info.Screen.Cols), int(info.Screen.Rows), ghosttyvt.Options{})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestScreenSnapshot_ReadOnlyAndLean(t *testing.T) {
 
 func TestManagerSnapshot_UnknownSessionErrors(t *testing.T) {
 	m := NewManager(nil)
-	if _, err := m.Snapshot("does-not-exist"); err == nil {
+	if _, err := m.ScreenSnapshot("does-not-exist"); err == nil {
 		t.Fatal("expected an error for an unknown session")
 	}
 }

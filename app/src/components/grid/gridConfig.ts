@@ -1,5 +1,5 @@
-// Shared, grid-level constants for the unified renderer. Every tile uses the
-// SAME font / size / dpr — a hard invariant for the unified renderer, whose
+// Shared, grid-level constants for the WebGL grid renderer. Every tile uses the
+// SAME font / size / dpr — a hard invariant for the renderer, whose
 // single shared glyph atlas rasterizes each glyph once at the canonical size and
 // shrinks it per-tile via the baked vertex transform.
 import {

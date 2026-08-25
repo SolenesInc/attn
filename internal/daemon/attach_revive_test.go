@@ -18,7 +18,7 @@ type attachReviveBackend struct {
 	fakeSpawnBackend
 }
 
-func (b *attachReviveBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *attachReviveBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	if _, spawned := b.LastSpawn(); !spawned {
 		return ptybackend.AttachInfo{}, nil, pty.ErrSessionNotFound
 	}

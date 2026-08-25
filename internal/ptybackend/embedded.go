@@ -81,7 +81,7 @@ func embeddedSpawnOptions(opts SpawnOptions) pty.SpawnOptions {
 	}
 }
 
-func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID string) (AttachInfo, Stream, error) {
+func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
 	events := make(chan OutputEvent, 128)
 	stream := &embeddedStream{
 		events: events,
@@ -90,28 +90,39 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 		},
 	}
 
-	info, err := b.manager.Attach(
-		sessionID,
-		subscriberID,
-		func(data []byte, seq uint32) bool {
-			payload := append([]byte(nil), data...)
-			return stream.publish(OutputEvent{Kind: OutputEventKindOutput, Data: payload, Seq: seq})
-		},
-		func(reason string) {
-			_ = stream.publish(OutputEvent{Kind: OutputEventKindDesync, Reason: reason})
-			stream.Close()
-		},
-		// Same stream as the bytes, so a set stays ordered behind the output it
-		// was measured on — the worker backend gets that ordering from the
-		// connection's send queue, this one from the stream channel.
-		pty.OnPlacements(func(update pty.PlacementUpdate) {
-			_ = stream.publish(OutputEvent{
-				Kind:       OutputEventKindPlacements,
-				Seq:        update.Seq,
-				Placements: update.Placements,
-			})
-		}),
-	)
+	send := func(data []byte, seq uint32) bool {
+		payload := append([]byte(nil), data...)
+		return stream.publish(OutputEvent{Kind: OutputEventKindOutput, Data: payload, Seq: seq})
+	}
+	onDrop := func(reason string) {
+		_ = stream.publish(OutputEvent{Kind: OutputEventKindDesync, Reason: reason})
+		stream.Close()
+	}
+	onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
+		_ = stream.publish(OutputEvent{
+			Kind:       OutputEventKindPlacements,
+			Seq:        update.Seq,
+			Placements: update.Placements,
+		})
+	})
+
+	omitReplay := len(opts) > 0 && opts[len(opts)-1].OmitReplay
+	var info pty.AttachInfo
+	var err error
+	if omitReplay {
+		info, err = b.manager.Subscribe(sessionID, subscriberID, send, onDrop, onPlacements)
+	} else {
+		info, err = b.manager.Attach(
+			sessionID,
+			subscriberID,
+			send,
+			onDrop,
+			// Same stream as the bytes, so a set stays ordered behind the output it
+			// was measured on — the worker backend gets that ordering from the
+			// connection's send queue, this one from the stream channel.
+			onPlacements,
+		)
+	}
 	if err != nil {
 		stream.Close()
 		return AttachInfo{}, nil, err
@@ -139,15 +150,15 @@ func (b *EmbeddedBackend) KittyImage(_ context.Context, sessionID string, imageI
 	return b.manager.KittyImage(sessionID, imageID)
 }
 
-func (b *EmbeddedBackend) Snapshot(_ context.Context, sessionID string) (pty.SnapshotInfo, error) {
-	return b.manager.Snapshot(sessionID)
+func (b *EmbeddedBackend) ScreenSnapshot(_ context.Context, sessionID string) (pty.ScreenSnapshotInfo, error) {
+	return b.manager.ScreenSnapshot(sessionID)
 }
 
 func (b *EmbeddedBackend) Input(_ context.Context, sessionID string, data []byte) error {
 	return b.manager.Input(sessionID, data)
 }
 
-func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) error {
+func (b *EmbeddedBackend) Resize(_ context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	return b.manager.Resize(sessionID, cols, rows, xpixel, ypixel)
 }
 

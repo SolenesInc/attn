@@ -1,0 +1,11 @@
+kind: fixed
+area: terminal
+change: >
+  A malformed tail in restored terminal history now keeps the usable screen and
+  earlier scrollback instead of reloading the pane. Quiet grids also stop
+  repainting, and terminal health, fresh attaches, and repeated fits no longer
+  rebuild or relay state that has not changed.
+symptom: >
+  A recovered terminal could repeatedly show the terminal-reloaded warning,
+  while an otherwise idle visible grid continued using CPU at the display
+  refresh rate.

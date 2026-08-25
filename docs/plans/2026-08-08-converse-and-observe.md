@@ -47,7 +47,7 @@ Target:
       -> daemon handleAgentPeek                    [new, ScopeSession]
         -> store.Get(id)                            state, todos, stamps
         -> inspectableTranscriptPath + transcript.ExtractLastAssistantMessage
-        -> ptybackend SnapshotProvider.Snapshot().Screen.Text
+        -> ptybackend ScreenSnapshotProvider.ScreenSnapshot().Screen.Text
     <- one AgentPeekResult; the observed session is never touched
 
   attn agent msg <session> "text"
@@ -138,7 +138,7 @@ the heavier slice lands on top.
       decoder case.
 - [ ] Daemon: `handleAgentPeek` assembling the three reads;
       transcript via `inspectableTranscriptPath` (the inspection ladder,
-      no cwd guess); screen via `SnapshotProvider` type-assert with a
+      no cwd guess); screen via `ScreenSnapshotProvider` type-assert with a
       clean "screen unavailable" degrade (old worker, no snapshot).
 - [ ] CLI: `attn agent peek <session>` with human output and `--json`;
       session-id prefix match like other session-scoped commands; errors

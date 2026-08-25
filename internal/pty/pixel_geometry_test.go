@@ -108,7 +108,7 @@ func newWinsizeHelperSpawn(t *testing.T, id string) *kittySpawn {
 func TestResizeReportsPixelGeometryToTheChild(t *testing.T) {
 	spawn := newWinsizeHelperSpawn(t, "winsize")
 
-	if err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
+	if _, err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
 	if err := spawn.manager.Input(spawn.id, []byte("go\n")); err != nil {
@@ -137,7 +137,7 @@ func TestResizeDerivesTheWorkerCellFromThePaneTotal(t *testing.T) {
 	term.Write([]byte("\x1b[?2048h"))
 	term.DrainResponses()
 
-	if err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
+	if _, err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestPixelLessResizeKeepsTheCellItAlreadyHas(t *testing.T) {
 	spawn := newQuietSpawn(t, "pixel-less", geomCols, geomRows)
 	term := sessionTerminal(t, spawn)
 
-	if err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
+	if _, err := spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel); err != nil {
 		t.Fatalf("Resize() carrying pixels: %v", err)
 	}
 	term.Write([]byte("\x1b[?2048h"))
@@ -169,7 +169,7 @@ func TestPixelLessResizeKeepsTheCellItAlreadyHas(t *testing.T) {
 
 	// A narrower grid, reported by a client that measured nothing.
 	const narrowCols = 30
-	if err := spawn.manager.Resize(spawn.id, narrowCols, geomRows, 0, 0); err != nil {
+	if _, err := spawn.manager.Resize(spawn.id, narrowCols, geomRows, 0, 0); err != nil {
 		t.Fatalf("Resize() without pixels: %v", err)
 	}
 
@@ -190,6 +190,58 @@ func TestPixelLessResizeKeepsTheCellItAlreadyHas(t *testing.T) {
 	if size.X != narrowCols*geomCellW || size.Y != geomYPixel {
 		t.Fatalf("the kernel winsize is %dx%d pixels after a pixel-less resize, want %dx%d",
 			size.X, size.Y, narrowCols*geomCellW, geomYPixel)
+	}
+}
+
+func TestResizeDeduplicatesAppliedGeometry(t *testing.T) {
+	spawn := newQuietSpawn(t, "resize-noop", geomCols, geomRows)
+
+	changed, err := spawn.manager.Resize(spawn.id, geomCols, geomRows, 0, 0)
+	if err != nil {
+		t.Fatalf("initial pixel-less Resize() error: %v", err)
+	}
+	if changed {
+		t.Fatal("the spawn geometry was reported as changed")
+	}
+
+	changed, err = spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel)
+	if err != nil {
+		t.Fatalf("measured Resize() error: %v", err)
+	}
+	if !changed {
+		t.Fatal("the first measured geometry was reported as unchanged")
+	}
+
+	changed, err = spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel, geomYPixel)
+	if err != nil {
+		t.Fatalf("repeated measured Resize() error: %v", err)
+	}
+	if changed {
+		t.Fatal("identical measured geometry was reported as changed")
+	}
+
+	changed, err = spawn.manager.Resize(spawn.id, geomCols, geomRows, 0, 0)
+	if err != nil {
+		t.Fatalf("pixel-less reconcile Resize() error: %v", err)
+	}
+	if changed {
+		t.Fatal("a pixel-less reconcile that derives the applied totals was reported as changed")
+	}
+
+	changed, err = spawn.manager.Resize(spawn.id, geomCols, geomRows, geomXPixel+1, geomYPixel)
+	if err != nil {
+		t.Fatalf("same-grid pixel Resize() error: %v", err)
+	}
+	if !changed {
+		t.Fatal("a new exact pixel total was reported as unchanged")
+	}
+
+	changed, err = spawn.manager.Resize(spawn.id, geomCols, geomRows, 0, 0)
+	if err != nil {
+		t.Fatalf("pixel-less reconcile after a remainder Resize() error: %v", err)
+	}
+	if changed {
+		t.Fatal("a pixel-less same-grid reconcile discarded the applied pixel remainder")
 	}
 }
 

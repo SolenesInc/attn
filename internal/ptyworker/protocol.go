@@ -22,19 +22,19 @@ const MinCompatibleRPCMinor = 0
 const (
 	MethodHello = "hello"
 	MethodInfo  = "info"
-	// MethodSnapshot returns the current rendered screen + LastSeq without
+	// MethodScreenSnapshot returns the current rendered screen + LastSeq without
 	// attaching. Added without an RPC version bump: older workers reject it
 	// with ErrBadRequest ("unknown method"), and the daemon degrades to an
 	// unseeded observer rather than failing.
-	MethodSnapshot = "snapshot"
-	MethodAttach   = "attach"
-	MethodWatch    = "watch"
-	MethodDetach   = "detach"
-	MethodInput    = "input"
-	MethodResize   = "resize"
+	MethodScreenSnapshot = "snapshot"
+	MethodAttach         = "attach"
+	MethodWatch          = "watch"
+	MethodDetach         = "detach"
+	MethodInput          = "input"
+	MethodResize         = "resize"
 	// MethodSetTheme updates the colors the session answers OSC 10/11/12 color
 	// queries with. Added without an RPC version bump, following the
-	// MethodSnapshot precedent: older workers reject it with ErrBadRequest
+	// MethodScreenSnapshot precedent: older workers reject it with ErrBadRequest
 	// ("unknown method"), and callers treat that as non-fatal.
 	MethodSetTheme = "set_theme"
 	MethodSignal   = "signal"
@@ -44,13 +44,13 @@ const (
 	// image id. Pulled on demand rather than pushed with the placement that
 	// references it: an image is megabytes of raw pixels and a client usually
 	// already has it. Added without an RPC version bump, following the
-	// MethodSnapshot precedent: an older worker rejects it with ErrBadRequest
+	// MethodScreenSnapshot precedent: an older worker rejects it with ErrBadRequest
 	// ("unknown method"), which reads the same as an image it cannot serve.
 	MethodKittyImage = "kitty_image"
 	// MethodUpgrade replaces the worker's own binary in place, keeping the PTY,
 	// the agent child, and the screen. The daemon calls it when the worker's
 	// terminal snapshot format no longer matches its own. Added without an RPC
-	// version bump, following the MethodSnapshot precedent: a worker built
+	// version bump, following the MethodScreenSnapshot precedent: a worker built
 	// before this rejects it with ErrBadRequest, and the daemon degrades to the
 	// stale-build notice — which is what such a worker's client already shows.
 	MethodUpgrade = "upgrade"
@@ -120,7 +120,7 @@ type EventEnvelope struct {
 	// StateSource / StateDetail / StateObservedAt qualify State on
 	// EventStateChanged: which observer spoke, why, and when it observed. The
 	// daemon arbitrates between observers, which a bare state name cannot
-	// support. Added without an RPC version bump, following the MethodSnapshot
+	// support. Added without an RPC version bump, following the MethodScreenSnapshot
 	// precedent: an older worker simply omits them and the daemon treats the
 	// state as source-unknown, observed on arrival.
 	StateSource     *string `json:"state_source,omitempty"`
@@ -327,10 +327,10 @@ type UpgradeResult struct {
 	BlockCount int `json:"block_count"`
 }
 
-// SnapshotResult is the lean read-only viewport seed returned by MethodSnapshot.
+// ScreenSnapshotResult is the lean read-only viewport seed returned by MethodScreenSnapshot.
 // An absent ScreenSnapshot leaves observers unseeded for graceful worker-version
 // skew and sessions that have not yet produced a frame.
-type SnapshotResult struct {
+type ScreenSnapshotResult struct {
 	LastSeq        uint32 `json:"last_seq"`
 	Cols           uint16 `json:"cols"`
 	Rows           uint16 `json:"rows"`
@@ -360,6 +360,8 @@ type AttachBlock struct {
 
 type AttachParams struct {
 	SubscriberID string `json:"subscriber_id,omitempty"`
+	// OmitReplay skips replay serialization; false preserves version skew.
+	OmitReplay bool `json:"omit_replay,omitempty"`
 }
 
 type InputParams struct {
@@ -373,6 +375,12 @@ type ResizeParams struct {
 	Rows   uint16 `json:"rows"`
 	XPixel uint16 `json:"xpixel,omitempty"`
 	YPixel uint16 `json:"ypixel,omitempty"`
+}
+
+type ResizeResult struct {
+	OK bool `json:"ok"`
+	// Pointer distinguishes an old {ok:true} from a new authoritative no-op.
+	Changed *bool `json:"changed,omitempty"`
 }
 
 type SignalParams struct {

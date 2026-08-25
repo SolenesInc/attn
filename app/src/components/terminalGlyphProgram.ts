@@ -1,5 +1,5 @@
 // Shared GLSL + glyph-classification for attn's two WebGL terminal renderers
-// (GhosttyWebGlRenderer, the per-pane main terminal, and UnifiedGridRenderer,
+// (GhosttyWebGlRenderer, the per-pane main terminal, and WebGlGridRenderer,
 // the mission-control grid). They were forked from one source and must keep an
 // identical glyph pipeline; sharing the shaders and the color-glyph test here
 // keeps them from drifting.

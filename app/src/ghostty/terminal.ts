@@ -155,14 +155,14 @@ export interface GhosttyTerminalConfig {
  * The scrollback half of a snapshot restore, decoded a page at a time so the
  * first paint does not wait on it.
  */
-export interface SnapshotHistory {
+export interface SnapshotHistoryDecoder {
   /** Scrollback rows the snapshot declares, before any page is applied. */
-  readonly rows: number;
+  readonly declaredRows: number;
   /**
    * Prepend one page, returning the rows it added — zero when the page no
    * longer fits the live terminal — or null once there are none left.
    */
-  next(): number | null;
+  decodeNextPage(): number | null;
   /** Give up on the rest. The terminal keeps what was already prepended. */
   close(): void;
 }
@@ -230,7 +230,7 @@ export class GhosttyTerminal {
   // Kept so a decoded handle comes up configured like the one it replaces.
   private readonly config: GhosttyTerminalConfig;
   private writePtyFn = 0;
-  private history: SnapshotHistory | null = null;
+  private historyDecoder: SnapshotHistoryDecoder | null = null;
 
   // A DataView is far more expensive to allocate than any wasm call it wraps,
   // so it is cached and only rebuilt when memory growth detaches the buffer.
@@ -400,9 +400,9 @@ export class GhosttyTerminal {
    * Finish or close it — until then the decoder borrows both the snapshot bytes
    * and this terminal.
    */
-  adoptSnapshot(snapshot: Uint8Array): SnapshotHistory {
+  adoptSnapshot(snapshot: Uint8Array): SnapshotHistoryDecoder {
     const e = this.e;
-    this.history?.close();
+    this.historyDecoder?.close();
 
     const src = e.ghostty_wasm_alloc(snapshot.length);
     new Uint8Array(e.memory.buffer, src, snapshot.length).set(snapshot);
@@ -445,13 +445,13 @@ export class GhosttyTerminal {
     const rows = Number(this.dv().getBigUint64(this.pScratch, true));
 
     let done = false;
-    const history: SnapshotHistory = {
-      rows,
-      next: () => {
+    const historyDecoder: SnapshotHistoryDecoder = {
+      declaredRows: rows,
+      decodeNextPage: () => {
         if (done) return null;
         const rc = e.ghostty_snapshot_decoder_next(decoder);
         if (rc !== GHOSTTY_SUCCESS) {
-          history.close();
+          historyDecoder.close();
           if (rc !== GHOSTTY_NO_VALUE) throw new Error(`ghostty_snapshot_decoder_next failed: ${rc}`);
           return null;
         }
@@ -463,19 +463,19 @@ export class GhosttyTerminal {
       close: () => {
         if (done) return;
         done = true;
-        if (this.history === history) this.history = null;
+        if (this.historyDecoder === historyDecoder) this.historyDecoder = null;
         e.ghostty_snapshot_decoder_free(decoder);
         releaseSource();
       },
     };
-    this.history = history;
-    return history;
+    this.historyDecoder = historyDecoder;
+    return historyDecoder;
   }
 
   free(): void {
     if (this.freed) return;
     this.freed = true;
-    this.history?.close();
+    this.historyDecoder?.close();
     this.keyEncoder?.free();
     this.keyEncoder = null;
     this.e.ghostty_render_state_row_cells_free(this.cells);

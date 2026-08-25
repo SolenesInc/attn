@@ -376,7 +376,7 @@ open through the run. That gap is slice 2.
       leaving each on `isAttentionSessionState` while it is off. There are four,
       not one: ⌘J (`handleJumpToWaiting`, `App.tsx:2890`), the collapsed-rail
       per-workspace dot (`Sidebar.tsx:785`), the grid tile's attention glow
-      (`App.tsx:2820` → `GridCompositor`), and the attention drawer's session
+      (`App.tsx:2820` → `TerminalGrid`), and the attention drawer's session
       section plus its badge count (`waitingLocalSessions`, `App.tsx:2884`). The
       drawer keeps its PR sections either way — PRs are out of scope for the
       queue and are the drawer's reason to exist.

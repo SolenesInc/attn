@@ -47,10 +47,12 @@ type HandoffState struct {
 	// PtmxFD is dup'd with CLOEXEC cleared, so it survives into the new image.
 	PtmxFD int
 
-	Cols  uint16
-	Rows  uint16
-	CellW uint16
-	CellH uint16
+	Cols   uint16
+	Rows   uint16
+	CellW  uint16
+	CellH  uint16
+	PixelW uint16
+	PixelH uint16
 
 	// VTDump replays the whole screen, scrollback included, into a terminal of
 	// any libghostty-vt version.
@@ -165,7 +167,9 @@ func (s *Session) handoff() (HandoffState, error) {
 		CleanupDir: s.cleanupDir,
 	}
 	s.metaMu.RLock()
-	state.Cols, state.Rows, state.CellW, state.CellH = s.cols, s.rows, s.cellW, s.cellH
+	state.Cols, state.Rows = s.cols, s.rows
+	state.CellW, state.CellH = s.cellW, s.cellH
+	state.PixelW, state.PixelH = s.pixelW, s.pixelH
 	s.metaMu.RUnlock()
 	s.themeMu.RLock()
 	state.Theme = s.theme
@@ -251,6 +255,8 @@ func (m *Manager) Adopt(st HandoffState) error {
 		rows:        st.Rows,
 		cellW:       st.CellW,
 		cellH:       st.CellH,
+		pixelW:      st.PixelW,
+		pixelH:      st.PixelH,
 		ptmx:        ptmx,
 		child:       &childProcess{pid: st.ChildPID},
 		subscribers: make(map[string]*sessionSubscriber),

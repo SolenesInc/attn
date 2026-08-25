@@ -12,7 +12,7 @@ import {
   CellFlags,
   type GhosttyCell,
   type GhosttyTerminal as GhosttyModel,
-  type SnapshotHistory,
+  type SnapshotHistoryDecoder,
 } from '../ghostty';
 import { loadGhostty } from '../ghostty/wasm';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
@@ -255,7 +255,7 @@ export interface GhosttyTerminalHandle {
   reset: () => void;
   // Hand back (or take back) the GPU drawing buffer while the pane is off-screen.
   // The model, its scrollback, and the GL context all survive; only the surface
-  // the compositor would show goes. Releasing must be paired with a restore
+  // the terminal renderer would show goes. Releasing must be paired with a restore
   // before the pane is painted again, and the restore repaints synchronously so
   // a revealed pane never shows a blank frame.
   setSurfaceReleased: (released: boolean) => void;
@@ -1828,9 +1828,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         const terminal = terminalRef.current;
         if (!terminal) return;
         modelOpRingRef.current.noteRestoreChunk(snapshot, terminal.cols, terminal.rows);
-        let history: SnapshotHistory;
+        let historyDecoder: SnapshotHistoryDecoder;
         try {
-          history = terminal.adoptSnapshot(snapshot);
+          historyDecoder = terminal.adoptSnapshot(snapshot);
         } catch (reason) {
           // Bytes this decoder cannot read are a payload fault, not a model
           // fault: replacing the model would remount the pane, reattach, and be
@@ -1859,12 +1859,33 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         annotationsRef.current?.noteWrite();
         flushSynchronizedOutputRender();
         requestAnimationFrame(() => {
-          void enqueueOperation('restoreHistory', () => {
+          void enqueueOperation('restoreSnapshotHistory', () => {
             if (!terminalRef.current) {
-              history.close();
+              historyDecoder.close();
               return;
             }
-            while (history.next() !== null) { /* prepend every page */ }
+            let restoredRows = 0;
+            try {
+              for (;;) {
+                const rows = historyDecoder.decodeNextPage();
+                if (rows === null) break;
+                restoredRows += rows;
+              }
+            } catch (reason) {
+              // READY installed a usable prefix; a bad lazy page must not
+              // discard it and reattach to the same bytes.
+              historyDecoder.close();
+              recordUiDiag({
+                kind: 'snapshot_history_decode_rejected',
+                diagnosticFile: UI_DIAGNOSTICS_FILE,
+                pane: diagKeyRef.current,
+                session: runtimeMetaRef.current?.sessionId ?? undefined,
+                bytes: snapshot.length,
+                declaredHistoryRows: historyDecoder.declaredRows,
+                restoredRows,
+                error: reason instanceof Error ? reason.message : String(reason),
+              });
+            }
             flushSynchronizedOutputRender();
           });
         });

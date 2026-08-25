@@ -91,10 +91,10 @@ func TestHandleAgentPeekResolvesPrefixesAndNamesFailures(t *testing.T) {
 
 type peekSnapshotBackend struct {
 	*fakeSpawnBackend
-	snapshot pty.SnapshotInfo
+	snapshot pty.ScreenSnapshotInfo
 }
 
-func (b *peekSnapshotBackend) Snapshot(context.Context, string) (pty.SnapshotInfo, error) {
+func (b *peekSnapshotBackend) ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error) {
 	return b.snapshot, nil
 }
 
@@ -103,7 +103,7 @@ func TestHandleAgentPeekServesTheRenderedScreen(t *testing.T) {
 	addCharacterizationSession(t, d, "peek-screen", protocol.SessionAgentClaude, protocol.SessionStateWorking)
 	d.ptyBackend = &peekSnapshotBackend{
 		fakeSpawnBackend: &fakeSpawnBackend{},
-		snapshot: pty.SnapshotInfo{
+		snapshot: pty.ScreenSnapshotInfo{
 			Screen: &pty.ViewportSnapshot{Text: "$ make test\nok\n", HasText: true, Cols: 80, Rows: 24},
 		},
 	}

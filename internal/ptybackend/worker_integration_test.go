@@ -122,7 +122,7 @@ func TestWorkerBackend_SpawnAttachInputResizeRemove(t *testing.T) {
 	if err := backend.Input(context.Background(), sessionID, []byte("printf '__ATTN_WORKER__\\n'\n")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
-	if err := backend.Resize(context.Background(), sessionID, 100, 30, 0, 0); err != nil {
+	if _, err := backend.Resize(context.Background(), sessionID, 100, 30, 0, 0); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
 
@@ -147,12 +147,12 @@ func TestWorkerBackend_SpawnAttachInputResizeRemove(t *testing.T) {
 	t.Fatalf("timed out waiting for worker output; got=%q", out.String())
 
 gotOutput:
-	// Read-only snapshot round-trips through MethodSnapshot -> callSnapshot and
+	// Read-only snapshot round-trips through MethodScreenSnapshot -> callScreenSnapshot and
 	// returns the current rendered screen, which must contain the marker we just
 	// printed. No subscriber is involved.
-	snap, err := backend.Snapshot(context.Background(), sessionID)
+	snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 	if err != nil {
-		t.Fatalf("Snapshot() error: %v", err)
+		t.Fatalf("ScreenSnapshot() error: %v", err)
 	}
 	if !snap.Running {
 		t.Fatalf("snapshot running=false, expected true")
@@ -284,12 +284,12 @@ func TestWorkerBackend_SnapshotReadsScreenReadOnly(t *testing.T) {
 	// Snapshot must fetch the rendered screen without a subscriber, so we can
 	// poll it repeatedly until the marker lands; if each call leaked a
 	// subscriber the worker would accumulate dead ones.
-	var info pty.SnapshotInfo
+	var info pty.ScreenSnapshotInfo
 	deadline := time.Now().Add(8 * time.Second)
 	for {
-		info, err = backend.Snapshot(context.Background(), sessionID)
+		info, err = backend.ScreenSnapshot(context.Background(), sessionID)
 		if err != nil {
-			t.Fatalf("Snapshot() error: %v", err)
+			t.Fatalf("ScreenSnapshot() error: %v", err)
 		}
 		if bytes.Contains(info.Screen.Payload, []byte("__ATTN_REPLAY__")) {
 			break

@@ -646,12 +646,12 @@ type fakeWorkerReconcileBackend struct {
 func (b *fakeWorkerReconcileBackend) Spawn(context.Context, ptybackend.SpawnOptions) error {
 	return nil
 }
-func (b *fakeWorkerReconcileBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeWorkerReconcileBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{}, nil, nil
 }
 func (b *fakeWorkerReconcileBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeWorkerReconcileBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) error {
-	return nil
+func (b *fakeWorkerReconcileBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
+	return true, nil
 }
 func (b *fakeWorkerReconcileBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -717,12 +717,12 @@ type fakeClearSessionsBackend struct {
 }
 
 func (b *fakeClearSessionsBackend) Spawn(context.Context, ptybackend.SpawnOptions) error { return nil }
-func (b *fakeClearSessionsBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeClearSessionsBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{}, nil, nil
 }
 func (b *fakeClearSessionsBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeClearSessionsBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) error {
-	return nil
+func (b *fakeClearSessionsBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
+	return true, nil
 }
 func (b *fakeClearSessionsBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -1535,16 +1535,22 @@ func (s *fakeOutputStream) ClosedCount() int {
 }
 
 type fakeAttachBackend struct {
-	mu      sync.Mutex
-	streams []*fakeOutputStream
-	failErr error
-	info    ptybackend.AttachInfo
-	infoSet bool
+	mu            sync.Mutex
+	streams       []*fakeOutputStream
+	attachOptions []ptybackend.AttachOptions
+	failErr       error
+	info          ptybackend.AttachInfo
+	infoSet       bool
 }
 
 func (b *fakeAttachBackend) Spawn(context.Context, ptybackend.SpawnOptions) error { return nil }
-func (b *fakeAttachBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeAttachBackend) Attach(_ context.Context, _, _ string, opts ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	b.mu.Lock()
+	option := ptybackend.AttachOptions{}
+	if len(opts) > 0 {
+		option = opts[len(opts)-1]
+	}
+	b.attachOptions = append(b.attachOptions, option)
 	if b.failErr != nil {
 		err := b.failErr
 		b.mu.Unlock()
@@ -1564,8 +1570,8 @@ func (b *fakeAttachBackend) Attach(context.Context, string, string) (ptybackend.
 	return info, stream, nil
 }
 func (b *fakeAttachBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeAttachBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) error {
-	return nil
+func (b *fakeAttachBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
+	return true, nil
 }
 func (b *fakeAttachBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -1584,6 +1590,16 @@ func (b *fakeAttachBackend) Streams() []*fakeOutputStream {
 	out := make([]*fakeOutputStream, len(b.streams))
 	copy(out, b.streams)
 	return out
+}
+
+func (b *fakeAttachBackend) LastAttachOptions(t *testing.T) ptybackend.AttachOptions {
+	t.Helper()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.attachOptions) == 0 {
+		t.Fatal("the backend was never attached")
+	}
+	return b.attachOptions[len(b.attachOptions)-1]
 }
 
 func (b *fakeAttachBackend) FailNextAttach(err error) {
@@ -1667,19 +1683,19 @@ func (f *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
 	return f.terminalBuild, f.terminalBuildKnown
 }
 
-// Snapshot makes the fake a ptybackend.SnapshotProvider, which is what the
+// ScreenSnapshot makes the fake a ptybackend.ScreenSnapshotProvider, which is what the
 // doorbell's screen guard looks for.
-func (b *fakeSpawnBackend) Snapshot(_ context.Context, _ string) (pty.SnapshotInfo, error) {
+func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.screenUnavailable {
-		return pty.SnapshotInfo{}, nil
+		return pty.ScreenSnapshotInfo{}, nil
 	}
 	text := b.screen
 	if text == "" {
 		text = "❯"
 	}
-	return pty.SnapshotInfo{Screen: &pty.ViewportSnapshot{Text: text, HasText: true}}, nil
+	return pty.ScreenSnapshotInfo{Screen: &pty.ViewportSnapshot{Text: text, HasText: true}}, nil
 }
 
 func (b *fakeSpawnBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
@@ -1693,7 +1709,7 @@ func (b *fakeSpawnBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions
 	}
 	return spawnErr
 }
-func (b *fakeSpawnBackend) Attach(context.Context, string, string) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+func (b *fakeSpawnBackend) Attach(context.Context, string, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{Running: true}, newFakeOutputStream(), nil
 }
 func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) error {
@@ -1709,8 +1725,8 @@ func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) erro
 	}
 	return nil
 }
-func (b *fakeSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) error {
-	return nil
+func (b *fakeSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
+	return true, nil
 }
 func (b *fakeSpawnBackend) SetTheme(_ context.Context, id string, theme pty.TerminalTheme) error {
 	b.mu.Lock()
@@ -2273,6 +2289,9 @@ func TestDaemon_HandleAttachSession_OmitsSnapshotForFreshSpawnPolicy(t *testing.
 		ID:           "sess-1",
 		AttachPolicy: protocol.Ptr(protocol.AttachPolicyFreshSpawn),
 	})
+	if opts := backend.LastAttachOptions(t); !opts.OmitReplay {
+		t.Fatal("fresh-spawn attach did not suppress replay serialization in the backend")
+	}
 
 	select {
 	case outbound := <-client.send:

@@ -60,13 +60,13 @@ func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (l
 	if d.ptyBackend == nil {
 		return "", false, false
 	}
-	provider, ok := d.ptyBackend.(ptybackend.SnapshotProvider)
+	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		return "", false, false
 	}
 	ctx, cancel := context.WithTimeout(parent, doorbellScreenTimeout)
 	defer cancel()
-	snapshot, err := provider.Snapshot(ctx, sessionID)
+	snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
 	if err != nil || snapshot.Screen == nil || !snapshot.Screen.HasText {
 		return "", false, false
 	}

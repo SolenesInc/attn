@@ -92,9 +92,9 @@ type ViewportSnapshot struct {
 	Rows    uint16
 }
 
-// SnapshotInfo is the read-only rendered state used to seed observers without
+// ScreenSnapshotInfo is the read-only rendered state used to seed observers without
 // attaching or claiming PTY geometry.
-type SnapshotInfo struct {
+type ScreenSnapshotInfo struct {
 	LastSeq uint32
 	Cols    uint16
 	Rows    uint16
@@ -413,23 +413,48 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 	}, m.logf)
 }
 
-// Attach registers a subscriber for the session's byte stream and returns the
-// attach snapshot. Options carry the streams a subscriber can additionally ask
-// for; a subscriber that only wants bytes passes none (see OnPlacements).
+func (m *Manager) subscribe(
+	sessionID, subscriberID string,
+	send func([]byte, uint32) bool,
+	onDrop func(reason string),
+	opts ...SubscriberOption,
+) (*Session, error) {
+	session, err := m.getSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if send == nil {
+		return nil, errors.New("subscriber send callback is required")
+	}
+	session.addSubscriber(subscriberID, send, onDrop, opts...)
+	return session, nil
+}
+
+// Subscribe registers a byte-stream consumer without creating replay bytes.
+func (m *Manager) Subscribe(
+	sessionID, subscriberID string,
+	send func([]byte, uint32) bool,
+	onDrop func(reason string),
+	opts ...SubscriberOption,
+) (AttachInfo, error) {
+	session, err := m.subscribe(sessionID, subscriberID, send, onDrop, opts...)
+	if err != nil {
+		return AttachInfo{}, err
+	}
+	return session.subscriptionInfo(), nil
+}
+
+// Attach registers a subscriber before atomically capturing replay state.
 func (m *Manager) Attach(
 	sessionID, subscriberID string,
 	send func([]byte, uint32) bool,
 	onDrop func(reason string),
 	opts ...SubscriberOption,
 ) (AttachInfo, error) {
-	session, err := m.getSession(sessionID)
+	session, err := m.subscribe(sessionID, subscriberID, send, onDrop, opts...)
 	if err != nil {
 		return AttachInfo{}, err
 	}
-	if send == nil {
-		return AttachInfo{}, errors.New("subscriber send callback is required")
-	}
-	session.addSubscriber(subscriberID, send, onDrop, opts...)
 	return session.info(), nil
 }
 
@@ -458,10 +483,10 @@ func (m *Manager) SetTheme(sessionID string, theme TerminalTheme) error {
 // session WITHOUT registering a subscriber or claiming geometry. It is the
 // read-only seed for observers (e.g. grid tiles) that then dedup the live
 // firehose against LastSeq.
-func (m *Manager) Snapshot(sessionID string) (SnapshotInfo, error) {
+func (m *Manager) ScreenSnapshot(sessionID string) (ScreenSnapshotInfo, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
-		return SnapshotInfo{}, err
+		return ScreenSnapshotInfo{}, err
 	}
 	return session.screenSnapshot(), nil
 }
@@ -482,20 +507,22 @@ func (m *Manager) Input(sessionID string, data []byte) error {
 	return session.input(data)
 }
 
-// Resize applies a new grid to a session. xpixel/ypixel are the pane's total
-// size in device pixels, or 0 when the caller has no pixel geometry to report.
-func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) error {
+// Resize applies geometry and reports whether it changed. xpixel/ypixel are
+// the pane's total device pixels, or 0 when no pixel geometry is available.
+func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	session.metaMu.RLock()
 	prevCols, prevRows := session.cols, session.rows
 	session.metaMu.RUnlock()
 	pid := session.child.processID()
-	resizeErr := session.resize(cols, rows, xpixel, ypixel)
-	m.logf("pty resize: id=%s prev=%dx%d new=%dx%d px=%dx%d pid=%d err=%v", sessionID, prevCols, prevRows, cols, rows, xpixel, ypixel, pid, resizeErr)
-	return resizeErr
+	changed, resizeErr := session.resize(cols, rows, xpixel, ypixel)
+	if changed || resizeErr != nil {
+		m.logf("pty resize: id=%s prev=%dx%d new=%dx%d px=%dx%d pid=%d changed=%v err=%v", sessionID, prevCols, prevRows, cols, rows, xpixel, ypixel, pid, changed, resizeErr)
+	}
+	return changed, resizeErr
 }
 
 func (m *Manager) Kill(sessionID string, sig syscall.Signal) error {
@@ -512,19 +539,7 @@ func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
 		return SessionInfo{}, err
 	}
 
-	info := session.info()
-	return SessionInfo{
-		SessionID:  session.id,
-		Agent:      session.agent,
-		CWD:        session.cwd,
-		Running:    info.Running,
-		Cols:       info.Cols,
-		Rows:       info.Rows,
-		PID:        info.PID,
-		LastSeq:    info.LastSeq,
-		ExitCode:   info.ExitCode,
-		ExitSignal: info.ExitSignal,
-	}, nil
+	return session.sessionInfo(), nil
 }
 
 // LastSignal is one session's most recent level observation. It reports false

@@ -372,15 +372,17 @@ func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) erro
 
 func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessionMessage) {
 	subID := wsSubscriberID(client, msg.ID)
+	policy := protocol.Deref(msg.AttachPolicy)
+	attachOptions := ptybackend.AttachOptions{OmitReplay: !shouldIncludeAttachReplay(policy)}
 
-	info, stream, err := d.ptyBackend.Attach(context.Background(), msg.ID, subID)
+	info, stream, err := d.ptyBackend.Attach(context.Background(), msg.ID, subID, attachOptions)
 	revived := false
 	if err != nil && errors.Is(err, pty.ErrSessionNotFound) && protocol.Deref(msg.AttachPolicy) == protocol.AttachPolicyRevive {
 		attachErr := err
 		if reviveErr := d.reviveSessionForAttach(msg); reviveErr != nil {
 			err = errors.Join(attachErr, reviveErr)
 		} else {
-			info, stream, err = d.ptyBackend.Attach(context.Background(), msg.ID, subID)
+			info, stream, err = d.ptyBackend.Attach(context.Background(), msg.ID, subID, attachOptions)
 			if err == nil {
 				revived = true
 			}
@@ -395,11 +397,11 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 		})
 		return
 	}
-	replay := buildAttachReplayPayload(info, protocol.Deref(msg.AttachPolicy))
+	replay := buildAttachReplayPayload(info, policy)
 	d.logf(
 		"PTY attach result: id=%s policy=%s running=%v last_seq=%d ghostty_snapshot_bytes=%d snapshot_format=%s scrollback_truncated=%v replay_decision=%s size=%dx%d",
 		msg.ID,
-		protocol.Deref(msg.AttachPolicy),
+		policy,
 		info.Running,
 		info.LastSeq,
 		len(replay.ghosttySnapshot),
@@ -481,7 +483,7 @@ func int32PtrToInt(v *int32) *int {
 // screen. It registers no subscriber and starts no stream — purely a seed for
 // observers (grid tiles) that then dedup the live firehose against last_seq.
 func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScreenSnapshotMessage) {
-	provider, ok := d.ptyBackend.(ptybackend.SnapshotProvider)
+	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
@@ -492,9 +494,9 @@ func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScre
 		return
 	}
 
-	info, err := provider.Snapshot(context.Background(), msg.ID)
+	info, err := provider.ScreenSnapshot(context.Background(), msg.ID)
 	if err != nil {
-		// Graceful: a worker built before MethodSnapshot answers "unknown
+		// Graceful: a worker built before MethodScreenSnapshot answers "unknown
 		// method"; the observer stays unseeded rather than erroring loudly.
 		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
@@ -753,10 +755,14 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		xpixel, ypixel = 0, 0
 	}
 	d.logf("pty_resize: id=%s cols=%d rows=%d xpixel=%d ypixel=%d", msg.ID, msg.Cols, msg.Rows, xpixel, ypixel)
-	if err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel)); err != nil {
+	changed, err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
+	if err != nil {
 		if shouldLogPtyCommandError(err) {
 			d.logf("pty_resize failed for %s: %v", msg.ID, err)
 		}
+		return
+	}
+	if !changed {
 		return
 	}
 	// Broadcast the new geometry to all other attached clients so they can

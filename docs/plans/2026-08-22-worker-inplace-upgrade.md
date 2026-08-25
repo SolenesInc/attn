@@ -179,7 +179,7 @@ from a bug: kitty images and their placements.
       the handoff, dup both fds, exec
 - [x] `ptyworker` adopt: `--adopt-handoff`, replay, resume at `LastSeq`,
       rewrite the registry entry
-- [x] `MethodUpgrade` on the worker RPC (additive, like `MethodSnapshot`: an
+- [x] `MethodUpgrade` on the worker RPC (additive, like `MethodScreenSnapshot`: an
       older worker answers `bad_request` and the daemon falls back to the
       notice)
 - [x] Daemon: on a `snapshot_format` mismatch, upgrade instead of flagging;

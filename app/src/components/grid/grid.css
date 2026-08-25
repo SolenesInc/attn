@@ -59,7 +59,7 @@
 
 /* Per-tile remove (×) button. Shown only on the hovered tile in the overview,
    positioned at its top-right corner (container-space coords from the
-   compositor). Above the canvas, and a sibling of the stage so a click never
+   terminal grid). Above the canvas, and a sibling of the stage so a click never
    reaches the stage's zoom handler. */
 .grid-tile-remove {
   position: absolute;

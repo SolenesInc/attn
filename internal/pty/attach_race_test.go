@@ -10,6 +10,46 @@ import (
 	"time"
 )
 
+func TestSessionInfoAndSubscribeDoNotSerializeReplay(t *testing.T) {
+	defer func() { infoSnapshotHook = nil }()
+
+	session := &Session{
+		id:          "metadata-only",
+		agent:       "shell",
+		cwd:         t.TempDir(),
+		cols:        80,
+		rows:        24,
+		child:       &childProcess{cmd: &exec.Cmd{}},
+		subscribers: make(map[string]*sessionSubscriber),
+		running:     true,
+		exited:      make(chan struct{}),
+	}
+	manager := NewManager(nil)
+	manager.sessions[session.id] = session
+
+	snapshots := 0
+	infoSnapshotHook = func() { snapshots++ }
+
+	if _, err := manager.SessionInfo(session.id); err != nil {
+		t.Fatalf("SessionInfo() error: %v", err)
+	}
+	if snapshots != 0 {
+		t.Fatalf("SessionInfo() serialized %d replay snapshots, want none", snapshots)
+	}
+	if _, err := manager.Subscribe(session.id, "observer", func([]byte, uint32) bool { return true }, nil); err != nil {
+		t.Fatalf("Subscribe() error: %v", err)
+	}
+	if snapshots != 0 {
+		t.Fatalf("Subscribe() serialized %d replay snapshots, want none", snapshots)
+	}
+	if _, err := manager.Attach(session.id, "frontend", func([]byte, uint32) bool { return true }, nil); err != nil {
+		t.Fatalf("Attach() error: %v", err)
+	}
+	if snapshots != 1 {
+		t.Fatalf("Attach() serialized %d replay snapshots, want one", snapshots)
+	}
+}
+
 // TestAttachSnapshotSeqConsistency proves — deterministically — that a frontend
 // re-attach can lose PTY output at the restore/live boundary.
 //
@@ -225,7 +265,7 @@ func TestScreenSnapshotSeqConsistency(t *testing.T) {
 	// not yet reached the screen, take the observer snapshot inside the gap.
 	var (
 		once    sync.Once
-		gapInfo SnapshotInfo
+		gapInfo ScreenSnapshotInfo
 		gapSeq  uint32
 	)
 	readLoopSeqGapHook = func() {

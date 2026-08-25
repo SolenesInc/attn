@@ -78,14 +78,19 @@ type Session struct {
 	cwd   string
 	agent string
 
-	metaMu sync.RWMutex
-	cols   uint16
-	rows   uint16
-	// Cell size in device pixels; zero until the first fit. The cell is
-	// remembered rather than the total so a pixel-less resize can re-derive
-	// its total.
+	// resizeMu makes compare-and-apply one ordered operation across clients.
+	resizeMu sync.Mutex
+	metaMu   sync.RWMutex
+	cols     uint16
+	rows     uint16
+	// Cell size in device pixels; zero until the first measured fit.
 	cellW uint16
 	cellH uint16
+	// Exact totals distinguish same-grid pixel updates from repeated fits.
+	pixelW uint16
+	pixelH uint16
+	// A failed ioctl leaves the logical geometry retryable.
+	resizeFailed bool
 
 	ptmx  *os.File
 	child *childProcess
@@ -691,7 +696,8 @@ func (s *Session) markExited(exitCode int, signal string) {
 	})
 }
 
-func (s *Session) info() AttachInfo {
+// sessionInfo reads lifecycle metadata without serializing the terminal.
+func (s *Session) sessionInfo() SessionInfo {
 	s.metaMu.RLock()
 	cols := s.cols
 	rows := s.rows
@@ -711,7 +717,39 @@ func (s *Session) info() AttachInfo {
 	}
 	s.exitMu.RUnlock()
 
-	pid := s.child.processID()
+	s.replayMu.Lock()
+	lastSeq := s.lastReplaySeq
+	s.replayMu.Unlock()
+
+	return SessionInfo{
+		SessionID:  s.id,
+		Agent:      s.agent,
+		CWD:        s.cwd,
+		Running:    running,
+		Cols:       cols,
+		Rows:       rows,
+		PID:        s.child.processID(),
+		LastSeq:    lastSeq,
+		ExitCode:   exitCode,
+		ExitSignal: exitSignal,
+	}
+}
+
+func (s *Session) subscriptionInfo() AttachInfo {
+	metadata := s.sessionInfo()
+	return AttachInfo{
+		LastSeq:    metadata.LastSeq,
+		Cols:       metadata.Cols,
+		Rows:       metadata.Rows,
+		PID:        metadata.PID,
+		Running:    metadata.Running,
+		ExitCode:   metadata.ExitCode,
+		ExitSignal: metadata.ExitSignal,
+	}
+}
+
+func (s *Session) info() AttachInfo {
+	metadata := s.sessionInfo()
 
 	// Serialize the ghostty terminal and read the watermark atomically: every
 	// byte in the dump has seq <= LastSeq, every live chunk to apply has
@@ -746,12 +784,12 @@ func (s *Session) info() AttachInfo {
 	// chunk after an attach is silently lost (or double-applied).
 	return AttachInfo{
 		LastSeq:                    replayWatermark,
-		Cols:                       cols,
-		Rows:                       rows,
-		PID:                        pid,
-		Running:                    running,
-		ExitCode:                   exitCode,
-		ExitSignal:                 exitSignal,
+		Cols:                       metadata.Cols,
+		Rows:                       metadata.Rows,
+		PID:                        metadata.PID,
+		Running:                    metadata.Running,
+		ExitCode:                   metadata.ExitCode,
+		ExitSignal:                 metadata.ExitSignal,
 		GhosttySnapshot:            ghosttySnapshot,
 		GhosttySnapshotFormat:      snapshotFormat(ghosttySnapshot),
 		GhosttyBlocks:              ghosttyBlocks,
@@ -796,7 +834,7 @@ func (s *Session) kittyImage(imageID uint32) (KittyImage, error) {
 // matching info()/Attach semantics. seqCounter would be wrong here: the read
 // loop increments it BEFORE applying the chunk, so a snapshot in that gap
 // would claim bytes the screen does not contain.
-func (s *Session) screenSnapshot() SnapshotInfo {
+func (s *Session) screenSnapshot() ScreenSnapshotInfo {
 	s.metaMu.RLock()
 	cols := s.cols
 	rows := s.rows
@@ -806,7 +844,7 @@ func (s *Session) screenSnapshot() SnapshotInfo {
 	running := s.running
 	s.exitMu.RUnlock()
 
-	info := SnapshotInfo{
+	info := ScreenSnapshotInfo{
 		Cols:    cols,
 		Rows:    rows,
 		Running: running,
@@ -850,23 +888,42 @@ func (s *Session) input(data []byte) error {
 // means no pixel geometry, and the session then reports the totals its
 // remembered cell size implies — an attach-time reconcile must not blank out
 // what a fit already measured.
-func (s *Session) resize(cols, rows, xpixel, ypixel uint16) error {
+func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
+	s.resizeMu.Lock()
+	defer s.resizeMu.Unlock()
+
 	// The cell is derived once, here; everything downstream speaks cells.
 	cellW, cellH := uint16(0), uint16(0)
 	if xpixel > 0 && ypixel > 0 && cols > 0 && rows > 0 {
 		cellW, cellH = xpixel/cols, ypixel/rows
 	}
 	s.metaMu.Lock()
-	s.cols = cols
-	s.rows = rows
-	if cellW > 0 && cellH > 0 {
-		s.cellW, s.cellH = cellW, cellH
-	} else {
+	prevCols, prevRows := s.cols, s.rows
+	prevCellW, prevCellH := s.cellW, s.cellH
+	prevPixelW, prevPixelH := s.pixelW, s.pixelH
+	previousFailed := s.resizeFailed
+	if cellW == 0 || cellH == 0 {
 		cellW, cellH = s.cellW, s.cellH
 		if cellW > 0 && cellH > 0 {
-			xpixel, ypixel = cols*cellW, rows*cellH
+			if cols == prevCols && rows == prevRows && prevPixelW > 0 && prevPixelH > 0 {
+				// Preserve exact totals, including division remainders, when a
+				// same-grid reconcile carries no new measurement.
+				xpixel, ypixel = prevPixelW, prevPixelH
+			} else {
+				xpixel, ypixel = cols*cellW, rows*cellH
+			}
 		}
 	}
+	if !previousFailed && prevCols == cols && prevRows == rows &&
+		prevCellW == cellW && prevCellH == cellH &&
+		prevPixelW == xpixel && prevPixelH == ypixel {
+		s.metaMu.Unlock()
+		return false, nil
+	}
+	s.cols, s.rows = cols, rows
+	s.cellW, s.cellH = cellW, cellH
+	s.pixelW, s.pixelH = xpixel, ypixel
+	s.resizeFailed = false
 	s.metaMu.Unlock()
 	// The resize mutates the same terminal info() serializes, so it belongs in
 	// that critical section. No-reflow because every client frame is: the
@@ -880,7 +937,9 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) error {
 		if cellW > 0 && cellH > 0 {
 			s.ghostty.SetCellPixelSize(int(cellW), int(cellH))
 		}
-		s.ghostty.ResizeNoReflow(int(cols), int(rows))
+		if prevCols != cols || prevRows != rows {
+			s.ghostty.ResizeNoReflow(int(cols), int(rows))
+		}
 	}
 	// A resize moves images without producing a byte of output, so no chunk
 	// carries the correction; deferring to "the next chunk" fails on an idle
@@ -904,13 +963,19 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if s.ptmxClosed {
-		return nil
+		return true, nil
 	}
 	// xpixel/ypixel are ws_xpixel/ws_ypixel: the pane's total pixel size, which
 	// an image emitter reads through TIOCGWINSZ to decide how large to draw.
-	return s.withPTMXFd(func(fd uintptr) error {
+	err := s.withPTMXFd(func(fd uintptr) error {
 		return setWinsize(fd, cols, rows, xpixel, ypixel)
 	})
+	if err != nil {
+		s.metaMu.Lock()
+		s.resizeFailed = true
+		s.metaMu.Unlock()
+	}
+	return true, err
 }
 
 // closePTMX closes the pty exactly once, shutting out the writers and the

@@ -1,10 +1,7 @@
-// The compositor owns everything that is NOT drawing: the terminal models, the
-// rAF loop, layout/grid math, the animation clocks (zoom morph, reflow,
-// attention pulse), focus, and hit-testing. Each frame it computes an animated
-// TileFrame per tile and hands the array to the GridRenderer.
+// Owns terminal models and on-demand scheduling; GridRenderer alone draws.
 //
 // In grid mode the models are fed from the live PTY stream (see GridView): bytes
-// arrive via writeBytes(); the compositor is a pure sink and OBSERVER — it
+// arrive via writeBytes(); the grid is a pure sink and OBSERVER — it
 // processes terminal responses but never echoes them back to the PTY (that would
 // inject phantom input into the user's session).
 import type { Ghostty, GhosttyTerminal } from '../../ghostty';
@@ -16,6 +13,7 @@ const GAP = 12;
 const REFLOW_MS = 280;
 const ZOOM_MS = 300;
 const ATTENTION_RATE = 5; // per second toward target
+const STATS_WINDOW_MS = 1000;
 
 // While a tile waits for its seed snapshot, live firehose chunks are buffered so
 // none are lost and none double-paint over the snapshot. Seeding is one
@@ -35,14 +33,15 @@ export interface GridTileSpec {
   state: UISessionState;
 }
 
-export interface CompositorStats extends GridRenderStats {
+export interface TerminalGridStats extends GridRenderStats {
   fps: number;
-  frameMsP50: number;
-  frameMsP95: number;
-  frameMsMax: number;
-  dropped: number;
+  frameIntervalMsP50: number;
+  frameIntervalMsP95: number;
+  frameIntervalMsMax: number;
+  slowFrameIntervals: number;
   tileCount: number;
-  rendered: boolean;
+  framePending: boolean;
+  renderIdleMs: number;
 }
 
 // Per-tile state for testing/introspection (no pixels required).
@@ -89,7 +88,7 @@ const lerpRect = (a: Rect, b: Rect, t: number): Rect => ({
   h: lerp(a.h, b.h, t),
 });
 
-export class GridCompositor {
+export class TerminalGrid {
   private readonly renderer: GridRenderer;
   private readonly ghostty: Ghostty;
   private readonly container: HTMLElement;
@@ -101,6 +100,7 @@ export class GridCompositor {
   private layout: Layout = { rows: 1, cols: 1 };
 
   private rafId: number | null = null;
+  private started = false;
   private lastNow = 0;
 
   // reflow animation
@@ -115,13 +115,14 @@ export class GridCompositor {
   private zoomT = 0;
 
   private lastFrames: TileFrame[] = [];
-  private frameMs: number[] = [];
+  private renderedAt: number[] = [];
+  private frameIntervals: Array<{ at: number; ms: number }> = [];
+  private lastRenderedAt: number | null = null;
   private lastStats: GridRenderStats | null = null;
-  private lastCompositorStats: CompositorStats | null = null;
   private statsEmitAt = 0;
   private visualDirty = true;
 
-  onStats: ((stats: CompositorStats) => void) | null = null;
+  onStats: ((stats: TerminalGridStats) => void) | null = null;
 
   constructor(
     renderer: GridRenderer,
@@ -143,6 +144,8 @@ export class GridCompositor {
     // Snapshot current placement so tiles slide from where they are.
     this.beginReflow();
     this.layout = { rows, cols };
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   // Snapshot every tile's resting rect under the CURRENT layout and start the
@@ -209,6 +212,7 @@ export class GridCompositor {
     this.tiles = next;
     this.tileIndex = new Map(next.map((t) => [t.id, t]));
     this.renderer.setTiles(this.tiles.map((t) => ({ id: t.id, model: t.model })));
+    if (this.visualDirty || membershipChanged) this.requestFrame();
   }
 
   // Feed live PTY bytes into one tile's model. `seq` is the firehose sequence
@@ -272,6 +276,8 @@ export class GridCompositor {
     if (!tile || cols <= 0 || rows <= 0) return;
     if (tile.model.cols === cols && tile.model.rows === rows) return;
     tile.model.resize(cols, rows);
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   hasTile(id: string): boolean {
@@ -280,7 +286,10 @@ export class GridCompositor {
 
   toggleHide(id: string): void {
     const tile = this.tileIndex.get(id);
-    if (tile) tile.hidden = !tile.hidden;
+    if (!tile) return;
+    tile.hidden = !tile.hidden;
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   zoomTo(id: string | null): void {
@@ -294,6 +303,8 @@ export class GridCompositor {
       this.zoomTarget = 0;
     }
     this.zoomStart = now;
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   isZoomed(): boolean {
@@ -312,8 +323,8 @@ export class GridCompositor {
 
   // --- introspection (testing / automation; no pixels required) -------------
 
-  getStats(): CompositorStats | null {
-    return this.lastCompositorStats;
+  getStats(): TerminalGridStats | null {
+    return this.lastStats ? this.summarizeStats(performance.now()) : null;
   }
 
   currentLayout(): Layout {
@@ -377,16 +388,20 @@ export class GridCompositor {
   }
 
   start(): void {
-    if (this.rafId !== null) return;
+    if (this.started) return;
+    this.started = true;
     this.lastNow = performance.now();
-    const loop = () => {
-      this.tick();
-      this.rafId = requestAnimationFrame(loop);
-    };
-    this.rafId = requestAnimationFrame(loop);
+    this.requestFrame();
+  }
+
+  // Repaint presentation state changed outside the terminal models.
+  invalidate(): void {
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   dispose(): void {
+    this.started = false;
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
     this.tiles.forEach((tile) => tile.model.free());
@@ -403,6 +418,14 @@ export class GridCompositor {
     this.zoomTarget = 0;
   }
 
+  private requestFrame(): void {
+    if (!this.started || this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.tick();
+    });
+  }
+
   // Write to the model with seq dedup, advancing the watermark. A seq-bearing
   // chunk at or below lastSeq is already on screen, so it is dropped.
   private applyBytes(tile: Tile, data: Uint8Array, seq: number | undefined): void {
@@ -410,6 +433,8 @@ export class GridCompositor {
     tile.model.write(data);
     while (tile.model.hasResponse()) tile.model.readResponse();
     if (seq !== undefined) tile.lastSeq = seq;
+    this.visualDirty = true;
+    this.requestFrame();
   }
 
   // Drain the seed buffer through applyBytes (which dedups against lastSeq), then
@@ -453,56 +478,58 @@ export class GridCompositor {
     const dt = Math.min(0.1, (now - this.lastNow) / 1000);
     this.lastNow = now;
 
-    // Advance attention smoothing every frame (cheap, keeps pulses alive).
+    // Attention eases to a static resting emphasis, then stops.
     let attentionAnimating = false;
+    let attentionChanged = false;
     for (const tile of this.tiles) {
-      const next = tile.attention + (tile.attentionTarget - tile.attention) * Math.min(1, dt * ATTENTION_RATE);
-      if (Math.abs(next - tile.attention) > 0.001) attentionAnimating = true;
-      tile.attention = next;
-      if (tile.attention > 0.01) attentionAnimating = true; // keep pulsing
-      // waiting_input flashes and scheduled slowly pulses; both are time-driven
-      // and attention-excluded, so keep the render loop alive for a visible
-      // tile or the animation freezes between repaints.
-      if (!tile.hidden && (tile.state === 'waiting_input' || tile.state === 'scheduled')) attentionAnimating = true;
+      const delta = tile.attentionTarget - tile.attention;
+      if (Math.abs(delta) <= 0.001) {
+        if (tile.attention !== tile.attentionTarget) {
+          tile.attention = tile.attentionTarget;
+          attentionChanged = true;
+        }
+        continue;
+      }
+      const next = tile.attention + delta * Math.min(1, dt * ATTENTION_RATE);
+      tile.attention = Math.abs(tile.attentionTarget - next) <= 0.001
+        ? tile.attentionTarget
+        : next;
+      attentionChanged = true;
+      if (tile.attention !== tile.attentionTarget) attentionAnimating = true;
     }
 
     // Advance zoom clock.
+    let zoomChanged = false;
     if (this.zoomStart >= 0) {
       const t = clamp01((now - this.zoomStart) / ZOOM_MS);
       this.zoomT = lerp(this.zoomFrom, this.zoomTarget, easeOutCubic(t));
+      zoomChanged = true;
       if (t >= 1) {
         this.zoomStart = -1;
         if (this.zoomTarget === 0) this.zoomId = null;
       }
     }
-    const reflowActive = this.reflowStart >= 0 && now - this.reflowStart < REFLOW_MS;
-    if (this.reflowStart >= 0 && !reflowActive) this.reflowStart = -1;
-    const zoomActive = this.zoomStart >= 0 || (this.zoomId !== null && this.zoomT > 0);
+    const hadReflow = this.reflowStart >= 0;
+    const reflowActive = hadReflow && now - this.reflowStart < REFLOW_MS;
+    if (hadReflow && !reflowActive) this.reflowStart = -1;
 
-    let anyDirty = false;
-    for (const tile of this.tiles) {
-      if (!tile.hidden && tile.model.update() !== 0) anyDirty = true;
-    }
-
-    const shouldRender = anyDirty || reflowActive || zoomActive || attentionAnimating || this.visualDirty;
+    const shouldRender = hadReflow || zoomChanged || attentionChanged || this.visualDirty;
     let rendered = false;
     if (shouldRender) {
+      this.visualDirty = false;
       const frames = this.computeFrames(now, reflowActive);
       this.lastFrames = frames;
       this.lastStats = this.renderer.frame(frames, now);
-      this.visualDirty = false;
+      this.recordRenderedFrame(now);
       rendered = true;
     }
 
-    // Frame-time ring buffer for FPS / drops.
-    this.frameMs.push(dt * 1000);
-    if (this.frameMs.length > 120) this.frameMs.shift();
-
-    if (now - this.statsEmitAt > 200) {
+    if (rendered && now - this.statsEmitAt > 200) {
       this.statsEmitAt = now;
-      this.lastCompositorStats = this.summarizeStats(rendered);
-      this.onStats?.(this.lastCompositorStats);
+      this.onStats?.(this.summarizeStats(now));
     }
+
+    if (reflowActive || this.zoomStart >= 0 || attentionAnimating) this.requestFrame();
   }
 
   private computeFrames(now: number, reflowActive: boolean): TileFrame[] {
@@ -591,23 +618,40 @@ export class GridCompositor {
     };
   }
 
-  private summarizeStats(rendered: boolean): CompositorStats {
-    const sorted = [...this.frameMs].sort((a, b) => a - b);
+  private recordRenderedFrame(now: number): void {
+    if (this.lastRenderedAt !== null && now > this.lastRenderedAt) {
+      this.frameIntervals.push({ at: now, ms: now - this.lastRenderedAt });
+    }
+    this.lastRenderedAt = now;
+    this.renderedAt.push(now);
+    this.pruneStats(now);
+  }
+
+  private pruneStats(now: number): void {
+    const cutoff = now - STATS_WINDOW_MS;
+    while (this.renderedAt.length > 0 && this.renderedAt[0] < cutoff) this.renderedAt.shift();
+    while (this.frameIntervals.length > 0 && this.frameIntervals[0].at < cutoff) this.frameIntervals.shift();
+  }
+
+  private summarizeStats(now: number): TerminalGridStats {
+    this.pruneStats(now);
+    const intervals = this.frameIntervals.map((sample) => sample.ms);
+    const sorted = [...intervals].sort((a, b) => a - b);
     const n = sorted.length;
     const pct = (p: number) => (n ? sorted[Math.min(n - 1, Math.floor(p * n))] : 0);
-    const avg = n ? sorted.reduce((s, v) => s + v, 0) / n : 0;
     const stats = this.lastStats ?? {
       drawCalls: 0, quads: 0, atlasUploads: 0, atlasResets: 0, liveContexts: 0, cpuSubmitMs: 0,
     };
     return {
       ...stats,
-      fps: avg > 0 ? Math.round(1000 / avg) : 0,
-      frameMsP50: pct(0.5),
-      frameMsP95: pct(0.95),
-      frameMsMax: sorted[n - 1] ?? 0,
-      dropped: this.frameMs.filter((v) => v > 32).length,
+      fps: this.renderedAt.length,
+      frameIntervalMsP50: pct(0.5),
+      frameIntervalMsP95: pct(0.95),
+      frameIntervalMsMax: sorted[n - 1] ?? 0,
+      slowFrameIntervals: intervals.filter((value) => value > 32).length,
       tileCount: this.tiles.filter((t) => !t.hidden).length,
-      rendered,
+      framePending: this.rafId !== null,
+      renderIdleMs: this.lastRenderedAt === null ? 0 : Math.max(0, now - this.lastRenderedAt),
     };
   }
 }

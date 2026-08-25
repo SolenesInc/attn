@@ -1,5 +1,5 @@
 // Font selection for glyph rasterization, shared by attn's two WebGL terminal
-// renderers (GhosttyWebGlRenderer, UnifiedGridRenderer) so they stay in lockstep.
+// renderers (GhosttyWebGlRenderer, WebGlGridRenderer) so they stay in lockstep.
 //
 // THE FIX. For graphemes that are emoji clusters, put "Apple Color Emoji" FIRST
 // so the entire cluster is shaped by it. Single emoji (which already render

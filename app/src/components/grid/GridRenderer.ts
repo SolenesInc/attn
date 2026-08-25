@@ -1,10 +1,10 @@
-// The renderer abstraction. The GridCompositor (which owns the rAF loop, layout,
+// The renderer abstraction. TerminalGrid (which owns the rAF loop, layout,
 // animation, and input) is renderer-agnostic: it computes every animated
 // TileFrame and hands them in; a GridRenderer is a DUMB per-frame function of
 // (tiles, frames) that only draws.
 //
 // Grid mode renders many live terminal tiles inside ONE WebGL2 context (see
-// UnifiedGridRenderer). This matters because WKWebView caps the number of
+// WebGlGridRenderer). This matters because WKWebView caps the number of
 // simultaneously-live WebGL contexts; the production pane renderer
 // (GhosttyTerminal) spends one context per pane, so a global "see every session"
 // surface has to composite into a single context to scale.
@@ -24,7 +24,7 @@ export interface Rect {
   h: number;
 }
 
-// Per-frame, animated placement of one tile. Recomputed by the compositor every
+// Per-frame, animated placement of one tile. Recomputed by TerminalGrid every
 // frame; the renderer treats it as immutable input.
 export interface TileFrame {
   id: string;

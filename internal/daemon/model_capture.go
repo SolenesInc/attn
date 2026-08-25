@@ -77,7 +77,7 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 	if !d.modelCaptureEnabled() || d.store == nil || d.ptyBackend == nil {
 		return
 	}
-	provider, ok := d.ptyBackend.(ptybackend.SnapshotProvider)
+	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
 		return
 	}
@@ -94,7 +94,7 @@ func (d *Daemon) modelCapturePass(recorder *modelcapture.Recorder, now time.Time
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), modelCaptureSnapshotTimeout)
-		snapshot, err := provider.Snapshot(ctx, sessionID)
+		snapshot, err := provider.ScreenSnapshot(ctx, sessionID)
 		cancel()
 		if err != nil {
 			d.logf("model capture snapshot failed: session=%s err=%v", sessionID, err)

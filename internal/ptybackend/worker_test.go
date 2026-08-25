@@ -140,6 +140,27 @@ func TestShouldForwardStateLocked(t *testing.T) {
 	}
 }
 
+func TestResizeResultChangedPreservesOldWorkerBehavior(t *testing.T) {
+	unchanged := false
+	changed := true
+	tests := []struct {
+		name   string
+		result ptyworker.ResizeResult
+		want   bool
+	}{
+		{name: "legacy response", result: ptyworker.ResizeResult{OK: true}, want: true},
+		{name: "new no-op", result: ptyworker.ResizeResult{OK: true, Changed: &unchanged}},
+		{name: "new change", result: ptyworker.ResizeResult{OK: true, Changed: &changed}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resizeResultChanged(tt.result); got != tt.want {
+				t.Fatalf("resizeResultChanged() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestWorkerBackend_Recover_QuarantinesOwnershipMismatch(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
 	backend, err := NewWorker(WorkerBackendConfig{
@@ -448,7 +469,7 @@ func TestWorkerBackend_CallSimple_ReusesPersistentControlConnection(t *testing.T
 	if err := backend.Input(context.Background(), sessionID, []byte("b")); err != nil {
 		t.Fatalf("second Input() error: %v", err)
 	}
-	if err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0); err != nil {
+	if _, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
 
@@ -476,7 +497,7 @@ func TestWorkerBackend_CallSimple_ReusesPersistentControlConnection(t *testing.T
 	}
 }
 
-func TestWorkerBackend_CallSimple_RetriesAfterPersistentConnectionDrops(t *testing.T) {
+func TestWorkerBackend_PersistentControl_RetriesAfterConnectionDrops(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
 	backend, err := NewWorker(WorkerBackendConfig{
 		DataRoot:         root,
@@ -541,7 +562,8 @@ func TestWorkerBackend_CallSimple_RetriesAfterPersistentConnectionDrops(t *testi
 						}
 					case ptyworker.MethodResize:
 						resizeCalls.Add(1)
-						result, _ := json.Marshal(map[string]any{"ok": true})
+						unchanged := false
+						result, _ := json.Marshal(ptyworker.ResizeResult{OK: true, Changed: &unchanged})
 						_ = enc.Encode(ptyworker.ResponseEnvelope{Type: "res", ID: req.ID, OK: true, Result: result})
 					default:
 						t.Errorf("unexpected method %q", req.Method)
@@ -564,8 +586,12 @@ func TestWorkerBackend_CallSimple_RetriesAfterPersistentConnectionDrops(t *testi
 	if err := backend.Input(context.Background(), sessionID, []byte("x")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
-	if err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0); err != nil {
+	changed, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0)
+	if err != nil {
 		t.Fatalf("Resize() after dropped control connection error: %v", err)
+	}
+	if !changed {
+		t.Fatal("a retried resize was suppressed even though the lost attempt may have applied")
 	}
 
 	backend.mu.RLock()
