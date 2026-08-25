@@ -1,0 +1,6 @@
+kind: fix
+area: daemon
+change: >
+  The daemon's IPC socket file now appears only once the daemon is accepting
+  connections (it listens on a staging path and renames it into place), so a
+  client that watches for the file is never refused in the bind-to-listen gap.

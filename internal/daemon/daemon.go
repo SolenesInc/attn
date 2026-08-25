@@ -876,9 +876,7 @@ func (d *Daemon) Start() error {
 		d.releasePIDLock()
 	}()
 
-	os.Remove(d.socketPath)
-
-	listener, err := net.Listen("unix", d.socketPath)
+	listener, err := listenUnixAtomically(d.socketPath)
 	if err != nil {
 		return err
 	}
