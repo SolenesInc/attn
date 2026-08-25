@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app build-evidence-recorder install-evidence-recorder uninstall-evidence-recorder ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -432,6 +432,15 @@ build-app: ensure-codesign-identity build
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
 		bash ./scripts/build-app-profile.sh
+
+build-evidence-recorder: ensure-codesign-identity
+	@MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' bash ./scripts/build-evidence-recorder.sh
+
+install-evidence-recorder: build-evidence-recorder
+	@bash ./scripts/install-evidence-recorder.sh install
+
+uninstall-evidence-recorder:
+	@bash ./scripts/install-evidence-recorder.sh uninstall
 
 ensure-codesign-identity:
 	@identity="$$(bash ./scripts/macos-codesign-identity.sh ensure)"; \

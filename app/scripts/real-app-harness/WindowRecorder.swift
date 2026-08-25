@@ -1,5 +1,5 @@
 // Records one window to an H.264 mp4 until SIGINT/SIGTERM, then finalizes and
-// exits 0. Usage: WindowRecorder <windowId> <outputPath> [fps]
+// exits 0. Usage: WindowRecorder <windowId> <expectedBundleId> <outputPath> [fps]
 //
 // ScreenCaptureKit's desktop-independent window filter composites the window's
 // own content wherever the window is — parked almost fully off-screen (the
@@ -26,12 +26,13 @@ func fail(_ message: String, code: Int32) -> Never {
     exit(code)
 }
 
-guard CommandLine.arguments.count >= 3, let windowIdArg = UInt32(CommandLine.arguments[1]) else {
-    fail("usage: WindowRecorder <windowId> <outputPath> [fps]", code: 2)
+guard CommandLine.arguments.count >= 4, let windowIdArg = UInt32(CommandLine.arguments[1]) else {
+    fail("usage: WindowRecorder <windowId> <expectedBundleId> <outputPath> [fps]", code: 2)
 }
 let targetWindowId = CGWindowID(windowIdArg)
-let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
-let fps = CommandLine.arguments.count > 3 ? Int32(CommandLine.arguments[3]) ?? 15 : 15
+let expectedBundleId = CommandLine.arguments[2]
+let outputURL = URL(fileURLWithPath: CommandLine.arguments[3])
+let fps = CommandLine.arguments.count > 4 ? Int32(CommandLine.arguments[4]) ?? 15 : 15
 
 // SkyLight asserts (CGS_REQUIRE_INIT) if ScreenCaptureKit touches the window
 // server from a background thread before the process has a connection; force
@@ -53,6 +54,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let window = content.windows.first(where: { $0.windowID == targetWindowId }) else {
             fail("window \(targetWindowId) not found among \(content.windows.count) shareable windows", code: 3)
+        }
+        guard window.owningApplication?.bundleIdentifier == expectedBundleId else {
+            let actual = window.owningApplication?.bundleIdentifier ?? "unknown"
+            fail("window \(targetWindowId) belongs to \(actual), expected \(expectedBundleId)", code: 3)
         }
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = CGFloat(filter.pointPixelScale)
@@ -148,6 +153,16 @@ for sig in [SIGINT, SIGTERM] {
     source.resume()
     signalSources.append(source)
 }
+
+// Broker-owned stdin closes with attn-recorder.app; EOF finalizes the orphan recorder.
+let parentLifetimeSource = DispatchSource.makeReadSource(fileDescriptor: STDIN_FILENO, queue: signalQueue)
+parentLifetimeSource.setEventHandler {
+    var byte: UInt8 = 0
+    if read(STDIN_FILENO, &byte, 1) == 0 {
+        recorder.stopAndFinalize()
+    }
+}
+parentLifetimeSource.resume()
 
 Task {
     do {

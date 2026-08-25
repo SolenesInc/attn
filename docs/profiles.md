@@ -140,7 +140,7 @@ the Go and (soon) e2e suites concurrently with no cross-talk.
 | Pick | `attn profile-env <name> \| source` |
 | Inspect | `attn profile` / `attn profile list` / `attn profile list --json` |
 | Build + install app | `make install PROFILE=<name>` (opens it: `make run PROFILE=<name>`) |
-| Sign | uniform stable identity via `scripts/macos-codesign-identity.sh`; macOS grants persist per bundle id |
+| Sign | uniform stable identity via `scripts/macos-codesign-identity.sh`; profile grants persist per bundle id, while evidence recording uses the fixed `com.attn.recorder.capture` helper inside `AttnRecorder.app` |
 | Clean | `attn profile clean <name>` — reap pty-workers, stop daemon, quit app, remove data dir + app, forget the bundle |
 
 ### Cleaning up after yourself

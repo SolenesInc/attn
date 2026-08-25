@@ -183,6 +183,7 @@ export function createScenarioRunner(options, {
     recorder = createScenarioRecorder({
       runDir,
       resolveWindowId: () => recordingDriver.mainWindowId(),
+      targetBundleId: recordingDriver.bundleId,
       log: appendTrace,
     });
     recorder.start();

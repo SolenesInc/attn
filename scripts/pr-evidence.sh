@@ -15,6 +15,8 @@ set -euo pipefail
 # GIF for the inline preview, mp4 as the full-quality master.
 
 EVIDENCE_REPO="${ATTN_PR_EVIDENCE_REPO:-victorarias/attn-pr-evidence}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECORDER_CLI="${SCRIPT_DIR}/../app/scripts/real-app-harness/recordWindow.mjs"
 
 usage() {
   sed -n '4,9p' "$0" | sed 's/^# \{0,1\}//'
@@ -38,28 +40,32 @@ window_id_for_app() {
   local swift_src
   swift_src="$(mktemp -t pr-evidence-winid).swift"
   cat > "$swift_src" <<'EOF'
+import AppKit
 import CoreGraphics
 import Foundation
 let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
 guard let list = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { exit(1) }
 let target = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ""
-var best: (id: Int, area: Int, width: Int) = (0, 0, 0)
+var best: (id: Int, area: Int, width: Int, bundleId: String) = (0, 0, 0, "")
 var owners = Set<String>()
 for w in list {
     let owner = w[kCGWindowOwnerName as String] as? String ?? ""
     if owner.hasPrefix("attn") { owners.insert(owner) }
     guard owner == target, let num = w[kCGWindowNumber as String] as? Int,
+          let pid = w[kCGWindowOwnerPID as String] as? Int,
           let bounds = w[kCGWindowBounds as String] as? [String: Any],
           let width = bounds["Width"] as? Int, let height = bounds["Height"] as? Int
     else { continue }
-    if width * height > best.area { best = (num, width * height, width) }
+    let bundleId = NSRunningApplication(processIdentifier: pid_t(pid))?.bundleIdentifier ?? ""
+    if width * height > best.area { best = (num, width * height, width, bundleId) }
 }
 if ProcessInfo.processInfo.environment["WINID_LIST"] != nil {
     print(owners.sorted().joined(separator: " "))
     exit(0)
 }
 guard best.id != 0 else { exit(3) }
-print("\(best.id) \(best.width)")
+guard !best.bundleId.isEmpty else { exit(4) }
+print("\(best.id) \(best.width) \(best.bundleId)")
 EOF
   local status=0
   swift "$swift_src" "$owner" || status=$?
@@ -98,10 +104,12 @@ cmd_record() {
     die "no on-screen window owned by \"$app\"; attn-family owners on screen: ${candidates:-none}. Pass --app <owner>."
   fi
   local win_id="${id_and_width%% *}"
+  local width_and_bundle="${id_and_width#* }"
+  local bundle_id="${width_and_bundle#* }"
 
   echo "recording window $win_id of $app for ${seconds}s -> $out"
-  screencapture -x -v -V "$seconds" -l "$win_id" "$out"
-  [[ -s "$out" ]] || die "screencapture produced no file (screen-recording permission?)"
+  node "$RECORDER_CLI" --window-id "$win_id" --bundle-id "$bundle_id" --seconds "$seconds" --out "$out"
+  [[ -s "$out" ]] || die "attn-recorder.app produced no file (screen-recording permission?)"
   echo "recorded $out ($(du -h "$out" | cut -f1 | tr -d ' '))"
 }
 

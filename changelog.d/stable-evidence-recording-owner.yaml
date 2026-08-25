@@ -1,0 +1,12 @@
+kind: fixed
+area: harness
+change: >
+  PR evidence recordings now run through a fixed signed capture helper inside
+  the separately installed AttnRecorder.app. macOS therefore asks for Screen
+  Recording access once instead of asking again for every short-lived profile
+  used to test a branch. Both manual and harness recordings use the same helper,
+  and a dropped client connection stops and finalizes the recording.
+symptom: >
+  Recording PR evidence from a named verification profile prompted for Screen
+  Recording access under that profile's name, so every ephemeral profile needed
+  its own permission grant.

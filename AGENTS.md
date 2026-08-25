@@ -209,12 +209,20 @@ treating scenario output as product evidence.
 ### Evidence recordings
 
 A PR with a visible change carries a recording of the live verification in its
-description. Record the run, publish, paste the emitted markdown:
+description. Install the fixed-identity recorder once, grant Screen Recording
+to `AttnRecorderCapture` on its first capture, then record the run, publish, and
+paste the emitted markdown:
 
 ```bash
+make install-evidence-recorder
 ./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4
 ./scripts/pr-evidence.sh publish clip.mp4   # pushes mp4+gif to victorarias/attn-pr-evidence, prints the markdown
 ```
+
+The recorder is a separate `~/Applications/AttnRecorder.app`, not part of the
+production app or any profile. Its capture helper has the fixed signed identity
+`com.attn.recorder.capture`, so reinstalling the bundle keeps the grant. `make
+uninstall-evidence-recorder` removes the app, local broker state, and grant.
 
 `record` captures the window of the named profile's app (`attn-<name>.app`).
 Pass the profile you installed for this verification, the same name you will
