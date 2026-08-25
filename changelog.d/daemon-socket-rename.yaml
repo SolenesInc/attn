@@ -1,4 +1,4 @@
-kind: fix
+kind: fixed
 area: daemon
 change: >
   The daemon's IPC socket file now appears only once the daemon is accepting
