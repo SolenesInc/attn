@@ -56,7 +56,7 @@ let boxWidth = 0;
 function widen(width: number) {
   boxWidth = width;
   act(() => {
-    for (const { target, cb } of [...observers]) {
+    for (const { target, cb } of observers.slice()) {
       cb([{ target, contentRect: { width } } as unknown as ResizeObserverEntry], {} as ResizeObserver);
     }
   });

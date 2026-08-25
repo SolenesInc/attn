@@ -177,7 +177,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
 function runIteration(scenario, iteration, timeoutMs, runAgainstProd) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
-    const childArgs = [...scenario.command.slice(1)];
+    const childArgs = scenario.command.slice(1);
     if (runAgainstProd) {
       if (!childArgs.includes('--')) {
         childArgs.push('--');

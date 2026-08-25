@@ -1,5 +1,5 @@
 // S3 steer: mid-run steer() while two sequential bash tool calls are running.
-import { buildSession, createLogger, sleep } from "./common.js";
+import { buildSession, createLogger } from "./common.js";
 
 const SCENARIO = "s3-steer";
 const logger = createLogger(SCENARIO);
@@ -16,7 +16,7 @@ async function main() {
 	let finalAssistantText = "";
 
 	const unsubscribe = session.subscribe((event) => {
-		const rec = logger.log("sdk", event.type, {
+		logger.log("sdk", event.type, {
 			note:
 				event.type === "queue_update"
 					? `steering=${JSON.stringify(event.steering)} followUp=${JSON.stringify(event.followUp)}`

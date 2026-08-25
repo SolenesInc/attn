@@ -60,7 +60,7 @@ export function parseCropSpec(str) {
 }
 
 async function main() {
-  const args = [...process.argv.slice(2)];
+  const args = process.argv.slice(2);
   let launch = false;
   let freshLaunch = false;
   let outputPath = '';

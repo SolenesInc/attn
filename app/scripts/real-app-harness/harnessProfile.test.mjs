@@ -20,7 +20,6 @@ import {
   profileCliEnv,
   profileForAppPath,
   resolveHarnessResources,
-  socketPathForProfile,
 } from './harnessProfile.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';

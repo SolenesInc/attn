@@ -210,9 +210,7 @@ async function main() {
     sessionRootDir: options.sessionRootDir,
   }, 'bridge-diagnose-session');
 
-  const client = new UiAutomationClient({
-    ...(options.appPath ? { appPath: options.appPath } : {}),
-  });
+  const client = new UiAutomationClient(options.appPath ? { appPath: options.appPath } : {});
 
   if (options.freshLaunch) {
     await client.launchFreshApp();

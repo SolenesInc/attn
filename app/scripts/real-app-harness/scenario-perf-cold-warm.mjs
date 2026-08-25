@@ -8,7 +8,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { profileForAppPath, assertProductionRunAllowed } from './harnessProfile.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildColdWarmVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
-import { delay, captureWebKitPids, snapshot, classRssMb, readLiveDaemonPid, paneIdForSession, closeSessions, fillAllPanes, teardownProfileState } from './perfMeasure.mjs';
+import { delay, captureWebKitPids, snapshot, readLiveDaemonPid, closeSessions, fillAllPanes, teardownProfileState } from './perfMeasure.mjs';
 
 function parseArgs(argv) {
   const filtered = argv.filter((arg) => arg !== '--');

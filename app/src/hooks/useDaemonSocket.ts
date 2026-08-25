@@ -4350,7 +4350,7 @@ export function useDaemonSocket({
   }, [nextRequestID, sendKeyedRequest]);
 
   const sendNotebookList = useCallback((prefix?: string): Promise<NotebookEntry[]> =>
-    sendRequest<NotebookEntry[]>('notebook_list', { ...(prefix ? { prefix } : {}) }, 'Notebook list timed out'), [sendRequest]);
+    sendRequest<NotebookEntry[]>('notebook_list', prefix ? { prefix } : {}, 'Notebook list timed out'), [sendRequest]);
 
   const sendNotebookRead = useCallback((path: string): Promise<NotebookReadResult> =>
     sendRequest<NotebookReadResult>('notebook_read', { path }, 'Notebook read timed out'), [sendRequest]);
@@ -4553,10 +4553,10 @@ export function useDaemonSocket({
     sendRequest<FsExistsResult>('fs_exists', { path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
 
   const sendFsWatch = useCallback((root?: string): Promise<FsWatchResult> =>
-    sendRequest<FsWatchResult>('fs_watch', { ...(root ? { root } : {}) }, 'Filesystem watch timed out'), [sendRequest]);
+    sendRequest<FsWatchResult>('fs_watch', root ? { root } : {}, 'Filesystem watch timed out'), [sendRequest]);
 
   const sendFsUnwatch = useCallback((root?: string): Promise<FsWatchResult> =>
-    sendRequest<FsWatchResult>('fs_unwatch', { ...(root ? { root } : {}) }, 'Filesystem unwatch timed out'), [sendRequest]);
+    sendRequest<FsWatchResult>('fs_unwatch', root ? { root } : {}, 'Filesystem unwatch timed out'), [sendRequest]);
 
   const sendFsIndex = useCallback((root?: string, extensions?: string[]): Promise<FsIndexResult> =>
     sendRequest<FsIndexResult>('fs_index', { ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);

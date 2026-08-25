@@ -174,7 +174,7 @@ function createOutputTailBuffer(maxLines = 40, maxLineLen = 400) {
 function runScenario(scenario, timeoutMs, runAgainstProd) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
-    const childArgs = [...scenario.command.slice(1)];
+    const childArgs = scenario.command.slice(1);
     if (runAgainstProd) {
       if (!childArgs.includes('--')) {
         childArgs.push('--');
@@ -294,7 +294,7 @@ async function main() {
     ok: failed.length === 0,
     scenarioCount: results.length,
     failedCount: failed.length,
-    results: results.map(({ outputTail, ...rest }) => rest),
+    results: results.map(({ outputTail: _outputTail, ...rest }) => rest),
   };
   console.log(`\nSerial matrix summary:\n${JSON.stringify(summary, null, 2)}`);
 

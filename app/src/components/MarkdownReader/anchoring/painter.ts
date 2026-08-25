@@ -109,7 +109,7 @@ export class MarkPainter implements HighlightPainter {
       span.appendChild(textNode);
       fresh.add(span);
     }
-    for (const span of [...this.root.querySelectorAll(idSelector(id))]) {
+    for (const span of this.root.querySelectorAll(idSelector(id))) {
       if (!fresh.has(span)) {
         unwrap(span);
       }
@@ -117,13 +117,13 @@ export class MarkPainter implements HighlightPainter {
   }
 
   clear(id: string): void {
-    for (const span of [...this.root.querySelectorAll(idSelector(id))]) {
+    for (const span of this.root.querySelectorAll(idSelector(id))) {
       unwrap(span);
     }
   }
 
   clearAll(): void {
-    for (const span of [...this.root.querySelectorAll(`[${MARK_ATTR}]`)]) {
+    for (const span of this.root.querySelectorAll(`[${MARK_ATTR}]`)) {
       unwrap(span);
     }
   }

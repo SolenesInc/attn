@@ -306,7 +306,7 @@ function makeFakeTerminal(
     getCursor: () => options.cursor ?? { x: 0, y: 0, visible: false },
     getViewport: () => Array.from({ length: cols * rows }, (_unused, index) => ({
       ...cell(),
-      ...(options.cell?.(Math.floor(index / cols), index % cols) ?? {}),
+      ...options.cell?.(Math.floor(index / cols), index % cols),
     })),
     getScrollbackLength: () => 0,
     getGraphemeString: () => '',

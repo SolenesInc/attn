@@ -4,7 +4,7 @@ import { defaultAutoModeConfig } from "../automode/config";
 import { createAutoMode, type AutoModeDenial } from "../automode/index";
 import { transcriptEntryCharLimit } from "../automode/transcript";
 import { UsageLedger } from "../automode/usage";
-import { assistantMessage, ctx, FakePi, toolCall, userInput } from "./automode-fake-pi";
+import { ctx, FakePi, toolCall, userInput } from "./automode-fake-pi";
 
 function wire(
   classifier: Classifier,

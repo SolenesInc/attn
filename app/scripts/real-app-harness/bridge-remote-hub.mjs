@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import WebSocket from 'ws';
 
 import { createRunContext, DEFAULT_REMOTE_SSH_TARGET, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -134,10 +132,6 @@ function saveJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
-function saveText(filePath, value) {
-  fs.writeFileSync(filePath, value, 'utf8');
-}
-
 function parseArgs(argv) {
   const remaining = [];
   const options = {
@@ -215,153 +209,6 @@ async function resetLocalDaemon(timeoutMs = 15_000) {
     } catch {
     }
   }
-}
-
-async function allocateLocalPort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close(() => reject(new Error('Failed to allocate local port')));
-        return;
-      }
-      const { port } = address;
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(port);
-      });
-    });
-  });
-}
-
-async function waitForTunnelPort(port, processRef, timeoutMs = 10_000) {
-  const startedAt = Date.now();
-  let lastError = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    if (processRef.exitCode !== null) {
-      throw new Error(`SSH tunnel exited early with code ${processRef.exitCode}`);
-    }
-    try {
-      await new Promise((resolve, reject) => {
-        const socket = net.createConnection({ host: '127.0.0.1', port });
-        socket.once('connect', () => {
-          socket.end();
-          resolve();
-        });
-        socket.once('error', (error) => {
-          socket.destroy();
-          reject(error);
-        });
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await sleep(100);
-    }
-  }
-  throw new Error(`Timed out waiting for SSH tunnel port ${port}: ${lastError instanceof Error ? lastError.message : lastError || 'unknown error'}`);
-}
-
-async function openRemoteWebSocketControl(target, authToken = '') {
-  const localPort = await allocateLocalPort();
-  const tunnel = spawn(
-    'ssh',
-    [
-      '-o', 'BatchMode=yes',
-      '-o', 'StrictHostKeyChecking=accept-new',
-      '-o', 'ExitOnForwardFailure=yes',
-      '-o', 'ConnectTimeout=10',
-      '-N',
-      '-L', `${localPort}:127.0.0.1:9849`,
-      target,
-    ],
-    { stdio: ['ignore', 'ignore', 'pipe'] },
-  );
-  let stderr = '';
-  tunnel.stderr.on('data', (chunk) => {
-    stderr += chunk.toString();
-  });
-
-  await waitForTunnelPort(localPort, tunnel, 15_000);
-
-  const ws = await new Promise((resolve, reject) => {
-    const client = new WebSocket(`ws://127.0.0.1:${localPort}/ws`, authToken
-      ? { headers: { Authorization: `Bearer ${authToken}` } }
-      : {});
-
-    const timeout = setTimeout(() => {
-      client.terminate();
-      reject(new Error(`Timed out connecting remote websocket tunnel on port ${localPort}`));
-    }, 15_000);
-
-    client.once('open', () => {
-      clearTimeout(timeout);
-      resolve(client);
-    });
-    client.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-  });
-
-  const close = async () => {
-    await new Promise((resolve) => {
-      ws.once('close', resolve);
-      ws.close();
-      setTimeout(resolve, 500);
-    });
-    if (tunnel.exitCode === null) {
-      tunnel.kill('SIGTERM');
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      if (tunnel.exitCode === null) {
-        tunnel.kill('SIGKILL');
-      }
-    }
-  };
-
-  const sendAndWait = async (payload, predicate, timeoutMs = 20_000, description = payload.cmd || 'remote ws command') => {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error(`Timed out waiting for ${description}`));
-      }, timeoutMs);
-
-      const onMessage = (raw) => {
-        try {
-          const data = JSON.parse(raw.toString());
-          if (!predicate(data)) {
-            return;
-          }
-          cleanup();
-          resolve(data);
-        } catch {
-        }
-      };
-
-      const onClose = () => {
-        cleanup();
-        reject(new Error(`Remote websocket closed while waiting for ${description}${stderr ? `: ${stderr.trim()}` : ''}`));
-      };
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        ws.off('message', onMessage);
-        ws.off('close', onClose);
-      };
-
-      ws.on('message', onMessage);
-      ws.once('close', onClose);
-      ws.send(JSON.stringify(payload));
-    });
-  };
-
-  return { localPort, ws, sendAndWait, close };
 }
 
 async function getRemoteHome(target) {

@@ -2,7 +2,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import {
   createRunContext,
@@ -16,8 +15,6 @@ import { ensureClaudePromptReadyViaPty, preTrustClaudeFolder } from './scenarioA
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -98,7 +95,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
   const evidence = { runId, profile, steps: [] };
-  const note = (m, extra) => { console.log(`[recoverable-auto-revive] ${m}`); evidence.steps.push({ t: Date.now(), m, ...(extra || {}) }); };
+  const note = (m, extra) => { console.log(`[recoverable-auto-revive] ${m}`); evidence.steps.push({ t: Date.now(), m, ...extra }); };
   const saveEvidence = (verdict) => {
     evidence.verdict = verdict;
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');

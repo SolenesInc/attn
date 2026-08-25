@@ -240,7 +240,7 @@ async function main() {
       await client.request('select_session', { sessionId });
       initialPaneId = (await waitForFirstWorkspacePane(client, sessionId, 'remote initial pane before relaunch', 30_000)).paneId;
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
-      const mainPaneState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
+      await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
         minCharCount: 20,
@@ -360,7 +360,7 @@ async function main() {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
-      const restoredMainState = await assertPaneVisibleContent(client, sessionId, initialPaneId, {
+      await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
         minCharCount: 20,

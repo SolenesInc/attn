@@ -50,7 +50,7 @@ test.describe('large Mermaid diagram reader', () => {
     const markerReceipt = await focusedSvg.evaluate((svg) => {
       const marked = svg.querySelector<SVGElement>('[marker-end]');
       const markerEnd = marked?.getAttribute('marker-end') ?? '';
-      const id = markerEnd.match(/#([^)'\"]+)/)?.[1];
+      const id = markerEnd.match(/#([^)'"]+)/)?.[1];
       return { markerEnd, markerExists: Boolean(id && svg.querySelector(`#${CSS.escape(id)}`)) };
     });
     expect(markerReceipt.markerEnd).toContain('url(');

@@ -110,7 +110,7 @@ export function base64ToBytes(value: string): Uint8Array {
 
 export function createGhosttyModelOpRing(options?: { now?: () => number }): GhosttyModelOpRing {
   const now = options?.now ?? (() => Date.now());
-  const slots: Array<ModelOp | undefined> = new Array(MODEL_OP_RING_MAX_OPS);
+  const slots: Array<ModelOp | undefined> = Array.from({ length: MODEL_OP_RING_MAX_OPS }, () => undefined);
   let head = 0;
   let count = 0;
   let retainedWriteBytes = 0;

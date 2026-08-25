@@ -10,8 +10,6 @@ import {
   handled,
   providerError,
   type WorktreeAfterCreateParams,
-  type WorktreeCreateParams,
-  type WorktreeCreateResult,
 } from "../src";
 
 type JsonRpcMessage = {
