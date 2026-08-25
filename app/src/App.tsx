@@ -80,6 +80,7 @@ import type { HiddenGridSession } from './components/grid/GridHiddenSessions';
 import { normalizeSessionAgent, type SessionAgent } from './types/sessionAgent';
 import { hasPane, workspaceSnapshotFromDaemonWorkspace, resolveEditorTileRoot, localWorkspaceDirectory, soleWorkspaceForId, serializeNotebookTileParams, type TerminalSplitDirection } from './types/workspace';
 import { useDaemonStore } from './store/daemonSessions';
+import { gardenPathToSeed, useGardenWalk } from './store/gardenWalk';
 import { useConversationsStore } from './store/conversations';
 import { usePRsNeedingAttention } from './hooks/usePRsNeedingAttention';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -3086,6 +3087,16 @@ function AppContent({
       });
   }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, showError]);
 
+  const handleRevealSeedInGarden = useCallback((seedId: string) => {
+    const trail = gardenPathToSeed(seeds, seedId);
+    if (trail.length === 0) {
+      showError(`Could not find ${seedId} in the Garden`);
+      return;
+    }
+    useGardenWalk.getState().setTrail(trail);
+    openDockPanel('garden');
+  }, [openDockPanel, seeds, showError]);
+
   const checkArtifactPath = useCallback((path: string) => {
     const slash = path.lastIndexOf('/');
     if (slash <= 0) return Promise.resolve(true);
@@ -3585,6 +3596,7 @@ function AppContent({
                     }))}
                     gardenSeeds={seeds}
                     onOpenSeed={handleOpenSeedTile}
+                    onRevealSeedInGarden={handleRevealSeedInGarden}
                     conversationAgents={conversationPaneAgents}
                     annotationApi={annotationApi}
                     onTriggerNudge={sendTriggerNudge}

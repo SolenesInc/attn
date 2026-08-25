@@ -1,6 +1,6 @@
 // See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { gardenScrollMemory, useGardenWalk } from '../store/gardenWalk';
+import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { crewDisplayName, crewHolderName } from '../utils/crewName';
@@ -97,7 +97,7 @@ function isClosed(seed: Seed): boolean {
 }
 
 function crownOf(seed: Seed): string {
-  return (seed.edges ?? []).find((edge) => edge.kind === 'part-of')?.to ?? '';
+  return seedParentID(seed);
 }
 
 function isPlot(seed: Seed): boolean {
@@ -178,19 +178,6 @@ function subtreeOf(index: GardenIndex, rootId: string): Set<string> {
     }
   }
   return wanted;
-}
-
-function pathTo(index: GardenIndex, id: string): string[] {
-  const path: string[] = [];
-  const guard = new Set<string>();
-  let cursor = index.byID.get(id);
-  while (cursor && !guard.has(cursor.id)) {
-    guard.add(cursor.id);
-    path.unshift(cursor.id);
-    const parent = crownOf(cursor);
-    cursor = parent ? index.byID.get(parent) : undefined;
-  }
-  return path;
 }
 
 function signalOf(seed: Seed, blockers: number): { text: string; tone: string } | null {
@@ -552,10 +539,10 @@ export function GardenPanel({
   const openResult = useCallback((id: string) => {
     rememberScroll();
     arrival.current = { direction: 'in', fromRow: '' };
-    setTrail(pathTo(index, id));
+    setTrail(gardenPathToSeed(seeds, id));
     setQuery('');
     setWideIn(null);
-  }, [index, rememberScroll, setTrail]);
+  }, [rememberScroll, seeds, setTrail]);
 
   const climbOne = useCallback(() => {
     climbTo(Math.max(0, livingTrail.length - 1));

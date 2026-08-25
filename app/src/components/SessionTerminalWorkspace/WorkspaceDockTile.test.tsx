@@ -1040,7 +1040,10 @@ function seedFixture(overrides: Partial<Seed> = {}): Seed {
 
 function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedDocument {
   return {
-    seed: seedFixture({ body }),
+    seed: seedFixture({
+      body,
+      plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 },
+    }),
     tender_holds: true,
     children: [seedFixture({ id: 's-child1', title: 'Reader child', body: '', status: 'harvested' })],
     notes: [{
@@ -1062,7 +1065,7 @@ describe('WorkspaceDockTile seed reader', () => {
     setMarkdownAnnotationsTransport(null);
   });
 
-  it('loads the seed document, renders its ledger, annotates by seed URI, and refetches on a garden push', async () => {
+  it('loads the seed document, renders its plot and collapsed log, annotates by seed URI, and refetches on a garden push', async () => {
     const first = seedDocumentFixture();
     const second = {
       ...seedDocumentFixture('# Updated seed body'),
@@ -1099,6 +1102,8 @@ describe('WorkspaceDockTile seed reader', () => {
 
     expect(await screen.findByRole('heading', { name: 'Seed body' })).toBeInTheDocument();
     expect(screen.getByText('Reader child')).toBeInTheDocument();
+    expect(screen.getByText('Log').closest('details')).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('Log').closest('summary') as HTMLElement);
     expect(screen.getByText('Live ledger note')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('Seed reader plan', { selector: '.workspace-dock-tile-title' })).toBeInTheDocument();
@@ -1120,6 +1125,172 @@ describe('WorkspaceDockTile seed reader', () => {
     view.rerender(<WorkspaceDockTile {...props} gardenSeeds={[second.seed]} />);
     expect(await screen.findByRole('heading', { name: 'Updated seed body' })).toBeInTheDocument();
     expect(sendSeedDocumentGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('navigates the plot in place, climbs canonical ancestry, and reveals the current seed in the Garden', async () => {
+    const plot = seedFixture({
+      id: 's-plot11',
+      title: 'Reader polish',
+      body: '# Plot plan',
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+    });
+    const child = seedFixture({
+      id: 's-child1',
+      title: 'Polish the tile',
+      body: '# Child body',
+      edges: [{ kind: 'part-of', to: plot.id }],
+    });
+    const details = new Map<string, SeedDocument>([
+      [plot.id, { ...seedDocumentFixture(plot.body), seed: plot, children: [child] }],
+      [child.id, { ...seedDocumentFixture(child.body), seed: child, children: [] }],
+    ]);
+    let resolveChild: (detail: SeedDocument) => void = () => {};
+    const childPending = new Promise<SeedDocument>((resolve) => { resolveChild = resolve; });
+    const sendSeedDocumentGet = vi.fn((seedID: string) => (
+      seedID === child.id ? childPending : Promise.resolve(details.get(seedID) as SeedDocument)
+    ));
+    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+    const { transport, getSpy } = makeSendTransport();
+    setMarkdownAnnotationsTransport(transport);
+    const onUpdateParams = vi.fn().mockResolvedValue({});
+    const onRevealSeedInGarden = vi.fn();
+
+    render(
+      <WorkspaceDockTile
+        tile={{ type: 'tile', tileId: 'tile-seed-s-plot11', tileKind: 'seed', tileParams: plot.id }}
+        workspaceId="workspace-1"
+        dragging={false}
+        gardenSeeds={[plot, child]}
+        onClose={vi.fn()}
+        onUpdateParams={onUpdateParams}
+        onRevealSeedInGarden={onRevealSeedInGarden}
+        onHeaderPointerDown={vi.fn()}
+        onRequestContent={vi.fn()}
+      />,
+      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Polish the tile/ }));
+    expect(onUpdateParams).toHaveBeenCalledWith(child.id);
+    expect(screen.queryByRole('heading', { name: 'Plot plan' })).toBeNull();
+    expect(screen.getByText('Loading seed…')).toBeInTheDocument();
+    expect(screen.getByText(child.title, { selector: '.workspace-dock-tile-title' })).toBeInTheDocument();
+    await act(async () => resolveChild(details.get(child.id) as SeedDocument));
+    expect(await screen.findByRole('heading', { name: 'Child body' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to Reader polish' })).toBeInTheDocument();
+    await waitFor(() => expect(getSpy).toHaveBeenCalledWith(seedMarkdownSource(child.id)));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal in Garden' }));
+    expect(onRevealSeedInGarden).toHaveBeenCalledWith(child.id);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Reader polish' }));
+    expect(onUpdateParams).toHaveBeenLastCalledWith(plot.id);
+    expect(await screen.findByRole('heading', { name: 'Plot plan' })).toBeInTheDocument();
+  });
+
+  it('unwinds a recursive plot trail with Escape only while the seed tile owns focus', async () => {
+    const root = seedFixture({
+      id: 's-root11',
+      title: 'Reader polish',
+      body: '# Root plan',
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+    });
+    const nested = seedFixture({
+      id: 's-nest11',
+      title: 'Nested polish',
+      body: '# Nested plan',
+      edges: [{ kind: 'part-of', to: root.id }],
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+    });
+    const leaf = seedFixture({
+      id: 's-leaf11',
+      title: 'Leaf polish',
+      body: '# Leaf plan',
+      edges: [{ kind: 'part-of', to: nested.id }],
+    });
+    const details = new Map<string, SeedDocument>([
+      [root.id, { ...seedDocumentFixture(root.body), seed: root, children: [nested] }],
+      [nested.id, { ...seedDocumentFixture(nested.body), seed: nested, children: [leaf] }],
+      [leaf.id, { ...seedDocumentFixture(leaf.body), seed: leaf, children: [] }],
+    ]);
+    const daemonApi = {
+      sendSeedDocumentGet: vi.fn((seedID: string) => Promise.resolve(details.get(seedID) as SeedDocument)),
+      sendOpenMarkdown: vi.fn(),
+    } as unknown as DaemonApi;
+    const onUpdateParams = vi.fn().mockResolvedValue({});
+    const view = render(
+      <WorkspaceDockTile
+        tile={{ type: 'tile', tileId: 'tile-seed-s-leaf11', tileKind: 'seed', tileParams: leaf.id }}
+        workspaceId="workspace-1"
+        dragging={false}
+        gardenSeeds={[root, nested, leaf]}
+        onClose={vi.fn()}
+        onUpdateParams={onUpdateParams}
+        onHeaderPointerDown={vi.fn()}
+        onRequestContent={vi.fn()}
+      />,
+      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Leaf plan' })).toBeInTheDocument();
+    const unfocusedEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    fireEvent(window, unfocusedEscape);
+    expect(unfocusedEscape.defaultPrevented).toBe(false);
+    expect(onUpdateParams).not.toHaveBeenCalled();
+
+    const body = view.container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
+    fireEvent.focusIn(body);
+    const firstEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    fireEvent(window, firstEscape);
+    expect(firstEscape.defaultPrevented).toBe(true);
+    expect(onUpdateParams).toHaveBeenLastCalledWith(nested.id);
+    expect(await screen.findByRole('heading', { name: 'Nested plan' })).toBeInTheDocument();
+
+    const secondEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    fireEvent(window, secondEscape);
+    expect(secondEscape.defaultPrevented).toBe(true);
+    expect(onUpdateParams).toHaveBeenLastCalledWith(root.id);
+    expect(await screen.findByRole('heading', { name: 'Root plan' })).toBeInTheDocument();
+
+    const rootEscape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    fireEvent(window, rootEscape);
+    expect(rootEscape.defaultPrevented).toBe(false);
+    expect(onUpdateParams).toHaveBeenCalledTimes(2);
+  });
+
+  it('hides the previous document while navigating outside a capped Garden snapshot', async () => {
+    const plot = seedFixture({
+      id: 's-plot12',
+      title: 'Sparse plot',
+      body: '# Previous body',
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 0, dormant: 0, ready: 1, blocked: 0 },
+    });
+    const child = seedFixture({ id: 's-child2', title: 'Outside the snapshot', body: '# Next body' });
+    const childPending = new Promise<SeedDocument>(() => {});
+    const sendSeedDocumentGet = vi.fn((seedID: string) => (
+      seedID === child.id
+        ? childPending
+        : Promise.resolve({ ...seedDocumentFixture(plot.body), seed: plot, children: [child] })
+    ));
+    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+
+    render(
+      <WorkspaceDockTile
+        tile={{ type: 'tile', tileId: 'tile-seed-s-plot12', tileKind: 'seed', tileParams: plot.id }}
+        workspaceId="workspace-1"
+        dragging={false}
+        gardenSeeds={[]}
+        onClose={vi.fn()}
+        onUpdateParams={vi.fn().mockResolvedValue({})}
+        onHeaderPointerDown={vi.fn()}
+        onRequestContent={vi.fn()}
+      />,
+      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Outside the snapshot/ }));
+    expect(screen.queryByRole('heading', { name: 'Previous body' })).toBeNull();
+    expect(screen.getByText('Loading seed…')).toBeInTheDocument();
   });
 
   it('keeps the tended seed primary bound to its live tender and offers Note on seed in the caret menu', async () => {

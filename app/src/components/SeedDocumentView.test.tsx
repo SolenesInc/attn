@@ -55,21 +55,36 @@ function document(overrides: Partial<SeedDocument> = {}): SeedDocument {
 }
 
 describe('SeedDocumentView', () => {
-  it('renders the seed body as markdown and the live child/note ledger beneath it', () => {
+  it('puts navigable plot work after seed status and before the annotatable body', () => {
     const child = seed({ id: 's-step11', title: 'Build the reader', body: '', status: 'harvested' });
+    const onOpenSeed = vi.fn();
     render(
       <SeedDocumentView
         document={document({
+          seed: seed({
+            plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 },
+          }),
           children: [child],
           notes: [note({ id: 'n-one111', body: 'Verified the **reader**.', author_member: 'alder' })],
           notes_total: 2,
         })}
+        onOpenSeed={onOpenSeed}
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Rendered plan' })).toBeInTheDocument();
-    expect(screen.getByText('Build the reader')).toBeInTheDocument();
-    expect(screen.getByText('harvested')).toBeInTheDocument();
+    const details = screen.getByLabelText('Seed details');
+    const plot = screen.getByRole('heading', { name: 'Plot' });
+    const body = screen.getByRole('heading', { name: 'Rendered plan' });
+    expect(details.compareDocumentPosition(plot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plot.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Build the reader/ }));
+    expect(onOpenSeed).toHaveBeenCalledWith('s-step11');
+    expect(screen.getByText('done')).toBeInTheDocument();
+
+    const log = screen.getByText('Log').closest('details');
+    expect(log?.open).toBe(false);
+    fireEvent.click(screen.getByText('Log').closest('summary') as HTMLElement);
+    expect(log?.open).toBe(true);
     expect(screen.getByText('reader', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('1 more entry on the log.')).toBeInTheDocument();
   });

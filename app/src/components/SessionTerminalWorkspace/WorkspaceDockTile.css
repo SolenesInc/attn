@@ -44,6 +44,53 @@
   text-overflow: ellipsis;
 }
 
+.workspace-dock-tile-seed-location {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-dock-tile-seed-parent {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 1 auto;
+  font-size: 11px;
+  gap: 3px;
+  min-width: 20px;
+  overflow: hidden;
+  padding: 2px 3px;
+}
+
+.workspace-dock-tile-seed-parent > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-dock-tile-seed-parent:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+}
+
+.workspace-dock-tile-seed-parent:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.workspace-dock-tile-seed-separator {
+  color: var(--color-text-dimmed);
+  flex: none;
+  font-size: 11px;
+}
+
 .workspace-dock-tile-address-form {
   flex: 1;
   min-width: 0;
@@ -453,6 +500,11 @@
   cursor: pointer;
 }
 
+.workspace-dock-tile-action svg {
+  height: 16px;
+  width: 16px;
+}
+
 .workspace-dock-tile-action:hover {
   background: var(--color-bg-button);
   color: var(--color-text-primary);
@@ -479,6 +531,11 @@
    the body keeps scrolling plus a slim gutter around the card. */
 .workspace-dock-tile-body--markdown {
   padding: 12px;
+}
+
+.workspace-dock-tile-body--seed {
+  container-type: inline-size;
+  padding: 8px;
 }
 
 .browser-tile-host {
