@@ -20,7 +20,7 @@ import (
 // Measured 2026-08-14: `claude --session-id <id>` refuses a second launch under an id
 // it already used, so the resume-preserving reload cannot serve the nap.
 
-const crewNapPrompt = "Your predecessor just closed their day and left you the letter above. Pick the thread up: orient from it, verify anything load-bearing that may have moved, then tell Victor in a few lines who you are, where things stand, and what you are doing next."
+const crewNapPrompt = "Your predecessor just closed their day and left you the letter above. Pick the thread up: orient from it, verify anything load-bearing that may have moved, then tell the user in a few lines who you are, where things stand, and what you are doing next."
 
 func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {

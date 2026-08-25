@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const crewRequestedSleepPrompt = "[attn] Victor is asking you to close your day and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff --sleep -m \"<your letter>\"`. This is consented closure, not a hard stop; nobody wakes behind you when the letter lands."
+const crewRequestedSleepPrompt = "[attn] The user is asking you to close your day and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff --sleep -m \"<your letter>\"`. This is consented closure, not a hard stop; nobody wakes behind you when the letter lands."
 
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
 	result, err := d.crewSleep(strings.TrimSpace(msg.Member))

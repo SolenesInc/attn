@@ -50,7 +50,7 @@ func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 	mu.Lock()
 	text := typed.String()
 	mu.Unlock()
-	for _, want := range []string{"Victor is asking you", "attn handoff --sleep", "nobody wakes behind you"} {
+	for _, want := range []string{"The user is asking you", "attn handoff --sleep", "nobody wakes behind you"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("composer input is missing %q: %q", want, text)
 		}

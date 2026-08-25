@@ -53,8 +53,8 @@ func TestPriming_ClosureCarriesHandoffFlagSemantics(t *testing.T) {
 
 	for _, want := range []string{
 		"Plain `attn handoff` is presence-decided day turnover",
-		"While Victor is at the machine, a successor wakes immediately",
-		"When Victor asks you to sleep, file with `attn handoff --sleep`",
+		"While the user is at the machine, a successor wakes immediately",
+		"When the user asks you to sleep, file with `attn handoff --sleep`",
 		"nobody wakes behind it",
 		"Use `attn handoff --nap` when you explicitly want a successor",
 	} {

@@ -1,0 +1,5 @@
+kind: changed
+area: agents
+change: >
+  The bundled Present guidance is shorter and keeps only the manifest contract,
+  review-writing rules, validation, feedback, and round workflow.
