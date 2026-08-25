@@ -4,8 +4,20 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-// The first line of automode/prompt.ts's classifierSystemPrompt.
-const CLASSIFIER_MARKER = 'You are a safety classifier for an autonomous coding agent';
+const CLASSIFIER_MARKER = 'You are a security monitor for an autonomous coding agent';
+
+const PASS_ONE = 'This is pass 1';
+const ALLOW_SEVERITY = 5;
+const DENY_SEVERITY = 60;
+const HARD_BLOCK_RULE = 'Data Exfiltration';
+
+function severityAnswer(verdict, pass) {
+  if (verdict.verdict === 'allow') return `<severity>${ALLOW_SEVERITY}</severity>`;
+  if (pass === 1) return `<severity>${DENY_SEVERITY}</severity>`;
+  const category = verdict.boundary === true ? HARD_BLOCK_RULE : (verdict.category ?? 'Destructive Operation');
+  const thinking = verdict.reason ? `<thinking>${verdict.reason}</thinking>` : '';
+  return `${thinking}<severity>${DENY_SEVERITY}</severity><category>${category}</category>`;
+}
 
 export const stubProviderName = 'attn-harness';
 export const stubAgentModel = `${stubProviderName}/stub-agent`;
@@ -25,8 +37,6 @@ function chunk(delta, finishReason = null) {
   };
 }
 
-// pi's reader throws "Stream ended without finish_reason", so the closing chunk
-// is not optional.
 function writeText(res, text) {
   sse(res, chunk({ role: 'assistant', content: text }));
   sse(res, { ...chunk({}, 'stop'), usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } });
@@ -44,6 +54,7 @@ function writeToolCall(res, { id, name, args }) {
 
 export function startPiStubProvider({ agent, judge }) {
   const calls = { agent: [], judge: [] };
+  let held;
   const server = http.createServer((req, res) => {
     if (!req.url.endsWith('/chat/completions')) {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('STUB-OK\n');
@@ -75,12 +86,14 @@ export function startPiStubProvider({ agent, judge }) {
       });
       try {
         if (role === 'judge') {
-          const verdict = judge(request);
-          writeText(res, JSON.stringify({
-            verdict: verdict.verdict,
-            reason: verdict.reason,
-            high_stakes: verdict.highStakes === true,
-          }));
+          const userText = messages
+            .filter((m) => m.role === 'user')
+            .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+            .join('\n');
+          const pass = userText.includes(PASS_ONE) ? 1 : 2;
+          if (pass === 1) held = judge(request);
+          const verdict = held ?? { verdict: 'deny', reason: 'the stub had no scripted verdict' };
+          writeText(res, severityAnswer(verdict, pass));
         } else {
           const answer = agent(request);
           if (answer.tool) {

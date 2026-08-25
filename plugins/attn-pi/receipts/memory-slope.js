@@ -2,7 +2,7 @@
 // behavior.
 import { buildSession, createLogger } from "./common.js";
 
-const SCENARIO = "s6-memory-slope";
+const SCENARIO = "memory-slope";
 const logger = createLogger(SCENARIO);
 const TURNS = 15;
 

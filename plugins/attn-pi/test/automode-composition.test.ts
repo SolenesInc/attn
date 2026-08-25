@@ -23,6 +23,9 @@ import {
 import { autoModeStatusKey } from "../automode/ui";
 import { FakePi, FakeUI, toolCall, uiContext } from "./automode-fake-pi";
 
+const judgingConfig = { ...defaultAutoModeConfig, models: ["test/judge"] };
+
+/** Answers every completion with one verdict, and counts what it was asked. */
 class CountingRegistry implements ModelRegistryLike {
   calls = 0;
 
@@ -54,7 +57,7 @@ class CountingRegistry implements ModelRegistryLike {
 
 function denies(): CompletionResult {
   return {
-    content: [{ type: "text", text: JSON.stringify({ verdict: "deny", reason: "not asked for" }) }],
+    content: [{ type: "text", text: "<severity>80</severity><category>Irreversible Local Destruction</category>" }],
     stopReason: "stop",
   };
 }
@@ -71,20 +74,21 @@ describe("the config a session is handed", () => {
     const source = attnAutoModeSource({
       [autoModeConfigEnvVar]: JSON.stringify({
         enabled_default: false,
-        environment: ["never touch production data"],
+        environment: { slots: { remote_targets: ["payments-prod"] }, notes: [] },
         allow: ["git push origin*"],
-        classifier_model: "opencode-go/glm-5.3",
+        models: ["opencode-go/glm-5.3"],
       }),
     });
     expect(source?.problem).toBeUndefined();
     expect(source?.config.enabledDefault).toBe(false);
-    expect(source?.config.environment).toEqual(["never touch production data"]);
+    expect(source?.config.environment.slots.remote_targets).toEqual(["payments-prod"]);
     expect(source?.config.allow).toEqual(["git push origin*"]);
   });
 
   test("a config that cannot be read leaves auto mode on the shipped defaults, and says so", () => {
     const source = attnAutoModeSource({ [autoModeConfigEnvVar]: "{ not json" });
     expect(source?.config).toEqual(defaultAutoModeConfig);
+    expect(source?.config.models).toEqual([]);
     expect(source?.problem).toContain("shipped defaults");
   });
 
@@ -105,12 +109,12 @@ describe("the config a session is handed", () => {
 
   test("bare pi prefers the environment attn set, so `pi -e automode.js` inside attn agrees with the suite", () => {
     const source = standaloneAutoModeSource(
-      { [autoModeConfigEnvVar]: JSON.stringify({ enabled_default: true, environment: ["from attn"] }) },
+      { [autoModeConfigEnvVar]: JSON.stringify({ enabled_default: true, environment: { slots: { domains: ["from.attn"] }, notes: [] } }) },
       () => {
         throw new Error("the file must not be read when attn sent a config");
       },
     );
-    expect(source.config.environment).toEqual(["from attn"]);
+    expect(source.config.environment.slots.domains).toEqual(["from.attn"]);
   });
 
   test("an unreadable file is reported rather than silently ignored", () => {
@@ -129,29 +133,47 @@ describe("the config a session is handed", () => {
 
 describe("turning auto mode on and off", () => {
   test("the configured default decides a session nobody told otherwise", () => {
-    expect(new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: true } }).enabled()).toBe(true);
-    expect(new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: false } }).enabled()).toBe(false);
+    expect(new AutoMode({ config: { ...judgingConfig, enabledDefault: true } }).enabled()).toBe(true);
+    expect(new AutoMode({ config: { ...judgingConfig, enabledDefault: false } }).enabled()).toBe(false);
   });
 
   test("a launch flag outranks the configured default, in both directions", () => {
-    const on = new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: false } });
+    const on = new AutoMode({ config: { ...judgingConfig, enabledDefault: false } });
     on.register(new FakePi().pass("auto"));
     expect(on.enabled()).toBe(true);
 
-    const off = new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: true } });
+    const off = new AutoMode({ config: { ...judgingConfig, enabledDefault: true } });
     off.register(new FakePi().pass("no-auto"));
     expect(off.enabled()).toBe(false);
   });
 
+  test("no model to judge with means auto mode is off, whatever anyone asks for", async () => {
+    const noModel = { ...defaultAutoModeConfig, enabledDefault: true, models: [] };
+    expect(new AutoMode({ config: noModel }).enabled()).toBe(false);
+
+    const flagged = new AutoMode({ config: noModel });
+    flagged.register(new FakePi().pass("auto"));
+    expect(flagged.enabled()).toBe(false);
+
+    const ui = new FakeUI();
+    const asked = new AutoMode({ config: noModel });
+    const pi = new FakePi();
+    asked.register(pi);
+    await pi.run("auto", "on", uiContext(ui));
+    expect(asked.enabled()).toBe(false);
+    expect(ui.statuses.get(autoModeStatusKey)).toBe("auto: off");
+    expect(ui.notices.at(-1)?.message).toContain("no model is set to judge a call");
+  });
+
   test("a session given both flags starts off", () => {
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     mode.register(new FakePi().pass("auto").pass("no-auto"));
     expect(mode.enabled()).toBe(false);
   });
 
   test("/auto toggles, outranks the flag it was typed to override, and says where it landed", async () => {
     const ui = new FakeUI();
-    const mode = new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: true } });
+    const mode = new AutoMode({ config: { ...judgingConfig, enabledDefault: true } });
     const pi = new FakePi().pass("auto");
     mode.register(pi);
 
@@ -167,7 +189,7 @@ describe("turning auto mode on and off", () => {
 
   test("/auto status reports without changing anything", async () => {
     const ui = new FakeUI();
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     const pi = new FakePi();
     mode.register(pi);
     await pi.run("auto", "status", uiContext(ui));
@@ -177,7 +199,7 @@ describe("turning auto mode on and off", () => {
 
   test("/auto refuses an argument it does not understand, and changes nothing", async () => {
     const ui = new FakeUI();
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     const pi = new FakePi();
     mode.register(pi);
     await pi.run("auto", "maybe", uiContext(ui));
@@ -188,7 +210,7 @@ describe("turning auto mode on and off", () => {
 
   test("the status is painted as the session opens, before anything is asked of it", () => {
     const ui = new FakeUI();
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     const pi = new FakePi();
     mode.register(pi);
     pi.start(uiContext(ui));
@@ -197,7 +219,7 @@ describe("turning auto mode on and off", () => {
 
   test("a broken config is said once, however many session transitions follow", () => {
     const ui = new FakeUI();
-    const mode = new AutoMode({ config: defaultAutoModeConfig, notice: "the config could not be read" });
+    const mode = new AutoMode({ config: judgingConfig, notice: "the config could not be read" });
     const pi = new FakePi();
     mode.register(pi);
     pi.start(uiContext(ui));
@@ -207,7 +229,7 @@ describe("turning auto mode on and off", () => {
 
   test("auto mode off judges nothing, so a toggled-off session costs no classifier call", async () => {
     const registry = new CountingRegistry(denies());
-    const mode = new AutoMode({ config: { ...defaultAutoModeConfig, enabledDefault: false } });
+    const mode = new AutoMode({ config: { ...judgingConfig, enabledDefault: false } });
     const pi = new FakePi();
     mode.register(pi);
     pi.start(uiContext(new FakeUI(), { modelRegistry: registry }));
@@ -218,19 +240,19 @@ describe("turning auto mode on and off", () => {
 
   test("the classifier is built from the session's own model registry", async () => {
     const registry = new CountingRegistry(denies());
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     const pi = new FakePi();
     mode.register(pi);
     pi.start(uiContext(new FakeUI(), { modelRegistry: registry }));
 
     const blocked = await pi.toolCall?.(push(), uiContext(new FakeUI()));
     expect(blocked?.block).toBe(true);
-    expect(blocked?.reason).toContain("not asked for");
-    expect(registry.calls).toBe(1);
+    expect(blocked?.reason).toContain("Irreversible Local Destruction");
+    expect(registry.calls).toBe(2);
   });
 
   test("a session with no model catalog refuses the call and names why", async () => {
-    const mode = new AutoMode({ config: defaultAutoModeConfig });
+    const mode = new AutoMode({ config: judgingConfig });
     const pi = new FakePi();
     mode.register(pi);
 
@@ -260,7 +282,7 @@ describe("a denial leaving the session", () => {
     await relay.listen();
     const suite = new AttnPiSuite({ socketPath, token: "tok-denial", piVersion: "0.83.0" });
     const mode = new AutoMode({
-      config: defaultAutoModeConfig,
+      config: judgingConfig,
       onDenial: (denial) => suite.reportDenial(denial),
     });
     const pi = new FakePi();
@@ -278,8 +300,8 @@ describe("a denial leaving the session", () => {
       token: "tok-denial",
       tool: "bash",
       action: "bash: git push --force origin main",
-      reason: "not asked for",
-      rule: "classifier-2a",
+      reason: "the classifier placed this call at severity 80 under the Irreversible Local Destruction rule",
+      rule: "classifier-intent",
       at: expect.any(String),
     });
 

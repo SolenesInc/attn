@@ -2,13 +2,13 @@
 // created only after the first assistant message (per S1/sdk.ts), so none exists.
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { SPIKE_DIR, createLogger } from "./common.js";
+import { RECEIPTS_DIR, createLogger } from "./common.js";
 
-const SCENARIO = "s5b-crash";
+const SCENARIO = "crash-revive-host";
 const logger = createLogger(SCENARIO);
 
 async function main() {
-	const child = spawn("bun", ["run", "s5-child.js", SCENARIO], { cwd: SPIKE_DIR, stdio: ["ignore", "pipe", "pipe"] });
+	const child = spawn("bun", ["run", "child-processes.js", SCENARIO], { cwd: RECEIPTS_DIR, stdio: ["ignore", "pipe", "pipe"] });
 	const childPid = child.pid; // captured at spawn
 	logger.log("harness", "child_spawned", { note: `pid=${childPid}` });
 

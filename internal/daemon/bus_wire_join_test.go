@@ -255,8 +255,12 @@ var wireFixtures = map[string]wireFixture{
 	FactNotificationCreated: {events: []string{protocol.EventNotificationsUpdated}},
 	FactNotificationRead:    {events: []string{protocol.EventNotificationsUpdated}},
 	FactAutoModeDenied:      {events: []string{protocol.EventNotificationsUpdated}},
-	FactAutomationChanged:   {events: []string{protocol.EventAutomationsChanged}},
-	FactTaskChanged:         {events: []string{protocol.EventTasksChanged}},
+	FactAutoModeConfigChanged: {
+		events:  []string{protocol.EventAutoModeStateChanged},
+		subject: func(*wireWorld) string { return AutoModeConfigSubject },
+	},
+	FactAutomationChanged: {events: []string{protocol.EventAutomationsChanged}},
+	FactTaskChanged:       {events: []string{protocol.EventTasksChanged}},
 	FactNotebookFileChanged: {
 		events:  []string{protocol.EventNotebookChanged},
 		subject: func(*wireWorld) string { return "note.md" },

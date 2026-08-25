@@ -1,8 +1,8 @@
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { SPIKE_DIR, createLogger, openSession, sleep } from "./common.js";
+import { RECEIPTS_DIR, createLogger, openSession, sleep } from "./common.js";
 
-const SCENARIO = "s5-crash";
+const SCENARIO = "crash-revive";
 const logger = createLogger(SCENARIO);
 
 function psSnapshot(label, pattern) {
@@ -17,7 +17,7 @@ function psSnapshot(label, pattern) {
 }
 
 async function main() {
-	const child = spawn("bun", ["run", "s5-child.js", SCENARIO], { cwd: SPIKE_DIR, stdio: ["ignore", "pipe", "pipe"] });
+	const child = spawn("bun", ["run", "child-processes.js", SCENARIO], { cwd: RECEIPTS_DIR, stdio: ["ignore", "pipe", "pipe"] });
 	const childPid = child.pid; // captured at spawn - the only PID this script will ever kill
 	logger.log("harness", "child_spawned", { note: `pid=${childPid}` });
 

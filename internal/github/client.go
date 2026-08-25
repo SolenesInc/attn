@@ -526,6 +526,26 @@ func (c *Client) FetchPRState(repo string, number int) (state string, merged boo
 	return prData.State, prData.Merged, prData.Title, nil
 }
 
+// RepoVisibility reports whether repo ("owner/name") is public or private,
+// returning GitHub's own word so a caller can pass it straight to a surface.
+func (c *Client) RepoVisibility(repo string) (string, error) {
+	body, err := c.doRequest("GET", "/repos/"+repo, nil)
+	if err != nil {
+		return "", fmt.Errorf("fetch repo visibility: %w", err)
+	}
+	var repoData struct {
+		Private bool `json:"private"`
+	}
+	if err := json.Unmarshal(body, &repoData); err != nil {
+		return "", fmt.Errorf("parse repo visibility: %w", err)
+	}
+	if repoData.Private {
+		return "private", nil
+	}
+	return "public", nil
+}
+
+// FetchPRDetails fetches detailed status for a PR
 func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	prPath := fmt.Sprintf("/repos/%s/pulls/%d", repo, number)
 	prBody, err := c.doRequest("GET", prPath, nil)

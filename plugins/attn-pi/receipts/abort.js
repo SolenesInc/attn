@@ -3,7 +3,7 @@
 import { execSync } from "node:child_process";
 import { buildSession, createLogger } from "./common.js";
 
-const SCENARIO = "s4-abort";
+const SCENARIO = "abort";
 const logger = createLogger(SCENARIO);
 
 function psSnapshot(label) {

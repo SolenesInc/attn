@@ -16,7 +16,6 @@ export default function attnAutoMode(pi: AutoModePiLike): void {
   autoMode.register(pi);
 }
 
-/** Undefined for "there is no file", which is the ordinary case, not an error. */
 function readConfigFile(path: string): string | undefined {
   try {
     return readFileSync(path, "utf8");

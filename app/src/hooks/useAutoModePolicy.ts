@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AutoModePatternEdit, AutoModePromotion, AutoModeState } from './daemonAutoModeEvents';
+import { useAutoModePushStore } from '../store/autoMode';
 
 export interface AutoModePolicy {
   state: AutoModeState | null;
@@ -15,6 +16,10 @@ export interface AutoModePolicy {
   addPattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
   removePattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
   editingList: AutoModePatternList | null;
+
+  setEnvironmentSlot: (id: string, values: string[]) => Promise<void>;
+
+  savingEnvironment: boolean;
 }
 
 export type AutoModePatternList = 'allow' | 'hard_deny';
@@ -26,6 +31,7 @@ interface AutoModePolicyOptions {
   discardProposal: (id: number) => Promise<AutoModePromotion>;
   addPattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
   removePattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
 }
 
 const message = (err: unknown, fallback: string): string =>
@@ -34,13 +40,18 @@ const message = (err: unknown, fallback: string): string =>
 export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolicy {
   const {
     enabled, getState, promoteProposal, discardProposal, addPattern, removePattern,
+    setEnvironmentSlot: writeEnvironmentSlot,
   } = options;
   const [state, setState] = useState<AutoModeState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resolvingID, setResolvingID] = useState<number | null>(null);
   const [editingList, setEditingList] = useState<AutoModePatternList | null>(null);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+
   const seqRef = useRef(0);
+  const pushedVersion = useAutoModePushStore((store) => store.version);
+  const [adoptedVersion, setAdoptedVersion] = useState(pushedVersion);
 
   const refresh = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -106,6 +117,16 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     [edit, removePattern],
   );
 
+  const setEnvironmentSlot = useCallback(async (id: string, values: string[]) => {
+    setSavingEnvironment(true);
+    try {
+      await writeEnvironmentSlot(id, values);
+      await refresh();
+    } finally {
+      setSavingEnvironment(false);
+    }
+  }, [writeEnvironmentSlot, refresh]);
+
   useEffect(() => {
     if (!enabled) {
       seqRef.current++;
@@ -113,10 +134,22 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
       setError(null);
       setLoading(false);
       setEditingList(null);
+      setSavingEnvironment(false);
       return;
     }
     void refresh();
   }, [enabled, refresh]);
+
+  useEffect(() => {
+    if (!enabled || pushedVersion <= adoptedVersion) return;
+    const pushed = useAutoModePushStore.getState().pushed;
+    setAdoptedVersion(pushedVersion);
+    if (!pushed) return;
+    seqRef.current++;
+    setState(pushed);
+    setError(null);
+    setLoading(false);
+  }, [enabled, pushedVersion, adoptedVersion]);
 
   return {
     state,
@@ -130,5 +163,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     addPattern: add,
     removePattern: remove,
     editingList,
+    setEnvironmentSlot,
+    savingEnvironment,
   };
 }

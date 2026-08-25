@@ -2,7 +2,7 @@
 // mid-flight and needs it to die uncooperatively.
 import { buildSession, createLogger } from "./common.js";
 
-const SCENARIO = process.argv[2] ?? "s5-crash";
+const SCENARIO = process.argv[2] ?? "crash-revive";
 const logger = createLogger(`${SCENARIO}-child`);
 
 async function main() {

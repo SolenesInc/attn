@@ -343,6 +343,18 @@ export const scenarioCatalog = [
     timeoutMs: 900_000,
   },
   {
+    id: 'automode-environment',
+    label: 'Auto mode environment: a slot written from the pane and from the CLI, and what an unfilled one says',
+    command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
+    timeoutMs: 300_000,
+  },
+  {
+    id: 'automode-no-model',
+    label: 'Auto mode with no model: off until one is named, on when a proposal is promoted',
+    command: ['pnpm', 'run', 'real-app:scenario-automode-no-model'],
+    timeoutMs: 300_000,
+  },
+  {
     id: 'focus-probe',
     label: 'Focus probe (no focus steal on background session create)',
     command: ['pnpm', 'run', 'real-app:focus-probe'],

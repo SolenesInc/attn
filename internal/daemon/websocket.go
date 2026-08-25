@@ -1231,6 +1231,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModePromote(client, msg.(*protocol.AutoModePromoteMessage))
 	case protocol.CmdAutoModeDiscard: // wire: automode_discard
 		d.handleAutoModeDiscard(client, msg.(*protocol.AutoModeDiscardMessage))
+	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+		d.handleAutoModeEnvSlotWS(client, msg.(*protocol.AutoModeEnvSlotMessage))
+	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+		d.handleAutoModeEnvNotesWS(client, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePatternAdd: // wire: automode_pattern_add
 		d.handleAutoModePatternAdd(client, msg.(*protocol.AutoModePatternAddMessage))
 	case protocol.CmdAutoModePatternRemove: // wire: automode_pattern_remove

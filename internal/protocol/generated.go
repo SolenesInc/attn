@@ -935,20 +935,17 @@ type AutoModeConfigInfo struct {
 	// Allow corresponds to the JSON schema field "allow".
 	Allow []string `json:"allow"`
 
-	// ClassifierModels corresponds to the JSON schema field "classifier_models".
-	ClassifierModels []string `json:"classifier_models"`
-
 	// EnabledDefault corresponds to the JSON schema field "enabled_default".
 	EnabledDefault bool `json:"enabled_default"`
 
 	// Environment corresponds to the JSON schema field "environment".
-	Environment []string `json:"environment"`
-
-	// EscalationModels corresponds to the JSON schema field "escalation_models".
-	EscalationModels []string `json:"escalation_models"`
+	Environment AutoModeEnvironmentInfo `json:"environment"`
 
 	// HardDeny corresponds to the JSON schema field "hard_deny".
 	HardDeny []string `json:"hard_deny"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []string `json:"models"`
 
 	// ShippedHardDeny corresponds to the JSON schema field "shipped_hard_deny".
 	ShippedHardDeny []string `json:"shipped_hard_deny"`
@@ -1021,25 +1018,93 @@ type AutoModeDiscardResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type AutoModeEnvAddMessage struct {
+type AutoModeEnvNotesMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Text corresponds to the JSON schema field "text".
-	Text string `json:"text"`
-}
+	// Notes corresponds to the JSON schema field "notes".
+	Notes []string `json:"notes"`
 
-type AutoModeEnvRemoveMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Index corresponds to the JSON schema field "index".
-	Index int `json:"index"`
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type AutoModeEnvResult struct {
 	// Environment corresponds to the JSON schema field "environment".
-	Environment []string `json:"environment"`
+	Environment AutoModeEnvironmentInfo `json:"environment"`
+}
+
+type AutoModeEnvSetResultMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AutoModeEnvSlotMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Slot corresponds to the JSON schema field "slot".
+	Slot string `json:"slot"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []string `json:"values"`
+}
+
+type AutoModeEnvironmentInfo struct {
+	// Notes corresponds to the JSON schema field "notes".
+	Notes []string `json:"notes"`
+
+	// Slots corresponds to the JSON schema field "slots".
+	Slots []AutoModeEnvironmentSlotValue `json:"slots"`
+}
+
+type AutoModeEnvironmentSlot struct {
+	// Choices corresponds to the JSON schema field "choices".
+	Choices []string `json:"choices"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// Detected corresponds to the JSON schema field "detected".
+	Detected bool `json:"detected"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// ReadBy corresponds to the JSON schema field "read_by".
+	ReadBy []string `json:"read_by"`
+
+	// Unset corresponds to the JSON schema field "unset".
+	Unset string `json:"unset"`
+}
+
+type AutoModeEnvironmentSlotValue struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []string `json:"values"`
 }
 
 type AutoModeGetMessage struct {
@@ -1187,12 +1252,32 @@ type AutoModeShowResult struct {
 	Proposals []AutoModeProposalInfo `json:"proposals"`
 }
 
+type AutoModeStateChangedMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config AutoModeConfigInfo `json:"config"`
+
+	// Denials corresponds to the JSON schema field "denials".
+	Denials []AutoModeDenialInfo `json:"denials"`
+
+	// EnvironmentSlots corresponds to the JSON schema field "environment_slots".
+	EnvironmentSlots []AutoModeEnvironmentSlot `json:"environment_slots"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Proposals corresponds to the JSON schema field "proposals".
+	Proposals []AutoModeProposalInfo `json:"proposals"`
+}
+
 type AutoModeStateResultMessage struct {
 	// Config corresponds to the JSON schema field "config".
 	Config AutoModeConfigInfo `json:"config"`
 
 	// Denials corresponds to the JSON schema field "denials".
 	Denials []AutoModeDenialInfo `json:"denials"`
+
+	// EnvironmentSlots corresponds to the JSON schema field "environment_slots".
+	EnvironmentSlots []AutoModeEnvironmentSlot `json:"environment_slots"`
 
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`

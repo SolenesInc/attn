@@ -39,8 +39,32 @@ export function denialWidgetLines(denials: readonly AutoModeDenial[]): string[] 
   const lines = [`auto mode blocked ${denials.length} call${denials.length === 1 ? "" : "s"}:`];
   if (hidden > 0) lines.push(`  … ${hidden} earlier`);
   for (const denial of shown) lines.push(`  ${clamp(denial.action)} — ${denial.reason}`);
-  lines.push("  Approve in your reply to let the agent retry.");
+  lines.push(offer(denials));
   return lines;
+}
+
+function offer(denials: readonly AutoModeDenial[]): string {
+  if (denials.every(nothingJudged)) {
+    return "  No classifier answered these, so approving will not help.";
+  }
+  if (denials.every((denial) => denial.clearable === false)) {
+    return "  Approving will not help. Auto mode's settings decide these.";
+  }
+  return "  Approve in your reply to let the agent retry.";
+}
+
+function nothingJudged(denial: AutoModeDenial): boolean {
+  return denial.rule === "classifier-unavailable" || denial.rule === "classifier-too-long";
+}
+
+export function tooLongQuestion(action: string): { title: string; message: string } {
+  return {
+    title: "auto mode could not judge this call",
+    message:
+      `The conversation no longer fits in the classifier's model, so nothing judged ` +
+      `${clamp(action)}. Nothing refused it either, because auto mode was never shown it. ` +
+      `Run it anyway? Answering no blocks the call and tells the agent to ask you directly.`,
+  };
 }
 
 export function breakerQuestion(breaker: BreakerState): { title: string; message: string } {
@@ -49,8 +73,8 @@ export function breakerQuestion(breaker: BreakerState): { title: string; message
       title: "auto mode cannot reach its classifier",
       message:
         `It blocked ${breaker.consecutive} calls in a row and ${breaker.total} since you last spoke, ` +
-        `every one of them because no classifier model answered — nothing judged them. Your model ` +
-        `endpoint looks to be down. Try again? Answering yes judges this call and the ones after it ` +
+        `every one of them because no classifier model answered, so nothing judged them. Your model ` +
+        `endpoint looks down. Try again? Answering yes judges this call and the ones after it ` +
         `normally, which will keep blocking while the endpoint is unreachable.`,
     };
   }
@@ -58,7 +82,7 @@ export function breakerQuestion(breaker: BreakerState): { title: string; message
     title: "auto mode stopped judging calls",
     message:
       `It has refused ${breaker.consecutive} calls in a row and ${breaker.total} since you last spoke, ` +
-      `so it stopped rather than let the agent grind against the same refusal. Resume auto mode? ` +
+      `so it stopped instead of letting the agent retry against the same refusal. Resume auto mode? ` +
       `Answering yes judges this call and the ones after it normally; it does not approve anything ` +
       `on its own.`,
   };

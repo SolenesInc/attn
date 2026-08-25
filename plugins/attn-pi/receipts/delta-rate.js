@@ -1,7 +1,7 @@
 // S2 delta rate: stream a ~400 word answer, measure message_update volume/rate.
 import { buildSession, createLogger } from "./common.js";
 
-const SCENARIO = "s2-delta-rate";
+const SCENARIO = "delta-rate";
 const logger = createLogger(SCENARIO);
 
 async function main() {

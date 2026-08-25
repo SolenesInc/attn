@@ -13,16 +13,23 @@ func (c *Client) AutoModeShow() (*protocol.AutoModeShowResult, error) {
 	return resp.AutomodeShowResult, nil
 }
 
-func (c *Client) AutoModeEnvAdd(text string) (*protocol.AutoModeEnvResult, error) {
-	resp, err := c.send(protocol.AutoModeEnvAddMessage{Cmd: protocol.CmdAutoModeEnvAdd, Text: text})
+func (c *Client) AutoModeEnvSlot(slot string, values []string) (*protocol.AutoModeEnvResult, error) {
+	resp, err := c.send(protocol.AutoModeEnvSlotMessage{
+		Cmd:    protocol.CmdAutoModeEnvSlot,
+		Slot:   slot,
+		Values: values,
+	})
 	if err != nil {
 		return nil, err
 	}
 	return resp.AutomodeEnvResult, nil
 }
 
-func (c *Client) AutoModeEnvRemove(index int) (*protocol.AutoModeEnvResult, error) {
-	resp, err := c.send(protocol.AutoModeEnvRemoveMessage{Cmd: protocol.CmdAutoModeEnvRemove, Index: index})
+func (c *Client) AutoModeEnvNotes(notes []string) (*protocol.AutoModeEnvResult, error) {
+	resp, err := c.send(protocol.AutoModeEnvNotesMessage{
+		Cmd:   protocol.CmdAutoModeEnvNotes,
+		Notes: notes,
+	})
 	if err != nil {
 		return nil, err
 	}

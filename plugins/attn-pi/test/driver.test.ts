@@ -136,8 +136,7 @@ describe("PiDriver", () => {
       environment: ["never touch prod"],
       allow: ["git push origin*"],
       hard_deny: [],
-      classifier_models: ["opencode-go/glm-5.3"],
-      escalation_models: ["opencode-go/qwen3.8-max"],
+      models: ["opencode-go/glm-5.3", "opencode-go/qwen3.8-max"],
     };
     const withConfig = await driver.spawn(params({ session_id: "session-2", run_id: "run-2", auto_mode: config }));
     expect(JSON.parse(withConfig.env?.ATTN_PI_AUTOMODE_CONFIG ?? "null")).toEqual(config);
@@ -514,7 +513,7 @@ describe("PiDriver", () => {
       tool: "bash",
       action: "bash: curl https://example.com",
       reason: "the user never asked to reach that host",
-      rule: "classifier-2a",
+      rule: "classifier-harm",
       at: "2026-08-17T10:00:00.000Z",
     });
 
@@ -524,7 +523,7 @@ describe("PiDriver", () => {
       tool: "bash",
       action: "bash: curl https://example.com",
       reason: "the user never asked to reach that host",
-      rule: "classifier-2a",
+      rule: "classifier-harm",
       at: "2026-08-17T10:00:00.000Z",
     });
   });

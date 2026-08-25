@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/rankkey"
 )
@@ -1064,6 +1065,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 	`},
 	{123, "persist session transcript bindings", ``},
+	{124, "one model list for both classifier passes", ``},
+	{125, "the environment becomes slots the rules can look up", ``},
 }
 
 const migration99SQL = `
@@ -1465,6 +1468,16 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 114 {
 			if err := applyMigration114(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 124 {
+			if err := applyMigration124(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 125 {
+			if err := applyMigration125(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2584,6 +2597,135 @@ func applyMigration114(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration124(tx *sql.Tx) error {
+	hasModels, err := columnExists(tx, "automode_config", "models")
+	if err != nil {
+		return err
+	}
+	if !hasModels {
+		if _, err := tx.Exec(
+			"ALTER TABLE automode_config ADD COLUMN models TEXT NOT NULL DEFAULT '[]'"); err != nil {
+			return err
+		}
+	}
+	hasClassifier, err := columnExists(tx, "automode_config", "classifier_models")
+	if err != nil || !hasClassifier {
+		return err
+	}
+	var classifier, escalation string
+	err = tx.QueryRow(
+		"SELECT classifier_models, escalation_models FROM automode_config WHERE id = 1").
+		Scan(&classifier, &escalation)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	chosen, cerr := aModelWasEverPromoted(tx)
+	if cerr != nil {
+		return cerr
+	}
+	if err == nil && chosen {
+		folded, ferr := foldModelLists(classifier, escalation)
+		if ferr != nil {
+			return ferr
+		}
+		if len(folded) > 0 {
+			encoded, merr := json.Marshal(folded)
+			if merr != nil {
+				return merr
+			}
+			if _, err := tx.Exec(
+				"UPDATE automode_config SET models = ? WHERE id = 1 AND (models = '' OR models = '[]')",
+				string(encoded)); err != nil {
+				return err
+			}
+		}
+	}
+	for _, column := range []string{"classifier_models", "escalation_models"} {
+		if _, err := tx.Exec(fmt.Sprintf(
+			"ALTER TABLE automode_config DROP COLUMN %s", column)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// aModelWasEverPromoted reads the only historical witness that a human picked
+// the models this database carries: promotion is the one way one reaches the config.
+func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
+	has, err := tableExists(tx, "automode_proposals")
+	if err != nil || !has {
+		return false, err
+	}
+	var count int
+	if err := tx.QueryRow(
+		"SELECT COUNT(*) FROM automode_proposals WHERE kind = ? AND state = ?",
+		automode.KindModel, automode.StatePromoted).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// applyMigration123 rewrites the environment column from the prose lines it held
+// into the slot document. The prose lands in notes rather than being discarded.
+func applyMigration125(tx *sql.Tx) error {
+	has, err := columnExists(tx, "automode_config", "environment")
+	if err != nil || !has {
+		return err
+	}
+	var raw string
+	err = tx.QueryRow("SELECT environment FROM automode_config WHERE id = 1").Scan(&raw)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(raw) == "" {
+		raw = "[]"
+	}
+	var lines []string
+	if err := json.Unmarshal([]byte(raw), &lines); err != nil {
+		// Already a document, or something this cannot read; either way there is
+		// no prose to carry and the reader falls back to an empty environment.
+		return nil
+	}
+	env := automode.NewEnvironment()
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			env.Notes = append(env.Notes, line)
+		}
+	}
+	encoded, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
+	return err
+}
+
+func foldModelLists(lists ...string) ([]string, error) {
+	folded := []string{}
+	seen := map[string]bool{}
+	for _, raw := range lists {
+		if raw == "" {
+			continue
+		}
+		var entries []string
+		if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+			return nil, fmt.Errorf("automode_config model list %q: %w", raw, err)
+		}
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" || seen[entry] {
+				continue
+			}
+			seen[entry] = true
+			folded = append(folded, entry)
+		}
+	}
+	return folded, nil
 }
 
 func applyMigration106(tx *sql.Tx) error {

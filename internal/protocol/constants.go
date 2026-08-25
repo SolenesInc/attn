@@ -287,11 +287,11 @@ const (
 // First group is agent-reachable over the unix socket and records proposals
 // only; the second is the app's alone, because promotion needs a human.
 const (
-	CmdAutoModeShow      = "automode_show"
-	CmdAutoModeEnvAdd    = "automode_env_add"
-	CmdAutoModeEnvRemove = "automode_env_remove"
-	CmdAutoModePropose   = "automode_propose"
-	CmdAutoModeDenials   = "automode_denials"
+	CmdAutoModeShow     = "automode_show"
+	CmdAutoModeEnvSlot  = "automode_env_slot"
+	CmdAutoModeEnvNotes = "automode_env_notes"
+	CmdAutoModePropose  = "automode_propose"
+	CmdAutoModeDenials  = "automode_denials"
 
 	CmdAutoModeGet           = "automode_get"
 	CmdAutoModePromote       = "automode_promote"
@@ -300,6 +300,12 @@ const (
 	CmdAutoModePatternRemove = "automode_pattern_remove"
 )
 
+const EventAutoModeEnvSetResult = "automode_env_set_result"
+
+const EventAutoModeStateChanged = "automode_state_changed"
+
+// Per-action automations result events (socket + WS share one command set;
+// see the Cmd constants above and internal/daemon/automations_actions.go).
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
 	EventAutomationValidateResult    = "automation_validate_result"
@@ -820,15 +826,15 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeEnvAdd:
-		var msg AutoModeEnvAddMessage
+	case CmdAutoModeEnvSlot:
+		var msg AutoModeEnvSlotMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeEnvRemove:
-		var msg AutoModeEnvRemoveMessage
+	case CmdAutoModeEnvNotes:
+		var msg AutoModeEnvNotesMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

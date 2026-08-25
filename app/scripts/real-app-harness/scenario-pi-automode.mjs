@@ -229,8 +229,7 @@ async function drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQu
 
     await runner.step('promote_the_stub_classifier', async () => {
       const proposals = [
-        ['automode', 'model', 'classifier', stubJudgeModel, '--json'],
-        ['automode', 'model', 'escalation', stubJudgeModel, '--json'],
+        ['automode', 'model', stubJudgeModel, '--json'],
       ].map((args) => {
         const result = runAttn(args);
         const id = result.json?.proposal?.id ?? result.json?.id;
@@ -247,12 +246,12 @@ async function drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQu
       await pollFor(
         () => {
           const shown = runAttn(['automode', 'show', '--json']).json;
-          return shown?.config?.classifier_models?.[0] === stubJudgeModel ? shown : null;
+          return shown?.config?.models?.[0] === stubJudgeModel ? shown : null;
         },
         'the promoted config to name the stub classifier',
         20_000,
       );
-      note('classifier and escalation models promoted to the stub');
+      note('the model list promoted to the stub');
     });
 
     await runner.step('start_pi_session', async () => {
@@ -319,8 +318,8 @@ async function drive({ options, profile, attnBin, runAttn, dbPath, stub, judgeQu
         20_000,
       );
       const latest = denials[0];
-      if (latest.rule !== 'classifier-2a') {
-        throw new Error(`the denial names rule ${JSON.stringify(latest.rule)}, want classifier-2a`);
+      if (latest.rule !== 'classifier-intent') {
+        throw new Error(`the denial names rule ${JSON.stringify(latest.rule)}, want classifier-intent`);
       }
       if (!String(latest.reason).includes(DENIAL_REASON)) {
         throw new Error(`the denial reason is ${JSON.stringify(latest.reason)}, want the scripted one`);

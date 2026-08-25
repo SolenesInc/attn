@@ -31,9 +31,15 @@ export type AutoModePiLike = AutoModeExtensionAPILike & {
 
 export type AutoModeSetup = {
   config: AutoModeConfig;
+
   ledger?: DenialLedgerLike;
+
   onDenial?: (denial: AutoModeDenial) => void;
+
   onWaitingForUser?: (waiting: boolean) => void;
+
+  sessionKey?: string;
+
   notice?: string;
 };
 
@@ -59,6 +65,7 @@ export class AutoMode {
   }
 
   enabled(): boolean {
+    if (this.setup.config.models.length === 0) return false;
     return this.choice ?? this.flag ?? this.setup.config.enabledDefault;
   }
 
@@ -92,14 +99,16 @@ export class AutoMode {
     else if (asked === "off") this.choice = false;
     else if (asked === "" || asked === "toggle") this.choice = !this.enabled();
     else if (asked !== "status") {
-      ctx.ui?.notify(`/auto takes on, off, status, or nothing at all — not ${JSON.stringify(asked)}.`, "error");
+      ctx.ui?.notify(`/auto takes on, off, status, or nothing at all, not ${JSON.stringify(asked)}.`, "error");
       return;
     }
     this.paint(ctx);
     ctx.ui?.notify(
-      this.enabled()
-        ? "auto mode is on: work inside this directory runs free, anything past it is judged."
-        : "auto mode is off: pi runs every tool call, as it does without it.",
+      this.setup.config.models.length === 0
+        ? "auto mode is off: no model is set to judge a call. Add one in attn's settings."
+        : this.enabled()
+          ? "auto mode is on: work inside this directory runs free, anything past it is judged."
+          : "auto mode is off: pi runs every tool call, as it does without it.",
       "info",
     );
   }
@@ -119,6 +128,7 @@ export class AutoMode {
         instance: new ModelClassifier({
           registry,
           config: this.setup.config,
+          ...(this.setup.sessionKey ? { sessionKey: this.setup.sessionKey } : {}),
           onUsage: (usage) => this.usage.add(usage),
         }),
       };

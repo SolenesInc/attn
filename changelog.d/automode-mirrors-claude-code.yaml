@@ -1,0 +1,24 @@
+kind: changed
+area: automode
+change: |
+  Auto mode's classifier was rebuilt to mirror how Claude Code's does the same
+  job, and you configure the whole thing in Settings.
+
+  - Settings has an Auto mode section: the effective policy, both pattern
+    lists, the rules sessions proposed, and what auto mode has refused.
+  - What the classifier knows about your machine is a text area there, with
+    four templates to start from.
+  - Two passes: one grades how dangerous an action is, cheaply; the second
+    weighs what you asked for and names the rule it matched.
+  - A delegation brief's authorization reaches the classifier whole, so auto
+    mode stops refusing work you already authorized.
+  - A blocked call tells the agent what Claude Code tells it, in Claude Code's
+    own words.
+  - Data leaving the machine is the one refusal a conversation cannot lift.
+  - A model that cannot be reached says so instead of claiming it refused you,
+    and one ordered model list is walked only when a model is unreachable.
+  - No verdict is remembered, so an approval is never ignored on the retry.
+symptom: |
+  A classifier shown a trimmed conversation refused work the user had already
+  authorized in the part that was trimmed away, then told the agent to go ask
+  for an approval that could not have helped.

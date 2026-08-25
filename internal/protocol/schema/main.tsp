@@ -5305,7 +5305,6 @@ model AppRollbackResult {
 // ============================================================================
 //
 // pi's permission system, configured attn-side. Design:
-// docs/plans/2026-08-16-pi-auto-mode.md.
 //
 // The surface is deliberately split in two, and the split IS the security
 // design. These commands — everything an agent can reach over the unix socket —
@@ -5314,14 +5313,14 @@ model AppRollbackResult {
 // human in the app is the trust boundary no CLI caller can fake. An agent must
 // not be able to write its own leash.
 
-// Auto mode's promoted config: what a pi session actually launches with. Model
-// lists are always resolved and never empty — a machine that never picked one
-// gets the shipped default here rather than nothing the caller would have to
-// fill in. They are ordered, primary first: pi walks the rest only when the one
-// before it cannot be reached.
+// Auto mode's promoted config: what a pi session actually launches with. The
+// model list is empty until a human names one, and an empty list is auto mode
+// off — nothing judges a call, so nothing runs under it. Models are ordered,
+// primary first: pi walks the rest only when the one before it cannot be
+// reached.
 model AutoModeConfigInfo {
   "enabled_default": boolean;
-  "environment": string[];
+  "environment": AutoModeEnvironmentInfo;
   "allow": string[];
   "hard_deny": string[];
   // The subset of "hard_deny" auto mode ships with rather than a human adding:
@@ -5329,14 +5328,44 @@ model AutoModeConfigInfo {
   // daemon's own WebSocket port, so a client cannot derive it and has to be
   // told which entries are built-in.
   "shipped_hard_deny": string[];
-  "classifier_models": string[];
-  "escalation_models": string[];
+  "models": string[];
+}
+
+// One question the rulebook asks about this machine. The rules reach a slot by
+// its label, so a rule and its slot move together; "read_by" names the rules
+// that look this one up, which is the reason the slot exists at all.
+model AutoModeEnvironmentSlot {
+  "id": string;
+  "label": string;
+  // "list" | "choice".
+  "kind": string;
+  // The closed set a "choice" slot picks from. Empty for a list.
+  "choices": string[];
+  "detail": string;
+  // What the rendered environment says when nobody filled it in: nothing
+  // trusted for a trust slot, or the working assumption the rules fall back to.
+  "unset": string;
+  // Filled from the session at launch. A value the user set wins.
+  "detected": boolean;
+  "read_by": string[];
+}
+
+// What the user filled in. Slots nobody touched are absent rather than empty,
+// so "unset" is what the classifier reads for them.
+model AutoModeEnvironmentInfo {
+  "slots": AutoModeEnvironmentSlotValue[];
+  // Context in the user's own words. No rule reads it: prose cannot be looked
+  // up, which is why the slots exist.
+  "notes": string[];
+}
+
+model AutoModeEnvironmentSlotValue {
+  "id": string;
+  "values": string[];
 }
 
 // One proposed change awaiting a human. "value" is a pattern for allow/deny and
 // a comma-separated ordered list of `provider/id` for model, which promotion
-// applies as that layer's whole list; "target" names which layer and is empty
-// otherwise.
 model AutoModeProposalInfo {
   "id": safeint;
   // "allow" | "deny" | "model".
@@ -5378,21 +5407,24 @@ model AutoModeShowResult {
   "proposals": AutoModeProposalInfo[];
 }
 
-// Environment prose is a direct write, not a proposal — the plan's public
-// interface specifies `env add`/`env remove` as edits.
-model AutoModeEnvAddMessage {
-  "cmd": "automode_env_add";
-  "text": string;
+// Environment edits are direct writes, not proposals: a session under auto mode
+// cannot reach them, and the person in the app is who fills them in.
+model AutoModeEnvSlotMessage {
+  "cmd": "automode_env_slot";
+  "slot": string;
+  // The slot's whole content. An empty list clears it back to "unset".
+  "values": string[];
+  "request_id"?: string;
 }
 
-model AutoModeEnvRemoveMessage {
-  "cmd": "automode_env_remove";
-  // Zero-based index into the entries `automode_show` returned.
-  "index": safeint;
+model AutoModeEnvNotesMessage {
+  "cmd": "automode_env_notes";
+  "notes": string[];
+  "request_id"?: string;
 }
 
 model AutoModeEnvResult {
-  "environment": string[];
+  "environment": AutoModeEnvironmentInfo;
 }
 
 // Record a proposal. Refused at submission when it could never be promoted — a
@@ -5438,6 +5470,15 @@ model AutoModeStateResultMessage {
   config: AutoModeConfigInfo;
   proposals: AutoModeProposalInfo[];
   denials: AutoModeDenialInfo[];
+  environment_slots: AutoModeEnvironmentSlot[];
+}
+
+model AutoModeStateChangedMessage {
+  event: "automode_state_changed";
+  config: AutoModeConfigInfo;
+  proposals: AutoModeProposalInfo[];
+  denials: AutoModeDenialInfo[];
+  environment_slots: AutoModeEnvironmentSlot[];
 }
 
 // Apply a pending proposal to the config. The app only — this command has no
@@ -5506,6 +5547,14 @@ model AutoModeDiscardResultMessage {
   success: boolean;
   error?: string;
   proposal?: AutoModeProposalInfo;
+}
+
+model AutoModeEnvSetResultMessage {
+  event: "automode_env_set_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  config?: AutoModeConfigInfo;
 }
 
 // ============================================================================
@@ -6611,4 +6660,6 @@ alias DaemonEvent =
   | AutoModeStateResultMessage
   | AutoModePromoteResultMessage
   | AutoModePatternResultMessage
-  | AutoModeDiscardResultMessage;
+  | AutoModeDiscardResultMessage
+  | AutoModeEnvSetResultMessage
+  | AutoModeStateChangedMessage;

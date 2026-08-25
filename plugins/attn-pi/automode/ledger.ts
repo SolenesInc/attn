@@ -9,9 +9,7 @@ export const denialLedgerSessionEnvVar = "ATTN_PI_SESSION_ID";
 
 export const denialLedgerFileName = "attn-automode-denials.jsonl";
 
-// Tripwire, not a budget. Measured 2026-08-18: a fat denial line is 476 bytes, so the two
-// kept generations hold ~18,000 records against a breaker that stops a session at 20 denials.
-export const denialLedgerMaxBytes = 4 * 1024 * 1024;
+export const denialLedgerMaxBytes = 64 * 1024 * 1024;
 
 export type EnvironmentLike = Record<string, string | undefined>;
 
@@ -34,6 +32,16 @@ export type DenialLedgerRecord = {
   reason: string;
   rule: string;
   at: string;
+
+  clearable?: boolean;
+
+  prompt?: DenialLedgerPrompt;
+};
+
+export type DenialLedgerPrompt = {
+  layer: string;
+  system: string;
+  user: string;
 };
 
 export type DenialLedgerLike = { record(denial: AutoModeDenial): void };
@@ -56,6 +64,8 @@ export class DenialLedger implements DenialLedgerLike {
       reason: denial.reason,
       rule: denial.rule,
       at: denial.at,
+      ...(denial.clearable === false ? { clearable: false } : {}),
+      ...(denial.prompt ? { prompt: denial.prompt } : {}),
     };
     this.ensureDirectory();
     this.rotateIfFull();

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,8 +25,8 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	if _, _, err := d.store.PromoteAutoModeProposal(proposal.ID, now); err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-	if _, err := d.store.SetAutoModeEnvironment([]string{"never touch prod"}, now); err != nil {
-		t.Fatalf("set environment: %v", err)
+	if _, err := d.store.SetAutoModeEnvironmentSlot("remote_targets", []string{"payments-prod"}, now); err != nil {
+		t.Fatalf("set environment slot: %v", err)
 	}
 
 	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
@@ -53,12 +54,11 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 		if len(params.AutoMode.Allow) != 1 || params.AutoMode.Allow[0] != "git push origin*" {
 			t.Errorf("auto mode allow = %v, want the promoted pattern", params.AutoMode.Allow)
 		}
-		if len(params.AutoMode.Environment) != 1 {
+		if got := params.AutoMode.Environment.Slots["remote_targets"]; len(got) != 1 {
 			t.Errorf("auto mode environment = %v", params.AutoMode.Environment)
 		}
-		if len(params.AutoMode.ClassifierModels) != 1 ||
-			params.AutoMode.ClassifierModels[0] != automode.DefaultClassifierModel {
-			t.Errorf("classifier models = %v", params.AutoMode.ClassifierModels)
+		if len(params.AutoMode.Models) != 0 {
+			t.Errorf("models = %v, want none until the user names one", params.AutoMode.Models)
 		}
 		var raw struct {
 			AutoMode map[string]json.RawMessage `json:"auto_mode"`
@@ -67,7 +67,7 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			t.Errorf("decode raw spawn params: %v", err)
 			return
 		}
-		for _, key := range []string{"enabled_default", "environment", "allow", "hard_deny", "classifier_models", "escalation_models"} {
+		for _, key := range []string{"enabled_default", "environment", "allow", "hard_deny", "models"} {
 			if _, ok := raw.AutoMode[key]; !ok {
 				t.Errorf("auto mode payload is missing %q", key)
 			}
@@ -321,4 +321,132 @@ func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 	if intent.AutoMode == nil || *intent.AutoMode {
 		t.Errorf("the reload rewrote the intent and lost the override: %v", intent.AutoMode)
 	}
+}
+
+// A session's own repository is the one thing the environment answers without
+// the user, so a destination rule has something to read on a fresh machine.
+func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "--initial-branch=main"},
+		{"remote", "add", "origin", "git@github.com:acme/widgets.git"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{
+		"launch_instructions": true, "auto_mode": true,
+	})
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		request := decodeJSONRPCMessage(t, client)
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode spawn params: %v", err)
+			return
+		}
+		if params.AutoMode == nil {
+			t.Error("spawn params carry no auto mode config")
+			return
+		}
+		detected := params.AutoMode.Environment.Slots["trusted_repo"]
+		if len(detected) != 2 {
+			t.Errorf("trusted_repo = %v, want the repo root and its remote", detected)
+			return
+		}
+		if detected[1] != "github.com/acme/widgets" {
+			t.Errorf("trusted_repo remote = %q, want the origin identity", detected[1])
+		}
+		// Nobody looked this repo up on GitHub, so the slot stays unset and the
+		// rules fall back to assuming private rather than to a guess.
+		if got := params.AutoMode.Environment.Slots["repo_visibility"]; len(got) != 0 {
+			t.Errorf("repo_visibility = %v, want nothing until a lookup answers", got)
+		}
+		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
+	}()
+
+	addTestWorkspace(d, "workspace-snipe", t.TempDir())
+	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+		ID:          "snipe-session",
+		Cwd:         repo,
+		WorkspaceID: "workspace-snipe",
+		Agent:       "snipe",
+		Cols:        80,
+		Rows:        24,
+	})
+	<-requestDone
+}
+
+// The user's own entry is the whole answer: detection does not append to it.
+func TestSpawnKeepsTheUsersTrustedRepoOverDetection(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "--initial-branch=main"},
+		{"remote", "add", "origin", "git@github.com:acme/widgets.git"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	if _, err := d.store.SetAutoModeEnvironmentSlot(
+		"trusted_repo", []string{"github.com/acme/only-this"}, time.Now().UTC()); err != nil {
+		t.Fatalf("set the trusted repo: %v", err)
+	}
+
+	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+	defer func() {
+		_ = client.Close()
+		<-done
+	}()
+	registerTestPluginDriver(t, client, "snipe", map[string]bool{
+		"launch_instructions": true, "auto_mode": true,
+	})
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		request := decodeJSONRPCMessage(t, client)
+		var params pluginDriverSpawnParams
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			t.Errorf("decode spawn params: %v", err)
+			return
+		}
+		got := params.AutoMode.Environment.Slots["trusted_repo"]
+		if len(got) != 1 || got[0] != "github.com/acme/only-this" {
+			t.Errorf("trusted_repo = %v, want only what the user named", got)
+		}
+		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
+	}()
+
+	addTestWorkspace(d, "workspace-snipe", t.TempDir())
+	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+		ID:          "snipe-session",
+		Cwd:         repo,
+		WorkspaceID: "workspace-snipe",
+		Agent:       "snipe",
+		Cols:        80,
+		Rows:        24,
+	})
+	<-requestDone
 }

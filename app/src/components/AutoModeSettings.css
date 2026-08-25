@@ -166,3 +166,96 @@
 .automode-denial-rule {
   white-space: nowrap;
 }
+
+/* The environment. One row per slot, the label wide enough that the labels line
+   up as a column: they are the words the rules use to reach a slot, so they
+   have to be readable as a list rather than hunted for. */
+.automode-slot-summary {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  padding-bottom: 2px;
+}
+
+.automode-slots {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.automode-slot-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.automode-slot-label {
+  color: var(--color-text-secondary);
+}
+
+.automode-slot-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.automode-slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  background: var(--color-bg-panel);
+}
+
+.automode-slot-remove {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--color-text-dimmed);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.automode-slot-remove:hover:not(:disabled) {
+  color: var(--color-error);
+}
+
+/* An unfilled slot shows what the rules fall back to. It is quieter than a
+   filled one and never blank: blank would read as "this does not matter". */
+.automode-slot-unset {
+  color: var(--color-text-dimmed);
+  font-size: 12px;
+}
+
+/* A detected slot fills itself from the session's repository, so the row says
+   so rather than reading as one more thing the user forgot. */
+.automode-slot-detected {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  color: var(--color-text-dimmed);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.automode-slot-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 6px 160px;
+}
+
+.automode-slot-choices {
+  display: flex;
+  gap: 6px;
+}
+

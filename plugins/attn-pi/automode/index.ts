@@ -1,6 +1,4 @@
-// Duck-typed against pi's ExtensionAPI/ExtensionContext shapes (verified against pi 0.84.2) rather than importing pi, so the extension runs under `bun test`.
-import { autoModeSystemPromptAddendum } from "./addendum";
-import type { Classifier } from "./classifier";
+import type { Classifier, ClassifierPrompt } from "./classifier";
 import type { AutoModeConfig } from "./config";
 import { denialToolResult } from "./denial";
 import type { DenialLedgerLike } from "./ledger";
@@ -10,6 +8,7 @@ import {
   autoModeDenialWidgetKey,
   breakerQuestion,
   classifyingWorkingMessage,
+  tooLongQuestion,
   denialNotice,
   denialWidgetLines,
   type AutoModeUILike,
@@ -43,6 +42,8 @@ export type MessageLike = { role: string; content: { type: string; text?: string
 
 export type MessageEndEventLike = { type: "message_end"; message: MessageLike };
 
+export type SessionCompactEventLike = { type: "session_compact" };
+
 export type ToolResultEventLike = {
   type: "tool_result";
   toolCallId: string;
@@ -54,7 +55,7 @@ export type ToolResultEventResultLike = { usage?: UsageLike };
 export type AutoModeContextLike = {
   cwd: string;
   signal?: AbortSignal;
-  /** False in `-p` and `--mode json`: nothing can be asked there. */
+
   hasUI?: boolean;
   ui?: AutoModeUILike;
 };
@@ -73,6 +74,7 @@ export type AutoModeExtensionAPILike = {
     handler: (event: BeforeAgentStartEventLike, ctx: AutoModeContextLike) => BeforeAgentStartResultLike,
   ): void;
   on(event: "message_end", handler: (event: MessageEndEventLike, ctx: AutoModeContextLike) => void): void;
+  on(event: "session_compact", handler: (event: SessionCompactEventLike, ctx: AutoModeContextLike) => void): void;
   on(
     event: "tool_result",
     handler: (event: ToolResultEventLike, ctx: AutoModeContextLike) => ToolResultEventResultLike | undefined,
@@ -82,13 +84,17 @@ export type AutoModeExtensionAPILike = {
 export type AutoModeDenial = {
   toolCallId: string;
   tool: string;
-  /** The blocked call in one line, the same text the model is given. */
+
   action: string;
   reason: string;
-  /** Who decided: a static rule name, `classifier-2a`/`-2b`, or the breaker. */
+
   rule: string;
   /** RFC 3339. */
   at: string;
+
+  clearable?: boolean;
+
+  prompt?: ClassifierPrompt;
 };
 
 export type AutoModeOptions = {
@@ -151,6 +157,12 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
             decision = await session.decide(call, decideOptions);
           }
         }
+        if (decision.outcome === "block" && decision.rule === "classifier-too-long") {
+          if (await askToRun(decision.action, ctx, options.onWaitingForUser)) {
+            session.noteApprovedCall(call);
+            return undefined;
+          }
+        }
       } catch (error) {
         // pi blocks a tool whose tool_call handler throws, but the model would get pi's error text instead of the denial contract.
         return { block: true, reason: denialToolResult({ action: describeCall(call), reason: failureReason(error) }) };
@@ -167,6 +179,8 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
         reason: decision.reason,
         rule: decision.rule,
         at: new Date().toISOString(),
+        ...(decision.clearable === false ? { clearable: false } : {}),
+        ...(decision.prompt ? { prompt: decision.prompt } : {}),
       };
       // The record first, the report second: the relay may lose a denial, the file may not.
       try {
@@ -200,8 +214,7 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
     // noteUserInput drops the repeat when a message arrives on both seams.
     pi.on("before_agent_start", (event) => {
       if (promptIsUsers) session.noteUserInput(event.prompt);
-      if (options.isEnabled?.() === false) return {};
-      return { systemPrompt: `${event.systemPrompt}\n\n${autoModeSystemPromptAddendum()}` };
+      return {};
     });
 
     // Only assistant TEXT: a toolResult message is the injection surface the classifier's prompt stays out of.
@@ -210,7 +223,10 @@ export function createAutoMode(options: AutoModeOptions): (pi: AutoModeExtension
       session.noteAssistantText(messageText(event.message));
     });
 
-    // pi takes the returned usage INSTEAD of the tool's own, so what the tool reported has to come back with it.
+    pi.on("session_compact", () => {
+      session.noteCompaction();
+    });
+
     pi.on("tool_result", (event) => {
       const held = options.usageLedger?.drain();
       return held ? { usage: mergeUsage(event.usage, held) } : undefined;
@@ -251,7 +267,24 @@ async function askToResume(
   }
 }
 
-/** Announcing must never decide the answer, so a listener that throws is noted and dropped. */
+async function askToRun(
+  action: string,
+  ctx: AutoModeContextLike,
+  onWaitingForUser?: (waiting: boolean) => void,
+): Promise<boolean> {
+  const ui = uiOf(ctx);
+  if (!ui) return false;
+  const question = tooLongQuestion(action);
+  announceWaiting(ctx, onWaitingForUser, true);
+  try {
+    return await ui.confirm(question.title, question.message);
+  } catch {
+    return false;
+  } finally {
+    announceWaiting(ctx, onWaitingForUser, false);
+  }
+}
+
 function announceWaiting(
   ctx: AutoModeContextLike,
   onWaitingForUser: ((waiting: boolean) => void) | undefined,
@@ -271,7 +304,6 @@ function messageText(message: MessageLike): string {
     .join("\n");
 }
 
-/** A reporter that threw. The denial itself stands; only the report is lost. */
 function reportFailure(ctx: AutoModeContextLike, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   uiOf(ctx)?.notify(`auto mode could not report this denial to attn: ${message}`, "warning");
