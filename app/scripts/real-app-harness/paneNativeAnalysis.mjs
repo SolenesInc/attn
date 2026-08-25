@@ -143,10 +143,6 @@ export function comparePaneNativePaintRegression(
   };
 }
 
-// Text-grid equivalent of `analyzePanePixelCoverage`. Uses the terminal's in-process
-// buffer (cols × rows of cells, with glyph/whitespace) so coverage signal is
-// independent of WKWebView compositor state — no screencap, no focus steal.
-// Returns the same field shape consumed by evaluate/compare helpers above.
 export function analyzePaneTextCoverage(
   {
     cols,
@@ -195,8 +191,6 @@ export function analyzePaneTextCoverage(
     const lineCols = Math.min(line.length, totalCols);
     for (let c = 0; c < lineCols; c += 1) {
       const ch = line[c];
-      // Treat anything but space and non-breaking space as an occupied cell.
-      // This matches pixel coverage which fires on any glyph-drawn pixel.
       if (ch && ch !== ' ' && ch !== '\u00a0') {
         activeCellCount += 1;
         rowActivity[r] += 1;

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { appPids, parseFootprint, parseGraphicsRegions, parseVmmapSummary } from './perfMeasure.mjs';
 
-// Verbatim `vmmap` (non-summary) rows: two pane-sized surfaces, one volatile
-// (0K dirty), one compositing tile, and one small layer.
 const REGIONS = `owned unmapped (graphics)    unmapped-unmapped     [ 22.6M  22.6M  22.6M     0K] rw-/rw- SM=PRV PURGE=N  owned physical footprint (unmapped) (graphics)
 owned unmapped (graphics)    unmapped-unmapped     [ 27.9M  27.9M  27.9M     0K] rw-/rw- SM=PRV PURGE=N  owned physical footprint (unmapped) (graphics)
 owned unmapped (graphics)    unmapped-unmapped     [ 22.6M  22.6M     0K     0K] rw-/rw- SM=PRV PURGE=V  owned physical footprint (unmapped) (graphics)
@@ -24,8 +22,6 @@ describe('parseGraphicsRegions', () => {
 
   it('sums dirty separately from virtual, so a volatile surface is visible', () => {
     const { largeDirtyMb, largeVirtualMb } = parseGraphicsRegions(REGIONS);
-    // The third surface is resident but purgeable: it counts toward virtual and
-    // not toward dirty, which is how reclaimable GPU memory shows up.
     expect(largeDirtyMb).toBeCloseTo(50.5, 1);
     expect(largeVirtualMb).toBeCloseTo(73.1, 1);
   });
@@ -36,8 +32,6 @@ describe('parseGraphicsRegions', () => {
   });
 });
 
-// Verbatim rows from `vmmap --summary` on a packaged attn WebContent process,
-// including the trailing MALLOC ZONE table that must not be parsed as regions.
 const SUMMARY = `Process:         com.apple.WebKit.WebContent [44033]
 Physical footprint:         1.2G
 Physical footprint (peak):  3.5G
@@ -82,7 +76,6 @@ describe('parseVmmapSummary', () => {
 
   it('converts each size suffix to megabytes', () => {
     const { byRegion } = parseVmmapSummary(SUMMARY);
-    // K, M and G all appear in the DIRTY column above.
     expect(byRegion['JS JIT generated code'].dirtyMb).toBeCloseTo(9.4, 1);
     expect(byRegion['MALLOC_SMALL'].dirtyMb).toBe(10.4);
     expect(byRegion['owned unmapped (graphics)'].residentMb).toBe(1024);
@@ -90,16 +83,14 @@ describe('parseVmmapSummary', () => {
 
   it('sums the slices a memory receipt reports', () => {
     const { slices } = parseVmmapSummary(SUMMARY);
-    expect(slices.graphics).toBe(665.6); // owned unmapped + VM_ALLOCATE
-    expect(slices.webkitMalloc).toBe(389.1); // WebKit Malloc + its metadata
+    expect(slices.graphics).toBe(665.6);
+    expect(slices.webkitMalloc).toBe(389.1);
     expect(slices.jsHeap).toBeCloseTo(15.9, 1);
   });
 
   it('excludes both summary rows from the region map and the dirty total', () => {
     const { byRegion, totalDirtyMb } = parseVmmapSummary(SUMMARY);
     expect(Object.keys(byRegion).filter((name) => name.startsWith('TOTAL'))).toEqual([]);
-    // Sum of the region rows above. Counting either summary row (1.1G each)
-    // would roughly triple it.
     expect(totalDirtyMb).toBeCloseTo(1081.4, 1);
   });
 
@@ -109,8 +100,6 @@ describe('parseVmmapSummary', () => {
   });
 
   it('keeps a row that carries trailing prose after the region count', () => {
-    // These rows were silently dropped while the parser anchored on the last
-    // column, which read a 0 MB malloc slice as if it were measured.
     const { byRegion, slices } = parseVmmapSummary(SUMMARY);
     expect(byRegion.MALLOC_SMALL).toEqual({ residentMb: 13.9, dirtyMb: 10.4 });
     expect(slices.malloc).toBeCloseTo(10.7, 1);
@@ -127,15 +116,12 @@ describe('parseVmmapSummary', () => {
   });
 
   it('excludes a reserved-address-space row from its slice', () => {
-    // `JS VM Gigacage (reserved)` is unallocated VM, not memory in use.
     const { slices } = parseVmmapSummary(SUMMARY);
     expect(slices.jsHeap).toBeCloseTo(15.9, 1);
   });
 
   it('parses a raw byte count with no size suffix, rounding sub-MB to 0.0', () => {
     const { byRegion } = parseVmmapSummary(SUMMARY);
-    // 824 bytes. The row is kept (not dropped as unparseable) but reports 0.0:
-    // a memory receipt is read in megabytes, so sub-MB regions are noise.
     expect(byRegion.__CTF).toEqual({ residentMb: 0, dirtyMb: 0 });
   });
 
@@ -147,8 +133,6 @@ describe('parseVmmapSummary', () => {
 
 describe('parseFootprint', () => {
   it('reads the physical footprint, not the peak line below it', () => {
-    // 1.2G vs the 3.5G peak. Taking the peak would report a number the process
-    // has not held since some earlier burst.
     expect(parseFootprint(SUMMARY)).toBeCloseTo(1228.8, 1);
   });
 
@@ -162,10 +146,6 @@ describe('parseFootprint', () => {
 });
 
 describe('appPids', () => {
-  // A headless `claude -p` the daemon spawns for classification is a child of
-  // the daemon, so a process-tree walk sweeps it into the snapshot. It is a
-  // separate program; counting its ~450MB as the app's makes every app number
-  // wrong in the same direction.
   const SNAP = {
     byClass: {
       app: { pids: [{ pid: 10 }] },

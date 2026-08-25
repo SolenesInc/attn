@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-// Verifies auto-close-on-exit: when a session's process exits cleanly (code 0)
-// the session closes itself, while a non-zero exit keeps the pane open so the
-// error stays readable. Drives the packaged app end-to-end against a real
-// shell PTY so the regression is caught in the product, not just unit tests.
-
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -162,9 +157,8 @@ async function main() {
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST).
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('wait_no_sessions_under_dir', () => waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {}));
@@ -181,7 +175,6 @@ async function main() {
       await closeExistingSessions(client, options.sessionRootDir);
     });
 
-    // --- Clean exit (code 0) auto-closes the session ---
     const clean = await runner.step('clean_exit_auto_closes', async () => {
       const session = await waitForShellWorkspace(client, observer, path.join(runner.sessionDir, 'clean'), `autoclose-clean-${runner.runId}`);
       createdSessionIds.push(session.sessionId);
@@ -192,12 +185,10 @@ async function main() {
       return session;
     });
 
-    // --- Non-zero exit (code 1) keeps the session open ---
     const failed = await runner.step('nonzero_exit_stays_open', async () => {
       const session = await waitForShellWorkspace(client, observer, path.join(runner.sessionDir, 'failed'), `autoclose-failed-${runner.runId}`);
       createdSessionIds.push(session.sessionId);
       await client.request('write_pane', { sessionId: session.sessionId, paneId: session.pane.paneId, text: 'exit 1', submit: true });
-      // The frontend renders the exit banner into the pane model once the process exits.
       await waitForPaneTextContains(
         client,
         session.sessionId,

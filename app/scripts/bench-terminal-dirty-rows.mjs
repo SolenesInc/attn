@@ -1,6 +1,3 @@
-// Inspect the vendored Ghostty model's dirty-row contract with representative
-// terminal updates. This is intentionally a real-WASM probe: renderer tests use
-// fakes and cannot establish which rows libghostty-vt marks dirty.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +41,6 @@ function write(label, bytes) {
   console.log(JSON.stringify({ label, ...dirtyRows() }));
 }
 
-// Establish the initial FULL state and then measure independent updates.
 console.log(JSON.stringify({ label: 'initial', ...dirtyRows() }));
 write('plain text', 'hello');
 write('carriage-return progress', '\rprogress 42%');

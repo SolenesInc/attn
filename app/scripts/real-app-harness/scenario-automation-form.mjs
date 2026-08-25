@@ -1,77 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Packaged-app proof for PR6's structured automation editor: AutomationForm
- * replaced the freeform YAML buffer (AutomationEditor.tsx, formerly driven by
- * this file as scenario-automation-editor.mjs). The UI-automation bridge
- * verbs moved from automation_editor_* to automation_form_* (see
- * useUiAutomationBridge.ts, `case 'automation_form_*'`), reading/driving the
- * mounted form through a published handle (automationFormAutomation.ts)
- * rather than scraping a textarea, and everything below is driven through the
- * real rendered form and panel, cross-checked against the daemon's own state
- * via the bundled `attn` CLI (`automation show`/`list`), not just the DOM.
- *
- * Two failure classes the old YAML editor exercised are UNREPRESENTABLE by
- * this form, by design:
- *
- *   - Raw invalid YAML (bad api_version, garbage syntax): the form never
- *     lets the user type YAML at all. Its own zod schema
- *     (automationFormModel.ts's automationFormSchema, mirroring
- *     ValidateDefinition's rules client-side) blocks submit before anything
- *     reaches the wire. leg2 pins that client-side block instead of a
- *     daemon-rejection round trip.
- *   - An in-place id edit: in edit mode the form renders `id` as static text
- *     (AutomationForm.tsx's `automation-form-id-static`), not an input — a
- *     real user cannot even attempt the D4 id-change this scenario's
- *     predecessor drove through the YAML buffer. The daemon's id_mismatch
- *     guard (internal/automation) still exists and is still worth proving
- *     independently of the UI, so leg5 reaches it via the bridge's
- *     automation_form_set_values escape hatch: set_values calls the form's
- *     setValues() handler directly (AutomationForm.tsx's bridge
- *     registration), bypassing React state/DOM entirely, so it can write
- *     `id` even though no rendered control offers that action. This is a
- *     deliberate UI-bypass to reach a daemon-only guard, not a claim that a
- *     real user can trigger it this way.
- *
- * A second, load-bearing quirk of the same escape hatch: automation_form_-
- * set_values calls handle.setValues() directly, which is a straight setValue()
- * per key — NOT the name input's onChange handler (handleNameChange in
- * AutomationForm.tsx), which is the only place slug-derivation from name to id
- * runs. Every create leg below sets `id` and `idCustomized: true` explicitly
- * in its set_values payload; slug derivation itself is exercised by
- * AutomationForm's own unit tests, not by this scenario.
- *
- * The form's create-mode defaults (makeCreateDefaults in AutomationForm.tsx)
- * already seed agent 'codex', the first codex catalog model
- * ('gpt-5.6-luna'), and that model's default effort — there is no daemon
- * starter-template fetch anymore (contrast the old editor's
- * `automation_editor_open` returning a YAML starter string). Every create leg
- * below deliberately leaves agent/model/effort OUT of its set_values payload
- * so those defaults carry straight through into the saved spec unmodified —
- * the "starter-simple" launch config this scenario proves end to end.
- *
- * The form saves by sending canonical JSON (which is also valid YAML — see
- * automationFormModel.ts's specJSONString/formValuesToSpec) through the same
- * definition_yaml wire field the old editor used; the daemon re-canonicalizes
- * either way. Revision bumps iff stored spec_json actually changes
- * (store.UpsertAutomationDefinition) — unaffected by PR6, and re-pinned here
- * (leg7, leg8, leg10).
- *
- * After every submit, the apply round trip is asynchronous: this scenario
- * polls automation_form_get_state until either `present === false` (success —
- * AutomationsPanel's onSaved closes the overlay) or saveError/errors becomes
- * non-empty (a refusal), rather than trusting the bridge verb's own
- * settleUi() alone to have waited long enough.
- *
- * Every definition this scenario applies is manual-trigger except the one
- * GitHub-trigger leg (leg8), and nothing it creates ever actually fires:
- * launch.executable is never set, matching the old editor scenario's same
- * invariant.
- *
- * Run serially (packaged-app scenarios are single-tenant):
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-form.mjs
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -95,7 +23,6 @@ function parseArgs(argv) {
   return { options, help: args.includes('--help') || args.includes('-h') };
 }
 
-
 function run(binary, args, env, options = {}) {
   return execFileSync(binary, args, {
     encoding: 'utf8',
@@ -109,9 +36,8 @@ function runJSON(binary, args, env) {
   return JSON.parse(run(binary, args, env));
 }
 
-// `attn automation show <id>` prints the canonical rendered YAML alone (no
-// JSON wrapper — see cmd/attn/automation.go). Get the definition summary
-// (id/enabled/revision) from `automation list` instead, filtered by id.
+// `attn automation show <id>` prints rendered YAML alone, no JSON wrapper;
+// the id/enabled/revision summary only comes from `automation list`.
 function showSpecYAML(binary, id, env) {
   return run(binary, ['automation', 'show', id], env);
 }
@@ -121,9 +47,6 @@ function findListRow(binary, id, env) {
   return list.find((row) => row.id === id) || null;
 }
 
-// A soft-deleted (or never-existed) id makes `automation show` exit 1 with
-// "automation: daemon error: ..." on stderr, rather than printing anything
-// JSON-parseable.
 function showFailsWithDaemonError(binary, id, env) {
   try {
     run(binary, ['automation', 'show', id], env);
@@ -156,10 +79,6 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon');
 }
 
-// Poll automation_form_get_state until `predicate` is satisfied. Every submit
-// this scenario drives is asynchronous (the apply round trip resolves on a
-// daemon response), so a single settleUi() inside the bridge verb is not
-// enough to observe the outcome — see the file-level comment.
 async function pollForm(client, predicate, description, timeoutMs = FORM_TIMEOUT_MS) {
   return poll(async () => {
     const state = await client.request('automation_form_get_state');
@@ -171,13 +90,8 @@ function findDefinitionRow(state, definitionId) {
   return (state?.definitions || []).find((row) => row.id === definitionId) || null;
 }
 
-// Click the panel's real enable/disable toggle and wait for the daemon to
-// come back. Same shape (and same rationale) as the predecessor editor
-// scenario's toggleEnabledAndWait: the row must be rendered before the click
-// (a definition created through the form reaches the panel by broadcast, not
-// synchronously), and automations_toggle_enabled itself only settles a few UI
-// frames without awaiting the daemon round trip, so the panel is what this
-// polls afterward.
+// automations_toggle_enabled settles a few UI frames without awaiting the
+// daemon, and the row arrives by broadcast, so poll the panel on both sides.
 async function toggleEnabledAndWait(client, definitionId, wantEnabled) {
   await poll(async () => {
     const current = await client.request('automations_get_state');
@@ -192,13 +106,6 @@ async function toggleEnabledAndWait(client, definitionId, wantEnabled) {
     return row && row.enabled === wantEnabled ? current : null;
   }, `definition ${definitionId} to render ${wantEnabled ? 'enabled' : 'disabled'} after the toggle broadcast`, PANEL_TIMEOUT_MS);
 }
-
-// --- form values fixtures -----------------------------------------------
-//
-// Both fixtures deliberately omit agent/model/effort from the returned
-// partial — see the file-level comment on why every create leg lets the
-// form's own create-mode defaults (codex / gpt-5.6-luna / medium) carry
-// through unmodified.
 
 function manualValues({ id, name, prompt, directoryPath }) {
   return {
@@ -243,9 +150,6 @@ async function captureFailureEvidence(runner, client) {
   }
 }
 
-// A best-effort, non-fatal, descriptively-named inline screenshot — matches
-// the predecessor scenario's convention rather than a standalone screenshot
-// leg.
 async function captureEvidenceScreenshot(runner, client, name) {
   try {
     await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client });
@@ -303,10 +207,6 @@ async function main() {
       appBuild = state.appBuild ?? null;
     });
 
-    // Leg 1: opening New shows the form's own create-mode defaults at
-    // revision 0 — no daemon starter-YAML fetch happens anymore (contrast
-    // the old editor's automation_editor_open, which pulled a starter
-    // template string from the daemon).
     await runner.step('leg1_create_mode_defaults', async () => {
       await client.request('automations_open_panel');
       const opened = await client.request('automation_form_open', {});
@@ -329,10 +229,6 @@ async function main() {
       );
     });
 
-    // Leg 2: the form's own zod validation blocks submit client-side —
-    // nothing reaches the daemon. This replaces the old editor's
-    // invalid-YAML-rejected leg; a raw-YAML rejection is unrepresentable
-    // through this form (see the file-level comment).
     await runner.step('leg2_client_validation_blocks_submit', async () => {
       const listBefore = runJSON(binary, ['automation', 'list'], daemonEnv) || [];
       runner.assert(!listBefore.some((row) => row.id === primaryID), 'sanity: primary id does not exist yet', listBefore);
@@ -371,11 +267,6 @@ async function main() {
       );
     });
 
-    // Leg 3: a real create (using the values already sitting in the buffer
-    // from leg2, corrected), then a reload through both the CLI and the
-    // real form — pinning the same v2 spec-canonical contract the old
-    // editor scenario pinned: the re-read YAML is a canonical rendering of
-    // the saved content, not anything hand-formatted.
     let leg3Revision = null;
     let leg3SpecYAML = null;
     const promptV1 = 'Automation form proof: initial create.';
@@ -413,11 +304,6 @@ async function main() {
       runner.assert(afterCancel.present === false, 'Cancel closes the reopened form back to the list', afterCancel);
     });
 
-    // Leg 4: creating a SECOND definition that reuses primaryID's id is
-    // refused. The typed id_collision error code routes to the id FIELD
-    // (AutomationForm.tsx's doSave: `if (code === 'id_collision') setError('id', ...)`),
-    // not the saveError banner — that routing is itself the product
-    // behavior this leg pins, not an incidental detail.
     await runner.step('leg4_create_collision_refused', async () => {
       await client.request('automation_form_open', {});
       await client.request('automation_form_set_values', {
@@ -462,10 +348,6 @@ async function main() {
       runner.assert(afterCancel.present === false, 'Cancel closes the collision attempt back to the list', afterCancel);
     });
 
-    // Leg 5: the id_mismatch guard, reached via the bridge's set_values
-    // escape hatch — a real user cannot do this, since the form renders id
-    // as static text in edit mode (see the file-level comment). This proves
-    // the DAEMON guard independently of the UI's own prevention.
     await runner.step('leg5_id_mismatch_guard_via_forceset', async () => {
       const reopened = await client.request('automation_form_open', { definitionId: primaryID });
       runner.assert(reopened.mode === 'edit', 'opening the shared definition for edit starts in edit mode', reopened);
@@ -500,10 +382,6 @@ async function main() {
       runner.assert(afterCancel.present === false, 'Cancel closes the mismatch attempt back to the list', afterCancel);
     });
 
-    // Leg 6: a Save against a stale revision — the definition changed out
-    // from under the open form via the CLI — is refused with
-    // saveErrorCode 'revision_conflict', and Reload recovers by pulling the
-    // current content into the form, after which a normal Save succeeds.
     let outOfBandRevision = null;
     const localPromptA = 'Local form edit before the out-of-band mutation lands.';
     const outOfBandPrompt = 'Mutated out of band via the bundled CLI while the form was open.';
@@ -550,13 +428,6 @@ async function main() {
       runner.assert(finalYAML.includes(localPromptA), 'the recovered save persists the locally re-applied content', finalYAML);
     });
 
-    // Leg 7: v2 revision semantics (store.UpsertAutomationDefinition —
-    // revision bumps exactly when spec_json changes), unaffected by PR6.
-    // Part A: resubmitting the exact same loaded values reapplies an
-    // IDENTICAL spec_json — a no-op, revision unchanged. Part B: a real
-    // semantic edit (renaming) DOES bump revision by exactly one, proving
-    // part A's unchanged revision is content-specific, not because saves
-    // stopped bumping revision at all.
     await runner.step('leg7_unchanged_resave_is_noop_then_edit_bumps', async () => {
       const rowBefore = findListRow(binary, primaryID, daemonEnv);
 
@@ -588,13 +459,6 @@ async function main() {
       runner.assert(rowAfterSemantic.name === renamedName, 'the renamed name is what got stored', rowAfterSemantic);
     });
 
-    // Leg 8: a GitHub-trigger create/reload round trip, pinning that the
-    // form's own re-canonicalization of a spec it did not itself author
-    // (repositories.mode and any other daemon-added keys) parses cleanly
-    // through specToFormValues, and that resubmitting the reopened,
-    // unchanged form does not manufacture a spurious revision bump merely
-    // because the daemon's canonical JSON differs syntactically from what
-    // the form emitted.
     const githubID = `automation-form-github-${suffix}`;
     await runner.step('leg8_github_roundtrip_no_spurious_bump', async () => {
       await client.request('automation_form_open', {});
@@ -635,8 +499,6 @@ async function main() {
       run(binary, ['automation', 'delete', githubID], daemonEnv);
     });
 
-    // Leg 9: a definition deleted out of band while a form has it open must
-    // not be resurrected by that form's Save.
     const staleEditPrompt = 'Edited after the definition was deleted elsewhere — this save must be refused.';
     await runner.step('leg9_delete_elsewhere_then_save_refused', async () => {
       const rowBefore = findListRow(binary, primaryID, daemonEnv);
@@ -664,11 +526,6 @@ async function main() {
       await client.request('automation_form_click', { button: 'cancel' });
     });
 
-    // Leg 10: `enabled` remains column-only post-#629, untouched by PR6. The
-    // panel toggle flips the column without bumping revision in either
-    // direction, and a form Save never touches it — same invariant the old
-    // editor scenario pinned, now proven for the form's own enabled toggle
-    // (AutomationForm.tsx's header switch) as well as the panel's.
     const toggleID = `automation-form-toggle-${suffix}`;
     await runner.step('leg10_panel_toggle_and_form_reflects_column', async () => {
       await client.request('automation_form_open', {});
@@ -712,8 +569,6 @@ async function main() {
       run(binary, ['automation', 'delete', toggleID], daemonEnv);
     });
 
-    // Leg 11: the form's own two-step delete (armed, then confirmed) is the
-    // end-to-end proof of the automation_delete WS path through the new UI.
     const deleteID = `automation-form-delete-${suffix}`;
     await runner.step('leg11_form_two_step_delete', async () => {
       await client.request('automation_form_open', {});
@@ -749,7 +604,6 @@ async function main() {
     await observer.close().catch(() => {});
     if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
     if (fixturePath) { try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {} }
-    // Leave a healthy plain profile daemon behind for whatever runs next.
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     runner.close();
   }

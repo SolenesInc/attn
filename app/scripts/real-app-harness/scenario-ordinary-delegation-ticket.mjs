@@ -1,20 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: an ORDINARY (non-chief) session delegates, and the resulting
- * ticket is bound and routed exactly like a chief's.
- *
- * Bootstraps two shell sessions — a delegator and a separate chief of staff that
- * takes no part in the delegation — then delegates a real codex worker FROM the
- * delegator. Asserts the daemon bound a ticket, the packaged app's tickets panel
- * renders it, and that activity on it reaches all three parties, each exactly
- * once: the worker (assignee), the delegator (creator), and the chief (durable
- * role identity). Also asserts the worker is NOT decorated delegated_from_chief —
- * that badge stays reserved for work the chief actually started.
- *
- * Prereqs: `codex` on PATH; a built `./attn` (or ATTN_HARNESS_BIN); a non-prod
- * profile install (`make install PROFILE=<name>`).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,8 +89,8 @@ async function setChiefOfStaff(client, sessionId) {
   );
 }
 
-// Bundles for one ticket, flattened. `attn ticket inbox --json` both reads AND
-// consumes, so each call must be treated as a one-shot observation.
+// `attn ticket inbox --json` both reads AND consumes, so each call is a
+// one-shot observation.
 function inboxEventsFor(runAttn, sessionId, ticketId) {
   const inbox = runAttn(['ticket', 'inbox', '--session', sessionId, '--json']);
   const bundles = inbox.json?.bundles ?? [];
@@ -170,8 +155,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // A chief exists but takes no part in this delegation — it must still see the
-    // activity, through its durable role identity rather than as the creator.
     await runner.step('boot_chief', async () => {
       chiefId = await createSessionAndWaitForInitialPane({
         client,
@@ -180,9 +163,8 @@ async function main() {
         label: `chief-${runner.runId}`,
         agent: 'shell',
         sessionWaitMs: 30_000,
-        // This scenario never types into these terminals — they exist to hold a
-        // session identity (a chief, a delegator). Waiting for a rendered pane
-        // would only add a window-visibility dependency the assertions don't need.
+        // These terminals exist to hold a session identity; nothing is ever typed
+        // into them.
         waitForInitialPaneVisible: false,
       });
       runner.registerCleanup('demote_and_unregister_chief', async () => {
@@ -197,7 +179,6 @@ async function main() {
       await setChiefOfStaff(client, chiefId);
     });
 
-    // The delegating session: an ordinary session with no special role.
     await runner.step('boot_delegator', async () => {
       delegatorId = await createSessionAndWaitForInitialPane({
         client,
@@ -206,9 +187,8 @@ async function main() {
         label: `deleg-${runner.runId}`,
         agent: 'shell',
         sessionWaitMs: 30_000,
-        // This scenario never types into these terminals — they exist to hold a
-        // session identity (a chief, a delegator). Waiting for a rendered pane
-        // would only add a window-visibility dependency the assertions don't need.
+        // These terminals exist to hold a session identity; nothing is ever typed
+        // into them.
         waitForInitialPaneVisible: false,
       });
       runner.registerCleanup('close_delegator_session', () =>
@@ -228,8 +208,8 @@ async function main() {
         client.request('close_session', { sessionId: workerId }).catch((error) => console.warn('[ordinary-delegation] close_session worker failed: ' + (error instanceof Error ? error.message : String(error)))));
       await observer.waitForSession({ id: workerId, timeoutMs: 30_000 });
 
-      // The board is read through the CLI: the app shows the garden now, and
-      // its ticket surfaces (with the bridge verbs that read them) are gone.
+      // The board is read through the CLI: the app shows the garden now, and its
+      // ticket surfaces are gone.
       const boundList = await pollFor(
         async () => {
           const tickets = ticketBoard();
@@ -242,7 +222,6 @@ async function main() {
       const id = boundList.bound.id;
       runner.log(`[RealAppHarness] delegator=${delegatorId} worker=${workerId} ticket=${id}`);
 
-      // The CLI read agrees with the panel: bound, working, brief as description.
       const show = runAttn(['ticket', 'show', id, '--json']);
       runner.assert(show.json?.assignee === workerId, `ticket show reports the worker as assignee (got ${JSON.stringify(show.json)})`, show.json);
       runner.assert(show.json?.status === 'working', `ticket show reports the working column (got ${show.json?.status})`, show.json);
@@ -254,8 +233,6 @@ async function main() {
       return id;
     });
 
-    // The badge stays chief-only: an ordinary delegation is tracked but not
-    // marked as delegated-from-chief.
     await runner.step('worker_not_decorated_delegated_from_chief', async () => {
       const list = runAttn(['list']);
       const worker = (list.json?.sessions ?? []).find((session) => session.id === workerId);
@@ -264,8 +241,6 @@ async function main() {
       return worker;
     });
 
-    // Baseline both observers' queues, then produce exactly one event and assert
-    // each of them is delivered it exactly once.
     await runner.step('worker_report_reaches_delegator_and_chief_once', async () => {
       inboxEventsFor(runAttn, delegatorId, ticketId);
       inboxEventsFor(runAttn, chiefId, ticketId);
@@ -287,7 +262,6 @@ async function main() {
       return true;
     });
 
-    // The reverse direction: a note from the delegator reaches the delegated agent.
     await runner.step('delegator_note_reaches_worker', async () => {
       inboxEventsFor(runAttn, workerId, ticketId);
       runAttn(['ticket', 'comment', ticketId, '-m', 'Delegator: check the error wording too.', '--session', delegatorId]);
@@ -321,16 +295,15 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    // Registered cleanups only fire on signals; the normal path tears down here,
-    // in the same order (worker, delegator, chief demote + unregister, app,
-    // observer) so the observer socket outlives every command that needs it.
+    // The observer socket must outlive every command that needs it, so teardown
+    // order here is worker, delegator, chief, app, observer.
     for (const sessionId of [workerId, delegatorId]) {
       if (!sessionId) continue;
       await client.request('close_session', { sessionId }).catch((error) => console.warn('[ordinary-delegation] close_session failed: ' + (error instanceof Error ? error.message : String(error))));
     }
     if (chiefId) {
       // A chief-of-staff session cannot be closed or unregistered while it holds
-      // the role (refused at both layers) — demote first, then unregister.
+      // the role — demote first.
       try {
         observer.send({ cmd: 'set_chief_of_staff', session_id: chiefId, chief_of_staff: false });
       } catch (error) {

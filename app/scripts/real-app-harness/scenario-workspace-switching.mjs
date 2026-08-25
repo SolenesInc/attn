@@ -61,10 +61,6 @@ async function focusAppForNativeShortcut(driver) {
   await driver.clickWindow(0.5, 0.5);
 }
 
-// This scenario's own guard: closes any leftover harness sessions from a prior
-// aborted run before it starts creating its own workspaces. The launch-time
-// sweep in common.mjs is the systemic backstop; this stays as a scenario-local
-// belt-and-suspenders check.
 async function closeExistingSessions(client, sessionRootDir) {
   const initial = await client.request('get_state');
   const harnessSessions = (initial.sessions || []).filter((session) => session.cwd?.startsWith(sessionRootDir));
@@ -222,11 +218,7 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app/wait-for-drain first (they must close LAST) and the
-  // pane sweep last (it must close FIRST) to reproduce the effective order
-  // below: close panes, wait for drain, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('wait_no_sessions_under_dir', () => waitForNoSessionsUnderDir(client, runner.sessionDir).catch(() => {}));

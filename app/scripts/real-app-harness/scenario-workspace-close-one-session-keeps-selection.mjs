@@ -178,11 +178,8 @@ async function main() {
   let splitSessionId = null;
   const note = (m, extra) => runner.log(m, extra);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST) and the session last (it
-  // must close FIRST) to reproduce the effective order below: close initial
-  // workspace panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST, the session last so it closes FIRST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 

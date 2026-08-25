@@ -128,10 +128,8 @@ export class UiAutomationClient {
   }
 
   async launchApp() {
-    // Default to always-on-top so scenarios don't steal focus and WKWebView
-    // rAF/ResizeObserver stay unthrottled. Probes that deliberately exercise
-    // the focus-stealing or occlusion paths set ATTN_HARNESS_ALWAYS_ON_TOP=0
-    // to opt out.
+    // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled; probes that
+    // exercise focus-stealing set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
     // Park the attn window off-screen by default so scenarios don't cover the
     // caller's work. Opt out with ATTN_HARNESS_PARK_VISIBLE_PX=0.
@@ -148,14 +146,8 @@ export class UiAutomationClient {
     const focusDriver = this.#focusDriver();
 
     if (effectiveLaunchEnv && Object.keys(effectiveLaunchEnv).length > 0) {
-      // Scenarios that need custom env vars (e.g. tr502's remote harness
-      // wiring) rely on spawn-style env delivery because LaunchServices and
-      // `open` don't reliably propagate env into Tauri's window-creation path.
-      //
-      // The window-exists gate uses CGWindowListCopyWindowInfo, not
-      // `tell application "System Events" to count of windows ...`. System
-      // Events returns 0 for Tauri/wry windows even when one is visible, so
-      // the prior osascript-based gate never fired reliably.
+      // LaunchServices and `open` do not reliably propagate env into Tauri's
+      // window-creation path, so custom env needs spawn-style delivery.
       const executablePath = this.appPath.endsWith('.app')
         ? path.join(this.appPath, 'Contents', 'MacOS', 'app')
         : this.appPath;
@@ -169,10 +161,8 @@ export class UiAutomationClient {
       });
       child.unref();
       await focusDriver.waitForMainWindow(10_000).catch(() => null);
-      // Re-issue the park via AX after the window exists. Tauri positions the
-      // window in on_page_load so there's no visual flash, but the AX
-      // set-position call also nudges the WebView out of the off-screen-init
-      // throttle state it otherwise enters.
+      // The AX set-position call also nudges the WebView out of the
+      // off-screen-init throttle state it otherwise enters.
       const parkPx = Number.parseInt(parkPxStr || '', 10);
       if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
         await focusDriver.parkWindow(parkPx).catch((error) => {
@@ -205,7 +195,6 @@ export class UiAutomationClient {
     try {
       await execFileAsync('osascript', ['-e', `tell application id "${this.bundleId}" to quit`]);
     } catch {
-      // Fall through to process-based cleanup.
     }
 
     const startedAt = Date.now();

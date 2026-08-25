@@ -1,7 +1,3 @@
-// Shared measurement + lifecycle primitives for the perf scenarios
-// (scenario-perf-baseline.mjs, scenario-perf-cold-warm.mjs). Side-effect-free:
-// importing this module runs nothing.
-
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -72,24 +68,17 @@ export function classify(proc) {
   if (command.includes('com.apple.WebKit.WebContent')) return 'webkit_webcontent';
   if (command.includes('com.apple.WebKit.Networking')) return 'webkit_networking';
   if (command.includes('com.apple.WebKit.GPU')) return 'webkit_gpu';
-  // Login shell spawned inside each pty-worker (the session's own workload, not
-  // attn overhead). Track it separately so per-session attn cost stays clear.
   if (/\/(fish|zsh|bash|dash|tcsh|ksh)( |$)|\/sh( |$)/.test(command)) return 'shell';
   return proc.comm;
 }
 
-// Snapshot the RSS of the dev app tree: descendants of the app pid (WebKit) plus
-// descendants of the daemon pid (one pty-worker per session) plus any explicitly
-// known pids. Targeting these specific roots isolates the dev tree from a
-// possibly-running prod daemon (both share the `attn daemon` command string).
+// Rooted at these pids rather than matched by command: a prod daemon shares the
+// `attn daemon` command string.
 export async function snapshot(appPid, daemonPid, webkitBaseline = new Set(), extraPids = []) {
   const table = await readProcessTable();
   const pidSet = new Set();
   for (const pid of collectDescendantPids(table, appPid)) pidSet.add(pid);
   if (daemonPid) for (const pid of collectDescendantPids(table, daemonPid)) pidSet.add(pid);
-  // Attribute any WebKit process that appeared after the pre-launch baseline to
-  // this app (they reparent to launchd, so a tree walk misses them). This is
-  // where the WS-1 atlas canvas + GPU texture memory lives.
   for (const proc of table) {
     if (isRelevantWebKitProcess(proc) && !webkitBaseline.has(proc.pid)) pidSet.add(proc.pid);
   }
@@ -126,22 +115,10 @@ export function classRssMb(snap, label) {
   return snap?.byClass?.[label]?.rssMb ?? 0;
 }
 
-// Region types worth naming in a memory receipt, and why each one is here.
-// `ps` RSS sums these into one number, so a change that moves memory between
-// them — releasing a GPU surface, bounding allocator churn — is invisible
-// without the split.
 const REGION_SLICES = {
-  // Per-pane GPU surfaces: the WebGL drawing buffer and glyph atlas of every
-  // MOUNTED terminal, visible or not. Owned by this process, mapped in the GPU
-  // process, so it lands here rather than in any malloc zone.
   graphics: ['owned unmapped (graphics)', 'VM_ALLOCATE (graphics)'],
-  // bmalloc: WebKit's C++ allocator. Ingestion-path churn high-water lives here,
-  // NOT in the JS heap, and the scavenger returns it lazily.
   webkitMalloc: ['WebKit Malloc', 'WebKit Malloc metadata'],
-  // The JS object heap proper. Measured small on attn (~7 MB) — kept so a claim
-  // of "JS leak" can be checked rather than assumed.
   jsHeap: ['JS VM Gigacage', 'JS JIT generated code'],
-  // The wasm linear memory of every Ghostty model plus other large buffers.
   malloc: ['MALLOC_LARGE', 'MALLOC_SMALL', 'MALLOC_TINY'],
 };
 
@@ -154,12 +131,8 @@ function parseVmmapSize(token) {
   return match[2] ? value * scale[match[2]] : value / (1024 * 1024);
 }
 
-// Locates the measurement window in a summary row: 7 size columns
-// (VIRTUAL/RESIDENT/DIRTY/SWAPPED/VOLATILE/NONVOL/EMPTY) followed by an integer
-// REGION COUNT. Neither end of the row can be trusted as an anchor — the name
-// may end in a bare number ("Memory Tag 241") and the row may carry trailing
-// prose ("see MALLOC ZONE table below"), so the window is found rather than
-// counted from an edge. Returns the index the sizes start at, or -1.
+// Neither edge anchors the 7 size columns: a name can end in a bare number
+// ("Memory Tag 241") and a row can carry trailing prose.
 function findSizeWindow(columns) {
   for (let start = 1; start + 7 < columns.length + 1; start += 1) {
     if (!/^\d+$/.test(columns[start + 7] ?? '')) continue;
@@ -169,13 +142,9 @@ function findSizeWindow(columns) {
   return -1;
 }
 
-// Pure: parses `vmmap --summary` into per-region-type resident/dirty megabytes.
-// Parsing stops at the MALLOC ZONE table below, whose rows have a different
-// arity and would otherwise mis-parse.
 export function parseVmmapSummary(text) {
   const byRegion = {};
-  // Unrounded, so a slice sums raw values and rounds once. Rounding each region
-  // first and then adding lets the per-region error accumulate into the slice.
+  // Unrounded: rounding each region before summing accumulates error in a slice.
   const exactDirtyMb = {};
   let totalDirtyMb = 0;
   for (const rawLine of text.split('\n')) {
@@ -188,7 +157,6 @@ export function parseVmmapSummary(text) {
     if (start < 0) continue;
     const sizes = columns.slice(start, start + 7).map(parseVmmapSize);
     const name = columns.slice(0, start).join(' ');
-    // Both summary rows: `TOTAL` and `TOTAL, minus reserved VM space`.
     if (!name || name.startsWith('TOTAL')) continue;
     const [residentMb, dirtyMb] = [sizes[1], sizes[2]];
     byRegion[name] = {
@@ -213,10 +181,8 @@ export function parseVmmapSummary(text) {
   };
 }
 
-// The number Activity Monitor prints in its Memory column, and the only one that
-// counts `owned unmapped (graphics)` — those pages are charged to this process
-// but mapped in another, so `ps` RSS cannot see them at all. An app measured by
-// RSS alone is missing its GPU surfaces entirely.
+// Physical footprint is the only number counting `owned unmapped (graphics)`:
+// those pages are mapped in another process, so `ps` RSS cannot see them.
 export function parseFootprint(text) {
   const match = /^Physical footprint:\s+(\S+)/m.exec(text);
   if (!match) return null;
@@ -224,19 +190,12 @@ export function parseFootprint(text) {
   return mb === null ? null : Number(mb.toFixed(1));
 }
 
-// The app is the Tauri process plus the WebKit processes it drives. The daemon,
-// its pty-workers, the session shells, and anything an agent spawns are separate
-// programs that happen to share a process tree — counting them as "the app"
-// attributes a 450MB headless classifier to the UI.
 export const APP_PROCESS_CLASSES = ['app', 'webkit_webcontent', 'webkit_gpu', 'webkit_networking'];
 
 export function appPids(snap) {
   return APP_PROCESS_CLASSES.flatMap((label) => (snap?.byClass?.[label]?.pids ?? []).map((entry) => entry.pid));
 }
 
-// Physical footprint of the app alone, per process and summed. Returns null
-// entries for any process vmmap could not read rather than dropping it silently,
-// so a partial total is visible as partial.
 export async function readAppFootprint(snap) {
   const byPid = {};
   let totalMb = 0;
@@ -253,17 +212,10 @@ export async function readAppFootprint(snap) {
   return { totalMb: Number(totalMb.toFixed(1)), missing, byPid };
 }
 
-// A GPU surface below this is chrome (compositing tiles, small layers), not a
-// pane-sized buffer. At a 1710x1073 window a full-width surface is ~22-30 MB,
-// and WebKit's 512x512@2x compositing tiles are ~4 MB, so 10 MB separates them
-// cleanly. Reported alongside the count so a shifted window size is visible
-// rather than silently re-bucketing.
+// Measured at a 1710x1073 window: full-width surfaces run ~22-30 MB, WebKit's
+// 512x512@2x compositing tiles ~4 MB, so 10 MB separates them cleanly.
 const LARGE_GRAPHICS_SURFACE_MB = 10;
 
-// Pure: the individual `owned unmapped (graphics)` regions from a full `vmmap`
-// (NOT --summary, which pre-aggregates them). The summary says how much GPU
-// surface a process holds; this says how many surfaces and what size, which is
-// what distinguishes "one buffer per pane" from "a fixed cost per window".
 export function parseGraphicsRegions(text) {
   const surfaces = [];
   for (const line of text.split('\n')) {
@@ -300,9 +252,6 @@ export async function readGraphicsRegions(pid) {
   }
 }
 
-// Dirty-page breakdown of one process. Returns null (never throws) when vmmap
-// is unavailable or the process is gone: a region receipt is an enrichment of
-// the RSS numbers, and losing it must not fail a run that measured fine.
 export async function readRegionFootprint(pid) {
   if (!pid) return null;
   try {
@@ -315,8 +264,6 @@ export async function readRegionFootprint(pid) {
   }
 }
 
-// Sample RSS repeatedly over a window and return the peak (by total RSS) and the
-// last sample. Used to catch the transient/retained spike from heavy output.
 export async function sampleWindow(appPid, daemonPid, webkitBaseline, windowMs, intervalMs = 1000) {
   const samples = [];
   const deadline = Date.now() + windowMs;
@@ -329,10 +276,6 @@ export async function sampleWindow(appPid, daemonPid, webkitBaseline, windowMs, 
   return { peak, last: samples[samples.length - 1], count: samples.length };
 }
 
-// Read the authoritative daemon pid from the profile's pid file, returning it
-// only if that process is still alive. This is pprof-independent: it is how the
-// default (non-ATTN_PPROF) baseline still attributes daemon + pty-worker RSS,
-// since the detached daemon and its workers are not descendants of the app pid.
 export function readLiveDaemonPid(profile) {
   let pid = null;
   try {
@@ -341,12 +284,10 @@ export function readLiveDaemonPid(profile) {
     return null;
   }
   if (!Number.isInteger(pid) || pid <= 0) return null;
-  try { process.kill(pid, 0); } catch { return null; } // stale pid file
+  try { process.kill(pid, 0); } catch { return null; }
   return pid;
 }
 
-// Stop the detached daemon for the given profile via its pid file. Only ever
-// touches ~/.attn-<profile> (or ~/.attn for prod), never another profile's.
 export async function stopDaemon(profile) {
   const pid = readLiveDaemonPid(profile);
   if (pid == null) return null;
@@ -359,12 +300,6 @@ export async function stopDaemon(profile) {
   return pid;
 }
 
-// Tear a NON-PROD profile down to empty on-disk state: quit its app (so the app
-// cannot auto-respawn the daemon after we kill it), stop the detached daemon,
-// then wipe its data dir (SQLite store, pid file, socket, worker logs). Does NOT
-// relaunch — the caller captures a WebKit-pid baseline (captureWebKitPids) after
-// teardown and before launchFreshApp, exactly like scenario-perf-baseline does.
-// Hard-refuses prod: wiping ~/.attn would destroy the user's real data.
 export async function teardownProfileState({ client, profile, wipe = true }) {
   if (!profile || profile === 'default') {
     throw new Error(`teardownProfileState refuses an empty/prod profile (got ${JSON.stringify(profile)})`);
@@ -385,8 +320,7 @@ export async function paneIdForSession(client, sessionId) {
   return ws.activePaneId || ws.panes?.[0]?.paneId || null;
 }
 
-// Close sessions through the automation bridge (the daemon-level close). The
-// observer's WS `unregister` is rejected without the workspace_sessions
+// The observer's WS `unregister` is rejected without the workspace_sessions
 // capability, so close_session is the supported cleanup path.
 export async function closeSessions(client, ids) {
   for (const sessionId of ids) {
@@ -394,10 +328,8 @@ export async function closeSessions(client, ids) {
   }
 }
 
-// Run `cmd` in every pane, one at a time, to grow each Ghostty WASM heap + atlas
-// so the warm-set sweep measures realistic (used) idle panes rather than the
-// empty floor. Sequential with a per-pane settle to avoid overrunning the
-// websocket's 256-message buffer (see AGENTS.md) by flooding all panes at once.
+// Sequential with a per-pane settle: filling every pane at once overruns the
+// websocket's 256-message buffer (see AGENTS.md).
 export async function fillAllPanes(client, sessionIds, cmd, perPaneSettleMs) {
   let filled = 0;
   for (const sessionId of sessionIds) {

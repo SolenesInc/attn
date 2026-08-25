@@ -1,33 +1,5 @@
 #!/usr/bin/env node
 
-// Performance baseline scenario.
-//
-// Drives the packaged dev app to a fixed number of shell sessions and captures
-// the per-process RSS of the whole attn tree (app + WebKit + daemon + one
-// pty-worker subprocess per session). Shell sessions are deliberate: the memory
-// workstreams target attn's OWN footprint (frontend terminals, worker scrollback
-// buffers, daemon heap), not the external claude/codex agent processes, so a
-// shell isolates exactly what we optimize and stays deterministic.
-//
-// Worker ring buffers are committed eagerly at spawn, and the frontend mounts a
-// terminal per visible/warm workspace, so the IDLE N-session snapshot already
-// captures the memory levers. Streaming (via benchmark_pty_transport) is only
-// used to drive a CPU profile, and is best-effort.
-//
-// The daemon is detached from the app, so its pid (and therefore its pty-worker
-// children) is resolved from the profile pid file (~/.attn-dev/attn.pid for the
-// dev install). That happens on every run, including the default one, so daemon
-// + worker RSS is always part of the baseline; if the pid file is missing/stale
-// the run warns loudly rather than silently reporting daemon: 0.
-//
-// When ATTN_PPROF is set in this process's environment, the scenario also
-// restarts the dev daemon so the freshly spawned one inherits the flag, then
-// pulls /debug/vars (authoritative daemon pid + worker pids) and heap/CPU pprof
-// profiles from the loopback diagnostics endpoint.
-//
-// Usage:
-//   pnpm run real-app:scenario-perf-baseline -- --sessions 8 --stream 2
-//   ATTN_PPROF=6060 pnpm run real-app:scenario-perf-baseline -- --sessions 8 --stream 2
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,9 +17,8 @@ import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveD
 
 const execFileAsync = promisify(execFile);
 
-// The app's own WebContent: the largest of the attributed WebContent pids. A
-// second one appears for an auxiliary web view (the in-app browser), and it is
-// never the one holding the terminal panes.
+// The app's own WebContent is the largest attributed pid; the second one is an
+// auxiliary web view (the in-app browser) and never holds the terminal panes.
 function webContentPid(snap) {
   const pids = snap?.byClass?.webkit_webcontent?.pids ?? [];
   if (pids.length === 0) return null;
@@ -111,10 +82,8 @@ function parseArgs(argv) {
   return Object.assign(options, extras);
 }
 
-// The harness parks the window nearly off-screen, and `screencapture -R` grabs a
-// screen region -- so a shot taken as-is catches the parked sliver, or whatever
-// window happens to sit in front. Put the window fully on screen and raise the
-// app before capturing anything.
+// The harness parks the window nearly off-screen and `screencapture -R` grabs a
+// screen region, so put the window fully on screen and raise the app first.
 async function bringWindowForward(client) {
   const parked = await getFrontWindowBounds(client.bundleId, { client }).catch(() => null);
   if (parked) {
@@ -186,8 +155,6 @@ async function streamBurst(client, sessionId, paneId, options) {
   }, { timeoutMs: 120_000 });
 }
 
-// Parse the --warm value (comma-separated ints, e.g. "-1,3,2,1,0") into the list
-// of warm-workspace limits to sweep. Returns null when --warm was not passed.
 function parseWarmLevels(raw) {
   if (raw == null) return null;
   const levels = String(raw)
@@ -197,18 +164,12 @@ function parseWarmLevels(raw) {
   return levels.length > 0 ? levels : null;
 }
 
-// Live (mounted) panes for a warm limit: active + `limit` recent, or all `n` when
-// the limit is negative (virtualization disabled). Used to order the sweep so it
-// only ever tears panes down.
 function warmLiveCount(limit, sessions) {
   return limit < 0 ? sessions : Math.min(sessions, limit + 1);
 }
 
-// Drive each session to `idle` through the real state-report path so the warm-set
-// can reclaim its (now cold) workspace. `attn _hook-state <id> idle` is exactly
-// what an agent's hook emits; the daemon broadcasts the state change and the
-// frontend drops the live-runtime protection. stdin is /dev/null so the binary's
-// optional hook-input JSON read hits EOF immediately instead of blocking.
+// stdin is /dev/null so the binary's optional hook-input JSON read hits EOF
+// immediately instead of blocking.
 function reportSessionState(bin, socketPath, sessionId, state) {
   return new Promise((resolve) => {
     const child = spawn(bin, ['_hook-state', sessionId, state], {
@@ -302,11 +263,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const isPerfBaselineLabel = (session) => typeof session.label === 'string' && session.label.startsWith('perf-baseline-');
   const sessionIds = [];
-  // Warm-workspace limit captured before the sweep perturbs it, restored in the
-  // finally so this run does not leak its last swept value into localStorage.
   let initialWarmLimit = null;
-  // Populated once the headline RSS is compared against the machine registry
-  // (below); read again after the finally block to emit the ATTN_VERDICT line.
   let rssEvaluation = null;
 
   const summary = {
@@ -335,8 +292,8 @@ async function main() {
       console.log(`[perf] stopped dev daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
     }
 
-    // Snapshot WebKit pids before relaunch so we can attribute the new ones to
-    // the dev app (and exclude a possibly-running prod app's WebKit).
+    // Snapshot WebKit pids before relaunch so the new ones are attributable to
+    // the dev app, excluding a possibly-running prod app's WebKit.
     const webkitBaseline = await captureWebKitPids();
 
     await client.launchFreshApp();
@@ -345,10 +302,8 @@ async function main() {
     await client.waitForFrontendResponsive(20_000);
     await observer.connect();
 
-    // A pane's GPU surface is sized in device pixels, so every graphics number
-    // is only readable next to the window it was measured at. The harness
-    // launches at Tauri's 1200x800 default, which is far smaller than a real
-    // window and understates the per-pane surface accordingly.
+    // A pane's GPU surface is sized in device pixels: the harness launches at
+    // Tauri's 1200x800 default, understating the per-pane surface.
     if (options.window) {
       const match = /^(\d+)x(\d+)$/.exec(options.window);
       if (!match) throw new Error(`--window expects WxH (e.g. 1728x1080), got: ${options.window}`);
@@ -362,9 +317,8 @@ async function main() {
     summary.window = await getFrontWindowBounds(client.bundleId, { client }).catch(() => null);
     console.log(`[perf] window bounds: ${summary.window ? `${summary.window.width}x${summary.window.height}` : 'unknown'}`);
 
-    // Clear detritus from prior runs. Sessions persist in the daemon's SQLite
-    // store and are restored across daemon restarts, so a fresh daemon can still
-    // surface stale perf-baseline sessions (with dead workers).
+    // Sessions persist in the daemon's SQLite store across restarts, so a fresh
+    // daemon can still surface stale perf-baseline sessions with dead workers.
     const stale = [...observer.sessionsById.values()].filter(isPerfBaselineLabel);
     if (stale.length > 0) {
       console.log(`[perf] closing ${stale.length} stale perf-baseline session(s) from prior runs`);
@@ -397,11 +351,8 @@ async function main() {
       }
     }
 
-    // Default path (and pprof fallback): resolve the daemon pid from the profile
-    // pid file so daemon + pty-worker RSS are always attributed -- not only when
-    // ATTN_PPROF is set. The daemon is detached/reparented, so its workers are
-    // NOT descendants of the app pid; without a daemon pid the headline silently
-    // reports daemon: 0 / ptyWorkers: 0 on the documented default run.
+    // The daemon is detached/reparented, so its pty-workers are NOT descendants
+    // of the app pid; resolve its pid from the profile pid file.
     if (!daemonPid) {
       daemonPid = readLiveDaemonPid(profileForAppPath(options.appPath));
       if (daemonPid) {
@@ -414,9 +365,6 @@ async function main() {
     summary.daemonPidSource = daemonPid ? (summary.diagUp ? 'debug-vars' : 'pid-file') : 'none';
 
     summary.snapshots.empty = await snapshot(appPid, daemonPid, webkitBaseline);
-    // The app's own floor, in the accounting the user sees. Everything else in
-    // the tree -- daemon, pty-workers, session shells, agents the daemon spawns
-    // -- is a different program, and summing them hides what the UI costs.
     summary.appFootprint = { empty: await readAppFootprint(summary.snapshots.empty) };
     const emptyWc = webContentPid(summary.snapshots.empty);
     summary.emptyWebContent = {
@@ -436,10 +384,8 @@ async function main() {
     );
     console.log(`[perf] empty app by pid: ${JSON.stringify(summary.appFootprint.empty.byPid)}`);
 
-    // Pace creation: wait for each session's initial pane to mount before
-    // creating the next, so the frontend main thread is free to reply to the
-    // next create_session (firing them back-to-back hangs the bridge while a
-    // terminal is mounting).
+    // Wait for each session's initial pane to mount before creating the next:
+    // firing them back-to-back hangs the bridge while a terminal is mounting.
     for (let i = 0; i < options.sessions; i += 1) {
       const label = `perf-baseline-${runId}-${i}`;
       const sessionId = await createSessionAndWaitForInitialPane({
@@ -458,17 +404,8 @@ async function main() {
 
     await delay(options.settleMs);
 
-    // Optionally grow each pane's WASM heap/atlas with real output before the
-    // sweep, so retained-RSS reflects used idle panes (an agent that produced
-    // output then went idle) instead of the empty-pane floor. Force all panes
-    // LIVE first (the warm limit persists in localStorage across runs, so a fresh
-    // app can launch already-virtualized) -- otherwise cold panes would only
-    // ingest the daemon's capped replay on rehydrate, not the full live output,
-    // and the sweep would compare unequal panes.
-    // Capture the warm limit before fill (which forces all panes live) or the
-    // sweep cycles through limits. It persists in localStorage, so leaving it
-    // changed would bleed into the next run and the user's app; restored in the
-    // finally.
+    // Force all panes LIVE before filling: the warm limit persists in
+    // localStorage across runs, so a fresh app can launch already-virtualized.
     const warmLevels = parseWarmLevels(options.warm);
     if (options.fillCmd || warmLevels) {
       initialWarmLimit = await client
@@ -488,15 +425,8 @@ async function main() {
       await delay(options.settleMs);
     }
 
-    // Warm-set A/B sweep. The warm-workspace limit (terminal virtualization) only
-    // reclaims IDLE workspaces: any workspace with a non-idle session is pinned
-    // live so its PTY model can still answer terminal queries. Freshly created
-    // shell sessions report `working`, so we first drive every session to `idle`
-    // via the real state-report path (`attn _hook-state <id> idle`, exactly what an
-    // agent's Stop/state hook does) -- otherwise the warm-set has nothing to tear
-    // down. Then sweep the requested limits most-live-first so each step only frees
-    // panes (monotonic teardown, never a rehydrate/regrow), giving clean
-    // within-app retained-RSS deltas for the per-pane cost.
+    // The warm set only reclaims IDLE workspaces, and the sweep must go
+    // most-live-first: a rehydrate makes the retained-RSS deltas incomparable.
     if (warmLevels) {
       await markSessionsIdle(client, options, sessionIds);
       summary.warmSweep = [];
@@ -512,14 +442,8 @@ async function main() {
         }
         await delay(options.settleMs);
         const snap = await snapshot(appPid, daemonPid, webkitBaseline);
-        // Per-pane GPU surfaces do not appear as their own class in `ps` RSS, so
-        // the sweep reads the WebContent region split too: a warm level that
-        // mounts fewer panes should show `graphics` fall with `livePanes`.
         const pid = webContentPid(snap);
         const regions = await readRegionFootprint(pid);
-        // How many pane-sized GPU surfaces exist at this warm level. If the
-        // count tracks mounted panes, virtualization releases surfaces; if it
-        // tracks sessions, something holds them past unmount.
         const surfaces = await readGraphicsRegions(pid);
         const appFootprint = await readAppFootprint(snap);
         const expectedVirtualized = limit < 0 ? 0 : Math.max(0, options.sessions - (limit + 1));
@@ -552,11 +476,6 @@ async function main() {
               + JSON.stringify(surfaces.histogram)
             : ''),
         );
-        // The per-pane RSS slope is only meaningful if the warm-set actually
-        // reached the intended live/virtual split. A mismatch means
-        // virtualization did not engage as expected (e.g. a session never went
-        // idle), so the retained-RSS deltas would be garbage — fail loudly
-        // rather than report invalid perf numbers.
         if (entry.virtualizedPanes !== expectedVirtualized) {
           throw new Error(
             `[perf] warm=${limit}: virtualized ${entry.virtualizedPanes} != expected `
@@ -567,11 +486,6 @@ async function main() {
       }
     }
 
-    // Does WebKit hand the pane-sized GPU surfaces back when asked? A surface a
-    // live compositing layer still owns survives the low-memory notification; a
-    // surface WebKit is merely caching for reuse is dropped by it. The two have
-    // different fixes — mount fewer panes vs. cap or defeat the cache — so the
-    // sweep alone cannot pick one.
     if (options.pressure) {
       const before = await snapshot(appPid, daemonPid, webkitBaseline);
       const pid = webContentPid(before);
@@ -604,10 +518,6 @@ async function main() {
       );
     }
 
-    // A dock panel costs a compositing layer only while it is open. Measures
-    // both directions -- the layer must be absent when closed and present when
-    // open -- and captures the open panel so a memory win that stopped the
-    // drawer from rendering cannot pass as a win.
     if (options.dockProbe) {
       const closedPid = webContentPid(await snapshot(appPid, daemonPid, webkitBaseline));
       const closed = await readGraphicsRegions(closedPid);
@@ -627,10 +537,6 @@ async function main() {
       );
     }
 
-    // An off-screen pane hands its GPU drawing buffer back, so being revealed is
-    // the moment it owes a repaint. Walk every session and photograph the window
-    // right after each switch: the memory win is only a win if the pane the user
-    // switched to still shows its own content.
     if (options.switchProbe && sessionIds.length > 0) {
       await bringWindowForward(client);
       summary.switchProbe = [];
@@ -651,10 +557,6 @@ async function main() {
       }
     }
 
-    // What a day of real use does that a single snapshot cannot see: open a set
-    // of sessions, close them, and do it again. A round that ends heavier than
-    // it started is memory no session owns any more, so nothing will ever
-    // release it — the shape that turns a working app into a 1GB one by evening.
     if (options.churnRounds > 0) {
       summary.churn = [];
       for (let round = 0; round < options.churnRounds; round += 1) {
@@ -700,10 +602,6 @@ async function main() {
       }
     }
 
-    // Full teardown, not just unmount: close every session and re-measure. If
-    // closing releases the pane-sized surfaces that virtualization did not, the
-    // retention is attn's to fix; if it does not, WebKit is caching them past
-    // any lifetime attn controls and only memory pressure returns them.
     if (options.closeProbe) {
       const before = await snapshot(appPid, daemonPid, webkitBaseline);
       const pid = webContentPid(before);
@@ -734,14 +632,8 @@ async function main() {
       );
     }
 
-    // Reclaim decay sampler (no pressure, no GC nudge). Hold the torn-down
-    // (most-virtualized) state and sample retained RSS over time. WebKit's
-    // scavenger / periodic memory monitor reclaims freed WASM + heap on a delay
-    // that is LONGER than a normal settle window, so a single short-settle
-    // snapshot can read "teardown reclaimed nothing" when the memory does come
-    // back given ~30-120s of quiet. This records the decay curve so we can tell
-    // soft-but-delayed (declines on its own) from hard (flat forever). Sessions
-    // stay open + idle so this measures warm-set teardown specifically.
+    // WebKit's scavenger reclaims freed WASM + heap on a delay LONGER than a
+    // settle window (~30-120s), so record the decay curve instead of one shot.
     if (options.reclaimHoldMs > 0) {
       summary.reclaimHold = [];
       const holdStart = Date.now();
@@ -782,10 +674,6 @@ async function main() {
 
     const streamN = Math.min(options.stream, sessionIds.length);
     if (options.realCmd && streamN > 0) {
-      // Realistic high-output repro through the NORMAL pty path (not the
-      // synthetic benchmark_pty_transport): run a heavy command in each stream
-      // target and sample peak + post-settle RSS. This is the before/after used
-      // to measure frontend-memory fixes.
       const targets = [];
       for (let i = 0; i < streamN; i += 1) {
         const sid = sessionIds[i];
@@ -803,7 +691,6 @@ async function main() {
       if (summary.diagUp) summary.vars.realPost = await httpGetJson(port, '/debug/vars').catch(() => null);
       console.log(`[perf] REAL-OUTPUT peak=${win.peak.totalRssMb} MB  post-settle=${summary.snapshots.realPost.totalRssMb} MB  (idle was ${summary.snapshots.idle.totalRssMb} MB)`);
     } else if (summary.diagUp && streamN > 0) {
-      // Best-effort synthetic streaming + CPU profile. Never fails the measurement.
       try {
         const targets = [];
         for (let i = 0; i < streamN; i += 1) {
@@ -862,10 +749,6 @@ async function main() {
       };
     }
     if (summary.warmSweep && summary.warmSweep.length > 0) {
-      // Per-pane cost = how much retained RSS each extra live (warm) pane holds,
-      // derived from the slope across the swept levels (max-live minus min-live,
-      // divided by the difference in live panes). This is the lever for the warm
-      // default: it is the marginal memory each warm slot costs.
       const sweep = summary.warmSweep;
       const most = sweep[0];
       const least = sweep[sweep.length - 1];
@@ -882,18 +765,12 @@ async function main() {
         })),
         perLivePaneTotalMb: paneSpan > 0 ? Number(((most.totalRssMb - least.totalRssMb) / paneSpan).toFixed(1)) : null,
         perLivePaneWebContentMb: paneSpan > 0 ? Number(((most.webContentRssMb - least.webContentRssMb) / paneSpan).toFixed(1)) : null,
-        // The per-pane GPU surface: what release-on-hide could actually reclaim.
         perLivePaneGraphicsMb: paneSpan > 0 && most.webContentDirtyMb && least.webContentDirtyMb
           ? Number(((most.webContentDirtyMb.graphics - least.webContentDirtyMb.graphics) / paneSpan).toFixed(1))
           : null,
       };
     }
 
-    // Compare this run's headline RSS against the per-machine registry (see
-    // machineRegistry.mjs) and record what the verdict line below reports.
-    // This never affects summary.ok / the process exit code -- an RSS
-    // regression is a trend signal for a driving agent to notice, not a
-    // harness error.
     const fingerprint = getMachineFingerprint();
     const baseline = loadBaseline(fingerprint.key);
     rssEvaluation = evaluateRssBaseline({
@@ -907,10 +784,7 @@ async function main() {
     recordOrCompareBaseline({ evaluation: rssEvaluation, key: fingerprint.key });
     summary.baselineComparison = rssEvaluation.comparison;
   } finally {
-    // Close every session we created so they don't persist into the next run.
     await closeSessions(client, sessionIds);
-    // Restore the warm limit captured before the sweep so we don't leak this
-    // run's last swept value into localStorage (next run / the user's app).
     if (initialWarmLimit !== null) {
       await client
         .request('set_warm_workspace_limit', { limit: initialWarmLimit }, { timeoutMs: 15_000 })
@@ -936,9 +810,6 @@ async function main() {
       console.log(`  ${warmCol}  ${liveCol}  ${virtCol}  ${totalCol}  ${wcCol}  ${gpuCol}  ${gfxCol}  ${mallocCol}`);
     }
     console.log(`  per-live-pane: total ${perLivePaneTotalMb ?? 'n/a'} MB, webContent ${perLivePaneWebContentMb ?? 'n/a'} MB`);
-    // The A/B this table exists for: graphics dirty is the per-pane GPU surface.
-    // If it does not fall with livePanes, invisible panes are not holding it and
-    // the release-on-hide hypothesis is wrong.
     const withGfx = levels.filter((lvl) => lvl.webContentDirtyMb?.graphics != null);
     if (withGfx.length >= 2) {
       const first = withGfx[0];
@@ -956,10 +827,8 @@ async function main() {
 
   console.log(JSON.stringify({ headline: summary.headline, reclaimHold: summary.reclaimHold, idleByClass: summary.snapshots.idle?.byClass, profiles: summary.profiles, runDir }, null, 2));
 
-  // A regression against the machine baseline is a trend signal, not a
-  // harness error: it surfaces as verdict.ok:false but never sets a non-zero
-  // exit code (see the try/finally above -- only real errors do that, via
-  // main().catch below).
+  // An RSS regression against the machine baseline sets verdict.ok:false but
+  // never a non-zero exit code.
   if (rssEvaluation) {
     emitVerdict(buildBaselineVerdict({
       ok: rssEvaluation.ok,

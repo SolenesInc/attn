@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 
-// Packaged-app scenario for the WebGL context-loss auto-recovery fix
-// (GhosttyTerminal's rendererEpoch backoff): forces the active pane's WebGL
-// context to be lost via the lose_webgl_context bridge action, then asserts
-// the full recovery lifecycle actually happens end to end — not just that
-// the right diagnostics events were logged, but that the rebuilt renderer
-// paints live output again and the pane's error overlay never shows.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,10 +47,8 @@ function parseArgs(argv) {
   return { options, help: Boolean(options.help) };
 }
 
-// Same on-disk location terminalDiagnosticsLog.ts writes to (see
-// $APPLOCALDATA/debug/terminal-diagnostics.jsonl), derived the same way
-// harnessProfile.mjs's manifestPathForProfile derives the automation manifest
-// path — both live under the profile's bundle's Application Support dir.
+// Same on-disk location terminalDiagnosticsLog.ts writes to
+// ($APPLOCALDATA/debug/terminal-diagnostics.jsonl).
 function terminalDiagnosticsLogPath(profile) {
   return path.join(
     os.homedir(),
@@ -89,9 +81,6 @@ function tailLog(logPath, lines = 40) {
   return fs.readFileSync(logPath, 'utf8').trim().split('\n').slice(-lines).join('\n');
 }
 
-// Polls the diagnostics log for `outcomes` to appear, in order, among this
-// pane's recovery records (not necessarily contiguous — other lifecycle
-// events interleave). Returns the matched records for the summary.
 async function waitForRecoverySequence(logPath, paneId, outcomes, timeoutMs) {
   const startedAt = Date.now();
   let seen = [];
@@ -156,9 +145,8 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const logPath = terminalDiagnosticsLogPath(currentHarnessProfile());
   const sessionLabel = `webgl-recovery-${runId}`;
-  // Markers must survive as a single unwrapped line on narrow panes (~50 cols
-  // in split layouts), so keep them short — uniqueness within this run's
-  // paneId is all the log filter needs, not the full runId.
+// Markers must survive as a single unwrapped line on narrow panes (~50 cols in
+// split layouts), so keep them short.
   const markerSuffix = runId.slice(-6);
 
   console.log(`[RealAppHarness] runDir=${runDir}`);

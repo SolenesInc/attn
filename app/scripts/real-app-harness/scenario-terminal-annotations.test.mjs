@@ -1,8 +1,3 @@
-// The grid-reading helpers the annotation scenario steers by. They decide
-// which row is dragged over; a bad choice does not fail loudly, it produces a
-// drag that resolves to nothing or to the wrong message, so the scenario would
-// report a product regression that is really a parsing bug here.
-
 import { describe, expect, it } from 'vitest';
 import { proseRow, wordSpan } from './scenario-terminal-annotations.mjs';
 
@@ -70,8 +65,6 @@ describe('wordSpan', () => {
     const span = wordSpan(PROSE);
     const quoted = PROSE.slice(span.startCol, span.endCol);
     expect(quoted).toBe('retry wrapper protects idempotent');
-    // Starting inside the indent would drag over the terminal's own gutter,
-    // and ending mid-word would anchor half a token.
     expect(span.startCol).toBeGreaterThanOrEqual(PROSE.length - PROSE.trimStart().length);
     expect(PROSE[span.endCol]).not.toMatch(/[A-Za-z]/);
   });

@@ -1,27 +1,5 @@
 #!/usr/bin/env node
 
-// Cold vs warm RSS scenario.
-//
-// scenario-perf-baseline.mjs's single RSS number self-baselines against its
-// OWN prior history: a freshly launched app and one that has cycled sessions
-// for a while land at very different footprints, so its headline number is
-// not reproducible run-to-run on the same machine. This scenario captures TWO
-// reproducible numbers instead, each preceded by a full data-dir wipe so
-// neither depends on prior app history:
-//
-//   cold = fresh app + N sessions, measured right after settle (no history)
-//   warm = fresh app + N sessions + a bounded per-pane warmup burst (grows the
-//          Ghostty WASM heaps/atlas), then settle -- the worked-then-idle
-//          footprint
-//
-// Requires a dedicated non-prod profile app bundle (one-time
-// `make install PROFILE=perf`) and is driven with `ATTN_HARNESS_PROFILE=perf`
-// -- wiping ~/.attn-dev or (far worse) ~/.attn between phases is not
-// acceptable, so this scenario refuses to run against the dev sibling or prod.
-//
-// Usage:
-//   ATTN_HARNESS_PROFILE=perf pnpm run real-app:scenario-perf-cold-warm -- --sessions 8
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -147,9 +125,6 @@ async function main() {
   const coldSnap = await runPhase({ warmup: false });
   const warmSnap = await runPhase({ warmup: true });
 
-  // Compare each phase against its own key in the per-machine registry (see
-  // machineRegistry.mjs). Never affects the process exit code -- a regression
-  // is a trend signal, not a harness error.
   const fingerprint = getMachineFingerprint();
   const recordedAt = new Date().toISOString();
   const coldKey = `${fingerprint.key}-cold`;
@@ -194,9 +169,8 @@ async function main() {
 
   console.log(JSON.stringify({ headline: summary.headline, coldByClass: coldSnap.byClass, warmByClass: warmSnap.byClass, runDir }, null, 2));
 
-  // A regression against either phase's machine baseline is a trend signal,
-  // not a harness error: it surfaces as verdict.ok:false but never sets a
-  // non-zero exit code (only real errors do that, via main().catch below).
+  // A baseline regression is a trend signal: verdict.ok:false, never a
+  // non-zero exit code.
   emitVerdict(buildColdWarmVerdict({
     cold: coldEval.comparison,
     warm: warmEval.comparison,

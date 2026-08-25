@@ -53,10 +53,6 @@ describe('formatVerdictLine', () => {
 
     const line = formatVerdictLine(verdictWithNewlines);
 
-    // JSON.stringify escapes newlines as the two-character sequence `\n`
-    // rather than a literal line break, so the produced line has no raw
-    // newline characters in it — verify that invariant directly rather than
-    // just re-parsing the JSON.
     expect(line.split('\n')).toHaveLength(1);
     expect(line).toContain('first line of error\\nsecond line\\nthird line');
   });

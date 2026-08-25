@@ -1,17 +1,7 @@
 #!/usr/bin/env node
 
-// Cmd+W from inside a docked notebook tile, in the packaged app. In the packaged
-// app the native "Close Pane" menu item claims ⌘W and dispatches session.close —
-// NOT the DOM terminal.close path browser e2e exercises — so a focus-aware close
-// has to live in the session.close handler too. The reported bug: with a notebook
-// tile docked beside a terminal, ⌘W while focus is in the tile closed the terminal
-// pane (ending that session) instead of the note you were looking at.
-//
-// This scenario docks a notebook tile with the REAL native ⌘⌥N, dismisses its
-// auto-finder so focus rests inside the tile (the "reading a note" state), then
-// presses the REAL native ⌘W and asserts the tile is undocked while the terminal
-// pane/session survives. Browser e2e can't cover this — Playwright never hits the
-// native menu that turns ⌘W into session.close.
+// In the packaged app the native "Close Pane" item claims ⌘W and dispatches
+// session.close, not the DOM terminal.close path browser e2e exercises.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,17 +32,12 @@ function parseArgs(argv) {
   };
 }
 
-// Scoped to the ACTIVE workspace's wrapper, like every other finder scenario: a
-// notebook tile docked in some other (inactive) workspace is still mounted in the
-// DOM, and a bare `.notebook-finder` would match its finder forever — so the
-// "Esc closed the finder" wait could never observe absence on a profile carrying
-// any leftover tile.
+// Scoped to the ACTIVE workspace's wrapper: a tile docked in an inactive
+// workspace is still mounted, and a bare `.notebook-finder` would match it.
 const FINDER_SELECTOR = '.terminal-wrapper.active .notebook-finder';
 
-// Presence via the screenshot bridge: only "not found" proves absence. Any other
-// error (html-to-image chokes inside CodeMirror subtrees) still proves the element
-// is there — treating those as absent would let a finder that never closed pass as
-// closed.
+// Presence via the screenshot bridge: only "not found" proves absence. Any
+// other error still proves the element is there.
 async function finderPresent(client) {
   try {
     await client.request('capture_screenshot_data', { selector: FINDER_SELECTOR });
@@ -128,7 +113,6 @@ async function main() {
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);
 
-    // 1. A normal shell workspace to dock the notebook tile into.
     const cwd = path.join(sessionDir, 'close-ws');
     fs.mkdirSync(cwd, { recursive: true });
     sessionId = await createSessionAndWaitForInitialPane({
@@ -155,7 +139,6 @@ async function main() {
     }
     const terminalPaneId = pane.paneId;
 
-    // 2. Dock a notebook tile via the REAL native ⌘⌥N (notebook.openTile).
     await driver.activateApp();
     await driver.pressKey('n', { command: true, option: true });
     const docked = await waitForWorkspaceUi(
@@ -168,18 +151,11 @@ async function main() {
     const tileId = docked.tileIds[0];
     console.log(`[RealAppHarness] docked notebook tile=${tileId}`);
 
-    // 3. A fresh tile auto-opens its finder; dismiss it with Esc so focus rests on
-    //    the tile itself (the "reading a note" state) rather than the finder input.
-    //    Esc closing the finder also proves focus is inside the tile, not stolen by
-    //    the terminal on dock.
     await waitForFinder(client, true, 'fresh notebook tile auto-opens its finder');
     await driver.activateApp();
     await driver.pressKeyCode(53); // Esc — InputDriver's --key map only covers printable keys
     await waitForFinder(client, false, 'Esc dismisses the finder, leaving focus in the tile');
 
-    // 4. The REAL native ⌘W. In the packaged app this fires the native "Close Pane"
-    //    menu item → session.close. With focus inside the notebook tile it must
-    //    UNDOCK THE TILE, leaving the terminal pane/session untouched.
     await driver.activateApp();
     await driver.pressKey('w', { command: true });
 
@@ -191,7 +167,6 @@ async function main() {
       15_000,
     );
 
-    // The terminal pane (and its session) must survive — the whole point of the fix.
     const workspaceAfter = await client.request('get_workspace', { sessionId });
     const panesAfter = workspaceAfter?.panes ?? [];
     const terminalSurvived = panesAfter.some((p) => p.paneId === terminalPaneId);

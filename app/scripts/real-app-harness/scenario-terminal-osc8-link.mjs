@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// End-to-end OSC 8 hyperlink Cmd+click in the packaged app:
-// real daemon PTY (TERM_PROGRAM=ghostty) -> OSC 8 hyperlink label
-// -> plain native click (must stay selection, no navigation)
-// -> native Cmd+click -> real GET request lands on a local HTTP server.
 
 import http from 'node:http';
 import {
@@ -36,8 +32,7 @@ function parseArgs(argv) {
   };
 }
 
-// Convert a page-CSS-pixel point into window-relative [0,1] coordinates for
-// the HID driver (window bounds include the title bar; the page does not).
+// Window bounds include the title bar; the page does not.
 function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
   const { width, height } = windowBounds.logicalBounds;
   const chromeX = Math.max(0, width - innerWidth);
@@ -67,8 +62,8 @@ function startProbeServer() {
 function closeServer(server) {
   return new Promise((resolve) => {
     server.close(() => resolve());
-    // The default browser that followed the probe link keeps its connection
-    // alive indefinitely; close() alone would wait for it to drain.
+    // The default browser that followed the probe link keeps its connection alive
+    // indefinitely; close() alone would wait for it to drain.
     server.closeAllConnections();
   });
 }
@@ -80,9 +75,8 @@ async function main() {
     return;
   }
 
-  // HID mouse clicks land at absolute screen positions, so the default
-  // 20px-visible window park would put every click off-window. Keep the
-  // whole window on screen for this scenario.
+  // HID mouse clicks land at absolute screen positions, so the default 20px
+  // window park would put every click off-window.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
   }
@@ -104,12 +98,8 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, probeServerPort: port });
 
-  // Cleanup, registered as soon as each resource type exists so a signal
-  // mid-scenario still tears them down. Runner cleanups run in REVERSE
-  // registration order, so register observer/app first (they must close
-  // LAST), then the session-panes sweep, then the probe server (it must
-  // close FIRST) to reproduce the effective order below: close probe server,
-  // close panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order, so the effective order
+  // below is: close probe server, close panes, quitApp, observer.close.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -150,8 +140,6 @@ async function main() {
     });
 
     await runner.step('assert_term_program_ghostty', async () => {
-      // Live-verify the daemon pins TERM_PROGRAM=ghostty for the PTY, which is
-      // what gates OSC 8 hyperlink rendering/opening in the real terminal.
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: 'echo "TP=$TERM_PROGRAM"' });
       await waitForPaneText(
         client,
@@ -175,15 +163,12 @@ async function main() {
     let target;
     let paneState;
     await runner.step('print_link_and_locate_label', async () => {
-      // Print an OSC 8 hyperlink whose visible label carries no URL text, so a
-      // successful navigation can only have come from following the escape's
-      // URI, not from clicking on visible text that happens to look like a link.
+      // The visible label carries no URL text, so a navigation can only have come
+      // from following the escape's URI.
       label = 'CLICK_ME_LINK';
       url = `http://127.0.0.1:${port}/osc8-hit`;
-      // Build the OSC 8 escape as literal shell source text (backslash-e, not
-      // an actual ESC byte): printf itself turns \e into ESC and \\ into a
-      // single backslash when it interprets the format string inside the
-      // pane's shell.
+      // Literal shell source text: printf itself turns \e into ESC and \\ into a
+      // single backslash when it interprets the format string.
       const esc = '\\e';
       const st = `${esc}\\\\`; // string terminator: ESC + a single literal backslash
       const printfCommand = `printf '${esc}]8;;${url}${st}${label}${esc}]8;;${st}\\n'`;
@@ -221,7 +206,6 @@ async function main() {
     });
 
     await runner.step('plain_click_stays_selection', async () => {
-      // Plain click must stay selection: no navigation, no HTTP hit.
       await driver.clickWindow(target.relativeX, target.relativeY);
       await delay(1_000);
       runner.assert(
@@ -231,7 +215,6 @@ async function main() {
     });
 
     await runner.step('cmd_click_opens_link', async () => {
-      // Cmd+click must open the link: a GET request lands on the probe server.
       await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
       const deadline = Date.now() + 10_000;
       while (hits.length === 0 && Date.now() < deadline) {

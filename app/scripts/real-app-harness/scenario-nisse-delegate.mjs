@@ -1,36 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: delegating to a conversation agent.
- *
- * Delegation is agent-agnostic machinery — a ticket, a worktree, a brief, a
- * session bound to all three — and the only thing a `nisse` session was
- * missing was the brief itself: its driver declared no `initial_prompt`, so the
- * spawn pipeline refused any launch carrying one. This scenario is what that
- * capability is FOR, proved end to end in the packaged app against a real agent:
- *
- *   1. an ordinary session delegates a real task to a `nisse` agent, which
- *      gets its own ticket and its own worktree,
- *   2. the brief arrives as the conversation's first user message — the agent is
- *      looking at the task, not at an empty composer,
- *   3. the agent does the work with its own tools and reports onto its ticket.
- *      The ticket event is attributed to the DELEGATED SESSION, which is the
- *      whole identity witness: the environment has to carry the session id from
- *      the daemon, through the host, through pi, into the tool subprocess that
- *      runs `attn`,
- *   4. the agent can read the repository guidance in the worktree it was given —
- *      the delegated agent's other source of "how do I report here",
- *   5. a second delegation is `kill -9`ed before its agent has said anything at
- *      all, which leaves no pi session file (measured, 2026-08-04 spike). Reload
- *      has to ask the same question again: the brief lives in the session's
- *      stored launch intent, not in the process that first received it.
- *
- * Each kill targets a pid captured when that host appeared, never a pattern.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin installed
- * (`attn plugin install-bundled attn-pi`), pi credentials in ~/.pi, and a built
- * `./attn` (or ATTN_HARNESS_BIN).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,13 +17,9 @@ import { currentHarnessProfile, dataDirForProfile, socketPathForProfile } from '
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// A fact that exists nowhere but the fixture repository's own agent guidance, so
-// an agent that states it can only have read the file in the worktree it was
-// given.
 const GUIDANCE_TOKEN = 'quicksilver-badger';
 
-// The work state an agent reports (`attn ticket status ready_for_review`) and
-// the column the board keeps it in are not the same word.
+// The state an agent reports and the column the board keeps it in differ.
 const TICKET_COLUMN_FOR_READY = 'in_review';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,8 +53,7 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
-// attn's JSON commands print an object or a bare array depending on the command
-// (`ticket show` an object, `ticket list` an array), sometimes after a line of
+// A JSON command prints an object or a bare array, sometimes after a line of
 // human progress text on the same stream.
 function parseAttnJSON(stdout) {
   const candidates = [stdout.indexOf('{'), stdout.indexOf('[')].filter((index) => index >= 0);
@@ -123,7 +87,6 @@ function conversationState(client, sessionId) {
   return client.request('conversation_get_state', { sessionId }, { timeoutMs: 20_000 }).catch(() => null);
 }
 
-// Read-only process table, as (pid, ppid, pgid, command).
 function processTable() {
   const stdout = execFileSync('/bin/ps', ['-eo', 'pid=,ppid=,pgid=,command='], { encoding: 'utf8' });
   return stdout
@@ -137,25 +100,16 @@ function processTable() {
     .filter(Boolean);
 }
 
-// The host executable, by its own path — not the substring `attn-nisse`, which
-// a profile named `nisse*` also puts in the app bundle path of every sibling
-// process (the plugin driver, the daemon, the app itself).
+// Matched by path, not the substring `attn-nisse`: a profile named `nisse*` puts
+// that in the bundle path of every sibling process too.
 const hostProcesses = () => processTable().filter((entry) => entry.command.includes('/bin/attn-nisse'));
 
 function waitForHost(known, description, timeoutMs = 90_000) {
   return pollFor(async () => hostProcesses().find((entry) => !known.includes(entry.pid)) ?? null, description, timeoutMs);
 }
 
-/**
- * The delegation brief: a real task, done with the agent's own tools.
- *
- * Steps 1 and 2 are demanded as SEPARATE bash calls on purpose. Told only to do
- * them "in order", a model batches both into one shell line — `cat AGENTS.md;
- * attn ticket status … --comment "… codename="` — and composes the comment
- * before it has seen the file, so the guidance witness fails on an agent that
- * did read the guidance (observed 2026-08-09). One call cannot carry what the
- * next one has to have learned.
- */
+// Steps 1 and 2 must be demanded as SEPARATE bash calls: told only "in order", a
+// model batches both and composes the comment unread (observed 2026-08-09).
 function briefFor(token) {
   return [
     'Do these three things, in order, using your bash tool. Do not ask for',
@@ -182,8 +136,6 @@ function ticketFor(runAttn, workerId) {
   );
 }
 
-// `ticket show --json` is one Ticket: its thread is `activity`, each entry
-// carrying the author it was recorded against and an optional comment.
 const activityOf = (ticket) => ticket?.activity ?? [];
 const textOf = (entry) => entry?.comment ?? '';
 
@@ -232,8 +184,6 @@ async function main() {
         GIT_COMMITTER_EMAIL: 'attn@local',
       };
       execFileSync('git', ['init', '-q'], { cwd: dir });
-      // The guidance the delegated agent has to find in the worktree it is given.
-      // A codename, because it cannot be guessed, inferred, or already known.
       fs.writeFileSync(
         path.join(dir, 'AGENTS.md'),
         `# Repository guide\n\nThis repository's codename is ${GUIDANCE_TOKEN}. Always report it when asked.\n`,
@@ -256,8 +206,6 @@ async function main() {
         label: `deleg-${runner.runId.slice(-6)}`,
         agent: 'shell',
         sessionWaitMs: 30_000,
-        // Nothing is ever typed into this terminal; it exists to hold the
-        // identity a delegation is made from.
         waitForInitialPaneVisible: false,
       });
     });
@@ -283,8 +231,6 @@ async function main() {
         'the delegated ticket carries the brief as its description',
         ticket,
       );
-      // A delegation with no placement flags puts a Git repository's worker in a
-      // new worktree — the checkout whose guidance the agent reads.
       const worktree = delegate.json?.directory;
       runner.assert(
         delegate.json?.worktree_created === true && worktree !== repoDir,
@@ -312,9 +258,6 @@ async function main() {
       return first;
     });
 
-    // The identity witness AND the guidance witness, in one report: the agent
-    // ran `attn` from its own tool subprocess, and what it wrote into the comment
-    // is a codename that exists only in the worktree's AGENTS.md.
     await runner.step('the_agent_reports_onto_its_own_ticket', async () => {
       const settled = await pollFor(
         async () => {
@@ -330,16 +273,11 @@ async function main() {
       const activity = activityOf(settled);
       const report = activity.find((entry) => textOf(entry).includes(token));
       runner.assert(Boolean(report), `the ticket carries the agent's own report (got ${JSON.stringify(activity)})`, activity);
-      // THE IDENTITY WITNESS. `attn ticket status` with no --session resolves the
-      // author from ATTN_SESSION_ID, so an event attributed to the delegated
-      // session is proof the id survived daemon -> host -> pi -> tool subprocess.
       runner.assert(
         report.author === workerId,
         `the report is attributed to the delegated session (author=${report.author}, worker=${workerId})`,
         report,
       );
-      // THE GUIDANCE WITNESS. The codename exists nowhere but the worktree's
-      // AGENTS.md, so an agent that reports it read the file it was given.
       runner.assert(
         textOf(report).includes(GUIDANCE_TOKEN),
         `the agent read the repository guidance in its worktree (comment=${JSON.stringify(textOf(report))})`,
@@ -348,10 +286,6 @@ async function main() {
       return report;
     });
 
-    // The brief belongs to the session, not to the process that received it. A
-    // host killed before its agent has said anything leaves no pi session file at
-    // all, so the replacement opens an empty conversation — and without the
-    // stored launch intent it would come back as an agent with nothing to do.
     await runner.step('a_brief_survives_a_crash_before_the_first_word', async () => {
       const before = hostProcesses().map((entry) => entry.pid);
       const earlyToken = `PIREVIVE-${runner.runId.slice(-6).toUpperCase()}`;
@@ -359,13 +293,8 @@ async function main() {
         'delegate',
         '--source-session', delegatorId,
         '--agent', 'nisse',
-        // One call, deliberately. A crash puts attn's own bookkeeping on the
-        // ticket — the reconciliation note and the revival — and the agent's
-        // first report used to die on that news of its own death: the
-        // read-before-you-write gate refused the write and the agent replied
-        // "done" having reported nothing. Since #821 only another
-        // participant's word gates a mutation, so a single call has to land.
-        // Telling the agent to retry would hide a regression of exactly that.
+        // One call, deliberately: asking the agent to retry would hide a
+        // regression of the read-before-you-write gate (#821).
         '--brief', [
           'Using your bash tool, run exactly this command, once:',
           `attn ticket status ready_for_review --comment "${earlyToken}"`,

@@ -1,30 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: long conversations and old ones.
- *
- * Slice 5 of the pi headless host is about depth — a conversation that outgrew
- * one window, and a conversation from days ago. This scenario proves the three
- * things that make those first-class, in the packaged app against a real agent:
- *
- *   1. an existing conversation file can be picked up by a NEW session, and the
- *      agent answers from it — resume of an arbitrary file, not just revive,
- *   2. a transcript longer than the snapshot window draws its newest window and
- *      pages the rest in on demand, with nothing lost and nothing duplicated,
- *   3. another client attaching does NOT shorten what a window that has paged
- *      back is showing — the sharpest edge slice 4 left behind,
- *   4. the model can be switched mid-session, and the host's answer is what the
- *      picker shows.
- *
- * The long conversation is synthesized as a pi session file rather than talked
- * into existence: proving the window needs more items than the window holds,
- * and a thousand real turns is a thousand real API calls. The file is read by
- * pi's own SessionManager, so if pi cannot read it this scenario fails — which
- * is the right failure, and the same one a user resuming an old file would hit.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin installed
- * (`attn plugin install-bundled attn-pi`) and pi credentials in ~/.pi.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -38,12 +13,9 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
-// A word only a session that read the earlier conversation can produce.
 const SECRET = 'zeppelin';
 
-// How many message entries the synthetic conversation holds. The host's
-// snapshot window is 500 items, so this is comfortably past it: enough that a
-// page has somewhere to come from and a second page still has more behind it.
+// The host's snapshot window is 500 items; this is comfortably past it.
 const LONG_CONVERSATION_ENTRIES = 1_200;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,24 +53,11 @@ async function sendPrompt(client, sessionId, text) {
   await client.request('dom_click', { selector: sendOf(sessionId) });
 }
 
-/**
- * The error row this run put in the transcript, if it put one there.
- *
- * `seen` is what was already on screen before the prompt: an earlier refusal
- * stays drawn, and it is not this run's news.
- */
 const failureNotice = (state, seen = new Set()) => (state?.notices || [])
   .find((notice) => notice.level === 'error' && notice.done && !seen.has(notice.id));
 
 const noticeIds = (state) => new Set((state?.notices || []).map((notice) => notice.id));
 
-/**
- * Waits for a settled run whose answer contains `word`.
- *
- * A run that the provider refused settles too, and would otherwise burn the
- * whole timeout: the transcript now carries an error row saying why, so this
- * stops on it and reports the provider's own words.
- */
 function settledWith(client, sessionId, word, description, { timeoutMs = 180_000, seenNotices = new Set() } = {}) {
   return pollFor(
     async () => {
@@ -129,7 +88,6 @@ function composerOpen(client, sessionId, description, timeoutMs = 120_000) {
   );
 }
 
-/** The session file pi wrote for this attn session, once it has written one. */
 function sessionFileFor(dataDir, sessionId, timeoutMs = 90_000) {
   const dir = path.join(dataDir, 'hosts', 'state', sessionId);
   return pollFor(
@@ -143,14 +101,8 @@ function sessionFileFor(dataDir, sessionId, timeoutMs = 90_000) {
   );
 }
 
-/**
- * A pi session file holding a long finished conversation.
- *
- * Shapes are copied from a file pi itself wrote (v3): a session header, then
- * alternating user/assistant message entries chained by parentId. What matters
- * for this scenario is only that pi can read it and the host can rebuild a
- * transcript from it — the words are filler, and say so.
- */
+// Entry shapes are copied from a v3 file pi itself wrote; pi's own
+// SessionManager reads this back.
 function writeLongConversation(file, entries) {
   const started = Date.UTC(2026, 0, 1);
   const lines = [JSON.stringify({
@@ -262,24 +214,12 @@ async function main() {
       const before = await conversationState(client, sessionId);
       const alternatives = (before.models || []).filter((name) => name !== before.model);
       if (alternatives.length === 0) {
-        // Only one model is authenticated on this machine. That is a real
-        // configuration, not a failure — record it and skip rather than assert
-        // against a picker with nothing to pick.
         runner.writeJson('model-switch.json', { skipped: 'only one model available', state: before });
         note('model switching not exercised: this machine offers one model', { model: before.model });
         return;
       }
-      // Any alternative proves the switch, so prefer a small one — this step
-      // runs a real prompt on whatever it picks. `getAvailable` answers from
-      // pi's catalog and this machine's credentials, neither of which knows
-      // that a provider retired a model: the first candidate came back 404 on
-      // 2026-08-09. So candidates are TRIED, and a refusal moves to the next
-      // rather than failing the run — what is being proved is that the switch
-      // takes effect, not that every model in the catalog still exists.
-      //
-      // Ordering: the provider currently answering is the one this machine
-      // demonstrably works with, so its models come first; a small one within
-      // that, since this step runs a real prompt on whatever it picks.
+      // pi's catalog does not know a provider retired a model: the first
+      // candidate came back 404 on 2026-08-09, so candidates are tried in turn.
       const providerOf = (name) => name.split('/')[0];
       const working = providerOf(before.model);
       const small = /haiku|mini|nano|flash|small|lite/i;
@@ -297,9 +237,6 @@ async function main() {
           `the host to confirm the switch to ${target}`,
           60_000,
         );
-        // The run after the switch is what proves it took. An earlier
-        // candidate's refusal is still drawn, so this run's news is only what
-        // was not on screen when it started.
         const seenNotices = noticeIds(switched);
         await sendPrompt(client, sessionId, 'Reply with exactly one word: bravo');
         try {
@@ -309,8 +246,6 @@ async function main() {
         } catch (error) {
           const failed = failureNotice(await conversationState(client, sessionId), seenNotices);
           if (!failed) throw error;
-          // The provider refused, and the pane said so rather than going quiet.
-          // That row is itself part of what this slice ships.
           refused.push({ model: target, reason: failed.text });
           note('a model the catalog offers was refused by its provider, and the pane said so', { model: target, reason: failed.text });
         }
@@ -342,13 +277,9 @@ async function main() {
         throw new Error(`the resumed session drew none of the conversation it forked: ${JSON.stringify(opened.messages)}`);
       }
 
-      // The load-bearing assertion: the AGENT has the history, not just the
-      // pane. Only a session that actually forked the file can answer this.
       await sendPrompt(client, created.sessionId, 'What word did I ask you to remember? Reply with only that word.');
       const settled = await settledWith(client, created.sessionId, SECRET, 'the resumed agent to answer from the conversation it picked up');
 
-      // A fork, not an append: the file it came from is untouched, so the
-      // session that owns it is still safe to keep talking to.
       const forked = await sessionFileFor(dataDir, created.sessionId);
       if (forked === originalFile) {
         throw new Error('the resumed session is writing to the file it resumed; the source conversation would be corrupted');
@@ -413,9 +344,7 @@ async function main() {
       if (!ids.includes(oldestAtFirst) || ids.indexOf(oldestAtFirst) === 0) {
         throw new Error('the page did not land above the item it was anchored to');
       }
-      // How long the reader waits between asking for older conversation and
-      // seeing it, at this transcript length. It is polled, so it is an upper
-      // bound — and an upper bound is what "scrolls smoothly" needs.
+      // Polled, so an upper bound on the wait for older conversation.
       const pagedInMs = Date.now() - askedAt;
       runner.writeJson('paging.json', {
         entries: LONG_CONVERSATION_ENTRIES,
@@ -432,9 +361,8 @@ async function main() {
         pagedInMs,
       });
 
-      // The edge slice 4 left behind: the snapshot is a BROADCAST replace, so
-      // another client asking for one used to shorten what this window is
-      // showing back to a single window. The observer is that other client.
+      // The snapshot is a broadcast replace, so another client asking for one
+      // used to shorten what this window shows back to a single window.
       observer.send({ cmd: 'agent_attach', id: sessionId });
       await delay(3_000);
       const after = await conversationState(client, sessionId);

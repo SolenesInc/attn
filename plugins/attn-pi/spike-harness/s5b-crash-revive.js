@@ -1,6 +1,5 @@
-// S5b: kill -9 the child ~immediately after prompt() is called, before any
-// assistant output. Expected: zero session file on disk (session file is
-// created only after the first assistant message, per S1/sdk.ts).
+// S5b: kill -9 after prompt() and before any assistant output. A session file is
+// created only after the first assistant message (per S1/sdk.ts), so none exists.
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { SPIKE_DIR, createLogger } from "./common.js";
@@ -40,7 +39,6 @@ async function main() {
 	logger.log("harness", "kill_sent", { note: `pid=${childPid}` });
 	process.kill(childPid, "SIGKILL");
 
-	// Give the OS a moment, then check.
 	await new Promise((r) => setTimeout(r, 500));
 
 	const fileExists = sessionFilePath ? existsSync(sessionFilePath) : false;

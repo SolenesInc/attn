@@ -107,9 +107,6 @@ async function main() {
       submit: false,
     });
 
-    // read_pane_text is the only way to verify rendered output: it walks the
-    // same terminal buffer the user sees, and the daemon's attach payload is
-    // binary snapshot data no observer can read.
     const utilityPaneText = await waitForPaneText(
       client,
       sessionId,

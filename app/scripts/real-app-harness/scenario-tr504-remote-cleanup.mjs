@@ -141,7 +141,6 @@ async function main() {
         observer.removeEndpoint(endpoint.id);
         await observer.waitFor(() => !observer.getEndpoint(endpoint.id), `cleanup remove endpoint ${endpoint.id}`, 20_000).catch(() => {});
       } catch {
-        // Best-effort cleanup only.
       }
     }
     const finalRemoteCleanup = await cleanupRemoteHarnessProcesses(
@@ -242,10 +241,8 @@ async function main() {
       runner.writeJson('01-active-processes.json', activeProcessSnapshot);
     });
 
-    // Closing a session (sidebar close / ⌘W) closes only that session's own pane —
-    // a split shell pane deliberately survives in the workspace, locally and
-    // remotely. Full teardown requires closing the shell pane first, the way ⌘W
-    // does, which the hub forwards to the remote daemon as workspace_layout_close_pane.
+    // Closing a session closes only that session's own pane; a split shell pane
+    // deliberately survives, so full teardown closes the shell pane first.
     await runner.step('close_shell_pane_and_verify_worker_exit', async () => {
       await client.request('close_pane', { sessionId, paneId: splitPaneId });
       await observer.waitFor(
@@ -263,8 +260,6 @@ async function main() {
       runner.writeJson('02-shell-pane-closed-processes.json', shellClosedProcessSnapshot);
     });
 
-    // This closes the last remaining session. Once it disappears, the remote
-    // workspace unregisters and every session worker process must exit.
     await runner.step('close_session_and_verify_remote_cleanup', async () => {
       await client.request('close_session', { sessionId });
       postCloseProcessSnapshot = await listRemoteProcessesByHarnessRoot(options.sshTarget, remotePaths.remoteHarnessRoot, 30_000);

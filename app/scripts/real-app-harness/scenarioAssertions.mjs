@@ -80,9 +80,8 @@ export async function waitForPaneVisible(client, sessionId, paneId, timeoutMs = 
   );
 }
 
-// Read a pane's whole terminal text through the app. This is the only way the
-// harness can see rendered text: attach carries the worker's terminal as binary
-// snapshot data, so the daemon observer cannot read it.
+// The only way the harness sees rendered text: attach carries the worker's
+// terminal as binary snapshot data, which the daemon observer cannot read.
 export async function readPaneText(client, sessionId, paneId, timeoutMs = 20_000) {
   const payload = await client.request('read_pane_text', { sessionId, paneId }, { timeoutMs });
   return payload?.text || '';
@@ -105,14 +104,8 @@ export async function scrollPaneToTop(client, sessionId, paneId, timeoutMs = 12_
   );
 }
 
-// A freshly-split pane's terminal only starts receiving pty_output after the
-// frontend's `attach_session` RPC succeeds. `write_pane` bypasses the terminal and
-// writes straight to the worker PTY, so input that arrives before attach
-// runs in the shell but drops output into the worker's scrollback without
-// reaching the terminal buffer (fresh_spawn attach omits replay). Gate writes
-// on `runtimeAttached=true` so visible content reflects what the shell did.
-// Returns { state, elapsedMs } — elapsedMs lets callers distinguish "gate
-// was cosmetic" (trivially true) from "gate caught a real attach stall".
+// `write_pane` bypasses the terminal, so input before `attach_session` succeeds
+// runs in the shell but never reaches the terminal buffer. Gate on runtimeAttached.
 export async function waitForPaneAttached(
   client,
   sessionId,
@@ -162,16 +155,8 @@ export async function waitForPaneInputFocus(
   );
 }
 
-// Fresh shell panes emit their first prompt ~hundreds of ms after attach,
-// then continue a startup handshake (CPR/DA1 queries, bracketed-paste toggle,
-// keyboard-mode setup). Typing during the handshake makes the shell raw-echo
-// the first keystroke at col 6 *before* zle takes over — the visible token
-// ends up rotated (e.g. `3tr502p76785` instead of `tr502p767853`). A prompt
-// on screen is necessary but not sufficient; the shell must also be idle.
-//
-// The gate: require the prompt glyph at the tail of the buffer *and* wait
-// for the terminal write-parse count to sit still for `idleMs`. That marks the
-// end of the startup burst, after which keystrokes go straight into zle.
+// Typing during the shell's startup handshake makes it raw-echo the first
+// keystroke at col 6, rotating the token (`3tr502p76785` for `tr502p767853`).
 export async function waitForPaneShellReady(
   client,
   sessionId,
@@ -400,11 +385,6 @@ async function waitForPaneVisibleContent(
   );
 }
 
-// Evaluates the same gates assertPaneVisibleContent waits on, as a standalone
-// array so callers can both drive the pass/fail predicate and render a compact
-// per-gate report on timeout (see formatGateReport). The `contains` entry is
-// omitted entirely when no needle was requested, since "OK"/"FAIL" for a gate
-// that was never checked would be misleading in the report.
 export function evaluateVisibleContentGates(
   visibleContent,
   {
@@ -560,11 +540,8 @@ function visibleContentAnchorLines(
     .slice(0, maxAnchors);
 }
 
-// After a resize (e.g. split_pane), the terminal keeps the pre-resize buffer around
-// until the agent responds to SIGWINCH with a fresh redraw. Sampling the pane
-// during that window captures stale wide content and misrepresents the post-
-// resize baseline. Wait until no visible line exceeds the pane's current
-// column count — that's the observable signal that reflow has landed.
+// The terminal keeps the pre-resize buffer until the agent redraws on SIGWINCH;
+// no visible line exceeding the pane's columns is the signal reflow landed.
 export async function waitForPaneReflowed(client, sessionId, paneId, timeoutMs = 20_000, description) {
   const label = description || `pane ${paneId} reflowed to current geometry`;
   return waitForPaneVisibleContent(
@@ -587,9 +564,8 @@ export async function waitForPaneReflowed(client, sessionId, paneId, timeoutMs =
   );
 }
 
-// Anchors restricted to lines containing the token — agent TUIs (claude
-// especially) collapse or reflow echoed prompt instructions on re-render, so
-// non-token lines are not stable anchors.
+// Agent TUIs (claude especially) collapse or reflow echoed prompt instructions
+// on re-render, so non-token lines are not stable anchors.
 export function tokenAnchorIgnorePatterns(token) {
   return [/^\s*$/u, new RegExp(`^(?!.*${token})`)];
 }
@@ -620,8 +596,6 @@ export async function assertPaneVisibleContentPreserved(
     minLineLength,
     ignoreAnchorPatterns,
   });
-  // An empty anchor list (e.g. ignoreAnchorPatterns filtered every line) must not become
-  // an unpassable assert — fall back to the ratio gates only.
   const requiredAnchorMatches = anchors.length === 0
     ? 0
     : Math.min(Math.max(1, minAnchorMatches), anchors.length);

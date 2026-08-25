@@ -48,6 +48,9 @@ jobs:
               - 'app/playwright.config.ts'
               - 'app/tsconfig*.json'
               - 'app/vite.config.ts'
+              - 'app/lint/**'
+              - '.oxlintrc.json'
+              - 'plugins/**'
               - 'app/pnpm-workspace.yaml'
               # The app SDK is a workspace package of the frontend and the source
               # its committed declarations are emitted from, so an edit to either
@@ -111,7 +114,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -167,6 +170,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Lint comments
+        run: go run ./cmd/commentlint ./...
+
       - name: Test
         run: ./scripts/test-go.sh
 
@@ -191,7 +197,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -203,6 +209,9 @@ jobs:
 
       - name: Type check
         run: pnpm run build
+
+      - name: Lint
+        run: pnpm run lint
 
       # The declarations the attn binary embeds are emitted from sdk/attn-app by
       # the same TypeScript this job just installed. Committed, so //go:embed can
@@ -236,7 +245,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Set up Go
         uses: actions/setup-go@v5

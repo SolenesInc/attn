@@ -1,18 +1,3 @@
-/**
- * Builds a throwaway git repository that produces a realistic, controlled diff
- * for exercising the review/diff panel (DiffView over @pierre/diffs) in the
- * packaged app.
- *
- * The repo has a `main` baseline pushed to a local bare `origin` (so the daemon
- * resolves `origin/HEAD` -> `origin/main` and diffs `origin/main...HEAD`), then
- * a `feature` branch whose committed changes span the cases that matter for the
- * renderer:
- *   - multiple languages (Shiki highlighting): .ts, .py, .go, .css, .md
- *   - a pure addition, a pure deletion, and several modifications
- *   - a file with two separated hunks (collapsed-context behavior)
- *   - a large file (virtualization)
- * Plus one uncommitted edit, so the working-tree path is exercised too.
- */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,16 +38,11 @@ function bigFile(marker) {
   return `${lines.join('\n')}\n`;
 }
 
-/**
- * @param {string} rootDir directory under which the fixture repo + its bare origin are created
- * @returns {{ repoDir: string, originDir: string }}
- */
 export function buildDiffFixtureRepo(rootDir) {
   const repoDir = path.join(rootDir, 'fixture-repo');
   const originDir = path.join(rootDir, 'fixture-origin.git');
   fs.mkdirSync(repoDir, { recursive: true });
 
-  // --- main baseline -------------------------------------------------------
   git(repoDir, 'init', '-q');
   git(repoDir, 'checkout', '-q', '-b', 'main');
 
@@ -126,15 +106,12 @@ export function buildDiffFixtureRepo(rootDir) {
   git(repoDir, 'add', '-A');
   git(repoDir, 'commit', '-q', '-m', 'baseline');
 
-  // --- local bare origin so origin/main resolves --------------------------
   fs.mkdirSync(originDir, { recursive: true });
   git(originDir, 'init', '-q', '--bare');
   git(repoDir, 'remote', 'add', 'origin', originDir);
   git(repoDir, 'push', '-q', 'origin', 'main');
-  // Point origin/HEAD at main so GetDefaultBranch() reports "main".
   git(repoDir, 'remote', 'set-head', 'origin', 'main');
 
-  // --- feature branch: committed changes ----------------------------------
   git(repoDir, 'checkout', '-q', '-b', 'feature');
 
   // Modify src/app.ts in two separated regions -> two hunks.
@@ -161,7 +138,6 @@ export function buildDiffFixtureRepo(rootDir) {
     '',
   ].join('\n'));
 
-  // Modify CSS and README.
   write(repoDir, 'styles/main.css', [
     '.button {',
     '  color: #2563eb;',
@@ -193,7 +169,6 @@ export function buildDiffFixtureRepo(rootDir) {
   // Large-file modification (single hunk deep in a big file).
   write(repoDir, 'data/table.ts', bigFile('feature'));
 
-  // Pure addition: a new Go file (distinct language) + a new TS util.
   write(repoDir, 'src/feature.go', [
     'package main',
     '',
@@ -216,13 +191,11 @@ export function buildDiffFixtureRepo(rootDir) {
     '',
   ].join('\n'));
 
-  // Pure deletion.
   remove(repoDir, 'src/legacy.py');
 
   git(repoDir, 'add', '-A');
   git(repoDir, 'commit', '-q', '-m', 'feature changes');
 
-  // --- one uncommitted edit (working-tree path) ---------------------------
   write(repoDir, 'src/util.ts', [
     'export function greet(name: string): string {',
     '  // tweaked while reviewing',

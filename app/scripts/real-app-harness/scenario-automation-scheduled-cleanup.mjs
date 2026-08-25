@@ -1,34 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Packaged-app proof for Slice 5's scheduled-trigger automation: a `scheduled`
- * definition fires at its intended minute, survives a daemon restart per its
- * catch_up policy, does real merged-worktree cleanup in a visible ticket/
- * session, never touches a dirty worktree, and coalesces later occurrences
- * onto the same singleton ticket/session. The scenario quits the profile's app
- * first (ensureFreshWorld) because a running app would respawn the daemon during
- * the simulated downtime and invalidate the restart-catch-up leg.
- *
- * Two definitions are applied against one isolated profile daemon:
- *   - `scheduled-cleanup-<suffix>`: cron `* * * * *`, policy.continuity
- *     singleton, policy.catch_up latest, a REAL `codex` launch (no
- *     executable override) pointed at a local fixture repo with one
- *     fully-merged clean worktree and one dirty worktree. Proves the full
- *     restart/catch-up/cleanup/coalescing story with genuine agent work.
- *   - `scheduled-storm-guard-<suffix>`: cron `* * * * *`, policy.continuity
- *     fresh, policy.catch_up latest, launched against a FAKE codex
- *     executable (argv logger, like the Slice 4 continuity scenario's
- *     probe) so the storm-guard re-assertion in leg 4 is cheap and fast.
- *     It re-proves "one restart catch-up run regardless of missed
- *     instants" under a different continuity policy; skip-vs-latest
- *     discard beyond the 5-minute grace is already covered by
- *     internal/daemon/automations_schedule_test.go and is not re-proven
- *     live here (see leg 4 below for why).
- *
- * Run serially (packaged-app scenarios are single-tenant):
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-scheduled-cleanup.mjs
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -40,9 +11,8 @@ import { ensureFreshWorld } from './freshWorld.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Real-time budgets. The daemon's automation-schedule ticker fires once a
-// real minute; these windows are sized around that cadence plus margin, not
-// around wall-clock convenience.
+// The daemon's automation-schedule ticker fires once a real minute; these
+// windows are sized around that cadence plus margin.
 const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
 const DOWNTIME_MS = 135_000; // >= two whole-minute instants missed while stopped.
 const RESTART_RUN_TIMEOUT_MS = 120_000; // daemon start + first post-restart tick + delivery.
@@ -70,8 +40,7 @@ function runJSON(binary, args, env) {
   return JSON.parse(run(binary, args, env));
 }
 
-// `enable`/`disable` are the only way to move the enabled column post-PR5;
-// both print the updated (lowercase) definition summary.
+// `enable`/`disable` are the only way to move the enabled column.
 function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
@@ -96,8 +65,6 @@ function sqlEscape(value) {
   return value.replaceAll("'", "''");
 }
 
-// --- fixture repo -----------------------------------------------------
-
 function gitConfigIdentity(repoDir) {
   execFileSync('git', ['config', 'user.name', 'attn'], { cwd: repoDir });
   execFileSync('git', ['config', 'user.email', 'attn@local'], { cwd: repoDir });
@@ -111,8 +78,7 @@ function createFixture(root) {
 
   execFileSync('git', ['init', '-q'], { cwd: repo });
   gitConfigIdentity(repo);
-  // Deterministic default-branch name regardless of the host's
-  // init.defaultBranch config or git version's -b support.
+// Deterministic default branch whatever the host's init.defaultBranch says.
   execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: repo });
   fs.writeFileSync(path.join(repo, 'README.md'), 'Scheduled cleanup fixture.\n');
   execFileSync('git', ['add', 'README.md'], { cwd: repo });
@@ -143,8 +109,6 @@ function worktreeListShows(repo, absolutePath) {
   return out.includes(absolutePath);
 }
 
-// --- fake codex probe (storm-guard leg only; see file header) ---------
-
 function createCodexProbe(root) {
   const log = path.join(root, 'codex-invocations.jsonl');
   const executable = path.join(root, 'codex-probe.mjs');
@@ -161,17 +125,10 @@ function invocations(log) {
   return fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
-// --- automation definition YAML ----------------------------------------
-
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
-// `enabled` is not a spec field post-PR5 (column-only; a YAML carrying
-// `enabled:` is rejected outright — errEnabledManagedOutsideSpec in
-// internal/automation/automation.go), so neither template below emits it.
-// Every apply of a brand-new id is inserted enabled regardless
-// (store.UpsertAutomationDefinition); teardown/leg-end disabling now goes
-// through `automation disable <id>` (disableDefinition above) instead of a
-// reapply with `enabled: false`.
+// `enabled` is a column, not a spec field: a YAML carrying `enabled:` is
+// rejected outright (errEnabledManagedOutsideSpec).
 function cleanupDefinitionYAML({ id, locationPath }) {
   return `api_version: ${API_VERSION}
 id: ${id}
@@ -219,12 +176,8 @@ location:
 `;
 }
 
-// The tick AFTER the anchor tick legitimately fires a run (one minute boundary
-// falls between any two ticks of a `* * * * *` schedule), so asserting "no run
-// yet" after a fixed sleep races that second tick. Poll for the cursor row the
-// anchor tick writes instead, and let the caller assert zero runs immediately
-// — the caller then has most of a minute to act (e.g. stop the daemon) before
-// a run can legally fire.
+// The tick AFTER the anchor tick legitimately fires a run, so a fixed sleep
+// races it. Poll for the cursor row the anchor tick writes instead.
 async function waitForScheduleAnchor(dbPath, definitionID) {
   await poll(
     () => sqliteRow(dbPath, `SELECT observed_at FROM automation_provider_cursors WHERE definition_id='${sqlEscape(definitionID)}' AND provider='schedule' AND scope='*';`),
@@ -293,7 +246,6 @@ async function main() {
       fs.writeFileSync(cleanupDefinitionFile, cleanupDefinitionYAML({ id: cleanupID, locationPath: fixtureRoot }));
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
       cleanupApplied = true;
-      // First observation after apply only anchors the cursor; it must not fire.
       await waitForScheduleAnchor(dbPath, cleanupID);
       const rows = runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [];
       runner.assert(rows.length === 0, 'no run fires on the anchor-only tick', { rows });
@@ -339,9 +291,6 @@ async function main() {
       runner.assert(fs.existsSync(path.join(fixture.dirtyWip, 'scratch.txt')), 'dirty-wip uncommitted file is untouched');
       runner.assert(worktreeListShows(fixture.repo, fixture.dirtyWip), 'dirty-wip worktree is still tracked by git worktree list');
 
-      // Deliberately weak on agent prose (per brief): filesystem outcome above is
-      // the primary evidence. This only checks the ticket did not fail outright
-      // and has at least the delivery activity row.
       const ticket = sqliteRow(
         dbPath,
         `SELECT status, (SELECT COUNT(*) FROM ticket_activity WHERE ticket_id=tickets.id) FROM tickets WHERE id='${sqlEscape(cleanupTicketID)}';`,
@@ -353,11 +302,7 @@ async function main() {
     });
 
     await runner.step('leg3_singleton_coalescing', async () => {
-      // The definition is still enabled and cron fires every minute, so by the
-      // time leg 2's (possibly multi-minute) cleanup wait completes, later
-      // occurrences have typically already coalesced onto the same ticket.
-      // Poll rather than a fixed ~75s sleep so a fast leg 2 still gets one more
-      // real tick before this asserts.
+      // Poll rather than a fixed sleep so a fast leg 2 still gets one more tick.
       const rows = await poll(() => {
         const list = runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [];
         return list.length >= 2 ? list : null;
@@ -376,9 +321,6 @@ async function main() {
         { sessions: [...sessions] },
       );
 
-      // Later occurrences coalescing onto the same singleton agent must never
-      // touch the dirty worktree either, re-asserting leg 2's evidence after
-      // at least one more real tick has nudged the same live session.
       runner.assert(fs.existsSync(fixture.dirtyWip), 'dirty-wip worktree directory is still preserved after coalescing');
       runner.assert(fs.existsSync(path.join(fixture.dirtyWip, 'scratch.txt')), 'dirty-wip uncommitted file is still untouched after coalescing');
       runner.assert(worktreeListShows(fixture.repo, fixture.dirtyWip), 'dirty-wip worktree is still tracked by git worktree list after coalescing');
@@ -386,15 +328,8 @@ async function main() {
       disableDefinition(binary, cleanupID, daemonEnv);
     });
 
-    // Leg 4: storm-guard re-assertion. A true skip-vs-latest discard proof needs
-    // downtime past the 5-minute grace (internal/daemon/automations_schedule.go
-    // scheduleSkipGrace); that would push this scenario's wall-clock budget well
-    // past ~15 minutes. Per the brief's option (b), skip-discard-beyond-grace is
-    // left to internal/daemon/automations_schedule_test.go (asserts skip fires
-    // nothing past the grace window) and this leg instead re-proves "restart
-    // catch-up fires exactly one run despite missed instants" under a SEPARATE
-    // continuity policy (fresh, not singleton) and a fresh definition ID, using a
-    // fake codex executable so the re-assertion is fast and cheap.
+    // Skip-vs-latest discard past the 5-minute grace would push this past ~15
+    // minutes of wall clock; it lives in automations_schedule_test.go instead.
     await runner.step('leg4_storm_guard_restart', async () => {
       fs.writeFileSync(
         stormGuardDefinitionFile,
@@ -411,13 +346,8 @@ async function main() {
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
 
-      // Poll until the run row exists AND has actually been delivered (its
-      // spawn already happened), not merely created: waiting on existence
-      // alone can race the NEXT real minute tick under fresh continuity (a
-      // second, distinct run+spawn) if delivery is slow. Disable the
-      // definition immediately once delivered — stopping further fires
-      // before polling for the probe invocation — so that race window can't
-      // widen while this step keeps running.
+      // Poll for delivery, not existence: waiting on the row alone can race the
+      // next minute tick into a second run under fresh continuity.
       const rows = await poll(() => {
         const list = runJSON(binary, ['automation', 'runs', stormGuardID], daemonEnv) || [];
         const delivered = list.filter((row) => row.state === 'delivered');
@@ -438,18 +368,13 @@ async function main() {
     runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
-    // Disable both definitions before the fixture directory disappears: an
-    // enabled `directory`-location scheduled definition re-validates its path
-    // (os.Stat) on every future tick, so leaving one enabled against a deleted
-    // temp root would spam schedule-observation errors on this profile forever.
+    // An enabled `directory` definition re-validates its path every tick, so one
+    // left against a deleted temp root spams this profile forever.
     if (daemonEnv) {
       if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
       if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
     }
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
-    // daemonEnv never diverged from a plain profile daemon (no mock provider,
-    // no CODEX_HOME override) here, so a single idempotent `ensure` is enough
-    // to leave a healthy daemon behind — no stop/swap cycle needed.
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     runner.close();
   }

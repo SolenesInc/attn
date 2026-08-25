@@ -1,6 +1,3 @@
-// S5 crash/revive: spawn a child bun process running s5-child.js, kill -9 it
-// mid-tool-call, then inspect what survived and whether reopening the session
-// and continuing works. Only the PID captured at spawn is ever killed.
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { SPIKE_DIR, createLogger, openSession, sleep } from "./common.js";
@@ -97,7 +94,6 @@ async function main() {
 		note: `entryCount=${entries.length} messageCount=${messageEntries.length} danglingToolCall=${danglingToolCall}`,
 	});
 
-	// Reopen and continue.
 	const { session: reopened } = await openSession(sessionFilePath);
 	await reopened.bindExtensions({ mode: "print" });
 	logger.log("harness", "reopened", { note: `entries=${reopened.messages.length}` });

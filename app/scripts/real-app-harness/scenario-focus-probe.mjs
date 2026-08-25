@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-// Dev scenario that measures witness → attn → witness focus transitions, so
-// opt out of the default always-on-top harness mode.
+// Opt out of always-on-top: this scenario measures real focus transitions.
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 import { execFile } from 'node:child_process';
@@ -45,9 +44,8 @@ async function activateWitness(timeoutMs = 10_000) {
     } catch (error) {
       lastError = error;
     }
-    // Wait a beat for macOS to propagate the activation; re-fire osascript
-    // each iteration because recently-launched apps can briefly refuse to
-    // yield frontmost to an AppleEvent activate request.
+    // A recently-launched app can briefly refuse to yield frontmost to an
+    // activate AppleEvent, so re-fire osascript each iteration.
     await sleep(400);
     if ((await frontmostBundleId()) === WITNESS_BUNDLE_ID) {
       return;
@@ -130,7 +128,6 @@ async function main() {
       observations.modeA_frontmostBefore = await frontmostBundleId();
       runner.log('mode_a:before', { bundleId: observations.modeA_frontmostBefore });
 
-      // Current focus-stealing path: NSRunningApplication.activate(...) + CGEvent.post.
       await driver.activateApp();
       await driver.pressKey('d', { command: true });
       await sleep(500);
@@ -150,7 +147,6 @@ async function main() {
       observations.modeB_frontmostBefore = await frontmostBundleId();
       runner.log('mode_b:before', { bundleId: observations.modeB_frontmostBefore });
 
-      // Focus-free path: bridge TCP socket → useUiAutomationBridge → splitPane.
       await client.request('split_pane', {
         sessionId,
         targetPaneId: initialPaneId,

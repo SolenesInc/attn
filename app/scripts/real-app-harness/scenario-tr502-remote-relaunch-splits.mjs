@@ -36,14 +36,8 @@ import {
   waitForEndpointConnected,
 } from './scenarioRemote.mjs';
 
-// Drives `type_pane_via_ui` one character at a time with a short pause
-// between sends. Twelve back-to-back single-byte pty_inputs (~1ms apart)
-// cause remote zsh+Starship to mis-echo: its syntax-highlight and
-// autosuggest plugins race against rapid zle callbacks and leave a
-// rotated/mangled token on screen (write_pane, which sends the whole
-// string in one PTY write, doesn't trip this). Pacing keeps the UI input
-// path under test while avoiding the shell-plugin race that has nothing to
-// do with attn.
+// One character at a time with a pause: twelve back-to-back single-byte inputs
+// (~1ms apart) make remote zsh+Starship mis-echo a rotated/mangled token.
 const HUMAN_TYPING_INTERVAL_MS = 35;
 async function typeIntoPaneAtHumanCadence(client, sessionId, paneId, text, intervalMs = HUMAN_TYPING_INTERVAL_MS) {
   for (const char of text) {
@@ -169,7 +163,6 @@ async function main() {
         observer.removeEndpoint(endpoint.id);
         await observer.waitFor(() => !observer.getEndpoint(endpoint.id), `cleanup remove endpoint ${endpoint.id}`, 20_000).catch(() => {});
       } catch {
-        // Best-effort cleanup only.
       }
     }
     const finalRemoteCleanup = await cleanupRemoteHarnessProcesses(

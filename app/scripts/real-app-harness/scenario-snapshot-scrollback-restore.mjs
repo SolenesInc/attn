@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-// One-off verification for docs/plans/2026-08-16-snapshot-restore.md: a session
-// with deep scrollback keeps it across an app relaunch. Before this change the
-// worker retained 10,000 BYTES of history (289 rows at 200 columns), so the
-// early lines below were gone by the time the client reattached.
+// Design: docs/plans/2026-08-16-snapshot-restore.md
 
 import {
   createSessionAndWaitForInitialPane,

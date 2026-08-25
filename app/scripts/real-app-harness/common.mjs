@@ -13,17 +13,10 @@ import {
   profileForAppPath,
 } from './harnessProfile.mjs';
 
-// Default SSH target for remote-endpoint scenarios: the local OrbStack VM
-// provisioned by provision-orb-remote.sh. ATTN_HARNESS_REMOTE_SSH_TARGET
-// retargets every remote scenario at once; each scenario's own env var
-// still wins over it.
 export const DEFAULT_REMOTE_SSH_TARGET =
   process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || 'attn-remote@orb';
 
 export function parseCommonArgs(argv) {
-  // Default to the active profile's install (the safe dev sibling unless
-  // ATTN_PROFILE/ATTN_HARNESS_PROFILE says otherwise). Production requires both
-  // an explicit prod target and the --run-against-prod acknowledgement.
   const options = {
     wsUrl: process.env.ATTN_REAL_APP_WS_URL || null,
     appPath: process.env.ATTN_REAL_APP_PATH || null,
@@ -47,14 +40,10 @@ export function parseCommonArgs(argv) {
 
   const safetyArgv = argv.length > 0 ? argv : process.argv.slice(2);
   const isHelp = options.help || safetyArgv.includes('--help') || safetyArgv.includes('-h');
-  // For --help we do not resolve the active profile's resources: a named
-  // profile resolves via `attn profile resolve`, which needs ./attn built, and
-  // help should never require a build. printCommonHelp resolves defensively.
+  // --help must not resolve the active profile: a named profile resolves via
+  // `attn profile resolve`, which needs ./attn built.
   if (isHelp) return options;
 
-  // Resolve the active profile's defaults for anything not set explicitly. The
-  // ws URL follows the (possibly explicit) app path's profile, so an explicit
-  // prod --app-path also routes to the prod daemon.
   if (!appPathExplicit) options.appPath = defaultAppPathForProfile();
   if (!wsUrlExplicit) options.wsUrl = defaultWSURLForProfile(profileForAppPath(options.appPath));
 
@@ -68,11 +57,6 @@ export function assertCommonTargetAllowed(options, argv = process.argv.slice(2))
 }
 
 export function printCommonHelp(scriptName) {
-  // Show the active profile and its resolved defaults so it is always obvious
-  // which world a run targets. currentHarnessProfile() needs no binary, so the
-  // label is always accurate; the per-profile resources need ./attn for a named
-  // profile, so show an honest placeholder (never a mislabeled dev fallback) if
-  // it is not built yet.
   const profile = currentHarnessProfile();
   const label = profile === '' ? 'production' : profile;
   let wsUrl;
@@ -98,16 +82,12 @@ Options:
 `);
 }
 
-// Contract: a driving agent greps stdout for the LAST line starting with the
-// `ATTN_VERDICT ` prefix and JSON.parses the remainder. Keep the payload on a
-// single line (compact JSON; no pretty-print) and free of embedded newlines so
-// naive line-oriented parsing never splits it.
+// Contract: an agent greps stdout for the LAST `ATTN_VERDICT ` line and
+// JSON.parses the rest, so the payload must stay on one line.
 export const ATTN_VERDICT_PREFIX = 'ATTN_VERDICT ';
 
-// Contract: verdict.firstFailure is capped at this length (see ATTN_VERDICT_PREFIX
-// above) so it can never contain a newline or otherwise break the one-line
-// contract. Shared by every producer of a firstFailure field (scenarioRunner.mjs,
-// rssBaselineVerdict.mjs).
+// Cap keeps firstFailure inside the one-line ATTN_VERDICT contract; shared
+// with scenarioRunner.mjs and rssBaselineVerdict.mjs.
 export const FIRST_FAILURE_MAX_LENGTH = 300;
 
 export function formatVerdictLine(verdict) {
@@ -133,25 +113,7 @@ export async function captureScreenshot(driver, outputPath) {
   }
 }
 
-// A harness session ROW can outlive the fresh-world process sweep: the
-// daemon persists sessions in its store, so a process-level cleanup (killing
-// pty-workers, restarting the daemon) does not remove a session a prior run
-// left behind. Any session whose cwd sits under the shared harness sessions
-// root is stale by definition at a *fresh* launch — this run has not created
-// one yet — so sweep them before scenarios start, surfacing what was found
-// rather than silently scrubbing it (a leaked session is diagnostic signal:
-// it means a prior run's own cleanup, e.g. a scenario's finally block, failed).
-//
-// Cleanup goes through the daemon's `unregister` command (via the observer),
-// not the bridge's `close_session`: handleCloseSession (App.tsx) refuses to
-// close a chief-of-staff session by design (isChiefOfStaffSession guard), and
-// a leaked stale session is very often exactly that — a scenario's chief.
-// That guard exists to protect a live user's chief from an accidental close,
-// not to protect a dead run's leftovers, so it's the wrong gate for this
-// path; `unregister` is the same underlying op the app itself uses via
-// sendUnregisterSession, minus that interactive guard.
-// Path-component-aware containment: '/a/b-old/x' is NOT under '/a/b'. The
-// sweep may tear down chief-of-staff sessions, so this boundary must hold.
+// Path-component-aware containment: '/a/b-old/x' is NOT under '/a/b'.
 export function isDirectoryUnderRoot(directory, roots) {
   if (!directory) return false;
   return roots.some((root) => directory === root || directory.startsWith(root + path.sep));
@@ -162,19 +124,8 @@ export async function sweepStaleHarnessSessions(observer, {
   log = (m) => console.log(`[harness] ${m}`),
   timeoutMs = 15_000,
 } = {}) {
-  // Ground truth is the DAEMON, via the observer's WebSocket snapshot — not
-  // the bridge's get_state. Right after launchFreshAppAndConnect's connect(),
-  // the frontend session store may not have loaded the daemon's persisted
-  // sessions yet, so a bridge get_state here can race and see zero stale
-  // sessions while the daemon still holds one. observer.sessionsById is
-  // populated as part of observer.connect() (already awaited by the caller),
-  // so it reflects the daemon's state, not the frontend's catch-up lag.
-  //
-  // The daemon store resolves symlinks in the cwd it persists (macOS
-  // `os.tmpdir()` returns `/var/folders/...`, but the daemon records the
-  // realpath `/private/var/folders/...`); the bridge's `cwd` does not. Match
-  // both the configured root and its realpath form so this filter isn't
-  // silently defeated by the symlink.
+  // The daemon persists the realpath'd cwd (/private/var/folders/...) while the
+  // bridge does not, so match both forms or the symlink defeats this filter.
   const rootCandidates = [...new Set([sessionRootDir, (() => {
     try {
       return fs.realpathSync(sessionRootDir);
@@ -193,39 +144,24 @@ export async function sweepStaleHarnessSessions(observer, {
 
   const staleIds = new Set(stale.map((session) => session.id));
 
-  // The daemon refuses to unregister a chief-of-staff session too — by
-  // design, at both the app and daemon layers. Demoting first is the
-  // sanctioned removal path; demoting a non-chief is a no-op, so it's safe to
-  // send for every stale id rather than figuring out which ones are chiefs.
-  // No wait between demote and unregister: both go out on the observer's
-  // single WebSocket connection, so the daemon processes them in order.
+  // The daemon refuses to unregister a chief-of-staff session, so demote first;
+  // demoting a non-chief is a no-op.
   for (const id of staleIds) {
     try {
       observer.send({ cmd: 'set_chief_of_staff', session_id: id, chief_of_staff: false });
     } catch (error) {
-      // A dead socket here still falls through to unregisterMatchingSessions,
-      // whose own error reporting will surface the failure below.
       log(`demote (set_chief_of_staff) for ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  // unregisterMatchingSessions's own timeout error already names the
-  // surviving session ids and includes a full id/label/state/directory
-  // snapshot (daemonObserver.mjs describeState), so it needs no wrapping.
   await observer.unregisterMatchingSessions((session) => staleIds.has(session.id), timeoutMs);
 
   return { swept: stale.length };
 }
 
-// The cheapest model each agent offers — the catalog's "(cheap)" entries in
-// app/src/components/automations/launchCatalog.ts. A scenario fixture asks an
-// agent to count, not to think, and nothing here caps what a run spends.
+// Mirrors the "(cheap)" entries in app/src/components/automations/launchCatalog.ts.
 const CHEAP_LAUNCH_MODELS = { claude: 'haiku', codex: 'gpt-5.4-mini' };
 
-// Per-agent escape hatch: ATTN_HARNESS_LAUNCH_MODEL_CLAUDE=sonnet pins that
-// instead, and =inherit leaves the setting alone. Inheriting is the expensive
-// option — an unpinned launch takes the machine owner's own default — so it
-// has to be asked for by name.
 function launchModelFor(agent) {
   const override = (process.env[`ATTN_HARNESS_LAUNCH_MODEL_${agent.toUpperCase()}`] || '').trim();
   if (override === 'inherit') {
@@ -234,17 +170,10 @@ function launchModelFor(agent) {
   return override || CHEAP_LAUNCH_MODELS[agent];
 }
 
-// Restores queued by pinCheapLaunchModels. They go back to the daemon
-// directly rather than through the app: scenarios tear down in whatever order
-// suits them — some through the runner's cleanup registry, some in their own
-// `finally` — and by the time the last of them has run the app is usually
-// gone. The daemon owns the setting and outlives every app launch, so it is
-// the one party guaranteed to still be there.
+// Restores go straight to the daemon, not through the app: by the time the
+// last scenario cleanup runs the app is usually gone.
 const pendingSettingRestores = [];
 
-// Pins every agent's launch model on the daemon the scenarios drive, and
-// records what was there first so the run leaves the profile as it found it —
-// dev is a profile the maintainer also uses by hand.
 async function pinCheapLaunchModels(client, observer) {
   for (const agent of Object.keys(CHEAP_LAUNCH_MODELS)) {
     const model = launchModelFor(agent);
@@ -258,9 +187,6 @@ async function pinCheapLaunchModels(client, observer) {
     }
     await client.request('set_setting', { key, value: model });
     console.log(`[harness] pinned ${key}=${model} (was ${previous ? previous : 'unconfigured'})`);
-    // Only the first pin of a key is worth remembering: a relaunch re-pins over
-    // the harness's own value, and going back to that would leave the pin in
-    // place. Keeping the earliest means the value the run started with wins.
     if (!pendingSettingRestores.some((restore) => restore.key === key)) {
       pendingSettingRestores.push({ key, value: previous });
     }
@@ -268,10 +194,8 @@ async function pinCheapLaunchModels(client, observer) {
   installSettingRestoreHook();
 }
 
-// beforeExit fires when the scenario's work is done and the loop drains, which
-// is every normal end — pass or fail. It does not fire on a signal, so the
-// runner calls the restore from its signal path too; draining the queue makes
-// the second call a no-op.
+// beforeExit does not fire on a signal, so the runner calls the restore from
+// its signal path too; draining the queue makes the second call a no-op.
 let settingRestoreHookInstalled = false;
 function installSettingRestoreHook() {
   if (settingRestoreHookInstalled) {
@@ -280,16 +204,13 @@ function installSettingRestoreHook() {
   settingRestoreHookInstalled = true;
   process.once('beforeExit', () => {
     // No await before the socket exists: a beforeExit handler only holds the
-    // process open through a real handle, so anything the restore waits on
-    // first (a dynamic import, say) lets the run end with the pin still on.
+    // process open through a real handle.
     void restoreHarnessSettings().catch((error) => {
       process.stderr.write(`[harness] could not restore pinned settings: ${error?.message || error}\n`);
     });
   });
 }
 
-// write is injectable so the pin/restore bookkeeping can be tested without a
-// daemon; nothing in the harness passes it.
 export async function restoreHarnessSettings({ write = writeDaemonSettings } = {}) {
   const restores = pendingSettingRestores.splice(0, pendingSettingRestores.length);
   if (restores.length === 0) {
@@ -302,8 +223,6 @@ export async function restoreHarnessSettings({ write = writeDaemonSettings } = {
   return restores.length;
 }
 
-// A short-lived daemon connection that writes settings and waits for the
-// daemon to echo each one back, so the process cannot exit mid-write.
 async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
   const ws = new WebSocket(wsUrl);
   const pending = new Set(entries.map((entry) => entry.key));
@@ -319,8 +238,6 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
         ? new Error(`daemon closed before writing ${[...pending].join(', ')} (code ${code}${reason?.length ? `: ${reason}` : ''})`)
         : undefined));
       ws.on('open', () => {
-        // The daemon refuses commands from a client that has not claimed
-        // workspace_sessions, and says so on the way out.
         ws.send(JSON.stringify({
           ...harnessClientHello('harness-observer'),
         }));
@@ -356,7 +273,6 @@ export async function launchFreshAppAndConnect(client, observer, { sweepStaleSes
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();
-  // After connect: the prior values ride in on initial_state.
   await pinCheapLaunchModels(client, observer);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
@@ -431,8 +347,6 @@ export async function bootstrapPackagedAppSession({
   await driver.activateBackground();
   await captureScreenshot(driver, path.join(runDir, '01-app-launched.png'));
 
-  // Scheme follows the selected app path so an explicit prod target opens
-  // prod while the default dev target stays isolated.
   const scheme = deepLinkSchemeForProfile(profileForAppPath(driver.appPath));
   const deepLink = `${scheme}://spawn?cwd=${encodeURIComponent(sessionDir)}&label=${encodeURIComponent(sessionLabel)}`;
   console.log(`[RealAppHarness] deepLink=${deepLink}`);

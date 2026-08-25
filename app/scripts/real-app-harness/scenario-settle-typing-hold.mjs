@@ -1,39 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: keyboard and pointer activity freeze settling.
- *
- * attn closes a turn for the user once they have steered an agent and it has
- * gone back to work. The countdown that does it used to run regardless of what
- * the user was doing, so a turn could close while they were still at the
- * keyboard writing the next thing. A keystroke now freezes it where it stands
- * and it stays frozen until five quiet seconds have passed.
- *
- * The whole mechanism lives between a real keystroke's route into the daemon and
- * a timer the daemon owns, which is why it is worth a packaged-app run. Two
- * writes reach a pane and only one of them is a person: the terminal's own input
- * path arrives untagged and holds, and an automation write is tagged and must
- * not — otherwise a delegated agent driving a pane would pin every countdown in
- * the app open. A unit test can assert both sides of that filter, but only the
- * real app proves the frontend's typing path is still the untagged one.
- *
- * The run asserts, in one app lifecycle:
- *
- *   1. typing into a running countdown freezes it — `auto_settle_held` rides the
- *      wire, the deadline is withdrawn, and the turn stays owed,
- *   2. the freeze outlives continued typing past the quiet window, so a user who
- *      keeps composing never has the countdown resume under their hands,
- *   3. going quiet hands back a *whole* countdown rather than the sliver that was
- *      left when they started typing, and
- *   4. an automation write to the same pane does not hold anything.
- *
- * The countdown window is deliberately long (60s), so "it expired on its own"
- * cannot explain the freeze, and a resumed deadline more than 50s out cannot be
- * the remainder of the one that was frozen.
- *
- * Prereqs: `claude` on PATH; a built `./attn` (or ATTN_HARNESS_BIN); a
- * non-production profile install with the automation layer.
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,9 +20,8 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The daemon's quiet window. Mirrored here rather than imported because the
-// scenario is asserting the behavior a user sees, not reading the constant that
-// produces it — a change to one should make this run fail, not follow it.
+// The daemon's quiet window, mirrored rather than imported: a change to one
+// should make this run fail, not follow it.
 const QUIET_WINDOW_MS = 5_000;
 const COUNTDOWN_SECONDS = 60;
 
@@ -88,9 +53,8 @@ async function pollFor(fn, description, timeoutMs = 60_000, intervalMs = 300) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
-// A person typing: the terminal's own input path, which reaches the daemon
-// untagged. This is the verb under test — write_pane is tagged `automation` and
-// is deliberately a different thing.
+// The terminal's own input path reaches the daemon untagged; write_pane is
+// tagged `automation` and is deliberately a different thing.
 async function typeLikeAPerson(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
 }
@@ -163,9 +127,6 @@ async function main() {
       agentPaneId = pane.paneId;
       await client.request('select_session', { sessionId: agentId });
 
-      // An agent booted to its prompt and not yet spoken to already owes a turn.
-      // Auto-settle only arms on a session that owes one, so this is the
-      // precondition for everything below rather than a claim of its own.
       await pollFor(
         () => (observer.getSession(agentId)?.turn_owed === true ? true : null),
         'the booted agent to owe a turn',
@@ -177,14 +138,10 @@ async function main() {
     let frozenDeadline = null;
 
     await runner.step('typing_freezes_the_running_countdown', async () => {
-      // Arm at the floor so the countdown starts promptly; the countdown itself
-      // is long, so nothing below can be explained by it running out.
       await client.request('set_setting', { key: 'auto_settle_arm_seconds', value: '5' });
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: String(COUNTDOWN_SECONDS) });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
 
-      // Steering is what arms it, and the agent has to still be working when the
-      // arm window elapses — leaving `working` cancels the settle by itself.
       await submitPrompt(
         client,
         agentId,
@@ -225,24 +182,16 @@ async function main() {
         'the keystrokes to freeze the countdown',
         10_000,
       );
-      // The two fields are mutually exclusive on purpose: a frozen countdown has
-      // no deadline, which is what stops the tile animating toward one.
       runner.assert(
         !held.auto_settle_fires_at,
         `a frozen countdown carries no deadline (got auto_settle_fires_at=${JSON.stringify(held.auto_settle_fires_at)})`,
         held,
       );
-      // A settle that ran would have closed the turn, and leaving `working`
-      // would have cancelled the countdown outright. Neither happened, so the
-      // keystrokes are what froze it.
       runner.assert(
         held.state === 'working' && held.turn_owed === true,
         `the agent is still working and still owes the turn while frozen (state=${JSON.stringify(held.state)}, turn_owed=${JSON.stringify(held.turn_owed)})`,
         held,
       );
-      // What the wire says is only half of it. The tile is where the user finds
-      // out a turn is about to close, so the freeze has to be drawn, not just
-      // broadcast.
       const chip = (await client.request('get_session_ui_state', { sessionId: agentId })).settling;
       runner.assert(
         chip && chip.held === true && chip.frozenBar === true && chip.text.toLowerCase().includes('paused'),
@@ -253,10 +202,6 @@ async function main() {
     });
 
     await runner.step('the_freeze_outlives_continued_typing', async () => {
-      // Past the quiet window twice over, with the gaps a person leaves between
-      // words. If the quiet check resumed instead of re-holding, the deadline
-      // would be back before this loop ends — under the user's hands, which is
-      // the bug this feature exists to prevent.
       const deadline = Date.now() + QUIET_WINDOW_MS * 2.5;
       let keystrokes = 0;
       while (Date.now() < deadline) {
@@ -274,10 +219,6 @@ async function main() {
     });
 
     await runner.step('going_quiet_hands_back_a_whole_countdown', async () => {
-      // An agent that finished its work while we were typing takes its pending
-      // settle with it — leaving `working` cancels one outright, hold or no hold.
-      // That is correct product behavior and a useless run, so it is separated
-      // from the assertion below rather than folded into a timeout.
       const resumed = await pollFor(
         () => {
           const session = observer.getSession(agentId);
@@ -296,9 +237,6 @@ async function main() {
         resumed,
       );
       const remainingMs = Date.parse(resumed.auto_settle_fires_at) - Date.now();
-      // The frozen bar is drawn full, so the countdown it releases into is a
-      // whole one. A remainder would drop the bar the instant typing stopped —
-      // and by now the original 60s deadline is long past.
       runner.assert(
         remainingMs > (COUNTDOWN_SECONDS - 10) * 1_000,
         `the resumed countdown is a whole one, not the remainder of the frozen one (${remainingMs}ms of ${COUNTDOWN_SECONDS}s)`,
@@ -338,8 +276,8 @@ async function main() {
       const until = Date.now() + QUIET_WINDOW_MS * 2.5;
       let moves = 0;
       while (Date.now() < until) {
-        // Visit both targets so the step never depends on where the cursor was
-        // left by a previous scenario run. Each pair contains real movement.
+        // Visit both targets so the step never depends on where a previous run left
+        // the cursor. Each pair contains real movement.
         for (const point of points) {
           await driver.movePointerInWindow(point.relativeX, point.relativeY);
           moves += 1;
@@ -368,9 +306,6 @@ async function main() {
     });
 
     await runner.step('automation_writes_do_not_freeze_it', async () => {
-      // attn typing on the user's behalf — a nudge, a delegation brief, a
-      // harness driving a pane — must not hold a countdown open. Same pane, same
-      // daemon command, different source tag.
       const before = observer.getSession(agentId)?.auto_settle_fires_at;
       await client.request('write_pane', { sessionId: agentId, paneId: agentPaneId, text: ' automated', submit: false });
       await delay(2_000);

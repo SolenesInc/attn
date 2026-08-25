@@ -1,53 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-agent benchmark: does a chief of staff, given the always-on ChiefGuidance
- * system prompt, ACTUALLY delegate and react proactively when a delegated ticket
- * changes — with no further human prompting? Every runtime relies on attn's
- * ticket nudge path when unread activity remains; the benchmark also records an
- * accidentally armed `attn ticket inbox --watch` process as evidence.
- *
- * This is an instruction-following benchmark, not a unit test: it stands up a REAL
- * Claude (or Codex) chief in an isolated packaged app, types a human-sounding
- * delegation request into its terminal exactly as a person would, and then only
- * OBSERVES. It never coaches the chief toward the "right" behavior.
- *
- * Flow:
- *   1. Seed a small git repo (CHANGELOG.md + README.md) as the chief's cwd so the
- *      delegated task is concrete.
- *   2. Create a real <agent> session ALREADY as chief (the "create as chief" toggle:
- *      create_session with chief_of_staff:true). The daemon assigns the chief role
- *      BEFORE spawn, so the very first launch injects ChiefGuidance — no promote, no
- *      reload (an empty zero-turn session can't be resumed, which is why the first
- *      launch, not a post-launch reload, must carry the guidance).
- *   3. GATE: confirm the daemon holds the role for this session AND its agent process
- *      was actually launched with the runtime-specific guidance carried by its
- *      --append-system-prompt / developer_instructions. Fail fast here so a setup
- *      miss never masquerades as a behavioral failure.
- *   4. Type the human prompt. Observe (no coaching):
- *        - did the chief DELEGATE? (a ticket bound to a NEW worker session appears)
- *        - did it optionally arm a watch, or leave unread activity for the shared
- *          nudge path?
- *      If the chief does the task ITSELF instead of delegating, capture the evidence
- *      and STOP with verdict=did-not-delegate — that is a finding to discuss, not a
- *      thing to auto-correct.
- *   5. If it delegated: drive the worker to report ready_for_review (the real
- *      producer path; the chief can't tell this from the sub-agent finishing), then
- *      observe whether the chief surfaces the update on its own.
- *
- * Run serially (packaged-app scenarios are single-tenant), one agent at a time:
- *   ATTN_HARNESS_PROFILE=uat node scripts/real-app-harness/scenario-chief-ticket-watch.mjs --agent claude
- *   ATTN_HARNESS_PROFILE=uat node scripts/real-app-harness/scenario-chief-ticket-watch.mjs --agent codex
- *
- * Prereqs: claude/codex on PATH; a built ./attn (or ATTN_HARNESS_BIN); a non-prod
- * profile install built from this branch (so its bundled attn has the runtime-aware
- * guidance and the create-as-chief spawn path) — e.g. `make install PROFILE=uat`.
- *
- * Repeatability: the chief role is profile-wide and persists in the profile DB, and
- * create-as-chief SKIPS when a chief already exists (it never transfers). So this
- * benchmark demotes any leftover chief at startup and again on teardown, leaving the
- * profile with no chief for the next run.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,8 +22,6 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// The two human prompts (approved by Victor). Casual, no mention of tests, tickets,
-// watching, or the feature — a person handing work to their chief of staff.
 const PROMPTS = {
   claude:
     'hey can you get someone going on a quick CHANGELOG audit? skim the last couple ' +
@@ -85,16 +35,11 @@ const PROMPTS = {
     'ping me when there\'s something to look at',
 };
 
-// Pin the chief's model per agent so the benchmark measures the ChiefGuidance on a
-// known model rather than whatever the agent defaults to. Empty => agent default.
-// Set via the chief_model_<agent> setting before create_session; cleared in teardown.
 const CHIEF_MODELS = {
   claude: 'opus',
   codex: 'gpt-5.5',
 };
 
-// --no-watch variant: tell the chief to delegate but explicitly NOT arm a watch /
-// Monitor. This isolates the shared daemon nudge path for either runtime.
 const NO_WATCH_PROMPTS = {
   claude:
     'hey can you get someone going on a quick CHANGELOG audit? skim the last couple ' +
@@ -138,7 +83,7 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 500) {
     if (last) return last;
     await delay(intervalMs);
   }
-  return null; // caller decides whether a miss is fatal
+  return null;
 }
 
 function resolveAttnBin() {
@@ -164,7 +109,6 @@ function makeAttnRunner(attnBin, profile) {
   };
 }
 
-// Tolerant shell: returns stdout (or '' on non-zero exit) so probes never throw.
 function shell(cmd) {
   try {
     return execFileSync('bash', ['-lc', cmd], { encoding: 'utf8' });
@@ -173,10 +117,8 @@ function shell(cmd) {
   }
 }
 
-// Live `attn ticket inbox --watch` processes as "pid command" lines. The agent's
-// OWN launch process also contains "ticket inbox --watch" (inside the guidance
-// blob), so exclude anything carrying the guidance or the system-prompt flags —
-// what remains is a genuine watch invocation, not the agent reading about it.
+// The agent's own launch process carries `ticket inbox --watch` inside its
+// guidance blob; the greps below exclude it from a genuine watch invocation.
 function watchProcessLines() {
   return shell(
     `ps -Awwo pid=,command= | grep -- 'ticket inbox --watch'` +
@@ -187,25 +129,15 @@ function watchProcessLines() {
 
 const pidOf = (line) => line.split(/\s+/)[0];
 
-// A watch the CHIEF armed = a `--watch` process whose pid was not already running
-// at baseline (captured before the prompt). This filters out a stray watch left by
-// a prior/other run — e.g. a `smoke-fake-*` Monitor — that would otherwise read as
-// a false "armed: YES".
 function freshWatchProcesses(baselinePids) {
   return watchProcessLines().filter((l) => !baselinePids.has(pidOf(l))).join('\n');
 }
 
-// Did the chief's agent get launched WITH its runtime-specific ChiefGuidance? Each
-// marker appears only in the guidance text, not in a live watch command.
 function chiefGuidanceProcesses(agent) {
   const marker = "Rely on attn's ticket nudges";
   return shell(`ps -Awwo pid=,command= | grep -- '${marker}' | grep -v grep`).trim();
 }
 
-// Drive a session to the desired chief state via the same UI flow a user would
-// (open actions, toggle, confirm any transfer). Idempotent: a no-op when already in
-// the wanted state. Used only for teardown/reset here — the chief itself is born via
-// create-as-chief, not promotion.
 async function setChiefOfStaff(client, sessionId, want) {
   const before = await client.request('chief_of_staff_get_state');
   const isChief = Boolean(before.sessions.find((s) => s.id === sessionId)?.chiefOfStaff);
@@ -225,9 +157,6 @@ async function setChiefOfStaff(client, sessionId, want) {
   assert(ok, `chief role set to ${want} for ${sessionId}`);
 }
 
-// Demote any session that currently holds the chief role, so create-as-chief (which
-// skips when a chief exists) starts from a clean slate. Catches a chief left live by
-// a prior run that crashed before its teardown.
 async function clearAnyChief(client) {
   const state = await client.request('chief_of_staff_get_state').catch(() => ({ sessions: [] }));
   const chief = (state.sessions || []).find((s) => s.chiefOfStaff);
@@ -255,8 +184,6 @@ async function main() {
   if (!profile) throw new Error('this benchmark never runs against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   const attnBin = resolveAttnBin();
   const runAttn = makeAttnRunner(attnBin, profile);
-  // The board is read through the CLI: the app shows the garden now, and its
-  // ticket surfaces (with the bridge verbs that read them) are gone.
   // `ticket list --json` prints an array; runAttn's own parse looks for an object.
   const ticketBoard = () => {
     try {
@@ -269,8 +196,6 @@ async function main() {
 
   const { runId, runDir, sessionDir } = createRunContext(options, `chief-watch-${agent}`);
 
-  // Seed the chief's cwd: a git repo with files the delegated task can plausibly act
-  // on, so "delegate this audit" is concrete rather than vacuous.
   const repoDir = path.join(sessionDir, 'chief-repo');
   fs.mkdirSync(repoDir, { recursive: true });
   fs.writeFileSync(path.join(repoDir, 'CHANGELOG.md'),
@@ -311,30 +236,18 @@ async function main() {
   try {
     await launchFreshAppAndConnect(client, observer);
 
-    // 0) Clean slate: demote any chief left over from a crashed prior run, since
-    //    create-as-chief skips (never transfers) when a chief already exists.
     const leftover = await clearAnyChief(client);
     if (leftover) note(`demoted leftover chief from a prior run`, { leftover });
 
-    // 0b) Enable auto-approve BEFORE create_session so the spawn reads it: the chief
-    //     must run unattended (the "keep me posted, I'm out" premise), and a default
-    //     permission posture stalls it on the first gate. set_setting + create ride
-    //     the same ordered WS, so the store has it before spawn (same pattern as
-    //     scenario-codex-resume-mapping's set_setting+create). Restored in teardown.
     await client.request('set_setting', { key: 'auto_approve_enabled', value: 'true' });
     note('enabled auto_approve_enabled for the benchmark');
 
-    // 0c) Pin the chief's model (chief_model_<agent>) BEFORE create so the launch
-    //     picks it up via --model. Same ordered-WS guarantee as auto_approve above.
     const chiefModel = CHIEF_MODELS[agent] || '';
     if (chiefModel) {
       await client.request('set_setting', { key: `chief_model_${agent}`, value: chiefModel });
       note(`pinned chief model: ${agent}=${chiefModel}`);
     }
 
-    // 1) Create the real agent session ALREADY as chief (the create-as-chief toggle).
-    //    The daemon assigns the role before spawn, so the first launch carries
-    //    ChiefGuidance — no promote, no in-place reload.
     const created = await client.request('create_session', {
       cwd: repoDir,
       label: `chief-${runId.slice(-6)}`,
@@ -347,10 +260,6 @@ async function main() {
     await ensureReady(client, chiefId, 90_000);
     note(`chief agent booted to prompt`);
 
-    // 2) GATE (role): the daemon must actually hold the chief role for THIS session.
-    //    If it doesn't, the create-as-chief role-set was skipped (e.g. a stale chief
-    //    still held the role) — fail fast and distinctly so it never reads as a
-    //    behavioral result.
     const roleState = await pollFor(
       async () => {
         const state = await client.request('chief_of_staff_get_state').catch(() => null);
@@ -366,8 +275,6 @@ async function main() {
       throw new Error('SETUP FAILED: the daemon did not assign the chief role to the new session (create-as-chief was skipped — likely a stale chief still holds the role; reset the profile and re-run).');
     }
 
-    // 3) GATE (guidance): the agent process must actually carry its runtime-specific
-    //    guidance in the launch args.
     await pollFor(
       () => Boolean(chiefGuidanceProcesses(agent)),
       'chief agent launched with ChiefGuidance',
@@ -383,9 +290,6 @@ async function main() {
     note(`role + guidance verified at first launch`);
     const readyPane = (await dumpPane('01-chief-ready-with-guidance')) || '';
 
-    // 3b) GATE (model): if we pinned a model, the chief's status line must show it.
-    //     A silent mispin (e.g. --model not threaded) would otherwise mislabel a
-    //     default-model result as the pinned one. Fail fast and distinctly.
     if (chiefModel) {
       if (!new RegExp(chiefModel, 'i').test(readyPane)) {
         console.log('\n=== SETUP FAILED: chief model did not pin ===');
@@ -396,34 +300,20 @@ async function main() {
       note(`chief model pinned: ${chiefModel}`);
     }
 
-    // Snapshot any pre-existing `--watch` processes (a stray one left by a prior
-    // run) so only a watch the chief arms AFTER the prompt counts as armed.
     const baselineWatchPids = new Set(watchProcessLines().map(pidOf));
 
-    // 4) Type the human prompt — then only observe.
     const prompt = (noWatch ? NO_WATCH_PROMPTS : PROMPTS)[agent];
     const pane = await waitForFirstWorkspacePane(client, chiefId, `chief pane ${chiefId}`, 20_000);
-    // write_pane goes straight to the worker PTY (sendRuntimeInput) — no DOM
-    // focus needed, so no click_pane gate. This is what a human's keystrokes
-    // become on stdin. CRUCIAL: send the text and the Enter as SEPARATE writes
-    // with a gap between them. Claude's TUI treats a fast burst ending in CR as a
-    // bracketed paste — the CR lands as a literal newline in the buffer and never
-    // submits (observed: prompt sat in the input at "0 tokens"). A standalone CR
-    // arriving after the paste settles is a genuine Enter, which submits.
+    // Claude's TUI reads a fast burst ending in CR as a bracketed paste, so the
+    // Enter has to be a separate write a beat later.
     await client.request('write_pane', { sessionId: chiefId, paneId: pane.paneId, text: prompt, submit: false });
     await delay(1_200);
     await client.request('write_pane', { sessionId: chiefId, paneId: pane.paneId, text: '\r', submit: false });
     note(`human prompt sent`, { prompt });
 
-    // Live chief state from the daemon (kept current via session_state_changed).
     const chiefState = () => observer.getSession(chiefId)?.state || 'unknown';
     evidence.stateBeforePrompt = chiefState();
 
-    // 4a) Confirm the prompt actually LANDED before we judge behavior: the chief
-    // must start working. If it never leaves idle/launching, the write didn't take
-    // (still booting, CR didn't submit, ...) — a harness glitch, NOT the behavioral
-    // "did-not-delegate" finding. Distinguishing this protects Victor's "don't
-    // auto-decide" instruction from firing on a setup problem.
     const started = await pollFor(
       () => (chiefState() === 'working' ? true : null),
       'chief to start working after the prompt',
@@ -441,14 +331,9 @@ async function main() {
     }
     note(`chief started working (prompt accepted)`);
 
-    // 4b) Snapshot existing tickets so a PRIOR run's delegation can't masquerade as
-    // this run's (the uat ticket DB persists across runs). Only a NEW ticket counts.
     const baselineIds = new Set(ticketBoard().map((tk) => tk.id));
     note(`ticket baseline captured`, { existing: baselineIds.size });
 
-    // 5) Observe: delegation (a NEW ticket bound to a non-chief session) and any
-    // optional watch arming. A watch is evidence, never a prerequisite.
-    // No coaching. Snapshot the pane along the way so we can read the chief's reasoning.
     let delegation = null;
     let armedWatch = '';
     const observeUntil = Date.now() + 240_000;
@@ -472,12 +357,6 @@ async function main() {
       const finalState = chiefState();
       evidence.chiefState = finalState;
       if (finalState === 'pending_approval') {
-        // BLOCKED on a permission-approval gate, not a refusal. A non-yolo chief
-        // runs in claude's default permission mode (attn adds
-        // --dangerously-skip-permissions only for yolo, and its settings carry no
-        // allow-list), so it stalls at the first gated command and cannot proceed
-        // unattended. This is a distinct verdict so a blocked chief never reads as
-        // the behavioral "did-not-delegate" finding.
         note(`observe window elapsed with chief BLOCKED on approval`, { finalState });
         saveEvidence('blocked-on-approval');
         console.log('\n=== BLOCKED: chief is stuck on a permission-approval prompt ===');
@@ -488,9 +367,6 @@ async function main() {
         return;
       }
       if (finalState === 'working' || finalState === 'launching') {
-        // Still deliberating at the deadline — Opus at xhigh can take a while. This
-        // is NOT a refusal; don't trip the discuss-this path on a slow-but-active
-        // chief. Bump the window or re-run.
         note(`observe window elapsed while chief STILL WORKING`);
         saveEvidence('inconclusive-still-working');
         console.log('\n=== INCONCLUSIVE: chief still working at the deadline ===');
@@ -499,8 +375,6 @@ async function main() {
         console.log(chiefText.split('\n').slice(-40).join('\n'));
         return;
       }
-      // Chief FINISHED (idle/waiting_input/...) without delegating — per Victor's
-      // caveat, the real finding to DISCUSS. Stop here; do not coax it.
       note(`chief FINISHED without delegating`, { finalState });
       saveEvidence('did-not-delegate');
       console.log('\n=== VERDICT: chief did NOT delegate ===');
@@ -518,13 +392,8 @@ async function main() {
     await observer.waitForSession({ id: workerId, timeoutMs: 30_000 }).catch(() => {});
 
     if (noWatch) {
-      // === SHARED DAEMON NUDGE PATH (--no-watch) ===
-      // The chief was told NOT to arm a Monitor. Any state except pending approval
-      // can receive the bounded nudge once it is not the selected pane.
       const chiefEligible = () => chiefState() !== 'pending_approval';
 
-      // 6a) Do not send into an approval prompt, then select the worker so the
-      //     chief's countdown is allowed to run even if it remains active/green.
       const eligible = await pollFor(() => (chiefEligible() ? true : null), 'chief to leave pending approval (no-watch)', 120_000, 1_500);
       if (!eligible) {
         await dumpPane('06-nowatch-pending-approval');
@@ -537,20 +406,14 @@ async function main() {
       note(`selected worker so the chief's shared nudge countdown can run`);
       const strayWatch = freshWatchProcesses(baselineWatchPids);
       if (strayWatch) {
-        // The chief armed a watch despite being told not to — it may consume the
-        // event before the countdown, so report the alternate consumer outcome.
         note(`chief ARMED A WATCH despite the no-watch prompt`, { processes: strayWatch.split('\n').length });
       } else {
         note(`chief is nudge-eligible with no watch armed`);
       }
 
-      // 6b) Now fire the producer event. With unread activity and no watch, the
-      //     daemon schedules the shared countdown and doorbells the chief.
       runAttn(['ticket', 'status', 'ready_for_review', '--comment', 'Audit done — 3 entries flagged, rewrites in the report.', '--session', workerId]);
       note(`worker reported ready_for_review`);
 
-      // 6c) Wait for the daemon doorbell to land in the chief pane. The exact text is
-      //     the fixed ticketNudgePrompt the daemon types in ("New ticket activity").
       const nudgeUntil = Date.now() + 90_000;
       let nudged = null;
       let reactedNw = null;
@@ -581,9 +444,6 @@ async function main() {
       return;
     }
 
-    // The controlled report may land while the chief is active: the shared policy
-    // permits every state except pending approval. Select the worker so a countdown
-    // is not intentionally paused by the user's current pane.
     const chiefEligible = () => chiefState() !== 'pending_approval';
     const settled = await pollFor(() => {
       if (!armedWatch) armedWatch = freshWatchProcesses(baselineWatchPids);
@@ -602,16 +462,10 @@ async function main() {
     await client.request('select_session', { sessionId: workerId });
     note(`selected worker so the chief's shared nudge countdown can run`);
 
-    // 6) Drive the worker to report ready_for_review — the real producer path. The
-    // chief cannot tell this from the sub-agent finishing on its own.
     await delay(2_000);
     runAttn(['ticket', 'status', 'ready_for_review', '--comment', 'Audit done — 3 entries flagged, rewrites in the report.', '--session', workerId]);
     note(`worker reported ready_for_review`);
 
-    // 7) Observe whether the chief surfaces the update ON ITS OWN. An optional watch
-    // may consume it before the shared countdown rings; otherwise the fixed nudge
-    // must arrive. Evidence = the chief runs `attn ticket inbox` / mentions the
-    // review without us prompting it again.
     const reactUntil = Date.now() + 240_000;
     let reacted = null;
     let nudged = null;
@@ -659,16 +513,11 @@ async function main() {
     throw error;
   } finally {
     if (workerId) await client.request('close_session', { sessionId: workerId }).catch(() => {});
-    // The chief is protected from closing while it holds the role, so demote it
-    // first (this also clears the role so the next run's create-as-chief is not
-    // blocked), then close.
     if (chiefId) {
       await setChiefOfStaff(client, chiefId, false).catch(() => {});
       await client.request('close_session', { sessionId: chiefId }).catch(() => {});
     }
-    // Restore the global auto-approve setting so it never leaks past the benchmark.
     await client.request('set_setting', { key: 'auto_approve_enabled', value: 'false' }).catch(() => {});
-    // Clear the pinned chief model so it never leaks past the benchmark.
     if (CHIEF_MODELS[agent]) {
       await client.request('set_setting', { key: `chief_model_${agent}`, value: '' }).catch(() => {});
     }

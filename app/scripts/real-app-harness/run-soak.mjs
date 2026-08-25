@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-// Runs one packaged-app scenario N times, strictly serially (the packaged app
-// is single-tenant — never parallelize), parses each run's ATTN_VERDICT line,
-// and ends with its own aggregate ATTN_VERDICT line + JSON report. This turns
-// "loop a scenario 30 times by hand" into one background command.
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,9 +14,6 @@ import {
 } from './harnessProfile.mjs';
 import { resolveScenario } from './scenarioCatalog.mjs';
 
-// Same profile-pinning rule as run-serial-matrix.mjs: default to the safe dev
-// sibling unless the shell (or an explicit override) already picked a
-// profile. This must run before any import that reads the env var.
 if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
   process.env.ATTN_HARNESS_PROFILE = 'dev';
 }
@@ -49,10 +41,6 @@ export function parseVerdictFromOutput(stdoutText) {
   return null;
 }
 
-// A missing verdict line is NOT a failure by itself: most catalog scenarios
-// are the older ad-hoc kind that predate the verdict contract and never emit
-// one. Exit code / timeout stay authoritative; a verdict only adds signal
-// when it is present and says ok: false.
 export function isRunFailure(record) {
   return (
     record.exitCode !== 0 ||
@@ -302,10 +290,6 @@ async function main() {
   }
 }
 
-// Only run the CLI entrypoint when this file is executed directly — the pure
-// helpers above (parseVerdictFromOutput, isRunFailure, summarizeSoak) are
-// imported directly by runSoak.test.mjs, and importing must not trigger a
-// real soak run or process.exit.
 const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMainModule) {
   main().catch((error) => {

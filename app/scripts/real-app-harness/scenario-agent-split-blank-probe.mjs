@@ -1,15 +1,7 @@
 #!/usr/bin/env node
 
-// DIAGNOSTIC probe for the "agent pane goes blank when a shell split opens" bug.
-// This is NOT an assertion scenario — it drives the exact user gesture (real
-// agent pane, then Cmd+D-equivalent vertical split that creates a shell pane
-// beside it) against the packaged dev app, captures native screenshots before
-// and after the split, and prints the agent paneId + split timestamp so the
-// on-disk render trace (debug/render-trace.jsonl) can be correlated.
-//
-// Remove together with the render-trace instrumentation once the root cause is
-// fixed (or promote into a proper regression scenario asserting the agent pane
-// stays painted after the split).
+// DIAGNOSTIC probe, not an assertion scenario: remove together with the
+// render-trace instrumentation once the blank-pane root cause is fixed.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -67,9 +59,6 @@ function parseArgs(argv) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Wait until the agent stops repainting: the blank only persists when the agent
-// is IDLE at split time (a continuously-animating agent self-heals on its next
-// redraw). We consider it idle once the visible model is byte-stable for idleMs.
 async function waitForAgentIdle(client, sessionId, paneId, idleMs, maxWaitMs = 30_000) {
   const startedAt = Date.now();
   let lastSig = null;
@@ -122,8 +111,6 @@ async function main() {
   try {
     await launchFreshAppAndConnect(client, observer);
 
-    // Match the user's real geometry: a wide window so the agent pane is ~180
-    // cols before the split (~90 after), not the tiny default harness window.
     try {
       const bounds = await getFrontWindowBounds(client.bundleId, { client });
       await setFrontWindowBounds({ ...bounds, x: 40, y: 40, width: 1680, height: 1050 }, { client });
@@ -159,7 +146,6 @@ async function main() {
     await waitForPaneVisible(client, sessionId, agentPaneId, 45_000);
     console.log(`[probe] agentPaneId=${agentPaneId}`);
 
-    // Let the agent fully settle so it is NOT redrawing when the split opens.
     const idleResult = await waitForAgentIdle(client, sessionId, agentPaneId, options.idleMs);
     console.log(`[probe] idle gate: ${JSON.stringify(idleResult)}`);
 
@@ -167,11 +153,8 @@ async function main() {
     console.log(`[probe] BASELINE agent model: ${JSON.stringify(baselineVisible)}`);
     await captureSessionArtifacts(client, runDir, '01-baseline', sessionId);
 
-    // The decisive gesture: open the shell split beside the agent pane.
     const workspaceBefore = await client.request('get_workspace', { sessionId });
     const existingPaneIds = new Set((workspaceBefore.panes || []).map((p) => p.paneId));
-    // Focus the agent pane first so the shortcut targets it, then drive the
-    // real Cmd+D path (terminal.splitVertical) — same code path as the user.
     await client.request('focus_pane', { sessionId, paneId: agentPaneId }).catch(() => {});
     const splitAtMs = Date.now();
     console.log(`[probe] SPLIT_AT_MS=${splitAtMs}`);
@@ -196,8 +179,6 @@ async function main() {
     console.log(`[probe] AFTER-SPLIT agent model: ${JSON.stringify(afterVisible)}`);
     await captureSessionArtifacts(client, runDir, '02-after-split', sessionId);
 
-    // Re-focus the agent pane and capture once more — switching focus is one of
-    // the things the user said does NOT fix the blank.
     await client.request('focus_pane', { sessionId, paneId: agentPaneId }).catch(() => {});
     await sleep(1_000);
     await captureSessionArtifacts(client, runDir, '03-agent-focused', sessionId);

@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-// Live witness for the state-detection flip: drive a real agent turn in the
-// packaged app and record every state the daemon publishes, with timings.
-//
-// It is a probe, not an assertion scenario. What it is for is the question no
-// unit test can answer — whether the resolver's verdicts, running against a real
-// agent's real signals, produce the right colors in the right order — so it
-// prints a timeline and leaves the judging to a human.
 
 import {
   createSessionAndWaitForInitialPane,
@@ -19,9 +12,6 @@ import {
   ensureCodexInitialPanePromptReady,
 } from './scenarioAgents.mjs';
 
-// PROBE_AGENT picks which harness the probe drives. The signals differ per agent
-// — claude's approvals arrive on a hook, codex's only in its title — so a run
-// against one says nothing about the other.
 const AGENT = process.env.PROBE_AGENT ?? 'claude';
 
 const PROMPT =
@@ -39,16 +29,6 @@ async function main() {
 
   await launchFreshAppAndConnect(client, observer);
 
-  // PROBE_GUARDIAN picks who answers approval requests, because the two halves
-  // of the approval behavior are only observable under opposite settings.
-  //
-  // `off`: no reviewer, so the prompt reaches the terminal and the approval path
-  // can be watched at all. `on`: codex routes the request to its auto_review
-  // reviewer, which answers in milliseconds — nothing reaches the terminal, and
-  // what is being checked is that the user is never shown a color for it.
-  //
-  // It is set explicitly rather than left alone because the setting is
-  // persistent: a previous run leaves the profile in whichever state it chose.
   if (process.env.PROBE_GUARDIAN) {
     const enabled = process.env.PROBE_GUARDIAN === 'on';
     await client.request('set_setting', {

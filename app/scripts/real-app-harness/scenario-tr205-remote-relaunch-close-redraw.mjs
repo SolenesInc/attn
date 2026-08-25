@@ -98,10 +98,6 @@ function minRecoveredWidth(previousWidth) {
 
 const PROBE_AGENT_PREFIX = 'probe:';
 
-// `--remote-agent probe:codex` / `probe:claude` select the deterministic
-// `attn _probe-tui` fixture — the only agents this scenario drives. The
-// login-dependent live-agent legs were removed (they needed credentials
-// seeded in the VM and could never run unattended); anything else is an error.
 function parseProbeStyle(remoteAgent) {
   const raw = String(remoteAgent || '');
   if (!raw.startsWith(PROBE_AGENT_PREFIX)) {
@@ -121,18 +117,8 @@ export function remoteProbeBinaryName(profile) {
   return trimmed === '' ? 'attn' : `attn-${trimmed}`;
 }
 
-// Mirrors the remote binary resolution in internal/hub/ssh.go:69 (used by
-// remoteAttnCommand) so the probe launches from whichever location the hub
-// actually installed to. This has to be resolved IN THE REMOTE SHELL, not
-// precomputed in JS: the launchEnv ATTN_REMOTE_ATTN_BIN this scenario passes
-// to the packaged app only reaches a daemon process it spawns fresh — an
-// already-running daemon (the common case once the harness reuses a live
-// app) never sees it, so the bootstrapper installs to the default
-// $HOME/.local/bin/<binaryName> path instead. Precomputing the path in JS
-// guesses which world the daemon is in and guesses wrong whenever a daemon
-// was already running; asking the shell to fall back the same way
-// remoteAttnCommand does is the only way to match the actual install
-// location in both worlds.
+// Mirrors internal/hub/ssh.go:69, resolved IN THE REMOTE SHELL: an
+// already-running daemon never sees the launchEnv ATTN_REMOTE_ATTN_BIN.
 export function buildProbeLaunchCommand(binaryName, style) {
   return `ATTN_BIN="\${ATTN_REMOTE_ATTN_BIN:-$HOME/.local/bin/${binaryName}}"; if [ ! -x "$ATTN_BIN" ] && [ -z "\${ATTN_REMOTE_ATTN_BIN:-}" ]; then ATTN_BIN="$(command -v ${binaryName} 2>/dev/null || true)"; fi; exec "$ATTN_BIN" _probe-tui --style ${style}`;
 }
@@ -147,40 +133,21 @@ function probeStyleRowRegex(style) {
   return new RegExp(`style=${escapeRegExp(style)} seq=\\d+ READY`);
 }
 
-// Truncation-tolerant style identity: just `style=<style>`, 11-12 chars, so it
-// survives right-truncation in panes as narrow as ~20 cols where the full
-// "style=<style> seq=<n> READY" row (24 chars) cannot fit. Used by the at-grid
-// wait, where the geometry row already proves a fresh repaint; full-row
-// readiness matching stays width-safe because it only runs pre-split at full
-// pane width (prepareRemoteProbeBaseline).
+// 11-12 chars, so it survives right-truncation in panes as narrow as ~20 cols
+// where the full 24-char READY row cannot fit.
 export function probeStyleIdentityRegex(style) {
   return new RegExp(`style=${escapeRegExp(style)}(?=\\s|$)`);
 }
 
-// Geometry and style are painted as two SEPARATE rows (bannerGeometryRow /
-// bannerStyleRow in internal/probetui/probetui.go) — split because a single
-// combined banner line truncated past recognition in narrow (~20-31 col)
-// panes. Both matchers must pass independently against the pane's joined
-// visible text; neither row alone proves the fixture is both alive and
-// painting the requested style.
 export function probeBannerReadyMatchers(style) {
   return [/ATTN-PROBE \d+x\d+/, probeStyleRowRegex(style)];
 }
 
-// The probe's geometry row pinned to an exact grid — used to confirm the
-// fixture has repainted at the pane's *current* geometry after a
-// resize/relaunch, not a stale pre-resize frame. `(?!\d)` guards against a
-// grid like 31x2 matching as a prefix of 31x25.
+// `(?!\d)` guards against a grid like 31x2 matching as a prefix of 31x25.
 export function buildProbeBannerAtGridRegex(cols, rows) {
   return new RegExp(`ATTN-PROBE ${cols}x${rows}(?!\\d)`);
 }
 
-// Additional probe-mode-only geometry assertion: waits for the pane's visible
-// content to contain the geometry row pinned to the pane's *current* grid
-// (cols x rows) AND the style identity for the expected style, so a redraw
-// claim is verified against ground truth instead of density heuristics alone.
-// The style check uses the truncation-tolerant identity regex, not the full
-// READY row, because narrow post-split panes truncate the style row.
 async function waitForProbeBannerAtGrid(client, sessionId, paneId, style, timeoutMs = 20_000) {
   const styleRegex = probeStyleIdentityRegex(style);
   return waitForPaneState(
@@ -202,10 +169,6 @@ async function waitForProbeBannerAtGrid(client, sessionId, paneId, style, timeou
   );
 }
 
-// The session is spawned with agent 'shell' (not the probe style), so the
-// initial pane is a plain shell. Launch the probe TUI in it and wait for its
-// readiness banner — the probe reads no input, so there is no transcript-anchor
-// prompt to seed; the banner itself is the anchor for the rest of the scenario.
 async function prepareRemoteProbeBaseline(client, sessionId, style) {
   await client.request('select_session', { sessionId });
   const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for probe session ${sessionId}`, 30_000);
@@ -230,18 +193,11 @@ async function prepareRemoteProbeBaseline(client, sessionId, style) {
     `probe TUI ready banner (style=${style}) in pane ${paneId}`,
     45_000,
   );
-  // Stable across seq and relaunch — this text never scrolls out or gets
-  // collapsed by redraw behavior. Just the geometry row's fixed prefix: the
-  // style row can itself truncate in very narrow panes, so it must not be the
-  // anchor other assertions key off of (see probeBannerReadyMatchers /
-  // bannerStyleRow).
+  // The geometry row's fixed prefix only: the style row truncates in very narrow
+  // panes, so it cannot be the anchor other assertions key off.
   return { paneId, requiredVisibleText: 'ATTN-PROBE' };
 }
 
-// Best-effort settle: waits until two consecutive pane snapshots render the same
-// visible lines, so baselines aren't captured mid-stream while the agent TUI is
-// still painting. Bounded — an animating TUI (spinner) proceeds after maxAttempts
-// rather than failing, since the caller's own assertions are the real check.
 async function waitForPaneContentStable(client, sessionId, paneId, { intervalMs = 1_500, maxAttempts = 8 } = {}) {
   let previous = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -257,9 +213,6 @@ async function waitForPaneContentStable(client, sessionId, paneId, { intervalMs 
 
 async function captureInitialPaneHealthyState(client, runner, sessionId, paneId, prefix, descriptionBase, requiredVisibleText = null, probeStyle = null) {
   await waitForPaneVisible(client, sessionId, paneId, 30_000);
-  // No scroll: captures assert on the live bottom viewport — agent startup output has
-  // outgrown one screen, so top-of-scrollback holds only banners, and the bottom is
-  // what a post-redraw screen must reproduce.
   const state = await assertPaneVisibleContent(client, sessionId, paneId, {
     contains: requiredVisibleText,
     allowWrappedContains: Boolean(requiredVisibleText),
@@ -271,9 +224,6 @@ async function captureInitialPaneHealthyState(client, runner, sessionId, paneId,
     description: `${descriptionBase} visible content`,
   });
   if (probeStyle) {
-    // Verify the banner has repainted at the pane's current grid, not just that
-    // dense content is present (ground truth on top of the density heuristic
-    // above).
     await waitForProbeBannerAtGrid(client, sessionId, paneId, probeStyle, 30_000);
   }
   await assertPaneCoverage(client, sessionId, paneId, {
@@ -345,12 +295,8 @@ async function closePaneAndAssertRecovery({
     `${label} initial pane width recovery`,
     20_000,
   );
-  // Line-anchor preservation is skipped here: every probe row encodes the
-  // current geometry/frame seq (by design), so baseline lines from a different
-  // grid can never match after a pane close widens the initial pane. The
-  // waitForProbeBannerAtGrid call below is the replacement — it proves a fresh
-  // repaint at the recovered grid, which is strictly stronger evidence of
-  // redraw recovery than stale-line matching.
+  // No line-anchor preservation: every probe row encodes the current geometry,
+  // so baseline lines never match once a close widens the pane.
   const anchorState = requiredVisibleText
     ? await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: requiredVisibleText,
@@ -364,8 +310,6 @@ async function closePaneAndAssertRecovery({
       })
     : null;
   if (probeStyle) {
-    // Same ground-truth grid check as captureInitialPaneHealthyState, applied
-    // at this close/recovery point.
     await waitForProbeBannerAtGrid(client, sessionId, initialPaneId, probeStyle, 20_000);
   }
   await assertPaneCoverage(client, sessionId, initialPaneId, {
@@ -412,9 +356,8 @@ async function closePaneAndAssertRecovery({
     );
   }
   return {
-    // The token-guaranteed snapshot from the requiredVisibleText assert above, not the
-    // separate get_pane_state a few checks later — codex can repaint to a banner-top
-    // frame in between, which would strip token lines from a chained baseline.
+    // The token-guaranteed snapshot from the assert above, not a later
+    // get_pane_state: codex can repaint to a banner-top frame in between.
     state: anchorState || finalMainState,
     nativeMetrics: candidateNativeMetrics,
     widthState: recoveredInitialPaneState,
@@ -436,8 +379,6 @@ async function main() {
   }
 
   const probeStyle = parseProbeStyle(options.remoteAgent);
-  // The scenario spawns a plain shell and types the probe TUI command into it
-  // itself, rather than asking the daemon to launch an agent.
   const spawnAgent = 'shell';
 
   const runner = createScenarioRunner(options, {
@@ -477,9 +418,6 @@ async function main() {
   let initialSplitMainState = null;
   let restoredMainState = null;
   let finalMainState = null;
-  // The stable anchor text used for redraw/recovery assertions throughout the
-  // rest of the run: the probe's ready banner prefix, set once
-  // prepareRemoteProbeBaseline returns.
   let anchorText = null;
   let cleanupStarted = false;
 
@@ -606,9 +544,6 @@ async function main() {
         description: 'initial pane transcript anchor preserved after initial split before relaunch',
       });
       await waitForProbeBannerAtGrid(client, sessionId, initialPaneId, probeStyle, 20_000);
-      // Settle the agent TUI before capturing the baseline the post-relaunch
-      // redraw is compared against — capturing mid-stream picks anchors from a
-      // transient frame that legitimately no longer exists after relaunch.
       await waitForPaneContentStable(client, sessionId, initialPaneId);
       initialSplitMainState = await captureInitialPaneHealthyState(
         client,
@@ -648,9 +583,7 @@ async function main() {
           minNonEmptyLineRatio: 0.7,
           minCharCountRatio: 0.55,
           minAnchorMatches: 2,
-          // Anchor only on token lines (claude echo/reflow flake). Safe here: the baseline
-          // is initialSplitMainState, captured via captureInitialPaneHealthyState with
-          // requiredVisibleText: anchorText, which asserts contains: token first.
+          // Anchor only on token lines (claude echo/reflow flake).
           ignoreAnchorPatterns: tokenAnchorIgnorePatterns(anchorText),
           timeoutMs: 20_000,
           description: 'restored initial pane content matches pre-relaunch split state',
@@ -680,9 +613,8 @@ async function main() {
         contains: anchorText,
         allowWrappedContains: true,
         minNonEmptyLines: 8,
-        // The pane can be ~20 cols once three panes share the main area after the
-        // relaunch split; dense/max-line gates are unreachable at that width — the
-        // wrapped contains + charCount carry this assertion.
+        // The pane can be ~20 cols once three panes share the main area, where
+        // dense/max-line gates are unreachable.
         minDenseLines: 0,
         minCharCount: 200,
         minMaxLineLength: 12,
@@ -829,9 +761,6 @@ async function main() {
   }
 }
 
-// Guards direct execution only — this module is imported directly by
-// scenario-tr205.test.mjs for its pure helpers, and importing must not
-// trigger a real scenario run or process.exit.
 const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMainModule) {
   main().catch((error) => {

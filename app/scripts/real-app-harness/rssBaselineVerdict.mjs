@@ -5,19 +5,8 @@ function truncateFirstFailure(message) {
   return message.length <= FIRST_FAILURE_MAX_LENGTH ? message : message.slice(0, FIRST_FAILURE_MAX_LENGTH);
 }
 
-// Pure: decides whether this run's RSS is within tolerance of the per-machine
-// baseline, and whether a new baseline should be written. No fs/Date/process
-// access so it stays directly unit-testable — the caller resolves the
-// baseline (machineRegistry.loadBaseline), performs the write
-// (machineRegistry.saveBaseline), and supplies `recordedAt`.
-//
-// A baseline is (re)recorded when there isn't one yet (first run on a
-// machine always self-baselines) or when the caller explicitly asked to via
-// `record` (re-baselining after an intentional regression/improvement). An
-// explicit re-record is a pass by construction: this run DEFINES the new
-// baseline, so it can never be a regression against the value it replaces —
-// comparing it against the old baseline (and possibly failing) would defeat
-// the point of asking to re-baseline.
+// An explicit re-record passes by construction: this run defines the new
+// baseline, so comparing it against the value it replaces would be pointless.
 export function evaluateRssBaseline({ totalRssMb, fingerprint, baseline, tolerancePct = 15, record = false, recordedAt }) {
   const hasBaseline = baseline?.metrics?.totalRssMb != null;
   const comparison = record === true
@@ -31,20 +20,10 @@ export function evaluateRssBaseline({ totalRssMb, fingerprint, baseline, toleran
   return { ok: comparison.ok, comparison, baselineToSave };
 }
 
-// Private: the 6-key envelope shared by every ATTN_VERDICT builder in this
-// file (buildBaselineVerdict / buildColdWarmVerdict / buildLeakSoakVerdict).
-// Each builder computes its own `ok`/`failureCount`/`firstFailure` (the
-// scenario-specific regression message differs per builder) and attaches its
-// own scenario-specific fields (`rss`/`metrics`) on top of this.
 function buildVerdictEnvelope({ ok, failureCount, firstFailure, scenarioId, runId, artifactsDir, summaryPath, durationMs }) {
   return { ok, scenarioId, runId, failureCount, firstFailure, artifactsDir, summaryPath, durationMs };
 }
 
-// Pure: builds the ATTN_VERDICT payload for the RSS baseline scenario. Extends
-// the core verdict contract (see common.mjs) with two scenario-specific
-// fields, `rss` and `metrics` — existing verdict consumers only read the core
-// fields, and this extension is documented for the leak-soak scenario that
-// will read `rss`/`metrics` off this same shape.
 export function buildBaselineVerdict({ ok, comparison, scenarioId, runId, artifactsDir, summaryPath, durationMs, extraMetrics = {} }) {
   const firstFailure = ok
     ? null
@@ -60,14 +39,6 @@ export function buildBaselineVerdict({ ok, comparison, scenarioId, runId, artifa
   };
 }
 
-// Pure: builds the single ATTN_VERDICT payload for the cold/warm RSS scenario.
-// `cold` and `warm` are `comparison` objects (the shape evaluateRssBaseline /
-// compareToBaseline returns: { ok, value, baseline, deltaPct, tolerancePct, reason }).
-// ok is the AND of both phases; failureCount counts the regressing phases;
-// firstFailure names the first regressor (cold before warm), capped like the
-// core contract. Extends the core verdict with `rss: { cold, warm }` and
-// `metrics: { coldRssMb, warmRssMb }` (parity with buildBaselineVerdict's
-// extension, for the leak-soak consumer).
 export function buildColdWarmVerdict({ cold, warm, scenarioId, runId, artifactsDir, summaryPath, durationMs }) {
   const ok = cold.ok && warm.ok;
   const failureCount = (cold.ok ? 0 : 1) + (warm.ok ? 0 : 1);
@@ -83,10 +54,7 @@ export function buildColdWarmVerdict({ cold, warm, scenarioId, runId, artifactsD
   };
 }
 
-// Pure: least-squares linear regression of `points` (y) against x = 0..n-1.
-// Standard closed form: slope = (n*sum(x*y) - sum(x)*sum(y)) / (n*sum(x^2) -
-// sum(x)^2). `slope` is rounded to 2 decimals -- it is the leak-soak
-// scenario's headline number (MB of retained RSS growth per cycle).
+// Least-squares fit of `points` (y) against x = 0..n-1.
 export function fitSlope(points) {
   if (points.length < 2) {
     throw new Error('fitSlope needs at least 2 points');
@@ -109,13 +77,8 @@ export function fitSlope(points) {
   return { slope: Number(slope.toFixed(2)), intercept };
 }
 
-// Pure: builds the ATTN_VERDICT payload for the leak-soak scenario.
-// `retainedByCycle` is the full per-cycle retained-RSS series (including the
-// warmup cycles); `slope` is the pre-fitted (fitSlope) trend over the
-// post-warmup portion -- this function does not fit it itself so the caller
-// can log/record intermediate values (e.g. the machine registry comparison)
-// before building the verdict. Extends the core verdict with `rss` and
-// `metrics`, in parity with buildBaselineVerdict/buildColdWarmVerdict.
+// `slope` is fitted by the caller, over the post-warmup portion of
+// `retainedByCycle`.
 export function buildLeakSoakVerdict({
   retainedByCycle,
   warmupCycles,

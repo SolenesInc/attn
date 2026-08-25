@@ -17,15 +17,8 @@ import {
 import { formatResultTable, selectFailedScenarios } from './matrixDigest.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog } from './scenarioCatalog.mjs';
 
-// Matrix runs against the safe dev install by default — the whole point of the
-// profile feature is to iterate on attn-on-attn scenarios without ever taking
-// over the live prod app. But honor the one knob: if the shell already selected
-// a profile via ATTN_PROFILE (e.g. agent7), let it win so the matrix drives that
-// profile's app/daemon. Only pin the dev sibling when NEITHER knob is set; an
-// unset/empty ATTN_PROFILE never targets prod by omission (currentHarnessProfile
-// falls back to dev). Opt into prod with ATTN_HARNESS_PROFILE= plus
-// --run-against-prod. This must happen before any import that reads the env var
-// at module-load time.
+// Must run before any import that reads ATTN_HARNESS_PROFILE at module load.
+// An unset ATTN_PROFILE falls back to dev, never to prod.
 if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
   process.env.ATTN_HARNESS_PROFILE = 'dev';
 }
@@ -78,9 +71,6 @@ function parseArgs(argv) {
   };
 }
 
-// Base directory shared with the per-scenario runs (see common.mjs's
-// parseCommonArgs default) so the matrix digest lands next to the run
-// artifacts it summarizes.
 function harnessArtifactsRoot() {
   return process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness');
 }
@@ -150,10 +140,6 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 
-// Rolling tail of a scenario's combined stdout+stderr, capped to bound
-// memory and digest size: at most maxLines lines, each truncated to
-// maxLineLen characters. Chunks may split mid-line, so partial lines are
-// buffered until a newline (or final flush) completes them.
 function createOutputTailBuffer(maxLines = 40, maxLineLen = 400) {
   const lines = [];
   let partial = '';
@@ -202,8 +188,6 @@ function runScenario(scenario, timeoutMs, runAgainstProd) {
     });
     activeChild = child;
     let timedOut = false;
-    // Tee child stdout/stderr: still stream to the matrix's own stdout as
-    // before, while also retaining a rolling tail for failure digests.
     const outputTail = createOutputTailBuffer();
     child.stdout.on('data', (chunk) => {
       process.stdout.write(chunk);
@@ -213,8 +197,6 @@ function runScenario(scenario, timeoutMs, runAgainstProd) {
       process.stderr.write(chunk);
       outputTail.pushChunk(chunk.toString('utf8'));
     });
-    // A scenario may declare a larger budget than the matrix default (e.g.
-    // multi-shell sweeps); an explicit --timeout-ms still wins when larger.
     const effectiveTimeoutMs = Math.max(timeoutMs, scenario.timeoutMs ?? 0);
     const timer = setTimeout(() => {
       timedOut = true;

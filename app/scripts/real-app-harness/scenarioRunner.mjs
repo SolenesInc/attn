@@ -6,14 +6,8 @@ import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarness
 import { MacOSDriver } from './macosDriver.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
 
-// Collapse to a single line and cap length so the verdict's firstFailure field
-// can never break the one-line ATTN_VERDICT contract regardless of what the
-// underlying error message contains. Exported for direct unit testing (see
-// verdict.test.mjs) — createScenarioRunner itself has filesystem/lock side
-// effects that make it a poor unit-test surface.
+// The verdict's firstFailure must stay one line whatever the error contains.
 export function summarizeFirstFailure(error) {
-  // Use the raw message (not normalizeError's stack trace) so firstFailure is
-  // the human-readable "what failed", not file/line noise from the stack.
   const message = error instanceof Error ? error.message : String(error);
   const firstLine = message.split(/\r?\n/, 1)[0];
   if (firstLine.length <= FIRST_FAILURE_MAX_LENGTH) {
@@ -28,11 +22,6 @@ function writeJson(filePath, value) {
 
 const FAILURE_DIGEST_MAX_ERROR_LINES = 60;
 
-// Cheap-to-inspect summary of a failed run: the failing step, the error (capped
-// so a huge stack trace doesn't dominate stdout), and where to look for more.
-// Written alongside failure.json and echoed to stdout right before the
-// ATTN_VERDICT line, so a driving agent can learn what broke without paging
-// through the full JSON summary.
 function buildFailureDigest({ scenarioId, runId, steps, error, runDir }) {
   const failingStep = [...steps].reverse().find((step) => step.status === 'error');
   const errorLines = normalizeError(error).split(/\r?\n/).slice(0, FAILURE_DIGEST_MAX_ERROR_LINES);
@@ -188,9 +177,6 @@ export function createScenarioRunner(options, {
     process.stdout.write(line);
   };
 
-  // ATTN_HARNESS_RECORD=1 records the app window to runDir/recording-NN.mp4,
-  // one segment per app launch. The recorder follows the window by polling, so
-  // no scenario has to wire anything; when disabled nothing runs at all.
   let recorder = null;
   if (recordingEnabled()) {
     const recordingDriver = new MacOSDriver({ appPath: options.appPath });
@@ -207,10 +193,8 @@ export function createScenarioRunner(options, {
       return cleanupPromise;
     }
     cleanupPromise = (async () => {
-      // The signal path's restore: beforeExit does not fire on a signal, and
-      // draining the queue makes whichever of the two runs second a no-op.
-      // It talks to the daemon on its own socket, so the app being gone by
-      // now is fine.
+      // beforeExit does not fire on a signal; draining the queue makes whichever
+      // of the two runs second a no-op.
       try {
         const restored = await restoreHarnessSettings();
         if (restored > 0) {
@@ -246,9 +230,8 @@ export function createScenarioRunner(options, {
       return;
     }
     finalized = true;
-    // Not awaited: the recorder's screencapture child keeps the event loop
-    // alive until it has finalized its file, and an orphaned recorder (signal
-    // path exits immediately) finalizes on its own after the SIGINT.
+    // Not awaited: the recorder's screencapture child keeps the event loop alive
+    // until it has finalized its file.
     void recorder?.stop();
     releaseScenarioLock?.();
     process.removeListener('exit', exitHandler);

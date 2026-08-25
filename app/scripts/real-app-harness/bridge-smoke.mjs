@@ -59,9 +59,6 @@ async function main() {
       direction: 'vertical',
     });
 
-    // The split's pane is the one the workspace did not have before it. Every
-    // pane in a workspace is kind `agent` — a shell pane is an agent pane whose
-    // agent is the shell — so there is nothing on the record to filter by.
     const utilityPane = await observer.waitForUtilityPane(sessionId, 20_000, existingPaneIds);
     if (!utilityPane?.runtime_id) {
       throw new Error('Utility pane runtime not found');
@@ -82,9 +79,8 @@ async function main() {
       client,
       sessionId,
       utilityPane.pane_id,
-      // The pane is 80-ish columns and the token is longer than what is left of
-      // the line after the prompt, so the terminal wraps it. Rendered text keeps
-      // that wrap as a newline; the token itself has no whitespace.
+      // The pane wraps the token, so the rendered text carries a newline the
+      // token itself does not have.
       (text) => text.replace(/\s+/g, '').includes(utilityToken),
       `utility pane text to contain ${utilityToken}`,
       15_000

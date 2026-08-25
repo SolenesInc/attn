@@ -1,22 +1,5 @@
 #!/usr/bin/env node
 
-// Packaged-app repro for a reveal-time clip: a hidden workspace's terminal
-// keeps its old, larger grid while the window shrinks around it. When the
-// workspace is revealed again, its model grid (rows x cellHeight) can be
-// taller than the container it renders into, and the reveal refit's late
-// retry historically only fired for too-TINY grids, not too-TALL ones — so
-// the pane stayed clipped indefinitely until something unrelated (e.g. a
-// window nudge) re-triggered a fit.
-//
-// To land workspace A on a genuinely too-tall grid (not just re-measure the
-// same size), this enlarges the window while A is active (confirming A's
-// pane actually grew into the extra height), switches to workspace B, shrinks
-// the window back to its original size while A is hidden, then reveals A and
-// asserts the revealed pane's canvas converges inside its terminal container
-// within a short deadline — the reveal-time backstop's invariant. Every
-// window-height transition is asserted to actually change (never a no-op),
-// so a vacuous run can never report pass.
-
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -44,8 +27,6 @@ const WINDOW_ENLARGE_HEIGHT_PX = 250;
 const REVEAL_CONVERGENCE_DEADLINE_MS = 600;
 const REVEAL_CONVERGENCE_POLL_MS = 100;
 const ENLARGE_REFIT_DEADLINE_MS = 5_000;
-// A's container must grow by at least half the enlarge delta to count as
-// proof it actually refit taller, not just noise/rounding.
 const ENLARGE_REFIT_MIN_GROWTH_PX = WINDOW_ENLARGE_HEIGHT_PX / 2;
 
 function parseArgs(argv) {
@@ -103,9 +84,6 @@ function boundsOf(dom, key) {
   return bounds;
 }
 
-// Measures the active pane's canvas rect against its terminal container rect.
-// Returns null measurements (treated as "not yet clean") when DOM nodes are
-// missing, since a mid-reveal pane can transiently lack them.
 async function measurePane(client, sessionId, paneId) {
   const state = await client.request('get_pane_state', { sessionId, paneId });
   const dom = state?.pane?.dom;
@@ -120,9 +98,6 @@ async function measurePane(client, sessionId, paneId) {
   return { clean, overflowBottom, overflowRight, canvas, container };
 }
 
-// Polls measurePane every REVEAL_CONVERGENCE_POLL_MS until either a clean
-// read is observed or the deadline elapses, returning the sequence of
-// measurements taken (for evidence) and whether it ever converged.
 async function waitForRevealConvergence(client, sessionId, paneId) {
   const deadline = Date.now() + REVEAL_CONVERGENCE_DEADLINE_MS;
   const measurements = [];
@@ -139,10 +114,6 @@ async function waitForRevealConvergence(client, sessionId, paneId) {
   }
 }
 
-// Polls measurePane until the pane's container has grown to at least
-// minHeight, or throws. Used to prove the pre-shrink enlarge actually landed
-// A on a taller grid — without this, a window resize that the pane never
-// refit to would let the scenario "pass" without exercising anything.
 async function waitForContainerHeightAtLeast(client, sessionId, paneId, minHeight, description, timeoutMs = ENLARGE_REFIT_DEADLINE_MS) {
   const deadline = Date.now() + timeoutMs;
   let lastMeasurement = null;
@@ -160,9 +131,8 @@ async function waitForContainerHeightAtLeast(client, sessionId, paneId, minHeigh
   }
 }
 
-// A window-height transition that turns out to be a no-op (e.g. clamped by
-// the OS, or the harness already parked at the target size) would let this
-// scenario "pass" without ever exercising the bug. Fail loudly instead.
+// A window-height transition that turns out to be a no-op would let this
+// scenario pass vacuously. Fail loudly instead.
 function assertHeightChanged(beforeHeight, afterHeight, label) {
   if (beforeHeight === afterHeight) {
     throw new Error(`${label}: window height did not change (stayed ${beforeHeight}) — scenario would pass vacuously`);
@@ -202,8 +172,6 @@ async function main() {
   try {
     await launchFreshAppAndConnect(client, observer);
 
-    // Workspace A is created (and selected) alone, so it is unambiguously
-    // the active workspace while we enlarge the window under it.
     workspaceA = await createShellWorkspace(client, observer, path.join(sessionDir, 'ws-a'), `revealoverflow-${runId}-a`);
     console.log(`[RealAppHarness] created workspace A: sessionId=${workspaceA.sessionId}`);
 
@@ -221,7 +189,6 @@ async function main() {
     const appliedEnlargedBounds = await setFrontWindowBounds(enlargedBounds, { client });
     assertHeightChanged(originalBounds.height, appliedEnlargedBounds.height, 'enlarge');
 
-    // Prove A actually refit taller, not just that the window resized.
     await waitForContainerHeightAtLeast(
       client,
       workspaceA.sessionId,
@@ -231,8 +198,6 @@ async function main() {
     );
     console.log('[RealAppHarness] confirmed workspace A refit to a taller grid at the enlarged window size');
 
-    // Creating workspace B selects it, hiding A while it still holds the
-    // tall grid from the enlarged window.
     workspaceB = await createShellWorkspace(client, observer, path.join(sessionDir, 'ws-b'), `revealoverflow-${runId}-b`);
     console.log(`[RealAppHarness] created workspace B: sessionId=${workspaceB.sessionId} (workspace A now hidden)`);
 
@@ -246,8 +211,6 @@ async function main() {
     const appliedShrunkBounds = await setFrontWindowBounds(shrunkBounds, { client });
     assertHeightChanged(appliedEnlargedBounds.height, appliedShrunkBounds.height, 'shrink');
 
-    // Reveal workspace A while it still holds the too-tall grid from before
-    // the shrink — this is the moment the reveal-time backstop must catch.
     console.log(`[RealAppHarness] revealing workspace A (sessionId=${workspaceA.sessionId})`);
     await client.request('select_session', { sessionId: workspaceA.sessionId });
     await waitForPaneVisible(client, workspaceA.sessionId, workspaceA.paneId, 20_000);

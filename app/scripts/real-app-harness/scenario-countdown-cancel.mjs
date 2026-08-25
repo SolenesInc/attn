@@ -1,47 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: Cmd+. stops the countdown you can see.
- *
- * attn counts down to two things it does to an agent without being asked —
- * closing a turn the user steered (auto-settle) and doorbelling an agent about
- * pending ticket activity (the ticket nudge). Both indicators now advertise the
- * same key, and one command calls off whichever countdown is on screen.
- *
- * This scenario exists because the delivery of that keystroke is the part no
- * other test can reach. macOS claims Command-period system-wide as
- * `cancelOperation:` and consumes it before WKWebView dispatches any DOM
- * keydown, so attn claims it from a native menu item that re-dispatches into the
- * page. A unit test, a vitest DOM test, and `dispatch_shortcut` all enter below
- * that seam and would pass against a build where the real key does nothing —
- * which is exactly what shipped before this change, with the shortcut printed on
- * the settling indicator the whole time. Only a real CGEvent Cmd+. against the
- * packaged app can tell the difference.
- *
- * The run asserts, in one app lifecycle:
- *
- *   1. a real Cmd+. cancels an armed auto-settle on the visible agent, and the
- *      turn stays owed — the countdown was called off, not completed,
- *   1b. a second real Cmd+., with nothing counting down, undoes the standing
- *      dismissal that cancel left behind and the settle re-arms; this is the
- *      same delivery seam in the case the page used to unregister entirely,
- *   2. a real Cmd+. cancels an armed ticket nudge on a visible-but-unselected
- *      split pane, and the ticket stays unread — it calls off the interruption,
- *      not the message,
- *   3. that cancel survives selecting the session and coming back, which is the
- *      path that used to re-arm it, and
- *   4. genuinely new ticket activity arms it again — the cancel answers what was
- *      pending, not the ticket forever.
- *
- * Each cancel is checked against a countdown whose deadline is far away (60s for
- * auto-settle, the 30s nudge window), so "it expired on its own" is excluded:
- * an expired auto-settle would have settled the turn, and an expired nudge would
- * have doorbelled and cleared unread.
- *
- * Prereqs: `claude` on PATH; a built `./attn` (or ATTN_HARNESS_BIN); a
- * non-production profile install with the automation layer; Accessibility trust
- * for the input driver.
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -116,17 +74,11 @@ async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
 }
 
-// The one thing under test: a real Command-period through the packaged app,
-// which only reaches the page if the native menu item is carrying it.
 async function pressCancelCountdown(driver) {
   await driver.activateApp();
   await driver.pressKey('.', { command: true });
 }
 
-// Splits the workspace into a second (shell) pane and returns its session id.
-// The split pane is a session of its own in the same workspace, which is the
-// only arrangement where a nudge countdown is both running and on screen: the
-// daemon pauses the nudge on the *selected* session.
 async function splitIntoShellPane(client, sessionId) {
   const before = await client.request('get_workspace', { sessionId });
   const beforeIds = new Set((before.panes || []).map((pane) => pane.paneId));
@@ -191,8 +143,6 @@ async function main() {
     client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {}));
   try {
     await runner.step('launch_app', async () => {
-      // Pins the cheap launch model for every agent; see "Which Model a
-      // Scenario Burns" in this directory's guide.
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -215,9 +165,6 @@ async function main() {
       agentPaneId = pane.paneId;
       await client.request('select_session', { sessionId: agentId });
 
-      // An agent booted to its prompt and not yet spoken to already owes a turn.
-      // Auto-settle only arms on a session that owes one, so this is the
-      // precondition for the first leg rather than a claim of its own.
       const owed = await pollFor(
         () => (observer.getSession(agentId)?.turn_owed === true ? true : null),
         'the booted agent to owe a turn',
@@ -227,23 +174,12 @@ async function main() {
     });
 
     await runner.step('cancel_auto_settle_with_a_real_keystroke', async () => {
-      // The arm window is at its floor so the countdown starts promptly; the
-      // countdown window is deliberately long. A short one would let "it fired
-      // on its own" explain the same observation, and this step is about which
-      // event cleared it.
       await client.request('set_setting', { key: 'auto_settle_arm_seconds', value: '5' });
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: '60' });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
 
-      // Steering is what arms it, and the agent has to still be working when the
-      // arm window elapses — leaving `working` cancels the settle by itself, and
-      // an agent that stops before then has a classifier verdict pending, which
-      // drops the arm too. The count is deliberately long: it has to outlast the
-      // arm delay plus both keystrokes plus the second arm, which is ~15s of
-      // working. Measured on the pinned haiku: 77 numbers a second (239 -> 1004
-      // across ten seconds of one run), so 2000 buys ~26s. 200 ran dry in five.
-      // Tool-free on purpose — a tool would ask for approval, and a pending
-      // approval leaves `working`.
+      // Measured on the pinned haiku: 77 numbers a second (239 -> 1004 across
+      // ten seconds), so 2000 buys ~26s; 200 ran dry in five.
       await submitPrompt(
         client,
         agentId,
@@ -276,35 +212,22 @@ async function main() {
       );
       const after = observer.getSession(agentId);
       note('auto-settle cancelled by keystroke', { state: after?.state, turn_owed: after?.turn_owed });
-      // The other way the deadline could have vanished is the agent leaving
-      // `working`, which cancels a pending settle on its own. Still working
-      // means the keystroke is the only thing that could have cleared it.
       runner.assert(
         after?.state === 'working',
         `the agent was still working when the countdown went away, so the keystroke cleared it (got state=${JSON.stringify(after?.state)})`,
         after,
       );
-      // An auto-settle that completed would have closed the turn. Still owed is
-      // what separates "called off" from "ran".
       runner.assert(
         after?.turn_owed === true,
         `the turn the user kept is still owed after the cancel (got turn_owed=${JSON.stringify(after?.turn_owed)})`,
         after,
       );
-      // The cancel leaves a standing dismissal behind, and says so: without it
-      // the next re-reported `working` re-arms what the user just called off,
-      // and without the flag nothing on screen would admit the settle is off.
       runner.assert(
         after?.auto_settle_dismiss_armed === true,
         `the cancel left a standing dismissal on the wire (got auto_settle_dismiss_armed=${JSON.stringify(after?.auto_settle_dismiss_armed)})`,
         after,
       );
 
-      // The second press is the delivery this scenario exists for, in its other
-      // form: nothing is counting down now, so the page carries the shortcut only
-      // because the standing dismissal is a thing worth pressing at. Before this
-      // change App unregistered the handler whenever no countdown was visible,
-      // and a real Cmd+. here reached nothing.
       await pressCancelCountdown(driver);
 
       await pollFor(
@@ -312,9 +235,6 @@ async function main() {
         'the real Cmd+. to undo the standing dismissal',
         15_000,
       );
-      // Undoing hands the session back to the ordinary rule with no state change
-      // to trigger it — the agent has been working throughout — so a countdown
-      // coming back is the whole proof that the disarm re-armed it.
       const rearmed = await pollFor(
         () => observer.getSession(agentId)?.auto_settle_fires_at || null,
         'the settle to re-arm after the dismissal was undone',
@@ -322,13 +242,10 @@ async function main() {
       );
       note('dismissal undone, settle re-armed', { firesAt: rearmed });
 
-      // Off before the next leg so nothing can arm a second countdown behind it.
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' });
     });
 
     const ticketId = await runner.step('arm_a_nudge_on_the_visible_unselected_pane', async () => {
-      // The agent creates the ticket, which makes it a participant and so the
-      // session ticket activity is delivered to.
       const created = runAttn([
         'ticket', 'new',
         '--title', `Countdown cancel fixture ${runner.runId.slice(-6)}`,
@@ -338,9 +255,6 @@ async function main() {
       const id = created.json?.ticket_id;
       runner.assert(typeof id === 'string' && id.length > 0, `ticket new returned an id (got ${JSON.stringify(created.json)})`, created.json);
 
-      // A split gives the workspace a second session, so the agent's tile stays
-      // on screen while something else holds the selection — the only shape in
-      // which a nudge countdown actually runs where the user can see it.
       const splitPane = await splitIntoShellPane(client, agentId);
       authorId = splitPane.runtimeId;
       await client.request('focus_pane', { sessionId: agentId, paneId: splitPane.paneId });
@@ -373,8 +287,6 @@ async function main() {
       );
       const after = observer.getSession(agentId);
       note('nudge cancelled by keystroke', { unread: after?.ticket_unread });
-      // Stopping a nudge calls off the interruption, not the message: a nudge
-      // that had fired instead would have doorbelled and drained unread.
       runner.assert(
         after?.ticket_unread === true,
         `the ticket is still unread after the cancel (got ticket_unread=${JSON.stringify(after?.ticket_unread)})`,
@@ -383,9 +295,6 @@ async function main() {
     });
 
     await runner.step('the_cancel_survives_looking_at_the_session', async () => {
-      // Selecting the agent and coming back is the path that re-armed a
-      // cancelled nudge: the daemon re-evaluates the countdown on every
-      // selection change. A cancel that a glance undoes is not a cancel.
       await client.request('select_session', { sessionId: agentId });
       await pollFor(async () => {
         const state = await client.request('get_state');
@@ -397,9 +306,6 @@ async function main() {
         return state.activeSessionId === authorId ? state : null;
       }, 'the selection to go back to the split pane', 20_000);
 
-      // Given time to re-arm and observed not to. The window it would have used
-      // is 30s; a few seconds is enough to catch the immediate re-arm this
-      // guards against, and the assertion below is the same field either way.
       await delay(4_000);
       const after = observer.getSession(agentId);
       runner.assert(
@@ -416,9 +322,6 @@ async function main() {
     });
 
     await runner.step('new_ticket_activity_asks_again', async () => {
-      // The cancel answers what was pending. Something that arrives afterwards
-      // is new, and has to be able to reach the user — otherwise the keystroke
-      // would be a permanent mute with no way out.
       runAttn(['ticket', 'comment', ticketId, '-m', 'One more thing, after the cancel.', '--session', authorId]);
       const rearmed = await pollFor(
         () => {

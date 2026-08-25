@@ -1,4 +1,4 @@
-.PHONY: run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -186,6 +186,14 @@ test-watch: $(GOTESTSUM)
 
 test-frontend:
 	cd app && pnpm run test
+
+lint: lint-go lint-frontend
+
+lint-go:
+	go run ./cmd/commentlint ./...
+
+lint-frontend:
+	cd app && pnpm run lint
 
 test-e2e:
 	@# Ensure stale Vite test server is not running

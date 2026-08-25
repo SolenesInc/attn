@@ -1,31 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: submitting a Present review closes the presentation
- * window.
- *
- * The present window (second Tauri webview, label "present") calls
- * `getCurrentWindow().hide()` after a review submit
- * (PresentRoot/index.tsx `handleSubmit`). This shipped broken twice because
- * no test drove the real present window: the unit test mocks
- * `getCurrentWindow` so `.hide()` always "succeeds", and the actual failure
- * was a missing `core:window:allow-hide` capability that only bites the
- * packaged app.
- *
- * This scenario drives the real window end to end:
- *   1. boot a cheap shell session and open a presentation on it via the
- *      `attn present` CLI against a real diff fixture,
- *   2. click the real pane-header chip to open the presentation window,
- *   3. poll present_window_is_visible until the window is actually open,
- *   4. click the real Submit button -> confirm dialog via present_window_submit,
- *   5. poll present_window_is_visible until it reports hidden.
- *
- * Step 5 is the regression assertion: it fails if the `core:window:allow-hide`
- * (or `core:window:allow-is-visible`) capability regresses.
- *
- * Prereqs: a built `./attn` (or ATTN_HARNESS_BIN); a non-prod profile install
- * with the automation layer (defaults to the dev sibling).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,11 +38,6 @@ function makeAttnRunner(attnBin, profile) {
   };
 }
 
-// Generic poll helper: retries `fn` (swallowing its rejections) until it
-// resolves truthy, or the overall budget elapses. Each attempt gets its own
-// `timeoutMs` inside `fn` (e.g. a short per-request automation timeout) so a
-// not-yet-mounted bridge fails fast and retries, rather than the whole poll
-// blocking on one long request.
 async function pollFor(fn, description, timeoutMs, intervalMs = 500) {
   const startedAt = Date.now();
   let lastError = null;
@@ -147,10 +116,6 @@ async function main() {
     });
     runner.log('session_ready', { sessionId, repoDir });
 
-    // src/app.ts genuinely changes between main and feature in the fixture
-    // repo (two hunks: an added import/console.log line and a VERSION bump —
-    // see diffFixtureRepo.mjs), so the round's one file entry has real diff
-    // content to show.
     const presentationId = await runner.step('open_presentation', async () => {
       const manifestPath = path.join(runner.sessionDir, 'present-submit-scenario.present.yml');
       const manifestYaml = [
@@ -181,16 +146,10 @@ async function main() {
     runner.log('presentation_opened', { presentationId });
 
     await runner.step('select_session', async () => {
-      // The presentation chip lives in the triggering session's pane header,
-      // which only mounts for the selected session.
       await client.request('select_session', { sessionId });
     });
 
     const chipClick = await runner.step('click_presentation_chip', async () => {
-      // The presentation_added broadcast that populates presentationNotices
-      // (and thus renders the chip) arrives over the app's own websocket
-      // asynchronously after the CLI call returns, so retry the click until
-      // the chip exists.
       return pollFor(
         () => client.request('present_click_chip', { presentationId }, { timeoutMs: 5_000 }).catch(() => null),
         'presentation chip to render in the pane header',
@@ -205,10 +164,6 @@ async function main() {
     );
 
     await runner.step('wait_for_present_window_visible', async () => {
-      // open_presentation_window creates the webview asynchronously and its
-      // bridge (usePresentAutomationBridge) only starts answering once React
-      // mounts, so give each attempt a short timeout and retry for the
-      // window to exist and report visible.
       const result = await pollFor(
         () =>
           client
@@ -223,15 +178,12 @@ async function main() {
     });
 
     await runner.step('submit_review', async () => {
-      // Drives the real Submit button -> confirm dialog flow in the present
-      // window's DOM. Zero draft comments is a valid submit.
       const result = await client.request('present_window_submit', {}, { timeoutMs: 15_000 });
       runner.assert(result?.submitted === true, `present_window_submit dispatched the confirm click (got ${JSON.stringify(result)})`, result);
     });
 
     await runner.step('wait_for_present_window_hidden', async () => {
-      // The regression assertion: this only passes if the present window's
-      // `getCurrentWindow().hide()` call after submit actually succeeds,
+      // Only passes if the present window's getCurrentWindow().hide() succeeds,
       // which requires the core:window:allow-hide capability.
       const result = await pollFor(
         () =>

@@ -1,31 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Packaged-app proof for worker-authoritative kitty images, which are ON by
- * default: with NOTHING injected into the environment, a program writes a kitty
- * graphics escape into a real session PTY, the worker (the system's only kitty
- * parser) describes the placement to the app, the app pulls the pixels and draws
- * them, the placement rides the scroll of the text it sits in, and the program's
- * delete empties the set.
- *
- * And the escape hatch: with ATTN_KITTY_STORAGE_LIMIT=0 in the daemon's
- * environment, the very same escape produces NOTHING — no stored image, no
- * placement, no wire traffic. Leg 5 proves that on a restarted daemon, so a hatch
- * broken by accident fails here rather than in someone's terminal.
- *
- * Why this scenario is not in the serial matrix (scenarioCatalog.mjs): it stops
- * and re-ensures the profile daemon twice to move ATTN_KITTY_STORAGE_LIMIT in
- * and out of the world the pty-workers inherit. That is a world change the
- * matrix's other scenarios should not have to reason about, the same reason
- * scenario-automation-scheduled-cleanup.mjs stays out. Run it directly:
- *
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-terminal-kitty-image.mjs
- *
- * The escape reaches the PTY as RAW BYTES from a file (`cat`), never as a
- * write_pane JS string: an ESC in a JS string is mangled by the shell quoting
- * on the way through, and a kitty escape that loses its ESC is just text.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -50,36 +24,22 @@ import {
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
 
-// The escape hatch: a storage limit of zero disables the kitty protocol
-// entirely. Unset means the default limit, which is why the image legs inject
-// nothing at all.
 const STORAGE_OFF = '0';
 
-// The image: 64x48 RGB, a coarse checkerboard with a white frame. Small enough
-// to send in a couple of escapes, loud enough to find by eye in the screenshot.
 const IMAGE_WIDTH = 64;
 const IMAGE_HEIGHT = 48;
-// Kitty's own convention chunks the base64 payload at 4096 bytes per escape
-// (m=1 until the last). Matching it means this scenario exercises the worker's
-// multi-escape path rather than a single-escape shape no real emitter sends.
+// Kitty's own convention: 4096 bytes of base64 per escape, m=1 until the last.
 const PAYLOAD_CHUNK = 4096;
 const IMAGE_ID = 8801;
-// A negative z-index, which kitty defines as "draw this under the text". It is
-// the one placement field that is a SIGNED int32 all the way from ghostty's
-// storage through the protocol to the client's store, so asserting it comes
-// back as -1 is what proves nothing on that path widened or truncated it.
+// The one placement field that is a SIGNED int32 the whole way from ghostty's
+// storage to the client's store.
 const IMAGE_Z = -1;
 
 const BLOB_TIMEOUT_MS = 20_000;
 const PLACEMENT_TIMEOUT_MS = 20_000;
 
-// A capture smaller than this is not a picture of the app. Receipt, measured
-// 2026-08-03 on this scenario's own artifacts: a screen-region grab of a parked
-// window returned a 40x1200px sliver of chrome at 14,201 bytes, while every real
-// full-window capture of the same app ran 155,065-493,022 bytes (the low end
-// being a near-empty pane). 60KB sits ~4x above every broken observation and
-// ~2.5x below the smallest healthy one, so only a capture that failed to see the
-// window touches it.
+// Measured 2026-08-03: a parked-window sliver came back at 14,201 bytes, every
+// real full-window capture at 155,065-493,022.
 const MIN_CAPTURE_BYTES = 60_000;
 
 function parseArgs(argv) {
@@ -115,17 +75,8 @@ function checkerboardRGB(width, height) {
   return pixels;
 }
 
-// Transmit-and-display (a=T) of raw 24-bit RGB (f=24) sent inline (t=d), split
-// across escapes the way kitty's convention does. Mirrors
-// kittyPlaceRGBChunked in internal/pty/kittycorpus_test.go, which is the shape
-// the worker's corpus goldens are pinned against.
-//
-// q=2 silences the terminal's own reply. A terminal that took the image answers
-// `\x1b_Gi=<id>;OK\x1b\\` on the PTY, and this emitter is `cat` at a shell
-// prompt with nobody reading it — so the reply lands in the shell's line editor
-// and eats the next command. That is faithful terminal behavior, not a defect
-// (kitty does the same); real emitters either set q or read the reply
-// themselves. Silencing it keeps the assertions about placements.
+// Mirrors kittyPlaceRGBChunked in internal/pty/kittycorpus_test.go. q=2 silences
+// a reply that would land in the shell's line editor and eat the next command.
 function kittyTransmitAndDisplay(id, width, height, z) {
   const encoded = checkerboardRGB(width, height).toString('base64');
   let out = '';
@@ -147,22 +98,8 @@ function findPlacement(state, imageId) {
   return (state?.placements || []).find((entry) => entry.imageId === imageId) || null;
 }
 
-/**
- * Evidence-grade screenshot: the app photographs its OWN window.
- *
- * The obvious route, captureFrontWindowScreenshot, resolves the window's bounds
- * and then grabs that RECTANGLE OF THE SCREEN. The harness parks the app window
- * mostly off-screen, so the rect clips at the screen edge and yields a sliver of
- * window chrome that looks identical in every leg — which is exactly how this
- * scenario once filed three byte-identical PNGs of nothing as proof. The bridge
- * action instead captures by CGWindowID (`screencapture -l <id> -o`), reading
- * the window's own surface whatever sits on top of it, and it re-resolves that
- * id on every call, which matters because a relaunch mints a new one.
- *
- * Two tripwires so a capture that saw nothing fails the leg instead of being
- * filed: the app must report it captured the window rather than falling back to
- * a region grab, and the file must be large enough to be a window.
- */
+// Captures by CGWindowID, re-resolved per call because a relaunch mints a new
+// one: a screen-rectangle grab of the parked window is a sliver of chrome.
 async function captureWindowEvidence(client, runner, name) {
   const outputPath = path.join(runner.runDir, name);
   const result = await client.request('capture_native_window_screenshot', { path: outputPath });
@@ -233,11 +170,8 @@ async function main() {
   const defaultEnv = profileEnv(profile);
   const offEnv = profileEnv(profile, { ATTN_KITTY_STORAGE_LIMIT: STORAGE_OFF });
 
-  // Nothing to inject for the image legs: images are on by default, so the app
-  // launches with the environment it would have in the field. The app spawns the
-  // daemon only when none is running, and the worker inherits the DAEMON's
-  // environment — which is why the dark leg ensures a daemon with the hatch set
-  // BEFORE relaunching the app, so the app never spawns one without it.
+  // A worker inherits the DAEMON's environment, so the dark leg ensures a daemon
+  // carrying the hatch BEFORE relaunching the app.
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
@@ -261,8 +195,7 @@ async function main() {
     }
   };
 
-  // Cleanups run in reverse registration order: leave the profile daemon as the
-  // world expects to find it (nothing injected, images on by default) LAST,
+  // Cleanups run in reverse registration order: the daemon is restored LAST,
   // after the app is gone.
   runner.registerCleanup('restore_default_daemon', () => {
     try { run(binary, ['daemon', 'stop'], defaultEnv); } catch {}
@@ -275,8 +208,6 @@ async function main() {
     await closeSessionPanes(darkSessionId);
   });
 
-  // One shell session with an attached, ready pane. Both legs need the same
-  // thing; the only difference is which daemon environment spawned its worker.
   const openShellPane = async (label) => {
     const id = await createSessionAndWaitForInitialPane({
       client,
@@ -304,8 +235,6 @@ async function main() {
   let darkPane = null;
 
   try {
-    // Nothing injected: whatever this daemon does with kitty escapes is the
-    // default every user gets.
     await runner.step('start_daemon_default', async () => {
       await ensureFreshWorld({ profile, appPath: resources.appPath });
       try { run(binary, ['daemon', 'stop'], defaultEnv); } catch {}
@@ -323,9 +252,6 @@ async function main() {
 
     await runner.step('emit_kitty_image', async () => {
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: `cat ${imageFile}` });
-      // The pane text proves the command ran; the placement below proves the
-      // bytes were parsed. Waiting on the echo first keeps a failure honest
-      // about which of the two broke.
       await waitForPaneText(
         client,
         sessionId,
@@ -338,9 +264,6 @@ async function main() {
       placed = await poll(async () => {
         const state = await client.request('get_pane_placement_state', { sessionId, paneId: pane.paneId });
         const placement = findPlacement(state, IMAGE_ID);
-        // 'present' is the whole round trip: the worker described the
-        // placement, the app noticed it had no pixels for that
-        // (image, generation), pulled them, and holds them now.
         return placement && placement.blob === 'present' ? { state, placement } : null;
       }, `kitty placement ${IMAGE_ID} described and its pixels pulled`, BLOB_TIMEOUT_MS);
 
@@ -366,18 +289,13 @@ async function main() {
     });
 
     await runner.step('placement_rides_the_scroll', async () => {
-      // Two bursts, each more than a screenful, so the image's row leaves the
-      // viewport and then keeps going. The invariant needs no line counting:
-      // the image keeps its absolute buffer row, and its screen row falls by
-      // exactly the number of rows that moved into scrollback.
       const lines = placed.state.rows + 5;
       const settledAfterBurst = async (previousScrollback, description) => poll(async () => {
         const state = await client.request('get_pane_placement_state', { sessionId, paneId: pane.paneId });
         const placement = findPlacement(state, IMAGE_ID);
         if (!placement || state.scrollback <= previousScrollback) return null;
-        // Mid-burst, the pane's scrollback and the placement set read beside it
-        // belong to different instants of the same scroll; two identical reads
-        // mean the stream has stopped moving under the arithmetic below.
+        // Mid-burst, scrollback and the placement set read beside it belong to
+        // different instants; two identical reads mean the stream has stopped.
         await sleep(500);
         const settled = await client.request('get_pane_placement_state', { sessionId, paneId: pane.paneId });
         const settledPlacement = findPlacement(settled, IMAGE_ID);
@@ -432,12 +350,6 @@ async function main() {
       );
       runner.writeJson('placement-cleared.json', cleared);
       captures.deleted = await captureWindowEvidence(client, runner, 'image-deleted.png');
-      // Liveness, not rendering: the pane has scrolled and run two more commands
-      // since image-drawn.png, so these two frames cannot legitimately match.
-      // Identical bytes mean the camera is pointed at something that does not
-      // change — a parked window's chrome, a stale file — and every screenshot
-      // this run files is worthless. What the image itself did is the placement
-      // state's job, above; this only certifies the pictures are of the app.
       runner.assert(
         captures.deleted.sha256 !== captures.drawn.sha256,
         `image-deleted.png is byte-identical to image-drawn.png (sha256 ${captures.drawn.sha256}), though the pane scrolled and ran two commands between them — the captures are not showing live window content`,
@@ -446,9 +358,6 @@ async function main() {
     });
 
     await runner.step('dark_with_the_escape_hatch', async () => {
-      // The way out. Same app, same escape, same everything — only the daemon's
-      // environment differs, and a session spawned from it must store no image
-      // at all, so there is never anything to describe.
       await closeSessionPanes(sessionId);
       sessionId = null;
       await client.quitApp();
@@ -469,9 +378,6 @@ async function main() {
         'image emitter command echoed on the dark daemon',
         20_000,
       );
-      // Give the whole pipeline the same budget the default leg needed to
-      // produce a placement, so "nothing arrived" means nothing arrives, not
-      // that we looked too early.
       await sleep(BLOB_TIMEOUT_MS);
       darkState = await client.request('get_pane_placement_state', {
         sessionId: darkSessionId, paneId: darkPane.paneId,
@@ -483,9 +389,6 @@ async function main() {
         darkState,
       );
       runner.writeJson('placement-dark.json', darkState);
-      // Captured after a relaunch, so its windowId is a different number from
-      // the two above — recorded in captures.json, which is how a reader can see
-      // for themselves that each capture resolved the window it ran against.
       captures.dark = await captureWindowEvidence(client, runner, 'dark-no-image.png');
       runner.writeJson('captures.json', captures);
     });
@@ -506,8 +409,6 @@ async function main() {
     for (const id of [sessionId, darkSessionId].filter(Boolean)) {
       await captureSessionArtifacts(client, runner.runDir, `kitty-image-failure-${id}`, id).catch(() => {});
     }
-    // Diagnostic, not evidence: no tripwires here, because a failing run wants
-    // whatever picture is obtainable, including a fallback region grab.
     await client.request('capture_native_window_screenshot', {
       path: path.join(runner.runDir, 'failure.png'),
     }).catch(() => {});

@@ -1,22 +1,5 @@
 #!/usr/bin/env node
 
-// Editor tile over an arbitrary workspace root, in the packaged app
-// (editor-arbitrary-roots epic, PR6). Docks a fresh editor tile with the REAL
-// native ⌘⌥N into a workspace whose directory is a throwaway temp folder (not
-// the Notebook root), opens a file in it via the tile's finder, and proves two
-// things at once:
-//   1. Root-scoped fs_read actually works for an arbitrary root — the tile
-//      renders the real file content (.cm-content), not an error state.
-//   2. Off-root gating (this PR) actually withholds Notebook-only chrome —
-//      the backlinks/outline rail never renders for a tile bound to a root
-//      other than the Notebook's.
-// A second tile, docked into a workspace whose directory IS the Notebook
-// root, is the positive control: the same rail CAN render there, proving step
-// 2 isolates the off-root case rather than the rail being broken generally.
-//
-// Modeled closely on scenario-notebook-tile-finder.mjs and
-// scenario-notebook-editor-undo.mjs (native ⌘⌥N dock, native finder typing).
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -49,24 +32,15 @@ function parseArgs(argv) {
   };
 }
 
-// Scope every probe to the ACTIVE workspace: inactive workspaces stay mounted
-// but hidden (warm set), so an unscoped selector can match a stale tile left
-// open by a previous run's workspace and poison presence waits.
+// Inactive workspaces stay mounted but hidden, so an unscoped selector matches
+// stale tiles from a previous run's workspace.
 const ACTIVE_TILE = '.terminal-wrapper.active .workspace-dock-tile';
 const FINDER_SELECTOR = `${ACTIVE_TILE} .notebook-finder`;
 const EDITOR_SELECTOR = `${ACTIVE_TILE} .cm-content`;
 const RAIL_SELECTOR = `${ACTIVE_TILE} .notebook-browser-rail`;
 
-// Mirrors internal/notebook/layout.go DefaultRoot: ~/attn-notebook, or
-// ~/attn-notebook-<profile> for any non-default profile. This is the notebook
-// root ONLY when the daemon's `notebook.root` setting is unset (the default
-// for every profile the harness creates fresh) — there is no UI-automation
-// surface that reports the resolved root without opening the Settings modal,
-// and adding one is out of scope here. If a profile has a custom
-// notebook.root configured, the "positive control" workspace below will not
-// actually land on the Notebook root and that half of the scenario will time
-// out with a clear cause. (Same convention as scenario-notebook-editor-undo.mjs
-// and scenario-notebook-link-nav.mjs.)
+// Mirrors internal/notebook/layout.go DefaultRoot, and is the real root only
+// while the daemon's `notebook.root` setting is unset.
 function defaultNotebookRootForProfile(profile) {
   const normalized = (profile || '').trim().toLowerCase();
   const base = path.join(os.homedir(), 'attn-notebook');
@@ -81,10 +55,8 @@ async function domSelectorPresent(client, selector) {
     if (String(error).includes('Screenshot selector not found in DOM')) {
       return false;
     }
-    // The selector resolved but the capture itself failed — html-to-image can
-    // throw on some subtrees (e.g. CodeMirror's .cm-content). We asked about
-    // presence, and the bridge only emits the "not found" error when the
-    // element is genuinely absent, so treat any other failure as present.
+    // html-to-image throws on some subtrees (CodeMirror's .cm-content); only the
+    // "not found" error means the element is absent.
     return true;
   }
 }
@@ -100,10 +72,8 @@ async function waitForDomSelector(client, selector, present, description, timeou
   throw new Error(`Timed out waiting for ${selector} to be ${present ? 'present' : 'absent'}: ${description}`);
 }
 
-// Absence-under-race check: an off-root tile withholds the rail because it
-// never asks the daemon for backlinks, not because a slow fetch hasn't landed
-// yet. Confirm the negative twice, a beat apart, so a race with a fetch that
-// SHOULD NOT exist can't slip a false pass through a single premature check.
+// Confirms the negative twice, a beat apart: a single premature check passes
+// against a fetch that is merely slow.
 async function assertNeverAppears(client, selector, description, settleMs = 1_500) {
   await waitForDomSelector(client, selector, false, `${description} (initial)`, 3_000);
   await new Promise((resolve) => setTimeout(resolve, settleMs));
@@ -123,11 +93,6 @@ async function waitForWorkspaceUi(client, workspaceId, predicate, description, t
   throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
-// Dock a fresh editor tile via the REAL native ⌘⌥N (notebook.openTile) into
-// whichever workspace is currently frontmost/active — the macOS-menu →
-// WebView shortcut path browser e2e cannot reach. Waits for the tile to
-// appear titled "Editor" (the fresh-tile fallback title before anything is
-// opened — this PR's Editor-label rename).
 async function dockEditorTileNative(client, driver, workspaceId) {
   await driver.activateApp();
   await driver.pressKey('n', { command: true, option: true });
@@ -150,9 +115,6 @@ async function dockEditorTileNative(client, driver, workspaceId) {
   }
 }
 
-// Open a note via the tile's auto-opened finder (a fresh tile with no
-// persisted path always opens straight into it): native-type the basename,
-// press Enter to pick the top ranked match — the same path a user takes.
 async function openNoteViaFinder(client, driver, basename) {
   await waitForDomSelector(client, FINDER_SELECTOR, true, 'fresh editor tile auto-opens its finder');
   await driver.activateApp();
@@ -233,9 +195,8 @@ async function main() {
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST).
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('remove_positive_control_note', () => {
@@ -251,9 +212,6 @@ async function main() {
       await closeExistingSessions(client, options.sessionRootDir);
     });
 
-    // 0. Seed the off-root fixture BEFORE launch/dock: a README.md at the root
-    //    plus a nested dir/note.md, so the tile's first fs_index already sees
-    //    both — no race against a fs_watch debounce.
     const { tempRoot, notebookRoot, positiveControlBasename } = await runner.step('seed_fixtures', async () => {
       const root = path.join(runner.sessionDir, 'editor-root');
       fs.mkdirSync(path.join(root, 'dir'), { recursive: true });
@@ -261,10 +219,6 @@ async function main() {
       fs.writeFileSync(path.join(root, 'dir', 'note.md'), '# Nested note\n\nUnder dir/.\n', 'utf8');
       runner.log(`[RealAppHarness] tempRoot=${root}`);
 
-      // Seed a positive-control note directly in the Notebook root (a real note
-      // among real notes — the same convention scenario-notebook-editor-undo.mjs
-      // and scenario-notebook-link-nav.mjs use for this uncontrolled-but-known
-      // location), unique to this run so it never collides across runs.
       const notebookRootDir = defaultNotebookRootForProfile(currentHarnessProfile());
       fs.mkdirSync(notebookRootDir, { recursive: true });
       const basename = `editor-root-positive-control-${runner.runId}`;
@@ -276,10 +230,6 @@ async function main() {
       return { tempRoot: root, notebookRoot: notebookRootDir, positiveControlBasename: basename };
     });
 
-    // 1. Off-root workspace: a normal shell session whose cwd is the temp root.
-    //    ⌘⌥N's default (resolveEditorTileRoot) pins a fresh editor tile to the
-    //    ACTIVE workspace's directory whenever it differs from the Notebook
-    //    root — so this docks a tile bound to tempRoot, not Notebook storage.
     const { off, offRootDocked } = await runner.step('dock_off_root_tile', async () => {
       const result = await openWorkspaceForCwd(client, observer, tempRoot, `editor-root-off-${runner.runId}`);
       tempSessionId = result.sessionId;
@@ -290,8 +240,6 @@ async function main() {
       return { off: result, offRootDocked: docked };
     });
 
-    // 2. Open README.md via the tile's auto-opened finder, then assert:
-    //    (a) tile title becomes the file basename.
     await runner.step('open_off_root_note_and_assert_title', async () => {
       await openNoteViaFinder(client, driver, 'README');
       await waitForWorkspaceUi(
@@ -306,24 +254,11 @@ async function main() {
       });
     });
 
-    // (b) .cm-content already asserted present by openNoteViaFinder — root-
-    //     scoped fs_read for an arbitrary root actually returned real bytes,
-    //     not an error state (which would never mount the editor at all).
-
-    // (c) THE off-root-gating assertion: no backlinks/outline rail. It must
-    //     never appear at all — this tile was never handed backlinksNotebook,
-    //     so there is no fetch in flight that could make it appear late.
     await runner.step('assert_off_root_rail_withheld', async () => {
       await assertNeverAppears(client, RAIL_SELECTOR, 'off-root tile withholds the backlinks/outline rail');
       runner.log('[RealAppHarness] off-root tile: rail withheld as expected.');
     });
 
-    // 3. Positive control: a second workspace whose directory IS the Notebook
-    //    root. resolveEditorTileRoot treats "directory === effective notebook
-    //    root" as the rootless case, so ⌘⌥N here docks a Notebook-rooted tile
-    //    (full capabilities) — the same rail should now render for a markdown
-    //    note, proving step (c) isolates off-root rather than the rail being
-    //    broken in general.
     const { on, onRootDocked } = await runner.step('dock_on_root_tile', async () => {
       const result = await openWorkspaceForCwd(client, observer, notebookRoot, `editor-root-on-${runner.runId}`);
       notebookSessionId = result.sessionId;

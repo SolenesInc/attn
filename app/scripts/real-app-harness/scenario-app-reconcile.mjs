@@ -1,59 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * The reconcile exit proof: a packaged app, a real bus, and every path an app's
- * derived view can take when facts stop being enough.
- *
- * A collection is a view over facts and a fact is only ever seen once, so two
- * things would leave that view quietly wrong: a version move (the app now
- * derives something different from the same facts) and a gap (the app resumed
- * below the oldest fact still in the log). This walks both, plus the cases that
- * must NOT rebuild, on apps that start life as `attn app new` output.
- *
- *   1  before        steward v1 derives {state,title}; the documents are right
- *                    for v1 and have no `status` field at all.
- *   2  no reconcile  disable, publish, enable — the retained backlog delivers in
- *      on resume     seq order and NOTHING reconciles. Re-enabling is not a
- *                    rebuild, and this is the leg that says so.
- *   3  version move  apply v2, which derives `status` from the very same facts.
- *                    Every document already written is wrong until the rebuild,
- *                    and after it every document carries `status`.
- *   4  refusal       historian subscribes and declares no reconcile: a version
- *                    move is refused in those words, before the pointer moves.
- *   5  gap           a REAL retention trim past a live cursor, then historian
- *                    resumes below the oldest surviving fact: no handler, so
- *                    attn disables it without moving its cursor and says why in
- *                    a notification. (See MANUFACTURED below.)
- *   6  interruption  a rebuild caught mid-flight by a daemon restart is repaired
- *                    on the next start and finishes.
- *   7  convergence   after every leg, a fact published later is handled by the
- *                    version that owns it, and the invocation log reads in order.
- *
- * MANUFACTURED, and it has to be: retention is floored at the minimum cursor
- * over enabled-or-installed consumers, so an installed app can never be trimmed
- * past through a product surface — that floor is the point of slice 3a. The one
- * precondition the design names as the remaining gap cause is a cursor left by a
- * removed install, so this scenario removes the app (product surface), publishes,
- * trims for real (product surface, ATTN_BUS_RETENTION), and re-inserts exactly
- * one row: `app:historian` at the cursor it actually reached. The trim, the
- * deleted events, the gap detection, the refusal, the disable and the
- * notification are all real; only that one row is hand-made.
- *
- * It is in the serial matrix (scenarioCatalog.mjs) despite changing the world:
- * it stops and re-ensures the profile daemon to move ATTN_BUS_RETENTION and the
- * app tripwires in and out, and puts the defaults back on the success path and
- * the failure path both, so no later leg inherits a one-second retention window.
- * A change here that can leave the tripwires behind belongs out of the catalog.
- * Run it directly:
- *
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-app-reconcile.mjs
- *
- * With ATTN_HARNESS_REMOTE_SSH_TARGET (or the default OrbStack VM) reachable it
- * also takes the Linux dispatch witness: the same bundle, applied and dispatched
- * on a Linux daemon, so the reconcile path is proven on the platform the hub
- * cross-compiles for. `--skip-remote` drops that leg.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -83,27 +29,22 @@ import {
   STEWARD_V2_DERIVE,
 } from './appFixtures.mjs';
 
-// A window a run can actually cross. The shipped default is thirty days, so
-// without moving it a trim over a fresh profile removes nothing however far
-// behind a consumer is, and the gap leg has nothing to stand on.
+// The shipped default is thirty days: without moving it a trim over a fresh
+// profile removes nothing, and the gap leg has nothing to stand on.
 const TRIM_WINDOW = '1s';
-// Short enough that a wedged rebuild is disabled inside a scenario rather than
-// a coffee break, long enough that a healthy rebuild never sees it.
 const STALL_WINDOW = '25s';
 const DISPATCH_TIMEOUT = '5s';
 
 const SETTLE_MS = 20_000;
-// Nothing on the wire says "and no reconcile happened". Absence needs a budget:
-// a rebuild that is going to run has always started within a second of the
-// trigger in this scenario's own runs, so ten is a tripwire, not a race.
+// Absence needs a budget: a rebuild that is going to run has always started
+// within a second of the trigger in this scenario's own runs.
 const ABSENCE_MS = 10_000;
 
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') args.shift();
   const skipRemote = args.includes('--skip-remote');
-  // parseCommonArgs rejects anything it does not know, so this scenario's own
-  // flag is consumed before the shared parser sees it.
+  // parseCommonArgs rejects flags it does not know, so consume this one first.
   const options = parseCommonArgs(args.filter((arg) => arg !== '--skip-remote'));
   return {
     options,
@@ -122,18 +63,15 @@ function run(binary, args, env, cwd = undefined) {
   });
 }
 
-// Every CLI command prints its routing banner first (`[attn profile=… socket=…]`),
-// which is exactly the line worth keeping in the logs and exactly the line that
-// is not JSON. Parse from the first structural character on.
+// Every CLI command prints a routing banner first, and it is not JSON.
 function parseJSON(output) {
   const start = output.search(/[[{]/);
   if (start < 0) throw new Error(`no JSON in CLI output: ${output.slice(0, 200)}`);
   return JSON.parse(output.slice(start));
 }
 
-// The CLI refuses on the daemon side by writing the error to stdout and exiting
-// non-zero, and a refusal is the assertion in two legs — so capture it rather
-// than letting execFileSync throw the text away.
+// The CLI refuses on the daemon side by writing to stdout and exiting
+// non-zero; a refusal is the assertion in two legs.
 function runAllowingFailure(binary, args, env) {
   try {
     return { ok: true, output: run(binary, args, env) };
@@ -188,9 +126,8 @@ async function main() {
     },
   });
 
-  // The daemon the whole walk runs against: a trim window a run can cross, and
-  // app tripwires short enough to observe. The app spawns a daemon only when
-  // none is running, so this one is ensured BEFORE the app launches.
+  // The app spawns a daemon only when none is running, so ensure this one
+  // BEFORE the app launches.
   const defaultEnv = profileEnv(profile);
   const walkEnv = profileEnv(profile, {
     ATTN_BUS_RETENTION: TRIM_WINDOW,
@@ -199,17 +136,13 @@ async function main() {
   });
 
   // An app's documents and version history survive `attn app remove`, so the
-  // names are scoped to this run: otherwise the first install would be a version
-  // move off the previous run's version, and leg 1 would read its documents.
+  // names are scoped to this run.
   const runSlug = runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-10);
   const STEWARD = `steward-${runSlug}`;
   const HISTORIAN = `historian-${runSlug}`;
 
   const appsRoot = path.join(runner.sessionDir, 'apps');
   fs.mkdirSync(appsRoot, { recursive: true });
-  // The ticket the interrupted rebuild waits for. Until it is published the
-  // rebuild cannot finish, which is what keeps one in flight long enough for a
-  // daemon restart to catch it.
   const releaseTicketId = `release-the-rebuild-${runSlug}`;
 
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -222,8 +155,6 @@ async function main() {
     runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, profile, dbPath,
   });
 
-  // Every fact this walk publishes is a ticket, because tickets are the one
-  // domain a scenario drives deterministically with no agent in the loop.
   const publishTicket = (label) => {
     ticketSeq += 1;
     const id = `${runner.runId}-${ticketSeq}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
@@ -245,18 +176,17 @@ async function main() {
     execFileSync('sqlite3', [`file:${dbPath}?immutable=1`, statement], { encoding: 'utf8', timeout: 30_000 }).trim();
 
   const restartDaemon = (env) => {
-    try { run(binary, ['daemon', 'stop'], env); } catch { /* not running is fine */ }
+    try { run(binary, ['daemon', 'stop'], env); } catch { }
     run(binary, ['daemon', 'ensure'], env);
   };
 
-  // Cleanups run in reverse registration order: hand the profile daemon back
-  // with nothing injected, LAST, after the app is gone.
+  // Cleanups run in reverse registration order.
   runner.registerCleanup('restore_default_daemon', () => restartDaemon(defaultEnv));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('remove_apps', () => {
     for (const name of [STEWARD, HISTORIAN]) {
-      try { run(binary, ['app', 'remove', name], walkEnv); } catch { /* already gone */ }
+      try { run(binary, ['app', 'remove', name], walkEnv); } catch { }
     }
   });
 
@@ -271,9 +201,6 @@ async function main() {
     });
 
     await runner.step('scaffold:new', async () => {
-      // `attn app new` first, always: the scaffold is on the critical path of
-      // the proof rather than beside it, so a scaffold that stops applying
-      // cleanly fails here at step one.
       for (const name of [STEWARD, HISTORIAN]) {
         run(binary, ['app', 'new', path.join(appsRoot, name)], walkEnv);
       }
@@ -332,7 +259,6 @@ async function main() {
         'the retained backlog to deliver after enable',
         SETTLE_MS,
       );
-      // The whole point of the leg: it caught up by DELIVERY, not by rebuild.
       await sleep(ABSENCE_MS);
       runner.assert(
         reconciles(STEWARD).length === 0,
@@ -363,8 +289,7 @@ async function main() {
         'documents carry the new field without having been rewritten',
       );
       // The documents can be right while the invocation row still says
-      // `running` — the handler returns before the daemon has written its
-      // outcome — so the row is polled for, not read once.
+      // `running`: the handler returns before the daemon writes its outcome.
       const rebuild = await poll(
         () => reconciles(STEWARD).find((row) => row.status !== 'running') || null,
         'the rebuild invocation to reach an outcome',
@@ -399,8 +324,7 @@ async function main() {
         ['app', 'apply', path.join(appsRoot, HISTORIAN)],
         walkEnv,
       );
-      // A second apply of a byte-identical version is not a move at all, so the
-      // manifest has to differ for the refusal to be the thing under test.
+      // A second apply of a byte-identical version is not a move at all.
       writeApp(
         appsRoot,
         HISTORIAN,
@@ -418,7 +342,6 @@ async function main() {
         `the refusal does not say what is missing: ${refused.output}`,
       );
       runner.writeJson('leg4-refusal.json', { unchangedApply: moved.output, refusal: refused.output });
-      // Put the manifest back so the version on disk is the one being served.
       writeApp(appsRoot, HISTORIAN, historianManifest({ name: HISTORIAN }), historianEntrypoint());
     });
 
@@ -426,14 +349,10 @@ async function main() {
       const cursor = Number(consumerOf(HISTORIAN).cursor);
       runner.assert(Number.isInteger(cursor) && cursor > 0, `historian has no cursor to be trimmed past: ${cursor}`);
 
-      // Product surface: removing the app deletes its consumer rows, which is
-      // what takes it out of the retention floor.
       run(binary, ['app', 'remove', HISTORIAN], walkEnv);
       for (let i = 0; i < 3; i += 1) publishTicket('past-the-cursor');
       await sleep(2000);
 
-      // Product surface: a real trim, deleting real rows, floored at the only
-      // consumer left standing.
       const trimmed = run(binary, ['bus', 'trim'], walkEnv);
       runner.assert(/removed \d+ event/.test(trimmed), `the trim removed nothing: ${trimmed}`);
       for (let i = 0; i < 2; i += 1) publishTicket('after-the-trim');
@@ -444,8 +363,8 @@ async function main() {
         `the trim did not move the oldest surviving fact past historian's cursor (earliest ${earliest}, cursor ${cursor})`,
       );
 
-      // THE ONE HAND-MADE THING: the cursor a removed install left behind. The
-      // daemon is down for it so nothing is holding the row in memory.
+      // The one hand-made row: the cursor a removed install left behind. The
+      // daemon is down for it so nothing holds the row in memory.
       run(binary, ['daemon', 'stop'], walkEnv);
       sqlite(
         'insert into bus_consumers (name, cursor, filter, enabled, updated_at) values ('
@@ -496,8 +415,6 @@ async function main() {
     });
 
     await runner.step('leg6:interrupted-rebuild-repairs', async () => {
-      // A rebuild that will not finish until a file appears, so the restart
-      // below catches one genuinely in flight rather than racing a fast one.
       writeApp(
         appsRoot,
         STEWARD,
@@ -536,10 +453,6 @@ async function main() {
         'the repaired rebuild to finish',
         60_000,
       );
-      // The receipt that the restart caught a rebuild in flight rather than
-      // racing a finished one: an `interrupted` attempt, and a completing one
-      // carrying the same request id — the same owed rebuild, repaired, not a
-      // second one raised from scratch.
       const attempts = reconciles(STEWARD);
       const interrupted = attempts.find((row) => row.status === 'interrupted');
       runner.assert(
@@ -582,10 +495,6 @@ async function main() {
     });
 
     await runner.step('visible:status-surfaces', async () => {
-      // The status surfaces a person actually reads, captured as text in the
-      // artifacts beside the window capture the recording carries. There is no
-      // automation verb that opens the settings apps page, so this records what
-      // the CLI surfaces show rather than claiming something about the modal.
       runner.writeText('app-status-steward.txt', run(binary, ['app', 'status', STEWARD], walkEnv));
       runner.writeText('app-status-historian.txt', run(binary, ['app', 'status', HISTORIAN], walkEnv));
       runner.writeText('bus-status.txt', run(binary, ['bus', 'status'], walkEnv));
@@ -602,21 +511,14 @@ async function main() {
     if (!skipRemote) {
       await runner.step('linux:reconcile-witness', async () => {
         const target = process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || DEFAULT_REMOTE_SSH_TARGET;
-        // The remote runs whatever binary was put there for it: the hub
-        // bootstrapper installs `attn-<profile>` into ~/.local/bin beside its
-        // own `attn-app-runtime-<profile>` sidecar, and a hand-staged
-        // cross-build lands the same way. ~/.bun/bin is on PATH explicitly
-        // because `attn app apply` bundles with bun and a non-interactive ssh
-        // shell has not run .bashrc.
+        // `attn app apply` bundles with bun and a non-interactive ssh shell
+        // has not run .bashrc, so ~/.bun/bin goes on PATH explicitly.
         const remoteAttn = process.env.ATTN_HARNESS_REMOTE_ATTN || 'attn';
         const remoteProfile = process.env.ATTN_HARNESS_REMOTE_PROFILE || '';
         const prefix = `export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"; `
           + (remoteProfile ? `export ATTN_PROFILE=${remoteProfile}; ` : '');
         const remote = (command, timeoutMs = 120_000) => runSSH(target, prefix + command, timeoutMs);
 
-        // Reachability is not this scenario's subject: an unreachable VM, or one
-        // with no attn on it, reports itself and the leg is skipped rather than
-        // failing the walk.
         const reachable = await remote(`command -v ${remoteAttn} && echo READY`, 20_000).catch(() => null);
         if (!reachable || !String(reachable).includes('READY')) {
           runner.log('linux:unavailable', { target, remoteAttn });
@@ -628,7 +530,6 @@ async function main() {
         const remoteRoot = `/tmp/attn-reconcile-${runSlug}`;
         await remote(`${remoteAttn} daemon ensure`, 120_000);
         await remote(`mkdir -p ${remoteRoot}`);
-        // The same scaffold the local walk starts from, then the same fixtures.
         await remote(`${remoteAttn} app new ${remoteRoot}/${witnessName}`, 300_000);
         const writeRemote = (file, body) =>
           remote(`cat > ${remoteRoot}/${witnessName}/${file} <<'ATTNEOF'\n${body}\nATTNEOF`);
@@ -649,8 +550,6 @@ async function main() {
           90_000,
         );
 
-        // Not just dispatch: the rebuild itself, on Linux. A version move on the
-        // remote has to reconcile there the same way it does here.
         await writeRemote('src/index.ts', stewardEntrypoint(STEWARD_V2_DERIVE));
         await remote(`${remoteAttn} app apply ${remoteRoot}/${witnessName}`, 300_000);
         const rebuilt = await poll(
@@ -696,7 +595,7 @@ async function main() {
       runner.writeText('app-status-steward.txt', runAllowingFailure(binary, ['app', 'status', STEWARD], walkEnv).output);
       runner.writeText('app-status-historian.txt', runAllowingFailure(binary, ['app', 'status', HISTORIAN], walkEnv).output);
       runner.writeText('bus-status.txt', runAllowingFailure(binary, ['bus', 'status'], walkEnv).output);
-    } catch { /* diagnostics are best-effort */ }
+    } catch { }
     await client.request('capture_native_window_screenshot', {
       path: path.join(runner.runDir, 'failure.png'),
     }).catch(() => {});
@@ -705,7 +604,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     for (const name of [STEWARD, HISTORIAN]) {
-      try { run(binary, ['app', 'remove', name], walkEnv); } catch { /* already gone */ }
+      try { run(binary, ['app', 'remove', name], walkEnv); } catch { }
     }
     await client.quitApp().catch(() => {});
     await observer.close();

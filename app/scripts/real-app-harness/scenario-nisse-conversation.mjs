@@ -1,29 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: a conversation session, end to end.
- *
- * A `nisse` session has no PTY. Its agent runs in a headless host process the
- * daemon spawns as a process-group leader, and everything the user sees comes
- * from that host's envelope stream. This scenario proves the whole chain in the
- * packaged app:
- *
- *   1. create a `nisse` session and wait for its composer to open
- *      (`session_ready` reached the app),
- *   2. type a prompt into the real composer and click Send,
- *   3. assert the reply streams into the pane and the run settles (the send
- *      button goes back from Steer to Send),
- *   4. send a SECOND prompt after settle and assert its own reply,
- *   5. start a long-running tool subprocess, close the session while it is
- *      live, and assert the host's group AND that subprocess are gone. pi
- *      detaches each tool child into its own process group, so the group kill
- *      alone would never reach it: what does is the cooperative SIGTERM the
- *      daemon sends first, which pi's dispose turns into tool teardown. The
- *      receipted bug is that a hard kill skips exactly that.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin installed
- * (`attn plugin install-bundled attn-pi`) and pi credentials in ~/.pi.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -37,10 +13,8 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
-// Composer selectors are pane-scoped. The app mounts a pane per conversation
-// session, so a bare [data-testid="conversation-input"] resolves to whichever
-// one is first in the DOM — and a run that types into another session's
-// composer looks exactly like a host that never got the prompt.
+// Composer selectors are pane-scoped: a bare [data-testid="conversation-input"]
+// resolves to whichever pane is first in the DOM.
 const paneOf = (sessionId) => `[data-testid="conversation-pane-${sessionId}"]`;
 const INPUT = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-input"]`;
 const SEND = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-send"]`;
@@ -69,9 +43,6 @@ function conversationState(client, sessionId) {
   return client.request('conversation_get_state', { sessionId }, { timeoutMs: 20_000 }).catch(() => null);
 }
 
-// Every live process, as (pid, pgid, command). Read-only: the scenario never
-// kills anything by pattern — it asks the app to close the session and then
-// checks what the daemon left behind.
 function processTable() {
   const stdout = execFileSync('/bin/ps', ['-eo', 'pid=,ppid=,pgid=,command='], { encoding: 'utf8' });
   return stdout
@@ -88,9 +59,8 @@ function processTable() {
 }
 
 function hostProcesses() {
-  // The host executable, by its own path — not the substring `attn-nisse`, which
-  // a profile named `nisse*` also puts in the app bundle path of every sibling
-  // process (the plugin driver, the daemon, the app itself).
+  // By its own path, not the substring `attn-nisse`: a profile named `nisse*`
+  // puts that in the bundle path of every sibling process too.
   return processTable().filter((entry) => entry.command.includes('/bin/attn-nisse'));
 }
 
@@ -100,10 +70,8 @@ async function sendPrompt(client, sessionId, text) {
 }
 
 async function waitForReply(client, sessionId, expected, description) {
-  // The run has to close, not just produce text: a reply asserted on its own
-  // would pass on a host that streamed and then wedged. The composer stays open
-  // for the whole run — Enter is a steer while the agent works — so the signal
-  // that the run ended is the send button going back to a plain send.
+  // The run has to close, not just produce text: the composer stays open for
+  // the whole run, so the settle signal is the send button leaving Steer.
   return pollFor(
     async () => {
       const state = await conversationState(client, sessionId);
@@ -217,17 +185,13 @@ async function main() {
     });
 
     await runner.step('close_session_leaves_no_orphans', async () => {
-      // Close the session with a tool subprocess live. That is the receipted
-      // bug: hard-killing the host strands what pi started, and a group whose
-      // only member is the host would prove nothing about it. pi's bash tool
-      // blocks for the whole sleep, so the run is still open at close.
+      // pi's bash tool blocks for the whole sleep, so a tool subprocess is still
+      // live at close, which is what the receipted bug strands.
       await sendPrompt(client, sessionId, 'Run the bash command `sleep 45`, then say done.');
       const toolChildren = await pollFor(
         async () => {
           // pi puts each tool subprocess in its OWN process group, so the
-          // host's group does not contain them. Parentage is what finds them,
-          // and it is what makes this assertion about the bug rather than
-          // about the group kill.
+          // host's group never contains them; parentage is what finds them.
           const children = processTable().filter((entry) => entry.ppid === hostPid);
           return children.length > 0 ? children : null;
         },
@@ -237,8 +201,8 @@ async function main() {
 
       const groupBefore = processTable().filter((entry) => entry.pgid === hostGroup);
       await client.request('close_session', { sessionId });
-      // A survivor is matched on pid AND command: a pid the kernel handed to
-      // something else in the meantime is not the process we started.
+      // Matched on pid AND command: a pid the kernel handed to something else
+      // in the meantime is not the process we started.
       const stillRunning = () => {
         const live = new Map(processTable().map((entry) => [entry.pid, entry.command]));
         return [
@@ -271,10 +235,8 @@ async function main() {
     await runner.finishFailure(error, { sessionId, hostPid, hostPgid: hostGroup });
     throw error;
   } finally {
-    // The app and the observer socket outlive the assertions, and an open
-    // socket holds node's event loop open — without this the scenario prints
-    // its verdict and then never exits, leaving the app running for whoever
-    // runs next.
+    // An open socket holds node's event loop open: without this the scenario
+    // prints its verdict and never exits.
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
   }

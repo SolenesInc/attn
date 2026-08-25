@@ -1,22 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: the full "Present" loop in the packaged app.
- *
- * An agent (via the attn CLI, `attn present --wait`) opens a presentation from a
- * manifest -> a notice chip appears in the main window -> clicking the chip
- * opens the second Tauri window (titled "attn — present") -> a reviewer
- * submits a round over the real daemon socket -> the same blocking CLI call
- * returns the feedback to the authoring agent.
- *
- * The present window itself carries NO automation bridge, so loop mechanics
- * are asserted via the MAIN-window bridge (present_get_state /
- * present_click_chip), the real daemon socket (presentDaemon.mjs), and native
- * window enumeration (macosDriver.mjs's waitForWindowTitled), plus a
- * best-effort screenshot artifact. Diff-pixel rendering inside the present
- * window is covered by unit tests and manual cold-boot verification, not
- * here — do not try to read the present window's DOM.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,8 +19,8 @@ import { getPresentations, getPresentationRound, submitPresentationRound } from 
 import { currentHarnessProfile, defaultDaemonPortForProfile, socketPathForProfile } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-// The em dash (U+2014) is load-bearing: it must match the native window title
-// set in app/src-tauri/src/lib.rs exactly, or waitForWindowTitled never matches.
+// The em dash (U+2014) must match the native window title set in
+// app/src-tauri/src/lib.rs exactly, or waitForWindowTitled never matches.
 const PRESENT_WINDOW_TITLE = 'attn — present';
 const REVIEWER_COMMENT = 'Reviewer note from the present-flow scenario.';
 
@@ -96,9 +79,8 @@ function startWaitingPresent(attnBin, profile, { cwd, sessionId }) {
       resolve({ stdout, stderr, json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null });
     });
   });
-  // A later scenario step awaits the original promise. Attach a rejection
-  // observer now as well so cleanup after an earlier failure cannot produce an
-  // unhandled rejection while the harness is unwinding.
+  // A rejection observer is attached now so cleanup after an earlier failure
+  // cannot produce an unhandled rejection.
   completion.catch(() => {});
 
   return { completion, kill: () => child.kill('SIGTERM') };

@@ -1,29 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: the ticket-nudge "deliver now" trigger button.
- *
- * The nudge feature gates every ticket doorbell behind a per-session countdown and
- * pauses it while the user is looking at that session, surfacing a "deliver now"
- * button. This scenario proves the *button* path end-to-end in the packaged app:
- *
- *   1. boot a real codex agent A (the nudge target) and select it,
- *   2. make A a ticket participant and produce unread activity from a second
- *      session B (a cheap shell) — A is selected, so the daemon arms the nudge
- *      PAUSED (no timer): nudge_fires_at is absent and the paused button renders,
- *   3. assert the doorbell has NOT been injected yet (the gate held), then
- *   4. click the real "deliver now" button and assert Codex starts a turn, consumes
- *      the ticket inbox, and settles with no doorbell text stranded in its composer
- *      — exercising the button onClick -> sendTriggerNudge -> WS ->
- *      handleTriggerNudge chain that no unit/tsc check covers.
- *
- * Because A is selected the nudge is paused with no armed timer, so the single
- * click is structurally the only delivery path — that is the exactly-once
- * guarantee (we do not count noisy rendered pane text).
- *
- * Prereqs: `codex` on PATH; a built `./attn` (or ATTN_HARNESS_BIN); a non-prod
- * profile install with the automation layer (defaults to the dev sibling).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,16 +19,11 @@ import { currentHarnessProfile } from './harnessProfile.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// The exact prompt the daemon doorbells into an idle agent's PTY
-// (internal/daemon/ticket_notify.go: ticketNudgePrompt). The scenario asserts the
-// FULL string lands after the click, and that a stable substring is ABSENT before.
+// Mirrors ticketNudgePrompt in internal/daemon/ticket_notify.go.
 const DOORBELL_PROMPT = '📋 New ticket activity — run `attn ticket inbox` to catch up.';
 const DOORBELL_SUBSTRING = 'New ticket activity';
-// The verbatim injected line minus the leading emoji (which the terminal grid may
-// render across cells). This contiguous chunk — em-dash + backticked command +
-// "to catch up." — is the real prompt, and an agent paraphrasing "new ticket
-// activity" in its own reply will not reproduce it, so its presence is a precise
-// "the doorbell was injected" signal.
+// The injected line minus the leading emoji, which the terminal grid can render
+// across cells.
 const DOORBELL_CORE = 'New ticket activity — run `attn ticket inbox` to catch up.';
 
 function parseArgs(argv) {
@@ -96,8 +67,6 @@ const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Collapse runs of whitespace so a match survives the terminal wrapping the
-// injected line across rows (e.g. "catch\n  up." -> "catch up.").
 const normalizeWs = (text) => text.replace(/\s+/g, ' ');
 
 async function readPaneText(client, sessionId) {
@@ -108,12 +77,8 @@ async function readPaneText(client, sessionId) {
   return { paneId: pane.paneId, text: res?.text || '' };
 }
 
-// A freshly-booted agent sits at its prompt but is not yet `idle`/`waiting_input`
-// — that state is only reached after a completed turn (boot -> working -> idle).
-// This scenario uses an idle target to isolate the paused manual-trigger path; the
-// shared nudge policy also permits active, launching, and unknown targets. The text
-// and the Enter are sent as SEPARATE writes (a fast burst ending in CR is
-// treated as a bracketed paste and never submits).
+// A booted agent reaches `idle` only after a completed turn. Text and Enter go as
+// SEPARATE writes: a burst ending in CR is treated as a paste and never submits.
 async function driveAgentToIdle(client, observer, sessionId, note) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const prompt = 'Reply with the single word: ok';
@@ -158,21 +123,17 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  let targetId = null; // A — the codex agent that receives the nudge
-  let authorId = null; // B — the shell that produces unread activity
+  let targetId = null;
+  let authorId = null;
   const note = (m, extra) => runner.log(m, extra);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST) and sessions last (they
-  // must close FIRST) to reproduce the effective order below: author close,
-  // target close, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order: observer/app are
+  // registered first so they close LAST, sessions last so they close FIRST.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
   try {
     const { repoDir } = await runner.step('create_repo_fixture', async () => {
-      // A real git repo for the target agent's cwd.
       const dir = path.join(runner.sessionDir, 'target-repo');
       fs.mkdirSync(dir, { recursive: true });
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -187,8 +148,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // 1) Boot the target agent A (codex — the reported-bug path is the codex idle
-    //    doorbell) and select it so the nudge will arm PAUSED, not counting.
     await runner.step('boot_target_and_drive_idle', async () => {
       targetId = await createSessionAndWaitForInitialPane({
         client,
@@ -206,10 +165,6 @@ async function main() {
       note(`target agent idle and selected`, { targetId, state: idleState });
     });
 
-    // 2) Make A a ticket participant: A creates an unbound backlog ticket (the
-    //    creator is a participant), then a second session B produces activity A is
-    //    notified about. B only needs to EXIST to author a comment, so it is a
-    //    cheap shell, not a booted agent.
     const ticketId = await runner.step('create_ticket_fixture', async () => {
       const ticketTitle = `Nudge trigger fixture ${runner.runId.slice(-6)}`;
       const created = runAttn(['ticket', 'new', '--title', ticketTitle, '--session', targetId, '--json']);
@@ -236,9 +191,6 @@ async function main() {
       return id;
     });
 
-    // 3) The notify reaches A as unread. A is selected, so the daemon pauses the
-    //    nudge: ticket_unread true, nudge_fires_at ABSENT (no armed timer). This
-    //    single observation proves BOTH participation and pause-while-active.
     await runner.step('assert_paused_gate', async () => {
       const unread = await pollFor(
         () => {
@@ -262,7 +214,6 @@ async function main() {
     });
 
     await runner.step('deliver_idle_nudge', async () => {
-      // 4) Gate held: the doorbell must NOT have been injected yet.
       const beforeClick = await readPaneText(client, targetId);
       runner.writeText('pane-before-click.txt', beforeClick.text);
       runner.assert(
@@ -271,7 +222,6 @@ async function main() {
       );
       note(`gate held: no doorbell in target pane before click`);
 
-      // Evidence: the paused "deliver now" button is actually rendered.
       try {
         const shot = await client.request('capture_screenshot_data', { selector: '.nudge-header-trigger' });
         if (shot?.pngBase64) {
@@ -281,16 +231,10 @@ async function main() {
         console.warn(`[nudge-trigger] paused-button screenshot skipped: ${error instanceof Error ? error.message : String(error)}`);
       }
 
-      // 5) Click the REAL "deliver now" button. This exercises the button's onClick ->
-      //    sendTriggerNudge -> WS -> handleTriggerNudge chain that no unit/tsc check
-      //    covers. handleTriggerNudge doorbells immediately while A is idle + unread.
       const clickRes = await client.request('click_nudge_trigger', {});
       runner.assert(clickRes?.clicked === true, `the trigger button was found and clicked (got ${JSON.stringify(clickRes)})`, clickRes);
       note(`clicked the deliver-now trigger`, { surface: clickRes.surface });
 
-      // 6) Injection is not enough: the regression left the verbatim prompt in the
-      //    composer and the old assertion still passed. Require the real Codex state
-      //    transition into a turn, then wait for it to settle and consume the inbox.
       const started = await pollFor(
         () => (observer.getSession(targetId)?.state === 'working' ? true : null),
         'Codex to start a turn from the delivered doorbell',
@@ -332,9 +276,6 @@ async function main() {
       note(`nudge turn settled with inbox consumed and no stranded composer text`, { state: settledState });
     });
 
-    // 7) Busy delivery uses Codex's queue semantics. Keep a normal turn alive long
-    //    enough to click deliver-now while state is authoritatively `working`, then
-    //    require the queued nudge to run afterward and drain the new ticket event.
     await runner.step('deliver_busy_nudge', async () => {
       const pane = await waitForFirstWorkspacePane(client, targetId, `pane for ${targetId}`, 20_000);
       const busyPrompt = 'Run `sleep 8`, then reply with the exact words: foreground turn finished';

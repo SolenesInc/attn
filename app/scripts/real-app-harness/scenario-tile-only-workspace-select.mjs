@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 
-// Tile-only (sessionless) workspace: dock a markdown tile, close the last
-// terminal so the workspace survives as a pure docked-tile workspace, then
-// prove it is both selectable and renders its tile.
-//
-// Regression for figgy's review on PR #257: selecting a sessionless workspace
-// used to be a no-op and the workspace did not render its docked tile.
-// https://github.com/victorarias/attn/pull/257#pullrequestreview-4413194398
+// Regression for PR #257: selecting a sessionless workspace used to be a
+// no-op and the workspace did not render its docked tile.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -109,11 +104,7 @@ async function main() {
 
   runner.log(`[RealAppHarness] attn socket=${socketPath}`);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST); the session pane close is
-  // registered later and guarded by `sessionId` so it is a no-op once the pane is
-  // closed as part of the scenario itself (step 3).
+  // Runner cleanups run in REVERSE registration order.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
@@ -124,7 +115,6 @@ async function main() {
       await closeExistingSessions(client, options.sessionRootDir);
     });
 
-    // 1. A normal shell workspace with one terminal.
     const cwd = path.join(runner.sessionDir, 'notes-ws');
     await runner.step('create_shell_session', async () => {
       fs.mkdirSync(cwd, { recursive: true });
@@ -148,7 +138,6 @@ async function main() {
       note(`shell session ready and selected`, { sessionId });
     });
 
-    // 2. Dock a markdown tile the way a user does: `attn open <file.md>`.
     const { workspaceId, tileId, pane } = await runner.step('dock_markdown_tile', async () => {
       const workspace = await client.request('get_workspace', { sessionId });
       const id = workspace.workspaceId;
@@ -175,7 +164,6 @@ async function main() {
       return { workspaceId: id, tileId: docked.tileIds[0], pane: initialPane };
     });
 
-    // 3. Close the only terminal. The workspace must survive on its tile alone.
     const afterClose = await runner.step('close_terminal_pane', async () => {
       await client.request('close_pane', { sessionId, paneId: pane.paneId });
       await waitForSessionAbsentFromDaemon(observer, sessionId, 'terminal session unregistered after closing last pane');
@@ -189,7 +177,6 @@ async function main() {
       return state;
     });
 
-    // 4. Select the now-sessionless workspace by id (the sidebar click / ⌘1–9 path).
     const afterSelect = await runner.step('select_tile_only_workspace', async () => {
       await client.request('select_workspace', { workspaceId });
       const state = await waitForWorkspaceUi(

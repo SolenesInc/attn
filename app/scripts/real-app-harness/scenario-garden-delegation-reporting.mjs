@@ -1,24 +1,4 @@
 #!/usr/bin/env node
-//
-// Delegation reporting on seeds, against the packaged app and its own daemon.
-//
-// Tickets carry delegation reporting today; the garden has to carry the same
-// weight before it can replace them. This scenario is that weight, live:
-//
-//   - `attn delegate` plants a seed whose body is the brief, tended by the
-//     delegate session — the binding is the dispatch record, so it survives
-//     into every later read;
-//   - what the delegate reports as work state onto its ticket also lands on
-//     the seed's log, with the ticket untouched;
-//   - attach and detach are typed log entries, and "current artifacts" is the
-//     daemon's projection over that log — the panel drill and the docked seed
-//     tile render the same set, from the same authority;
-//   - a seed id is a steering address: `attn agent msg <seed>` reaches
-//     whoever is tending it.
-//
-// The commands run inside a pane, which is where an agent runs them: the app
-// puts its own `attn` first on a session's PATH, so what the pane answers is
-// this build talking to this profile's daemon.
 import path from 'node:path';
 import fs from 'node:fs';
 import {
@@ -40,8 +20,6 @@ function parseArgs(argv) {
   return { options: parseCommonArgs(args), help: args.includes('--help') || args.includes('-h') };
 }
 
-// The brief. One line, so finding it in the seed body is finding the brief
-// rather than guessing at where a pane wrapped it.
 const BRIEF = 'BRIEF9 carry the delegation on a seed';
 const STEER = 'STEER4 the seed id is the address';
 
@@ -66,9 +44,8 @@ async function paneText(client, pane) {
   return payload.text || '';
 }
 
-// A pane wraps at its own width, so an id or a sentence can arrive split across
-// two rows — and a break that lands on a space swallows it. Everything read
-// here is matched with the whitespace taken out of both sides.
+// A pane wraps at its own width and a break on a space swallows it, so every
+// read here is matched with the whitespace taken out of both sides.
 function flat(text) {
   return text.replace(/\n/g, '');
 }
@@ -83,9 +60,8 @@ function saw(haystack, needle) {
 
 let marks = 0;
 
-// runInPane types a command with a marker echoed after it and returns only what
-// that command printed: the marker appears twice — in the line as typed and
-// again as the shell prints it — so the output is what lies between them.
+// The marker appears twice — in the line as typed and again as the shell
+// prints it — so the output is what lies between them.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const mark = `mark${++marks}x`;
   await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
@@ -121,10 +97,8 @@ function seedIDs(text) {
   return [...flat(text).matchAll(/(s-[a-z0-9]{6})/g)].map((match) => match[1]);
 }
 
-// The tile is read by naming the seed, never by taking the first one on screen:
-// a workspace keeps older seed tiles mounted, and one of those answers too. The
-// wait is on the log entry the command just wrote — the document arriving is the
-// signal, and the artifact set is what is then asserted.
+// The tile is read by naming the seed: a workspace keeps older seed tiles
+// mounted, and one of those answers too.
 async function awaitTile(client, seedID, ready, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, notes: [], artifacts: [] };
@@ -136,9 +110,8 @@ async function awaitTile(client, seedID, ready, timeoutMs = 20_000) {
   throw new Error(`the seed tile for ${seedID} never caught up: ${JSON.stringify(state)}`);
 }
 
-// The drill is a row expanded in the panel; re-reading it collapses and reopens,
-// because the document is fetched on the way in. Like the tile, it is read on
-// the log entry the command just wrote rather than after a fixed pause.
+// Re-reading the drill collapses and reopens it, because the document is
+// fetched on the way in.
 async function readDrill(client, seedID, ready, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs;
   let state = { present: false, notes: [], artifacts: [] };
@@ -176,8 +149,6 @@ async function main() {
 
     delegated = await runner.step('dispatch_a_delegation', async () => {
       const known = new Set(observer.sessionsById.keys());
-      // Awaited on the daemon, not the pane: what the delegation prints wraps
-      // in a narrow pane, and the session existing is the fact.
       await client.request('write_pane', {
         ...pane,
         text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
@@ -193,8 +164,6 @@ async function main() {
     });
 
     seed = await runner.step('the_brief_is_a_seed_the_delegate_tends', async () => {
-      // The listing carries the delegation's name as the title and its session
-      // as the tender; the brief is the body, which `show` is what reads.
       const listed = await runInPane(client, pane, 'attn seed ls', delegated);
       const planted = seedIDs(listed)[0];
       runner.assert(Boolean(planted), 'the delegation planted a seed', { listed });
@@ -207,9 +176,6 @@ async function main() {
     });
 
     await runner.step('a_status_report_lands_on_the_log', async () => {
-      // The ticket is still the reporting channel; the seed's log is what the
-      // same report also reaches. The CLI answers with the ticket's new
-      // status, which is what says the ticket side is untouched.
       const reported = await runInPane(client, pane,
         `attn ticket status in_progress --comment "digging in" --session ${delegated}`, '→ working');
       runner.writeText('ticket-status.txt', reported + '\n');
@@ -237,7 +203,6 @@ async function main() {
           { selector: '.garden-panel' })).pngBase64, 'base64'));
       await pace();
 
-      // The tile is the second render site of the one read model.
       await runInPane(client, pane, `attn open ${seed} --session ${pane.sessionId}`, '');
       const tile = await awaitTile(client, seed, (state) => state.notes.some((note) => note.kind === 'attach'));
       runner.assert(tile.present, 'the seed opened as a tile', { tile });

@@ -323,10 +323,6 @@ async function main() {
         `${options.agent} initial pane width to recover after closing split`,
         20_000,
       );
-      // No scroll: captures assert on the live bottom viewport — a real agent
-      // transcript outgrows one screen, so the welcome header legitimately
-      // scrolls away, and the content-preserved check below is the recovery
-      // signal.
       await assertPaneVisibleContentPreserved(
         client,
         sessionId,

@@ -1,53 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: the sidebar's agent-queue arrangement.
- *
- * The queue turns the sidebar into a list of turns the user owes. A turn opens
- * when an agent reaches a state that wants the user and closes only when the
- * user settles it — no state change ever removes a row, and a row never moves
- * while the user is working with that agent. That is the whole claim, and it is
- * only observable end to end: the daemon stamps the turn, derives `turn_owed`
- * per broadcast, and the sidebar renders the band from what it is told.
- *
- * The run drives two real Claude agents in two workspaces and asserts, against
- * the rendered DOM (`queue_get_state`), that:
- *
- *   1. an agent queues from the moment it boots to its prompt, and both owed
- *      turns are in the band, oldest first, and in exactly one place — the bands
- *      replace the workspace tree rather than sitting on top of it,
- *   2. clicking a row hands the agent over with the keyboard in its terminal,
- *   3. steering that agent leaves it exactly where it was, showing its live
- *      (working) state rather than dropping out of the queue,
- *   4. settling moves it to the Settled band, and only settling does,
- *   5. a settled agent that wants the user again returns at the bottom, behind
- *      the turn that has been owed longer,
- *   6. a settled agent whose run finishes without asking anything returns too —
- *      a result nobody has read is still the user's — while a shell pane, which
- *      reaches the same `idle` state, never queues at all, and a shell split out
- *      of an agent is that agent's satellite: no row anywhere, including for a
- *      shell split out of that shell,
- *   7. pinning an agent from its queue row takes that one agent out of the queue
- *      into the Pinned band, leaving its workspace and siblings alone, and
- *      unpinning there brings it back with the turn it never stopped owing — so
- *      the queue is never a one-way door,
- *   8. the chief of staff occupies its own slot and never the band,
- *   9. turning the arrangement off and back on mid-session restores the whole
- *      workspace tree, then returns the same queue with the same agent selected,
- *  10. an auto-settle completing on the agent the user is watching hands over
- *      the next agent that owes a turn, the same as settling by hand does,
- *  11. settling by keyboard hands over the next agent that still owes a turn,
- *      and lands on home when nothing does,
- *  12. a settle survives a daemon restart,
- *  13. landing on home that way leaves it waiting for the queue to refill — the
- *      banner says so on a switch the user can throw either way — and the next
- *      turn to open takes the user to it,
- *  14. walking to home instead leaves the user there, however many agents start
- *      asking.
- *
- * Prereqs: `claude` on PATH; a non-production profile install with the
- * automation layer; a built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
- */
+// Prereqs: `claude` on PATH; a non-production profile install with the
+// automation layer; a built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -71,10 +25,6 @@ import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAsse
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// States that want the user, and so open a turn. The scenario asserts the queue
-// against whichever of them the agent actually reaches: the product claim is
-// "a state that wants the user opens a turn", not that a given prompt always
-// produces the same one.
 const TURN_OPENING_STATES = new Set(['waiting_input', 'pending_approval', 'unknown']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -117,10 +67,6 @@ function settledIds(queue) {
   return (queue.settled || []).map((row) => row.id);
 }
 
-// The pane a session occupies in `workspaceSessionId`'s workspace. Asked of the
-// pane's owning session rather than matched against the pane id's text: a pane id
-// is not required to contain the session id, and a lookup that quietly finds
-// nothing sends `undefined` to a command that then acts on the active pane.
 async function paneIdFor(client, workspaceSessionId, sessionId) {
   const workspace = await client.request('get_workspace', { sessionId: workspaceSessionId });
   const pane = (workspace.panes || []).find((entry) => entry.sessionId === sessionId);
@@ -158,9 +104,6 @@ async function createAgent(client, observer, runner, dirName, label) {
   return { sessionId, paneId: pane.paneId, cwd };
 }
 
-// A turn that ends on a question is the plainest way to a state that wants the
-// user: the classifier reads the agent's own closing text, so no tool
-// permission, sandbox, or auto-approve setting is in the path.
 function questionPrompt(token) {
   return [
     `I am thinking about ${token} but I have not decided anything yet.`,
@@ -169,11 +112,7 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-// The budget is generous because it is not what is under test. The prompt asks
-// for one short question and no tools, but a live agent may go exploring anyway,
-// and how long it takes to stop says nothing about whether the queue reacts to
-// the state it stops in. A tight bound here just turns agent discretion into a
-// failure that reads like a product regression.
+// Generous on purpose: how long a live agent takes to stop is not under test.
 const OWED_TURN_TIMEOUT_MS = 240_000;
 
 async function driveToOwedTurn(client, observer, agent, token, description) {
@@ -248,22 +187,12 @@ async function main() {
     await runner.step('open_first_turn', async () => {
       alpha = await createAgent(client, observer, runner, 'alpha', `queue-alpha-${runner.runId}`);
       createdSessionIds.push(alpha.sessionId);
-      // The sidebar only exists once there is something to list, so the band is
-      // checked here rather than against a sessionless app.
-      //
-      // An agent you launched and have not spoken to boots to its prompt and
-      // resolves to `idle`, the same state a finished run resolves to, and idle
-      // opens a turn. Nothing will happen in it until you type, so it queues
-      // from the moment it boots — no prompt required. This is the only place
-      // the launch case is observable end to end.
       await pollFor(async () => {
         const state = await queueState(client);
         return state.present ? state : null;
       }, 'the queue band to render once the arrangement is on', 15_000);
       await waitForTurns(client, [alpha.sessionId], 'alpha queued from the moment it booted');
 
-      // Steering it into a real ask keeps the same turn — the later steps settle
-      // and re-open against an agent that has actually run something.
       const state = await driveToOwedTurn(client, observer, alpha, 'QUEUE_ALPHA', 'alpha to want the user');
       runner.log('alpha opened a turn', { state });
       await waitForTurns(client, [alpha.sessionId], 'alpha still in the band');
@@ -282,9 +211,6 @@ async function main() {
         queue.turns[0].workspaceId !== queue.turns[1].workspaceId,
         `the two turns come from different workspaces: ${JSON.stringify(queue.turns.map((row) => row.workspaceId))}`,
       );
-      // The bands replace the tree rather than sitting on top of it. An agent
-      // drawn in both places is what made a row look like it moved when only one
-      // of its copies did.
       for (const sessionId of [alpha.sessionId, beta.sessionId]) {
         runner.assert(
           !queue.treeSessionIds.includes(sessionId),
@@ -307,11 +233,6 @@ async function main() {
     });
 
     await runner.step('a_row_opens_from_the_keyboard', async () => {
-      // A queue row must be operable without a mouse. The focus is placed
-      // directly rather than walked to with Tab — where a blind Tab walk ends up
-      // depends on the whole window, which says nothing about this row — but the
-      // keypress itself is a real Return through the packaged app, so it proves
-      // the row responds to the keyboard and not only to a click handler.
       await client.request('select_session', { sessionId: beta.sessionId });
       await driver.activateApp();
 
@@ -337,10 +258,6 @@ async function main() {
     });
 
     await runner.step('steering_keeps_the_row_in_place', async () => {
-      // Answering the agent's question is steering: it goes back to work, and
-      // the row must stay exactly where it was, showing that it is working. A
-      // queue that dropped it here would be a queue of stopped agents, not of
-      // turns the user still owes.
       const before = await queueState(client);
       const beforeIndex = turnIds(before).indexOf(alpha.sessionId);
       await submitPrompt(client, alpha.sessionId, alpha.paneId, 'Blue. Reply with the single word: noted.');
@@ -356,8 +273,6 @@ async function main() {
     });
 
     await runner.step('settling_is_the_only_exit', async () => {
-      // Let the run end on its own first: the row surviving a completed run is
-      // the point — nothing but a settle takes it out.
       await pollFor(() => {
         const state = observer.getSession(alpha.sessionId)?.state;
         return state && state !== 'working' ? state : null;
@@ -388,7 +303,6 @@ async function main() {
     });
 
     await runner.step('a_finished_run_returns_the_agent_to_the_queue', async () => {
-      // Settle alpha first, so nothing but the finish itself can bring it back.
       await client.request('dom_click', { selector: `[data-testid="queue-settle-${alpha.sessionId}"]` });
       await waitForTurns(client, [beta.sessionId], 'alpha settled again');
 
@@ -431,10 +345,6 @@ async function main() {
     });
 
     await runner.step('classification_suspends_auto_settle', async () => {
-      // The countdown must not treat the resolver's awaiting-verdict hold as
-      // proof that work continues. Give the short run enough time to reach the
-      // visible countdown, but a wide enough countdown that it reliably stops
-      // and starts classification before the settle deadline.
       await client.request('set_setting', { key: 'auto_settle_arm_seconds', value: '5' });
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: '60' });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
@@ -483,30 +393,14 @@ async function main() {
     });
 
     await runner.step('auto_settle_hands_over_the_next_agent', async () => {
-      // A turn closing hands over the next agent that owes one whoever closed
-      // it — a countdown completing is not a lesser settle than the keystroke.
-      // This is the only path where nobody pressed anything, so it is also the
-      // only one where the app has to react to the settle rather than perform
-      // it, and the only one no unit test can stand in for: the timer lives in
-      // the daemon and the handover is in the app.
-      //
-      // Both windows are set to their floors to keep the step short. They are
-      // still real: the agent has to hold `working` through both.
       await client.request('set_setting', { key: 'auto_settle_arm_seconds', value: '5' });
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: '3' });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
       try {
-        // Polled rather than read once: the settings above each come back as a
-        // broadcast, and a single read can land between the re-renders they
-        // cause. What the band settles on is the precondition, not whatever it
-        // happened to hold at the first opportunity.
         const owed = await pollFor(async () => {
           const ids = turnIds(await queueState(client));
           return ids.length >= 2 ? ids : null;
         }, 'two agents owing turns, so there is somewhere to hand over to', 30_000);
-        // The bottom row, so the handover wraps to the top — and so the queue
-        // this step hands to the ones below it comes back in the same order it
-        // was given, once the settled agent is driven back to a turn.
         const watchedId = owed[owed.length - 1];
         const nextId = owed[0];
         const watched = [alpha, beta].find((agent) => agent.sessionId === watchedId);
@@ -514,25 +408,16 @@ async function main() {
         runner.log('auto-settle will run on the bottom of the queue', { watched: watchedId, next: nextId });
         await client.request('select_session', { sessionId: watched.sessionId });
 
-        // Resolved now rather than taken from the agent's birth record: a pane
-        // can be replaced under a session, and writing to an id it no longer has
-        // goes nowhere silently.
+        // A pane can be replaced under a session, and writing to an id it no longer
+        // has goes nowhere silently.
         const pane = await waitForFirstWorkspacePane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
 
-        // Steering is what arms it. The prompt asks for enough output to outlast
-        // both windows — anything shorter finishes first, and the stop-time
-        // classifier correctly suspends the settle, so a short reply would test
-        // the classifier guard instead of continuing work.
         await submitPrompt(
           client,
           watched.sessionId,
           pane.paneId,
           'Count from 1 to 500, one number per line, nothing else. Do not use any tools.',
         );
-        // Both preconditions are polled separately from the handover so a run
-        // where the steering never landed, or where the agent finished before
-        // the windows elapsed, reads as the setup failing rather than as the
-        // handover regressing.
         await pollFor(
           () => (observer.getSession(watched.sessionId)?.state === 'working' ? true : null),
           'the steered agent to go back to work',
@@ -558,9 +443,6 @@ async function main() {
           `auto-settle moved it to Settled like any other settle: ${JSON.stringify(settledIds(after))}`,
         );
 
-        // Put the turn back so the steps below see the queue they were written
-        // against. Turned off first so the restoring run cannot arm a second
-        // countdown behind this step's back.
         await client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' });
         await driveToOwedTurn(
           client,
@@ -576,18 +458,12 @@ async function main() {
     });
 
     await runner.step('a_shell_pane_never_queues', async () => {
-      // A shell pane is a real store session, registered idle at birth and left
-      // there. Now that idle opens a turn, only the shell exclusion keeps every
-      // ⌘` terminal out of a queue nothing could ever settle.
       const before = turnIds(await queueState(client));
       const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
       const targetPaneId = workspace.activePaneId || workspace.panes?.[0]?.paneId;
       await client.request('split_pane', { sessionId: alpha.sessionId, targetPaneId, direction: 'vertical' });
-      // Waiting for `idle` specifically, not merely for the session to exist: a
-      // pane is registered in the spawn-time `working` color and the resolver
-      // settles it a beat later, so asserting on first sight reads the wrong
-      // state. Idle is the state under test — it is what opens a turn — so the
-      // exclusion is only proved once the shell is actually in it.
+      // A pane is registered in the spawn-time `working` color and settles a beat
+      // later, so asserting on first sight reads the wrong state.
       const shell = await pollFor(async () => {
         const state = await client.request('get_state');
         const session = (state.sessions || []).find((entry) => entry.agent === 'shell');
@@ -604,9 +480,6 @@ async function main() {
         `opening a terminal changed nothing in the band: ${JSON.stringify(before)} -> ${JSON.stringify(turnIds(after))}`,
       );
 
-      // And it is a satellite: split out of an agent, it is reached by going to
-      // that agent, where it is a pane. So it earns no row of its own anywhere —
-      // not in the settled band, and not in what is left of the tree.
       runner.assert(
         !settledIds(after).includes(shell.id),
         `a shell beside its agent gets no settled row: ${JSON.stringify(settledIds(after))}`,
@@ -616,9 +489,6 @@ async function main() {
         `a satellite is not in the tree either: ${JSON.stringify(after.treeSessionIds)}`,
       );
 
-      // Splitting out of the shell inherits the same agent rather than making the
-      // shell a parent, so a chain of terminals still belongs to the one agent it
-      // came from and nothing has a chain to walk.
       await client.request('split_pane', {
         sessionId: alpha.sessionId,
         targetPaneId: await paneIdFor(client, alpha.sessionId, shell.id),
@@ -637,10 +507,8 @@ async function main() {
         `a shell split out of a shell is a satellite of the same agent: ${JSON.stringify(settledIds(nestedQueue))}`,
       );
 
-      // Leave the workspace as this step found it. A leftover shell pane is not a
-      // cosmetic mess: later steps click the middle of the window to put focus in
-      // the agent before a keyboard settle, and an extra pane is what that click
-      // lands on instead.
+      // Later steps click the middle of the window to focus the agent, and a
+      // leftover pane is what that click lands on instead.
       for (const id of [nested.id, shell.id]) {
         await client.request('close_pane', {
           sessionId: alpha.sessionId,
@@ -658,13 +526,6 @@ async function main() {
     });
 
     await runner.step('pinning_from_a_row_takes_that_agent_out_of_the_queue', async () => {
-      // A gesture aimed at a row acts on that row: the button pins the agent, not
-      // its workspace, and the agent lands in the Pinned band below Settled. The
-      // row's own button is the claim under test — pressed through the DOM, as the
-      // user would — because the tree, which owns the workspace-scoped pin, is not
-      // drawn for ordinary workspaces while the queue is on. Without a way back it
-      // would be a one-way door, so unpinning from where the row lands is half the
-      // step.
       const before = await queueState(client);
       const alphaWorkspaceId = (before.turns.find((row) => row.id === alpha.sessionId) || {}).workspaceId;
       runner.assert(Boolean(alphaWorkspaceId), 'the row carries the workspace it belongs to');
@@ -681,16 +542,11 @@ async function main() {
         (pinned.pinned || []).map((row) => row.id).includes(alpha.sessionId),
         `a pinned agent lands in the Pinned band: ${JSON.stringify(pinned.pinned)}`,
       );
-      // Its workspace was not touched, so beta's sibling relationship — and every
-      // other agent in that workspace — is exactly where it was.
       runner.assert(
         !pinned.treeSessionIds.includes(alpha.sessionId),
         `pinning one agent did not pin its workspace: ${JSON.stringify(pinned.treeSessionIds)}`,
       );
 
-      // Unpin from the band the row landed in. Pinning is not settling: the turn
-      // went on accruing underneath, so alpha comes back owed rather than settled,
-      // and it comes back at the age it has really been owed.
       await client.request('dom_click', { selector: `[data-testid="queue-unpin-${alpha.sessionId}"]` });
       await waitForTurns(
         client,
@@ -711,10 +567,6 @@ async function main() {
       const promoted = await waitForTurns(client, [alpha.sessionId], 'beta out of the band once it is chief', 20_000);
       runner.assert(promoted.chief?.id === beta.sessionId, `beta occupies the chief slot: ${JSON.stringify(promoted.chief)}`);
 
-      // Pin reaches the chief's workspace like any other, and the chief keeps its
-      // anchored slot regardless — so the group that survives in the tree must
-      // not draw it a second time. Pin it from the tree with the arrangement off,
-      // which is the affordance a user has for a workspace holding only the chief.
       const chiefWorkspaceId = promoted.chief.workspaceId;
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
       await pollFor(async () => {
@@ -723,10 +575,6 @@ async function main() {
       }, 'the tree back before pinning the chief workspace', 15_000);
       await client.request('dom_click', { selector: `[data-testid="pin-workspace-${chiefWorkspaceId}"]` });
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-      // Wait for the pinned group to be drawn, not merely for the band to come
-      // back: the pin travels to the daemon and returns as a broadcast, and
-      // reading the tree before it lands would let "the group does not draw the
-      // chief" pass because nothing is drawn at all.
       const chiefPinned = await pollFor(async () => {
         const state = await queueState(client);
         return state.present && state.chief && state.treeWorkspaceIds.includes(chiefWorkspaceId) ? state : null;
@@ -776,19 +624,16 @@ async function main() {
     });
 
     await runner.step('a_settle_survives_a_daemon_restart', async () => {
-      // Settle with the real key combo this time: the packaged app's native menu
-      // can swallow an accelerator before the DOM ever sees it, which no unit or
-      // e2e test can catch.
+      // The packaged app's native menu can swallow an accelerator before the DOM
+      // ever sees it, which no unit or e2e test can catch.
       await client.request('select_session', { sessionId: beta.sessionId });
       await driver.activateApp();
       await driver.clickWindow(0.5, 0.5);
       await driver.pressKey('e', { command: true, shift: true });
       await waitForTurns(client, [alpha.sessionId], 'beta settled by shortcut before the restart');
 
-      // Closing a turn hands over the next agent that still owes one, so the
-      // user never has to settle and then go looking. The target is taken from
-      // the queue as it stood before the settle — reading it afterwards would
-      // race the daemon broadcast that drops the settled row.
+      // The target is read before the settle: reading it afterwards races the
+      // daemon broadcast that drops the settled row.
       const jumped = await pollFor(async () => {
         const state = await client.request('get_state');
         return state.activeSessionId === alpha.sessionId ? state : null;
@@ -798,8 +643,7 @@ async function main() {
         `settling selected the next owed turn: ${jumped.activeSessionId}`,
       );
 
-      // The app respawns the daemon, so it has to be down for the restart to be
-      // a restart.
+      // The app respawns the daemon, so it has to be down for this to be a restart.
       await client.quitApp();
       await observer.close();
       try { execFileSync(attnBin, ['daemon', 'stop'], { env: daemonEnv, encoding: 'utf8' }); } catch {}
@@ -814,17 +658,8 @@ async function main() {
     });
 
     await runner.step('settling_the_last_turn_lands_on_home', async () => {
-      // With nothing left to hand over, home is where the queue ends: staying
-      // would leave the user on the one agent guaranteed to be finished with
-      // them, and home is the surface that says so.
-      //
-      // Settled by shortcut, repeatedly, until the band runs out. One press is
-      // not enough to reach the end of the queue here: the daemon reclassifies
-      // every session when it comes back from the restart, and an agent the user
-      // settled at `waiting_input` can legitimately land on `idle` a moment later
-      // — a finished run is a turn like any other, so it opens one. Each press
-      // therefore settles the agent it was handed and is handed the next, which
-      // is the move-on loop itself; the claim under test is where that loop ends.
+      // One press is not enough: the daemon reclassifies every session after the
+      // restart, so a settled agent can legitimately open a fresh turn.
       await client.request('select_session', { sessionId: alpha.sessionId });
       await driver.activateApp();
       await driver.clickWindow(0.5, 0.5);
@@ -845,8 +680,6 @@ async function main() {
         `no agent is selected once the queue is empty: ${state.activeSessionId}`,
       );
 
-      // Home reached this way is a wait, not a stop: the user did not choose to
-      // be here, the queue simply ran out. The banner says so on its own switch.
       const home = await pollFor(
         async () => {
           const current = await client.request('home_get_state');
@@ -860,8 +693,6 @@ async function main() {
         `landing on home from a settle arms the wait: ${JSON.stringify(home)}`,
       );
 
-      // And it is the user's to change, both ways: a switch that only the app
-      // can throw is not a switch.
       await client.request('dom_click', { selector: '[data-testid="follow-next-turn"] input' });
       const off = await pollFor(
         async () => {
@@ -885,10 +716,6 @@ async function main() {
     });
 
     await runner.step('waiting_at_home_takes_the_user_to_the_next_turn', async () => {
-      // The other half of the handover. A turn opening while the user waits is
-      // the same event as a turn closing seen from the other side, so it moves
-      // them the same way — without this, home watches an agent start asking and
-      // says nothing.
       await driveToOwedTurn(client, observer, beta, 'what to do about the wait', 'beta to want the user again');
       await waitForTurns(client, [beta.sessionId], 'beta back in the band while home waits');
       const jumped = await pollFor(
@@ -906,11 +733,6 @@ async function main() {
     });
 
     await runner.step('home_the_user_walked_to_keeps_them', async () => {
-      // The rule the wait exists under: deciding to be on home means staying
-      // there. Going home by hand — from an agent whose turn is still open, so
-      // there is something to be pulled to the whole time — leaves the wait off,
-      // and every agent that starts asking afterwards stays in the queue until
-      // the user goes and takes it.
       await driver.activateApp();
       await driver.clickWindow(0.5, 0.5);
       await driver.pressKey('h', { command: true, shift: true });
@@ -927,9 +749,6 @@ async function main() {
         'both agents owed while the user sits on home',
         30_000,
       );
-      // Long enough that a jump would have happened: the follow reacts to the
-      // same broadcast that puts the row in the band, which the wait above
-      // already proved lands within seconds.
       await delay(5_000);
       const stayed = await client.request('get_state');
       runner.assert(

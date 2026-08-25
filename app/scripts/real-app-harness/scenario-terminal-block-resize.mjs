@@ -1,25 +1,7 @@
 #!/usr/bin/env node
 
-// Packaged-app regression: command-block geometry through the REAL lifecycle a
-// workspace terminal experiences, across fish, bash, and zsh:
-//   - complex make-like output (ANSI colors, long wrapping compiler lines,
-//     carriage-return progress overwrites), tall seq output, small blocks
-//   - an app relaunch (attach replay rebuilds the model from raw bytes; the
-//     path that broke `make` output rendering in prod)
-//   - pane width changes via split/close-split (buffer reflow; the path that
-//     corrupted block geometry)
-//
-// Shell contract (correct-or-absent invariant):
-//   - fish emits OSC 133 natively: blocks must exist, survive the relaunch
-//     replay, and hit-test correctly at every step. A width change clears the
-//     store; if the change interrupted attach replay, the re-requested replay
-//     rebuilds the blocks at the new width — either way a click must select
-//     the right block or nothing
-//   - bash/zsh run WITHOUT shell integration (--norc / -f so a host config
-//     cannot add markers): blocks must be ABSENT and clicks must select
-//     nothing — never a wrong box
-//   - text integrity (replay + width changes, including wrapped colored
-//     lines) must hold for all three shells at every step
+// Shell contract: fish emits OSC 133 natively, so blocks must exist and
+// hit-test; bash/zsh run without integration, so a click must select nothing.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -56,12 +38,8 @@ function shellAvailable(shell) {
   }
 }
 
-// Make-like output, portable across all three shells: colored
-// percent-prefixed lines long enough to wrap in a full pane (and wrap several
-// times in a split pane), then a carriage-return progress overwrite, then a
-// done marker. Shipped as a script file in the session cwd (a long one-liner
-// mangles when typed into a live shell); `sh make-sim.sh <token>` is ONE
-// command, so under fish it is one block.
+// Shipped as a script file: a long one-liner mangles when typed into a live
+// shell, and `sh make-sim.sh <token>` is ONE command, so under fish one block.
 const MAKE_SIM_SCRIPT = `i=1
 while [ $i -le 24 ]; do
   printf "\\033[32m[%3d%%]\\033[0m Building CXX object deep/nested/module_path/src/component_$i/impl/translation_unit_$i.cpp.o -O2 -Wall -Wextra -fno-omit-frame-pointer\\n" $((i*4))
@@ -89,10 +67,8 @@ function assertNoBlocks(state, label) {
   }
 }
 
-// Text integrity through replay and reflow. Short sentinels must exist as
-// whole rows; long sentinels and the long compiler lines wrap (and re-wrap on
-// width change), so they must survive as contiguous tokens once row breaks
-// are joined.
+// Long sentinels wrap and re-wrap on a width change, so they are asserted as
+// contiguous tokens once row breaks are joined.
 function assertTextIntegrity(text, sentinels, longTokens, label) {
   const lines = text.split('\n').map((line) => line.trim());
   for (const sentinel of sentinels) {
@@ -115,8 +91,7 @@ async function runCommandAndWait(client, sessionId, paneId, command, expectedLin
     `output of ${expectedLine}`, 30_000);
 }
 
-// read_pane_text returns the whole buffer; click_pane_cell takes VIEWPORT rows
-// (scrolled to bottom, the viewport shows the last `rows` buffer lines).
+// read_pane_text returns the whole buffer; click_pane_cell takes VIEWPORT rows.
 async function clickOutputLine(client, sessionId, paneId, state, lineText) {
   const read = await client.request('read_pane_text', { sessionId, paneId });
   const lines = read.text.split('\n');
@@ -140,11 +115,8 @@ async function clickAndExpectSelected(client, sessionId, paneId, lineText, comma
   console.log(`[verify] ${label}: click selected the correct block (${block.id})`);
 }
 
-// After a width change the block store clears, then the replay re-request
-// (triggered when the geometry change interrupted queued replay) may rebuild
-// the blocks at the new width. Both outcomes honor correct-or-absent: if a
-// block covers the clicked line it must be the RIGHT block; if none does, the
-// click must select nothing.
+// A width change clears the block store and the replay may rebuild it: if a
+// block covers the clicked line it must be the RIGHT block, else none.
 async function clickAndExpectCorrectOrAbsent(client, sessionId, paneId, lineText, commandPrefix, label) {
   const state = await client.request('get_pane_block_state', { sessionId, paneId });
   const selected = await clickOutputLine(client, sessionId, paneId, state, lineText);
@@ -199,12 +171,8 @@ async function main() {
 
   const token = (shell) => `RESIZE_${shell}_${runner.runId}`;
   const makeDone = (shell) => `MAKE_DONE_${shell}_${runner.runId}`;
-  // Short sentinels are checked as whole rows at every geometry. The runId
-  // tokens and compiler paths wrap at full width and are checked as
-  // contiguous tokens in the row-joined text — but ONLY at the geometry the
-  // history was replayed at: the terminal resizes without reflow, so a
-  // narrower pane truncates each row at its width by design (the worker keeps
-  // the raw bytes; the next replay re-parses them at the new size).
+  // The terminal resizes without reflow, so a narrower pane truncates each row
+  // by design; wrapped tokens hold only at the geometry history was replayed at.
   const sentinelsFor = () => ['smallblock', '142', 'linked OK'];
   const longTokensFor = (shell) => [
     token(shell.name),
@@ -213,11 +181,8 @@ async function main() {
     'deep/nested/module_path/src/component_24/impl/translation_unit_24.cpp.o',
   ];
 
-  // Cleanup, registered as soon as each resource type exists so a signal
-  // mid-scenario still tears them down. Runner cleanups run in REVERSE
-  // registration order, so register observer/app first (they must close
-  // LAST) and the session-panes sweep last (it must close FIRST) to
-  // reproduce the effective order below: close panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order, so the effective order
+  // below is: close panes, quitApp, observer.close.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -234,8 +199,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // Phase A: one session per shell, each with tall output, a make-like
-    // colored/wrapping/CR-progress block, and a small marker block.
     await runner.step('phase_a_baseline_blocks', async () => {
       for (const shell of SHELLS) {
         const dir = path.join(runner.sessionDir, shell.name);
@@ -281,8 +244,6 @@ async function main() {
       }
     });
 
-    // Phase B: one relaunch — attach replay rebuilds every model (and, for
-    // fish, the block store) from raw bytes: the `make install` reinstall path.
     await runner.step('phase_b_relaunch_replay', async () => {
       await relaunchAppAndConnect(client, observer);
       for (const { shell, sessionId, paneId } of sessions) {
@@ -300,9 +261,6 @@ async function main() {
           `${shell.name} after-relaunch`,
         );
         if (shell.blocksExpected) {
-          // Blocks rebuilt from replayed markers: the small block and the
-          // make-like block (clicked via its visible done marker) must both
-          // hit-test correctly.
           await clickAndExpectSelected(client, sessionId, paneId, 'smallblock', 'echo smallblock', `${shell.name} after-relaunch small`);
           await clickAndExpectSelected(client, sessionId, paneId, makeDone(shell.name), 'sh make-sim.sh', `${shell.name} after-relaunch make`);
         } else {
@@ -314,25 +272,17 @@ async function main() {
       await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, '1-after-relaunch.png') }).catch(() => {});
     });
 
-    // Phase C: width changes via split + close-split, per shell. A width
-    // change invalidates stored block rows (the store clears); when it lands
-    // while attach replay is still applying, the app re-requests the replay
-    // and rebuilds the model — history must come back intact at the new
-    // width, and fish blocks must be correct-or-absent at every step;
-    // bash/zsh stay block-free.
     await runner.step('phase_c_width_changes', async () => {
       for (const { shell, sessionId, paneId } of sessions) {
         await selectAndWaitForPane(client, sessionId, paneId);
         await client.request('split_pane', { sessionId, targetPaneId: paneId, direction: 'vertical' });
         await delay(1_500);
-        // The split focuses the new pane's session; re-select ours so bridge
-        // clicks resolve against the workspace view the DOM renders.
+        // The split focuses the new pane's session; re-select ours so bridge clicks
+        // resolve against the workspace view the DOM renders.
         await client.request('select_session', { sessionId });
         await delay(300);
-        // History may be restored by a debounced replay re-request after the
-        // split's geometry change — wait for it rather than sampling once.
-        // Short sentinels only: rows truncate at the narrower width (no-reflow
-        // resize), so the wrapped long tokens are not expected here.
+        // History may be restored by a debounced replay re-request after the split's
+        // geometry change — wait for it rather than sampling once.
         await waitForPaneText(client, sessionId, paneId, (text) => {
           const lines = text.split('\n').map((line) => line.trim());
           return sentinelsFor(shell).every((sentinel) => lines.includes(sentinel));
@@ -374,9 +324,8 @@ async function main() {
         } else {
           await clickAndExpectNothing(client, sessionId, paneId, 'postclose', `${shell.name} post-close`);
         }
-        // Widening back keeps every row, but columns truncated at the narrow
-        // width stay truncated until the next replay re-parses the raw history
-        // (no-reflow resize) — so the long tokens are not required here either.
+        // Columns truncated at the narrow width stay truncated until the next replay
+        // re-parses the raw history (no-reflow resize).
         await waitForPaneText(client, sessionId, paneId, (text) => {
           const lines = text.split('\n').map((line) => line.trim());
           return [...sentinelsFor(shell), 'postsplit'].every((sentinel) => lines.includes(sentinel));

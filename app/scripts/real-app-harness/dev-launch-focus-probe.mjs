@@ -1,12 +1,7 @@
 #!/usr/bin/env node
-// Dev probe (NOT a scenario): verifies that the spawn-with-env launch path
-// in UiAutomationClient.launchApp() restores the caller's frontmost app. The
-// tr502 scenario is the only production user of this path today — this probe
-// exercises the same code without paying for a full remote-harness round
-// trip. `dev-` prefix keeps it out of scenario discovery.
+// The `dev-` prefix keeps this out of scenario discovery.
 
-// This probe deliberately exercises focus-stealing + caller-restore; opt out
-// of the default always-on-top mode so launch behaves like production.
+// Opt out of always-on-top so launch really steals focus, as in production.
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 import { execFile } from 'node:child_process';
@@ -47,8 +42,6 @@ async function main() {
   }
   console.log(`[probe] caller frontmost=${callerBundle}`);
 
-  // Minimal launchEnv triggers the spawn-with-env path without caring what
-  // env vars land in the app process; this probe only checks focus.
   const client = new UiAutomationClient({
     launchEnv: { ATTN_FOCUS_PROBE: '1' },
   });
@@ -58,8 +51,6 @@ async function main() {
   await new Promise((resolve) => setTimeout(resolve, 400));
   console.log(`[probe] before launch frontmost=${await frontmost()}`);
 
-  // Sample frontmost from a detached child during launch so we catch any
-  // transient steal window that launchApp closes before returning.
   const sampler = execFile('node', ['-e', `
     const { execFile } = require('node:child_process');
     const { promisify } = require('node:util');
@@ -87,8 +78,7 @@ async function main() {
   await new Promise((resolve) => setTimeout(resolve, 2500));
   sampler.kill('SIGKILL');
 
-  // Sample a few more times — the caller restore lands after the window gate
-  // fires, which is ~200ms typical but can race on a loaded machine.
+  // The caller restore lands after the window gate fires, ~200ms typical.
   for (let i = 0; i < 5; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const now = await frontmost();

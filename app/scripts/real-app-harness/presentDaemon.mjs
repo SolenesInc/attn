@@ -7,9 +7,6 @@ import { defaultDaemonPortForProfile, harnessClientHello } from './harnessProfil
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DAEMON_SOCKET_HOOK_PATH = path.resolve(HARNESS_DIR, '../../src/hooks/useDaemonSocket.ts');
 
-// Reads the app's own PROTOCOL_VERSION at runtime rather than hardcoding it,
-// so the harness stays in lockstep with protocol bumps automatically instead
-// of silently talking a stale version to the daemon.
 export function readFrontendProtocolVersion() {
   const source = fs.readFileSync(DAEMON_SOCKET_HOOK_PATH, 'utf8');
   const match = /export const PROTOCOL_VERSION = '(\d+)'/.exec(source);
@@ -19,9 +16,6 @@ export function readFrontendProtocolVersion() {
   return match[1];
 }
 
-// Opens a daemon websocket, sends client_hello, waits for the daemon's
-// initial_state ack (mirroring daemonObserver.mjs), runs fn against a
-// sendAndWait helper, then always closes the socket.
 export async function withDaemonSocket(fn, { port = defaultDaemonPortForProfile() } = {}) {
   const wsUrl = `ws://localhost:${port}/ws`;
   const ws = new WebSocket(wsUrl);
@@ -64,8 +58,6 @@ export async function withDaemonSocket(fn, { port = defaultDaemonPortForProfile(
   });
 
   try {
-    // client_kind/version mirror the real app's hello (see useDaemonSocket.ts)
-    // so daemon-side diagnostics can tell harness connections apart.
     await sendAndWait(
       {
         ...harnessClientHello('harness-present-daemon', {
@@ -104,10 +96,6 @@ export async function getPresentationRound(presentationId, { port, seq } = {}) {
   }, { port });
 }
 
-// Shapes a present_submit_round message. Exported (pure, no socket) so tests
-// can cover payload shaping without a live daemon. verdict mirrors the
-// daemon's own validation (handlePresentSubmitRound in internal/daemon/present.go):
-// it must be "approved" or "feedback".
 export function buildSubmitMessage({ roundId, comments = [], handback = true, verdict = 'feedback' }) {
   if (!roundId) {
     throw new Error('buildSubmitMessage requires roundId');
@@ -138,8 +126,6 @@ export function buildSubmitMessage({ roundId, comments = [], handback = true, ve
   };
 }
 
-// If roundId is omitted, fetches the presentation's latest round first and
-// submits against it.
 export async function submitPresentationRound({ presentationId, roundId, comments = [], handback = true, verdict = 'feedback' } = {}, { port } = {}) {
   return withDaemonSocket(async (sendAndWait) => {
     let resolvedRoundId = roundId;

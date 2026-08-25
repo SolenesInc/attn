@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-//
-// The garden's app surfaces, against the packaged app and its own daemon.
-//
-// The ticket board and its detail panel are gone; the garden replaced them.
-// Two things the board did every day have to still work, and this is them:
-//
-//   - a delegated pane says what it reports to — the seed chip in its header,
-//     which opens the seed as a tile (the one annotated reading surface);
-//   - a seed whose tender session was CLOSED can be reopened from the panel
-//     drill. That was the board's Resume button; without it, a delegation
-//     whose pane you closed is a dead end.
-//
-// The reopen gates on the dispatch record (cwd + agent), which outlives the
-// session, so the button reads the same before and after the close — and the
-// daemon owns the whole composite (register → pane → spawn, with rollback).
 import path from 'node:path';
 import fs from 'node:fs';
 import {
@@ -50,9 +35,8 @@ function saw(haystack, needle) {
 
 let marks = 0;
 
-// Types a command with a marker echoed after it and returns only what that
-// command printed: the marker appears twice — in the line as typed and again as
-// the shell prints it — so the output is what lies between them.
+// The marker appears twice, once as typed and once as the shell prints it, so
+// the command's output is what lies between them.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const mark = `mark${++marks}x`;
   await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
@@ -150,8 +134,6 @@ async function main() {
       const planted = seedIDs(listed)[0];
       runner.assert(Boolean(planted), 'the delegation planted a seed', { listed });
 
-      // The chip is decorated at broadcast from the dispatch record, so it
-      // arrives with the session rather than after a garden read.
       const chip = await pollFor(
         async () => {
           const state = await client.request('session_seed_chip_get_state', { sessionId: delegated });

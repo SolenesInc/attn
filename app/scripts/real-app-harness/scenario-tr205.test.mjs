@@ -21,15 +21,8 @@ describe('remoteProbeBinaryName', () => {
 });
 
 describe('buildProbeLaunchCommand', () => {
-  // Mirrors the remote binary resolution in internal/hub/ssh.go:69
-  // (remoteAttnCommand). This is resolved IN THE REMOTE SHELL, not
-  // precomputed in JS, because a live run showed the JS-precomputed path can
-  // diverge from where the daemon actually installed: an already-running
-  // daemon never sees this scenario's ATTN_REMOTE_ATTN_BIN launchEnv, so the
-  // bootstrapper falls back to installing at the default
-  // $HOME/.local/bin/<binaryName> path instead of the harness-scoped
-  // override path. The regression this guards against: someone "simplifying"
-  // this back to a single hardcoded path, which is exactly what broke live.
+  // Resolved in the REMOTE shell, not precomputed in JS: an already-running
+  // daemon installs at the default path, not this scenario's launchEnv override.
   it('references both the ATTN_REMOTE_ATTN_BIN override and the default install path, and execs the probe', () => {
     const command = buildProbeLaunchCommand('attn-fxm1', 'codex');
     expect(command).toContain('${ATTN_REMOTE_ATTN_BIN:-');
@@ -38,11 +31,8 @@ describe('buildProbeLaunchCommand', () => {
   });
 });
 
-// Mirrors the two-row banner in internal/probetui/probetui.go
-// (bannerGeometryRow "ATTN-PROBE <cols>x<rows>", bannerStyleRow
-// "style=<style> seq=<seq> READY") — split across rows because a single
-// combined banner line truncated past recognition in narrow (~20-31 col)
-// panes.
+// Split across two rows because a single combined banner line truncated past
+// recognition in narrow (~20-31 col) panes.
 describe('probeBannerReadyMatchers', () => {
   it('both matchers pass against a real two-row banner', () => {
     const [geometryRegex, styleRegex] = probeBannerReadyMatchers('codex');
@@ -91,10 +81,9 @@ describe('buildProbeBannerAtGridRegex', () => {
 describe('probeStyleIdentityRegex', () => {
   it('matches a right-truncated style row', () => {
     const identityRegex = probeStyleIdentityRegex('codex');
-    const truncatedRow = 'style=codex seq=73 R'; // Truncated at 20 cols
+    const truncatedRow = 'style=codex seq=73 R';
     expect(identityRegex.test(truncatedRow)).toBe(true);
 
-    // Verify the full-row matcher would have failed on the truncated row
     const fullRowRegex = /style=codex seq=\d+ READY/;
     expect(fullRowRegex.test(truncatedRow)).toBe(false);
   });

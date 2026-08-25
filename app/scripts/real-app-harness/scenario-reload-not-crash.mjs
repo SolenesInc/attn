@@ -1,34 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: reloading an agent is a lifecycle transition, not a crash.
- *
- * Regression coverage for the 2026-07-04 incident: reloading a delegated agent
- * (session actions -> Reload = frontend ptyKill + ptySpawn of the same id) made
- * the daemon treat the worker exit as a mid-flight death — the bound ticket was
- * stamped Crashed and a reconcile classifier task was enqueued against a healthy
- * session. The fix threads reload:true through kill_session so handlePTYExit
- * skips exactly the ticket seam for that one exit.
- *
- * The scenario proves BOTH sides of the seam in the packaged app:
- *
- *   1. boot a real codex agent, bind a ticket to it (`ticket take` + status),
- *   2. put it mid-turn (state=working) and reload it via the real UI path
- *      (reload_session bridge action -> reloadSession -> kill_session reload:true),
- *      then assert: ticket NOT crashed, no reconcile task minted, agent respawned,
- *   3. boot a SECOND agent (claude) with its own ticket, put it mid-turn, and
- *      SIGKILL its pty-worker for real, then assert: that ticket IS crashed and
- *      a reconcile task exists — the reload carve-out did not widen into a
- *      crash-detection hole, and the first session's reload mark did not leak
- *      across sessions. (A separate session because the resumed codex
- *      conversation cannot run another real turn in this environment — the
- *      crash seam itself is per-exit and identical for first or respawned
- *      workers.)
- *
- * Prereqs: `codex` and `claude` on PATH; a built `./attn` (or
- * ATTN_HARNESS_BIN); a non-prod profile install with the automation layer
- * (defaults to the dev sibling).
- */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -94,8 +65,6 @@ function makeAttnRunner(attnBin, profile) {
   };
 }
 
-// The bound ticket's current status, from the CLI's list (authoritative store
-// read; no dependency on broadcast timing).
 function ticketStatus(runAttn, ticketId) {
   const { json } = runAttn(['ticket', 'list', '--all', '--json']);
   const tickets = Array.isArray(json) ? json : [];
@@ -103,16 +72,12 @@ function ticketStatus(runAttn, ticketId) {
   return ticket?.status || null;
 }
 
-// Reconcile tasks minted for the ticket, straight from the profile DB's durable
-// task table (TaskID = "reconcile:<ticketId>").
 function reconcileTaskCount(profile, ticketId) {
   const dbPath = path.join(os.homedir(), `.attn-${profile}`, 'attn.db');
   const out = execFileSync('sqlite3', [dbPath, `SELECT COUNT(*) FROM tasks WHERE kind='reconcile' AND subject='${ticketId}';`], { encoding: 'utf8' });
   return Number(out.trim());
 }
 
-// The pty-worker process for a session (worker backend runs one `attn pty-worker
-// --session-id <id>` per session).
 function workerPid(sessionId) {
   try {
     const out = execFileSync('pgrep', ['-f', `pty-worker.*--session-id ${sessionId}`], { encoding: 'utf8' });
@@ -123,11 +88,8 @@ function workerPid(sessionId) {
   }
 }
 
-// Submit a prompt that keeps the agent busy for a while, and wait until the
-// daemon says the session is working — the crash seam only differs from the
-// clean-rest path for mid-flight states. Retries the submit: right after a
-// reload the resumed codex TUI can look prompt-ready (stale replayed pane
-// text) while still swallowing input.
+// The submit is retried: right after a reload the resumed codex TUI can look
+// prompt-ready (stale replayed pane text) while still swallowing input.
 async function driveAgentToWorking(client, observer, sessionId, note) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
   const prompt = 'Count from 1 to 40, one number per line, then say done. Do not use tools.';
@@ -192,7 +154,6 @@ async function main() {
   try {
     await launchFreshAppAndConnect(client, observer);
 
-    // 1) Boot a real codex agent and bind a ticket to it.
     sessionId = await createSessionAndWaitForInitialPane({
       client,
       observer,
@@ -210,14 +171,12 @@ async function main() {
     const ticketId = created.json?.ticket_id;
     assert(typeof ticketId === 'string' && ticketId.length > 0, `ticket new returned an id (got ${JSON.stringify(created.json)})`);
     runAttn(['ticket', 'take', ticketId, '--session', sessionId, '--confirm']);
-    // Take assigns but does not change the column; report working like a real
-    // agent would — the incident's ticket was in Working when the reload hit.
+    // `ticket take` assigns but does not move the column.
     runAttn(['ticket', 'status', 'in_progress', '--session', sessionId, '--comment', 'harness: starting work']);
     const statusAfterTake = ticketStatus(runAttn, ticketId);
     assert(statusAfterTake === 'working', `ticket bound and working after take (got ${statusAfterTake})`);
     note('ticket bound to agent', { ticketId, status: statusAfterTake });
 
-    // 2) Reload mid-turn: the ticket must stay put and no reconcile task minted.
     await driveAgentToWorking(client, observer, sessionId, note);
     await client.request('reload_session', { sessionId }, { timeoutMs: 45_000 });
     note('reload_session completed');
@@ -231,12 +190,8 @@ async function main() {
     assert(tasksAfterReload === 0, `no reconcile task after reload (got ${tasksAfterReload})`);
     note('reload left the ticket alone', { statusAfterReload, tasksAfterReload });
 
-    // 3) Real crash, on a fresh second session: SIGKILL its worker mid-turn.
-    //    The crash stamp and the reconcile enqueue must both still fire.
-    //    Claude here, not codex: a killed claude fires no Stop hook, so the
-    //    daemon still sees the session mid-flight when the worker death lands
-    //    (codex turns in this environment can end instantly and settle idle
-    //    before crash detection runs, hiding the seam under test).
+    // Claude, not codex: a killed claude fires no Stop hook, so the daemon still
+    // sees the session mid-flight when the worker death lands.
     preTrustClaudeFolder(repoDir);
     crashSessionId = await createSessionAndWaitForInitialPane({
       client,
@@ -262,10 +217,8 @@ async function main() {
     process.kill(pid, 'SIGKILL');
     note('killed pty-worker', { pid });
 
-    // A SIGKILLed worker does NOT produce an immediate PTY exit: the daemon's
-    // worker-backend poller retries the dead socket and only forces the exit
-    // after "unreachable for 30s". The crash stamp lands after that window, so
-    // poll well past it.
+    // A SIGKILLed worker produces no immediate PTY exit: the daemon forces it
+    // only after "unreachable for 30s", so poll well past that.
     const crashed = await pollFor(
       () => (ticketStatus(runAttn, crashTicketId) === 'crashed' ? true : null),
       `ticket ${crashTicketId} to be stamped crashed after a real worker death`,
@@ -275,7 +228,6 @@ async function main() {
     assert(crashed, 'ticket crashed after real kill');
     const tasksAfterCrash = reconcileTaskCount(profile, crashTicketId);
     assert(tasksAfterCrash === 1, `reconcile task minted for the real crash (got ${tasksAfterCrash})`);
-    // And the reload-leg ticket must STILL be untouched.
     const reloadTicketFinal = ticketStatus(runAttn, ticketId);
     assert(reloadTicketFinal === 'working', `reload-leg ticket still working at the end (got ${reloadTicketFinal})`);
     note('real crash still detected; reload ticket untouched', { tasksAfterCrash, reloadTicketFinal });

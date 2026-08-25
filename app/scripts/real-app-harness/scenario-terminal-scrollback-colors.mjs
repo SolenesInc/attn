@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-// Live verification for scrollback cell colors: fills a shell pane's
-// scrollback with ANSI-colored lines, scrolls to the top, and captures
-// screenshots of the scrolled viewport. The colored markers are asserted in
-// pane text; the colors themselves are judged from the captured screenshots.
 
 import {
   createSessionAndWaitForInitialPane,
@@ -53,9 +49,8 @@ async function main() {
   let sessionId = null;
   let shellPaneId = null;
 
-  // Typed into the pane, whose login shell may be fish. The colored-output
-  // generator is POSIX shell, so it travels base64-wrapped and runs under
-  // bash — no quoting constraints survive the trip.
+  // The pane's login shell may be fish, so the POSIX-shell generator travels
+  // base64-wrapped and runs under bash.
   const fillScript = [
     'i=1',
     "while [ $i -le 120 ]; do case $((i % 4)) in 1) e='\\033[31m';; 2) e='\\033[32m';; 3) e='\\033[34m';; 0) e='\\033[43;30m';; esac; printf \"${e}COLOR_%03d\\033[0m\\n\" $i; i=$((i+1)); done",
@@ -81,7 +76,6 @@ async function main() {
     });
 
     shellPaneId = await runner.step('open_shell_pane', async () => {
-      // A shell session launches with its shell as the initial pane.
       const initialPane = await waitForFirstWorkspacePane(client, sessionId, 'initial shell pane', 20_000);
       shellPaneId = initialPane.paneId;
       await waitForPaneAttached(client, sessionId, shellPaneId, 20_000);
@@ -102,10 +96,8 @@ async function main() {
         'colored scrollback seed output',
         30_000,
       );
-      // The seed marker also matches the typed command's terminal echo, so
-      // wait for the output to finish: hold until the pane text is stable
-      // across a settle interval, otherwise the scroll below races the tail
-      // of the stream and captures a half-filled screen.
+      // The seed marker also matches the typed command's echo, so hold until
+      // the pane text is stable or the scroll races the tail of the stream.
       const settleMs = 600;
       let lastText = '';
       const startedAt = Date.now();
@@ -131,16 +123,13 @@ async function main() {
         shellPaneId,
         (state) => {
           const visible = (state?.pane?.visibleContent?.lines || []).join('\n');
-          // COLOR_001 alone can be true mid-stream on a half-filled screen;
-          // requiring a deep line OUT of view pins this to the top of a
-          // completed buffer.
+          // COLOR_001 alone can be true mid-stream; requiring a deep line OUT
+          // of view pins this to the top of a completed buffer.
           return visible.includes('COLOR_001') && !visible.includes('COLOR_100');
         },
         'top of colored scrollback visible in the viewport',
         20_000,
       );
-      // Hold the scrolled state inside the recording window so the captured
-      // frames show whether the viewport stays anchored or snaps back.
       await new Promise((resolve) => setTimeout(resolve, 1500));
       await captureSessionArtifacts(client, runner.runDir, '01-scrolled-to-top-colored', sessionId);
     });

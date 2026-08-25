@@ -63,9 +63,6 @@ describe('evaluateRssBaseline', () => {
   });
 
   it('forces a re-record when record is true even with an existing baseline, and passes by construction', () => {
-    // This is the figgyster-reproduced bug: an explicit re-record must never
-    // be evaluated against the baseline it is about to replace, even when the
-    // new value would have been a regression against the old one.
     const baseline = { fingerprint, metrics: { totalRssMb: 500 }, recordedAt: '2026-07-01T00:00:00.000Z' };
 
     const result = evaluateRssBaseline({

@@ -1,21 +1,4 @@
 #!/usr/bin/env node
-//
-// Garden slice 5's acceptance, against the packaged app and its own daemon.
-//
-// A plot is planted in one command, a delegation is dispatched at it, and the
-// panel walks the garden root to leaf while the plot drains. The three things
-// only a live run can answer:
-//
-//   - the dispatch record is written by the delegation itself, so a flag-free
-//     `ready` inside the delegated session answers with its plot;
-//   - dispatch is scope and not a fence — `--all` from that same session steps
-//     back out to the whole garden;
-//   - the panel navigates: a crown row carries its plot's counts, opening it
-//     drills into the children, and the trail climbs back out.
-//
-// The commands run inside a pane, which is where an agent runs them: the app
-// puts its own `attn` first on a session's PATH, so what the pane answers is
-// this build talking to this profile's daemon.
 import path from 'node:path';
 import fs from 'node:fs';
 import {
@@ -37,15 +20,10 @@ function parseArgs(argv) {
   return { options: parseCommonArgs(args), help: args.includes('--help') || args.includes('-h') };
 }
 
-// The plot under test. Two children are free from the start and the third waits
-// on one of them, so "children are parallel by default; only blocks sequences"
-// is visible in the counts rather than asserted about the payload.
 const PLOT = {
   title: 'Walk a plot end to end',
   body: '# The plan\n\nThe crown body is the plan a delegate is primed with.',
   children: [
-    // `blocks` names what this child holds back, so the first step is what the
-    // sequenced one waits on: harvesting it is what frees the third.
     { title: 'First parallel step', body: 'Nothing holds this one.', blocks: ['the-sequenced-step'] },
     { title: 'Second parallel step', body: 'Nothing holds this one either.' },
     { title: 'The sequenced step' },
@@ -73,9 +51,8 @@ async function paneText(client, pane) {
   return payload.text || '';
 }
 
-// A pane wraps at its own width, so an id or a sentence can arrive split across
-// two rows — and a break that lands on a space swallows it. Everything this
-// scenario reads is matched with the whitespace taken out of both sides.
+// A pane wraps at its own width and a break landing on a space swallows it, so
+// everything read here is matched with the whitespace taken out of both sides.
 function flat(text) {
   return text.replace(/\n/g, '');
 }
@@ -90,11 +67,8 @@ function saw(haystack, needle) {
 
 let marks = 0;
 
-// runInPane types a command with a marker echoed after it and returns only what
-// that command printed: the marker appears twice — in the line as typed and
-// again as the shell prints it — so the output is what lies between them. The
-// pane is a scrolling buffer, so neither "contains it" nor counting occurrences
-// over the whole pane can tell this command's answer from an earlier one's.
+// runInPane's marker prints twice — as typed and as echoed — so this command's
+// answer is what lies between them, not what the scrolling pane contains.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const mark = `mark${++marks}x`;
   await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
@@ -168,7 +142,6 @@ async function main() {
 
     await runner.step('the_crown_wears_its_plot', async () => {
       const listed = await runInPane(client, pane, 'attn seed ls --tree', 'done ·');
-      // Two children free, one held back by a sibling: parallel by default.
       runner.assert(saw(listed, '[0/3 done · 0 growing · 2 ready · 1 blocked]'),
         'the crown row carries its plot progress', { listed });
       runner.writeText('ls-tree.txt', listed + '\n');
@@ -176,8 +149,6 @@ async function main() {
 
     delegated = await runner.step('dispatch_a_delegate_at_the_plot', async () => {
       const known = new Set(observer.sessionsById.keys());
-      // The delegation is awaited on the daemon, not on the pane: what it
-      // prints wraps in a narrow pane, and the session existing is the fact.
       await client.request('write_pane', {
         ...pane,
         text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
@@ -205,8 +176,6 @@ async function main() {
     });
 
     await runner.step('dispatch_is_scope_and_not_a_fence', async () => {
-      // A seed planted outside the plot: the delegate must still be able to see
-      // it, because nothing fences a dispatched session in.
       const outside = await runInPane(client, pane,
         `attn seed plant "Work outside the plot" --session ${pane.sessionId}`, 's-');
       const strayID = seedIDs(outside).pop();
@@ -259,8 +228,6 @@ async function main() {
       const drainedRow = drained.seeds.find((seed) => seed.id === crown);
       runner.assert(drainedRow.plot.includes('1/3 done'),
         'harvesting a child drains the plot on screen', { row: drainedRow });
-      // Dependency order: the sequenced step was blocked, and harvesting its
-      // blocker is what frees it — with nobody clearing anything.
       const freed = await runInPane(client, pane, `attn seed ready --session ${delegated}`, 'ready in the plot under');
       runner.assert(saw(freed, sequenced),
         'harvesting the blocker freed the sequenced step', { freed, sequenced });
@@ -271,8 +238,6 @@ async function main() {
     });
 
     await runner.step('two_delegates_share_one_plot', async () => {
-      // Dispatch is not an assignment: a second delegate at the same crown is a
-      // second pair of hands, and the per-seed tender is what keeps them apart.
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
@@ -286,15 +251,12 @@ async function main() {
       await runInPane(client, pane, 'true', '');
 
       const [, parallel, sequenced] = children;
-      // Both delegates see the same two ready children, and each claims one.
       const offered = await runInPane(client, pane, `attn seed ready --session ${second}`, 'ready in the plot under');
       runner.assert(saw(offered, parallel) && saw(offered, sequenced),
         'the second delegate is offered the same plot', { offered });
       await runInPane(client, pane, `attn seed tend ${parallel} --session ${second}`, 'is growing');
       await runInPane(client, pane, `attn seed tend ${sequenced} --session ${delegated}`, 'is growing');
 
-      // The collision that must not happen quietly: claiming a seed somebody
-      // else holds is refused by name, not silently taken over.
       const refused = await runInPane(client, pane,
         `attn seed tend ${parallel} --session ${delegated}`, 'one tender at a time');
       runner.assert(saw(refused, `${parallel} is being tended by`),
@@ -307,8 +269,6 @@ async function main() {
     });
 
     await runner.step('a_fresh_session_reorients_from_ready_alone', async () => {
-      // Garden state lives in the daemon: a session that watched none of this
-      // has to be able to pick the work up from the two read commands alone.
       const fresh = await openPane(client, observer, runner, 'newcomer');
       const seen = await runInPane(client, fresh, 'attn seed ready', 'ready in the garden');
       runner.assert(saw(seen, 'ready in the garden'),

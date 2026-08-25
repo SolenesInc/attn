@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-// Dev harness — runs a real-app scenario as a child process while polling
-// `NSWorkspace.frontmostApplication` once per second. Reports, per timestamp,
-// which bundle identifier is frontmost, and at the end prints a condensed
-// transition log ("caller → attn at Xs, attn → caller at Ys").
-//
-// Usage:
-//   node scripts/real-app-harness/verify-focus-behavior.mjs \
-//     --scenario tr301
-//   node scripts/real-app-harness/verify-focus-behavior.mjs \
-//     --command 'pnpm --dir app run real-app:scenario-tr204'
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {

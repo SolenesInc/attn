@@ -30,11 +30,6 @@ function resolveTargetBounds(state, target) {
   };
 }
 
-// Pane coverage assertions used to sample WKWebView-composited pixels. That
-// path required attn frontmost because occluded WebViews serve stale backing
-// store, and the focus steal was visually disruptive. The terminal's in-process
-// buffer is the rendering ground truth for terminal content, so we analyse
-// cell occupancy instead of pixel activity — no screencap, no focus steal.
 export async function capturePaneNativeMetrics(
   client,
   runDir,

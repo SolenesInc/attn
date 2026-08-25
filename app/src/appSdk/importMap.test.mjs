@@ -2,17 +2,6 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
-// The import map is a join nobody can see whole. Four surfaces have to agree on
-// one list of specifiers, and each one is in a different language:
-//
-//   - the SDK package's exports map (what an app may import),
-//   - internal/appbuild's SDKSpecifiers (what the view build marks external),
-//   - index.html's import map (what the browser resolves those to),
-//   - vite.config.ts's fixed-name chunks (what those URLs are).
-//
-// A specifier missing from any one of them is a view that mounts and then fails
-// to link, with an error naming a bare module specifier and nothing else. So the
-// list is read off all four and compared, rather than restated in a fifth place.
 
 const read = (path) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8")
 
@@ -35,8 +24,6 @@ describe("the app SDK's import map", () => {
   })
 
   it("resolves every specifier the view build marks external", () => {
-    // SDKSpecifiers() in Go, read as source: the two sides cannot import each
-    // other, and a Go change that adds a surface has to fail here.
     const goList = appbuildCodegen.match(/func SDKSpecifiers\(\) \[\]string \{[\s\S]*?\n\}/)[0]
     const suffixes = [...goList.matchAll(/SDKModule \+ "([^"]+)"/g)].map((m) => m[1])
     const external = [sdkPackage.name, ...suffixes.map((s) => sdkPackage.name + s)]

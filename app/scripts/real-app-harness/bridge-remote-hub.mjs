@@ -198,7 +198,6 @@ async function resetLocalDaemon(timeoutMs = 15_000) {
     try {
       process.kill(pid, 'SIGTERM');
     } catch {
-      // Ignore races with already-exited daemons.
     }
   }
 
@@ -214,7 +213,6 @@ async function resetLocalDaemon(timeoutMs = 15_000) {
     try {
       process.kill(pid, 'SIGKILL');
     } catch {
-      // Ignore races with already-exited daemons.
     }
   }
 }
@@ -343,7 +341,6 @@ async function openRemoteWebSocketControl(target, authToken = '') {
           cleanup();
           resolve(data);
         } catch {
-          // Ignore malformed frames for matching purposes.
         }
       };
 
@@ -785,9 +782,8 @@ Remote hub options:
 
   try {
     setStep('startup');
-    // Reset the remote target before the local daemon starts. Otherwise a
-    // previously persisted endpoint can auto-connect during app startup and
-    // race with this cleanup step.
+    // A persisted endpoint auto-connects during app startup and races this
+    // cleanup, so reset the remote target before the local daemon starts.
     await resetRemoteTarget(extraOptions.sshTarget);
     await resetLocalDaemon();
     await client.launchFreshApp();
@@ -959,8 +955,6 @@ Remote hub options:
       20_000,
     );
     saveJson(path.join(runDir, 'picker-worktree-options.json'), worktreeRepoOptions);
-    // The create form is always expanded at the top of the chooser, so there is
-    // no row to select first — it is ready as soon as repo options render.
     const newWorktreeForm = await waitForLocationPickerState(
       client,
       (state) => state?.open && state?.repoOptions?.newWorktree?.visible,
@@ -1303,7 +1297,6 @@ Remote hub options:
     try {
       await captureArtifacts(client, runDir, 'failure');
     } catch {
-      // Ignore artifact capture failures while recording the primary failure.
     }
     try {
       if (remoteSessionId) {
@@ -1311,7 +1304,6 @@ Remote hub options:
         saveJson(path.join(runDir, 'session-ui-failure.json'), sessionUi);
       }
     } catch {
-      // Ignore failure artifact errors.
     }
     try {
       if (remoteSessionId && remoteUtilityPane?.pane_id) {
@@ -1322,7 +1314,6 @@ Remote hub options:
         saveJson(path.join(runDir, 'remote-utility-pane-state-failure.json'), paneState);
       }
     } catch {
-      // Ignore failure artifact errors.
     }
     try {
       const perfSnapshot = await client.request('capture_perf_snapshot', {
@@ -1331,14 +1322,12 @@ Remote hub options:
       }, { timeoutMs: 15_000 });
       saveJson(path.join(runDir, 'perf-snapshot-failure.json'), perfSnapshot);
     } catch {
-      // Ignore failure artifact errors.
     }
     try {
       if (remoteInteraction) {
         saveJson(path.join(runDir, 'remote-interaction-failure.json'), remoteInteraction);
       }
     } catch {
-      // Ignore failure artifact errors.
     }
     saveJson(path.join(runDir, 'summary.json'), summary);
     throw error;
@@ -1351,7 +1340,6 @@ Remote hub options:
             id: sessionId,
           });
         } catch {
-          // Ignore remote cleanup failures during teardown.
         }
       }
     }
@@ -1360,7 +1348,6 @@ Remote hub options:
         observer.removeEndpoint(endpointId);
         await waitForEndpointRemoved(observer, endpointId, 10_000);
       } catch {
-        // Ignore endpoint cleanup failures during teardown.
       }
     }
     await observer.close();

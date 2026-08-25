@@ -65,9 +65,8 @@ async function submitCodexPromptViaUi(client, sessionId, paneId, text) {
     paneId,
     text,
   });
-  // Codex treats fast character streams as paste bursts and intentionally
-  // makes a following Enter insert a newline. Wait past that suppression
-  // window so this is a real submit gesture.
+  // Codex treats fast character streams as paste bursts and makes a following
+  // Enter insert a newline; wait past that suppression window.
   await delay(250);
   await client.request('type_pane_via_ui', {
     sessionId,
@@ -432,8 +431,6 @@ async function main() {
       const previousHeaderCount = countCodexHeaders(beforeNew?.text || '');
       await submitCodexPromptViaUi(client, sessionId, initialPaneId, '/new');
 
-      // Some Codex versions use the first Enter to accept the slash-command
-      // completion. Confirm it only when /new has not already opened a prompt.
       await delay(1000);
       const afterFirstEnter = await client.request('read_pane_text', { sessionId, paneId: initialPaneId });
       if (countCodexHeaders(afterFirstEnter?.text || '') <= previousHeaderCount) {

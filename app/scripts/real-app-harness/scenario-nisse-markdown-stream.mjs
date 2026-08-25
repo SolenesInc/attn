@@ -1,41 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: a RECORDED real nisse reply, replayed into the pane.
- *
- * The recording under `app/src/components/ConversationPane/__recordings__/`
- * was captured off a real host's fd 3 against a real model on 2026-08-19 —
- * headings, lists, a GFM table, fenced code in three languages, inline code, a
- * link, and a mermaid diagram, 7,845 chars over 317 coalesced deltas in 13.8 s.
- * The envelopes are handed to the app at the gaps they were recorded at,
- * through the same `applyEnvelope` the socket's `agent_event` calls, so the
- * store, the pane, the markdown pipeline and the scroll container are all the
- * real thing.
- *
- * Why the envelopes are replayed rather than a stub model answering: the nisse
- * host resolves its model through pi's static catalog (`getModel`), which
- * cannot see a provider declared in an agent dir, so the harness's stub
- * provider is unreachable from a conversation session. Pointing the session at
- * a real model was tried and reaches a real model, which does not reproduce a
- * recording. Replaying the recording is both the honest rig and the
- * deterministic one.
- *
- * What it asserts, one per criterion the spike was set:
- *
- *   1. no flash of raw text — the visible transcript never carries a fence, a
- *      table row, a link's `](`, or a bare emphasis marker, sampled throughout,
- *   2. half-open constructs are stable — the settled transcript is the whole
- *      markdown drawn as structure,
- *   3. a diagram waits for its fence — a pending placeholder is seen, and no
- *      diagram is drawn before the fence closes,
- *   4. scroll anchoring survives — following the stream stays pinned, and a
- *      reader scrolled back does not move while a second reply streams in,
- *   5. the frame budget — what a live pane costs to read while it grows,
- *      reported with the message sizes it was measured at.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin. No model
- * credentials are needed and no model is called.
- */
+// Prereqs: a non-production profile install with the attn-pi plugin. No model
+// credentials are needed and no model is called.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +22,7 @@ const paneOf = (id) => `[data-testid="conversation-pane-${id}"]`;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Markdown syntax that must never reach the reader as text. */
+// Markdown syntax that must never reach the reader as text.
 const RAW_SYNTAX = [
   ['fence', /```/],
   ['table row', /\|[^\n|]*\|/],
@@ -64,13 +30,6 @@ const RAW_SYNTAX = [
   ['strong', /\*\*\S/],
 ];
 
-/**
- * The recording, as envelopes carrying the gap that preceded each one.
- *
- * The recording holds the host's coalesced 30 ms deltas rather than the model's
- * own chunks, so replaying it feeds the pane at the rate it saw — which is the
- * rate this scenario is about.
- */
 function recordedEnvelopes() {
   const rows = fs.readFileSync(RECORDING, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   let previous = rows[0].at;
@@ -79,9 +38,6 @@ function recordedEnvelopes() {
     previous = row.at;
     return { seq: row.envelope.seq, kind: row.envelope.kind, body: row.envelope.body, afterMs };
   });
-  // The recording holds two assistant messages; the reply the criteria are
-  // about is the long one, so `chars` is that message's own total rather than
-  // the sum over both.
   const perMessage = new Map();
   let deltas = 0;
   for (const row of rows) {
@@ -94,11 +50,6 @@ function recordedEnvelopes() {
   return { envelopes, chars, deltas };
 }
 
-/**
- * The same reply again, as a second run appended to the transcript: the spine
- * continues rather than resetting, and the message ids are fresh so the pane
- * draws new messages instead of rewriting the ones already there.
- */
 function secondRun(envelopes) {
   return envelopes
     .filter((entry) => entry.kind !== 'session_ready' && entry.kind !== 'conversation_snapshot')
@@ -215,8 +166,8 @@ async function drive({ options, replay }) {
           if (message) {
             samples.push({ chars: message.text.length, ms: cost });
             for (const [label, pattern] of RAW_SYNTAX) {
-              // Code blocks and inline code legitimately contain these; the
-              // bridge gives the rendered html, so strip those subtrees first.
+              // Code blocks and inline code legitimately contain these; the bridge gives
+              // rendered html, so strip those subtrees first.
               const visible = message.html
                 .replace(/<pre[\s\S]*?<\/pre>/g, ' ')
                 .replace(/<code[\s\S]*?<\/code>/g, ' ')
@@ -234,17 +185,14 @@ async function drive({ options, replay }) {
             }
             previousChars = message.text.length;
           }
-          // The rendered text is shorter than the markdown that made it, so the
-          // char count cannot say the reply is whole. The message's own
-          // streaming flag can: message_end clears it.
+          // The rendered text is shorter than the markdown that made it, so only the
+          // message's own streaming flag can say the reply is whole.
           if (message?.streaming) sawStreaming = true;
           if (sawStreaming && message && !message.streaming) break;
         }
         if (Date.now() - started > 120_000) throw new Error(`the recorded reply never settled (${previousChars} chars)`);
-        // Each read is its own connection to the bridge, so an unthrottled loop
-        // exhausts the machine's ephemeral ports before the reply ends. 25 ms is
-        // still faster than the 30 ms window the host coalesces deltas on, so
-        // nothing the pane draws goes unsampled.
+        // An unthrottled loop exhausts the machine's ephemeral ports; 25 ms is
+        // still under the 30 ms window the host coalesces deltas on.
         await delay(25);
       }
       fs.writeFileSync(path.join(runner.runDir, 'follow-series.json'), `${JSON.stringify(follow, null, 1)}\n`, 'utf8');
@@ -283,9 +231,6 @@ async function drive({ options, replay }) {
     });
 
     await runner.step('criterion_5_frame_budget', async () => {
-      // What the bridge round trip cost while the transcript grew. It is not a
-      // React render timing — it is the whole read of a live pane, which is
-      // strictly more than the render — so it is an upper bound.
       const sorted = samples.map((sample) => sample.ms).sort((a, b) => a - b);
       const at = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
       const biggest = Math.max(...samples.map((sample) => sample.chars));
@@ -301,14 +246,9 @@ async function drive({ options, replay }) {
     });
 
     await runner.step('criterion_4_scroll_anchoring', async () => {
-      // Following the stream: the transcript stayed at the bottom for the whole
-      // replay. The pane follows only within 80px of the bottom, so anything
-      // past that means a block changing height pushed the reader off.
       if (followFromBottom > 80) throw new Error(`follow mode drifted ${followFromBottom}px off the bottom`);
       note(`follow mode stayed pinned (worst ${followFromBottom}px from the bottom)`);
 
-      // Reading scrolled back while a second reply streams: the position must
-      // not move under them.
       await client.request('conversation_scroll_to', { sessionId, fromBottom: 600 });
       const before = await client.request('conversation_get_state', { sessionId });
       await client.request('conversation_replay_envelopes', { sessionId, envelopes: secondRun(replay.envelopes) });

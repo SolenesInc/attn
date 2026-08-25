@@ -10,8 +10,6 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CANONICAL_PATH = path.join(MODULE_DIR, 'perf-baselines.json');
 const DEFAULT_REGISTRY_DIR = path.join(os.homedir(), '.attn-perf-registry');
 
-// Best-effort sysctl read: attn only supports macOS, but harness unit tests
-// and any future non-mac dev box should degrade gracefully rather than throw.
 function readSysctl(key) {
   try {
     return execFileSync('sysctl', ['-n', key], { encoding: 'utf8' }).trim();
@@ -20,9 +18,8 @@ function readSysctl(key) {
   }
 }
 
-// Pure: hashes only the IDENTITY subset of a fingerprint (hardware + major OS
-// version), deliberately excluding the full osRelease patch version so a
-// routine macOS point-update does not orphan a machine's recorded baseline.
+// The osRelease patch version is deliberately out of the key: a macOS point
+// update must not orphan a machine's recorded baseline.
 export function fingerprintKey({ hwModel, cpuBrand, cpuCount, arch, totalMemGb, osMajor }) {
   const identity = JSON.stringify({ hwModel, cpuBrand, cpuCount, arch, totalMemGb, osMajor });
   return crypto.createHash('sha256').update(identity).digest('hex').slice(0, 12);
@@ -43,10 +40,6 @@ export function getMachineFingerprint() {
   return { key, arch, platform, osRelease, hwModel, cpuBrand, cpuCount, totalMemGb };
 }
 
-// Pure regression check: a value BELOW baseline is always ok (an improvement,
-// never a failure); only growth beyond tolerancePct above baseline fails. A
-// missing baseline can never fail either — the first run on a machine always
-// self-baselines rather than blocking.
 export function compareToBaseline(value, baselineValue, { tolerancePct = 10 } = {}) {
   if (baselineValue == null) {
     return { ok: true, value, baseline: null, deltaPct: null, tolerancePct, reason: 'no-baseline' };
@@ -58,9 +51,6 @@ export function compareToBaseline(value, baselineValue, { tolerancePct = 10 } = 
   return { ok, value, baseline: baselineValue, deltaPct, tolerancePct, reason: ok ? 'within-band' : 'regression' };
 }
 
-// Canonical (committed) baselines win over the local machine cache, so a
-// hand-curated reference-machine entry always takes precedence once one is
-// recorded for a key.
 export function loadBaseline(fingerprintKeyValue, { registryDir = DEFAULT_REGISTRY_DIR, canonicalPath = DEFAULT_CANONICAL_PATH } = {}) {
   const canonical = readJsonIfExists(canonicalPath);
   if (canonical && Object.prototype.hasOwnProperty.call(canonical, fingerprintKeyValue)) {
@@ -71,21 +61,14 @@ export function loadBaseline(fingerprintKeyValue, { registryDir = DEFAULT_REGIST
   return readJsonIfExists(localPath);
 }
 
-// Writes only to the local per-machine cache. The canonical file is a
-// hand-curated/committed artifact and is never written by this function.
 export function saveBaseline(fingerprintKeyValue, baseline, { registryDir = DEFAULT_REGISTRY_DIR } = {}) {
   ensureDir(registryDir);
   const localPath = path.join(registryDir, `${fingerprintKeyValue}.json`);
   fs.writeFileSync(localPath, `${JSON.stringify(baseline, null, 2)}\n`);
 }
 
-// Saves the baseline (when the evaluation asked for one) and logs the
-// resulting record-or-compare outcome, in the exact `[perf] recorded ...` /
-// `[perf] compared to ...` shape every perf scenario prints after calling
-// evaluateRssBaseline. `label` is an optional word (with its own trailing
-// space, e.g. 'cold ', 'warm ', 'leak-floor ') inserted between "recorded"/
-// "compared to" and "baseline" to distinguish per-phase keys; omit it for a
-// scenario with a single, unqualified baseline.
+// `label` carries its own trailing space (e.g. 'cold '); it is concatenated,
+// not joined.
 export function recordOrCompareBaseline({ evaluation, key, label = '' }) {
   if (evaluation.baselineToSave) {
     saveBaseline(key, evaluation.baselineToSave);

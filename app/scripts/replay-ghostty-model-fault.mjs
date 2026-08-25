@@ -1,43 +1,3 @@
-// Replay a captured Ghostty model fault against the real vendored wasm.
-//
-// The app keeps a bounded ring of the raw inputs fed to each pane's terminal
-// model (app/src/utils/ghosttyModelOpRing.ts). When the model traps, that ring
-// is written into the `model_fault` record of
-// `$APPLOCALDATA/debug/terminal-diagnostics.jsonl`. This script turns such a
-// record back into a running repro: it rebuilds a terminal at the captured
-// geometry, applies the attach-restore VT dump the model was built from, then
-// replays every write/resize/reset in order.
-//
-// Usage:
-//   node app/scripts/replay-ghostty-model-fault.mjs <diagnostics.jsonl> [index]
-//   node app/scripts/replay-ghostty-model-fault.mjs <diagnostics.jsonl> --list
-//
-//   index      0-based, over the model_fault records that carry a capture.
-//              Negative counts from the end. Default -1 (the most recent).
-//   --list     print the capturing faults in the file and exit.
-//   --watchdog-ms <n>   per-step wall-clock budget (default 5000).
-//   --no-update         skip the per-op terminal.update() (the model-side call
-//                       the renderer makes; it is where the production
-//                       "Out of bounds memory access in update()" fault fired).
-//
-// Exit codes (same convention as repro-ghostty-vt-resize-hang.mjs):
-//   0  every op applied, no fault — the capture did not reproduce
-//   1  HANG: a step exceeded the watchdog (wasm-level infinite loop)
-//   2  TRAP/EXCEPTION: the model faulted — the capture reproduced
-//   3  REFUSED: the record cannot be replayed (see the message)
-//   4  usage / input error
-//
-// A capture whose `snapshotTruncated` is true is refused rather than replayed:
-// its restore dump is a prefix of what the model actually received, so the
-// replay would start from a different screen and every divergence after it is
-// meaningless. That is why the ring marks truncation explicitly.
-//
-// The wasm is a synchronous, single-threaded blob: a wasm-level infinite loop
-// (a known fault mode of this core, see
-// docs/plans/2026-07-27-ghostty-wasm-model-crashes.md) cannot be detected from
-// the thread running it. The replay therefore runs in a worker_thread the
-// parent can terminate.
-
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -47,27 +7,19 @@ const WASM_PATH = `${APP_ROOT}/vendor/ghostty-vt/ghostty-vt.wasm`;
 
 const DEFAULT_WATCHDOG_MS = 5000;
 // Mirrors HISTORICAL_REPLAY_CHUNK_BYTES in
-// app/src/components/SessionTerminalWorkspace/useGhosttyPaneRuntime.ts: the app
-// feeds a restore dump to the model in chunks of this size, and the ring stores
-// the dump reassembled, so the replay re-chunks it the same way.
+// app/src/components/SessionTerminalWorkspace/useGhosttyPaneRuntime.ts.
 const RESTORE_CHUNK_BYTES = 16 * 1024;
 
 const ENCODER = new TextEncoder();
-// DEC mode 2027 (Unicode grapheme clustering). The app enables it at model
-// construction and re-asserts it after any RIS — see
-// app/src/components/terminalGraphemeMode.ts, which these two helpers mirror.
-// The ring captures writes PRE-wrapper, so a faithful replay has to apply the
-// same wrapper. `ghosttyModelOpRing.replay.test.ts` pins them together: it
-// drives one terminal through the app's real terminalGraphemeMode helper and
-// another through this file, and fails if the grids differ.
+// Mirrors app/src/components/terminalGraphemeMode.ts: the ring captures writes
+// PRE-wrapper, so a faithful replay re-applies it (pinned by its replay test).
 const GRAPHEME_CLUSTERING_MODE = 2027;
 const ENABLE_CLUSTERING = ENCODER.encode('\x1b[?2027h');
 const ESC = 0x1b;
 const RIS_FINAL = 0x63; // 'c'; ESC c is RIS.
 
-// Mirrors app/src/utils/ghosttyResize.ts: every fit resize disables DEC
-// wraparound around the resize to select ghostty's no-reflow path. Those extra
-// writes reach the model, so a `noReflow` op must reproduce them.
+// Mirrors app/src/utils/ghosttyResize.ts: a fit resize disables DEC wraparound
+// around itself, and those writes reach the model too.
 const DEC_WRAPAROUND_MODE = 7;
 const DISABLE_WRAPAROUND = ENCODER.encode('\x1b[?7l');
 const ENABLE_WRAPAROUND = ENCODER.encode('\x1b[?7h');
@@ -115,10 +67,6 @@ function base64ToBytes(value) {
   return new Uint8Array(Buffer.from(value, 'base64'));
 }
 
-/**
- * Turn a `model_fault` record's capture into replay input.
- * Throws when the record cannot be replayed; the message names the field.
- */
 export function decodeCapture(capture) {
   if (!capture || typeof capture !== 'object') {
     throw new Error('record has no `capture` — it predates capture-on-fault instrumentation');
@@ -145,10 +93,6 @@ export function decodeCapture(capture) {
   };
 }
 
-/**
- * Apply a decoded capture to a live ghostty terminal, in order.
- * `onStep(label)` is called before each step so a watchdog can name what hung.
- */
 export function replayCapture(terminal, decoded, options = {}) {
   const onStep = options.onStep || (() => {});
   const update = options.update !== false;
@@ -208,10 +152,6 @@ export function readCapturingFaults(path) {
   return records;
 }
 
-// The four calls replayCapture makes, over the raw wasm exports. The app's own
-// binding (app/src/ghostty) is TypeScript and this worker loads plain .mjs with
-// no transform, so the CLI path carries its own minimal model; the vitest side
-// hands replayCapture the real binding instead.
 async function createTerminal(cols, rows) {
   const bytes = readFileSync(WASM_PATH);
   const mod = await WebAssembly.compile(bytes);

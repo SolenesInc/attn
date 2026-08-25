@@ -44,9 +44,6 @@ export class DaemonObserver {
     this.initialStateReceived = false;
   }
 
-  // The daemon's own view of a setting, as carried by initial_state and kept
-  // current by settings_updated. Returns '' for unconfigured, which is the
-  // value that puts a setting back the way it was found.
   getSetting(key) {
     return this.settings.get(key) ?? '';
   }
@@ -335,8 +332,6 @@ export class DaemonObserver {
     });
   }
 
-  // A settings payload is the whole map, so it replaces rather than merges —
-  // a key the daemon stopped reporting is a key that is no longer configured.
   #applySettings(settings) {
     if (!settings || typeof settings !== 'object') {
       return;
@@ -406,8 +401,8 @@ export class DaemonObserver {
       case 'workspace_layout':
       case 'workspace_layout_updated':
         if (data.workspace_layout?.workspace_id) {
-          // Layouts are tracked unconditionally: for remote sessions the layout event
-          // can arrive before the session shows up in the hub's session list.
+          // Tracked unconditionally: a remote session's layout event can arrive
+          // before the session shows up in the hub's session list.
           this.layoutsByWorkspaceId.set(data.workspace_layout.workspace_id, data.workspace_layout);
           for (const pane of data.workspace_layout.panes || []) {
             if (pane.kind === 'agent' && pane.session_id && this.sessionsById.has(pane.session_id)) {
@@ -443,10 +438,6 @@ export class DaemonObserver {
   }
 }
 
-// Attach once and report that it succeeded. This observer cannot read terminal
-// text: attach carries the worker's terminal as binary snapshot data only a
-// ghostty decoder understands, so anything that needs rendered text goes
-// through the app's `read_pane_text`.
 export async function attachOnce(wsUrl, runtimeId, timeoutMs = 5_000) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);

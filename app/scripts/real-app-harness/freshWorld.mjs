@@ -6,17 +6,6 @@ import {
   isProductionHarnessTarget,
 } from './harnessProfile.mjs';
 
-// Matrix runs get poisoned by leftover world state from an aborted/failed
-// prior run: leaked `pty-worker` processes and stale daemon/app instances
-// make the *next* run fail with fake timeouts that look like real
-// regressions. `ensureFreshWorld` quits the app, stops the daemon, and kills
-// any leaked pty-worker children for the target profile before the matrix
-// runs its first scenario.
-
-/**
- * Pure guard: throws when the target is ambiguous or production-shaped.
- * No side effects. Call this before doing anything to the world.
- */
 export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
   if (!profile) {
     throw new Error(`fresh-world preflight refused: profile is empty/falsy (profile=${JSON.stringify(profile)}).`);
@@ -24,11 +13,8 @@ export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
   if (!appPath) {
     throw new Error(`fresh-world preflight refused: appPath is empty/falsy (appPath=${JSON.stringify(appPath)}).`);
   }
-  // Mirror harnessProfile.mjs's private normalizeProfile: 'default' is the
-  // documented alias for the empty/production profile. Without this, a
-  // caller passing the raw string 'default' alongside a non-prod-shaped
-  // appPath would slip past isProductionHarnessTarget's profile === '' check
-  // below and let the preflight scrub a production-aliased target.
+  // 'default' is the alias for the production profile; isProductionHarnessTarget
+  // only checks profile === '', so it would let a 'default' target through.
   const normalizedProfile = profile.trim().toLowerCase();
   if (normalizedProfile === '' || normalizedProfile === 'default') {
     throw new Error(
@@ -44,16 +30,13 @@ export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
   }
 }
 
-// The worker binary path, e.g. "<appPath>/Contents/MacOS/attn". Matching is
-// keyed on this full app path (never a bare "pty-worker" pattern) so a
-// fresh-world run for one profile can never touch another profile's — or
-// production's — workers, even if they happen to be running side by side.
+// Matching keys on this full app path, never a bare "pty-worker" pattern, so one
+// profile's cleanup can never touch another profile's or production's workers.
 function attnBinaryPath(appPath) {
   return `${appPath}/Contents/MacOS/attn`;
 }
 
-// pgrep -f exits 1 (no matches) which is a normal, expected outcome here —
-// treat it as "no pids", not an error.
+// pgrep -f exits 1 on no matches; that is "no pids", not an error.
 function pgrepFullCommand(pattern) {
   const result = spawnSync('pgrep', ['-f', pattern], { encoding: 'utf8' });
   if (result.status !== 0 && result.status !== 1) {
@@ -72,16 +55,11 @@ function commandLineForPid(pid) {
   return (result.stdout || '').trim();
 }
 
-// pids whose full command line contains both the app binary path and
-// 'pty-worker' — i.e. leaked pty-worker children of *this profile's* app.
 function findLeakedWorkerPids(appPath) {
   const binPath = attnBinaryPath(appPath);
   return pgrepFullCommand(binPath).filter((pid) => commandLineForPid(pid).includes('pty-worker'));
 }
 
-// Any process (app, daemon, or worker) whose command line still references
-// this profile's app binary path. Used both to detect a pre-existing app
-// instance and, after cleanup, to verify nothing survived.
 function findAnySurvivingPids(appPath) {
   return pgrepFullCommand(attnBinaryPath(appPath));
 }
@@ -90,11 +68,6 @@ async function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
-/**
- * Quit the app, stop the daemon, and kill leaked pty-worker processes for
- * `profile`/`appPath`, then verify nothing survives. Always safe-guarded by
- * `assertFreshWorldTargetSafe` first.
- */
 export async function ensureFreshWorld({
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
@@ -110,7 +83,6 @@ export async function ensureFreshWorld({
   try {
     execFileSync('osascript', ['-e', `tell application id "${bundleId}" to quit`], { stdio: 'pipe' });
   } catch {
-    // The app may not be running — that's fine, not an error for this preflight.
   }
 
   let daemonStopped = false;
@@ -134,17 +106,15 @@ export async function ensureFreshWorld({
       try {
         process.kill(pid, 'SIGTERM');
       } catch {
-        // Already gone.
       }
     }
     await sleep(2_000);
     for (const pid of leakedPids) {
       try {
-        process.kill(pid, 0); // Still alive?
+        process.kill(pid, 0);
         log(`pty-worker pid=${pid} survived SIGTERM — sending SIGKILL`);
         process.kill(pid, 'SIGKILL');
       } catch {
-        // Already gone — expected for the common case.
       }
     }
   } else {

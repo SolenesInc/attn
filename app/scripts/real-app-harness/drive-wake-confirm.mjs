@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Drives the two-step crew wake in a running app. Attaches to whatever app is
-// already up for the profile — it never launches or restarts one — so it is the
-// way to watch the arm-and-confirm choreography in the packaged app.
-//
-//   node scripts/real-app-harness/drive-wake-confirm.mjs focus <member>
-//   node scripts/real-app-harness/drive-wake-confirm.mjs click <member>
-//   node scripts/real-app-harness/drive-wake-confirm.mjs story <asleep> <woken>
-//   node scripts/real-app-harness/drive-wake-confirm.mjs pointer <asleep> <woken>
-//
-// `focus` reveals the row's controls through :focus-within — CSS :hover does
-// not answer to dispatched pointer events, so a synthetic hover would leave the
-// sun invisible. `story` is the whole choreography in one run: arm and let it
-// stand down, then arm and confirm.
-//
-// `pointer` is the same choreography under the real cursor, for recording it.
-// It costs an Accessibility grant and a frontmost app, and it is worth both: a
-// bridge-driven run has to focus the row to see it, which paints a focus ring no
-// pointer user ever sees, and it stands the arm down on a timeout rather than
-// showing the outside click that is the rule people actually meet.
 
 import { MacOSDriver } from './macosDriver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -37,12 +18,8 @@ const focus = (client, member) =>
 const click = (client, member) =>
   client.request('dom_click', { selector: `[data-testid="queue-crew-wake-${member}"]` });
 
-// The input driver aims at the AX window frame, which starts at the titlebar;
-// the DOM measures from under it. Measured at 32 logical px on macOS by
-// comparing a wake button's DOM bounds against where the same button lands in a
-// window-relative screenshot, twice on different rows. A wrong offset does not
-// fail quietly: the click misses the sun, the member stays asleep, and both the
-// recording and `attn crew list` say so.
+// The driver aims at the AX window frame (titlebar included), the DOM measures
+// from under it: 32 logical px, measured against window-relative screenshots.
 const WINDOW_CHROME_PX = 32;
 
 async function pointerMapper(client) {
@@ -90,8 +67,6 @@ async function main() {
     await driver.activateApp();
     const toWindow = await pointerMapper(client);
 
-    // Hover first and click second, both on the sun: the controls only exist
-    // under the pointer, so this is the order a person's hand takes.
     const sunOf = async (member) => {
       const { bounds } = await client.request('dom_hover', {
         selector: `[data-testid="queue-crew-wake-${member}"]`,
@@ -108,9 +83,6 @@ async function main() {
     console.log(`armed ${standDown}`);
     await wait(1500);
 
-    // Empty sidebar below the roster: the outside click is the stand-down rule
-    // a person meets first, and it reads faster on camera than four seconds of
-    // nothing.
     await press({ x: 0.13, y: 0.7 });
     console.log(`${standDown} stood down`);
     await wait(1200);

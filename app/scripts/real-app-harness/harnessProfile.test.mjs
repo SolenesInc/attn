@@ -28,9 +28,6 @@ import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// The drift guard and arbitrary-profile resolution need the real attn binary.
-// Locate it the same way harnessProfile.mjs does; skip those tests if absent so
-// the unit suite never depends on a built binary.
 function attnBinary() {
   const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(TEST_DIR, '../../../attn')]
     .filter(Boolean);
@@ -43,8 +40,6 @@ const originalHarnessProfile = process.env.ATTN_HARNESS_PROFILE;
 const originalProfile = process.env.ATTN_PROFILE;
 const originalArgv = process.argv;
 
-// Start every test from a clean slate so the one-knob precedence is exercised
-// deterministically regardless of the surrounding shell's ATTN_PROFILE.
 beforeEach(() => {
   delete process.env.ATTN_HARNESS_PROFILE;
   delete process.env.ATTN_PROFILE;
@@ -117,11 +112,8 @@ describe('real-app harness production safety', () => {
   });
 
   it('treats a named profile as an isolated world, not production', () => {
-    // The pre-PR3 guard flagged any non-dev profile as prod; a named profile
-    // must NOT require --run-against-prod.
     expect(isProductionHarnessTarget({ profile: 'agent7' })).toBe(false);
     expect(() => assertProductionRunAllowed({ profile: 'agent7' }, [])).not.toThrow();
-    // ...but an explicit prod app path / bundle / port still trips the guard.
     expect(isProductionHarnessTarget({ profile: 'agent7', bundleId: 'com.attn.manager' })).toBe(true);
     expect(isProductionHarnessTarget({
       profile: 'agent7',
@@ -130,8 +122,6 @@ describe('real-app harness production safety', () => {
   });
 
   it('detects the prod app path case-insensitively (macOS filesystems)', () => {
-    // APFS/HFS+ are case-insensitive: `Attn.app` launches the real prod app, so
-    // the guard and the path→profile mapping must treat it as prod too.
     for (const name of ['Attn.app', 'ATTN.APP', 'attn.App']) {
       const appPath = path.join(os.homedir(), 'Applications', name);
       expect(isProductionHarnessTarget({ profile: 'dev', appPath })).toBe(true);
@@ -194,10 +184,6 @@ describe('daemon pid file resolution', () => {
   });
 });
 
-// Single-authority guarantees. These require the built attn binary, so they are
-// skipped (not failed) when ./attn is absent — the Go-side
-// TestProfileDerivation_DefaultAndDev pins the authority's output in Go CI, and
-// this guard pins the JS fast-path literals against it during local dev.
 describeWithBinary('single authority (attn profile resolve)', () => {
   function resolve(profile) {
     const stdout = execFileSync(ATTN_BIN, ['profile', 'resolve', '--profile', profile, '--json'], {
@@ -217,7 +203,6 @@ describeWithBinary('single authority (attn profile resolve)', () => {
       expect(resources.socket).toBe(r.socket);
       expect(resources.dataDir).toBe(r.dataDir);
       expect(resources.deepLinkScheme).toBe(r.deepLinkScheme);
-      // ...and the public accessors derive from those literals.
       expect(bundleIdentifierForProfile(profile)).toBe(r.bundleId);
       expect(defaultAppPathForProfile(profile)).toBe(r.appPath);
       expect(defaultDaemonPortForProfile(profile)).toBe(Number(r.wsPort));
@@ -226,9 +211,6 @@ describeWithBinary('single authority (attn profile resolve)', () => {
   });
 
   it('round-trips a named profile: appPath ⇒ profile via the authority naming', () => {
-    // Pins the one hand-maintained inverse mapping (profileForAppPath) against
-    // the authority's appPath, so a future change to the Go app-name scheme
-    // breaks this test instead of silently mis-routing.
     expect(profileForAppPath(defaultAppPathForProfile('agent7'))).toBe('agent7');
     expect(profileForAppPath(defaultAppPathForProfile('dev'))).toBe('dev');
     expect(profileForAppPath(defaultAppPathForProfile(''))).toBe('');
@@ -241,7 +223,6 @@ describeWithBinary('single authority (attn profile resolve)', () => {
     expect(deepLinkSchemeForProfile('agent7')).toBe('attn-agent7');
     expect(dataDirForProfile('agent7')).toBe(path.join(os.homedir(), '.attn-agent7'));
     expect(defaultDaemonPortForProfile('agent7')).toBe(Number(r.wsPort));
-    // A named profile's real daemon port never collides with prod/dev.
     expect(defaultDaemonPortForProfile('agent7')).not.toBe(9849);
     expect(defaultDaemonPortForProfile('agent7')).not.toBe(29849);
   });
@@ -272,9 +253,6 @@ describe('profileCliEnv', () => {
   });
 
   it('keeps ATTN_DATA_DIR and ATTN_WS_PORT out, which a profile name cannot override', () => {
-    // An attn-managed session exports both into every shell it hosts, and each
-    // outranks ATTN_PROFILE: leaving them makes a profile-selected command talk
-    // to production while still printing profile=<name>.
     const env = profileCliEnv('agent7');
     expect('ATTN_DATA_DIR' in env).toBe(false);
     expect('ATTN_WS_PORT' in env).toBe(false);

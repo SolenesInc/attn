@@ -220,12 +220,8 @@ export function chooseRemoteWSPort() {
   return 19000 + Math.floor(Math.random() * 2000);
 }
 
-// When the home screen shipped the Sync-button flow (2026-04-12), remote
-// endpoints stopped silently auto-bootstrapping on binary or protocol
-// mismatches — they park in `binary_mismatch` / `version_mismatch` /
-// `version_ahead` waiting for the user to click Sync. The harness doesn't
-// have a UI to click, so we send `bootstrap_endpoint` programmatically the
-// first time we observe one of those statuses, mirroring what the button does.
+// Remote endpoints park in `binary_mismatch` / `version_mismatch` /
+// `version_ahead` until the user clicks Sync; send `bootstrap_endpoint` instead.
 const SYNC_REQUIRED_STATUSES = new Set([
   'binary_mismatch',
   'version_mismatch',
@@ -251,7 +247,6 @@ export async function waitForEndpointConnected(observer, name, timeoutMs = 180_0
           observer.send({ cmd: 'bootstrap_endpoint', endpoint_id: endpoint.id });
           bootstrappedIds.add(endpoint.id);
         } catch {
-          // Leave endpoint out of the bootstrapped set so the next tick retries.
         }
       }
     }

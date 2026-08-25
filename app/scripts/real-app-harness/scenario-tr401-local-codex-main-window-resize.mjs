@@ -60,11 +60,8 @@ function codexHeaderOptions(description) {
 function assertCompleteCodexHeaderFrame(state, description) {
   const lines = state?.pane?.visibleContent?.lines || [];
   const text = lines.join('\n');
-  // Codex may print extra bordered boxes (e.g. the "Update available!" banner
-  // when a newer release exists), so border counts over the whole pane are not
-  // meaningful. Anchor on the box that CONTAINS the header line instead: the
-  // nearest ╭ line above it and the nearest ╰ line below it must both be
-  // complete at the current width.
+  // Codex may print extra bordered boxes, so border counts over the whole pane
+  // are not meaningful; anchor on the box containing the header line.
   const headerCount = (text.match(/OpenAI Codex/g) || []).length;
   const headerIndex = lines.findIndex((line) => line.includes('OpenAI Codex'));
   let topBorder = null;

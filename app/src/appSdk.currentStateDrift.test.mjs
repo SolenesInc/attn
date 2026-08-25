@@ -2,26 +2,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// sdk/attn-app/src/currentState.ts hand-copies the wire's current-state shapes.
-// It has to: the SDK is its own package, published as declarations an app
-// typechecks against with no npm, so it cannot import the frontend's generated
-// types — and quicktype's output is neither readonly nor documented, which is
-// what an author reads.
-//
-// A hand-copy with nothing watching it drifts silently: check-types and
-// check-sdk both stay green while a field the daemon stopped sending is still
-// promised to every app. This is what watches it. It compares field names and
-// optionality against generated.ts, which is the file the daemon's own schema
-// produces — a field added, removed, renamed or made optional on the wire fails
-// here by name. Types are compared by presence, not by spelling: the SDK writes
-// unions where quicktype writes enums, on purpose.
+// The SDK hand-copies the wire's current-state shapes; nothing else catches
+// drift, because check-types and check-sdk both stay green through it.
 
-// Vitest runs with the app directory as its root, so the SDK is one level up.
 const sdkSource = readFileSync(resolve(process.cwd(), '../sdk/attn-app/src/currentState.ts'), 'utf8');
 const wireSource = readFileSync(resolve(process.cwd(), 'src/types/generated.ts'), 'utf8');
 
-// The SDK's name for each shape, and the wire's. They agree except where the
-// generated name carries a prefix the SDK has no use for.
 // Plain JS, per the include rule in vite.config.ts: this reads source off disk
 // and the app tsconfig carries no node types.
 const SHAPES = [
@@ -34,11 +20,8 @@ const SHAPES = [
   ['PR', 'PR'],
   ['RepoState', 'RepoState'],
   ['AuthorState', 'AuthorState'],
-  // No TicketRow pair: the app's ticket surfaces became garden surfaces, so
-  // the wire carries no TicketRow any more. The SDK still promises
-  // currentState.tickets, served by a daemon-local row
-  // (internal/daemon/current_state.go) — nothing generated left to drift
-  // against.
+  // No TicketRow pair: the wire carries none, and the SDK's currentState.tickets
+  // is served by a daemon-local row.
   ['SeedEdge', 'SeedEdge'],
   ['SeedPlotProgress', 'SeedPlotProgress'],
   ['SeedVar', 'SeedVar'],
@@ -48,7 +31,6 @@ const SHAPES = [
   ['AppRegistryEntry', 'AppRegistryEntry'],
 ];
 
-/** Every declared field of one interface, as `name` or `name?`, sorted. */
 function fieldsOf(source, name) {
   const header = `export interface ${name} {`;
   const start = source.indexOf(header);
@@ -57,7 +39,6 @@ function fieldsOf(source, name) {
   const body = source.slice(start + header.length, end);
   const fields = [];
   for (const line of body.split('\n')) {
-    // The index signature quicktype emits is not a field.
     if (line.includes('[property: string]')) continue;
     const match = /^\s*(?:readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)(\??):/.exec(line);
     if (match) fields.push(`${match[1]}${match[2]}`);

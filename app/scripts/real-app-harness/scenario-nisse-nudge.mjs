@@ -1,32 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: nudging a conversation session, and the states it moves
- * through.
- *
- * A `nisse` session has no PTY, so every way attn interrupts an agent —
- * the composer's Steer button, a ticket nudge, a Present notice — becomes a
- * verb down the host's own pipe. This scenario proves the two that matter, in
- * the packaged app, against a real agent:
- *
- *   1. a nudge to a session that is mid-run lands at the agent's next turn
- *      boundary, and the pane shows the whole arc: the message sits in the
- *      queue strip (sent, not yet read), then leaves it as the user message it
- *      delivered appears in the transcript, then the reply answers it,
- *   2. the same verb sent to an idle session starts a run instead of
- *      disappearing — which is what makes an in-band nudge safe at any time.
- *
- * Alongside both, the session's own state is asserted from the daemon: working
- * while a run is open, idle when it settles, and a turn owed to the user at the
- * end, exactly like a PTY agent that stopped.
- *
- * The idle nudge is sent as a raw `agent_prompt` with `mode: steer` because
- * that is precisely what the daemon's session-input route does — the composer never sends
- * steer while idle, so driving the UI could not reach this path.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin installed
- * (`attn plugin install-bundled attn-pi`) and pi credentials in ~/.pi.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -40,16 +13,12 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
-// Composer selectors are pane-scoped. The app mounts a pane per conversation
-// session, so a bare [data-testid="conversation-input"] resolves to whichever
-// one is first in the DOM — and a run that types into another session's
-// composer looks exactly like a host that never got the prompt.
+// Composer selectors are pane-scoped: a bare [data-testid="conversation-input"]
+// resolves to whichever pane is first in the DOM.
 const paneOf = (sessionId) => `[data-testid="conversation-pane-${sessionId}"]`;
 const INPUT = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-input"]`;
 const SEND = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-send"]`;
 
-// Long enough that the steer is provably queued rather than racing the reply,
-// short enough that the run settles well inside the scenario timeout.
 const HOLD_PROMPT = 'Run the bash command `sleep 25`. When it finishes, reply with exactly one word: alpha';
 const STEER_TEXT = 'Change of plan: when you reply, use exactly one word: bravo';
 const IDLE_NUDGE_TEXT = 'Reply with exactly one word: charlie';
@@ -151,8 +120,6 @@ async function main() {
         'the conversation composer to open (session_ready)',
         90_000,
       );
-      // A host that has said it is ready but has never run declares itself idle,
-      // and an idle session is one the user is owed a turn on.
       const session = await observer.waitFor(
         () => {
           const current = observer.getSession(sessionId);
@@ -178,8 +145,6 @@ async function main() {
         'the session to declare working when the run opens',
         60_000,
       );
-      // Enter is a steer for as long as the run is open — the composer stays
-      // usable, which is the whole point of the state living on the wire.
       const pane = await pollFor(
         async () => {
           const current = await conversationState(client, sessionId);
@@ -195,8 +160,6 @@ async function main() {
       await client.request('dom_type', { selector: INPUT(sessionId), text: STEER_TEXT });
       await client.request('dom_click', { selector: SEND(sessionId) });
 
-      // Queued: pi has it, the agent has not read it. It sits here for as long
-      // as the agent stays inside its tool call.
       const withQueue = await pollFor(
         async () => {
           const current = await conversationState(client, sessionId);
@@ -210,8 +173,6 @@ async function main() {
         throw new Error(`the queue strip shows ${JSON.stringify(entry)}, not the steer that was sent`);
       }
 
-      // Seen: pi drains the queue at the agent's next turn boundary and the
-      // message becomes part of the transcript.
       const delivered = await pollFor(
         async () => {
           const current = await conversationState(client, sessionId);

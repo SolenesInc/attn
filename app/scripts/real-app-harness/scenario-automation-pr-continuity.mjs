@@ -285,11 +285,8 @@ async function main() {
       }, 'profile daemon');
     });
     await runner.step('launch_packaged_app', () => launchFreshAppAndConnect(client, observer));
-    // `enabled` is not a spec field post-PR5 (column-only; a YAML carrying
-    // `enabled:` is rejected outright — errEnabledManagedOutsideSpec in
-    // internal/automation/automation.go), so this literal no longer emits it.
-    // A brand-new id is inserted enabled regardless
-    // (store.UpsertAutomationDefinition).
+    // A YAML carrying `enabled:` is rejected outright
+    // (errEnabledManagedOutsideSpec in internal/automation/automation.go).
     const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\nid: ${id}\nname: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report in this ticket. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;
     fs.writeFileSync(definitionFile, definition(definitionID, 'Slice 4 packaged continuity proof', 'gpt-5.6-sol'));
     fs.writeFileSync(secondaryDefinitionFile, definition(secondaryDefinitionID, 'Slice 4 secondary continuity proof', 'gpt-5.6-sol'));
@@ -341,9 +338,6 @@ async function main() {
       fs.writeFileSync(path.join(secondaryWorktree, 'review-notes.txt'), 'preserve the second reviewer too\n');
       const nextSHA = advanceFixture(fixture.repo);
       await setHead(mock.url, nextSHA);
-      // Observation runs before detail refresh. The first refresh learns the new
-      // head; the second feeds that stored head through normal automation
-      // observation, which performs the authoritative focused GET.
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
       await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
       const row = await poll(() => {
@@ -434,7 +428,7 @@ async function main() {
     });
     await runner.step('daemon_restart_preserves_continuity', async () => {
       // Quit the app before restarting: a running app respawns the daemon
-      // without the mock GitHub env and would invalidate the leg.
+      // without the mock GitHub env.
       await client.quitApp();
       await observer.close().catch(() => {});
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}

@@ -13,18 +13,11 @@ function compact(text) {
   return text.replace(/\s+/g, '');
 }
 
-// Claude Code stores per-project state in ~/.claude.json under
-// `projects.<absolute-path>`. Pre-marking a folder as trusted before launch
-// skips the "Do you trust this folder?" gating, which is brittle to detect
-// (wording drifts across Claude releases) and slow to dismiss via type-and-
-// enter. The harness session dir is fresh per run, so writing this entry
-// can't shadow a real user-curated trust decision.
+// Writes into the real ~/.claude.json. Safe only because the harness session dir
+// is fresh per run, so the entry cannot shadow a user-curated trust decision.
 export function preTrustClaudeFolder(folderPath) {
-  // Claude indexes projects by the realpath of cwd, so on macOS where the
-  // harness session dirs live under /var/folders/... (a symlink to
-  // /private/var/folders/...) we have to resolve symlinks before keying
-  // the config; otherwise our entry sits next to Claude's canonical entry
-  // and never gets read.
+  // Claude keys projects by the realpath of cwd: an unresolved /var/folders path
+  // sits next to Claude's canonical entry and is never read.
   const resolvedFolder = path.resolve(folderPath);
   const absoluteFolder = (() => {
     try {
@@ -36,10 +29,8 @@ export function preTrustClaudeFolder(folderPath) {
   const configPath = path.join(os.homedir(), '.claude.json');
 
   let config = {};
-  // Carry forward the existing file mode so we don't silently downgrade a
-  // `0600` config to whatever the umask gives us (default `0644`). Claude's
-  // config can hold account/session metadata, so widening read permission
-  // would be a real footgun. If the file is new, default to `0600`.
+  // Carry the existing mode forward: this config holds account metadata, and the
+  // umask would widen a 0600 file to 0644.
   let fileMode = 0o600;
   try {
     const raw = fs.readFileSync(configPath, 'utf8');
@@ -103,11 +94,8 @@ function hasCodexPrompt(text) {
   );
 }
 
-// Codex sometimes interrupts startup with an "Update available!" chooser
-// (1 = update now, 2 = skip, 3 = skip until next version). If we don't
-// dismiss it, the usual `hasCodexPrompt` signals never arrive and the
-// scenario times out. We send "3" so the remote stops asking until the
-// next release.
+// An undismissed "Update available!" chooser blocks every hasCodexPrompt signal;
+// choice 3 skips until the next version.
 function hasCodexUpdatePrompt(text) {
   return (
     text.includes('Update available!')
@@ -194,28 +182,9 @@ export async function ensureCodexInitialPanePromptReady(client, sessionId, timeo
   throw new Error(`Timed out waiting for Codex prompt readiness in session ${sessionId}`);
 }
 
-// --- Focus-free readiness (PTY-driven) -----------------------------------
-//
-// The ensure*InitialPanePromptReady helpers above gate on the pane acquiring
-// DOM *input focus* (click_pane + waitForPaneInputFocus). That focus state
-// reflects the ghostty terminal's real focus/blur events, which WebKit only
-// delivers when the app is the macOS *key window*. The real-app harness keeps
-// the app parked in the background (driver.activateBackground / window_park,
-// "without changing frontmost"), so a backgrounded scenario can never satisfy
-// that gate — the pane renders fine and reads fine, but never reports focus.
-//
-// These variants reach the same "agent is at its interactive prompt" state
-// WITHOUT requiring focus. Every interaction (dismissing the trust gate, the
-// Codex update chooser) is a `write_pane`, which goes straight to the worker
-// PTY's stdin via sendRuntimeInput — exactly the bytes a human's keystrokes
-// become, independent of which window is key. Use these for scenarios that
-// also DRIVE the agent via write_pane (PTY-direct) rather than synthetic
-// keystrokes; keep the focus-gated variants for scenarios that test
-// keystroke/UI input, where focus genuinely matters.
+// The helpers above gate on DOM input focus, which WebKit delivers only to the
+// macOS key window; a parked app never satisfies it. These use write_pane.
 
-// Answer a TUI menu (trust gate, update chooser) by writing the choice + CR
-// straight to the PTY. A TUI reading stdin sees this identically to a real
-// keypress, so no DOM focus is needed.
 async function answerPaneMenuViaPty(client, sessionId, paneId, choice) {
   await client.request('write_pane', { sessionId, paneId, text: `${choice}\r`, submit: false });
 }
@@ -225,9 +194,7 @@ async function ensureAgentPromptReadyViaPty(client, sessionId, { label, isReady,
   const handled = [];
 
   while (Date.now() - startedAt < timeoutMs) {
-    // select_session only changes which workspace is shown; it does not steal
-    // OS focus, so it is safe for a backgrounded app. It keeps read_pane_text
-    // resolving against the right workspace view.
+    // select_session changes the shown workspace without stealing OS focus.
     await client.request('select_session', { sessionId });
     const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for ${label} session ${sessionId}`, 20_000);
     await waitForPaneVisible(client, sessionId, initialPane.paneId, 20_000);
@@ -252,9 +219,6 @@ async function ensureAgentPromptReadyViaPty(client, sessionId, { label, isReady,
   throw new Error(`Timed out waiting for ${label} prompt readiness in session ${sessionId} (focus-free / PTY)`);
 }
 
-// Focus-free Claude readiness. Pre-trust the folder (preTrustClaudeFolder)
-// before launch and the trust gate normally never appears; this still handles
-// it defensively via PTY write in case it does.
 export async function ensureClaudePromptReadyViaPty(client, sessionId, timeoutMs = 60_000) {
   return ensureAgentPromptReadyViaPty(client, sessionId, {
     label: 'Claude',
@@ -264,9 +228,6 @@ export async function ensureClaudePromptReadyViaPty(client, sessionId, timeoutMs
   });
 }
 
-// Focus-free Codex readiness. Codex has no pre-trust path, so the trust gate
-// (choice 1) and the "Update available!" chooser (choice 3 = skip until next
-// version) are both dismissed here via PTY write.
 export async function ensureCodexPromptReadyViaPty(client, sessionId, timeoutMs = 60_000) {
   return ensureAgentPromptReadyViaPty(client, sessionId, {
     label: 'Codex',
@@ -295,17 +256,13 @@ export async function promptClaudeForStructuredBlock(client, sessionId, token, l
   await client.request('click_pane', { sessionId, paneId: initialPane.paneId });
   await waitForPaneInputFocus(client, sessionId, initialPane.paneId, 15_000);
   // Claude Code treats a rapid multi-line write_pane as a paste, so a trailing \r
-  // in the same call inserts a newline instead of submitting. Write the prompt,
-  // wait a beat, then submit with a lone \r — the same doorbell pattern Codex
-  // needs mid-turn.
+  // inserts a newline instead of submitting.
   await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: prompt, submit: false });
   await delay(500);
   await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: '\r', submit: false });
 
-  // Wait for the reply to actually render: the input box echoes the prompt (up
-  // to lineCount occurrences of token pre-submit), so only count it submitted
-  // once the token count exceeds that — the echoed user message contributes at
-  // least one more occurrence and the reply's exact lines contribute lineCount.
+  // The input box echoes the prompt, up to lineCount occurrences of token before
+  // submit, so only a higher count means the reply rendered.
   const replyTimeoutMs = 45_000;
   const startedAt = Date.now();
   let lastText = '';

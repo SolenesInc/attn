@@ -14,26 +14,8 @@ const PROD_DAEMON_PORT = '9849';
 // Profile name grammar — mirrors config.profileNamePattern on the Go side.
 const PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
 
-/**
- * Harness profile resolution.
- *
- * The real-app harness honors the *one knob*, `ATTN_PROFILE`, like every other
- * entrypoint: set it once in a shell and the harness drives that profile's app
- * and daemon. `ATTN_HARNESS_PROFILE` is an explicit override for the rare case
- * where the harness must target a *different* world than the surrounding shell.
- *
- * Resource derivation has a single authority: `attn profile resolve`. The two
- * profiles the harness has always supported — the default/prod install and the
- * `dev` sibling — are kept here as fast-path literals so the common path (and
- * the unit tests) need no built binary; `harnessProfile.test.mjs` asserts those
- * literals equal `attn profile resolve` whenever `./attn` is built, so they can
- * never drift from the Go authority. Every *other* profile is resolved live.
- *
- * @see docs/profiles.md
- */
-
-// Fast-path resources for prod ('') and dev. Verified against the authority by
-// the drift guard in harnessProfile.test.mjs.
+// Fast-path resources for prod ('') and dev. The drift guard in
+// harnessProfile.test.mjs pins them to `attn profile resolve`.
 const BUILTIN_RESOURCES = {
   '': {
     profile: '',
@@ -57,24 +39,11 @@ const BUILTIN_RESOURCES = {
   },
 };
 
-// Normalize a raw profile string the way the Go side does: trim, lower-case,
-// and collapse the alias 'default' to the empty (production) profile.
 function normalizeProfile(raw) {
   const value = (raw ?? '').trim().toLowerCase();
   return value === 'default' ? '' : value;
 }
 
-/**
- * The profile the harness targets, following the one-knob model:
- *
- *   1. `ATTN_HARNESS_PROFILE` set ⇒ explicit override (wins over the shell).
- *      Empty string (or 'default') is the documented production escape hatch —
- *      still gated by `--run-against-prod` downstream.
- *   2. Otherwise follow `ATTN_PROFILE`, but never target production by
- *      omission: an unset/empty/default `ATTN_PROFILE` means the surrounding
- *      shell is in the prod world, so the harness falls back to the safe `dev`
- *      sibling rather than touching the real install.
- */
 export function currentHarnessProfile() {
   const override = process.env.ATTN_HARNESS_PROFILE;
   if (override !== undefined) {
@@ -86,8 +55,6 @@ export function currentHarnessProfile() {
 
 const resourceCache = new Map();
 
-// Resolve the attn binary used for profile derivation. ATTN_HARNESS_BIN wins;
-// otherwise the repo-root ./attn built by `make dev` / `go build -o ./attn`.
 function resolveAttnBinaryPath() {
   const candidates = [
     process.env.ATTN_HARNESS_BIN,
@@ -126,11 +93,6 @@ function resolveViaAuthority(profile) {
   };
 }
 
-/**
- * The full resource bundle for a profile, from the single authority. dev/prod
- * use the fast-path literals; every other profile resolves from
- * `attn profile resolve` and is memoized by name (resolution is deterministic).
- */
 export function resolveHarnessResources(profile = currentHarnessProfile()) {
   const key = normalizeProfile(profile);
   if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
@@ -149,10 +111,7 @@ export function bundleIdentifierForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).bundleId;
 }
 
-// Map a packaged-app path back to its profile: `attn.app` ⇒ '' (prod),
-// `attn-<name>.app` ⇒ '<name>'. Anything else falls back to the active profile.
-// The basename is lower-cased first because macOS filesystems are
-// case-insensitive by default — `Attn.app` resolves to the prod bundle.
+// macOS filesystems are case-insensitive: `Attn.app` is the prod bundle.
 export function profileForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
   const appName = path.basename(appPath || '').toLowerCase();
   const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?\.app$/.exec(appName);
@@ -172,14 +131,11 @@ export function defaultDaemonPortForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).wsPort;
 }
 
-// Data dir for the active profile (~/.attn for prod, ~/.attn-<name> otherwise).
 export function dataDirForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).dataDir;
 }
 
-// The credential the daemon requires in client_hello, minted into the profile's
-// data dir at daemon startup. Every harness socket sends it; without it the
-// daemon refuses the hello and names this file.
+// The daemon refuses a client_hello without this token.
 export function clientTokenForProfile(profile = currentHarnessProfile()) {
   const fromEnv = (process.env.ATTN_CLIENT_TOKEN ?? '').trim();
   if (fromEnv) return fromEnv;
@@ -190,8 +146,6 @@ export function clientTokenForProfile(profile = currentHarnessProfile()) {
   }
 }
 
-// The hello every harness websocket opens with. One place, so a new field on
-// the message reaches all of them.
 export function harnessClientHello(clientKind, { version = 'real-app-harness', capabilities = ['workspace_sessions'] } = {}) {
   return {
     cmd: 'client_hello',
@@ -202,15 +156,10 @@ export function harnessClientHello(clientKind, { version = 'real-app-harness', c
   };
 }
 
-// Unix socket the `attn` CLI talks to for the active profile. Pass this as
-// ATTN_SOCKET_PATH when driving the CLI (e.g. `attn open`) against the daemon.
 export function socketPathForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).socket;
 }
 
-// Pid file the daemon writes on startup for the active profile (same state dir
-// as the socket). Lets tools resolve the authoritative daemon pid -- and from it
-// the pty-worker children -- without the pprof diagnostics endpoint.
 export function daemonPidFilePathForProfile(profile = currentHarnessProfile()) {
   return path.join(resolveHarnessResources(profile).dataDir, 'attn.pid');
 }
@@ -230,19 +179,12 @@ export function manifestPathForProfile(profile = currentHarnessProfile()) {
   );
 }
 
-// Deep-link scheme registered for the profile's bundle (prod: `attn`,
-// dev: `attn-dev`, named: `attn-<name>`). From config.DeepLinkSchemeForProfile.
 export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).deepLinkScheme;
 }
 
-// Every routing override a CLI call could inherit. ATTN_PROFILE names a world;
-// each of these overrides it outright, and an attn-managed session exports
-// ATTN_DATA_DIR and ATTN_WS_PORT into every shell it hosts. A harness driven
-// from inside attn that clears only the socket/db/config/plugin four keeps the
-// PRODUCTION data dir and port: the banner reads profile=<name> while the
-// command talks to ~/.attn, which is how a scenario's `daemon ensure` takes over
-// the production daemon. `attn profile-env` does not clear ATTN_DATA_DIR either.
+// An attn-hosted shell exports ATTN_DATA_DIR and ATTN_WS_PORT, and `attn
+// profile-env` clears neither: miss one and the command lands in prod ~/.attn.
 const ROUTING_OVERRIDE_ENV = [
   'ATTN_DATA_DIR',
   'ATTN_WS_PORT',
@@ -252,9 +194,6 @@ const ROUTING_OVERRIDE_ENV = [
   'ATTN_PLUGIN_DIR',
 ];
 
-// The environment for driving the `attn` CLI at one profile: the caller's
-// environment with ATTN_PROFILE set and every inherited routing override
-// removed, so the profile is the only thing deciding where the command lands.
 export function profileCliEnv(profile = currentHarnessProfile(), extra = {}) {
   const env = { ...process.env, ATTN_PROFILE: profile, ...extra };
   for (const key of ROUTING_OVERRIDE_ENV) {
@@ -277,14 +216,7 @@ export function isProductionHarnessTarget({
   try {
     wsPort = new URL(wsUrl).port;
   } catch {
-    // Invalid URLs are handled by their consumer; they are not evidence of prod.
   }
-  // Production is the default/empty profile. A *named* profile (dev, agent7, …)
-  // is an isolated world and is never production. We still flag an explicit
-  // prod app path / bundle id / port as prod (defense in depth — e.g. a named
-  // profile pointed at `--app-path ~/Applications/attn.app`). The app-name
-  // compare is case-insensitive: macOS filesystems treat `Attn.app` as the prod
-  // bundle, so the guard must too.
   return (
     profile === ''
     || path.basename(appPath || '').toLowerCase() === PROD_APP_NAME

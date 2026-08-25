@@ -42,8 +42,6 @@ describe('evaluateVisibleContentGates', () => {
   });
 
   it('computes nonEmptyLines/denseLines/charCount/maxLineLength boundaries with actual/required in the right direction', () => {
-    // Exactly at the minimum: ok. One below: fails. This pins actual >= required,
-    // not required >= actual (a swap would flip both cases).
     const atMinimum = evaluateVisibleContentGates(
       visibleContent({ nonEmptyLineCount: 8, denseLineCount: 3, charCount: 20, maxLineLength: 20 }),
       { minNonEmptyLines: 8, minDenseLines: 3, minCharCount: 20, minMaxLineLength: 20 },
@@ -77,9 +75,6 @@ describe('formatGateReport', () => {
   });
 
   it('never reports a failing gate as OK or a passing gate as FAIL', () => {
-    // A regression that swapped the ok flag (or hardcoded 'OK') would slip past
-    // a report string it isn't compared against — assert the substring lands
-    // next to the gate it belongs to instead.
     const gates = [
       { gate: 'charCount', actual: 5, required: 20, ok: false },
       { gate: 'maxLineLength', actual: 25, required: 20, ok: true },

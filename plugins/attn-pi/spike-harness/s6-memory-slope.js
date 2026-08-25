@@ -1,6 +1,5 @@
-// S6 memory slope: 15 sequential turns on one session, sampling
-// process.memoryUsage() after each settle. This is a 15-turn slope, NOT a
-// day-long soak receipt - it says nothing about long-run behavior.
+// A 15-turn slope, not a day-long soak receipt: it says nothing about long-run
+// behavior.
 import { buildSession, createLogger } from "./common.js";
 
 const SCENARIO = "s6-memory-slope";
@@ -24,7 +23,6 @@ async function main() {
 
 	session.dispose();
 
-	// Simple linear slope (least squares) over turn index for rss and heapUsed.
 	function slope(points, key) {
 		const n = points.length;
 		const xs = points.map((p) => p.turn);

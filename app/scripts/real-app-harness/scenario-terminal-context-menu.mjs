@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 
-// End-to-end terminal context menu in the packaged app:
-// real daemon PTY -> real fish (OSC 133 block) -> native HID right-click
-// -> attn's DOM context menu (the WKWebView menu must be suppressed)
-// -> native click on "Copy output" -> real macOS clipboard
-// -> native click on "Paste" -> clipboard text lands in the PTY.
-
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
@@ -72,8 +66,7 @@ async function waitForClipboard(expected, description, timeoutMs = 10_000) {
   throw new Error(`${description}: clipboard never matched.\nExpected: ${JSON.stringify(expected)}\nLast:     ${JSON.stringify(last)}`);
 }
 
-// Convert a page-CSS-pixel point into window-relative [0,1] coordinates for
-// the HID driver (window bounds include the title bar; the page does not).
+// Window bounds include the title bar; the page does not.
 function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
   const { width, height } = windowBounds.logicalBounds;
   const chromeX = Math.max(0, width - innerWidth);
@@ -107,9 +100,8 @@ async function main() {
     throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
   }
 
-  // HID mouse clicks land at absolute screen positions, so the default
-  // 20px-visible window park would put every click off-window. Keep the
-  // whole window on screen for this scenario.
+  // HID clicks land at absolute screen positions, so the default 20px-visible
+  // window park would put every click off-window.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
   }
@@ -132,12 +124,7 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
 
-  // Cleanup, registered as soon as each resource type exists so a signal
-  // mid-scenario still tears them down. Runner cleanups run in REVERSE
-  // registration order, so register observer/app first (they must close
-  // LAST), then the session-panes sweep, then the clipboard restore (it must
-  // close FIRST) to reproduce the effective order below: restore clipboard,
-  // close panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -208,7 +195,6 @@ async function main() {
         cell: { row: outputRow, col: 2 },
       });
 
-      // Native right-click on the block's output row.
       await driver.activateApp();
       target = windowRelativePoint(
         cellRect.centerX,
@@ -236,7 +222,6 @@ async function main() {
         );
       }
 
-      // Copy output through the menu -> real clipboard.
       writeClipboard('context-menu-sentinel');
       const copyOutput = itemById.get('copy-output');
       const copyPoint = windowRelativePoint(
@@ -253,8 +238,6 @@ async function main() {
 
     let pasteToken;
     await runner.step('open_menu_and_paste', async () => {
-      // Paste through the menu -> clipboard text lands in the PTY (this also
-      // proves the clipboard READ permission works in the packaged app).
       pasteToken = `PASTEPROBE_${runner.runId}`;
       writeClipboard(pasteToken);
       await driver.rightClickWindow(target.relativeX, target.relativeY);

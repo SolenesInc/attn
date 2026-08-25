@@ -474,13 +474,8 @@ async function main() {
         },
       );
 
-      // The app resizes fit-driven geometry WITHOUT reflow
-      // (resizeGhosttyWithoutReflow, app/src/utils/ghosttyResize.ts), so
-      // shrinking the window truncates scrollback line tails permanently —
-      // restoring the window cannot bring them back. Re-capture the utility
-      // pane's post-shrink content here (after it has settled) so
-      // restore_window_and_assert can verify preservation against this
-      // narrow-width capture instead of the unreachable pre-shrink baseline.
+      // The app resizes fit-driven geometry WITHOUT reflow, so shrinking the
+      // window truncates scrollback line tails permanently.
       shrunkUtilityState = await client.request('get_pane_state', { sessionId, paneId: utilityPaneId });
 
       await captureSessionArtifacts(client, runner.runDir, '02-shrunk', sessionId);
@@ -610,15 +605,8 @@ async function main() {
         },
       );
 
-      // Regression thresholds are deliberately loose because the underlying
-      // metric now counts occupied cells, not anti-aliased pixels. Under a
-      // full window-resize cycle, agent UIs (e.g. Claude's header box) do
-      // not always re-expand their rendering to the restored width, so a
-      // "same-size" pane often has ~30% fewer busy columns than baseline
-      // despite content being intact. Visible-content assertions above
-      // already cover the "did the text come back" invariant; what this
-      // check still guards is a pane going blank or losing most of its
-      // vertical coverage, which even these loose thresholds catch.
+      // Thresholds are loose because the metric counts occupied cells: an agent
+      // UI often does not re-expand to the restored width. Blank panes still fail.
       if (baselineMainNativeMetrics) {
         await assertPaneNativePaintRecovered(
           client,

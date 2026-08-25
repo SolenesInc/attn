@@ -1,46 +1,5 @@
-// Minimal deterministic repro for an infinite-loop hang in the vendored
-// ghostty-vt wasm's resize path.
-//
-// Spike artifact of docs/plans/2026-07-27-ghostty-wasm-model-crashes.md.
-// Exit 0 is the pass criterion for a fixed wasm build: run this script
-// against a candidate ghostty-vt.wasm during the bisect/cherry-pick to
-// confirm the fix (exit 1 means the hang still reproduces).
-//
-// Sequence: create a 59x58 terminal, write one line containing a truncated
-// OSC 8 hyperlink + box-drawing + a long run of 'w' that overflows the
-// terminal width, then widen to 69 cols, narrow to 68, narrow to 67. The
-// THIRD call (the second consecutive narrow, 68->67) never returns: 100% CPU,
-// no exception, no trap signal -- a true infinite loop inside
-// ghostty_terminal_resize (or something it calls), distinct from the
-// `unreachable`/OOB traps seen in production from ghostty_terminal_write and
-// the renderer's update(). Confirmed root requirements (see accompanying
-// report/plan doc):
-//   - a widen of at least +10 cols (59->69; +9 does not reproduce)
-//   - followed by two separate narrow-by-1 resize() calls (a single narrow
-//     after the widen does not reproduce)
-//   - specific write content: plain ASCII alone does not reproduce; the
-//     OSC 8 fragment + box-drawing + overflowing 'w' run does
-//
-// Discrimination result: reproduces with BOTH plain term.resize() (as used
-// here) AND the app's mode-7 no-reflow wrapper from
-// app/src/utils/ghosttyResize.ts (write('\x1b[?7l') -> resize() ->
-// write('\x1b[?7h')) -- confirmed by wrapping the same three resize calls in
-// that dance and observing the identical hang at the identical step. So this
-// is not specific to either of the app's two resize call sites
-// (resizeGhosttyWithoutReflow vs. plain resizeLocal); both reach the same
-// wasm-level infinite loop.
-//
-// Drives the wasm exports directly rather than through the app's binding: the
-// worker loads plain .mjs with no TypeScript transform, and the three calls the
-// repro needs (new/write/resize) are the raw C API anyway. Since
-// the hang is a synchronous, wasm-level infinite loop, it cannot be detected
-// from the same thread it runs on (the event loop never gets control back).
-// This script runs the repro in a worker_thread so the parent can apply a
-// wall-clock watchdog and terminate() the worker if a step never reports
-// back -- worker termination works even mid-blocking-synchronous-call.
-//
-// Exit codes: 0 = no fault (all steps completed); 1 = HANG (a step exceeded
-// the watchdog budget); 2 = unexpected exception/trap while running a step.
+// Repro for a ghostty-vt wasm resize hang: exit 0 = fixed, 1 = hang, 2 = trap.
+// Needs a widen of >=+10 cols (59->69) then two narrow-by-1 resizes to reproduce.
 
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import { readFileSync } from 'node:fs';
@@ -49,9 +8,8 @@ import { fileURLToPath } from 'node:url';
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WASM_PATH = `${APP_ROOT}/vendor/ghostty-vt/ghostty-vt.wasm`;
 
-// The exact minimized payload (truncated OSC 8, box drawing, overflowing
-// 'w' run). Do not "clean up" the malformed-looking OSC 8 fragments -- they
-// are load-bearing; plain ASCII of the same length does not reproduce.
+// The malformed-looking OSC 8 fragments are load-bearing; plain ASCII of the
+// same length does not reproduce.
 const PAYLOAD =
   '\x1b]8;;/\x1bine 31 ┌──┐│\x1b]8;;2\x1b\\entry 32\x1b]8;;7\x1b\\entry ' + 'w'.repeat(104);
 

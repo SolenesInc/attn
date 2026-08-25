@@ -1,27 +1,6 @@
 #!/usr/bin/env node
-// Research probe (NOT a scenario): measures the actual requestAnimationFrame
-// callback rate inside attn's WKWebView under three window states: frontmost
-// & key, visible & non-key (parked corner panel), and fully occluded.
-//
-// Previous "visible-non-key probe" was misleading — it looked at whether
-// `terminalReady` and `runtimeAttached` eventually became true, which tolerates
-// partial throttling (3 fps still passes a 20-second timeout). This probe
-// counts real rAF ticks over 2-second windows and reports fps directly, so we
-// can tell the difference between 60 fps, 3 fps, and 0 fps.
-//
-// Expected readings:
-//   - Frontmost key window: ~60 fps (full speed)
-//   - Visible non-key corner panel: ??? (that's what we want to measure)
-//   - Fully occluded (behind another window): ~0–1 fps
-//
-// Decision rule:
-//   If non-key ≈ key (both 50–60 fps): parking is a viable path for tests.
-//   If non-key ≪ key: parking partially throttles; tests with tight round-
-//     trip timeouts (tr204, tr401) will fail intermittently. Fall back to the
-//     capture-and-restore pattern.
 
-// This probe cycles through frontmost/non-key/occluded window states, so opt
-// out of the harness default always-on-top mode.
+// This probe cycles the window through non-key and occluded states.
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 import fs from 'node:fs';
@@ -64,21 +43,8 @@ async function activateBundle(bundleId) {
   ], { timeout: 5_000 }).catch(() => {});
 }
 
-// Measures rAF callback rate inside attn's webview via the automation bridge.
-// The `dispatch_shortcut` path has access to the renderer's `window.requestAnimationFrame`,
-// but the bridge doesn't expose arbitrary JS eval. So instead we poll a frame-
-// counter that we increment via the bridge's read_pane_state heartbeat logging.
-//
-// Simpler approach: use an existing bridge action that internally calls
-// `window.requestAnimationFrame`, and count how many completions happen in a
-// fixed window by sampling the terminal's `renderCount` (which only advances inside
-// onRender → driven by rAF). If attn is at 60fps, a pane that has steady PTY
-// output (e.g. `yes` running in the background) should see dozens of renders
-// per second; if throttled to 3fps, the counter creeps.
-//
-// To avoid flooding the user's machine, we start a small `head -c 100000 /dev/urandom`
-// loop in a pane (bounded output, triggers continuous terminal writes), then sample
-// renderCount at t=0 and t=2000ms to compute fps.
+// The bridge exposes no JS eval, so rAF rate is read through `renderCount`,
+// which only advances inside onRender and so only advances on a rAF tick.
 async function sampleRenderRate(client, sessionId, paneId, windowMs = 2000) {
   const startSample = await client.request('get_pane_state', { sessionId, paneId });
   const startRender = startSample?.renderHealth?.terminal?.renderCount ?? 0;
@@ -141,7 +107,6 @@ async function main() {
     const paneId = newPane.paneId;
     console.log(`[raf-probe] paneId=${paneId}`);
 
-    // Start bounded continuous output so each rAF tick renders.
     await client.request('write_pane', {
       sessionId,
       paneId,
@@ -151,8 +116,7 @@ async function main() {
     await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
     await sleep(1_500);
 
-    // Phase A: key & frontmost. Current launchApp hands key back to caller, so
-    // explicitly activate attn for this phase.
+    // launchApp hands key back to the caller, so attn is activated explicitly.
     await activateBundle(ATTN_BUNDLE_ID);
     await sleep(800);
     results.phases.key_frontmost = {
@@ -161,7 +125,6 @@ async function main() {
     };
     console.log('[raf-probe] key_frontmost:', results.phases.key_frontmost);
 
-    // Phase B: non-key but still visible (caller gets focus).
     if (callerBundleId) {
       await activateBundle(callerBundleId);
     }
@@ -172,7 +135,6 @@ async function main() {
     };
     console.log('[raf-probe] visible_nonkey:', results.phases.visible_nonkey);
 
-    // Phase C: restore attn foreground (control) to confirm throttle is reversible.
     await activateBundle(ATTN_BUNDLE_ID);
     await sleep(800);
     results.phases.key_frontmost_again = {
@@ -181,7 +143,6 @@ async function main() {
     };
     console.log('[raf-probe] key_frontmost_again:', results.phases.key_frontmost_again);
 
-    // Summary heuristic.
     const fpsKey = results.phases.key_frontmost.sample.renderFps;
     const fpsNonKey = results.phases.visible_nonkey.sample.renderFps;
     const ratio = fpsKey > 0 ? fpsNonKey / fpsKey : 0;

@@ -21,9 +21,6 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// First line of a driver failure: names the condition a human has to fix, so
-// the fix is visible without reading the driver's own message underneath.
-// Pure so it can be unit-tested without spawning the compiled driver binary.
 export function describeInputDriverFailure(stderr = '') {
   if (stderr.includes('Accessibility permission is required')) {
     return 'Grant Accessibility access to the attn real-app input driver when macOS prompts, then rerun the harness.';
@@ -34,10 +31,8 @@ export function describeInputDriverFailure(stderr = '') {
   return 'macOS automation failed.';
 }
 
-// Appends `--window-title <substring>` when opts.windowTitle is set, so
-// callers can target a secondary Tauri window (e.g. "attn — present") that
-// Accessibility never enumerates. Pure so it can be unit-tested without
-// spawning the compiled driver binary.
+// A secondary Tauri window (e.g. "attn — present") is never enumerated by
+// Accessibility; --window-title targets it instead.
 export function withWindowTitleArgs(args, opts = {}) {
   if (!opts.windowTitle) {
     return args;
@@ -74,8 +69,6 @@ export class MacOSDriver {
   }
 
   async activateBackground() {
-    // Verify the app is running without changing frontmost. Silent success
-    // means the target process is resolvable via AX; no HID tap is engaged.
     await this.runInputDriver(['activate_background']);
     await delay(this.actionDelayMs);
   }
@@ -98,19 +91,12 @@ export class MacOSDriver {
     return this.runInputDriverCapture(['frontmost']);
   }
 
-  // Whether a scenario's synthetic input can actually be delivered right now:
-  // `{ screenLocked, displayCount, asleepCount, blockReason }`, where a
-  // non-null blockReason is the same sentence the driver refuses input with.
-  // Observation-only — reading it never activates the app and works fine while
-  // the display is off, which is the point.
   async displayState() {
     return JSON.parse(await this.runInputDriverCapture(['display_state']));
   }
 
-  // Returns the CGWindowID of the driver's bundle's largest layer-0 onscreen
-  // window, or null if no such window exists. Reliable gate for "attn's window
-  // has been created": System Events returns 0 for Tauri/wry apps even when a
-  // window is visible, so this path uses CGWindowListCopyWindowInfo instead.
+  // System Events reports 0 windows for Tauri/wry apps even when one is
+  // visible, so this reads CGWindowListCopyWindowInfo instead.
   async mainWindowId(opts = {}) {
     try {
       const value = await this.runInputDriverCapture(withWindowTitleArgs(['windowid'], opts));
@@ -133,10 +119,6 @@ export class MacOSDriver {
     return null;
   }
 
-  // Returns all onscreen windows owned by the driver's bundle, parsed from the
-  // `windowlist` subcommand: Array<{ id, name, x, y, width, height, layer }>.
-  // Returns [] on any failure (never throws), matching mainWindowId()'s
-  // tolerance.
   async windowList() {
     try {
       const value = await this.runInputDriverCapture(['windowlist']);
@@ -147,10 +129,8 @@ export class MacOSDriver {
     }
   }
 
-  // Polls windowList() until a window whose `name` equals `title` appears.
-  // Returns the matching window object, or null on timeout. Requires window
-  // names (Screen Recording permission); callers should treat null as "the
-  // window never opened" and fail loudly rather than guessing.
+  // Window names need Screen Recording permission; without it this only ever
+  // times out to null.
   async waitForWindowTitled(title, { timeoutMs = 10_000, pollIntervalMs = 200 } = {}) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -222,10 +202,8 @@ export class MacOSDriver {
     await delay(this.actionDelayMs);
   }
 
-  // Press-drag-release from (relativeX, relativeY) to (toRelativeX,
-  // toRelativeY), interpolated in opts.steps leftMouseDragged events — the
-  // shape WebKit requires for text selection (same 0..1 semantics as
-  // clickWindow).
+  // Interpolated leftMouseDragged events: the shape WebKit requires for text
+  // selection. Same 0..1 semantics as clickWindow.
   async dragWindow(relativeX, relativeY, toRelativeX, toRelativeY, opts = {}) {
     const args = [
       'drag',
@@ -262,11 +240,7 @@ export class MacOSDriver {
     await delay(this.actionDelayMs);
   }
 
-  // Warps the cursor to (relativeX, relativeY) inside the resolved window
-  // (same 0..1 semantics as clickWindow) and posts a pixel-unit scroll wheel
-  // event, split into opts.steps sub-events. Positive deltaY scrolls content
-  // up, negative scrolls it down (CGEvent convention) — see InputDriver.swift
-  // --help for a worked example.
+  // Positive deltaY scrolls content up, negative down (CGEvent convention).
   async scrollWindow(relativeX, relativeY, deltaY, opts = {}) {
     const args = [
       'scroll',
@@ -313,9 +287,6 @@ export class MacOSDriver {
 
   async ensureInputDriver() {
     fs.mkdirSync(INPUT_DRIVER_BUILD_DIR, { recursive: true });
-    // Staleness is content-based, not mtime-based, so a stale binary from any
-    // source (old checkout, interrupted build) is rebuilt whenever
-    // InputDriver.swift's hash changes.
     const sourceHash = createHash('sha256').update(fs.readFileSync(INPUT_DRIVER_SOURCE)).digest('hex');
     const fingerprintPath = `${INPUT_DRIVER_BINARY}.fingerprint`;
     const binaryExists = fs.existsSync(INPUT_DRIVER_BINARY);

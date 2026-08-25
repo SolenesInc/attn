@@ -1,42 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: snoozing an agent in the queue.
- *
- * Settle answers *I dealt with this*. Snooze answers *not now*: it closes the
- * open turn and stops the next one from opening until a time the user named.
- * The claim only exists end to end — the daemon writes the settle and the
- * deadline in one statement, suppresses the turn-open while the deadline holds,
- * arms a timer, and the sidebar draws the row in its own section with the time
- * it comes back.
- *
- * The run drives two real Claude agents in two workspaces and asserts, against
- * the rendered DOM (`queue_get_state`) and the daemon's own broadcast, that:
- *
- *   1. snoozing from a queue row's menu closes that turn, takes the row out of
- *      both bands, and puts it in the Snoozed section with a wake time,
- *   2. snoozing the agent the user is looking at hands over the next agent that
- *      owes a turn, the same way settling does,
- *   3. the deferral actually holds: the snoozed agent runs, stops in a state
- *      that would open a turn, and no turn opens,
- *   4. waking early puts it back — and at the *tail*, behind the turn that has
- *      been owed longer, because the clock on what you owe starts when you said
- *      you would come back,
- *   5. the wake timer does the same thing on its own when the deadline passes,
- *   6. a deferral survives a daemon restart, deadline and all,
- *   7. break-through: an agent whose process dies clears its own snooze and
- *      opens a turn immediately, because that is what the user could not have
- *      anticipated.
- *
- * The menu's shortest choice is 30 minutes, which is the product's answer and
- * not a testable wait, so the timed legs send `snooze_turn` with a few-second
- * deadline over the daemon socket. The menu itself is exercised in full for leg
- * 1 — what the six buttons compute is unit-tested in snoozeDurations.test.ts.
- *
- * Prereqs: `claude` on PATH; a non-production profile install with the
- * automation layer; a built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -126,14 +89,10 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-// Generous on purpose: how long a live agent takes to stop says nothing about
-// whether the queue reacts to the state it stops in.
 const AGENT_STOP_TIMEOUT_MS = 240_000;
 
 async function driveToStop(client, observer, agent, token, description) {
   await submitPrompt(client, agent.sessionId, agent.paneId, questionPrompt(token));
-  // It has to be seen working first, or a stop that has not started yet reads
-  // as a stop that already finished.
   await pollFor(
     () => (observer.getSession(agent.sessionId)?.state === 'working' ? true : null),
     `${description} to start working`,
@@ -160,12 +119,8 @@ async function waitForTurns(client, expected, description, timeoutMs = 30_000) {
   );
 }
 
-/**
- * The live agent process for a session, found by its working directory.
- *
- * By cwd rather than by name: a `pkill -f` against the command line would match
- * any sibling agent on this machine, and the run's cwd is unique to it.
- */
+// By cwd, never by name: a `pkill -f` on the command line would match any
+// sibling agent on this machine.
 function agentPidForCwd(cwd) {
   const rows = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n');
   const candidates = rows
@@ -177,7 +132,7 @@ function agentPidForCwd(cwd) {
     try {
       out = execFileSync('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'], { encoding: 'utf8' });
     } catch {
-      continue; // gone between the listing and the probe
+      continue;
     }
     if (out.split('\n').some((line) => line.startsWith('n') && line.slice(1) === cwd)) return pid;
   }
@@ -244,15 +199,10 @@ async function main() {
       createdSessionIds.push(beta.sessionId);
       await driveToStop(client, observer, beta, 'SNOOZE_BETA', 'beta to want the user');
 
-      // Alpha's turn opened first, so it stays ahead of beta throughout — which
-      // is what makes "beta came back at the tail" a real assertion rather than
-      // a coincidence of a one-row band.
       await waitForTurns(client, [alpha.sessionId, beta.sessionId], 'both turns, oldest first');
     });
 
     await runner.step('snoozing_from_the_row_menu_parks_the_agent_and_hands_over', async () => {
-      // Snooze the agent the user is looking at: closing its turn should move
-      // them on, exactly as settling does.
       await client.request('select_session', { sessionId: beta.sessionId });
       await pollFor(async () => {
         const state = await client.request('get_state');
@@ -260,8 +210,6 @@ async function main() {
       }, 'beta to be the agent on screen', 15_000);
 
       await client.request('dom_click', { selector: `[data-testid="queue-snooze-${beta.sessionId}"]` });
-      // The click on the choice is itself the assertion that the menu opened:
-      // dom_click fails loudly when the selector is not in the DOM.
       const chosen = await pollFor(
         () => client.request('dom_click', { selector: '[data-testid="snooze-choice-30m"]' }).catch(() => null),
         'the snooze duration menu to open with its 30-minute choice',
@@ -294,12 +242,10 @@ async function main() {
       runner.assert(row.wake, `the row says when it comes back: ${JSON.stringify(row)}`);
       runner.log('deferred row', row);
 
-      // The daemon's own answer, not just the drawing of it.
       const session = await pollFor(
         () => {
           const current = observer.getSession(beta.sessionId);
-          // turn_owed is omitted from the broadcast when false, so its absence
-          // is the closed turn.
+          // turn_owed is omitted from the broadcast when false.
           return current && !current.turn_owed && current.turn_snoozed_until ? current : null;
         },
         'the daemon to broadcast the closed turn and the deadline',
@@ -323,9 +269,6 @@ async function main() {
     });
 
     await runner.step('the_deferral_holds_while_the_agent_runs_and_stops', async () => {
-      // The whole point. The agent works, stops in a state that would open a
-      // turn, and nothing opens — this is the suppression, and it is the one
-      // claim a unit test of the band cannot make.
       const state = await driveToStop(client, observer, beta, 'SNOOZE_BETA_AGAIN', 'the deferred agent to stop again');
       runner.log('the deferred agent stopped', { state });
       await delay(3_000);
@@ -356,8 +299,6 @@ async function main() {
         !queue.snoozed.present,
         `the section goes away with the last deferral: ${JSON.stringify(queue.snoozed)}`,
       );
-      // The tail, not the head: the woken turn is stamped at the wake instant,
-      // so alpha — owed since before the snooze — stays ahead of it.
       runner.assert(turnIds(queue)[1] === beta.sessionId, 'it came back at the tail');
     });
 
@@ -390,7 +331,7 @@ async function main() {
 
       await client.quitApp();
       await observer.close();
-      try { execFileSync(attnBin, ['daemon', 'stop'], { env: daemonEnv, encoding: 'utf8' }); } catch { /* already down */ }
+      try { execFileSync(attnBin, ['daemon', 'stop'], { env: daemonEnv, encoding: 'utf8' }); } catch {}
       execFileSync(attnBin, ['daemon', 'ensure'], { env: daemonEnv, encoding: 'utf8' });
       await relaunchAppAndConnect(client, observer);
 
@@ -411,10 +352,8 @@ async function main() {
     });
 
     await runner.step('a_dead_agent_breaks_through_its_own_snooze', async () => {
-      // The one thing the user could not have anticipated. Killing the process
-      // with a signal rather than a clean exit is deliberate: a clean exit is
-      // auto-close's business, and closing the session would take the row away
-      // instead of ringing.
+      // SIGKILL, not a clean exit: a clean exit is auto-close's business and
+      // would take the row away instead of ringing.
       const pid = agentPidForCwd(beta.cwd);
       runner.assert(pid, `found the deferred agent's process: ${pid}`);
       process.kill(pid, 'SIGKILL');

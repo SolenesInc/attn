@@ -1,17 +1,5 @@
 #!/usr/bin/env node
 
-// Terminal annotations end to end in the packaged app: a real Codex turn on a
-// real WebGL grid, an alt-drag over completed commentary while its tool call is
-// still running, and the guarantees the unit tests can only claim about mocks —
-//
-//   1. the annotation is the daemon's, not the pane's, so it survives the app
-//      being quit and relaunched, and still resolves onto live rows there;
-//   2. a second turn does not take the first turn's annotation away.
-//
-// Every assertion is wording-independent. The agent is asked for plain prose,
-// but what it actually says is read off the grid and carried through the run,
-// so agent discretion changes the quote rather than failing the scenario.
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,19 +24,13 @@ import { harnessClientHello } from './harnessProfile.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
 // Generous on purpose: how long a live agent takes to stop says nothing about
-// whether an annotation survived it. A tight bound here turns agent discretion
-// into a failure that reads like a product regression.
+// whether an annotation survived it.
 const SETTLE_TIMEOUT_MS = 240_000;
 const TURN_START_TIMEOUT_MS = 90_000;
-// Completed messages invalidate the live window; this covers that round trip
-// and the repaint, not the agent.
 const ANCHOR_TIMEOUT_MS = 30_000;
 const SETTLED_STATES = new Set(['idle', 'waiting_input', 'pending_approval']);
 
-// The label clicked in the popup. The UI renders its emoji, while the daemon
-// stores its stable id.
 const LABEL = { name: 'Show the receipt', id: 'show-the-receipt', emoji: '🧾' };
-// The note drafted beside the marks, and what proves it left the composer.
 const NOTE = 'Prefer the smallest change that covers this.';
 const FIRST_MESSAGE = 'A retry wrapper protects idempotent operations from duplicate network effects.';
 const SECOND_MESSAGE = 'A circuit breaker stops repeated calls while a dependency is failing.';
@@ -100,10 +82,8 @@ function workingCommentaryPrompt(sentence, startedMarker, releaseMarker) {
   ].join(' ');
 }
 
-// A submitted prompt does not immediately leave the settled state it was typed
-// in, so waiting only for "settled" returns before the turn has even opened and
-// every later read is of the previous turn. Wait for the turn to open, then for
-// it to close.
+// A submitted prompt does not immediately leave the state it was typed in, so
+// waiting only for "settled" returns before the turn has even opened.
 async function waitForTurn(observer, sessionId, description) {
   await pollFor(
     () => (observer.getSession(sessionId)?.state === 'working' ? true : null),
@@ -120,8 +100,6 @@ async function waitForTurn(observer, sessionId, description) {
   );
 }
 
-// Whether `inner` lies entirely within `outer`, with a pixel of slack for the
-// subpixel rounding a real window produces.
 function contains(outer, inner) {
   return inner.left >= outer.left - 1
     && inner.top >= outer.top - 1
@@ -134,8 +112,6 @@ function overlaps(a, b) {
     && a.top < b.top + b.height && b.top < a.top + a.height;
 }
 
-// Alt-drag over the agent's prose until it resolves to an anchor. Returns the
-// row it landed on, which every later assertion is about.
 async function pollForDrag(client, runner, sessionId, paneId, description, requiredWords) {
   let lastRow = null;
   let lastSpan = null;
@@ -169,9 +145,6 @@ async function pollForDrag(client, runner, sessionId, paneId, description, requi
   }
 }
 
-// The daemon's own copy, read over a fresh socket rather than through the UI.
-// The point of the whole change is that these two agree without the pane
-// holding anything, so asking the daemon directly is what makes that testable.
 function daemonAnnotations(wsUrl, sessionId, timeoutMs = 8_000) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
@@ -188,9 +161,8 @@ function daemonAnnotations(wsUrl, sessionId, timeoutMs = 8_000) {
     });
     ws.on('message', (raw) => {
       const data = JSON.parse(raw.toString());
-      // A malformed hello, an unknown command, or a rejected capability comes
-      // back as a plain error event; without this the mistake reads as a
-      // timeout and looks like the daemon lost the annotations.
+      // A rejected hello or command comes back as a plain error event; without
+      // this it reads as a timeout and looks like lost annotations.
       if (data.event === 'error') {
         clearTimeout(timer);
         ws.close();
@@ -213,9 +185,6 @@ function daemonAnnotations(wsUrl, sessionId, timeoutMs = 8_000) {
   });
 }
 
-// Find the Codex assistant row containing the requested words. Requiring the
-// leading bullet excludes wrapped user-prompt continuations, which can repeat
-// the exact sentence the scenario asked Codex to write.
 export function proseRow(lines, requiredWords = []) {
   let best = null;
   const wanted = requiredWords.map((word) => word.toLowerCase());
@@ -235,8 +204,6 @@ export function proseRow(lines, requiredWords = []) {
   return best;
 }
 
-// A whole-word column span inside a row, away from both edges so the drag
-// cannot pick up the indent or a wrapped word.
 export function wordSpan(rowText) {
   const trimmedStart = rowText.length - rowText.trimStart().length;
   const words = [...rowText.matchAll(/[A-Za-z][A-Za-z'-]*/g)]
@@ -248,9 +215,8 @@ export function wordSpan(rowText) {
 }
 
 async function readVisibleLines(client, sessionId, paneId) {
-  // Drag coordinates are viewport rows. `read_pane_text` returns the whole
-  // buffer, so its indices point below the canvas as soon as Codex has enough
-  // startup output to create scrollback.
+  // Drag coordinates are viewport rows; `read_pane_text` returns the whole
+  // buffer, so its indices point below the canvas once there is scrollback.
   const state = await client.request('get_pane_state', { sessionId, paneId });
   return state.pane?.visibleContent?.lines ?? [];
 }
@@ -273,18 +239,12 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  // ⌘Enter is delivered by the page's keydown listener, and whether it reaches
-  // that listener at all — rather than being eaten by AppKit or handed to the
-  // PTY — is the part only a real keystroke into the packaged app can show.
   const driver = new MacOSDriver({ appPath: options.appPath });
   let sessionId = null;
   let paneId = null;
   const toolGateDir = path.join(runner.sessionDir, 'tool-gate');
   const toolStartedMarker = path.join(toolGateDir, 'started');
   const toolReleaseMarker = path.join(toolGateDir, 'release');
-  // What the agent said, and where it sits on the grid. Carried through the
-  // rest of the run so every later assertion is about this exact text, and
-  // named in the failure report when a step goes wrong.
   let anchoredRowText = null;
   let quote = null;
 
@@ -342,8 +302,7 @@ async function main() {
       );
 
       // The prose before the Bash call is a completed assistant message even
-      // though the session remains working. The watcher invalidation must make
-      // it annotatable without waiting for the sleep or the turn to settle.
+      // though the session is still working, so it must be annotatable now.
       const anchored = await pollForDrag(client, runner, sessionId, paneId, 'the first turn', FIRST_MESSAGE_WORDS);
       anchoredRowText = anchored.rowText;
       runner.assert(
@@ -367,8 +326,6 @@ async function main() {
         filed.annotations[0].emoji === LABEL.emoji,
         `Annotation emoji = ${JSON.stringify(filed.annotations[0].emoji)}, want ${LABEL.emoji}`,
       );
-      // The anchor is offsets into the transcript, so the quote is the
-      // agent's markdown — which is what the row renders, modulo the wrap.
       const quotedWords = quote.trim().split(/\s+/);
       const rowWords = new Set(anchoredRowText.trim().split(/\s+/));
       const missing = quotedWords.filter((word) => !rowWords.has(word));
@@ -436,9 +393,6 @@ async function main() {
       paneId = workspace?.panes?.[0]?.paneId ?? paneId;
     });
 
-    // The annotation is only worth keeping if it can still be found on the
-    // message. Scroll the first turn back into view and alt-click the wash: it
-    // reopens only when the projection resolved those rows.
     await runner.step('still_projects_onto_the_grid', async () => {
       const found = await pollFor(
         async () => {
@@ -474,15 +428,8 @@ async function main() {
       );
     });
 
-    // The regression this whole change exists to prevent: the pane used to
-    // throw its annotations away the moment the agent said anything else.
-    //
-    // This runs after the grid check, not before it. A second turn pushes the
-    // first one up, and a long enough answer pushes it out of the scrollback
-    // the restore preserves — at which point there are no rows left to project
-    // onto and declining to paint is the containment gate working, not a lost
-    // annotation. Surviving a new turn is a claim about the panel and the
-    // daemon, so assert it there and leave the grid out of it.
+    // This runs after the grid check: a second turn can push the first out of
+    // the preserved scrollback, at which point declining to paint is correct.
     await runner.step('survives_a_second_turn', async () => {
       await submitPrompt(client, sessionId, paneId, prosePrompt(SECOND_MESSAGE));
       await waitForTurn(observer, sessionId, 'the second turn');
@@ -500,11 +447,8 @@ async function main() {
       );
     });
 
-    // The editor is positioned against the window, but it is only usable
-    // inside the pane it annotates: the sidebar and the neighbouring panes
-    // paint over anything that reaches them. A drag on the first words of a
-    // line anchors it at the pane's left edge, which is where it used to be
-    // drawn half under the sidebar.
+    // The editor is positioned against the window but is only usable inside the
+    // pane it annotates; the sidebar and neighbouring panes paint over it.
     await runner.step('the_editor_lands_inside_its_pane', async () => {
       await pollForDrag(client, runner, sessionId, paneId, 'the second turn', SECOND_MESSAGE_WORDS);
       const state = await pollFor(
@@ -525,8 +469,6 @@ async function main() {
         `The annotation editor was drawn outside every terminal pane, where the app's chrome covers it: `
         + `popup ${JSON.stringify(popupRect)}, panes ${JSON.stringify(paneRects)}, viewport ${JSON.stringify(viewport)}`,
       );
-      // The other half: the panel is drawn over the editor, so an editor that
-      // lands under it is on screen and unreachable.
       runner.assert(
         !panelRect || !overlaps(panelRect, popupRect),
         `The annotation editor was drawn under the annotations panel: `
@@ -534,12 +476,7 @@ async function main() {
       );
     });
 
-    // The panel is the list of what you wrote, so a row in it is clicked to
-    // change what it says — and once it says something, the control that
-    // removes it has to still be on the row rather than pushed below it.
     await runner.step('a_panel_row_opens_its_editor_and_keeps_its_remove_control', async () => {
-      // Close the popup the previous step opened; a press outside is how a
-      // user dismisses it, and it must not disturb a labelled annotation.
       await client.request('dom_click', { selector: '[data-testid="annotation-panel"] .anno-panel-title' });
       await sleep(300);
 
@@ -574,10 +511,8 @@ async function main() {
         row.rect && row.removeRect,
         `Panel row reported no geometry: ${JSON.stringify(row)}`,
       );
-      // A comment wraps inside the row. The remove control must still start on
-      // the row's first line — it used to be auto-placed after the comment,
-      // which put it on a line of its own exactly when there was text to
-      // remove. 12px is a tripwire, not a measurement of the real 5px offset.
+      // A comment wraps inside the row, and the remove control used to be
+      // auto-placed after it. 12px is a tripwire, not the real 5px offset.
       const offset = row.removeRect.top - row.rect.top;
       runner.assert(
         offset <= 12,
@@ -588,14 +523,10 @@ async function main() {
         row.removeRect.left + row.removeRect.width <= row.rect.left + row.rect.width + 1,
         `The remove control overflows its row: ${JSON.stringify(row.removeRect)} vs ${JSON.stringify(row.rect)}`,
       );
-      // Leave the surface as the user would: nothing open over the panel.
       await client.request('dom_click', { selector: '[data-testid="annotation-panel"] .anno-panel-title' });
       await sleep(300);
     });
 
-    // The note is the sentence the marks qualify — "let's do x and y", with the
-    // marks saying where. It is drafted in the panel and goes out with them, so
-    // it is held by the daemon like they are and spent by the same send.
     await runner.step('a_note_is_drafted_beside_the_marks', async () => {
       await client.request('dom_type', { selector: '.anno-panel-note', text: NOTE });
 
@@ -614,10 +545,8 @@ async function main() {
     });
 
     await runner.step('send_shortcut_submits_it_and_tombstones_it', async () => {
-      // A real ⌘Return, not the button: the button is a click handler any unit
-      // test can drive, while the keystroke has to survive AppKit, reach the
-      // page's capture-phase listener, and be claimed by this pane instead of
-      // going to the PTY.
+      // A real ⌘Return: the keystroke has to survive AppKit, reach the page's
+      // capture-phase listener, and be claimed by this pane over the PTY.
       await driver.pressKeyCode(36, { command: true });
       const sent = await pollFor(
         async () => {
@@ -643,8 +572,6 @@ async function main() {
       // The tombstone, not a save of the empty list: a save already in flight
       // must not be able to put the sent marks back.
       runner.assert(after.generation >= 2, `Generation after send = ${after.generation}, want the raised tombstone`);
-      // The note was delivered with them, so it is spent with them — one left
-      // behind is an instruction that goes out a second time.
       runner.assert(
         !after.note,
         `The daemon still holds the sent note: ${JSON.stringify(after.note)}`,
@@ -654,11 +581,6 @@ async function main() {
         `The note box still holds what was just sent: ${JSON.stringify(sent.note)}`,
       );
 
-      // The claim this whole path exists for: Send all SUBMITS. Text sitting in
-      // the composer would satisfy any assertion about the pane's contents, so
-      // the only proof that separates a paste from a send is the session taking
-      // a turn on it — which is also what proves the Enter landed as a keypress
-      // rather than being folded into the pasted block.
       await waitForTurn(observer, sessionId, 'the turn the annotation feedback opened');
 
       const lines = await readVisibleLines(client, sessionId, paneId);
@@ -706,7 +628,6 @@ async function main() {
   }
 }
 
-// Importing this file for its helpers must not launch an app.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.stack || error.message : String(error));

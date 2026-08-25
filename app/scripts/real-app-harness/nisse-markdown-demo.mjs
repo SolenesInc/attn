@@ -1,21 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * Watch a recorded nisse reply stream into the real conversation pane.
- *
- * This is the "look at it yourself" half of the streaming-markdown spike: it
- * launches the profile's app, opens a conversation session, and replays a
- * recorded envelope stream at the pacing it was recorded at. Nothing is
- * scripted below the socket — the store, the pane, the markdown pipeline and
- * the scroll container are the shipped ones. No model is called.
- *
- *   ATTN_PROFILE=<name> node app/scripts/real-app-harness/nisse-markdown-demo.mjs
- *   ... --theme light          # relaunch in the light theme first
- *   ... --recording md-long    # the 27,540-char reply instead of the tour
- *
- * The app is left running on purpose: scroll back through the transcript, or
- * scroll away mid-replay and watch the view hold still.
- */
+// Replays a recorded nisse reply into the real conversation pane and leaves
+// the app running. Flags: --theme, --recording.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

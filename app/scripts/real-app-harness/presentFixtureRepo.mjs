@@ -1,9 +1,3 @@
-/**
- * Builds a throwaway git repository with a committed base->head change and a
- * `.present.yml` manifest pinning that range, for exercising the Present
- * window (a second Tauri window titled "attn — present") in the packaged
- * app.
- */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,16 +23,11 @@ function write(repoDir, relPath, contents) {
   fs.writeFileSync(full, contents, 'utf8');
 }
 
-/**
- * @param {string} rootDir directory under which the fixture repo is created
- * @returns {{ repoDir: string, manifestPath: string, baseSha: string, headSha: string, notedPath: string }}
- */
 export function buildPresentFixtureRepo(rootDir) {
   const repoDir = path.join(rootDir, 'present-fixture');
   fs.mkdirSync(repoDir, { recursive: true });
   git(repoDir, 'init', '-q');
 
-  // --- base commit ---------------------------------------------------------
   write(repoDir, 'greeting.ts', [
     'export function greet(name: string): string {',
     '  return `Hello, ${name}!`;',
@@ -57,7 +46,6 @@ export function buildPresentFixtureRepo(rootDir) {
   git(repoDir, 'commit', '-q', '-m', 'base');
   const baseSha = git(repoDir, 'rev-parse', 'HEAD').trim();
 
-  // --- head commit -----------------------------------------------------
   write(repoDir, 'greeting.ts', [
     'export function greet(name: string): string {',
     '  // reworked to include a friendlier sign-off',
@@ -70,7 +58,6 @@ export function buildPresentFixtureRepo(rootDir) {
   git(repoDir, 'commit', '-q', '-m', 'head: tweak greeting');
   const headSha = git(repoDir, 'rev-parse', 'HEAD').trim();
 
-  // --- Present manifest ------------------------------------------------
   const manifestPath = path.join(repoDir, '.present.yml');
   const manifestYaml = [
     'version: 1',

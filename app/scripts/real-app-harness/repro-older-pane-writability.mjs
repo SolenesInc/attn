@@ -25,8 +25,7 @@ async function typeAndWaitForEcho(client, sessionId, paneId, token, timeoutMs = 
   await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
   const deadline = Date.now() + timeoutMs;
   let lastText = '';
-  // Narrow utility panes wrap long tokens across lines, so match on compacted
-  // (whitespace-stripped) text — the echo still proves the pane accepted input.
+  // Narrow utility panes wrap long tokens, so also match on compacted text.
   while (Date.now() < deadline) {
     const payload = await client.request('read_pane_text', { sessionId, paneId });
     lastText = payload?.text || '';
@@ -136,11 +135,8 @@ async function main() {
     const secondScrollback = await typeAndWaitForEcho(client, sessionId, secondUtilityPane.paneId, secondToken);
     fs.writeFileSync(path.join(runDir, 'utility-2-scrollback.txt'), secondScrollback, 'utf8');
 
-    // The actual regression probe: return focus to the older pane and confirm
-    // it still accepts typed input (the bug: older pane input was sometimes
-    // dropped after a newer split became active). type_pane_via_ui requires
-    // the target pane's terminal input to be focused, so
-    // a refocus-routing regression surfaces as a 'Failed to type' error here.
+    // type_pane_via_ui needs the target pane's input focused, so a refocus-routing
+    // regression surfaces here as a 'Failed to type' error.
     await focusPaneAndAwaitInput(client, sessionId, firstUtilityPane.paneId);
     const revisitScrollback = await typeAndWaitForEcho(
       client,

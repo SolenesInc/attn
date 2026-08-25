@@ -391,8 +391,6 @@ function countOccurrences(haystack, needle) {
   return count;
 }
 
-// Completion is read through the app: the daemon's attach payload is binary
-// snapshot data, so rendered text only exists on the client side.
 async function waitForTerminalCompletion(client, sessionId, paneId, token, doneToken, expectedLineCount, timeoutMs = 45_000) {
   const startedAt = Date.now();
   return waitForCondition(async () => {
@@ -419,9 +417,8 @@ async function runTerminalLoad(client, sessionId, shellPanes, lineCount = 2500) 
   const paneRuns = [];
   for (let index = 0; index < shellPanes.length; index += 1) {
     const pane = shellPanes[index];
-    // Keep markers shorter than a deeply split pane. Pane text is rendered
-    // text, so a long logical token can contain a newline in it and never match
-    // even though the command completed.
+    // Rendered pane text wraps: a token longer than the pane's width can carry a
+    // newline and never match, even though the command completed.
     const token = `P${index}${Date.now().toString(36).slice(-6)}`;
     const doneToken = `${token}D`;
     const python = [

@@ -1,30 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: what a conversation session shows about the tools its
- * agent runs, and the way out of a queue.
- *
- * A `nisse` session has no terminal, so a tool call the agent makes is not
- * something the user can watch happen — it exists only if the pane draws it.
- * This scenario proves the four things that make that drawing trustworthy, in
- * the packaged app, against a real agent:
- *
- *   1. reading, running and editing each produce a card naming the tool and
- *      what it was pointed at, and the card is collapsed — no output in the
- *      transcript until someone asks for it,
- *   2. opening a card fetches its output and shows it,
- *   3. an output pi clipped offers the whole of itself, and delivers text the
- *      clipped answer did not have,
- *   4. an edit draws as a diff of the patch pi produced, and a queued steer can
- *      be cancelled — the strip empties and the agent never reads it.
- *
- * The bash leg asks for 5,000 lines on purpose: pi truncates tool output at
- * 2,000 lines / 50 KB and writes the whole of it to a file, which is the only
- * way to reach the "show the full output" path with a real agent.
- *
- * Prereqs: a non-production profile install with the attn-pi plugin installed
- * (`attn plugin install-bundled attn-pi`) and pi credentials in ~/.pi.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -38,10 +13,8 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
-// Composer selectors are pane-scoped. The app mounts a pane per conversation
-// session, so a bare [data-testid="conversation-input"] resolves to whichever
-// one is first in the DOM — and a run that types into another session's
-// composer looks exactly like a host that never got the prompt.
+// Composer selectors must stay pane-scoped: a bare conversation-input resolves
+// to whichever session's pane is first in the DOM.
 const paneOf = (sessionId) => `[data-testid="conversation-pane-${sessionId}"]`;
 const INPUT = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-input"]`;
 const SEND = (sessionId) => `${paneOf(sessionId)} [data-testid="conversation-send"]`;
@@ -52,9 +25,6 @@ const toggleFor = (callId) =>
 const fullOutputFor = (callId) =>
   `[data-testid="conversation-tool-${callId}"] [data-testid="conversation-tool-full"]`;
 
-// The word the read tool has to come back with, and the one the edit replaces
-// it by. Distinctive enough that finding it in a card's output cannot be an
-// accident of the agent's own prose.
 const MARKER = 'vermillion';
 const REPLACEMENT = 'cerulean';
 
@@ -94,7 +64,6 @@ function hasReply(state, word) {
   );
 }
 
-/** The state once the run that answers with `word` has settled. */
 function settledWith(client, sessionId, word, description, timeoutMs = 240_000) {
   return pollFor(
     async () => {
@@ -107,13 +76,11 @@ function settledWith(client, sessionId, word, description, timeoutMs = 240_000) 
   );
 }
 
-/** The newest card for a tool, by name. */
 function cardFor(state, name) {
   const matches = (state?.tools || []).filter((tool) => tool.name === name);
   return matches.length > 0 ? matches[matches.length - 1] : null;
 }
 
-/** The card, once it is showing something — output, a diff, or why neither. */
 function openedCard(client, sessionId, name, description) {
   return pollFor(
     async () => {
@@ -218,8 +185,6 @@ async function main() {
       if (card.status !== 'ok') {
         throw new Error(`the read card reports ${card.status}: ${JSON.stringify(card)}`);
       }
-      // Collapsed and empty. This is the sizing contract: the file's contents
-      // are not in the app until the user asks for them.
       if (card.expanded || card.output !== '') {
         throw new Error(`a tool card must arrive collapsed and output-free: ${JSON.stringify(card)}`);
       }
@@ -247,10 +212,6 @@ async function main() {
       if (!card) {
         throw new Error(`no bash card in the transcript; tools=${JSON.stringify(settled.tools)}`);
       }
-      // The other half of the collapsed contract: pi hands the tool's output
-      // back to the model as a message of its own, and none of it may reach the
-      // transcript. 5,000 lines is a loud enough witness that a regression here
-      // cannot hide.
       const inlined = (settled.messages || []).find((message) => message.text.includes('\n4999'));
       if (inlined) {
         throw new Error(`the tool's output was inlined into the transcript as a ${inlined.role} message of ${inlined.text.length} chars`);
@@ -272,9 +233,6 @@ async function main() {
         'the full output to replace the clipped one',
         60_000,
       );
-      // The clipped answer stops at pi's 2,000-line cap; the full one runs to
-      // the end. Asserting the last line is what proves it is the whole file
-      // rather than a longer clip.
       if (!full.output.includes('\n5000')) {
         throw new Error(`the full output does not reach the last line: ${full.output.length} chars, tail=${JSON.stringify(full.output.slice(-40))}`);
       }
@@ -298,7 +256,6 @@ async function main() {
       if (!opened.hasPatch) {
         throw new Error(`an edit must render as a diff, not as text: ${JSON.stringify({ ...opened, output: opened.output.length })}`);
       }
-      // The edit really happened, which is what the diff is a picture of.
       const after = fs.readFileSync(path.join(repoDir, 'notes.txt'), 'utf8');
       if (!after.includes(REPLACEMENT)) {
         throw new Error(`the edit tool reported success but the file still reads: ${JSON.stringify(after)}`);
@@ -345,8 +302,6 @@ async function main() {
         throw new Error('the clear control outlived the queue it belonged to');
       }
 
-      // The point of cancelling: the agent never reads it. The held run runs to
-      // its own end and answers the prompt it was given, not the cancelled one.
       const settled = await settledWith(client, sessionId, 'delta', 'the held run to settle on its own answer');
       const readIt = (settled.messages || []).some(
         (message) => message.role === 'user' && message.text.includes('epsilon'),
@@ -372,8 +327,6 @@ async function main() {
     await runner.finishFailure(error, { sessionId });
     throw error;
   } finally {
-    // The app and the observer socket outlive the assertions, and an open
-    // socket holds node's event loop open.
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
   }

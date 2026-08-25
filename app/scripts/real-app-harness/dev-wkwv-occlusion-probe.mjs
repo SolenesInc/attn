@@ -1,29 +1,5 @@
 #!/usr/bin/env node
-// Research probe (NOT a scenario): does WKWebView deliver fresh frames to
-// WindowServer while attn's NSWindow is occluded? Iteration tool for designing
-// a focus-free capture path. Intentionally prefixed `dev-` so scenario runners
-// and `real-app:serial-matrix` do not pick it up.
-//
-// Procedure:
-//   1. Launch attn, connect bridge, create a session.
-//   2. Split a shell pane, focus it, type BEFORE_TOKEN, wait for echo.
-//   3. Capture-A: screencapture -l <winid> (attn frontmost).
-//   4. Activate ghostty to occlude attn (no focus change on the pane PTY).
-//   5. Capture-B immediately (nothing drew; expected to match A).
-//   6. write_pane AFTER_TOKEN (PTY-direct — independent of DOM focus). Wait
-//      for echo via read_pane_text (confirms the terminal saw the bytes).
-//   7. Capture-C while attn is still occluded.
-//   8. Compare SHA-256 hashes.
-//      - If C ≠ B: the compositor kept delivering frames under occlusion.
-//      - If C == B: WKWebView paused composite delivery; any focus-free
-//        screencap path captures stale backing store.
-//
-// Usage:
-//   node scripts/real-app-harness/dev-wkwv-occlusion-probe.mjs
-//
-// Requires: /tmp/find-window-id (see notes in docs/research/wkwv-occlusion.md
-// or rebuild from app/scripts/real-app-harness/InputDriver.swift's
-// mainWindowBounds helper if missing).
+// Research probe, not a scenario: `dev-` keeps scenario runners from picking it up.
 
 // This probe deliberately occludes attn, so opt out of the default always-on-
 // top harness mode — otherwise the window refuses to be covered.
@@ -116,8 +92,6 @@ async function typeAndWaitForEcho(client, sessionId, paneId, token, { useUi = tr
     await client.request('type_pane_via_ui', { sessionId, paneId, text: `echo ${token}` });
     await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
   } else {
-    // PTY-direct path: does not depend on DOM activeElement, so it works even
-    // when attn has lost key window status and the textarea is blurred.
     await client.request('write_pane', { sessionId, paneId, text: `echo ${token}\r`, submit: false });
   }
   const deadline = Date.now() + 12_000;
@@ -135,8 +109,6 @@ async function typeAndWaitForEcho(client, sessionId, paneId, token, { useUi = tr
 async function main() {
   const appPath = defaultAppPathForProfile();
   const observer = new DaemonObserver({ wsUrl: defaultWSURLForProfile() });
-  // Setup phase runs with attn frontmost so WKWebView initializes normally;
-  // we deliberately occlude later to test paint delivery.
   const client = new UiAutomationClient({ appPath, backgroundLaunch: false });
   const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wkwv-probe-'));
 

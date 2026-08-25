@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchFreshAppAndConnect, restoreHarnessSettings } from './common.mjs';
 
-// Every scenario boots through launchFreshAppAndConnect, so what it pins is
-// what the whole catalog spends. These cover the pin and the promise that goes
-// with it: the profile is left as it was found.
-
 function fakeClient() {
   const calls = [];
   return {
@@ -28,7 +24,6 @@ function fakeObserver(settings = {}) {
   };
 }
 
-// Stands in for the daemon connection the real restore opens.
 function recordingWriter() {
   const written = [];
   const write = async (entries) => { written.push(...entries); };
@@ -70,8 +65,6 @@ describe('launch model pinning', () => {
     const client = fakeClient();
     const observer = fakeObserver({ default_model_claude: 'sonnet', default_model_codex: 'gpt-5.5' });
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
-    // The relaunch sees the harness's own pin in place; recording that would
-    // leave haiku behind for good.
     const afterPin = fakeObserver({ default_model_claude: 'haiku', default_model_codex: 'gpt-5.4-mini' });
     await launchFreshAppAndConnect(client, afterPin, { sweepStaleSessions: false });
 

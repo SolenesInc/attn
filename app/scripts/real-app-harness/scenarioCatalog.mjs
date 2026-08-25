@@ -1,6 +1,3 @@
-// Shared scenario catalog for the serial matrix and the soak runner. Both
-// scripts drive the same packaged-app scenarios; keeping one list here avoids
-// two copies drifting apart as scenarios are added or renamed.
 export const scenarioCatalog = [
   {
     id: 'workspace-shell-lifecycle',
@@ -66,8 +63,6 @@ export const scenarioCatalog = [
     id: 'present-flow',
     label: 'Present flow: waiting CLI → window → submit round → synchronous feedback',
     command: ['pnpm', 'run', 'real-app:scenario-present-flow'],
-    // Boots the app + a session + a blocking CLI handback + a second native
-    // window; give it headroom like the other heavy scenarios.
     timeoutMs: 240_000,
   },
   {
@@ -79,14 +74,12 @@ export const scenarioCatalog = [
     id: 'garden-plot-dispatch',
     label: 'Garden plot dispatch: a plot is planted, a delegate is dispatched at it, and the panel walks it draining',
     command: ['pnpm', 'run', 'real-app:scenario-garden-plot-dispatch'],
-    // Boots the app, a session, and a real delegation into a second session.
     timeoutMs: 240_000,
   },
   {
     id: 'garden-delegation-reporting',
     label: 'Garden delegation reporting: a delegation reports on its seed — log notes, artifacts, steering',
     command: ['pnpm', 'run', 'real-app:scenario-garden-delegation-reporting'],
-    // Boots the app, a session, and a real delegation into a second session.
     timeoutMs: 240_000,
   },
   {
@@ -99,66 +92,48 @@ export const scenarioCatalog = [
     id: 'garden-seed-reopen',
     label: 'Garden surfaces: a delegated pane names its seed, and a closed tender is reopened from the drill',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-reopen'],
-    // Boots the app, a session, a delegation, and one respawn.
     timeoutMs: 240_000,
   },
   {
     id: 'ordinary-delegation-ticket',
     label: 'Ordinary delegation: a non-chief session delegates, and the bound ticket routes to worker, delegator, and chief',
     command: ['pnpm', 'run', 'real-app:scenario-ordinary-delegation-ticket'],
-    // Bootstraps a chief + a delegator + a real codex delegation in one app
-    // lifecycle; same budget class as the chief lifecycle scenario.
     timeoutMs: 360_000,
   },
   {
     id: 'nudge-trigger',
     label: 'Ticket nudge: paused gate holds, then the real "deliver now" button doorbells the agent',
     command: ['pnpm', 'run', 'real-app:scenario-nudge-trigger'],
-    // Boots a real codex agent, drives it idle, produces unread ticket activity,
-    // and clicks the live trigger button; needs more than the default budget.
     timeoutMs: 360_000,
   },
   {
     id: 'countdown-cancel',
     label: 'Countdown cancel: a real Cmd+. stops the auto-settle and nudge countdowns on screen',
     command: ['pnpm', 'run', 'real-app:scenario-countdown-cancel'],
-    // Boots a real Claude agent, waits out an auto-settle arm window, and drives
-    // a ticket nudge through a split; more than the default budget.
     timeoutMs: 420_000,
   },
   {
     id: 'settle-typing-hold',
     label: 'Settle typing hold: typing to an agent freezes its settling countdown, and going quiet hands back a whole one',
     command: ['pnpm', 'run', 'real-app:scenario-settle-typing-hold'],
-    // Boots a real Claude agent, waits out an auto-settle arm window, then types
-    // across two quiet windows; more than the default budget.
     timeoutMs: 300_000,
   },
   {
     id: 'agent-queue',
     label: 'Agent queue: a turn opens on a state and closes only when the user settles it',
     command: ['pnpm', 'run', 'real-app:scenario-agent-queue'],
-    // Boots two real Claude agents in two workspaces, steers one through a full
-    // run, and restarts the daemon; needs well more than the default budget.
     timeoutMs: 900_000,
   },
   {
     id: 'agent-queue-snooze',
     label: 'Agent queue snooze: a deferral closes the turn, suppresses the next one, and wakes to the tail',
     command: ['pnpm', 'run', 'real-app:scenario-agent-queue-snooze'],
-    // Boots two real Claude agents, defers one through the row menu, drives it
-    // through a second run under the deferral, restarts the daemon, and kills
-    // an agent process to prove the break-through.
     timeoutMs: 900_000,
   },
   {
     id: 'automation-lifecycle',
     label: 'Automation lifecycle: edit-rebind, delete-resurrect, cleanup-dirty-safe',
     command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
-    // Three independent legs: a scheduled definition edited/reverted across
-    // three live ~60s ticker waits, a delete/resurrect round-trip through
-    // the panel, and a two-delivery mock-GitHub cleanup proof; needs more
-    // than the default budget.
     timeoutMs: 600_000,
   },
   {
@@ -175,8 +150,6 @@ export const scenarioCatalog = [
     id: 'terminal-annotations',
     label: 'Annotate a live claude turn; it survives the next turn and an app relaunch',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-annotations'],
-    // Two live agent turns plus a full app relaunch and rehydrate. The agent
-    // decides how long it thinks; that is not what is under test here.
     timeoutMs: 600_000,
   },
   {
@@ -203,8 +176,6 @@ export const scenarioCatalog = [
     id: 'terminal-block-resize',
     label: 'Block geometry across fish/bash/zsh through relaunch replay + split/close-split',
     command: ['pnpm', 'run', 'real-app:scenario-terminal-block-resize'],
-    // Three shells share one launch + relaunch lifecycle; the default
-    // per-scenario budget is too tight for the full sweep.
     timeoutMs: 360_000,
   },
   {
@@ -304,80 +275,66 @@ export const scenarioCatalog = [
     label: 'Conversation session: nisse round trip, second prompt after settle, no orphans on close',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-conversation'],
     // Needs the attn-pi plugin installed in the target profile
-    // (`attn plugin install-bundled attn-pi`) and pi credentials, the same way
-    // the codex/claude scenarios need theirs. Boots a real agent and runs three
-    // prompts, the last of which holds a `sleep 45` open.
+    // (`attn plugin install-bundled attn-pi`) and pi credentials.
     timeoutMs: 300_000,
   },
   {
     id: 'nisse-nudge',
     label: 'Conversation session: steer mid-run, nudge an idle session, state and turn',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-nudge'],
-    // Same prereqs as nisse-conversation. Holds a `sleep 25` open so the
-    // steer is provably queued, then runs two more prompts through the agent.
+    // Same prereqs as nisse-conversation.
     timeoutMs: 420_000,
   },
   {
     id: 'nisse-tools',
     label: 'Conversation session: tool cards, on-demand detail, full output, patch as a diff, queue cancel',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-tools'],
-    // Same prereqs as nisse-conversation. Four prompts through a real agent,
-    // the last of which holds a `sleep 30` open so a steer is provably queued
-    // before it is cancelled.
+    // Same prereqs as nisse-conversation.
     timeoutMs: 600_000,
   },
   {
     id: 'nisse-revive',
     label: 'Conversation session: kill -9 to recoverable, reload with history, snapshot on a cold client',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-revive'],
-    // Same prereqs as nisse-conversation. Two sessions, five prompts through
-    // a real agent, one `sleep 45` held open across a SIGKILL, and an app
-    // restart in the middle to get a client that never saw the live stream.
+    // Same prereqs as nisse-conversation.
     timeoutMs: 600_000,
   },
   {
     id: 'nisse-delegate',
     label: 'Delegation to a conversation agent: brief as the first message, the agent reports on its own ticket, a brief survives a crash before the first word',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-delegate'],
-    // Same prereqs as nisse-conversation. Two delegations through a real
-    // agent, each of which does a small task and comments on its ticket, plus a
-    // SIGKILL of the second host before pi has written anything down.
+    // Same prereqs as nisse-conversation.
     timeoutMs: 900_000,
   },
   {
     id: 'nisse-history',
     label: 'Conversation session: resume an existing conversation file, page a long transcript, switch model mid-session',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-history'],
-    // Same prereqs as nisse-conversation. Three sessions and four prompts
-    // through a real agent; the long transcript is a synthesized session file
-    // rather than a thousand live turns, so its cost is one resume.
+    // Same prereqs as nisse-conversation.
     timeoutMs: 600_000,
   },
   {
     id: 'nisse-markdown-stream',
     label: 'Conversation session: a recorded reply replayed into the pane renders as markdown while it streams',
     command: ['pnpm', 'run', 'real-app:scenario-nisse-markdown-stream'],
-    // Needs attn-pi installed in the target profile, like the other nisse
-    // scenarios, but calls no model: the reply is a recording replayed into the
-    // pane at the pacing it was captured at, so the run is deterministic and free.
+    // Needs attn-pi installed, like the other nisse scenarios, but calls no model:
+    // the reply is a recording, so the run is deterministic and free.
     timeoutMs: 300_000,
   },
   {
     id: 'app-reconcile',
     label: 'App reconcile: version move rebuilds, a real trim gap disables loudly, an interrupted rebuild repairs',
     command: ['pnpm', 'run', 'real-app:scenario-app-reconcile'],
-    // Restarts the daemon with short retention/stall/dispatch tripwires and
-    // puts the defaults back. Needs bun for `attn app apply`; the Linux
-    // witness leg self-skips when the VM has no attn.
+    // Needs bun for `attn app apply`; the Linux witness leg self-skips when the
+    // VM has no attn.
     timeoutMs: 600_000,
   },
   {
     id: 'pi-automode',
     label: 'pi auto mode: envelope invisibility, a denial and its surfaces, a conversational grant, a quiet session, the circuit breaker',
     command: ['pnpm', 'run', 'real-app:scenario-pi-automode'],
-    // Needs `pi` on PATH and the attn-pi plugin installed, but no credentials
-    // and no network: the session's model and auto mode's classifier are both
-    // a loopback stub, so every verdict is the script's.
+    // Needs `pi` on PATH and the attn-pi plugin installed, but no credentials and
+    // no network: the model and the classifier are both a loopback stub.
     timeoutMs: 900_000,
   },
   {
@@ -389,9 +346,6 @@ export const scenarioCatalog = [
   },
 ];
 
-// Matrix-facing resolution: soakOnly entries are excluded entirely (both from
-// the full-sweep default and from explicit --scenario selection) so adding a
-// soak-only probe never changes run-serial-matrix behavior.
 export function resolveScenarios(selected, catalog = scenarioCatalog) {
   const matrixCatalog = catalog.filter((scenario) => !scenario.soakOnly);
   if (!selected.length) {
@@ -407,7 +361,6 @@ export function resolveScenarios(selected, catalog = scenarioCatalog) {
   });
 }
 
-// Direct single-scenario resolution (run-soak): soakOnly entries resolve fine.
 export function resolveScenario(id, catalog = scenarioCatalog) {
   const scenario = catalog.find((entry) => entry.id === id);
   if (!scenario) {

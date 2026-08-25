@@ -345,6 +345,15 @@ every comment body, verdict, and failing check URL, so act on it.
 - Conventional commit titles with a scope, in plain language:
   `fix(queue): hand over the next agent however a turn closes`.
 
+## Comments
+
+The code says what it does; a comment earns its place only by saying what
+the code cannot: a tool directive, a measured receipt behind a number, or a
+trap that is not visible from the file. No block is longer than two lines;
+`make lint` enforces that in Go (`internal/lint/commentblock`) and in
+TypeScript (`app/lint/attn`), and CI runs it. If a compressed comment does
+not make sense on its own, delete it.
+
 ## Architecture
 
 - `cmd/attn`: CLI, agent launch, session registration, hooks/settings

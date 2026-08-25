@@ -1,17 +1,5 @@
 #!/usr/bin/env node
 
-// Notebook tile finder, in the packaged app. Dock a notebook tile with the REAL
-// native ⌘⌥N keystroke (so the macOS-menu → WebView shortcut path is exercised,
-// not a synthetic DOM dispatch), confirm the tile's fuzzy finder auto-opens and
-// renders in the WKWebView, then prove the native ⌘P re-summon works after the
-// finder is dismissed — the one path browser e2e cannot cover (Playwright never
-// hits the native menu, and jsdom never lays out the overlay).
-//
-// The sequence is ordered so a focus regression fails loudly: Esc must actually
-// CLOSE the finder (proving focus was inside the tile, not stolen by the terminal
-// on dock), and the follow-up ⌘P must REOPEN it (proving the close restored focus
-// into the tile so the tile-scoped keydown still fires).
-
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -42,14 +30,10 @@ function parseArgs(argv) {
   };
 }
 
-// Scope probes to the ACTIVE workspace: inactive workspaces stay mounted but
-// hidden (warm set), so an unscoped selector can match a stale finder/editor
-// left open by a previous run's workspace and poison presence waits.
+// Scope probes to the ACTIVE workspace: inactive ones stay mounted but hidden,
+// so an unscoped selector can match a previous run's finder.
 const FINDER_SELECTOR = '.terminal-wrapper.active .notebook-finder';
 
-// The finder overlay is tile-scoped DOM, so capture_screenshot_data(selector)
-// resolves when it is mounted and throws ("selector not found") when it is not —
-// a clean presence probe that doubles as a screenshot of the overlay subtree.
 async function finderPresent(client) {
   try {
     await client.request('capture_screenshot_data', { selector: FINDER_SELECTOR });
@@ -58,10 +42,8 @@ async function finderPresent(client) {
     if (String(error).includes('Screenshot selector not found in DOM')) {
       return false;
     }
-    // The selector resolved but the capture itself failed — html-to-image can
-    // throw on some subtrees (e.g. CodeMirror's .cm-content). We asked about
-    // presence, and the bridge only emits the "not found" error when the
-    // element is genuinely absent, so treat any other failure as present.
+    // The bridge emits "not found" only when the element is genuinely absent,
+    // and html-to-image can throw on some subtrees (CodeMirror's .cm-content).
     return true;
   }
 }
@@ -134,9 +116,7 @@ async function main() {
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST).
+  // Runner cleanups run in REVERSE registration order.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
 
@@ -147,7 +127,6 @@ async function main() {
       await closeExistingSessions(client, options.sessionRootDir);
     });
 
-    // 1. A normal shell workspace to dock the notebook tile into.
     const { workspaceId } = await runner.step('create_shell_session', async () => {
       const cwd = path.join(runner.sessionDir, 'finder-ws');
       fs.mkdirSync(cwd, { recursive: true });
@@ -177,12 +156,6 @@ async function main() {
       return { workspaceId: id };
     });
 
-    // 2. Dock a notebook tile via the REAL native ⌘⌥N (notebook.openTile). This is
-    //    the macOS-menu → WebView shortcut path the browser e2e can't reach. Native
-    //    key delivery (CGEvents) requires the controlling process to hold macOS
-    //    Accessibility permission AND attn to be frontmost — like every native-input
-    //    scenario here. Without it the keystroke is silently dropped, so surface that
-    //    as a clear cause rather than a mystery "tile never appeared" timeout.
     const docked = await runner.step('dock_notebook_tile', async () => {
       await driver.activateApp();
       await driver.pressKey('n', { command: true, option: true });
@@ -209,8 +182,6 @@ async function main() {
       return result;
     });
 
-    // 3. A fresh tile opens straight into the finder — confirm it actually rendered
-    //    in the WKWebView (not just that the tile mounted).
     await runner.step('finder_auto_opens', async () => {
       await waitForFinder(client, true, 'fresh notebook tile auto-opens its finder');
       await captureFrontWindowScreenshot(path.join(runner.runDir, 'finder-open.png'), { client }).catch((error) => {
@@ -218,17 +189,12 @@ async function main() {
       });
     });
 
-    // 4. Esc must CLOSE the finder. If it doesn't, focus was not inside the tile
-    //    (e.g. the terminal stole it on dock) — a real bug, surfaced here.
     await runner.step('esc_closes_finder', async () => {
       await driver.activateApp();
       await driver.pressKeyCode(53); // Esc — InputDriver's --key map only covers printable keys
       await waitForFinder(client, false, 'Esc dismisses the finder');
     });
 
-    // 5. Native ⌘P must RE-SUMMON it. This proves both that ⌘P reaches the WebView
-    //    (no native Print item swallows it) and that closing the finder restored
-    //    focus into the tile so the tile-scoped keydown still fires.
     await runner.step('cmdp_resummons_finder', async () => {
       await driver.activateApp();
       await driver.pressKey('p', { command: true });

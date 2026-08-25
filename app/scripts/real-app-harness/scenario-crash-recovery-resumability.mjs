@@ -1,11 +1,5 @@
 #!/usr/bin/env node
 
-// A machine crash, reproduced: every pty worker and the daemon are SIGKILLed
-// at once, so nothing gets to say goodbye and no worker can be re-adopted on
-// the way back. What must survive is every session attn can still bring back —
-// whatever agent it is and whatever it was last seen doing — and what must not
-// is a session with nothing left to reopen.
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -44,8 +38,6 @@ function parseArgs(argv) {
   return { options, help: args.includes('--help') || args.includes('-h') };
 }
 
-// The resume id is the evidence under test, so the scenario reads it where the
-// daemon writes it rather than inferring it from the screen.
 async function readPersistedResumeId(dataDir, sessionId) {
   const dbPath = path.join(dataDir, 'attn.db');
   const { stdout } = await execFileAsync('sqlite3', [
@@ -55,8 +47,8 @@ async function readPersistedResumeId(dataDir, sessionId) {
   return stdout.trim();
 }
 
-// The rollout `codex resume <id>` would reopen. Located the way the daemon's
-// driver locates it: the first line's session_meta names the id.
+// A rollout's first line carries the session_meta naming its id, which is how
+// the daemon's own codex driver locates it.
 function findCodexRollout(resumeId) {
   const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'sessions');
   const stack = [root];
@@ -98,9 +90,8 @@ async function waitFor(description, predicate, timeoutMs) {
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-// A crash leaves no orderly shutdown behind: SIGKILL every worker this
-// profile's registry knows about, then the daemon itself. The registry is what
-// makes this precise — only PIDs attn recorded for this profile are signalled.
+// SIGKILL only PIDs this profile's registry recorded: never match by name or
+// path, or the kill lands on another session.
 function killProfileRuntimeLikeACrash(dataDir, log) {
   const killed = { workers: [], daemon: null };
   const workersRoot = path.join(dataDir, 'workers');
@@ -179,9 +170,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // Codex, with a conversation behind it: a rollout on disk and the native
-    // resume id attn persisted from it. This is the session the crash used to
-    // delete.
     codexSessionId = await runner.step('create_codex_session_with_a_conversation', async () => {
       const sessionId = await createSessionAndWaitForInitialPane({
         client,
@@ -193,18 +181,14 @@ async function main() {
       });
       const pane = await waitForFirstWorkspacePane(client, sessionId, 'codex pane', 20_000);
       codexPaneId = pane.paneId;
-      // Codex reports its native rollout id at session start; until the daemon
-      // has persisted it there is no resume target and the scenario would be
-      // testing the wrong thing.
       codexResumeId = await waitFor(
         'codex to report its native resume id',
         async () => (await readPersistedResumeId(dataDir, sessionId)) || null,
         90_000,
       );
       await submitCodexPrompt(client, sessionId, pane.paneId, `Reply with exactly ${token} and nothing else.`);
-      // The rollout is the conversation. Waiting for the token to land in it is
-      // what makes "the crash did not lose the conversation" a real claim: the
-      // pane would show the token from the local echo alone.
+      // The pane would show the token from local echo alone, so the claim needs
+      // the rollout on disk.
       const rollout = await waitFor(
         'the token to reach the codex rollout on disk',
         () => {
@@ -218,9 +202,6 @@ async function main() {
       return sessionId;
     });
 
-    // Claude, booted to its prompt and never asked anything: it writes its
-    // transcript on the first turn, so there is nothing on disk to resume and
-    // nothing to keep.
     claudeSessionId = await runner.step('create_claude_session_that_never_took_a_turn', async () => {
       return createSessionAndWaitForInitialPane({
         client,
@@ -264,8 +245,8 @@ async function main() {
 
     await runner.step('reboot_into_the_app', async () => {
       await relaunchAppAndConnect(client, observer);
-      // Startup recovery runs before clients cross the barrier, but the
-      // observer's first snapshot can beat the deferred pass; give it a beat.
+      // Startup recovery runs before clients cross the barrier, but the observer's
+      // first snapshot can beat the deferred pass; give it a beat.
       await sleep(2_000);
       runner.writeText('daemon-after-reboot.log', daemonLogTail(dataDir));
     });
@@ -300,8 +281,6 @@ async function main() {
       if (session) {
         throw new Error(`claude session survived as ${session.state}; it has no transcript to resume`);
       }
-      // Reaped means the pane goes with the row: no Reload is offered for a
-      // session that could not take one.
       const workspace = observer.getWorkspace(claudeSessionId);
       if (workspace) {
         throw new Error('the reaped claude session left its workspace pane behind');

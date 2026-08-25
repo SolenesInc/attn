@@ -1,28 +1,5 @@
 #!/usr/bin/env node
 
-// Leak-soak RSS scenario.
-//
-// scenario-perf-cold-warm.mjs takes two single-cycle snapshots, each preceded
-// by a full data-dir wipe, so it can compare a reproducible cold footprint
-// against a reproducible warm footprint -- but it can never see a leak that
-// only accumulates WITHIN a single continuous process. This scenario runs N
-// create -> workload -> close cycles inside ONE long-lived app instance (NO
-// wipe between cycles -- the leak only accumulates within a single continuous
-// process), sampling RETAINED RSS after a decay hold each cycle (the LAST
-// sample of a decay window, never the peak -- macOS scavenges freed pages
-// lazily, so only a settled sample reflects what the process is actually
-// holding onto). It then fits the least-squares slope of retained-RSS-vs-cycle
-// across the post-warmup cycles: a flat slope is healthy churn, a positive
-// staircase is a leak.
-//
-// Requires a dedicated non-prod profile app bundle (one-time
-// `make install PROFILE=perf`) and is driven with `ATTN_HARNESS_PROFILE=perf`
-// -- like scenario-perf-cold-warm.mjs, this scenario refuses to run against
-// the dev sibling or prod.
-//
-// Usage:
-//   ATTN_HARNESS_PROFILE=perf pnpm run real-app:scenario-perf-leak-soak -- --cycles 12
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -146,10 +123,8 @@ async function main() {
       await fillAllPanes(client, sessionIds, options.workloadCmd, options.perPaneSettleMs);
       await closeSessions(client, sessionIds);
 
-      // Decay hold: sample repeatedly over the window and keep only the LAST
-      // sample (retained), never the peak -- macOS scavenges freed pages
-      // lazily, so a sample taken right after close would still show the
-      // transient workload spike, not what the process actually retains.
+      // The LAST sample of the decay window, never the peak: macOS scavenges
+      // freed pages lazily, so an early sample still shows the workload spike.
       const win = await sampleWindow(appPid, daemonPid, webkitBaseline, options.reclaimHoldMs);
       retainedByCycle.push(win.last.totalRssMb);
       console.log(`[perf] cycle ${cycle + 1}/${options.cycles}: retained ${win.last.totalRssMb} MB (peak ${win.peak.totalRssMb})`);
@@ -161,9 +136,6 @@ async function main() {
   const post = retainedByCycle.slice(options.warmupCycles);
   const { slope } = fitSlope(post);
 
-  // Registry comparison is an informational trend signal (mirrors cold/warm's
-  // usage of evaluateRssBaseline) -- it is NEVER what gates this scenario's
-  // verdict; the slope-vs-threshold check above is.
   const fingerprint = getMachineFingerprint();
   const key = `${fingerprint.key}-leak-floor`;
   const floorEval = evaluateRssBaseline({
@@ -207,9 +179,6 @@ async function main() {
 
   console.log(JSON.stringify({ slope, slopeThresholdMb: options.slopeThresholdMb, retainedByCycle, runDir }, null, 2));
 
-  // A slope regression is a trend signal, not a harness error: it surfaces as
-  // verdict.ok:false but never sets a non-zero exit code (only real errors do
-  // that, via main().catch below).
   emitVerdict(verdict);
 }
 

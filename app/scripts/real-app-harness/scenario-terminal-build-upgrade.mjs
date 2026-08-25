@@ -1,29 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Real-app scenario: an update that moves the terminal engine swaps each
- * running session's pty-worker underneath it, and the user sees nothing.
- *
- * A pty-worker outlives an install and carries its own libghostty-vt, so a
- * ghostty bump used to strand every open session with a terminal the app no
- * longer agrees with — the only way out was reloading by hand, which restarts
- * whatever was running in the pane. The worker now replaces its own binary with
- * execve, keeping its pid, its PTY, and its child.
- *
- * The scenario stages a real bump: a shell session runs, then the daemon
- * sidecar is reinstalled with a different SNAPSHOT_FORMAT and restarts. That is
- * exactly what an app update does to a running session, minus a ghostty
- * checkout.
- *
- * Asserted after the swap:
- *   - the worker pid and the shell's pid are unchanged (execve, not respawn),
- *   - what was on the screen before is still on the screen,
- *   - the shell still answers, so the PTY crossed intact,
- *   - the session is not flagged terminal_build_stale, so no notice appears.
- *
- * Prereqs: a non-prod profile installed from this branch (`make install
- * PROFILE=<name>`), and `make` runnable from the repo root.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,8 +25,6 @@ import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harne
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
 
-// Any tag the running worker does not already carry stands in for a ghostty
-// bump: the daemon compares the two strings and nothing else.
 const STAGED_SNAPSHOT_FORMAT = 'ffffffffffff';
 
 function parseArgs(argv) {
@@ -70,9 +44,6 @@ async function pollFor(fn, description, timeoutMs = 60_000, intervalMs = 250) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
-// The worker registry is where the pids live, and it is rewritten by the image
-// that takes over — so reading it after the swap reads the new image's claim
-// about the process it inherited.
 function readRegistryEntry(dataDir, sessionId) {
   const workersDir = path.join(dataDir, 'workers');
   if (!fs.existsSync(workersDir)) return null;
@@ -88,15 +59,10 @@ function readRegistryEntry(dataDir, sessionId) {
   return null;
 }
 
-// `daemon ensure` only ensures one is running, so a sidecar swapped underneath
-// a live daemon changes nothing until it restarts — which is what an app update
-// does, and what the swap has to survive.
 function restartDaemon(appPath, profile) {
   const binary = path.join(appPath, 'Contents', 'MacOS', 'attn');
   // profileCliEnv, not a hand-built env: a harness driven from inside attn
-  // inherits ATTN_DATA_DIR, and the banner would still read profile=<name>
-  // while `daemon ensure` — and install-daemon's migration — landed on
-  // production ~/.attn.
+  // inherits ATTN_DATA_DIR and would land on production ~/.attn.
   const env = profileCliEnv(profile);
   execFileSync(binary, ['daemon', 'stop'], { env, stdio: 'inherit' });
   execFileSync(binary, ['daemon', 'ensure'], { env, stdio: 'inherit' });
@@ -135,8 +101,6 @@ async function main() {
 
   runner.log(`[RealAppHarness] profile=${profile} dataDir=${dataDir} wsUrl=${options.wsUrl}`);
 
-  // Registered for the signal path and called explicitly on the way out —
-  // finishSuccess does not run the registry. Guarded so both paths are safe.
   let staged = false;
   let cleanedUp = false;
   const cleanUp = async () => {
@@ -198,9 +162,6 @@ async function main() {
     });
 
     await runner.step('stage_terminal_engine_update', async () => {
-      // Reinstalling the sidecar with a different tag is a ghostty bump as far
-      // as the daemon is concerned, and it restarts the daemon the same way an
-      // update does.
       staged = true;
       execFileSync(
         'make',
@@ -237,8 +198,6 @@ async function main() {
     });
 
     await runner.step('pane_survived_and_still_answers', async () => {
-      // The app reconnects to the restarted daemon on its own; the pane has to
-      // come back with what was on it, not a fresh screen.
       await pollFor(
         async () => {
           const current = await readPaneText(client, session.sessionId, session.paneId).catch(() => '');
@@ -282,8 +241,8 @@ async function main() {
       );
     });
 
-    // Before finishSuccess, which releases the single-tenant scenario lock:
-    // the restore reinstalls the daemon, and the next run must not overlap it.
+    // Before finishSuccess, which releases the single-tenant scenario lock: the
+    // restore reinstalls the daemon, and the next run must not overlap it.
     await cleanUp();
     runner.finishSuccess();
   } catch (error) {
@@ -294,9 +253,8 @@ async function main() {
   }
 }
 
-// No process.exit on the way out: the runner deliberately does not await
-// recorder.stop(), relying on the capture child to hold the event loop until it
-// has finalized the mp4. Exiting here truncates it into an unplayable file.
+// No process.exit on the way out: the runner does not await recorder.stop(),
+// and exiting here truncates the mp4 into an unplayable file.
 main().catch((error) => {
   console.error(error);
   process.exit(1);

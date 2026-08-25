@@ -21,7 +21,6 @@ async function activateBundle(bundleId) {
   try {
     await runAppleScript(`tell application id "${bundleId}" to activate`);
   } catch {
-    // Best effort only.
   }
 }
 
@@ -222,10 +221,7 @@ export async function setFrontWindowBounds(targetBounds, options = {}) {
   );
 }
 
-// Resolves the absolute screencapture rect for a window, optionally cropped
-// to a window-relative sub-rect. `crop` coordinates are relative to the
-// window's top-left corner. The crop is clamped to the window's bounds; a
-// crop rect that does not overlap the window at all throws.
+// `crop` coordinates are relative to the window's top-left corner.
 export function resolveCaptureRect(windowBounds, crop = null) {
   if (!windowBounds) {
     throw new Error('resolveCaptureRect requires windowBounds');
@@ -274,9 +270,6 @@ export function resolveCaptureRect(windowBounds, crop = null) {
   };
 }
 
-// Parses `sips -g pixelWidth -g pixelHeight <path>` output into pixel
-// dimensions. Sips prints the file path on the first line, then one
-// "  pixelWidth: N" / "  pixelHeight: N" line per queried property.
 export function parseSipsPixelDimensions(stdout) {
   const text = String(stdout || '');
   const widthMatch = /pixelWidth:\s*(\d+)/.exec(text);

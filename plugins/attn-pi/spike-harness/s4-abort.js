@@ -1,7 +1,5 @@
-// S4 abort: abort() mid-bash-call, inspect the exact event tail and whether the
-// underlying sleep process actually died. Provider is google (gemini), not the
-// anthropic/bedrock pair the "stopReason becomes aborted" fact was verified
-// against - record whatever stopReason/error this provider actually produces.
+// Provider is google (gemini), not the anthropic/bedrock pair the "stopReason
+// becomes aborted" fact was verified against.
 import { execSync } from "node:child_process";
 import { buildSession, createLogger } from "./common.js";
 
@@ -56,7 +54,6 @@ async function main() {
 				await session.abort();
 				abortReturnedT = performance.now();
 				logger.log("harness", "abort_returned", { note: `ms=${(abortReturnedT - abortCalledT).toFixed(1)}` });
-				// Give the OS a beat, then check if the sleep survived the abort.
 				setTimeout(() => psSnapshot("after_abort_1s"), 1000);
 			}, 2000);
 		}
@@ -65,7 +62,6 @@ async function main() {
 	await session.prompt("Run the bash command `sleep 30 && echo never`.");
 	unsubscribe();
 
-	// Wait a bit longer to catch any delayed/phantom events, then dispose.
 	await new Promise((r) => setTimeout(r, 1500));
 	session.dispose();
 

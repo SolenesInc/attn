@@ -1,13 +1,5 @@
 #!/usr/bin/env node
 
-// End-to-end markdown-link Cmd+click in the packaged app:
-// real daemon PTY -> plain `./alpha.md` path text in a shell pane
-// -> plain native click (must stay selection, no tile)
-// -> native Cmd+click -> markdown tile docks into the workspace,
-//    bound to the pane's session (tile_session_id in the daemon layout)
-// -> Cmd+click a second file docks a SECOND tile
-// -> Cmd+click the first file again REUSES its tile (no duplicate).
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,8 +33,7 @@ function parseArgs(argv) {
   };
 }
 
-// Convert a page-CSS-pixel point into window-relative [0,1] coordinates for
-// the HID driver (window bounds include the title bar; the page does not).
+// Window bounds include the title bar; the page does not.
 function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
   const { width, height } = windowBounds.logicalBounds;
   const chromeX = Math.max(0, width - innerWidth);
@@ -92,16 +83,13 @@ async function main() {
   }
 
   // HID mouse clicks land at absolute screen positions, so the default
-  // 20px-visible window park would put every click off-window. Keep the
-  // whole window on screen for this scenario.
+  // 20px-visible window park would put every click off-window.
   if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
   }
 
-  // Path-link detection checks file existence through Tauri's fs scope, which
-  // only allows $HOME/** AND does not match dot-directories — the default
-  // tmpdir session root (or anything under a hidden dir) would make every
-  // detected path fail the existence check and never become a link.
+  // Tauri's fs scope allows $HOME/** and does not match dot-directories, so a
+  // path under a hidden dir fails the existence check and never becomes a link.
   if (!process.env.ATTN_REAL_APP_SESSION_ROOT && !process.argv.includes('--session-root-dir')) {
     options.sessionRootDir = path.join(os.homedir(), 'Library', 'Caches', 'attn-harness', 'real-app-sessions');
   }
@@ -122,16 +110,11 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
 
-  // Markdown fixtures live in the session cwd so short relative paths
-  // (`./alpha.md`) resolve against the pane's cwd without line wrapping.
   fs.writeFileSync(path.join(runner.sessionDir, 'alpha.md'), '# Alpha Doc\n\nHello from **alpha**.\n\n- one\n- two\n', 'utf8');
   fs.writeFileSync(path.join(runner.sessionDir, 'beta.md'), '# Beta Doc\n\nHello from *beta*.\n', 'utf8');
 
-  // Cleanup, registered as soon as each resource type exists so a signal
-  // mid-scenario still tears them down. Runner cleanups run in REVERSE
-  // registration order, so register observer/app first (they must close
-  // LAST) and the session-panes sweep last (it must close FIRST) to
-  // reproduce the effective order below: close panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order: observer/app first so
+  // they close last, the session-panes sweep last so it closes first.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -173,9 +156,6 @@ async function main() {
       });
     });
 
-    // `echo ./alpha.md` prints the bare relative path on its own line; the
-    // exact-trim match below skips the echoed command line (which carries the
-    // `echo ` prefix), so clicks always land on plain output text.
     const echoPath = async (relPath) => {
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: `echo ${relPath}` });
       await waitForPaneText(
@@ -188,8 +168,8 @@ async function main() {
       );
     };
 
-    // Re-derive the click point fresh each time: docking a tile resizes the
-    // pane, which reflows text and invalidates any cached row/col geometry.
+    // Docking a tile resizes the pane, which reflows text and invalidates any
+    // cached row/col geometry.
     const clickTargetFor = async (relPath) => {
       const read = await client.request('read_pane_text', { sessionId, paneId: pane.paneId });
       const lines = read.text.split('\n');
@@ -230,9 +210,8 @@ async function main() {
       15_000,
     );
 
-    // Path detection is hover-lazy with an async existence check; a plain
-    // click both asserts "no navigation" AND warms the detection cache at the
-    // exact click point before the Cmd+click that must act on it.
+    // Path detection is hover-lazy with an async existence check, so the plain
+    // click also warms it at the exact point the Cmd+click must act on.
     const cmdClickPath = async (relPath) => {
       const target = await clickTargetFor(relPath);
       await driver.clickWindow(target.relativeX, target.relativeY);
@@ -247,7 +226,6 @@ async function main() {
     });
 
     await runner.step('plain_click_stays_selection', async () => {
-      // Plain click must stay selection: no markdown tile appears.
       const plainTarget = await clickTargetFor('./alpha.md');
       await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
       await delay(1_500);
@@ -261,7 +239,6 @@ async function main() {
     let alphaTileId;
     let alphaNode;
     await runner.step('cmd_click_alpha_docks_tile', async () => {
-      // Cmd+click alpha docks the first markdown tile.
       await cmdClickPath('./alpha.md');
       const tilesAfterAlpha = await waitForMarkdownTileCount(1, 'alpha markdown tile docked');
       alphaTileId = tilesAfterAlpha[0];
@@ -270,7 +247,6 @@ async function main() {
         `Unexpected markdown tile id: ${alphaTileId}`,
       );
 
-      // The daemon layout must record the tile bound to the pane's session.
       const alphaTiles = await pollUntil(
         async () => {
           const tiles = collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
@@ -293,7 +269,6 @@ async function main() {
     let betaTileId;
     let betaNode;
     await runner.step('cmd_click_beta_docks_second_tile', async () => {
-      // Cmd+click beta docks a SECOND, distinct markdown tile.
       await cmdClickPath('./beta.md');
       const tilesAfterBeta = await waitForMarkdownTileCount(2, 'beta markdown tile docked alongside alpha');
       runner.assert(
@@ -321,8 +296,6 @@ async function main() {
     });
 
     await runner.step('cmd_click_alpha_again_reuses_tile', async () => {
-      // Cmd+click alpha again REUSES the existing tile: still exactly two
-      // tiles, same ids as before.
       await cmdClickPath('./alpha.md');
       await delay(2_000);
       const tilesAfterReuse = await markdownTileIds();

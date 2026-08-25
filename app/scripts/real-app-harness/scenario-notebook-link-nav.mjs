@@ -1,22 +1,5 @@
 #!/usr/bin/env node
 
-// Mod-click markdown link navigation inside a notebook tile, packaged app,
-// entirely through the synthetic-DOM bridge (dom_click / dom_type) — no
-// MacOSDriver, no native CGEvent input at all. Proves:
-//   1. ⌘-click on a bare relative link navigates to the sibling note (tile
-//      title flips nav-probe -> bar).
-//   2. ⌘-click on a #heading link scrolls the note: a link near the bottom
-//      of the doc is virtualized OUT of the CodeMirror DOM before the jump
-//      and IN after it (CM only mounts visible lines, so presence proves the
-//      scroll landed).
-//   3. A note in a nested directory that references an image via a
-//      `..`-relative path (climbing back out to a sibling assets/ dir)
-//      renders the resolved image, not the broken placeholder — proving
-//      resolveImageSrc's baseDir-relative + `..`-clamped resolution against
-//      the real packaged-app asset-read IPC round trip (not just the
-//      resolver's unit tests).
-// Modeled on scenario-notebook-editor-undo.mjs, swapping every native driver
-// step for a bridge verb.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,7 +26,7 @@ const TOP_LINK = '.terminal-wrapper.active .cm-md-link[data-href="#anchor-top"]'
 const IMAGE_IMG = '.terminal-wrapper.active .cm-md-image img';
 const IMAGE_BROKEN = '.terminal-wrapper.active .cm-md-image-broken';
 
-// 1x1 transparent PNG, embedded so the harness has no external fixture to keep in sync.
+// 1x1 transparent PNG, embedded so the harness has no external fixture.
 const PIXEL_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -58,9 +41,8 @@ function parseArgs(argv) {
   };
 }
 
-// Selector presence via the screenshot bridge: "not found" error == absent;
-// success or any other error (html-to-image chokes inside CM subtrees, which
-// still proves presence) == present.
+// Selector presence via the screenshot bridge: "not found" means absent; any
+// other error (html-to-image chokes inside CM subtrees) still proves presence.
 async function domSelectorPresent(client, selector) {
   try {
     await client.request('capture_screenshot_data', { selector }, { timeoutMs: 8000 });
@@ -114,9 +96,7 @@ async function closeExistingSessions(client, sessionRootDir) {
   }
 }
 
-// Open a note via the finder, entirely through the bridge: type the fuzzy
-// query, wait for exactly one result row, mousedown-pick it (the finder picks
-// on mousedown, not click — see NotebookFinder.tsx).
+// The finder picks on mousedown, not click — see NotebookFinder.tsx.
 async function openNoteViaFinderBridge(client, workspaceId, basename, query) {
   await waitForDomSelector(client, FINDER_SELECTOR, true, `finder open for ${basename}`);
   await client.request('dom_type', { selector: FINDER_INPUT_SELECTOR, text: query });
@@ -152,14 +132,8 @@ async function main() {
     await launchFreshAppAndConnect(client, observer);
     await closeExistingSessions(client, options.sessionRootDir);
 
-    // 0. Seed three probe notes on disk before anything mounts. Names are
-    // chosen so each finder query fuzzy-matches exactly one note: "qnav" is
-    // not a subsequence of qbar/qanchor's names and vice versa.
-    //
-    // They live in the workspace directory, not the Notebook root: ⌘⌥N roots a
-    // docked editor tile at the active workspace's directory (App.tsx
-    // resolveEditorTileRoot), so that tree is what its finder indexes. Seeding
-    // per run also keeps the shared Notebook root free of run debris.
+    // Names are chosen so each finder query fuzzy-matches exactly one note. They
+    // live in the workspace directory, which is what a docked tile's finder indexes.
     const noteRoot = path.join(sessionDir, 'linknav-ws');
     fs.mkdirSync(noteRoot, { recursive: true });
     const NAV = `${runId}qnav`;
@@ -171,15 +145,6 @@ async function main() {
     const filler = Array.from({ length: 80 }, (_, i) => `Filler line ${i + 1}.`).join('\n\n');
     fs.writeFileSync(navPath, `# nav probe\n\n[bar](${BAR}.md)\n`, 'utf8');
     fs.writeFileSync(barPath, `# bar\n\nSibling of nav probe.\n\n[anchor](${ANCHOR}.md)\n`, 'utf8');
-    // 0b. A note nested one directory deep, referencing an image via a
-    // `..`-relative path back out to a sibling assets/ directory:
-    //   <root>/<run>-imgdir/<run>qimg.md   -> ![pixel](../<run>-assets/pixel.png)
-    //   <root>/<run>-assets/pixel.png
-    // Linked from the anchor probe (relative-path-into-a-subdirectory link),
-    // so reaching it exercises the same mod-click navigation as steps 4-5
-    // above rather than needing to re-summon the finder mid-session (the
-    // finder's only reopen affordance is the "Find a note" empty-state
-    // button, which isn't shown while a note is already open).
     const IMG = `${runId}qimg`;
     const imgDirName = `${runId}-imgdir`;
     const assetsDirName = `${runId}-assets`;
@@ -210,8 +175,6 @@ async function main() {
     ].join('\n'), 'utf8');
     console.log(`[RealAppHarness] noteRoot=${noteRoot} nav=${NAV}.md bar=${BAR}.md anchor=${ANCHOR}.md`);
 
-    // 1. A normal shell workspace, rooted at the seeded tree, to dock the
-    // notebook tile into.
     const cwd = noteRoot;
     sessionId = await createSessionAndWaitForInitialPane({
       client,
@@ -236,15 +199,11 @@ async function main() {
       throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
     }
 
-    // 2. Dock a notebook tile via the bridge shortcut dispatcher (no native
-    // ⌘⌥N needed) — the fresh tile auto-opens its finder.
     await client.request('dispatch_shortcut', { shortcutId: 'notebook.openTile' });
     const docked = await waitForWorkspaceUi(
       client,
       workspaceId,
-      // A notebook tile with no note open is titled "Editor" (the title becomes
-      // the note's basename once one is open), so "Editor" is what a freshly
-      // docked tile looks like.
+      // A notebook tile with no note open is titled "Editor".
       (state) => Array.isArray(state?.tileIds) && state.tileIds.length === 1
         && Array.isArray(state?.tileTitles) && state.tileTitles.includes('Editor'),
       'notebook.openTile docks a fresh notebook tile (titled "Editor")',
@@ -252,11 +211,9 @@ async function main() {
     );
     console.log(`[RealAppHarness] docked notebook tile=${docked.tileIds[0]}`);
 
-    // 3. Open the nav probe via the finder, bridge-only.
     await openNoteViaFinderBridge(client, workspaceId, NAV, 'qnav');
     console.log('[RealAppHarness] STEP 1 OK: nav-probe note open in the notebook tile.');
 
-    // 4. ⌘-click the bare relative link -> navigates to the sibling note.
     await client.request('dom_click', {
       selector: `.terminal-wrapper.active .cm-md-link[data-href="${BAR}.md"]`,
       modifiers: { meta: true },
@@ -269,7 +226,6 @@ async function main() {
     );
     console.log('[RealAppHarness] STEP 2 OK: mod-click on relative link navigated to the sibling note.');
 
-    // 5. ⌘-click the second relative link -> navigates to the anchor probe.
     await client.request('dom_click', {
       selector: `.terminal-wrapper.active .cm-md-link[data-href="${ANCHOR}.md"]`,
       modifiers: { meta: true },
@@ -282,21 +238,17 @@ async function main() {
     );
     console.log('[RealAppHarness] STEP 3 OK: mod-click on relative link navigated bar -> anchor.');
 
-    // 6. Precondition: the bottom-of-doc [top] link must not be mounted yet
-    // (CM virtualization), and the [down] link must be.
+    // CM only mounts visible lines, so the bottom-of-doc [top] link is not yet
+    // mounted and its presence after the jump is what proves the scroll landed.
     await waitForDomSelector(client, DOWN_LINK, true, 'down link rendered');
     if (await domSelectorPresent(client, TOP_LINK)) {
       throw new Error('precondition failed: bottom [top] link already in DOM before the anchor jump');
     }
 
-    // 7. ⌘-click #down-below -> scrolls the note; the [top] link enters the
-    // virtualized CM DOM only once the jump lands.
     await client.request('dom_click', { selector: DOWN_LINK, modifiers: { meta: true } });
     await waitForDomSelector(client, TOP_LINK, true, 'mod-click #down-below scrolls the note into view');
     console.log('[RealAppHarness] STEP 4 OK: mod-click on #down-below scrolled the note (bottom-of-doc link now in the CM DOM).');
 
-    // 8. ⌘-click the image-probe link -> navigates into the nested imgdir/
-    // note that references a `..`-relative image.
     const IMAGE_LINK = `.terminal-wrapper.active .cm-md-link[data-href="${imgLinkHref}"]`;
     await waitForDomSelector(client, IMAGE_LINK, true, 'image-probe link rendered');
     await client.request('dom_click', { selector: IMAGE_LINK, modifiers: { meta: true } });
@@ -308,9 +260,6 @@ async function main() {
     );
     console.log('[RealAppHarness] STEP 5 OK: mod-click on relative link navigated into the nested directory.');
 
-    // 9. The `..`-relative image must resolve and render (not the broken
-    // placeholder): proves resolveImageSrc's baseDir-relative + `..`-clamped
-    // path resolution against the real asset-read IPC round trip.
     await waitForDomSelector(client, IMAGE_IMG, true, '`..`-relative image renders (not broken placeholder)');
     if (await domSelectorPresent(client, IMAGE_BROKEN)) {
       throw new Error('`..`-relative image rendered as broken placeholder instead of resolving');

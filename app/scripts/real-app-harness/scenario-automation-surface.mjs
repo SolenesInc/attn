@@ -1,28 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Packaged-app proof for Slice 6's profile-level Automations dock panel: a
- * CLI-created definition appears in the panel via broadcast with no restart,
- * "run now" driven through the real panel controls produces a navigable run
- * and re-rendering the panel never duplicates it, a rejected run-now surfaces
- * its error inline instead of failing silently, and both the definition list
- * and run history survive a daemon+app restart.
- *
- * Two definitions are applied against one isolated profile daemon:
- *   - `automations-surface-manual-<suffix>`: trigger.type manual, policy
- *     continuity fresh (the only continuity manual trigger validation
- *     allows), launched against a FAKE codex executable (argv logger, like
- *     the Slice 5 storm-guard probe) so a run-now click reaches `delivered`
- *     fast and deterministically.
- *   - `automations-surface-scheduled-<suffix>`: trigger.type scheduled with
- *     a once-a-year cron so it never fires during the scenario window;
- *     exists only to prove the panel hides the run-now affordance for a
- *     non-manual trigger.
- *
- * Run serially (packaged-app scenarios are single-tenant):
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-surface.mjs
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -35,9 +12,6 @@ import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Poll budgets. The panel refetches on every `automations_changed` broadcast,
-// so appearance/toggle/run-state changes should land fast; these windows are
-// generous margin over that, not tuned to any real cadence.
 const PANEL_APPEAR_TIMEOUT_MS = 30_000;
 const RUN_DELIVERED_TIMEOUT_MS = 45_000;
 const TOGGLE_TIMEOUT_MS = 20_000;
@@ -65,8 +39,6 @@ function runJSON(binary, args, env) {
   return JSON.parse(run(binary, args, env));
 }
 
-// `enable`/`disable` are the only way to move the enabled column post-PR5;
-// both print the updated (lowercase) definition summary.
 function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
@@ -93,17 +65,10 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon', RESTART_READY_TIMEOUT_MS);
 }
 
-// --- fixture location: both definitions use `location.type: directory`,
-// which only requires an existing absolute directory (no git needed). ---
-
 function createFixture(root) {
   const dir = fs.mkdtempSync(path.join(root, 'automations-surface-'));
   return fs.realpathSync(dir);
 }
-
-// --- fake codex probe: an argv logger, not a real agent, so run-now reaches
-// delivered fast and deterministically (mirrors the Slice 5 storm-guard
-// probe in scenario-automation-scheduled-cleanup.mjs). ---
 
 function createCodexProbe(root) {
   const log = path.join(root, 'codex-invocations.jsonl');
@@ -116,17 +81,10 @@ function createCodexProbe(root) {
   return { executable, log };
 }
 
-// --- automation definition YAML ----------------------------------------
-
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
-// `enabled` is not a spec field post-PR5 (column-only; a YAML carrying
-// `enabled:` is rejected outright — errEnabledManagedOutsideSpec in
-// internal/automation/automation.go), so neither template below emits it.
-// Every apply of a brand-new id is inserted enabled regardless
-// (store.UpsertAutomationDefinition); teardown disabling goes through
-// `automation disable <id>` (disableDefinition above) instead of a reapply
-// with `enabled: false`.
+// A YAML carrying `enabled:` is rejected outright (errEnabledManagedOutsideSpec
+// in internal/automation/automation.go), so no template below emits it.
 function manualDefinitionYAML({ id, locationPath, executable }) {
   return `api_version: ${API_VERSION}
 id: ${id}
@@ -172,26 +130,17 @@ location:
 `;
 }
 
-// --- panel bridge helpers ------------------------------------------------
-
 function findDefinitionRow(state, definitionId) {
   return (state?.definitions || []).find((row) => row.id === definitionId) || null;
 }
 
 function currentRuns(state) {
-  // collectAutomationsUiState() only renders a runs section for the
-  // currently-selected definition, so this is scoped to whichever
-  // definition automations_select_definition last selected.
   return state?.runs || [];
 }
 
 async function closeAndReopenPanel(client) {
-  // No automations_close_panel bridge verb exists (openAutomationsPanel in
-  // App.tsx is open-only — calling automations_open_panel again on an
-  // already-open panel is a no-op and would not force a refetch); the real
-  // close button also has no data-testid. Drive it through the generic
-  // dom_click verb instead, the documented house convention for controls
-  // without a dedicated bridge verb.
+  // No close-panel bridge verb: automations_open_panel on an open panel is a
+  // no-op and forces no refetch, so the close button is clicked through the DOM.
   await client.request('dom_click', { selector: '.automations-panel__close' });
   return client.request('automations_open_panel');
 }
@@ -258,9 +207,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // Leg 1 (create via CLI, appears in UI via broadcast): apply a
-    // manual-trigger definition via the bundled CLI, then confirm the panel
-    // renders it without a restart.
     await runner.step('leg1_apply_manual_and_panel_shows_it', async () => {
       fs.writeFileSync(
         manualDefinitionFile,
@@ -280,11 +226,6 @@ async function main() {
       runner.assert(row.canRunNow === true, 'manual definition renders the run-now affordance', row);
     });
 
-    // Leg 2 (run-now via UI produces a navigable run; no duplicate run from
-    // repeated UI response handling): run now through the real button,
-    // confirm exactly one delivered, navigable run, then close+reopen the
-    // panel (a fresh fetch, not a second click) and confirm it is still
-    // exactly one run.
     await runner.step('leg2_run_now_and_navigable', async () => {
       await client.request('automations_select_definition', { definitionId: manualID });
       await client.request('automations_run_now', { definitionId: manualID });
@@ -305,10 +246,6 @@ async function main() {
       runner.assert(reopenedRuns[0].id === firstRunId, 'reopening the panel shows the same run id', reopenedRuns);
     });
 
-    // Leg 3 (request failure is shown, not hidden): a non-manual definition
-    // has no run-now affordance; a disabled manual definition still renders
-    // one (by design), and clicking it surfaces the daemon's rejection
-    // inline rather than hiding it, without creating a new run row.
     await runner.step('leg3_failure_shown_not_hidden', async () => {
       fs.writeFileSync(
         scheduledDefinitionFile,
@@ -350,10 +287,6 @@ async function main() {
       }, 'manual definition to render enabled again after broadcast', TOGGLE_TIMEOUT_MS);
     });
 
-    // Leg 4 (restart preserves list and navigation): stop the daemon, quit
-    // the app, bring both back up (same mechanics as
-    // scenario-automation-scheduled-cleanup.mjs's restart leg), then confirm
-    // both definitions and the prior run still render correctly.
     await runner.step('leg4_restart_preserves_list_and_navigation', async () => {
       await client.quitApp();
       await observer.close();
@@ -389,11 +322,8 @@ async function main() {
     runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
-    // Disable both definitions before the fixture directory disappears: an
-    // enabled `directory`-location definition re-validates its path on
-    // future observation, so leaving one enabled against a deleted temp root
-    // would spam errors on this profile forever (same defensive ordering as
-    // scenario-automation-scheduled-cleanup.mjs's finally block).
+    // Disable before the fixture directory disappears: an enabled
+    // `directory` definition re-validates its path forever after.
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
@@ -403,9 +333,6 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
-    // daemonEnv never diverged from a plain profile daemon here (no mock
-    // provider, no CODEX_HOME override), so a single idempotent `ensure` is
-    // enough to leave a healthy daemon behind.
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     runner.close();
   }

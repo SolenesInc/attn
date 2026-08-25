@@ -1,17 +1,10 @@
-// A loopback model provider for pi, so a scenario can script what the agent
-// says and what auto mode's classifier answers instead of asking a real model.
-//
-// pi resolves providers from `models.json` under its agent dir, which
-// `PI_CODING_AGENT_DIR` relocates; a provider declared there with
-// `api: "openai-completions"` reaches this server over the OpenAI streaming
-// wire, which is what pi's client speaks. The two roles are told apart by the
-// system prompt: auto mode's classifier prompt opens with a line no coding
-// agent's does.
+// Agent and classifier are told apart by the system prompt: the classifier's
+// opens with a line no coding agent's does.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-/** The first line of automode/prompt.ts's classifierSystemPrompt. */
+// The first line of automode/prompt.ts's classifierSystemPrompt.
 const CLASSIFIER_MARKER = 'You are a safety classifier for an autonomous coding agent';
 
 export const stubProviderName = 'attn-harness';
@@ -49,19 +42,9 @@ function writeToolCall(res, { id, name, args }) {
   sse(res, { ...chunk({}, 'tool_calls'), usage: { prompt_tokens: 8, completion_tokens: 6, total_tokens: 14 } });
 }
 
-/**
- * Starts the server.
- *
- * `agent(request)` answers the session's own model and returns either
- * `{ text }` or `{ tool: { name, args } }`. `judge(request)` answers auto
- * mode's classifier and returns `{ verdict, reason, highStakes }`. Both are
- * given `{ body, messages, systemPrompt, turn }`, where `turn` counts the calls
- * that role has already answered.
- */
 export function startPiStubProvider({ agent, judge }) {
   const calls = { agent: [], judge: [] };
   const server = http.createServer((req, res) => {
-    // Somewhere for a scripted `curl` to reach that is not the internet.
     if (!req.url.endsWith('/chat/completions')) {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('STUB-OK\n');
       return;
@@ -131,11 +114,6 @@ export function startPiStubProvider({ agent, judge }) {
   });
 }
 
-/**
- * Writes a throwaway pi agent dir naming the stub provider, and returns the
- * value `PI_CODING_AGENT_DIR` wants. Nothing is copied out of the real
- * `~/.pi/agent`: a run against this dir reaches no model but the stub.
- */
 export function writeStubAgentDir(dir, baseUrl) {
   fs.mkdirSync(dir, { recursive: true });
   const model = (id) => ({

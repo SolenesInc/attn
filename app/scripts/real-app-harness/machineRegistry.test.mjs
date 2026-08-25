@@ -40,10 +40,6 @@ describe('fingerprintKey', () => {
   });
 
   it('is unaffected by osRelease patch-level detail collapsed to the same osMajor', () => {
-    // Two real osRelease strings (e.g. '24.1.0' and '24.5.0') both parse to
-    // osMajor 24 upstream in getMachineFingerprint; here we assert the pure
-    // helper treats identical osMajor as identical regardless of what patch
-    // version it was derived from.
     const fromPatchOne = fingerprintKey({ ...baseIdentity, osMajor: 24 });
     const fromPatchTwo = fingerprintKey({ ...baseIdentity, osMajor: 24 });
 

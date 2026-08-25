@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "pnpm run verify:ghostty-vt && vitest run",
+    "lint": "cd .. && app/node_modules/.bin/oxlint app plugins sdk",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "real-app:smoke": "node scripts/real-app-harness/smoke.mjs",
@@ -146,6 +147,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.80.0",
     "@playwright/test": "^1.57.0",
     "@tauri-apps/cli": "^2.11.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -157,6 +159,7 @@
     "@types/unist": "^3.0.3",
     "@vitejs/plugin-react": "^4.6.0",
     "happy-dom": "^20.0.11",
+    "oxlint": "1.80.0",
     "pngjs": "^7.0.0",
     "remark-parse": "11.0.0",
     "remark-rehype": "11.1.2",

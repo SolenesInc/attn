@@ -1,49 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * Packaged-app proof for Slice 7 PR A's automation lifecycle semantics:
- * editing a live definition safely rotates a stale continuity binding
- * (including the revert-edge fix, live), soft-delete/resurrect round-trips
- * through the profile-level Automations panel while preserving run history,
- * and the explicit dirty-safe cleanup command partitions terminal runs three
- * ways — cleaned, kept_dirty, kept_active — without ever touching run rows.
- *
- * A3 (bounded retention) is deliberately NOT exercised here: its policy is
- * purely time-based (age floor + keep-window) and is fully covered by
- * internal/daemon/automation_retention_test.go; there is no live-timing
- * signal a packaged scenario could add over those unit tests without an
- * unreasonable wall-clock budget (waiting out a 14-day age floor).
- *
- * Three definitions are applied against one isolated profile daemon:
- *   - `automation-lifecycle-edit-<suffix>`: trigger.type scheduled, cron
- *     `* * * * *`, policy.continuity singleton, launched against a FAKE
- *     codex executable (argv logger, like the Slice 5/6 probes) so each
- *     occurrence reaches `delivered` fast and deterministically. Applied
- *     three times in place (P1 -> P2 -> P1) to prove edit-time rotation and
- *     the revert-edge fix live.
- *   - `automation-lifecycle-delete-<suffix>`: trigger.type manual, policy
- *     continuity fresh, directory location, same fake probe. Driven through
- *     the real Automations panel for run-now and delete-resurrect
- *     visibility, and through the bundled CLI for delete/re-apply (no
- *     delete/cleanup UI affordance exists yet — see the harness-limitations
- *     note in the final report).
- *   - `automation-lifecycle-cleanup-<suffix>`: trigger.type
- *     github_review_requested against a local mock GitHub server (mirrors
- *     scenario-automation-pr-continuity.mjs's fixture), policy.continuity
- *     per_subject, location.type repository_worktree. Three independent
- *     worktrees under ONE definition are produced by delivering once, then
- *     editing the prompt twice more (each edit rotates the per_subject
- *     binding exactly like the edit-rebind leg) and re-triggering the same
- *     PR/SHA subject through a withdraw+re-request cycle each time — every
- *     claim mints a fresh, non-persisted session and therefore a fresh
- *     worktree path, with no second mock host or PR needed. Only the third
- *     (current) binding is left live at cleanup time — the first two are
- *     dropped by the edits that rotate past them — so the three runs land
- *     one in each of cleanup's three result buckets.
- *
- * Run serially (packaged-app scenarios are single-tenant):
- *   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-lifecycle.mjs
- */
+// Run serially (packaged-app scenarios are single-tenant):
+//   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-lifecycle.mjs
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,10 +26,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Real-time budgets. The daemon's automation-schedule ticker fires once a
-// real minute; these windows are sized around that cadence plus margin, like
-// scenario-automation-scheduled-cleanup.mjs's budgets, not around wall-clock
-// convenience.
+// The daemon's automation-schedule ticker fires once a real minute; the
+// budgets below are that cadence plus margin.
 const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
 const SCHEDULE_RUN_TIMEOUT_MS = 90_000; // one more live tick after apply/edit; the cursor is not re-anchored by an edit.
 const PANEL_TIMEOUT_MS = 30_000;
@@ -99,8 +55,6 @@ function runJSON(binary, args, env) {
   return JSON.parse(run(binary, args, env));
 }
 
-// `enable`/`disable` are the only way to move the enabled column post-PR5;
-// both print the updated (lowercase) definition summary.
 function disableDefinition(binary, id, env) {
   return runJSON(binary, ['automation', 'disable', id], env);
 }
@@ -136,13 +90,8 @@ async function waitForDaemonReady(binary, daemonEnv) {
   }, 'profile daemon');
 }
 
-// The tick AFTER the anchor tick legitimately fires a run (one minute
-// boundary falls between any two ticks of a `* * * * *` schedule), so
-// asserting "no run yet" after a fixed sleep races that second tick. Poll
-// for the cursor row the anchor tick writes instead. An edit never resets
-// this cursor (GetAutomationScheduleCursor/SetAutomationScheduleCursor are
-// keyed by definition_id only, untouched by continuity-binding rotation), so
-// only the very first apply needs this anchor wait.
+// The tick after the anchor tick legitimately fires a run, so asserting "no
+// run yet" after a fixed sleep races it. Poll for the anchor cursor instead.
 async function waitForScheduleAnchor(dbPath, definitionID) {
   await poll(
     () => sqliteRow(dbPath, `SELECT observed_at FROM automation_provider_cursors WHERE definition_id='${sqlEscape(definitionID)}' AND provider='schedule' AND scope='*';`),
@@ -151,13 +100,6 @@ async function waitForScheduleAnchor(dbPath, definitionID) {
   );
 }
 
-// --- fake codex probe: an argv logger, not a real agent (mirrors the
-// Slice 5/6 probes), so every leg reaches delivered fast and
-// deterministically. Reused across all three definitions; none of this
-// scenario's assertions depend on inspecting the probe's own invocation log
-// (unlike scenario-automation-pr-continuity.mjs's resume-argv checks), only
-// on daemon-observable run/session/ticket state, so one shared probe is
-// enough. ---
 
 function createCodexProbe(root) {
   const log = path.join(root, 'codex-invocations.jsonl');
@@ -170,19 +112,11 @@ function createCodexProbe(root) {
   return { executable, log };
 }
 
-// --- automation definition YAML ----------------------------------------
 
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
-// `enabled` is not a spec field post-PR5 (column-only; a YAML carrying
-// `enabled:` is rejected outright — errEnabledManagedOutsideSpec in
-// internal/automation/automation.go), so none of these templates emit it.
-// Every apply of a brand-new id is inserted enabled regardless
-// (store.UpsertAutomationDefinition), and re-applying an existing id never
-// touches its current enabled value — only `automation enable`/`disable`
-// does. Where this scenario used to reapply with `enabled: false` for
-// teardown, it now calls `automation disable <id>` directly (see
-// disableDefinition below).
+// `enabled` is not a spec field: a YAML carrying it is rejected outright
+// (errEnabledManagedOutsideSpec).
 function editRebindDefinitionYAML({ id, locationPath, executable, prompt }) {
   return `api_version: ${API_VERSION}
 id: ${id}
@@ -255,8 +189,6 @@ location:
 `;
 }
 
-// --- leg3 fixture: local git repo + local mock GitHub server (mirrors
-// scenario-automation-pr-continuity.mjs's createFixture/startMock). ---
 
 function createCleanupFixture(root) {
   const repo = path.join(root, 'cleanup-fixture-repo');
@@ -306,10 +238,6 @@ async function setRequested(mockURL, active) {
   if (!response.ok) throw new Error(`mock control returned ${response.status}`);
 }
 
-// refresh_prs has no UI bridge verb (it is a raw daemon WS command driving
-// the PR-list feature that automation GitHub observation piggybacks on), so
-// this connects directly to the daemon like
-// scenario-automation-pr-continuity.mjs's wsRequest helper.
 async function wsRequest(wsURL, message, event, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsURL);
@@ -351,7 +279,6 @@ async function waitSessionGone(observer, sessionID, description) {
   await observer.waitFor(() => (!observer.getSession(sessionID) ? true : null), description);
 }
 
-// --- panel bridge helpers (mirrors scenario-automation-surface.mjs) ------
 
 function findDefinitionRow(state, definitionId) {
   return (state?.definitions || []).find((row) => row.id === definitionId) || null;
@@ -440,13 +367,6 @@ async function main() {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    // Leg 1: edit-rebind. Apply P1, wait for the first delivery under a
-    // singleton continuity binding; edit to P2 (a contract change) and wait
-    // for the next occurrence to deliver on a FRESH thread (re-exercises the
-    // pre-existing f477d5d8 rotation fix); then revert to P1 and wait for a
-    // THIRD fresh thread — only this last step exercises this session's new
-    // A1-fix, since P1's contract now matches run1's history and a naive
-    // "does prior same-contract history exist" check would have refused it.
     let run1 = null;
     let run2 = null;
     let run3 = null;
@@ -502,11 +422,6 @@ async function main() {
       disableDefinition(binary, editID, daemonEnv);
     });
 
-    // Leg 2: delete-resurrect. Deleting has no UI affordance yet (see the
-    // harness-limitations note in the final report), so the mutation is
-    // CLI-driven and only the panel's passive reaction to the
-    // automations_changed broadcast is UI-driven, matching the dual-surface
-    // design A2/A4 actually shipped.
     let deleteRunID = '';
     await runner.step('leg2_delete_resurrect', async () => {
       fs.writeFileSync(deleteDefinitionFile, deleteResurrectDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
@@ -541,13 +456,11 @@ async function main() {
         'runs remain queryable via the CLI after delete',
         runsAfterDelete,
       );
-      // Select id alongside deleted_at: sqlite3 prints a lone empty string as
-      // an empty line, which sqliteRow can't tell apart from "no row".
+      // sqlite3 prints a lone empty string as an empty line, which sqliteRow cannot
+      // tell apart from "no row" — so select id alongside it.
       const deletedRow = sqliteRow(dbPath, `SELECT id, deleted_at FROM automation_definitions WHERE id='${sqlEscape(deleteID)}';`);
       runner.assert(deletedRow && deletedRow[1] !== '' && deletedRow[1] !== undefined, 'the definition row is soft-deleted (deleted_at set) in the DB', { deletedRow });
 
-      // Resurrection always re-enables (store.UpsertAutomationDefinition), so
-      // there is no enabled param to pass here even conceptually.
       fs.writeFileSync(deleteDefinitionFile, deleteResurrectDefinitionYAML({ id: deleteID, locationPath: deleteFixture, executable: probe.executable }));
       runJSON(binary, ['automation', 'apply', '--file', deleteDefinitionFile], daemonEnv);
 
@@ -568,16 +481,6 @@ async function main() {
       disableDefinition(binary, deleteID, daemonEnv);
     });
 
-    // Leg 3: cleanup-dirty-safe. Three independent worktrees under ONE
-    // definition come from delivering once, then editing the prompt twice
-    // more (each edit rotates the per_subject binding via the same
-    // rotateContinuity mechanism leg 1 already proved) and re-triggering the
-    // same PR/SHA subject through a withdraw+re-request cycle each time,
-    // which mints a fresh, non-persisted session and therefore a fresh
-    // worktree path — no second mock host or PR needed. Only the third
-    // (current) binding is still live when cleanup runs: the first two were
-    // dropped by the edits that rotated past them, so run1/run2 are
-    // genuinely unbound and run3 is not.
     await runner.step('leg3_cleanup_dirty_safe', async () => {
       fs.writeFileSync(cleanupDefinitionFile, cleanupLifecycleDefinitionYAML({ id: cleanupID, executable: probe.executable, repoPath: cleanupFixture.repo, prompt: CLEANUP_PROMPT_V1 }));
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
@@ -616,9 +519,6 @@ async function main() {
 
       fs.writeFileSync(path.join(dirtyWorktree, 'uncommitted-scratch.txt'), 'dirty for leg3 cleanup-dirty-safe\n');
 
-      // A third edit rotates the binding again, dropping run2's binding (its
-      // worktree is now unbound too, just dirty) and minting run3 as the
-      // definition's new current thread.
       fs.writeFileSync(cleanupDefinitionFile, cleanupLifecycleDefinitionYAML({ id: cleanupID, executable: probe.executable, repoPath: cleanupFixture.repo, prompt: CLEANUP_PROMPT_V3 }));
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
 
@@ -636,13 +536,6 @@ async function main() {
       runner.assert(activeWorktree !== cleanWorktree && activeWorktree !== dirtyWorktree, 'the third delivery gets an independent worktree', { cleanWorktree, dirtyWorktree, activeWorktree });
       runner.assert(fs.existsSync(activeWorktree), 'third delivery worktree exists', { activeWorktree });
 
-      // Closing thread C's session before cleanup is the point of this leg,
-      // not an incidental step: a session row being absent does not mean the
-      // thread is dead. Unlike run1/run2, the definition is NOT edited again
-      // after this delivery, so run3's continuity binding is still live —
-      // that surviving binding, with no live session row backing it, is
-      // exactly the case that used to make cleanup silently skip the run and
-      // destroy a live thread's worktree.
       await client.request('close_session', { sessionId: activeRun.session_id });
       await waitSessionGone(observer, activeRun.session_id, 'third cleanup-leg session to unregister');
 
@@ -694,15 +587,8 @@ async function main() {
     runner.finishFailure(error, { profile, editID, deleteID, cleanupID });
     throw error;
   } finally {
-    // Disable every definition before its fixture directory disappears: an
-    // enabled `directory`-location scheduled definition re-validates its
-    // path (os.Stat) on every future tick, and an enabled
-    // github_review_requested definition keeps observing the mock — leaving
-    // either running against a torn-down fixture would spam errors on this
-    // profile forever (same defensive ordering as
-    // scenario-automation-scheduled-cleanup.mjs's finally block). Each leg
-    // already disables its own definition at the end of its happy path; these
-    // are a defensive backstop for the case where an assertion threw first.
+    // An enabled definition keeps ticking against a torn-down fixture and spams
+    // this profile forever.
     if (daemonEnv) {
       if (editApplied) { try { disableDefinition(binary, editID, daemonEnv); } catch {} }
       if (deleteApplied) { try { disableDefinition(binary, deleteID, daemonEnv); } catch {} }
@@ -714,9 +600,6 @@ async function main() {
     if (mock?.child) mock.child.kill('SIGTERM');
     if (editFixture) { try { fs.rmSync(editFixture, { recursive: true, force: true }); } catch {} }
     if (deleteFixture) { try { fs.rmSync(deleteFixture, { recursive: true, force: true }); } catch {} }
-    // daemonEnv carried mock GitHub env vars for this scenario only; stop it
-    // above, then leave a healthy plain profile daemon behind for whatever
-    // runs next (mirrors scenario-automation-pr-continuity.mjs's finally).
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     runner.close();
   }

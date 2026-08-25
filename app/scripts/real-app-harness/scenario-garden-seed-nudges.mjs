@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-//
-// Seed doorbells through the packaged app and real PTYs:
-//
-//   - a dispatcher delegates work and is automatically in the audience;
-//   - a ringing note from the delegate reaches the dispatcher's pane;
-//   - reading the seed resets the one-bell coalescing gate;
-//   - the delegate's harvest reaches the dispatcher as a second nudge.
+
 import path from 'node:path';
 import fs from 'node:fs';
 import {

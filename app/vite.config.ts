@@ -126,9 +126,11 @@ export default defineConfig(async ({ command }) => ({
       // node types, and vitest stubs CSS imports to empty.
       "src/**/*.test.mjs",
       "scripts/real-app-harness/**/*.test.{ts,mjs}",
+      "lint/**/*.test.ts",
     ],
     environmentMatchGlobs: [
       ["scripts/real-app-harness/**/*.test.{ts,mjs}", "node"],
+      ["lint/**/*.test.ts", "node"],
     ],
   },
 }));

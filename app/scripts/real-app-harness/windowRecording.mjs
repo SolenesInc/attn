@@ -5,15 +5,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-// Records the app window of a scenario run to mp4 segments in the run's
-// artifacts dir, via the compiled WindowRecorder.swift (ScreenCaptureKit
-// desktop-independent window capture — see its header for why plain
-// `screencapture -v` cannot record the harness's parked windows).
-//
-// An app relaunch means a new segment against the new window id — hence the
-// window-id poll. Recording never fails a scenario: every failure path logs
-// and continues.
-
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const RECORDER_SOURCE = path.join(SCRIPT_DIR, 'WindowRecorder.swift');
@@ -26,9 +17,8 @@ export function recordingEnabled(env = process.env) {
   return value === '1' || value === 'true' || value === 'on';
 }
 
-// Same content-hash rebuild and best-effort codesign as InputDriver
-// (macosDriver.mjs ensureInputDriver): a stable signature keeps the TCC
-// screen-recording grant attached to the binary across rebuilds.
+// A stable signature keeps the TCC screen-recording grant attached to the
+// binary across rebuilds, so the rebuild is content-hashed and re-signed.
 export async function ensureWindowRecorder() {
   fs.mkdirSync(RECORDER_BUILD_DIR, { recursive: true });
   const sourceHash = createHash('sha256').update(fs.readFileSync(RECORDER_SOURCE)).digest('hex');
@@ -80,7 +70,6 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
       try {
         child.kill('SIGINT');
       } catch {
-        // Already dead; `exited` below settles from the buffered event.
       }
       const tripwire = setTimeout(() => {
         forced = true;
@@ -110,11 +99,6 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
   };
 }
 
-// Follows a scenario's app window across launches: polls resolveWindowId and
-// keeps exactly one recording running against the current window id, rotating
-// to a new numbered segment when the id changes (app relaunch) and finalizing
-// the old one. stop() is idempotent and safe to call without awaiting — the
-// recorder child keeps the event loop alive until it has finalized.
 export function createScenarioRecorder({
   runDir,
   resolveWindowId,
@@ -153,8 +137,7 @@ export function createScenarioRecorder({
         try {
           command = await commandPromise;
         } catch (error) {
-          // A recorder binary that cannot build will never build this run;
-          // disable instead of logging a failed compile once per poll.
+          // A recorder binary that cannot build will never build this run.
           log('recording:disabled', { error: error instanceof Error ? error.message : String(error) });
           stopped = true;
           if (timer) {

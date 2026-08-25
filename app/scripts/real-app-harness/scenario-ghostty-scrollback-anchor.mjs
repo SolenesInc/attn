@@ -70,8 +70,8 @@ async function main() {
 
     shellPaneId = await runner.step('open_shell_pane', async () => {
       const initialPane = await waitForFirstWorkspacePane(client, sessionId, 'initial pane for scrollback split', 20_000);
-      // Baseline must be captured after the initial pane exists, or the split
-      // helper can mistake the initial pane for the new shell pane.
+      // Capture the baseline after the initial pane exists, or the split helper can
+      // mistake the initial pane for the new shell pane.
       const workspace = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
       existingPaneIds.add(initialPane.paneId);
@@ -112,9 +112,8 @@ async function main() {
     });
 
     await runner.step('stream_output_without_losing_anchor', async () => {
-      // Typing snaps the viewport to the bottom, so the stream is started first
-      // (with a delay) and the viewport re-anchored before output arrives — the
-      // assertion then isolates whether STREAMING OUTPUT moves the viewport.
+      // Typing snaps the viewport to the bottom, so the stream starts first and the
+      // viewport is re-anchored before output arrives.
       await client.request('write_pane', {
         sessionId,
         paneId: shellPaneId,

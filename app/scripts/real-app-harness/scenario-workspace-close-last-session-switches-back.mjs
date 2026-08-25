@@ -191,11 +191,7 @@ async function main() {
   const createdSessionIds = [];
   const note = (m, extra) => runner.log(m, extra);
 
-  // Cleanup, registered as soon as each resource exists so a signal mid-scenario
-  // still tears them down. Runner cleanups run in REVERSE registration order, so
-  // register observer/app first (they must close LAST) and the created sessions
-  // last (they must close FIRST) to reproduce the effective order below: close
-  // created session panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_created_sessions', async () => {

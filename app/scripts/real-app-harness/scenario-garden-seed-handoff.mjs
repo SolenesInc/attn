@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-//
-// Garden slice 4's acceptance, against the packaged app and its own daemon.
-//
-// Session A tends a seed, leaves a handoff and ends; session B — a fresh
-// errand — runs `attn seed tend` and the note is in its face before it does
-// any work. Both are real app sessions, because the rule under test is "a
-// tender whose session the daemon no longer knows has let go", and only a real
-// session can stop being known.
-//
-// The commands run inside the panes, which is where an agent runs them: the
-// app puts its own `attn` first on a session's PATH, so what a pane answers is
-// this build talking to this profile's daemon. What the CLI prints — order,
-// indentation, the handoff appearing once — is pinned in cmd/attn's unit
-// tests; what this scenario is for is the crossing between two live sessions.
 import path from 'node:path';
 import {
   createSessionAndWaitForInitialPane,
@@ -34,8 +20,7 @@ function parseArgs(argv) {
   return { options: parseCommonArgs(args), help: args.includes('--help') || args.includes('-h') };
 }
 
-// The handoff body. Short enough to survive any pane width without wrapping,
-// so finding it is finding the note rather than guessing at a line break.
+// Short enough to survive any pane width without wrapping.
 const HANDOFF = 'PICKUP7 start at freshestHandoff';
 
 function occurrences(haystack, needle) {
@@ -48,9 +33,8 @@ function occurrences(haystack, needle) {
   return count;
 }
 
-// The whole flow runs in about five seconds, which is unreadable in a clip. A
-// recorded run holds each answer on screen long enough to read; an ordinary run
-// pauses for nothing.
+// The flow runs in about five seconds; a recorded run holds each answer on
+// screen long enough to read.
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 
 async function pace() {
@@ -62,9 +46,8 @@ async function paneText(client, pane) {
   return payload.text || '';
 }
 
-// runInPane types a command and waits for a *new* occurrence of what the
-// command answers. New, not present: the pane still shows what the earlier
-// commands printed, so "contains it" would pass before this command ran.
+// Wait for a NEW occurrence: the pane still shows what earlier commands
+// printed, so "contains it" would pass before this command ran.
 async function runInPane(client, pane, command, expected, timeoutMs = 30_000) {
   const before = occurrences(await paneText(client, pane), expected);
   await client.request('write_pane', { ...pane, text: command });
@@ -116,12 +99,11 @@ async function main() {
     paneA = await runner.step('open_session_a', () => openPane(client, observer, runner, 'gardenA'));
 
     seedID = await runner.step('a_plants_and_tends', async () => {
-      // A shell pane carries no session identity of its own — attn withholds it
-      // so an ordinary command cannot report against a session — so the tender
-      // is named. An agent pane has ATTN_SESSION_ID and passes nothing.
+      // A shell pane carries no session identity of its own, so the tender has
+      // to be named. An agent pane has ATTN_SESSION_ID and passes nothing.
       const planted = await runInPane(client, paneA,
         `attn seed plant "carry a seed across two sessions" --session ${paneA.sessionId}`, 's-');
-      // plant answers with the id and nothing else, so the id is a line of its own.
+      // plant answers with the id and nothing else, on a line of its own.
       const ids = [...planted.matchAll(/^\s*(s-[a-z0-9]{5,})\s*$/gm)].map((match) => match[1]);
       const id = ids[ids.length - 1];
       runner.assert(Boolean(id), 'plant answered with a seed id', { planted });
@@ -137,9 +119,6 @@ async function main() {
       runner.assert(Boolean(shot?.pngBase64), 'the garden panel is on screen', {});
       fs.writeFileSync(path.join(runner.runDir, 'garden-panel.png'), Buffer.from(shot.pngBase64, 'base64'));
       await pace();
-      // The panel is scoped to the active workspace and sits over the pane, so
-      // it is closed again before the crossing: what the successor is told is
-      // told in the terminal.
       await client.request('dom_click', { selector: '.garden-panel__close' });
     });
 
@@ -167,8 +146,7 @@ async function main() {
       runner.assert(
         claimed.lastIndexOf('is growing') < claimed.lastIndexOf(HANDOFF),
         'the claim is confirmed before the handoff', { claimed });
-      // Who wrote it, on the header. The id wraps in a narrow pane, so the
-      // assertion takes the part that cannot straddle a line break.
+      // The id wraps in a narrow pane; assert the part that cannot straddle it.
       runner.assert(claimed.includes(`handoff — ${authorID.slice(0, 8)}`),
         'the handoff names the session that left it', { claimed, authorID });
       runner.writeText('tend.txt', claimed + '\n');

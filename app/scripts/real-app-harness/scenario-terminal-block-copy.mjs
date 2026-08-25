@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// End-to-end command-block copy in the packaged app:
-// real daemon PTY -> real fish (native OSC 133 markers) -> block click-select
-// -> native Cmd+C / Cmd+Shift+C -> real macOS clipboard.
-
 import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
@@ -97,12 +93,8 @@ async function main() {
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
 
-  // Cleanup, registered as soon as each resource type exists so a signal
-  // mid-scenario still tears them down. Runner cleanups run in REVERSE
-  // registration order, so register observer/app first (they must close
-  // LAST), then the session-panes sweep, then the clipboard restore (it must
-  // close FIRST) to reproduce the effective order below: restore clipboard,
-  // close panes, quitApp, observer.close.
+  // Runner cleanups run in REVERSE registration order: observer/app first so
+  // they close last, clipboard restore last so it closes first.
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session_panes', async () => {
@@ -152,8 +144,6 @@ async function main() {
     await runner.step('run_command_and_select_block', async () => {
       token = `BLOCKCOPY_${runner.runId}`;
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: `echo ${token}` });
-      // The block's output row is the line that is exactly the token (the
-      // typed command line carries the `echo ` prefix).
       paneState = await waitForPaneText(
         client,
         sessionId,
@@ -166,7 +156,6 @@ async function main() {
       outputRow = read.text.split('\n').findIndex((line) => line.trim() === token);
       runner.assert(outputRow >= 0, `Token row disappeared. Pane text:\n${read.text}`);
 
-      // Plain click on the output row selects the surrounding command block.
       await client.request('click_pane_cell', {
         sessionId,
         paneId: pane.paneId,

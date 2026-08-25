@@ -8,8 +8,6 @@ import { isDirectoryUnderRoot, parseCommonArgs } from './common.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// The named-profile path resolves via the real attn binary; skip (don't fail)
-// when ./attn is absent so the unit suite never depends on a built binary.
 function attnBinary() {
   const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(TEST_DIR, '../../../attn')]
     .filter(Boolean);
@@ -23,8 +21,6 @@ const originalProfile = process.env.ATTN_PROFILE;
 const originalAppPath = process.env.ATTN_REAL_APP_PATH;
 const originalWsUrl = process.env.ATTN_REAL_APP_WS_URL;
 
-// Clean slate so the safe dev default is exercised regardless of the shell's
-// ATTN_PROFILE (which the harness now follows when no override is set).
 beforeEach(() => {
   delete process.env.ATTN_HARNESS_PROFILE;
   delete process.env.ATTN_PROFILE;
@@ -100,7 +96,6 @@ describeWithBinary('parseCommonArgs one-knob (ATTN_PROFILE)', () => {
 
     expect(options.appPath).toBe(path.join(os.homedir(), 'Applications', 'attn-agent7.app'));
     expect(options.wsUrl).toBe(`ws://127.0.0.1:${resolved.wsPort}/ws`);
-    // A named profile is an isolated world — never refused as prod.
     expect(options.runAgainstProd).toBe(false);
   });
 
@@ -116,39 +111,27 @@ describeWithBinary('parseCommonArgs one-knob (ATTN_PROFILE)', () => {
 
 describe('isDirectoryUnderRoot', () => {
   it('rejects a sibling directory that merely shares the root as a string prefix', () => {
-    // The exact bug from figgyster's PR #631 review: a plain startsWith(root)
-    // check treats '.../attn-real-app-sessions-old/keep' as under
-    // '.../attn-real-app-sessions' and would sweep a session that was never
-    // part of the harness.
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions-old/keep', ['/tmp/attn-real-app-sessions'])).toBe(false);
   });
 
   it('accepts an exact root match', () => {
-    // The session directory can be the root itself, not just a subpath.
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions', ['/tmp/attn-real-app-sessions'])).toBe(true);
   });
 
   it('accepts a nested child directory', () => {
-    // The common case: a per-run session workspace nested under the root.
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions/run-1/ws', ['/tmp/attn-real-app-sessions'])).toBe(true);
   });
 
   it('rejects an unrelated path', () => {
-    // Baseline negative case: nothing in common with the root at all.
     expect(isDirectoryUnderRoot('/Users/victor/projects/other', ['/tmp/attn-real-app-sessions'])).toBe(false);
   });
 
   it('rejects a null or empty directory', () => {
-    // A session with no recorded directory must never match; a bare
-    // Boolean(directory) mistake could otherwise let falsy values through.
     expect(isDirectoryUnderRoot(null, ['/tmp/attn-real-app-sessions'])).toBe(false);
     expect(isDirectoryUnderRoot('', ['/tmp/attn-real-app-sessions'])).toBe(false);
   });
 
   it('matches against any of multiple root candidates (symlink realpath form)', () => {
-    // sweepStaleHarnessSessions passes both the configured root and its
-    // macOS realpath ('/var/folders/...' vs '/private/var/folders/...') so a
-    // directory recorded in either form must still be recognized.
     const roots = ['/var/folders/xy/attn-real-app-sessions', '/private/var/folders/xy/attn-real-app-sessions'];
     expect(isDirectoryUnderRoot('/private/var/folders/xy/attn-real-app-sessions/run-2/ws', roots)).toBe(true);
   });

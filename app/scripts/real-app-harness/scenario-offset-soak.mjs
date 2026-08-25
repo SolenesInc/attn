@@ -1,20 +1,5 @@
 #!/usr/bin/env node
 
-// Randomized soak repro for a hard-to-reproduce bug: a terminal pane's
-// rendered canvas ends up offset/clipped at the bottom (or side) of its
-// pane, persisting until remount. Suspected triggers: switching among 4+
-// workspaces (warm-set virtualization churn), font-size (UI scale) changes
-// made while other workspaces are hidden, window resizes, splitting/closing
-// panes (a real prod incident clipped in a narrow 292px-wide split), and
-// re-activating a cold workspace mid-attach-replay (the replay storm resizes
-// the canvas dozens of times over ~1s before settling — bouncing away and
-// back interrupts that window).
-//
-// This drives the real packaged dev app through a seeded, weighted random
-// walk of those actions and asserts, after every step, that the active
-// workspace's canvas DOM rect sits inside its terminal container's rect.
-// First violation stops the run, dumps evidence, and exits non-zero.
-
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -80,8 +65,6 @@ function parseArgs(argv) {
   };
 }
 
-// Deterministic PRNG (mulberry32) so a given --seed always drives the same
-// action sequence.
 function mulberry32(seed) {
   let state = seed >>> 0;
   return function next() {
@@ -106,16 +89,8 @@ function delay(ms) {
 }
 
 function fullScreenTuiCommand(markerLabel) {
-  // Enters the alternate screen, redraws TOP/BOTTOM markers (with live
-  // cols/rows) on every SIGWINCH, then idles. Painted content at the exact
-  // bottom row makes bottom-clipping visually real, and the readout exposes
-  // stale PTY size after a resize.
-  //
-  // markerLabel must be short (e.g. "s0") — the run's long, timestamped
-  // session label does not fit some narrow panes, and a wrapped marker line
-  // both scrolls the TOP row off-screen and garbles the BOTTOM row. Each
-  // line is also truncated to the live terminal width (`printf '%.*s'`) so a
-  // future narrow pane can never wrap, regardless of label length.
+  // markerLabel must be short (e.g. "s0"): a wrapped marker line scrolls the TOP
+  // row off-screen and garbles the BOTTOM row.
   return (
     `bash -c 'r(){ c=$(tput cols); l=$(tput lines); clear; ` +
     `top="TOP ${markerLabel} cols=$c rows=$l"; ` +
@@ -165,22 +140,13 @@ async function createTuiWorkspace(client, observer, cwd, sessionLabel, markerLab
     sessionId,
     workspaceId: workspace.workspaceId,
     label: sessionLabel,
-    // Bookkeeping for the panes we've injected the full-screen TUI into, so
-    // split/close_split actions know what exists and can hand out unique
-    // marker labels. measureActiveWorkspacePanes does NOT read this — it
-    // always re-fetches live panes from get_workspace — this is only for
-    // action selection and marker-label bookkeeping.
     panes: [{ paneId: pane.paneId, markerLabel }],
     nextPaneMarker: 1,
   };
 }
 
-// Waits for a new pane to appear in the workspace, regardless of pane kind.
-// scenarioAssertions.mjs's waitForNewShellPane filters to kind === 'shell',
-// but these workspaces' panes are kind 'agent' (agent shell wrapper), so
-// that filter never matches here and the wait times out even though the
-// split succeeded. Mirror its resolution logic (prefer the workspace's
-// activePaneId if it's new, else the first new pane) without the kind filter.
+// These workspaces' panes are kind 'agent', so scenarioAssertions'
+// waitForNewShellPane (kind === 'shell') never matches and times out.
 async function waitForNewPane(client, sessionId, existingPaneIds, description, timeoutMs = 20_000) {
   const workspace = await waitForSessionWorkspace(
     client,
@@ -193,9 +159,6 @@ async function waitForNewPane(client, sessionId, existingPaneIds, description, t
   return newPanes.find((pane) => pane.paneId === workspace.activePaneId) || newPanes[0];
 }
 
-// Writes the same full-screen TUI marker script into a freshly split pane
-// and waits for it to paint, mirroring what createTuiWorkspace does for a
-// workspace's initial pane.
 async function seedTuiIntoPane(client, sessionId, paneId, markerLabel, description) {
   await client.request('write_pane', { sessionId, paneId, text: fullScreenTuiCommand(markerLabel) });
   await waitForPaneText(
@@ -236,10 +199,6 @@ function boundsOf(dom, key) {
   return bounds;
 }
 
-// Checks every pane of the active workspace's canvas against its terminal
-// container. Returns a list of per-pane measurements plus any violations
-// (missing DOM nodes count as a violation too — that is itself evidence of
-// a broken render, not something to silently skip).
 async function measureActiveWorkspacePanes(client, sessionId) {
   const workspace = await client.request('get_workspace', { sessionId });
   const measurements = [];
@@ -330,18 +289,14 @@ async function main() {
 
     for (let index = 0; index < options.workspaceCount; index += 1) {
       const sessionLabel = `offsetsoak-${runId}-${index}`;
-      const markerLabel = `s${index}`; // short: must fit inside any pane width without wrapping
+      const markerLabel = `s${index}`;
       const workspace = await createTuiWorkspace(client, observer, path.join(sessionDir, `ws${index}`), sessionLabel, markerLabel);
       workspaces.push(workspace);
       console.log(`[RealAppHarness] created workspace ${index}: sessionId=${workspace.sessionId} workspaceId=${workspace.workspaceId} marker=${markerLabel}`);
     }
 
-    let activeIndex = workspaces.length - 1; // last created workspace is selected
+    let activeIndex = workspaces.length - 1;
 
-    // Recency of activation, oldest-first: index 0 is the workspace least
-    // recently made active, i.e. the one most likely evicted from the warm
-    // set and coldest on next re-activation. Setup activated workspaces in
-    // creation order, so that's the initial recency order too.
     const recency = workspaces.map((_, index) => index);
     const markActive = (index) => {
       const position = recency.indexOf(index);
@@ -366,8 +321,6 @@ async function main() {
       return candidate;
     };
 
-    // The coldest OTHER workspace: the least-recently-active entry in
-    // `recency` that isn't excludeIndex.
     const leastRecentlyActiveIndex = (excludeIndex) => {
       for (const index of recency) {
         if (index !== excludeIndex) {
@@ -385,9 +338,6 @@ async function main() {
       let action;
       const params = {};
 
-      // Weighted action distribution: switch 35%, font_scale 20%,
-      // window_resize 15%, rapid_double_switch 5%, bounce_switch 10%,
-      // split 10%, close_split 5%.
       if (roll < 0.35) {
         action = 'switch';
         params.switchToIndex = otherIndex(activeIndex);
@@ -436,11 +386,6 @@ async function main() {
         await switchTo(first);
         await switchTo(second);
       } else if (roll < 0.85) {
-        // Best persistent-bug candidate: re-activate the coldest workspace
-        // (most likely evicted from the warm set), interrupt its attach
-        // replay storm (dozens of resizeLocal events over ~1s before it
-        // settles) with an away-and-back bounce, then land back on it so the
-        // usual post-step measurement checks it mid-settle.
         action = 'bounce_switch';
         const coldTarget = leastRecentlyActiveIndex(activeIndex);
         params.coldTargetIndex = coldTarget;
@@ -511,7 +456,6 @@ async function main() {
           params.switchToIndex = otherIndex(activeIndex);
           await switchTo(params.switchToIndex);
         } else {
-          // Never close the first pane — pick uniformly among the rest.
           const closeIndex = 1 + pickInt(rand, 0, existingPanes.length - 2);
           const paneToClose = existingPanes[closeIndex];
           params.paneId = paneToClose.paneId;
@@ -544,13 +488,8 @@ async function main() {
       );
 
       if (violations.length > 0) {
-        // Production incidents show transient clips that self-heal, but the
-        // attach-replay storm on a cold workspace reactivation can run ~1s
-        // BEFORE the self-heal even starts, so a single fixed-delay recheck
-        // can land mid-churn and misclassify a transient as persistent. Poll
-        // every 750ms up to a 4.5s deadline; the first clean re-measure wins
-        // (record how long healing took), and only fail if every poll through
-        // the deadline stays dirty.
+  // The attach-replay storm on a cold reactivation runs ~1s before the self-heal
+  // starts, so poll to the deadline rather than taking one fixed-delay recheck.
         console.warn(`[RealAppHarness] suspect clip at step ${step}, polling every ${TRANSIENT_RECHECK_POLL_MS}ms up to ${TRANSIENT_RECHECK_DEADLINE_MS}ms...`);
         const suspectAt = Date.now();
         const rechecks = [];
