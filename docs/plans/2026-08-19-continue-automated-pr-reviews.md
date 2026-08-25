@@ -193,7 +193,7 @@ fetch the new commit but never move an agent-owned checkout automatically.
   in isolated profile `reviewpush2` (run
   `automation-pr-continuity-2026-08-20T11-12-57-639Z`). It began with no review
   request, activated both definitions, then requested review and
-  exercised independent GPT Sol and gpt-5.6-sol definitions, continued both
+  exercised two independent GPT Sol definitions, continued both
   on the new head without replacement reviewers, preserved dirty evidence,
   replanted and retended a harvested reviewer seed, resumed after restart, and
   retained the missing-worktree refusal.
