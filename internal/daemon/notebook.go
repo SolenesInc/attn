@@ -371,7 +371,7 @@ func chiefInboxSourceHeading(sourcePath string) string {
 		return "## From the Notebook"
 	}
 	// The link parser stops a target at the first ')' or whitespace.
-	if strings.IndexAny(rel, " \t()[]<>") < 0 {
+	if !strings.ContainsAny(rel, " \t()[]<>") {
 		return fmt.Sprintf("## From [/%s](/%s)", rel, rel)
 	}
 	return fmt.Sprintf("## From `/%s`", rel)

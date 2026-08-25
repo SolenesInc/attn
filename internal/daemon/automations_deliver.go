@@ -807,9 +807,9 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if acknowledged {
-		return errors.New("Codex directory trust prompt did not clear")
+		return errors.New("automation launch: Codex directory trust prompt did not clear")
 	}
-	return errors.New("Codex launch did not produce a verifiable screen")
+	return errors.New("automation launch did not produce a verifiable Codex screen")
 }
 func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.WorkRequest, directory string) error {
 	ticket, err := d.store.GetTicket(req.IDs.TicketID)

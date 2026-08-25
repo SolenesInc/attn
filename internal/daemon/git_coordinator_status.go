@@ -172,13 +172,6 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 	return result
 }
 
-func getGitStatus(dir string) (*protocol.GitStatusUpdateMessage, error) {
-	return getGitStatusWithOptions(dir, gitStatusOptions{
-		mode:         gitStatusModeFull,
-		includeStats: true,
-	})
-}
-
 // Callers use gitCoordinator.Status so concurrent requests for one repo/mode share a git process.
 func getGitStatusForSubscription(dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 	return getGitStatusWithOptions(dir, gitStatusOptions{

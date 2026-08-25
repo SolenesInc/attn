@@ -60,7 +60,6 @@ type sessionInputOriginKind uint8
 const (
 	sessionInputOriginUnknown sessionInputOriginKind = iota
 	sessionInputOriginUserConversation
-	sessionInputOriginUserControl
 	sessionInputOriginMaintenance
 	sessionInputOriginPeerAgent
 )
@@ -72,10 +71,6 @@ type sessionInputOrigin struct {
 
 func userConversationInput() sessionInputOrigin {
 	return sessionInputOrigin{kind: sessionInputOriginUserConversation}
-}
-
-func userControlInput() sessionInputOrigin {
-	return sessionInputOrigin{kind: sessionInputOriginUserControl}
 }
 
 func maintenanceInput(source string) sessionInputOrigin {
@@ -127,16 +122,6 @@ func userConversationSessionInput(key, sessionID, text string, placement session
 		sessionID: strings.TrimSpace(sessionID),
 		text:      text,
 		origin:    userConversationInput(),
-		placement: placement,
-	}
-}
-
-func userControlSessionInput(domain, key, sessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
-	return sessionInputDelivery{
-		id:        inputAttemptID(domain, key),
-		sessionID: strings.TrimSpace(sessionID),
-		text:      text,
-		origin:    userControlInput(),
 		placement: placement,
 	}
 }
@@ -716,16 +701,6 @@ func (m *sessionInputModule) currentUserRun(sessionID string) (sessionInputRunRe
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
 	if lane.run == nil || !lane.run.userTaken {
-		return sessionInputRunRef{}, false
-	}
-	return lane.run.ref, true
-}
-
-func (m *sessionInputModule) currentRun(sessionID string) (sessionInputRunRef, bool) {
-	lane := m.lane(sessionID)
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
-	if lane.run == nil {
 		return sessionInputRunRef{}, false
 	}
 	return lane.run.ref, true

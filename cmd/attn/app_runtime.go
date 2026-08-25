@@ -163,7 +163,7 @@ func writeAppRuntimeInfo(info protocol.AppRuntimeInfo) {
 
 func appRuntimeRestartTakesNoName(arg string) error {
 	return fmt.Errorf(
-		"takes no app name, and %q looks like one. Every app's handlers run in one shared runtime, so restarting it restarts them all — there is nothing per-app to restart. To stop one app, `attn app disable %s`.",
+		"takes no app name, and %q looks like one. Every app's handlers run in one shared runtime, so restarting it restarts them all — there is nothing per-app to restart. To stop one app, run `attn app disable %s`",
 		arg, arg)
 }
 

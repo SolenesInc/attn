@@ -1,0 +1,8 @@
+kind: internal
+area: build
+change: >
+  `make lint-go` and CI's Daemon job now run staticcheck (pinned to v0.7.0 by a
+  `tool` directive in `go.mod`) beside `go vet` and the comment linter,
+  configured by a repo-root `staticcheck.conf`. The Go workflows read their toolchain from `go.mod`
+  instead of a hardcoded 1.22, and `golang.org/x/text` moves to v0.39.0 to
+  clear a flagged advisory.

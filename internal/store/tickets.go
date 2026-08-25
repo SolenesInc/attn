@@ -1036,25 +1036,6 @@ func nullIfEmpty(value string) any {
 }
 
 // column is a trusted internal literal, never caller input.
-func (s *Store) updateTicketFieldWithEvent(id, column, value string, evt TicketEvent, now time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		return nil
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if err := updateTicketFieldWithEventTx(tx, id, column, value, evt, now); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func updateTicketFieldWithEventTx(tx *sql.Tx, id, column, value string, evt TicketEvent, now time.Time) error {
 	res, err := tx.Exec(
 		`UPDATE tickets SET `+column+` = ?, updated_at = ? WHERE id = ?`,

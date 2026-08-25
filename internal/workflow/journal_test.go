@@ -58,6 +58,7 @@ func TestHashSchemaSentinel(t *testing.T) {
 	if present == schemaNoneSentinel {
 		t.Errorf("present schema hashed to the none sentinel")
 	}
+	//lint:ignore SA4000 the identical operands are the point: hashing is deterministic.
 	if hashSchema(json.RawMessage(`{"a":1}`)) != hashSchema(json.RawMessage(`{"a":1}`)) {
 		t.Errorf("identical schema produced different hashes")
 	}
@@ -67,6 +68,7 @@ func TestHashSchemaSentinel(t *testing.T) {
 }
 
 func TestHashPromptStable(t *testing.T) {
+	//lint:ignore SA4000 the identical operands are the point: hashing is deterministic.
 	if hashPrompt("hello") != hashPrompt("hello") {
 		t.Errorf("identical prompt produced different hashes")
 	}

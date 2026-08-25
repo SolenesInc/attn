@@ -634,7 +634,6 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		}
 		if tickResult.State != "" && protocol.SessionState(tickResult.State) != sessionState {
 			d.recordTranscriptEvidence(w.sessionID, tickResult.State, "watcher tick", time.Now())
-			sessionState = protocol.SessionState(tickResult.State)
 		}
 		if tickResult.BlockClassification {
 			continue
