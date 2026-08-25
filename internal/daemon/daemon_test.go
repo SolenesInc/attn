@@ -338,7 +338,8 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	}
 	defer foreign.Close()
 
-	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
+	socketPath := filepath.Join(shortTempDir(t), "test.sock")
+	d := NewForTesting(socketPath)
 	t.Cleanup(d.Stop)
 
 	// Start() blocks on its accept loop, so race its return against the
@@ -355,6 +356,9 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("Start() error = %q, want it to name %q", err, want)
 			}
+		}
+		if _, statErr := os.Stat(socketPath); !os.IsNotExist(statErr) {
+			t.Errorf("failed start left %s behind (stat: %v); a socket path with no listener is a false ready signal", socketPath, statErr)
 		}
 	case <-d.startedCh:
 		t.Fatal("daemon reported itself started while another process held the WebSocket port; the bind failure must be fatal, not logged")

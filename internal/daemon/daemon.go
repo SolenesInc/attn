@@ -872,6 +872,7 @@ func (d *Daemon) Start() error {
 		if d.listener != nil {
 			_ = d.listener.Close()
 			d.listener = nil
+			os.Remove(d.socketPath)
 		}
 		d.releasePIDLock()
 	}()
