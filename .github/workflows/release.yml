@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  GH_TOKEN: ${{ github.token }}
+
 on:
   push:
     tags:

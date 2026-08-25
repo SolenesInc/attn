@@ -19,6 +19,7 @@ permissions:
   contents: read
 
 env:
+  GH_TOKEN: ${{ github.token }}
   # Defined once, reused verbatim for both the head and base runs so the
   # comparison is apples-to-apples.
   #   -run '^$'   : skip normal tests (also sidesteps the known pre-existing

@@ -1,5 +1,8 @@
 name: Release Preflight
 
+env:
+  GH_TOKEN: ${{ github.token }}
+
 on:
   pull_request:
     branches: [main]

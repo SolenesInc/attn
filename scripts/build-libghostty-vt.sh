@@ -18,6 +18,7 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/libghostty-vt.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/release-asset.sh"
 
 platform="$(vt_default_platform)"
 output_dir="$(vt_output_dir_for "$platform")"
@@ -61,13 +62,11 @@ if [[ -z "$lock_sha" ]]; then
 fi
 
 asset="$(vt_asset_name_for "$platform")"
-url="https://github.com/${VT_REPO}/releases/download/${VT_RELEASE_TAG}/${asset}"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/attn-vt-dl.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 echo "==> downloading prebuilt libghostty-vt ($platform, key ${key:0:12})"
-echo "    $url"
-if ! curl -fL --retry 3 --retry-delay 1 -o "$tmp/$asset" "$url"; then
+if ! release_asset_download "$VT_REPO" "$VT_RELEASE_TAG" "$asset" "$tmp/$asset"; then
   echo "warning: download failed; falling back to source build" >&2
   build_from_source
   exit 0
