@@ -8,10 +8,6 @@ function processExitReason(code: number | null, signal: NodeJS.Signals | null): 
   return 'an unknown status';
 }
 
-// Daemon startup has no healthy duration contract: a loaded CI runner can delay
-// the child without making it unhealthy. Readiness is the socket appearing;
-// failure is the child exiting first. The Playwright test budget remains the
-// outer tripwire for a process that is alive but genuinely wedged.
 export function waitForDaemonSocket(
   proc: ChildProcess,
   socketPath: string,

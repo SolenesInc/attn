@@ -7,25 +7,19 @@ import (
 	"strings"
 )
 
-// ConversationSlice is a small, classification-ready reduction of a (possibly
-// huge) agent transcript: the human's original request, any later corrections,
-// the most recent compaction summary (Claude only), and the agent's most
-// recent status turns. It intentionally carries no tool-call/activity trace.
 type ConversationSlice struct {
-	Brief      string   // first genuine human turn (the delegation prompt), capped
-	Rescoping  []string // later genuine human turns (corrections / scope changes), capped, oldest->newest
-	Summary    string   // most recent compaction summary text, if any (Claude), capped
-	AgentTurns []string // last N agent text turns, capped, oldest->newest
-	HumanCount int      // total genuine human turns seen (pre-cap)
-	AgentCount int      // total agent text turns seen (pre-cap)
+	Brief      string
+	Rescoping  []string
+	Summary    string
+	AgentTurns []string
+	HumanCount int
+	AgentCount int
 }
 
-// Empty reports whether no human/agent text or compaction summary was found.
 func (s ConversationSlice) Empty() bool {
 	return s.Brief == "" && len(s.Rescoping) == 0 && s.Summary == "" && len(s.AgentTurns) == 0
 }
 
-// Render renders the slice as a labeled prompt block, omitting empty sections.
 func (s ConversationSlice) Render() string {
 	var sections []string
 	if s.Brief != "" {
@@ -43,16 +37,13 @@ func (s ConversationSlice) Render() string {
 	return strings.Join(sections, "\n\n")
 }
 
-// SliceOptions bounds how much of a transcript ExtractConversationSlice keeps.
-// Any field that is <= 0 falls back to the DefaultSliceOptions value.
 type SliceOptions struct {
-	MaxRescopingTurns int // most recent human turns AFTER the brief (default 4)
-	MaxAgentTurns     int // most recent agent text turns (default 6)
-	TurnCharCap       int // per-turn char cap for brief/rescoping/agent (default 3000)
-	SummaryCharCap    int // larger cap for the compaction summary (default 12000)
+	MaxRescopingTurns int
+	MaxAgentTurns     int
+	TurnCharCap       int
+	SummaryCharCap    int
 }
 
-// DefaultSliceOptions returns the default SliceOptions.
 func DefaultSliceOptions() SliceOptions {
 	return SliceOptions{
 		MaxRescopingTurns: 4,
@@ -79,17 +70,11 @@ func resolveSliceOptions(opts SliceOptions) SliceOptions {
 	return opts
 }
 
-// sliceLineOrigin captures the Claude "origin" field used to distinguish
-// genuine human turns from injected/tool-authored user-role content.
 type sliceLineOrigin struct {
 	Kind string `json:"kind"`
 }
 
-// sliceLine is a superset shape covering the Claude, Codex, and Copilot line
-// formats. Unknown fields are ignored by encoding/json, so a single unmarshal
-// is enough to try all three shapes for every line.
 type sliceLine struct {
-	// Claude
 	Type             string           `json:"type"`
 	IsCompactSummary bool             `json:"isCompactSummary"`
 	Origin           *sliceLineOrigin `json:"origin"`
@@ -97,18 +82,15 @@ type sliceLine struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 
-	// Codex (event_msg envelope only; response_item is intentionally ignored
-	// here so the same turn is not double-counted)
+	// event_msg envelope only; response_item is ignored here so the same turn is
+	// not double-counted.
 	Payload json.RawMessage `json:"payload"`
 
-	// Copilot
 	Data struct {
 		Content string `json:"content"`
 	} `json:"data"`
 }
 
-// humanTurns is a bounded accumulator of human turns: the first one plus a
-// capped tail of the most recent later ones.
 type humanTurns struct {
 	maxTail int
 
@@ -122,8 +104,6 @@ type humanTurns struct {
 
 func (h *humanTurns) add(text string) {
 	if text == h.lastText {
-		// consecutive duplicate (e.g. a resent Codex user_message) - do not
-		// double-count or double-store it.
 		return
 	}
 	h.lastText = text
@@ -141,25 +121,8 @@ func (h *humanTurns) add(text string) {
 	}
 }
 
-// sliceBuilder accumulates a bounded ConversationSlice over a single
-// streaming pass. It never retains more than a small, capped amount of text
-// regardless of transcript size.
-//
-// Human turns are accumulated twice. `strict` takes only user-role lines whose
-// provenance is known to be a genuinely typed human message; `permissive` also
-// takes user-role lines with no provenance at all. Modern Claude transcripts
-// stamp `"origin":{"kind":"human"}` on typed turns and leave `origin` absent on
-// injected user-role content (`<local-command-caveat>` wrappers, slash-command
-// stdout blocks, tool results), so `strict` is the correct read for them.
-// Transcripts predating the `origin` field carry no stamp anywhere, so
-// `permissive` is used whenever `strict` saw nothing at all.
-//
-// Trade-off: a modern transcript whose user-role content is *entirely* injected
-// is indistinguishable from a legacy one by this rule, so it falls back and
-// reports the injected text. Provenance is per-line, so there is no signal that
-// separates "file written before the field existed" from "file where no human
-// turn has landed yet". The fallback only fires when the alternative is an
-// empty slice, which makes it the safer of the two errors.
+// `permissive` also takes user-role lines with no provenance and is used whenever `strict`
+// saw nothing — the read for transcripts predating the `origin` field.
 type sliceBuilder struct {
 	opts SliceOptions
 
@@ -168,7 +131,7 @@ type sliceBuilder struct {
 
 	lastSummary string
 
-	tailAgent []string // bounded tail of agent turns
+	tailAgent []string
 
 	agentCount int
 }
@@ -181,9 +144,6 @@ func newSliceBuilder(opts SliceOptions) *sliceBuilder {
 	}
 }
 
-// addHuman records a turn whose human provenance is established (an
-// origin-stamped Claude turn, or a Codex/Copilot user message, where the
-// transcript format itself distinguishes user messages from tool output).
 func (b *sliceBuilder) addHuman(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -193,8 +153,6 @@ func (b *sliceBuilder) addHuman(text string) {
 	b.permissive.add(text)
 }
 
-// addUnstampedHuman records user-role text with no provenance: a genuine human
-// turn in a legacy transcript, or injected content in a modern one.
 func (b *sliceBuilder) addUnstampedHuman(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -203,7 +161,6 @@ func (b *sliceBuilder) addUnstampedHuman(text string) {
 	b.permissive.add(text)
 }
 
-// humans returns the accumulator the slice should be built from.
 func (b *sliceBuilder) humans() *humanTurns {
 	if b.strict.count > 0 {
 		return &b.strict
@@ -306,12 +263,6 @@ func (b *sliceBuilder) toSlice(opts SliceOptions) ConversationSlice {
 	}
 }
 
-// ExtractConversationSlice reads a JSONL transcript (Claude, Codex, or
-// Copilot shaped) in a single streaming pass and reduces it to a small,
-// bounded ConversationSlice suitable for downstream classification. Memory
-// use is bounded regardless of transcript size or line length. Only a
-// file-open/IO error returns a non-nil error; malformed or unrecognized
-// lines are skipped silently.
 func ExtractConversationSlice(path string, opts SliceOptions) (ConversationSlice, error) {
 	opts = resolveSliceOptions(opts)
 

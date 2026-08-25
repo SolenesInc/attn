@@ -21,15 +21,10 @@ import (
 	"github.com/victorarias/attn/internal/workflow"
 )
 
-// cancelPollInterval is how often the cancel-watcher polls the daemon for a
-// canceled status. Cancellation is COOPERATIVE VIA POLLING: the request/response
-// socket client cannot read unsolicited control frames, so the engine process
-// polls workflow_run_get and cancels its own root context when it observes a
-// canceled run. (The daemon's relay registry is a best-effort bonus; this poll is
-// the guarantee.)
+// Cancellation is COOPERATIVE VIA POLLING: the request/response socket client cannot read
+// unsolicited control frames, so the engine polls workflow_run_get at this interval.
 const cancelPollInterval = 1 * time.Second
 
-// runWorkflow dispatches `attn workflow <subcommand>`.
 func runWorkflow() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" || os.Args[2] == "help" {
 		writeWorkflowHelp(os.Stdout)
@@ -75,28 +70,21 @@ run options:
 `)
 }
 
-// --- run -------------------------------------------------------------------
-
-// workflowRunArgs is the parsed `workflow run` flag set. It is produced by a pure
-// parser so the parsing is unit-testable without touching the filesystem or env.
 type workflowRunArgs struct {
 	script     string
-	argsJSON   string // resolved raw JSON args (from --args or --args-file), "" if none
-	argsInline string // value of --args, for re-exec persistence decisions
+	argsJSON   string
+	argsInline string
 	argsFile   string
 	wait       bool
 	session    string
 	resume     string
 	harness    string
 	model      string
-	runID      string // hidden: the detached child reuses the parent's runId
+	runID      string
 }
 
-// parseWorkflowRunArgs parses `workflow run` flags. The positional <script.js> may
-// appear before OR after the flags: the canonical form is `run <script.js>
-// [flags]`, but Go's flag package stops at the first non-flag token, so we lift the
-// script out of argv first and parse the remaining flags. envSession is the
-// ATTN_SESSION_ID fallback (passed in so the parser stays pure/testable).
+// Go's flag package stops at the first non-flag token, so the positional script
+// is lifted out of argv before parsing.
 func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, error) {
 	script, rest, err := extractScriptArg(argv)
 	if err != nil {
@@ -112,7 +100,7 @@ func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, er
 	resume := fs.String("resume", "", "resume a prior run id")
 	harness := fs.String("harness", "codex", "agent harness (codex|claude)")
 	model := fs.String("model", "", "workflow agent model")
-	runID := fs.String("run-id", "", "") // hidden: reused by the detached child
+	runID := fs.String("run-id", "", "")
 
 	if err := fs.Parse(rest); err != nil {
 		return workflowRunArgs{}, err
@@ -144,13 +132,7 @@ func parseWorkflowRunArgs(argv []string, envSession string) (workflowRunArgs, er
 	return out, nil
 }
 
-// extractScriptArg pulls the single positional <script.js> out of argv (wherever
-// it sits relative to the flags) and returns it plus the remaining flag args. The
-// script is the first token that is not a flag and is not the value of a preceding
-// value-taking flag. Errors when no positional or more than one is present.
 func extractScriptArg(argv []string) (script string, rest []string, err error) {
-	// Flags that consume the following token as their value (so that value is not
-	// mistaken for the positional script).
 	valueFlags := map[string]bool{
 		"--args": true, "--args-file": true, "--session": true,
 		"--resume": true, "--harness": true, "--model": true, "--run-id": true,
@@ -160,7 +142,6 @@ func extractScriptArg(argv []string) (script string, rest []string, err error) {
 		tok := argv[i]
 		if strings.HasPrefix(tok, "-") {
 			rest = append(rest, tok)
-			// Skip the value of a `--flag value` pair (but not `--flag=value`).
 			if valueFlags[tok] && i+1 < len(argv) {
 				rest = append(rest, argv[i+1])
 				i++
@@ -179,8 +160,6 @@ func extractScriptArg(argv []string) (script string, rest []string, err error) {
 	return script, rest, nil
 }
 
-// resolveWorkflowArgsJSON loads the raw JSON args from --args or --args-file. It
-// returns "" when neither is set. A non-empty payload is validated as JSON.
 func resolveWorkflowArgsJSON(a workflowRunArgs) (string, error) {
 	raw := strings.TrimSpace(a.argsInline)
 	if a.argsFile != "" {
@@ -223,8 +202,6 @@ func runWorkflowRun(argv []string) {
 
 	c := client.New("")
 
-	// Determine the run id: a detached child carries --run-id from the parent; a
-	// resume reuses the resumed run id; otherwise mint a fresh one.
 	runID := parsed.runID
 	if runID == "" {
 		if parsed.resume != "" {
@@ -234,13 +211,9 @@ func runWorkflowRun(argv []string) {
 		}
 	}
 
-	// The hidden --run-id flag marks a detached child: it reuses the parent's run
-	// id AND skips re-creating the initial upsert (the parent already created it).
 	isDetachedChild := parsed.runID != ""
 
 	if !parsed.wait {
-		// Foreground caller without --wait: detach a self re-exec that runs the
-		// engine to completion in the background, print the run id, and return.
 		if err := detachWorkflowChild(c, parsed, runID, scriptHash, argsJSON); err != nil {
 			fmt.Fprintf(os.Stderr, "workflow run: %v\n", err)
 			os.Exit(1)
@@ -253,10 +226,8 @@ func runWorkflowRun(argv []string) {
 	os.Exit(exitCode)
 }
 
-// buildInitialWorkflowRun constructs the running-status run row sent at run start.
-// The store's ON CONFLICT upsert replaces every column, so this carries the full
-// header. Shared by the foreground run, the detached child, and the engine test so
-// the initial-row shape has a single source of truth.
+// The store's ON CONFLICT upsert replaces every column, so the initial write
+// must carry the FULL header.
 func buildInitialWorkflowRun(parsed workflowRunArgs, runID, scriptHash, argsJSON string) *protocol.WorkflowRun {
 	now := string(protocol.TimestampNow())
 	run := &protocol.WorkflowRun{
@@ -272,9 +243,6 @@ func buildInitialWorkflowRun(parsed workflowRunArgs, runID, scriptHash, argsJSON
 	return run
 }
 
-// executeWorkflowRun runs the engine to completion in the FOREGROUND, reporting
-// progress to the daemon (initial + final run upserts, per-call upserts via the
-// IPC journal), and prints the terminal result. It returns the process exit code.
 func executeWorkflowRun(
 	c workflowClient,
 	parsed workflowRunArgs,
@@ -297,13 +265,7 @@ func executeWorkflowRun(
 	return runWorkflowEngine(c, parsed, runID, source, argsJSON, stub)
 }
 
-// runWorkflowEngine drives the engine to completion against an already-built stub:
-// it decodes args, wires the IPC journal + cancel watcher, runs (or resumes), sends
-// the terminal upsert, prints the result, and returns the exit code. executeWorkflowRun
-// supplies the real driver stub; tests inject a fake — so neither the engine wiring
-// nor the finalize path is reimplemented outside this function.
 func runWorkflowEngine(c workflowClient, parsed workflowRunArgs, runID, source, argsJSON string, stub workflow.AgentStub) int {
-	// Parse args JSON into an `any` for the engine; keep argsJSON as the raw form.
 	var argsAny any
 	if strings.TrimSpace(argsJSON) != "" {
 		if err := json.Unmarshal([]byte(argsJSON), &argsAny); err != nil {
@@ -336,12 +298,8 @@ func runWorkflowEngine(c workflowClient, parsed workflowRunArgs, runID, source, 
 	return workflowResultExitCode(final.Status)
 }
 
-// finishWorkflowRun sends the terminal run upsert derived from the engine result
-// and returns the daemon's hydrated view. It read-modify-writes the existing run:
-// the store's ON CONFLICT upsert replaces EVERY column with the supplied row, so
-// the terminal upsert must carry the full header (script_path, created_at, etc.)
-// to avoid clobbering it. Falls back to a synthesized run if the daemon round-trip
-// fails, so the CLI still prints a result.
+// The ON CONFLICT upsert replaces EVERY column, so the terminal write must
+// carry the full header. Falls back to a synthesized run on a get failure.
 func finishWorkflowRun(c workflowClient, runID string, result workflow.RunResult) *protocol.WorkflowRun {
 	run := loadRunForFinalize(c, runID)
 	run.Status = mapRunStatus(result)
@@ -365,9 +323,6 @@ func finishWorkflowRun(c workflowClient, runID string, result workflow.RunResult
 	return run
 }
 
-// finishWorkflowRunFailure reports a setup/decoding failure as a failed run,
-// preserving the existing run header (see finishWorkflowRun on the full-row upsert
-// requirement).
 func finishWorkflowRunFailure(c workflowClient, runID, message string) {
 	run := loadRunForFinalize(c, runID)
 	run.Status = protocol.WorkflowRunStatusFailed
@@ -379,24 +334,15 @@ func finishWorkflowRunFailure(c workflowClient, runID, message string) {
 	fmt.Fprintf(os.Stderr, "workflow run: %s\n", message)
 }
 
-// loadRunForFinalize fetches the current run so a terminal upsert can preserve the
-// header. A get failure or absent run yields a minimal run carrying just the id, so
-// finalization still proceeds (the worst case re-writes only the id + terminal
-// fields, never silently dropping a run we know about).
 func loadRunForFinalize(c workflowClient, runID string) *protocol.WorkflowRun {
 	existing, err := c.WorkflowRunGet(runID)
 	if err == nil && existing != nil {
-		// Drop the hydrated agent calls from the upsert payload: the daemon
-		// re-persists every embedded call on a run upsert, which is redundant here
-		// (calls are already journaled) and would re-broadcast them.
 		existing.AgentCalls = nil
 		return existing
 	}
 	return &protocol.WorkflowRun{RunID: runID, Resumable: true, CreatedAt: string(protocol.TimestampNow())}
 }
 
-// applyOptionalRunFields sets the optional run header fields shared by the
-// initial upsert.
 func applyOptionalRunFields(run *protocol.WorkflowRun, parsed workflowRunArgs, argsJSON string) {
 	if strings.TrimSpace(argsJSON) != "" {
 		run.ArgsJson = protocol.Ptr(argsJSON)
@@ -409,10 +355,6 @@ func applyOptionalRunFields(run *protocol.WorkflowRun, parsed workflowRunArgs, a
 	}
 }
 
-// mapRunStatus maps an engine RunResult to the persisted run status. An
-// interruption is reported as canceled ONLY when it was a real cancellation (the
-// cancel watcher tripping ctx); a watchdog-timeout interruption is a failure. The
-// engine tags ctx-cancellation with the "cancelled" reason, so we key on that.
 func mapRunStatus(result workflow.RunResult) protocol.WorkflowRunStatus {
 	switch result.Status {
 	case workflow.StatusCompleted:
@@ -427,9 +369,6 @@ func mapRunStatus(result workflow.RunResult) protocol.WorkflowRunStatus {
 	}
 }
 
-// interruptedByCancel reports whether an interruption error came from ctx
-// cancellation (the cancel watcher) rather than a watchdog timeout. The engine
-// sets the "workflow cancelled" reason for ctx cancellation.
 func interruptedByCancel(err error) bool {
 	var ie *workflow.ErrInterrupted
 	if errors.As(err, &ie) {
@@ -438,7 +377,6 @@ func interruptedByCancel(err error) bool {
 	return false
 }
 
-// buildWorkflowStub constructs the real driver AgentStub for a run.
 func buildWorkflowStub(parsed workflowRunArgs) (workflow.AgentStub, error) {
 	tmpDir, err := os.MkdirTemp("", "attn-workflow-run-*")
 	if err != nil {
@@ -453,9 +391,6 @@ func buildWorkflowStub(parsed workflowRunArgs) (workflow.AgentStub, error) {
 		Model:       parsed.model,
 		RunTmpDir:   tmpDir,
 		WorkingTree: cwd,
-		// Surface worktree-isolation lifecycle diagnostics (notably retained,
-		// mutated worktrees) on the engine process's stderr so the operator can
-		// find kept worktrees after the run.
 		LogFunc: func(format string, args ...interface{}) {
 			fmt.Fprintf(os.Stderr, "workflow run: "+format+"\n", args...)
 		},
@@ -466,11 +401,6 @@ func buildWorkflowStub(parsed workflowRunArgs) (workflow.AgentStub, error) {
 	return stub, nil
 }
 
-// startCancelWatcher launches the cooperative cancellation poller. Every interval
-// it fetches the run; when the daemon reports Status=="canceled" it cancels the
-// engine's root context, which propagates to in-flight subagent contexts. It
-// returns a stop func that tears the watcher down. The interval is injectable so
-// tests can poll fast and deterministically.
 func startCancelWatcher(ctx context.Context, cancel context.CancelFunc, c workflowClient, runID string, interval time.Duration) func() {
 	if interval <= 0 {
 		interval = cancelPollInterval
@@ -496,9 +426,6 @@ func startCancelWatcher(ctx context.Context, cancel context.CancelFunc, c workfl
 	return func() { close(done) }
 }
 
-// observeCanceled reports whether the daemon currently considers runID canceled.
-// A get error is treated as not-canceled (transient socket failures must not abort
-// a healthy run; the watcher retries on the next tick).
 func observeCanceled(c workflowClient, runID string) bool {
 	run, err := c.WorkflowRunGet(runID)
 	if err != nil || run == nil {
@@ -507,10 +434,6 @@ func observeCanceled(c workflowClient, runID string) bool {
 	return run.Status == protocol.WorkflowRunStatusCanceled
 }
 
-// detachWorkflowChild re-execs this binary as a foregrounded `workflow run ...
-// --wait --run-id <runID>` child in a new session (Setsid) so the engine runs to
-// completion after the parent returns. The parent creates the initial run upsert
-// so the run is visible immediately, then leaves; the child skips re-creating it.
 func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, scriptHash, argsJSON string) error {
 	if _, err := c.WorkflowRunUpsert(buildInitialWorkflowRun(parsed, runID, scriptHash, argsJSON)); err != nil {
 		return fmt.Errorf("report run start: %w", err)
@@ -531,8 +454,7 @@ func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, script
 	if parsed.resume != "" {
 		childArgs = append(childArgs, "--resume", parsed.resume)
 	}
-	// Persist args to a temp file for the child to avoid argv quoting traps for
-	// arbitrary JSON. The child reads it back via --args-file.
+	// A temp file, not argv: arbitrary JSON hits quoting traps.
 	if strings.TrimSpace(argsJSON) != "" {
 		f, err := os.CreateTemp("", "attn-workflow-args-*.json")
 		if err != nil {
@@ -554,10 +476,7 @@ func detachWorkflowChild(c workflowClient, parsed workflowRunArgs, runID, script
 	return cmd.Start()
 }
 
-// --- result ----------------------------------------------------------------
-
-// workflowResultOutput is the frozen `workflow result` JSON shape. Field order is
-// part of the agent-facing contract; keep it stable.
+// workflowResultOutput is frozen: field order is part of the agent-facing contract.
 type workflowResultOutput struct {
 	Status       string          `json:"status"`
 	Result       json.RawMessage `json:"result,omitempty"`
@@ -598,8 +517,6 @@ func runWorkflowResult(argv []string) {
 	os.Exit(workflowResultExitCode(run.Status))
 }
 
-// fetchWorkflowRun gets a run, optionally polling until it reaches a terminal
-// status when wait is set.
 func fetchWorkflowRun(c workflowClient, runID string, wait bool) (*protocol.WorkflowRun, error) {
 	run, err := c.WorkflowRunGet(runID)
 	if err != nil {
@@ -631,7 +548,6 @@ func isTerminalRunStatus(s protocol.WorkflowRunStatus) bool {
 	}
 }
 
-// buildWorkflowResultOutput projects a hydrated run into the frozen result shape.
 func buildWorkflowResultOutput(run *protocol.WorkflowRun) workflowResultOutput {
 	out := workflowResultOutput{
 		Status: string(run.Status),
@@ -650,10 +566,6 @@ func buildWorkflowResultOutput(run *protocol.WorkflowRun) workflowResultOutput {
 	return out
 }
 
-// countWorkflowCalls returns (total, done, running) where done counts calls that
-// have reached a terminal status (ok | errored | skipped) and running counts the
-// in-flight calls. A running call is not done; the running count is what lets a
-// polling agent tell "still progressing" from "not yet dispatched".
 func countWorkflowCalls(calls []protocol.WorkflowAgentCall) (total, done, running int) {
 	total = len(calls)
 	for _, call := range calls {
@@ -669,17 +581,12 @@ func countWorkflowCalls(calls []protocol.WorkflowAgentCall) (total, done, runnin
 	return total, done, running
 }
 
-// workflowResultExitCode maps a terminal run status to a process exit code:
-// completed -> 0, anything else -> 1. A pure function so the run/result paths
-// share the exit decision and tests can assert it without os.Exit.
 func workflowResultExitCode(status protocol.WorkflowRunStatus) int {
 	if status == protocol.WorkflowRunStatusCompleted {
 		return 0
 	}
 	return 1
 }
-
-// --- show ------------------------------------------------------------------
 
 func runWorkflowShow(argv []string) {
 	fs := flag.NewFlagSet("workflow show", flag.ContinueOnError)
@@ -707,10 +614,6 @@ func runWorkflowShow(argv []string) {
 	printJSON(buildWorkflowShowOutput(run))
 }
 
-// workflowShowOutput is the `workflow show` projection: a progress-forward view a
-// polling agent can read to tell a healthy long run from a stalled one. The
-// in-flight call appears as a first-class row with a climbing elapsed_seconds, so
-// back-to-back polls visibly advance even while a single call runs for minutes.
 type workflowShowOutput struct {
 	RunID     string             `json:"run_id"`
 	Status    string             `json:"status"`
@@ -743,8 +646,6 @@ type workflowCallView struct {
 	Error          string `json:"error,omitempty"`
 }
 
-// buildWorkflowShowOutput projects a hydrated run into the agent-legible progress
-// view. Pure (time.Now only for a running call's elapsed) so it is unit-testable.
 func buildWorkflowShowOutput(run *protocol.WorkflowRun) workflowShowOutput {
 	total, done, running := countWorkflowCalls(run.AgentCalls)
 	phase := protocol.Deref(run.Phase)
@@ -781,7 +682,6 @@ func buildWorkflowShowOutput(run *protocol.WorkflowRun) workflowShowOutput {
 	}
 }
 
-// workflowProgressSummary is a one-line human/agent-legible progress string.
 func workflowProgressSummary(total, done, running int, phase string) string {
 	s := fmt.Sprintf("%d/%d done", done, total)
 	if running > 0 {
@@ -793,9 +693,6 @@ func workflowProgressSummary(total, done, running int, phase string) string {
 	return s
 }
 
-// workflowCallElapsedSeconds returns the seconds a call has run: started->completed
-// for a finished call, started->now for an in-flight one. It returns nil when no
-// usable started_at is present, so a missing timestamp never renders a bogus value.
 func workflowCallElapsedSeconds(call protocol.WorkflowAgentCall) *int {
 	started := protocol.Timestamp(protocol.Deref(call.StartedAt)).Time()
 	if started.IsZero() {
@@ -815,14 +712,6 @@ func workflowCallElapsedSeconds(call protocol.WorkflowAgentCall) *int {
 	return &secs
 }
 
-// --- cancel ----------------------------------------------------------------
-
-// runWorkflowCancel requests cancellation of a run. The daemon marks the run
-// canceled and relays to the engine; the engine process (which polls
-// workflow_run_get every cancelPollInterval) cancels its root context and any
-// in-flight subagent contexts. This is the "moved-on agent halts a run" path
-// from the design — the engine need not be this process. Prints the daemon's
-// post-cancel view of the run.
 func runWorkflowCancel(argv []string) {
 	fs := flag.NewFlagSet("workflow cancel", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -849,9 +738,6 @@ func runWorkflowCancel(argv []string) {
 	printJSON(run)
 }
 
-// --- list ------------------------------------------------------------------
-
-// workflowListEntry is the per-run summary printed by `workflow list`.
 type workflowListEntry struct {
 	RunID     string `json:"run_id"`
 	Status    string `json:"status"`
@@ -898,20 +784,14 @@ func buildWorkflowListEntries(runs []protocol.WorkflowRun) []workflowListEntry {
 	return out
 }
 
-// --- small helpers ---------------------------------------------------------
-
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
 
-// newWorkflowRunID mints a fresh run id. It mirrors the crypto/rand hex scheme
-// other attn ids use, prefixed for readability in logs/lists.
 func newWorkflowRunID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand failing is catastrophic; fall back to a timestamp-free
-		// unique-ish value. This path is effectively unreachable.
 		return "wf-" + hex.EncodeToString([]byte(fmt.Sprintf("%p", &b)))
 	}
 	return "wf-" + hex.EncodeToString(b[:])

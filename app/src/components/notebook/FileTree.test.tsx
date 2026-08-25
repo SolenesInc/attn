@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileTree } from './FileTree';
 import type { FsEntry } from '../../hooks/useDaemonSocket';
 
-// A tiny fixture tree: root has a directory (areas/) and a file (index.md); areas/
-// holds one file (foo.md). listDir returns the children for a given directory.
+// A tiny fixture tree: root has areas/ and index.md; areas/ holds foo.md.
 const TREE: Record<string, FsEntry[]> = {
   '': [
     { path: 'areas', name: 'areas', isDir: true, size: 0 },
@@ -27,7 +26,6 @@ describe('FileTree', () => {
     expect(await screen.findByRole('treeitem', { name: 'areas' })).toBeInTheDocument();
     expect(screen.getByRole('treeitem', { name: 'index.md' })).toBeInTheDocument();
     expect(listDir).toHaveBeenCalledWith('');
-    // Shallow: the nested file is not listed until areas/ is expanded.
     expect(screen.queryByRole('treeitem', { name: 'foo.md' })).not.toBeInTheDocument();
   });
 
@@ -39,18 +37,15 @@ describe('FileTree', () => {
     expect(areas).toHaveAttribute('aria-expanded', 'false');
     expect(listDir).not.toHaveBeenCalledWith('areas');
 
-    // Expand: areas/ is listed and its child appears.
     fireEvent.click(areas);
     expect(await screen.findByRole('treeitem', { name: 'foo.md' })).toBeInTheDocument();
     expect(screen.getByRole('treeitem', { name: 'areas' })).toHaveAttribute('aria-expanded', 'true');
     expect(listDir).toHaveBeenCalledWith('areas');
     expect(listDir.mock.calls.filter(([p]) => p === 'areas')).toHaveLength(1);
 
-    // Collapse: the child is hidden.
     fireEvent.click(screen.getByRole('treeitem', { name: 'areas' }));
     await waitFor(() => expect(screen.queryByRole('treeitem', { name: 'foo.md' })).not.toBeInTheDocument());
 
-    // Re-expand: served from cache, no second fetch for areas/.
     fireEvent.click(screen.getByRole('treeitem', { name: 'areas' }));
     expect(await screen.findByRole('treeitem', { name: 'foo.md' })).toBeInTheDocument();
     expect(listDir.mock.calls.filter(([p]) => p === 'areas')).toHaveLength(1);
@@ -66,10 +61,8 @@ describe('FileTree', () => {
     const file = await screen.findByRole('treeitem', { name: 'index.md' });
     fireEvent.click(file);
     expect(onSelectFile).toHaveBeenCalledWith('index.md');
-    // Clicking a file never triggers a directory listing.
     expect(listDir).toHaveBeenCalledTimes(1);
 
-    // When it becomes the selection, it is marked current.
     rerender(<FileTree listDir={listDir} selectedPath="index.md" onSelectFile={onSelectFile} />);
     expect(screen.getByRole('treeitem', { name: 'index.md' })).toHaveAttribute('aria-current', 'true');
   });
@@ -85,7 +78,6 @@ describe('FileTree', () => {
     const rootCalls = listDir.mock.calls.filter(([p]) => p === '').length;
     const areasCalls = listDir.mock.calls.filter(([p]) => p === 'areas').length;
 
-    // A change signal re-lists the root AND the open directory (preserving expansion).
     rerender(<FileTree listDir={listDir} selectedPath={null} onSelectFile={vi.fn()} changeSignal={1} />);
     await waitFor(() => {
       expect(listDir.mock.calls.filter(([p]) => p === '').length).toBe(rootCalls + 1);

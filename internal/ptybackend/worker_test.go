@@ -113,9 +113,6 @@ func buildAttnBinaryForWorkerTest(t *testing.T) string {
 	return binary
 }
 
-// shouldForwardStateLocked now guards only the poll fallback, where an old worker
-// re-reports the same state on every tick. The pulse window is what keeps a long
-// `working` run refreshed there without forwarding it at the poll rate.
 func TestShouldForwardStateLocked(t *testing.T) {
 	now := time.Now()
 	session := &workerSession{}
@@ -1006,7 +1003,7 @@ func TestWorkerBackend_GetSession_PrunesDeadRegistryEntry(t *testing.T) {
 	entry := ptyworker.NewRegistryEntry(
 		backend.cfg.DaemonInstanceID,
 		sessionID,
-		0, // definitely not alive
+		0,
 		0,
 		socketPath,
 		"codex",
@@ -1049,9 +1046,6 @@ func TestWorkerStream_PublishOverflowWaitsForBufferSpace(t *testing.T) {
 			resultCh <- stream.publish(OutputEvent{Kind: OutputEventKindOutput, Data: []byte("b"), Seq: 2})
 		}()
 
-		// publish() re-arms its backpressure timer forever rather than giving
-		// up, so run past one full period and let the bubble settle: the
-		// publisher is still parked, and nothing but the drain below frees it.
 		time.Sleep(streamPublishWait + 50*time.Millisecond)
 		synctest.Wait()
 		select {
@@ -1324,9 +1318,6 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 		t.Fatalf("NewWorker() error: %v", err)
 	}
 
-	// Use manual cancellation after we observe the worker process has started.
-	// This avoids flakes where the context cancels before the child gets
-	// scheduled and writes its PID file.
 	ctx, cancel := context.WithCancel(context.Background())
 	spawnDone := make(chan error, 1)
 	go func() {
@@ -1384,8 +1375,6 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 	t.Fatalf("worker pid %d still alive after spawn failure cleanup", pid)
 }
 
-// TestWorkerBackend_Spawn_PassesThemeFlagsOnlyWhenSet covers the --theme-*
-// flag round-trip in Spawn() without starting a worker process.
 func TestWorkerBackend_Spawn_PassesThemeFlagsOnlyWhenSet(t *testing.T) {
 	t.Parallel()
 

@@ -79,9 +79,8 @@ export function resizeGhosttyWithoutReflow(
     return;
   }
 
-  // Ghostty reflows the entire primary-screen history when DEC wraparound is
-  // enabled. Temporarily disabling it selects Ghostty's no-reflow resize path;
-  // restore the producer's mode before any later output is parsed.
+  // Ghostty reflows the entire primary-screen history when DEC wraparound is enabled;
+  // disabling it selects the no-reflow resize path. Restore before any later output.
   terminal.write(DISABLE_WRAPAROUND);
   try {
     terminal.resize(cols, rows);

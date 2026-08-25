@@ -5,22 +5,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The garden board's write path. Moving a seed and writing on its log were
-// unix-socket commands only — the app could read the garden and never touch it
-// — so the board prototype puts the same two commands on the WebSocket. The
-// rules are not restated here: both handlers call the very code the CLI calls
-// and only differ in how the answer travels back.
-//
-// The actor is unnamed. A move from the board is the user's own, and the app
-// holds no session or crew identity to sign it with; the verbs the board offers
-// are the ones that need no tender, so an unnamed actor is legal rather than
-// merely tolerated. `tend` is not reachable from here, which is why the board's
-// Growing column dispatches an agent instead of claiming a seed.
-//
-// An unnamed actor is never the holder, so a card somebody else is still
-// tending refuses every verb until the drop forces it. That is what the
-// composer's takeover line asks for, and `force` is how the answer travels.
-//
 // Prototype: docs/plans/2026-08-20-garden-kanban-board-prototype.md.
 
 func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTransitionMessage) {

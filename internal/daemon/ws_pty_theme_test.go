@@ -8,11 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 )
 
-// TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions covers the two
-// observable effects handleSetTerminalTheme must have: it stores the theme so
-// a subsequent spawn's SpawnOptions carries it (ws_pty.go's spawn site reads
-// d.currentTerminalTheme()), and it fans SetTheme out to every session the
-// backend currently reports as live.
 func TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{sessionIDs: []string{"sess-a", "sess-b"}}
@@ -50,13 +45,8 @@ func TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions(t *testing.T) {
 		}
 	}
 
-	// A subsequent spawn must carry the stored theme. Drive the real handler
-	// (via spawnForChiefTest's app create ordering: register workspace, add
-	// pane, spawn) rather than calling backend.Spawn directly with a
-	// hand-built Theme field — that would assert this test's own code
-	// instead of the "Theme: d.currentTerminalTheme()" line in
-	// handleSpawnSession (ws_pty.go), so it couldn't catch that line being
-	// deleted.
+	// Driven through the real handler: a hand-built Theme passed to backend.Spawn would
+	// assert this test's own code, not handleSpawnSession's "Theme:" line.
 	client := newWorkspaceProtocolTestClient()
 	spawnForChiefTest(t, d, client, "ws-theme", "sess-c", string(protocol.SessionAgentClaude), false)
 	expectSpawnResult(t, client, "sess-c", true)
@@ -70,9 +60,6 @@ func TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions(t *testing.T) {
 	}
 }
 
-// TestHandleSetTerminalTheme_BlanksInvalidColors covers validation: an
-// invalid color field ("red" is not "#rrggbb") is blanked to "" (pty falls
-// back to its built-in default) while valid fields are kept as-is.
 func TestHandleSetTerminalTheme_BlanksInvalidColors(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}

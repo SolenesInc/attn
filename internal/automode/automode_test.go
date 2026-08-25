@@ -31,8 +31,6 @@ func TestValidateProposalRefusesABroadAllow(t *testing.T) {
 	}
 }
 
-// A blanket hard-deny refuses everything, which is the safe direction — only
-// allow is guarded.
 func TestValidateProposalAcceptsABroadDeny(t *testing.T) {
 	if err := ValidateProposal(KindDeny, "", "*"); err != nil {
 		t.Fatalf("broad deny refused: %v", err)
@@ -100,9 +98,8 @@ func TestValidateProposalRejectsUnknownKinds(t *testing.T) {
 	}
 }
 
-// The JSON here IS plugins/attn-pi/automode/config.ts's RawAutoModeConfig. A
-// field renamed on one side without the other silently drops to the pi-side
-// default, so the names are pinned by a test rather than by memory.
+// The JSON here IS plugins/attn-pi/automode/config.ts's RawAutoModeConfig: a field renamed
+// on one side without the other silently drops to the pi-side default.
 func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 	raw, err := json.Marshal(Defaults())
 	if err != nil {
@@ -129,15 +126,11 @@ func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 func TestShippedHardDenyCoversAutoModesOwnSurfaces(t *testing.T) {
 	patterns := ShippedHardDeny("29849")
 	joined := strings.Join(patterns, "\n")
-	// The verbs that write: environment prose feeds the classifier's own prompt,
-	// and the rest file rows in the human's review list.
 	for _, verb := range []string{"env", "allow", "deny", "model"} {
 		if !strings.Contains(joined, "attn automode "+verb) {
 			t.Errorf("shipped hard deny does not cover `attn automode %s`: %v", verb, patterns)
 		}
 	}
-	// The read-only verbs stay reachable: a denied agent explaining what stopped
-	// it is behavior the plan asks for.
 	for _, verb := range []string{"show", "denials"} {
 		if strings.Contains(joined, "attn automode "+verb) {
 			t.Errorf("shipped hard deny covers the read-only verb %q: %v", verb, patterns)

@@ -11,21 +11,16 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
-// sessionActivityKind is the job kind the activity executor is registered under.
 const sessionActivityKind = "session_activity"
 
-// Per-agent defaults, applied once the user has picked an agent; there is
-// deliberately no default AGENT (see parseActivityConfig). Measured (receipts in
-// docs/plans/2026-08-07-session-activity.md): Codex/Luna 4.8s p50 at $0.0027 a
-// run, Claude/Haiku 11.7s at $0.011–0.017. Effort is unset on Claude because it
-// measured inert there; on Codex `low` gave the tightest latency tail.
+// Measured (receipts in docs/plans/2026-08-07-session-activity.md): Codex/Luna 4.8s p50
+// at $0.0027 a run, Claude/Haiku 11.7s at $0.011-0.017; effort measured inert on Claude.
 const (
 	activityClaudeDefaultModel = "claude-haiku-4-5"
 	activityCodexDefaultModel  = "gpt-5.6-luna"
 	activityCodexDefaultEffort = "low"
 )
 
-// Generation intervals per presence tier, in seconds; `away` has none.
 const (
 	defaultActivityWatchingSeconds = 120
 	defaultActivityPresentSeconds  = 300
@@ -33,28 +28,21 @@ const (
 	activityIntervalMaxSeconds     = 3600
 )
 
-// defaultActivityPresenceIdleSeconds is how long the `present` tier survives
-// after the last input. UNMEASURED — a guess, safe because `away` self-heals on
-// the next input. Replace it with a receipt if it ever matters.
+// UNMEASURED — a guess, safe because `away` self-heals on the next input.
 const (
 	defaultActivityPresenceIdleSeconds = 90
 	activityPresenceIdleMinSeconds     = 10
 	activityPresenceIdleMaxSeconds     = 3600
 )
 
-// activityConfig is the resolved {agent, model, effort}. A blank setting has NO
-// default agent — which agent runs decides whose account pays.
 type activityConfig struct {
 	Agent  string `json:"agent"`
 	Model  string `json:"model"`
 	Effort string `json:"effort,omitempty"`
 }
 
-// errActivityAgentUnset is distinct so the UI can treat it as a setup step.
 var errActivityAgentUnset = errors.New("session activity has no agent selected: choose claude or codex")
 
-// parseActivityConfig resolves activity.config; a blank agent is an error, never
-// a fallback, and a blank model or effort takes that agent's default.
 func parseActivityConfig(raw string) (activityConfig, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -105,8 +93,6 @@ func parseActivityConfig(raw string) (activityConfig, error) {
 	return config, nil
 }
 
-// validateActivitySetting also resolves the executable on PATH, so a missing CLI
-// is rejected in the settings pane rather than failing a job later.
 func (d *Daemon) validateActivitySetting(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -127,14 +113,11 @@ func (d *Daemon) validateActivitySetting(raw string) error {
 	return nil
 }
 
-// activityIntervals is the per-tier generation cadence.
 type activityIntervals struct {
 	Watching int `json:"watching"`
 	Present  int `json:"present"`
 }
 
-// parseActivityIntervals clamps out-of-range fields instead of rejecting them:
-// a typo must not stop generation.
 func parseActivityIntervals(raw string) (activityIntervals, error) {
 	intervals := activityIntervals{
 		Watching: defaultActivityWatchingSeconds,
@@ -169,8 +152,6 @@ func clampInterval(seconds, fallback int) int {
 	return seconds
 }
 
-// activityEnabled reports the runtime switch, off by default: the feature spends
-// money per refresh and sends transcript excerpts to a model.
 func (d *Daemon) activityEnabled() bool {
 	if d.store == nil {
 		return false
@@ -178,7 +159,6 @@ func (d *Daemon) activityEnabled() bool {
 	return parseBooleanSetting(d.store.GetSetting(SettingActivityEnabled))
 }
 
-// activityConfigured loads the resolved config, or reports why there is none.
 func (d *Daemon) activityConfigured() (activityConfig, error) {
 	if d.store == nil {
 		return activityConfig{}, errors.New("session activity settings unavailable")
@@ -186,8 +166,8 @@ func (d *Daemon) activityConfigured() (activityConfig, error) {
 	return parseActivityConfig(d.store.GetSetting(SettingActivityConfig))
 }
 
-// activityInterval is a tier's cadence; `away` returns zero, which every caller
-// must read as "generate nothing", never "generate now".
+// `away` returns zero, which every caller must read as "generate nothing", never
+// "generate now".
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	if tier == PresenceAway {
 		return 0
@@ -211,8 +191,6 @@ func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	return time.Duration(intervals.Present) * time.Second
 }
 
-// presenceIdleLimit is daemon-owned: the client reports when input happened,
-// never for how long it counts.
 func (d *Daemon) presenceIdleLimit() time.Duration {
 	seconds := defaultActivityPresenceIdleSeconds
 	if d.store != nil {
@@ -226,7 +204,6 @@ func (d *Daemon) presenceIdleLimit() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// resolveActivityExecutable resolves the provider and absolute executable path.
 func (d *Daemon) resolveActivityExecutable(config activityConfig) (agentdriver.HeadlessTaskProvider, string, error) {
 	driver := agentdriver.Get(config.Agent)
 	if driver == nil {

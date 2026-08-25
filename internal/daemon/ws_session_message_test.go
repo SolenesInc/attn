@@ -12,10 +12,8 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// writeCodexRollout lays down a codex rollout under CODEX_HOME for `cwd`, so
-// the daemon's own transcript resolution finds it the way it would in
-// production. `source` is "cli" for an interactive pane; `codex exec` runs write
-// "exec" and must not be picked up.
+// `source` is "cli" for an interactive pane; `codex exec` runs write "exec" and
+// must not be picked up.
 func writeCodexRollout(t *testing.T, codexHome, id, cwd, source string, messages ...string) string {
 	t.Helper()
 	dir := filepath.Join(codexHome, "sessions", "2026", "08", "02")
@@ -98,8 +96,6 @@ func seedAssistantWindow(t *testing.T, d *Daemon, sessionID string, agent protoc
 }
 
 func TestSessionMessagesGet_ReturnsPastTurnsOldestFirst(t *testing.T) {
-	// The whole point of the window: a turn scrolling past is still annotatable,
-	// so the earlier message has to come back alongside the newest one.
 	d, sessionID := codexSessionDaemon(t, "An earlier answer.", "The answer under annotation.")
 
 	result := sessionMessagesGet(t, d, sessionID)
@@ -123,8 +119,6 @@ func TestSessionMessagesGet_ReturnsPastTurnsOldestFirst(t *testing.T) {
 }
 
 func TestSessionMessagesGet_KeysAreStableAndPerMessage(t *testing.T) {
-	// Keys are what persisted annotations address. Re-reading the transcript
-	// must not rename a message, and two messages must not share a key.
 	d, sessionID := codexSessionDaemon(t, "An earlier answer.", "The answer under annotation.")
 
 	first := sessionMessagesGet(t, d, sessionID)
@@ -148,9 +142,6 @@ func TestSessionMessagesGet_KeysAreStableAndPerMessage(t *testing.T) {
 }
 
 func TestSessionMessagesGet_EmptyTranscriptIsNotAnError(t *testing.T) {
-	// A transcript with no assistant prose — pure tool activity — is a success
-	// with nothing to annotate, which the client reports rather than treating as
-	// a failure.
 	d, sessionID := codexSessionDaemon(t)
 
 	result := sessionMessagesGet(t, d, sessionID)
@@ -196,8 +187,6 @@ func TestSessionMessagesGet_NoLiveTranscriptAuthorityIsUnavailable(t *testing.T)
 }
 
 func TestSessionMessagesGet_ReportsAnOversizeMessageInsteadOfHalvingIt(t *testing.T) {
-	// Handing back half a message would silently re-point every offset past the
-	// cut, so an oversize message is left out and the window says so.
 	huge := strings.Repeat("x", annotatableMessageMaxChars+1)
 	d, sessionID := codexSessionDaemon(t, "A normal answer.", huge)
 
@@ -250,10 +239,8 @@ func TestSessionMessagesGet_RejectsUnknownSession(t *testing.T) {
 }
 
 func TestSessionMessagesGet_IgnoresHeadlessExecRollouts(t *testing.T) {
-	// attn's own stop-time classifier runs `codex exec` in the session's own
-	// directory, so a second rollout lands seconds after the pane's. Reading it
-	// would hand the annotator the classifier's bookkeeping instead of what the
-	// agent said to the user.
+	// attn's stop-time classifier runs `codex exec` in the session's own directory,
+	// so a second rollout lands seconds after the pane's.
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 	cwd := t.TempDir()

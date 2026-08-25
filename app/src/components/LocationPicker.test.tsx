@@ -261,12 +261,10 @@ describe('LocationPicker', () => {
       expect(screen.getByTestId('location-picker-item-0')).toHaveClass('selected');
     });
 
-    // First Escape deselects without closing
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('location-picker-item-0')).not.toHaveClass('selected');
 
-    // Second Escape closes
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -463,7 +461,6 @@ describe('LocationPicker', () => {
 
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'ArrowDown' });
 
-    // After manual navigation, Escape deselects first and only then closes.
     fireEvent.keyDown(screen.getByTestId('location-picker-path-input'), { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('location-picker-item-0')).not.toHaveClass('selected');
@@ -489,8 +486,6 @@ describe('LocationPicker', () => {
     fireEvent.click(screen.getByTestId('location-picker-overlay'));
     fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
 
-    // The cached row still renders for instant feedback, but it must not be
-    // auto-highlighted: bare Enter could launch a stale path.
     const cachedItem = await screen.findByTestId('location-picker-item-0');
     expect(cachedItem).not.toHaveClass('selected');
 
@@ -589,8 +584,6 @@ describe('LocationPicker', () => {
 
     fireEvent.click(screen.getByTestId('repo-new-worktree-form'));
     fireEvent.change(screen.getByTestId('repo-new-worktree-input'), { target: { value: 'feat-more' } });
-    // Worktrees now default to origin/<defaultBranch>; opt into the selected
-    // worktree's current branch to exercise that path.
     fireEvent.click(screen.getByTestId('repo-new-worktree-start-current'));
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'Enter' });
 
@@ -606,8 +599,6 @@ describe('LocationPicker', () => {
     });
   });
 
-  // A repo is habitually branched or habitually not, so the picker remembers the
-  // last destination chosen for it and opens there next time.
   describe('remembered repo destination', () => {
     const repoRoot = '/home/remote/projects/exsin';
     const destinationKey = `new_session_destination_local_${repoRoot}`;
@@ -743,8 +734,8 @@ describe('LocationPicker', () => {
             },
           }],
         },
-        // Stored for the LOCAL checkout at the same path: the remote must not
-        // read it, and must write under its own key.
+        // Stored for the LOCAL checkout at the same path: the remote must not read
+        // it, and must write under its own key.
         { settings: { [destinationKey]: 'main_repo' }, setSetting },
       );
 
@@ -959,8 +950,6 @@ describe('LocationPicker', () => {
     });
   });
 
-  // The Playwright harness drives a single local daemon today, so remote parity is
-  // proven at the component-integration level here rather than full browser E2E.
   it('applies the same exact-path worktree behavior on remote endpoints', async () => {
     const onInspectPath = vi.fn(async (inputPath: string, endpointId?: string) => ({
       success: true,
@@ -1627,16 +1616,12 @@ describe('LocationPicker', () => {
     });
 
     it('hides the chief toggle in the split-session flow (purpose=session)', () => {
-      // A split into an existing workspace routes through createSplitSession, which
-      // never carries the chief flag — showing the toggle there is a silent no-op.
       renderPicker({ chiefExists: false, purpose: 'session' });
       expect(screen.queryByTestId('location-picker-chief-toggle')).not.toBeInTheDocument();
     });
 
     it('hides the chief toggle for the terminal (shell) agent', () => {
       renderPicker({ chiefExists: false, purpose: 'workspace' });
-      // The chief toggle is offered for claude/codex only — selecting the terminal
-      // agent (which has no chief-guidance launch path) must hide it.
       fireEvent.click(screen.getByRole('radio', { name: /Terminal/i }));
       expect(screen.queryByTestId('location-picker-chief-toggle')).not.toBeInTheDocument();
     });

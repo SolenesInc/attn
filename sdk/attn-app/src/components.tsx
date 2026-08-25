@@ -1,26 +1,5 @@
-// The component slice: what a view needs to stop looking foreign.
-//
-// Tokens come for free — a view mounts inside attn's DOM, so every
-// `var(--color-*)` and `var(--font-*)` already resolves — and that is most of
-// "looks native" at zero cost. What is left is the handful of controls a view
-// would otherwise hand-roll: attn has 55 distinct button class names across 51
-// stylesheets, which is the receipt for why `Button` is component number one.
-//
-// These render class names and nothing else. The stylesheet backing them lives
-// in attn's own build (app/src/components/appViews/appSdkComponents.css), not
-// here: the SDK is a rollup entry the import map resolves to, so a CSS import in
-// this file would emit an asset no page links and every style would silently
-// vanish. app/src/components/appViews/appSdkComponents.classes.test.tsx renders
-// each component and fails on a class the stylesheet does not define.
-//
-// Two components are deliberately absent, and stay absent until a view needs
-// them: a spinner (a permanently animating element is a battery bug in a window
-// that is open all day — loading states are text) and a relative-time label (a
-// repaint loop waiting to happen; an absolute timestamp with a `title` costs
-// nothing and repaints never).
-//
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "The
-// design-system slice".
+// Class names only: a CSS import here would emit an asset no page links, so the stylesheet lives in app/src/components/appViews/appSdkComponents.css.
+// A spinner and a relative-time label are deliberately absent: both repaint forever in a window open all day.
 
 import type { ChangeEvent, KeyboardEvent, ReactElement, ReactNode } from "react"
 import ReactMarkdown from "react-markdown"
@@ -30,11 +9,7 @@ function classes(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(" ")
 }
 
-/**
- * `primary` is the one action a view wants; `secondary` is everything else;
- * `danger` is the one that destroys something. There is no fourth: a view that
- * needs another meaning is telling the SDK about a component it is missing.
- */
+/** There is no fourth: a view needing another meaning needs another component. */
 export type ButtonVariant = "primary" | "secondary" | "danger"
 
 export interface ButtonProps {
@@ -42,7 +17,6 @@ export interface ButtonProps {
   variant?: ButtonVariant
   disabled?: boolean
   onClick?: () => void
-  /** Buttons in a view are actions, never form submissions, so this defaults to "button". */
   type?: "button" | "submit"
   title?: string
   className?: string
@@ -75,7 +49,6 @@ export interface TextInputProps {
   onChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
-  /** Rendered under the field, in the error colour. A refusal the user can read. */
   error?: string
   ariaLabel?: string
   className?: string
@@ -108,7 +81,7 @@ export function TextInput({
 }
 
 export interface TextAreaProps extends TextInputProps {
-  /** Visible rows. The box does not grow on its own — a view that wants that says so. */
+  /** Visible rows; the box does not grow on its own. */
   rows?: number
 }
 
@@ -144,7 +117,6 @@ export interface ListProps {
   className?: string
 }
 
-/** The scrolling column a view's rows live in. */
 export function List({ children, className }: ListProps): ReactElement {
   return (
     <div className={classes("attn-app-list", className)} role="list">
@@ -154,11 +126,8 @@ export function List({ children, className }: ListProps): ReactElement {
 }
 
 export interface ListRowProps {
-  /** The line the user reads first. */
   title: ReactNode
-  /** The quieter second line: who, when, which session. */
   meta?: ReactNode
-  /** Trailing controls, laid out at the row's end. */
   actions?: ReactNode
   /** A row that answers a click is focusable and reachable by keyboard. */
   onClick?: () => void
@@ -208,18 +177,11 @@ export function ListRow({
 }
 
 export interface EmptyStateProps {
-  /** What is not there — "Nothing waiting", not "No data". */
   title: string
-  /** Why, or what to do about it. Empty is fine; a wrong guess is not. */
   hint?: ReactNode
   className?: string
 }
 
-/**
- * The state a live-query view is in most of the time. It is text, on purpose:
- * "nothing pending" rendered wrong is what makes a working tile look broken,
- * and a spinner that never stops is worse than a sentence.
- */
 export function EmptyState({ title, hint, className }: EmptyStateProps): ReactElement {
   return (
     <div className={classes("attn-app-empty", className)}>
@@ -230,17 +192,11 @@ export function EmptyState({ title, hint, className }: EmptyStateProps): ReactEl
 }
 
 export interface MarkdownProps {
-  /** The source. Agent-written content is markdown, which is why this is here. */
   children: string
   className?: string
 }
 
-/**
- * Read-only markdown, with GitHub tables and task lists.
- *
- * No raw HTML and no scripts: what a view renders here is usually written by an
- * agent, and an app that wants richer output composes components instead.
- */
+/** Read-only markdown with GitHub tables and task lists. No raw HTML, no scripts. */
 export function Markdown({ children, className }: MarkdownProps): ReactElement {
   return (
     <div className={classes("attn-app-markdown", className)}>

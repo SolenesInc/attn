@@ -1,12 +1,3 @@
-// Annotations on an agent's messages, anchored to markdown offsets and painted
-// over whichever terminal rows currently show that markdown.
-//
-// The gate is the invariant: before emitting a wash the store re-reads the text
-// at the rows it is about to paint and confirms it still quotes the anchor, so a
-// stale alignment costs a refusal rather than a misattribution. Every message in
-// the annotatable window carries its own alignment and annotations, because
-// offsets address one specific markdown string.
-//
 // See docs/decisions/2026-08-02-terminal-annotations-anchor-to-the-transcript.md.
 
 import {
@@ -18,20 +9,14 @@ import {
   type RowRange,
 } from './terminalMessageAlign';
 
-// The terminal, reduced to what a projection needs. Mirrors `BlockRowAccess`.
 export interface MessageRowAccess {
   cols(): number;
   totalRows(): number;
   rowText(bufferRow: number): string;
-  // Text between two code-unit columns: the gate reads exactly the cells a wash
-  // would cover, so sideways drift is caught.
   rowTextRange(bufferRow: number, startCol: number, endCol: number): string;
-  // Hidden OSC 8 target for a cell. Optional because plain terminal rows and
-  // test grids have no hyperlink metadata; visible text remains sufficient.
   hyperlinkUri?(bufferRow: number, col: number): string | null;
 }
 
-// One assistant message that can be annotated.
 export interface AnnotatableMessage {
   key: string;
   markdown: string;
@@ -43,8 +28,6 @@ export interface TerminalAnnotation {
   // Offsets into that message's markdown (UTF-16 code units).
   start: number;
   end: number;
-  // The markdown the offsets covered when made; kept so the panel still lists
-  // an annotation whose message fell out of the window.
   quote: string;
   quickLabelId: string;
   comment: string;
@@ -57,7 +40,6 @@ export interface AnnotationWash {
   rows: RowRange[];
 }
 
-// An anchor resolved from a drag: which message, and where in it.
 export interface MessageAnchor {
   messageKey: string;
   start: number;
@@ -65,9 +47,7 @@ export interface MessageAnchor {
   quote: string;
 }
 
-// Cap on a whole-buffer search; scrollback far outruns any single message.
 const ALIGN_WINDOW_ROWS = 2000;
-// Search margin around the last known span; bounds per-frame cost.
 const LOCAL_MARGIN_ROWS = 60;
 
 interface AlignmentCache {
@@ -76,7 +56,6 @@ interface AlignmentCache {
   geometryGeneration: number;
   cols: number;
   totalRows: number;
-  // Where the message resolved last time. Seeds the bounded search window.
   lastSpan: { firstRow: number; lastRow: number } | null;
 }
 
@@ -87,19 +66,14 @@ function newAnnotationId(): string {
 }
 
 export class TerminalAnnotationStore {
-  // Oldest first, newest last — the annotatable window, as served.
   private messages: AnnotatableMessage[] = [];
   private markdownByKey = new Map<string, string>();
   private annotations: TerminalAnnotation[] = [];
-  // One alignment per message: they invalidate together, resolve independently.
   private caches = new Map<string, AlignmentCache>();
 
   private writeGeneration = 0;
   private geometryGeneration = 0;
 
-  // Replaces the annotatable window, keeping annotations (they address message
-  // keys). Returns whether the window actually changed, so re-fetching the same
-  // turns skips the repaint.
   setMessages(messages: readonly AnnotatableMessage[]): boolean {
     const same = messages.length === this.messages.length
       && messages.every((message, index) => message.key === this.messages[index].key
@@ -107,7 +81,6 @@ export class TerminalAnnotationStore {
     if (same) return false;
     this.messages = messages.map((message) => ({ ...message }));
     this.markdownByKey = new Map(this.messages.map((message) => [message.key, message.markdown]));
-    // Text changed under a key would resolve against a stale alignment.
     this.caches.clear();
     return true;
   }
@@ -120,7 +93,6 @@ export class TerminalAnnotationStore {
     return this.markdownByKey.get(key) ?? null;
   }
 
-  // Whether a drag over the grid could resolve to an anchor at all.
   hasMessages(): boolean {
     return this.messages.length > 0;
   }
@@ -129,7 +101,6 @@ export class TerminalAnnotationStore {
     return this.annotations;
   }
 
-  // Replaces the whole list; ids come from the stored annotations.
   hydrate(annotations: readonly TerminalAnnotation[]): void {
     this.annotations = annotations.map((annotation) => ({ ...annotation }));
   }
@@ -169,8 +140,6 @@ export class TerminalAnnotationStore {
     this.annotations = [];
   }
 
-  // The buffer the anchors resolved against is gone (alt-screen, restore, fresh
-  // model). Only alignments drop; annotations address markdown, not rows.
   reset(): void {
     this.caches.clear();
   }
@@ -187,9 +156,6 @@ export class TerminalAnnotationStore {
     this.geometryGeneration += 1;
   }
 
-  // Where to look for a message this time. A whole-buffer search costs
-  // O(scrollback); re-confirming near the last span costs O(message). The margin
-  // covers the message doubling in height plus drift from appended output.
   private searchWindow(
     lastSpan: { firstRow: number; lastRow: number } | null,
     totalRows: number,
@@ -209,8 +175,8 @@ export class TerminalAnnotationStore {
     const totalRows = access.totalRows();
     const cols = access.cols();
 
-    // A span is only meaningful in the geometry it was measured in: seeding a
-    // bounded search across a reflow resolves a window that clips the message.
+    // A span is only meaningful in the geometry it was measured in: seeding a bounded search
+    // across a reflow resolves a window that clips the message.
     const previous = this.caches.get(key);
     let lastSpan = previous?.lastSpan ?? null;
     if (previous && (previous.cols !== cols || previous.geometryGeneration !== this.geometryGeneration)) {
@@ -227,8 +193,6 @@ export class TerminalAnnotationStore {
     let rows = readRows(base, end);
     let alignment = alignMessage(markdown, rows, base, access.hyperlinkUri);
 
-    // Widen to the whole buffer on a miss, or on an edge hit — the message
-    // probably continues outside the window.
     const missed = alignment.firstRow < 0;
     const atEdge = !missed
       && ((alignment.firstRow <= base + 1 && base > 0)
@@ -255,8 +219,6 @@ export class TerminalAnnotationStore {
     return entry;
   }
 
-  // The alignment for one message, re-computed whenever anything could have
-  // moved the text. A missed invalidation costs a refusal, not a wrong paint.
   private currentAlignment(key: string, access: MessageRowAccess): MessageAlignment | null {
     const markdown = this.markdownByKey.get(key);
     if (markdown === undefined || markdown === '') return null;
@@ -273,8 +235,6 @@ export class TerminalAnnotationStore {
     return this.align(key, markdown, access).alignment;
   }
 
-  // The per-frame entry point: only washes whose rows still quote their anchor.
-  // A message outside the window resolves to nothing; its text is not on-grid.
   project(access: MessageRowAccess): AnnotationWash[] {
     if (!this.hasWork()) return [];
     const washes: AnnotationWash[] = [];
@@ -296,9 +256,6 @@ export class TerminalAnnotationStore {
     return washes;
   }
 
-  // Which annotation covers a buffer cell. Resolved from the same gated
-  // projection the paint uses, so an annotation the gate refused is not
-  // clickable; a later annotation wins an overlap, being the one drawn on top.
   annotationAt(access: MessageRowAccess, bufferRow: number, col: number): string | null {
     let hit: string | null = null;
     for (const wash of this.project(access)) {
@@ -311,8 +268,6 @@ export class TerminalAnnotationStore {
     return hit;
   }
 
-  // Turns a drag into an anchor on the message the dragged rows belong to,
-  // newest first. Null when the selection covers no confidently-aligned words.
   anchorForSelection(
     access: MessageRowAccess,
     selection: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -334,7 +289,6 @@ export class TerminalAnnotationStore {
     return null;
   }
 
-  // The rows every annotatable message currently occupies, newest first.
   resolvedSpans(access: MessageRowAccess): Array<{ key: string; firstRow: number; lastRow: number }> {
     const spans: Array<{ key: string; firstRow: number; lastRow: number }> = [];
     for (let index = this.messages.length - 1; index >= 0; index -= 1) {

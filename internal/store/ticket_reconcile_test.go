@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-// The machine-reconciliation flag (orphaned-ticket reconciliation): claim is a
-// true set-if-unset, clears re-arm it, and the multi-ticket session query feeds
-// the session-end seam.
-
 func TestClaimTicketReconciliation_SetIfUnset(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -26,7 +22,6 @@ func TestClaimTicketReconciliation_SetIfUnset(t *testing.T) {
 		t.Fatal("first claim = false, want true")
 	}
 
-	// Second claim (death-hook double-fire, or hook-vs-sweep race) loses.
 	claimed, err = s.ClaimTicketReconciliation("orphan-1", claimTime.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("second ClaimTicketReconciliation: %v", err)
@@ -42,7 +37,6 @@ func TestClaimTicketReconciliation_SetIfUnset(t *testing.T) {
 	if got.ReconciledAt == nil || !got.ReconciledAt.Equal(claimTime) {
 		t.Fatalf("ReconciledAt = %v, want first claim time %v (loser must not overwrite)", got.ReconciledAt, claimTime)
 	}
-	// The claim is internal bookkeeping: no board churn.
 	if !got.UpdatedAt.Equal(ticketBase) {
 		t.Fatalf("UpdatedAt = %v, want untouched %v", got.UpdatedAt, ticketBase)
 	}
@@ -87,7 +81,6 @@ func TestClearTicketReconciliationForAssignee(t *testing.T) {
 		}
 	}
 
-	// Cleared flags can be claimed again — the re-arm contract.
 	claimed, err := s.ClaimTicketReconciliation("flag-a", ticketBase.Add(2*time.Hour))
 	if err != nil || !claimed {
 		t.Fatalf("re-claim after clear = %v, %v; want true, nil", claimed, err)
@@ -124,8 +117,6 @@ func TestActiveTicketsForSession_ReturnsAllNonTerminal(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
 
-	// Two non-terminal, one terminal, one other-session: the seam must see
-	// exactly the two non-terminal bound tickets, newest first.
 	if _, err := s.CreateTicket(Ticket{ID: "older", Title: "t", Assignee: "sess-1", Status: TicketStatusWorking}, "chief", ticketBase); err != nil {
 		t.Fatalf("CreateTicket older: %v", err)
 	}

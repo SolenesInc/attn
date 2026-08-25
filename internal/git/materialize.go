@@ -14,9 +14,8 @@ func RepositoryCacheKey(identity string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(strings.TrimSpace(identity))))
 }
 
-// ValidateLocalClone resolves an explicitly configured repository root without
-// ResolveRepoDir's sibling-search convenience. Invalid overrides are failures,
-// never a signal to fall back to the managed cache.
+// An invalid override is a failure, never a signal to fall back to the managed
+// cache.
 func ValidateLocalClone(path, expectedIdentity string) (string, error) {
 	path = CanonicalizePath(path)
 	info, err := os.Stat(path)
@@ -46,9 +45,8 @@ func ValidateLocalClone(path, expectedIdentity string) (string, error) {
 	return mainRepo, nil
 }
 
-// authorizationForGitURL returns an HTTP authorization header only for HTTPS.
-// SSH/scp transports use their own credentials; plaintext HTTP is rejected so a
-// host token can never be attached to a cleartext request.
+// HTTPS only: plaintext HTTP is rejected so a host token can never be attached
+// to a cleartext request.
 func authorizationForGitURL(rawURL, authorization string) (string, error) {
 	if authorization == "" {
 		return "", nil
@@ -70,8 +68,6 @@ func authorizationForGitURL(rawURL, authorization string) (string, error) {
 	}
 }
 
-// EnsureManagedClone atomically installs a non-bare clone at target and validates
-// every adoption against the configured repository identity.
 func EnsureManagedClone(cloneURL, target, expectedIdentity, authorization string) (string, bool, error) {
 	if _, err := os.Stat(target); err == nil {
 		mainRepo, err := ValidateLocalClone(target, expectedIdentity)

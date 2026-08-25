@@ -2,9 +2,6 @@
 
 package pty
 
-// The attach payload is one picture of one moment: dump, blocks, placements,
-// watermark. This is the placement corner of it.
-
 import (
 	"os"
 	"os/exec"
@@ -15,9 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// placementSession starts a read loop over a socketpair with kitty live and
-// subscribes for placements, returning the session, the peer end to write
-// program output into, and a channel of the updates a client would receive.
 func placementSession(t *testing.T, id string, cols, rows int) (*Session, *os.File, chan PlacementUpdate) {
 	t.Helper()
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
@@ -34,7 +28,7 @@ func placementSession(t *testing.T, id string, cols, rows int) (*Session, *os.Fi
 		cols:        uint16(cols),
 		rows:        uint16(rows),
 		ptmx:        ptmx,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() errors, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		ghostty:     term,
 		wireFeed:    newWireFeeder(term, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),
@@ -53,8 +47,6 @@ func placementSession(t *testing.T, id string, cols, rows int) (*Session, *os.Fi
 	return s, peer, updates
 }
 
-// awaitPlacement blocks until an update describing image id arrives. The
-// timeout is a failure guard, never the thing being waited on.
 func awaitPlacement(t *testing.T, updates <-chan PlacementUpdate, id uint32) PlacementUpdate {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
@@ -72,17 +64,6 @@ func awaitPlacement(t *testing.T, updates <-chan PlacementUpdate, id uint32) Pla
 	}
 }
 
-// A snapshot's placements must be the placements OF that snapshot. The dump,
-// the blocks, the placements, and the watermark are read in one hold for the
-// same reason: a client applies the dump and then keeps live chunks with
-// seq > LastSeq, so anything captured a moment later describes a screen the
-// client is not going to reconstruct — an image drawn at a position the dump
-// does not contain, and no live chunk to correct it.
-//
-// The hook fires after the lock is released, which is what makes this a real
-// test rather than a tautology: a capture taken outside the hold — a second
-// replayMu acquisition after the dump, say — sees the write the hook injects,
-// while LastSeq (read inside) still excludes it.
 func TestAttachPlacementsAreCapturedWithTheWatermark(t *testing.T) {
 	defer func() { infoSnapshotHook = nil }()
 
@@ -93,9 +74,6 @@ func TestAttachPlacementsAreCapturedWithTheWatermark(t *testing.T) {
 	}
 	placed := awaitPlacement(t, updates, 70)
 
-	// Inside the post-capture window: place a SECOND image and wait until the
-	// read loop has applied it, so the terminal genuinely holds both by the time
-	// info() returns.
 	injected := make(chan struct{})
 	infoSnapshotHook = func() {
 		infoSnapshotHook = nil
@@ -125,8 +103,6 @@ func TestAttachPlacementsAreCapturedWithTheWatermark(t *testing.T) {
 			info.LastSeq, s.seqCounter.Load())
 	}
 
-	// And the session still describes both images to a live client, so the
-	// snapshot's narrower set is a moment in time rather than a lost image.
 	if _, err := peer.Write([]byte("\x1b[12;1Hscroll\r\n\r\n\r\n")); err != nil {
 		t.Fatalf("peer write: %v", err)
 	}

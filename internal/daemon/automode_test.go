@@ -14,10 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Auto mode's two transports and the line between them. What these pin is the
-// asymmetry: everything the CLI can reach only records an intention, and the
-// verbs that change what a session runs under answer the app alone.
-
 func automodeShow(t *testing.T, d *Daemon) *protocol.AutoModeShowResult {
 	t.Helper()
 	resp := docCall(t, func(c net.Conn) {
@@ -45,8 +41,6 @@ func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 		result.Config.ClassifierModels[0] != automode.DefaultClassifierModel {
 		t.Errorf("classifier models = %v", result.Config.ClassifierModels)
 	}
-	// The lists must marshal as [] rather than null: a client rendering a
-	// settings section should not have to tell "no entries" from "no answer".
 	if result.Config.Allow == nil || result.Config.Environment == nil || result.Config.HardDeny == nil {
 		t.Fatalf("a config list came back nil: %+v", result.Config)
 	}
@@ -55,7 +49,6 @@ func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 	}
 }
 
-// The whole security design in one test: the CLI's allow verb is inert.
 func TestAutoModeAllowOnlyProposes(t *testing.T) {
 	d := newDaemonForTest(t)
 	resp := automodePropose(t, d, automode.KindAllow, "", "git push origin*")
@@ -108,8 +101,6 @@ func TestAutoModeEnvironmentAddAndRemove(t *testing.T) {
 		t.Fatalf("environment = %v", got)
 	}
 
-	// An out-of-range index names the limit and the ask rather than silently
-	// removing nothing.
 	resp = docCall(t, func(c net.Conn) {
 		d.handleAutoModeEnvRemove(c, &protocol.AutoModeEnvRemoveMessage{Cmd: protocol.CmdAutoModeEnvRemove, Index: 7})
 	})
@@ -121,8 +112,6 @@ func TestAutoModeEnvironmentAddAndRemove(t *testing.T) {
 	}
 }
 
-// The unix-socket read `attn automode denials` answers with: newest first, and
-// carrying the rule that decided so the feed says who refused the call.
 func TestAutoModeDenialsReadsWhatSessionsReported(t *testing.T) {
 	d := newDaemonForTest(t)
 	resp := docCall(t, func(c net.Conn) {
@@ -220,9 +209,6 @@ func TestAutoModePromoteRefusesAnUnknownProposal(t *testing.T) {
 	}
 }
 
-// Promotion has no unix-socket half, and that absence is the trust boundary: an
-// agent reaches this socket, a human reaches the app. A future change that
-// registers a case for it fails here.
 func TestPromotionIsNotReachableOverTheUnixSocket(t *testing.T) {
 	d := newDaemonForTest(t)
 	for _, cmd := range []string{protocol.CmdAutoModePromote, protocol.CmdAutoModeDiscard} {
@@ -248,9 +234,6 @@ func TestPromotionIsNotReachableOverTheUnixSocket(t *testing.T) {
 	}
 }
 
-// The launch surface needs the promoted default to show what a session would
-// get, and the settings snapshot is how it gets there — read-only: the config
-// is written through the automode verbs, never through set_setting.
 func TestSettingsSnapshotCarriesTheAutoModeDefault(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	if got := d.settingsWithAgentAvailability()[SettingAutoModeEnabledDefault]; got != "true" {
@@ -267,8 +250,6 @@ func TestSettingsSnapshotCarriesTheAutoModeDefault(t *testing.T) {
 	}
 }
 
-// The denial wire, daemon end: a driver reports one refused call and it becomes
-// a row, a notification, and one automode.denied fact naming its session.
 func TestAutoModeDenialFromADriverBecomesARowANotificationAndAFact(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client, done := startPluginPipe(t, d, "pi-plugin", nil)
@@ -343,8 +324,6 @@ func TestAutoModeDenialFromADriverBecomesARowANotificationAndAFact(t *testing.T)
 	}
 }
 
-// A denial reported against a run this plugin does not own changes nothing —
-// the denials feed is what the user trusts to say what their sessions did.
 func TestAutoModeDenialFromAnUnownedRunIsRefused(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client, done := startPluginPipe(t, d, "pi-plugin", nil)
@@ -384,8 +363,6 @@ func TestAutoModeDenialFromAnUnownedRunIsRefused(t *testing.T) {
 	}
 }
 
-// The app's direct edits, over the same wire the settings section uses.
-
 func automodePatternAdd(t *testing.T, d *Daemon, list, pattern string) protocol.AutoModePatternResultMessage {
 	t.Helper()
 	client := busTestClient()
@@ -418,8 +395,6 @@ func TestAutoModePatternEditFromTheAppRoundTrips(t *testing.T) {
 	if len(added.Config.Allow) != 1 || added.Config.Allow[0] != "git status*" {
 		t.Fatalf("allow after add = %v", added.Config.Allow)
 	}
-	// The CLI's read sees it, so `attn automode show` explains what a session
-	// launches with however the entry got there.
 	if got := automodeShow(t, d); len(got.Config.Allow) != 1 || got.Config.Allow[0] != "git status*" {
 		t.Fatalf("show after a direct add: %v", got.Config.Allow)
 	}
@@ -433,8 +408,6 @@ func TestAutoModePatternEditFromTheAppRoundTrips(t *testing.T) {
 	}
 }
 
-// The client cannot derive the shipped list — it names this daemon's own port —
-// so the wire has to say which entries are built-in.
 func TestAutoModeStateNamesTheShippedHardDenies(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	added := automodePatternAdd(t, d, automode.ListHardDeny, "*terraform apply*")
@@ -479,7 +452,6 @@ func TestAutoModePatternEditRefusalsReachTheApp(t *testing.T) {
 	if !strings.Contains(protocol.Deref(refused.Error), "built-in") {
 		t.Fatalf("shipped removal refusal = %q", protocol.Deref(refused.Error))
 	}
-	// And it is still in force: the read resolves it back in whatever happened.
 	found := false
 	for _, pattern := range automodeShow(t, d).Config.HardDeny {
 		if pattern == shipped {
@@ -491,8 +463,6 @@ func TestAutoModePatternEditRefusalsReachTheApp(t *testing.T) {
 	}
 }
 
-// Direct editing changes where a human writes, never who may write. A future
-// change that registers a unix-socket case for either verb fails here.
 func TestPatternEditingIsNotReachableOverTheUnixSocket(t *testing.T) {
 	d := newDaemonForTest(t)
 	for _, cmd := range []string{protocol.CmdAutoModePatternAdd, protocol.CmdAutoModePatternRemove} {
@@ -516,7 +486,6 @@ func TestPatternEditingIsNotReachableOverTheUnixSocket(t *testing.T) {
 			t.Fatalf("%s was refused for the wrong reason: %q", cmd, got)
 		}
 	}
-	// And the config it could not reach is untouched.
 	if got := automodeShow(t, d); len(got.Config.Allow) != 0 {
 		t.Fatalf("allow = %v after a socket edit attempt", got.Config.Allow)
 	}

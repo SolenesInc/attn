@@ -58,15 +58,12 @@ export function shouldReportApplicationMouseMove({
   buttons,
 }: ApplicationMouseMoveReportOptions): boolean {
   if (buttons === 0) {
-    // No physical button held: passive hover motion. Only DECSET 1003
-    // (any-event tracking) reports hover; drag tracking (1002) stays quiet, and
-    // a lingering activeButton with no button down is a stale drag we already
-    // released, so suppress that too.
+    // Only DECSET 1003 (any-event tracking) reports hover; drag tracking (1002)
+    // stays quiet.
     return activeButton === null && anyEventMouseTracking;
   }
-  // A physical button is down. Forward the drag only when the press that started
-  // it originated inside this terminal (activeButton set); this drops
-  // split-divider drags that began outside the pane.
+  // Forward a drag only when its press originated inside this terminal, which
+  // drops split-divider drags that began outside the pane.
   if (activeButton === null) {
     return false;
   }

@@ -1,9 +1,3 @@
-/**
- * AnnotationSidebar — position sort with globals last (E18), orphan cards
- * (E22 surface), hover-reveal delete, two-step clear-all, quick-label chips,
- * global-comment button, count-pill toggle.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { AnchorRecord } from '../anchoring';

@@ -42,13 +42,6 @@ location: {type: directory, path: PATH}
 	}
 }
 
-// TestMarshalDefinitionYAMLRoundTripsThroughParse pins
-// MarshalDefinitionYAML's contract as automationDefinitionYAML's legacy-row
-// fallback: rendering a parsed spec back to YAML and parsing that YAML again
-// must produce an equal spec, byte-identical canonical JSON, and (critically)
-// still pass ParseDefinitionYAML's validation — a legacy row's
-// reconstructed definition_yaml must stay a legal input to
-// validateAutomationSpec / automationApply, not just a legal-looking one.
 func TestMarshalDefinitionYAMLRoundTripsThroughParse(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
 id: roundtrip
@@ -80,14 +73,6 @@ location: {type: directory, path: "` + t.TempDir() + `"}
 	}
 }
 
-// TestParseDefinitionYAMLAcceptsJSONEncoding documents the WS automations
-// form's save path: the form edits automation_definition_get's spec_json
-// directly and never touches spec_yaml, then sends that JSON straight back
-// through automation_apply's definition_yaml field. That only works because
-// every DefinitionSpec field carries identical `yaml:`/`json:` tags, so
-// json.Marshal's output is itself valid YAML that ParseDefinitionYAML accepts
-// and decodes to an equal spec — this test is the guarantee that the two
-// encodings can never drift apart on the daemon side.
 func TestParseDefinitionYAMLAcceptsJSONEncoding(t *testing.T) {
 	raw := `api_version: attn.dev/automations/v1alpha1
 id: json-save-path
@@ -116,13 +101,6 @@ location: {type: directory, path: "` + t.TempDir() + `"}
 	}
 }
 
-// TestStarterTemplateYAMLIsWellFormedYAML pins automation_definition_get's
-// id: "" starter-template contract: the rendered document must at least be
-// syntactically parseable YAML matching StarterDefinition field-for-field
-// (via yaml.Unmarshal directly, not ParseDefinitionYAML/ValidateDefinition —
-// StarterDefinition's Location.Path is an intentional placeholder that does
-// not exist on disk, so it fails canonicalizeDirectory by design until the
-// user edits it).
 func TestStarterTemplateYAMLIsWellFormedYAML(t *testing.T) {
 	rendered, err := StarterTemplateYAML()
 	if err != nil {
@@ -203,12 +181,6 @@ location: {type: directory, path: /tmp}
 	}
 }
 
-// TestDefinitionRejectsEnabledKey pins enabled having exactly one authority
-// (the store's enabled column, not the spec): a YAML document carrying a
-// top-level enabled key must be rejected at parse, before ValidateDefinition
-// or KnownFields even runs, with an error pointing the user at
-// 'attn automation enable'/'disable' rather than a generic unknown-field
-// error.
 func TestDefinitionRejectsEnabledKey(t *testing.T) {
 	_, _, err := ParseDefinitionYAML([]byte(`api_version: attn.dev/automations/v1alpha1
 id: bad
@@ -301,12 +273,6 @@ location:
 	}
 }
 
-// TestGitHubReviewDefinitionRejectsPolicyAndRequiresWorktree pins the v2 rule
-// that github_review_requested's continuity/catch_up are fully implied
-// (per_subject/latest) and must be ABSENT from the trigger — unlike a
-// scheduled trigger, there is no accepted explicit value, not even the
-// implied one — plus the pre-existing repository_worktree location
-// requirement.
 func TestGitHubReviewDefinitionRejectsPolicyAndRequiresWorktree(t *testing.T) {
 	base := `api_version: attn.dev/automations/v1alpha1
 id: requested-review
@@ -431,12 +397,8 @@ location:
 	}
 }
 
-// TestCanonicalJSONOmitsScheduleForNonScheduledTriggers is the regression
-// check for Fix 3: encoding/json's omitempty does not omit a zero-value
-// struct, so TriggerSpec.Schedule must be a pointer or every manual/
-// github_review_requested definition's canonical JSON grows a spurious
-// "schedule":{} key, which would bump UpsertAutomationDefinition's revision
-// on every byte-identical re-apply.
+// encoding/json's omitempty does not omit a zero-value struct, so
+// TriggerSpec.Schedule must stay a pointer.
 func TestCanonicalJSONOmitsScheduleForNonScheduledTriggers(t *testing.T) {
 	dir := t.TempDir()
 	manual := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
@@ -456,9 +418,6 @@ location: {type: directory, path: PATH}
 	}
 }
 
-// TestScheduledDefinitionRoundTripsCronAndTimeZone locks in that
-// TriggerSpec.Schedule's pointer conversion still carries cron/time_zone
-// through both the YAML parse and a canonical-JSON re-decode.
 func TestScheduledDefinitionRoundTripsCronAndTimeZone(t *testing.T) {
 	dir := t.TempDir()
 	raw := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1
@@ -489,9 +448,6 @@ location: {type: directory, path: PATH}
 	}
 }
 
-// TestManualTriggerRejectsContinuityAndCatchUp pins the v2 rule that a
-// manual trigger's continuity/catch_up are fully implied (fresh, no
-// catch_up) and must be ABSENT from the trigger, just like github's.
 func TestManualTriggerRejectsContinuityAndCatchUp(t *testing.T) {
 	dir := t.TempDir()
 	base := strings.ReplaceAll(`api_version: attn.dev/automations/v1alpha1

@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import './SessionContextCapPrompt.css';
 
-// The action-menu route to a per-session context-window cap: one number input,
-// Enter saves, blank (or 0) clears the pin so the session falls back to the
-// chief / per-agent default settings. Saving a change reloads the agent in
-// place (the cap only applies at launch), which the copy says out loud.
+// Saving a change reloads the agent in place: the cap only applies at launch.
 interface SessionContextCapPromptProps {
   sessionLabel: string;
   /** Current pin in tokens; undefined when the session has none. */

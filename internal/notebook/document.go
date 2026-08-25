@@ -9,25 +9,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Document is a parsed Notebook markdown file: optional YAML frontmatter plus
-// body. A disk-parsed document re-serializes its frontmatter byte-for-byte, so
-// externally-written fields survive an attn rewrite untouched; only an
-// attn-constructed document is serialized from the map (sorted keys).
+// A disk-parsed document re-serializes its frontmatter byte-for-byte, so externally-written fields survive an attn rewrite untouched; only an attn-constructed document is serialized from the map.
 type Document struct {
-	// Frontmatter is read-only after Parse: mutating it does not change what
-	// Bytes emits — construct a fresh Document to serialize edited frontmatter.
-	Frontmatter map[string]any
-	// Body is the markdown after the frontmatter block, kept byte-for-byte.
-	Body string
-	// rawFrontmatter is the exact on-disk YAML; when set, Bytes emits it verbatim.
+	// Read-only after Parse: mutating it does not change what Bytes emits — construct a fresh Document to serialize edited frontmatter.
+	Frontmatter    map[string]any
+	Body           string
 	rawFrontmatter string
 }
 
 const frontmatterFence = "---"
 
-// Parse splits raw bytes into frontmatter and body. A missing or unclosed
-// fence means no frontmatter, never an error; only malformed YAML inside a
-// well-formed block errors — callers that must not fail use ParsePermissive.
 func Parse(raw []byte) (Document, error) {
 	fm, body, ok := splitFrontmatter(string(raw))
 	if !ok {
@@ -43,8 +34,7 @@ func Parse(raw []byte) (Document, error) {
 	return Document{Frontmatter: meta, Body: body, rawFrontmatter: fm}, nil
 }
 
-// decodeFrontmatter decodes a YAML mapping into map[string]any. Timestamps stay
-// literal text, not time.Time, so dates round-trip and string accessors work.
+// Timestamps stay literal text, not time.Time, so dates round-trip and string accessors work.
 func decodeFrontmatter(text []byte) (map[string]any, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(text, &root); err != nil {
@@ -86,7 +76,7 @@ func nodeToValue(n *yaml.Node) any {
 		return nil
 	case yaml.ScalarNode:
 		if n.Tag == "!!timestamp" {
-			return n.Value // keep timestamps as literal text, not time.Time
+			return n.Value
 		}
 		var v any
 		if err := n.Decode(&v); err != nil {
@@ -98,8 +88,6 @@ func nodeToValue(n *yaml.Node) any {
 	}
 }
 
-// ParsePermissive parses raw bytes and never fails: malformed frontmatter
-// falls back to treating the whole content as the body.
 func ParsePermissive(raw []byte) Document {
 	doc, err := Parse(raw)
 	if err != nil {
@@ -108,8 +96,6 @@ func ParsePermissive(raw []byte) Document {
 	return doc
 }
 
-// Bytes serializes the document back to disk form (sorted frontmatter keys;
-// no frontmatter → body alone).
 func (d Document) Bytes() []byte {
 	if d.rawFrontmatter != "" {
 		return []byte(frontmatterFence + "\n" + d.rawFrontmatter + frontmatterFence + "\n" + d.Body)
@@ -122,7 +108,7 @@ func (d Document) Bytes() []byte {
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
 	if err := enc.Encode(d.Frontmatter); err != nil {
-		return []byte(d.Body) // practically unreachable; degrade rather than panic
+		return []byte(d.Body)
 	}
 	_ = enc.Close()
 	buf.WriteString(frontmatterFence + "\n")
@@ -138,8 +124,6 @@ func (d Document) frontmatterString(key string) string {
 	return v
 }
 
-// Type returns the declared OKF `type` ("" if absent or non-string), falling
-// back to the legacy `kind` for read-compat; attn always writes `type`.
 func (d Document) Type() string {
 	if t := d.frontmatterString("type"); t != "" {
 		return t
@@ -147,8 +131,6 @@ func (d Document) Type() string {
 	return d.frontmatterString("kind")
 }
 
-// Title returns the first H1's text — attn never reads a frontmatter `title:`.
-// "" when the body has no H1; callers fall back to the filename.
 func (d Document) Title() string { return firstH1(d.Body) }
 
 var (
@@ -156,10 +138,8 @@ var (
 	mdFenceRe = regexp.MustCompile("^[ \t]*(`{3,}|~{3,})")
 )
 
-// firstH1 returns the first level-1 ATX heading's text, or "". It skips fenced
-// code blocks and follows CommonMark ATX rules (trailing #-sequence stripped).
 func firstH1(body string) string {
-	var fence byte // 0 outside a code fence; otherwise the marker rune ('`' or '~')
+	var fence byte
 	for line := range strings.SplitSeq(body, "\n") {
 		if mdFenceRe.MatchString(line) {
 			marker := strings.TrimLeft(line, " \t")[0]
@@ -181,18 +161,14 @@ func firstH1(body string) string {
 	return ""
 }
 
-// Summary returns the declared summary ("" if absent).
 func (d Document) Summary() string { return d.frontmatterString("summary") }
 
-// Updated returns the declared update timestamp ("" if absent).
 func (d Document) Updated() string { return d.frontmatterString("updated") }
 
-// splitFrontmatter returns the YAML between the fences and the body after the
-// closing fence; ok is false when either fence is missing (no frontmatter).
 func splitFrontmatter(s string) (fm, body string, ok bool) {
 	nl := strings.IndexByte(s, '\n')
 	if nl < 0 {
-		return "", s, false // single line; can't carry a fenced block
+		return "", s, false
 	}
 	if strings.TrimRight(s[:nl], "\r") != frontmatterFence {
 		return "", s, false
@@ -210,7 +186,7 @@ func splitFrontmatter(s string) (fm, body string, ok bool) {
 			return s[afterOpen:off], s[next:], true
 		}
 		if next == len(s) {
-			break // reached EOF without a closing fence
+			break
 		}
 		off = next
 	}

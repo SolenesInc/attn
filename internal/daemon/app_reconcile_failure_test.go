@@ -14,14 +14,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// What happens when a rebuild does not succeed: the attempt is visible while it
-// runs, it survives a daemon that dies mid-flight, the request stays owed
-// through every failure, and attn eventually stops trying and says so.
-//
 // See docs/plans/2026-08-14-ext-app-reconcile-handler.md, gates 4 and 7.
 
-// reconcilingApp installs a subscribed app that declares reconcile, and puts one
-// version_changed request in front of it by applying a second version.
 func reconcilingApp(t *testing.T, d *Daemon, name string) store.AppVersion {
 	t.Helper()
 	installApp(t, d, name, subscribing("ticket.*"))
@@ -35,10 +29,6 @@ func appReconcilePreDrain(t *testing.T, d *Daemon, name string) error {
 	return d.appPreDrain(name)(context.Background(), bus.Consumer{Name: apps.ConsumerName(name)}, nil)
 }
 
-// A running attempt is durable, so `attn app status` can report a rebuild in
-// flight without inferring one from a daemon's memory — and a daemon that dies
-// mid-rebuild leaves a row the next startup closes rather than an attempt that
-// looks live forever.
 func TestAReconcileInterruptedByARestartIsRepairedAndStaysOwed(t *testing.T) {
 	d := newAppDaemon(t)
 	version := reconcilingApp(t, d, "greeter")
@@ -85,8 +75,6 @@ func TestAReconcileInterruptedByARestartIsRepairedAndStaysOwed(t *testing.T) {
 	}
 }
 
-// Interruption is not the app's fault, so it must not move the app closer to
-// being disabled — the stall clock belongs to failures the app caused.
 func TestAnInterruptedAttemptDoesNotAdvanceTheStallClock(t *testing.T) {
 	d := newAppDaemon(t)
 	version := reconcilingApp(t, d, "greeter")
@@ -109,9 +97,6 @@ func TestAnInterruptedAttemptDoesNotAdvanceTheStallClock(t *testing.T) {
 	}
 }
 
-// A rebuild that keeps throwing keeps the request owed, keeps every attempt in
-// the log, and after the stall window attn stops trying: the app is disabled and
-// a durable notification says so, with the fence and the way back.
 func TestAReconcileThatKeepsThrowingDisablesTheAppAndSaysSo(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -135,11 +120,6 @@ func TestAReconcileThatKeepsThrowingDisablesTheAppAndSaysSo(t *testing.T) {
 		}
 	}
 	status := appStatus(t, d, "greeter").AppStatusResult
-	// The bus's real delivery loop also drives the pre-drain hook, so a
-	// background retry can be mid-attempt when this is read: a truthful running
-	// state with no last error yet. Wait for the attempt to settle rather than
-	// racing it — the property is that the last failure is carried, not that no
-	// other attempt can be in flight.
 	if status.Reconcile.LastError == nil || !strings.Contains(*status.Reconcile.LastError, "TypeError") {
 		waitForCond(t, 5*time.Second, "the last reconcile failure to reach app status", func() bool {
 			status = appStatus(t, d, "greeter").AppStatusResult
@@ -170,8 +150,6 @@ func TestAReconcileThatKeepsThrowingDisablesTheAppAndSaysSo(t *testing.T) {
 		!strings.Contains(notes[0].Body, "remains owed") {
 		t.Fatalf("the notification does not say what is owed or how to get back: %q", notes[0].Body)
 	}
-	// Disabling never completes the rebuild: the whole point of keeping it owed
-	// is that enabling the app again runs it rather than resuming past it.
 	after, err := d.store.AppReconcilePending("greeter")
 	if err != nil || after.ThroughRequestID != claim.ThroughRequestID {
 		t.Fatalf("the request moved when the app was disabled: %+v, %v", after, err)
@@ -185,16 +163,11 @@ func TestAReconcileThatKeepsThrowingDisablesTheAppAndSaysSo(t *testing.T) {
 			}
 		}
 	}
-	// One row per try, and at least the five this test drove — the daemon's own
-	// consumer loop may have retried the same claim alongside them.
 	if attempts < 5 {
 		t.Fatalf("recorded attempts = %d, want one per try", attempts)
 	}
 }
 
-// Commands are not bus deliveries, so nothing else would hold them behind the
-// fence. Letting one mutate the collections halfway through a rebuild is what
-// would make the fence meaningless.
 func TestACommandIsRefusedByNameWhileAReconcileIsOwed(t *testing.T) {
 	d := newAppDaemon(t)
 	manifest := subscribing("ticket.*")
@@ -203,9 +176,6 @@ func TestACommandIsRefusedByNameWhileAReconcileIsOwed(t *testing.T) {
 	second := manifest
 	second.Description = "the version that owes a rebuild"
 	installApp(t, d, "greeter", second)
-	// The app's own consumer loop is running and would otherwise clear the fence
-	// out from under this test; a rebuild that cannot succeed keeps it owed for
-	// as long as the assertions need it.
 	runtime := startFakeAppRuntime(t, d, nil)
 	runtime.reconcile = func(*fakeAppRuntime, appReconcileRequest) error {
 		return errors.New("this rebuild never succeeds")
@@ -225,9 +195,6 @@ func TestACommandIsRefusedByNameWhileAReconcileIsOwed(t *testing.T) {
 	if !strings.Contains(refusal, "greeter") || !strings.Contains(refusal, "rebuilding") {
 		t.Fatalf("the refusal does not name the app and what it is doing: %q", refusal)
 	}
-	// The code travels in its own field, so the sentence is free to be a
-	// sentence. It led with `reconcile_owed:` once, which reads to a person as
-	// noise and to a caller as something to parse.
 	if strings.HasPrefix(refusal, protocol.ErrorCodeReconcileOwed) {
 		t.Fatalf("the refusal leads with the wire code instead of saying what happened: %q", refusal)
 	}
@@ -235,17 +202,11 @@ func TestACommandIsRefusedByNameWhileAReconcileIsOwed(t *testing.T) {
 		t.Fatalf("the refusal does not name where to look: %q", refusal)
 	}
 
-	// And it is a refusal, not a failure: nothing ran, so nothing is charged to
-	// the app. The rebuild failing in the background is charged — that is the
-	// clock working — and a command must never add to it.
 	if stall, ok := d.appStallSnapshot("greeter"); ok && stall.kind != appStallKindReconcile {
 		t.Fatalf("a refused command put the app on the auto-disable clock: %+v", stall)
 	}
 }
 
-// Retrying code that does not exist cannot heal, so a gap discovered under a
-// version with no reconcile handler is loud immediately rather than after
-// fifteen minutes of retries.
 func TestAGapWithNoHandlerDisablesTheAppWithoutMovingItsCursor(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribingWithoutReconcile("ticket.*"))
@@ -278,17 +239,12 @@ func TestAGapWithNoHandlerDisablesTheAppWithoutMovingItsCursor(t *testing.T) {
 		t.Fatalf("missing_reconcile invocations = %+v, want exactly one", missing)
 	}
 
-	// Status names the state rather than leaving a reader to infer it from a
-	// disabled app that owes something.
 	status := appStatus(t, d, "greeter").AppStatusResult.Reconcile
 	if status.State != appReconcileStateUnsupported || status.Reason == nil {
 		t.Fatalf("status = %+v", status)
 	}
 }
 
-// A version move under a handler-less subscribed version is refused before the
-// pointer moves: installing a version attn already knows it cannot serve safely
-// would be choosing the broken state on purpose.
 func TestAVersionMoveIsRefusedWhenTheSubscribedVersionCannotReconcile(t *testing.T) {
 	d := appApplyDaemon(t)
 	legacy := `{"name":"greeter","attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["ticket.*"]}]}`

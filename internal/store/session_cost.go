@@ -9,17 +9,12 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-// SessionCostObservation is one provider request's absolute token usage.
-// ObservationID is stable across repeated transcript lines for the same request.
 type SessionCostObservation struct {
 	ObservationID string            `json:"observation_id"`
 	Model         string            `json:"model"`
 	Usage         sessioncost.Usage `json:"usage"`
 }
 
-// SessionCostState is the durable accounting fact for one session. Cursor is
-// the next transcript position; observations make repeated provider messages
-// idempotent while the ledger keeps pricing a cheap per-model reduction.
 type SessionCostState struct {
 	Initialized      bool                              `json:"initialized,omitempty"`
 	Cursor           string                            `json:"cursor,omitempty"`
@@ -58,7 +53,6 @@ func decodeSessionCostState(raw string) (SessionCostState, error) {
 	return state, nil
 }
 
-// SessionCost returns a copy of the durable cost state.
 func (s *Store) SessionCost(sessionID string) (SessionCostState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -76,9 +70,6 @@ func (s *Store) SessionCost(sessionID string) (SessionCostState, error) {
 	return state, nil
 }
 
-// SetSessionCostCursor moves the transcript checkpoint without changing usage.
-// It seeds an existing transcript at head and records replacement/recovery
-// boundaries before their next usage batch is committed.
 func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
 		state.Initialized = true
@@ -86,18 +77,12 @@ func (s *Store) SetSessionCostCursor(sessionID, cursor string) error {
 	})
 }
 
-// InitializeSessionCostTracking marks a newly launched session as eligible to
-// account from byte zero when its transcript is discovered. Existing live
-// sessions lack this marker after migration and are seeded at transcript head.
 func (s *Store) InitializeSessionCostTracking(sessionID string) error {
 	return s.updateSessionCost(sessionID, func(state *SessionCostState) {
 		state.Initialized = true
 	})
 }
 
-// MarkSessionCostUsageUnavailable records that a transcript-bearing harness
-// produced an assistant turn but exposes no token usage. It returns true only
-// on the first transition so idle watcher ticks stay quiet on the wire.
 func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {
@@ -109,9 +94,6 @@ func (s *Store) MarkSessionCostUsageUnavailable(sessionID, cursor string) (bool,
 	return changed, err
 }
 
-// ApplySessionCostObservations advances the transcript cursor and upserts
-// absolute request usage atomically. The bool reports whether billable usage
-// changed (cursor-only movement stays quiet on the wire).
 func (s *Store) ApplySessionCostObservations(sessionID, cursor string, observations []SessionCostObservation) (bool, error) {
 	changed := false
 	err := s.updateSessionCost(sessionID, func(state *SessionCostState) {

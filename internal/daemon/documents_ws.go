@@ -8,25 +8,15 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Live queries on the WebSocket. The subscription loop, the wake channel and the
-// windowed delivery are documents.go's; what is here is the identity a
-// multiplexed connection needs — a client-minted id, the way out that matches
-// the way in, and the per-client ceiling on how many may be open at once.
-//
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "Protocol
-// envelopes".
+// See docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "Protocol envelopes".
 
-// clientDocSubscriptions is one client's live queries: id → the channel whose
-// close ends that subscription's loop. Its own lock, because a subscription ends
-// from three directions (the client asking, the client disconnecting, the daemon
-// giving up) and none of them holds the other's.
+// clientDocSubscriptions has its own lock: a subscription ends from three directions
+// (client asking, client disconnecting, daemon giving up) and none holds the other's.
 type clientDocSubscriptions struct {
 	mu   sync.Mutex
 	subs map[string]chan struct{}
 }
 
-// open registers a subscription, or says why it cannot. The count comes back so
-// the refusal can name the ask alongside the limit.
 func (s *clientDocSubscriptions) open(id string) (done chan struct{}, held int, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -44,8 +34,6 @@ func (s *clientDocSubscriptions) open(id string) (done chan struct{}, held int, 
 	return done, len(s.subs), nil
 }
 
-// close ends one subscription and reports whether it was there — an unsubscribe
-// racing the daemon's own ending is ordinary, not an error.
 func (s *clientDocSubscriptions) close(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -58,9 +46,8 @@ func (s *clientDocSubscriptions) close(id string) bool {
 	return true
 }
 
-// closeAll ends every subscription this client holds. A client that vanished
-// leaves loops that would otherwise re-run its queries on every write to their
-// collections, forever.
+// closeAll: a vanished client would otherwise leave loops re-running its queries
+// on every write to their collections, forever.
 func (s *clientDocSubscriptions) closeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -76,9 +63,6 @@ func (s *clientDocSubscriptions) count() int {
 	return len(s.subs)
 }
 
-// handleDocSubscribeWS accepts a live query on the WebSocket. Every refusal and
-// every ending leaves by the same envelope, so a client has exactly one place to
-// learn a subscription is not running.
 func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscribeMessage) {
 	id := protocol.Deref(msg.SubscriptionID)
 	if id == "" {
@@ -106,16 +90,12 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 		return
 	}
 
-	// Its own goroutine: the loop blocks between deliveries, and the message pump
-	// that got us here processes this client's commands in order — including the
-	// doc_unsubscribe that ends this.
+	// Its own goroutine: the loop blocks between deliveries, and the pump that got us here
+	// handles this client's commands in order — including the doc_unsubscribe that ends it.
 	go func() {
 		defer client.docSubscriptions.close(id)
 		d.runDocSubscription(q, msg.Have, docSink{
 			deliver: func(window *protocol.DocSubscribeResult) error {
-				// A non-blocking hand-off to the write pump, which is what keeps a
-				// slow client from stalling a delivery loop. Its failure means the
-				// client is gone or too far behind to keep, and the subscription ends.
 				if !d.sendToClient(client, protocol.DocSubscriptionDeliveryMessage{
 					Event:          protocol.EventDocSubscriptionDelivery,
 					SubscriptionID: id,
@@ -133,14 +113,10 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 	}()
 }
 
-// handleDocUnsubscribeWS is the way out for the way in. An id nobody holds is
-// ignored: an unsubscribe racing the daemon's own ending is the ordinary case.
 func (d *Daemon) handleDocUnsubscribeWS(client *wsClient, msg *protocol.DocUnsubscribeMessage) {
 	client.docSubscriptions.close(msg.SubscriptionID)
 }
 
-// endDocSubscriptionWS tells the client one subscription is over, and why. Code
-// is what a host acts on; the message is what a person reads.
 func (d *Daemon) endDocSubscriptionWS(client *wsClient, id string, err error, code string) {
 	if code == "" {
 		code = protocol.ErrorCodeInvalidQuery
@@ -153,7 +129,6 @@ func (d *Daemon) endDocSubscriptionWS(client *wsClient, id string, err error, co
 	})
 }
 
-// dropDocSubscriptions ends every live query a departing client held.
 func (d *Daemon) dropDocSubscriptions(client *wsClient) {
 	if client == nil {
 		return

@@ -9,27 +9,19 @@ import (
 	"strings"
 )
 
-// EnsureGUIPath ensures the PATH includes common tool locations.
-// On macOS, GUI apps start with a minimal PATH. This function:
-// 1. Runs /usr/libexec/path_helper to get system-configured paths
-// 2. Adds common Homebrew and user paths that may be missing
-// 3. Updates the PATH environment variable
-//
-// This should be called early in daemon startup before spawning
-// subprocesses that need tools like 'gh'.
+// A GUI app on macOS starts with a minimal PATH, so subprocesses lose tools
+// like 'gh' unless this ran first.
 func EnsureGUIPath() error {
 	currentPath := os.Getenv("PATH")
 
-	// Try path_helper first - it reads /etc/paths and /etc/paths.d/*
 	if helperPath := runPathHelper(); helperPath != "" {
 		currentPath = mergePaths(currentPath, helperPath)
 	}
 
-	// Add common paths that exist on disk
 	commonPaths := []string{
-		"/opt/homebrew/bin", // Homebrew on Apple Silicon
+		"/opt/homebrew/bin",
 		"/opt/homebrew/sbin",
-		"/usr/local/bin", // Homebrew on Intel Mac
+		"/usr/local/bin",
 		"/usr/local/sbin",
 	}
 	if home, err := os.UserHomeDir(); err == nil {
@@ -54,8 +46,7 @@ func runPathHelper() string {
 	return extractPathFromShellOutput(string(output))
 }
 
-// extractPathFromShellOutput parses the output of `path_helper -s`
-// which outputs: PATH="..."; export PATH;
+// extractPathFromShellOutput parses `path_helper -s` output: PATH="..."; export PATH;
 func extractPathFromShellOutput(output string) string {
 	const prefix = "PATH=\""
 	start := strings.Index(output, prefix)

@@ -1,10 +1,3 @@
-/**
- * DiffView Test Harness
- *
- * Renders DiffView (the @pierre/diffs wrapper) in isolation with mocked review
- * callbacks. Exposes window.__HARNESS__ controls for switching files, toggling
- * layout, and seeding comments.
- */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiffView } from '../../src/components/DiffView';
 import type { ReviewComment } from '../../src/types/generated';
@@ -176,9 +169,6 @@ export function DiffViewHarness({ onReady }: HarnessProps) {
     api.failNextAddComment = () => {
       failNextAddRef.current = true;
     };
-    // Simulate a background change that re-renders the diff without touching the
-    // file content: a comment arrives on another line (as the agent or a poll
-    // would deliver). The selected file's original/modified are unchanged.
     api.addBackgroundComment = () =>
       setComments((prev) => [
         ...prev,

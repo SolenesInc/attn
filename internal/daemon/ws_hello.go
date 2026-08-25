@@ -11,22 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleClientHello records the client's identity and capabilities for the
-// rest of the connection. Idempotent — a client that re-sends hello overwrites
-// its prior identity.
-//
-// We deliberately don't reply: the hello is a fire-and-forget setup
-// message. The next command the client sends is the real signal that
-// the connection is alive and ready.
-//
-// The one exception is a client returning from an eviction. Its previous
-// connection was hung up on and could not be told why over a socket that was
-// already backed up, so the reason is handed to it here — once, and only if
-// the daemon is still holding one for the client_id it just named.
-//
-// Unix-socket commands never reach here: they have their own dispatch in
-// daemon.go, and file permissions on the socket already decide who may speak.
-// The WebSocket port has no such gate, which is what client_token is for.
 func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMessage) {
 	if !d.authorizeClientHello(client, msg) {
 		return
@@ -51,27 +35,15 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 	d.admitClient(client)
 	if record, ok := d.wsHub.takeEviction(clientID); ok {
 		if !d.sendEvictionNotice(client, record) {
-			// The eviction was filed while this connection was already saying hello
-			// (the hub evicts on its own goroutine, and a re-hello races it), and the
-			// connection can no longer be written — its send channel is closed, or
-			// its buffer is full the way the eviction's cause says it is. Consuming
-			// the record here would lose the only copy, so it goes back on file for
-			// this client's next hello. No duplicate is possible: a delivered notice
-			// is never re-filed.
+			// Consuming the record here would lose the only copy, so it goes back on file
+			// for the next hello; a delivered notice is never re-filed.
 			d.wsHub.rememberEviction(clientID, record)
 		}
 	}
 }
 
-// admitClient lets an authorized connection into the hub and hands it the
-// snapshot it has been waiting for.
-//
-// Registration happens here rather than at accept, and that is the read side of
-// the client token: the hub is the only fan-out, so a connection that has not
-// presented the token sees no broadcast and no initial_state — which is most of
-// what there is to see. A client that helloes twice joins the hub once; the
-// token itself is checked on every hello, so a second one that fails still
-// closes an already-admitted connection.
+// admitClient lets an authorized connection into the hub. The hub is the only fan-out, so
+// an unauthorized connection sees no broadcast at all. A double hello joins once.
 func (d *Daemon) admitClient(client *wsClient) {
 	client.admitted.Do(func() {
 		d.wsHub.add(client)
@@ -80,22 +52,12 @@ func (d *Daemon) admitClient(client *wsClient) {
 	})
 }
 
-// authorizeClientHello refuses a hello that does not carry this profile's
-// client token. It runs before any identity is recorded, so a refused client
-// also fails the workspace_sessions gate on everything it sends afterwards, and
-// admitClient never runs for it.
-//
-// The refusal names the file it should have read: nobody reads our code, their
-// agents read our errors, and "unauthorized" alone is unfixable.
 func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHelloMessage) bool {
 	if client.bearerAuthorized {
-		// Already proved itself at the HTTP layer with the operator's bearer,
-		// which is how a deliberately exposed port is gated. Asking a browser
-		// served from that port for a file on this disk would only close it.
 		return true
 	}
 	// The d.clientToken != "" half matters: a daemon holding no token refuses
-	// everyone rather than matching the client that also sent nothing.
+	// everyone rather than matching a client that also sent nothing.
 	provided := strings.TrimSpace(protocol.Deref(msg.ClientToken))
 	if d.clientToken != "" && subtle.ConstantTimeCompare([]byte(d.clientToken), []byte(provided)) == 1 {
 		return true
@@ -116,9 +78,8 @@ func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHell
 		Error:     protocol.Ptr(reason),
 		ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient),
 	})
-	// Close through the send channel, not the connection: the write pump drains
-	// what is queued before it hangs up, which is what makes the refusal arrive
-	// rather than race the close.
+	// Close through the send channel, not the connection: the write pump drains the
+	// queue first, which is what makes the refusal arrive rather than race the close.
 	client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, protocol.ErrorCodeUnauthorizedClient)
 	return false
 }

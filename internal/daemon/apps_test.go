@@ -14,14 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The app registry's IPC surface. What these pin is mostly what the handlers
-// refuse to invent: an app with no consumer has no enabled state, an unknown
-// name is answered with what does exist, and removing an app keeps everything
-// that is history or data.
-
-// seedApp writes the rows a real profile holds after one apply: a registry row
-// pointing at a version, and the app's own bus consumer sitting behind a log
-// that has moved on.
 func seedApp(t *testing.T, d *Daemon, name string, enabled bool) store.AppVersion {
 	t.Helper()
 	now := time.Now().UTC()
@@ -48,9 +40,8 @@ func seedAppConsumer(t *testing.T, d *Daemon, name string, enabled bool, cursor 
 	}, time.Now()); err != nil {
 		t.Fatalf("seed consumer for %s: %v", name, err)
 	}
-	// SaveBusConsumer deliberately never rewrites an existing row's cursor or
-	// enabled bit — re-registering at startup must neither rewind a consumer nor
-	// resurrect one the operator killed — so the seed sets both explicitly.
+	// SaveBusConsumer never rewrites an existing row's cursor or enabled bit, so the
+	// seed sets both explicitly.
 	if _, err := d.store.SetBusConsumerEnabled(apps.ConsumerName(name), enabled, time.Now()); err != nil {
 		t.Fatalf("seed consumer bit for %s: %v", name, err)
 	}
@@ -111,8 +102,6 @@ func TestAppListReportsVersionAndConsumer(t *testing.T) {
 	}
 
 	version := seedApp(t, d, "approval-gate", true)
-	// Two facts on the log with the consumer parked at 1: lag is what the app
-	// has yet to be delivered, which is the number an operator acts on.
 	for i := 0; i < 2; i++ {
 		if _, err := d.store.AppendBusEvent(store.BusEvent{Name: "ticket.created", Subject: "t-1"}, time.Now()); err != nil {
 			t.Fatalf("append event: %v", err)
@@ -145,8 +134,6 @@ func TestAppListReportsVersionAndConsumer(t *testing.T) {
 	}
 }
 
-// An app whose runtime has never registered a consumer is a real state, and the
-// answer says so rather than defaulting it to enabled or to disabled.
 func TestAppWithNoConsumerReportsNoneAndCannotBeFlipped(t *testing.T) {
 	d := newDaemonForTest(t)
 	if err := d.store.SaveApp("half-installed", time.Now()); err != nil {
@@ -167,8 +154,6 @@ func TestAppWithNoConsumerReportsNoneAndCannotBeFlipped(t *testing.T) {
 			t.Fatalf("flipping an app with no consumer succeeded (enabled=%t)", enabled)
 		}
 		msg := protocol.Deref(resp.Error)
-		// The error names the consumer that is missing and where to look — an
-		// agent reading it can act without reading the code.
 		if !strings.Contains(msg, "app:half-installed") || !strings.Contains(msg, "attn app status") {
 			t.Fatalf("error does not say what is missing or what to run: %q", msg)
 		}
@@ -211,8 +196,6 @@ func TestAppEnableDisableFlipsTheConsumerBitAndPublishes(t *testing.T) {
 	if facts[0].Subject != "approval-gate" {
 		t.Fatalf("subject = %q, want the app name", facts[0].Subject)
 	}
-	// The payload carries which way it went: a consumer of this fact must not
-	// have to read back a bit that may already have moved again.
 	var payload appEnabledChanged
 	if err := json.Unmarshal([]byte(facts[0].Payload), &payload); err != nil {
 		t.Fatalf("decoding payload %q: %v", facts[0].Payload, err)
@@ -274,10 +257,8 @@ func TestAppVersionChangeReconcilesAtTheFrozenCursorThenDeliversTheRetainedFact(
 	waitFor(t, "reconcile followed by retained fact delivery", func() bool {
 		return len(runtime.reconcileLog()) == 1 && len(runtime.dispatchLog()) == 1
 	})
-	// The fence is read off the reconcile the runtime was actually handed, not
-	// off a mid-test peek at the pending claim: a drain already in flight when
-	// the app was disabled may legitimately consume that claim first, and what
-	// matters either way is the boundary the app rebuilt to.
+	// Read the fence off the reconcile the runtime was handed: a drain already in flight
+	// when the app was disabled may legitimately consume the pending claim first.
 	if fence := runtime.reconcileLog()[0].Reason.ThroughSeq; fence >= retainedSeq {
 		t.Fatalf("version fence %d covered retained undelivered fact %d", fence, retainedSeq)
 	}
@@ -311,8 +292,7 @@ func TestAppRemoveKeepsHistoryAndDocuments(t *testing.T) {
 	if _, ok, err := d.store.GetApp("approval-gate"); err != nil || ok {
 		t.Fatalf("registry row survived: ok=%t err=%v", ok, err)
 	}
-	// The consumer row going is what releases the retention floor; an orphaned
-	// enabled row would pin the whole event log against trimming.
+	// An orphaned enabled consumer row would pin the whole event log against trimming.
 	if _, ok, err := d.store.GetBusConsumer("app:approval-gate"); err != nil || ok {
 		t.Fatalf("consumer row survived: ok=%t err=%v", ok, err)
 	}
@@ -332,9 +312,6 @@ func TestAppRemoveKeepsHistoryAndDocuments(t *testing.T) {
 	}
 }
 
-// A stray consumer with no registry row is exactly the state that needs a way
-// out: it is an enabled registration nobody serves, holding the log's retention
-// floor down.
 func TestAppRemoveCleansAConsumerWithNoRegistryRow(t *testing.T) {
 	d := newDaemonForTest(t)
 	seedAppConsumer(t, d, "orphan", true, 0)
@@ -373,8 +350,6 @@ func TestAppCommandsOnAnUnknownNameSayWhatExists(t *testing.T) {
 	}
 }
 
-// A name whose registry row is gone but whose history survives is a different
-// situation from a name that never existed, and the error says which.
 func TestAppStatusOnARemovedAppPointsAtItsRemains(t *testing.T) {
 	d := newDaemonForTest(t)
 	seedApp(t, d, "approval-gate", true)
@@ -433,9 +408,6 @@ func TestAppStatusReportsHistoryAndRecentInvocations(t *testing.T) {
 	}
 }
 
-// Rollback takes a version id and names ids in every refusal, so status is
-// where they have to be readable. A count alone sent the reader looking for a
-// list that did not exist on any surface.
 func TestAppStatusListsTheVersionIdsRollbackTakes(t *testing.T) {
 	d := newDaemonForTest(t)
 	seedApp(t, d, "approval-gate", false)
@@ -459,13 +431,9 @@ func TestAppStatusListsTheVersionIdsRollbackTakes(t *testing.T) {
 	if len(result.RecentVersions) != recentVersionLimit {
 		t.Fatalf("recent_versions = %d, want the %d cap", len(result.RecentVersions), recentVersionLimit)
 	}
-	// Newest first, so the ids a reader is most likely to want are the ones they
-	// get when the list is truncated.
 	if result.RecentVersions[0].ID != int(ids[len(ids)-1]) {
 		t.Fatalf("recent_versions[0].ID = %d, want the newest %d", result.RecentVersions[0].ID, ids[len(ids)-1])
 	}
-	// The count still tells the truth about how many exist, which is what keeps
-	// the capped list honest.
 	if result.Versions != len(ids)+1 {
 		t.Fatalf("versions = %d, want %d", result.Versions, len(ids)+1)
 	}
@@ -474,10 +442,6 @@ func TestAppStatusListsTheVersionIdsRollbackTakes(t *testing.T) {
 	}
 }
 
-// Status is where the serving history is readable, because bare rollback walks
-// it and nothing else says whether another step exists. The list starts at the
-// version serving now, so what follows it is where the next rollbacks go, and
-// the total keeps a capped list honest.
 func TestAppStatusShowsWhereRollbackCanStillGo(t *testing.T) {
 	d := newDaemonForTest(t)
 	seedApp(t, d, "approval-gate", false)
@@ -509,13 +473,10 @@ func TestAppStatusShowsWhereRollbackCanStillGo(t *testing.T) {
 		t.Fatalf("serving_history[1] = %d, want the next rollback's target %d",
 			result.ServingHistory[1].ID, ids[len(ids)-2])
 	}
-	// One step per version applied, plus the one seedApp left.
 	if steps := protocol.Deref(result.ServingHistorySteps); steps != len(ids)+1 {
 		t.Fatalf("serving_history_steps = %d, want %d", steps, len(ids)+1)
 	}
 
-	// A walk that goes past the newest versions still reports a history: the
-	// versions on it come from the whole list, not the capped recent one.
 	for i := 0; i < recentVersionLimit+1; i++ {
 		if resp := appRollback(t, d, "approval-gate", 0); !resp.Ok {
 			t.Fatalf("rollback %d: %v", i+1, protocol.Deref(resp.Error))

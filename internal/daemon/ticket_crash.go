@@ -7,12 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// isMidFlightCrashState reports whether a delegated session's pre-clobber runtime
-// state means its process ended while still working — a crash or a kill — rather
-// than at a clean rest. It mirrors the dispatch close-state classification: a
-// cut-off from launching / working / pending_approval is a failure, while idle /
-// waiting_input (and the ambiguous unknown) are neutral ends that leave the ticket
-// wherever the agent last reported it.
 func isMidFlightCrashState(state string) bool {
 	switch state {
 	case protocol.StateLaunching, protocol.StateWorking, protocol.StatePendingApproval:
@@ -22,14 +16,8 @@ func isMidFlightCrashState(state string) bool {
 	}
 }
 
-// crashTicket authors the Crashed status on one bound ticket whose session's
-// process ended mid-flight without a terminal report. Crashed is the one column
-// transition attn writes itself: the dead worker never got to say done/failed,
-// so the board would otherwise show a stale Working/Blocked forever. Callers
-// (the session-end seam in ticket_reconcile.go) have already established the
-// ticket is non-terminal; a racing terminal report still wins because
-// SetTicketStatus is permissive but the reconciliation claim that follows is
-// first-writer-wins.
+// Callers have already established the ticket is non-terminal, and a racing terminal report still
+// wins because the reconciliation claim that follows is first-writer-wins.
 func (d *Daemon) crashTicket(ticketID, sessionID, state string) bool {
 	if _, err := d.store.SetTicketStatus(
 		ticketID,
@@ -42,10 +30,7 @@ func (d *Daemon) crashTicket(ticketID, sessionID, state string) bool {
 		return false
 	}
 	d.logf("ticket %q crashed: session %s ended mid-flight (%s)", ticketID, sessionID, state)
-	// attn authored the crash; notify the chief (the crashed session is gone, so it
-	// is skipped as a non-live participant).
 	d.notifyTicketObservers(ticketID)
-	// Refresh the app's board view: the ticket moved to the Crashed lane.
 	d.publishTicketFact(FactTicketStatusChanged, ticketID)
 	return true
 }

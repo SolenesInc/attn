@@ -43,21 +43,13 @@ Text to analyze:
 """
 `
 
-// VerdictParked is the state token for a PARKED verdict: the turn yielded to its
-// own background work and will resume without the user. Deliberately not a
-// protocol state — the daemon files it as classifier evidence and the resolver's
-// background-work clause is the only reader.
+// Deliberately not a protocol state — the daemon files it as classifier evidence.
 const VerdictParked = "parked"
 
-// ClaudeVerdictSchema is the JSON Schema the Claude backend's final answer must
-// validate against (passed to the CLI as --json-schema). The validated object
-// comes back as the run's structured output; ParseVerdict reads it.
 const ClaudeVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["WAITING","DONE","PARKED"]}},"required":["verdict"],"additionalProperties":false}`
 
-// ComposeYieldInput builds the classification input for a stop that yielded with
-// background work still running: the assistant's last message plus the harness
-// facts the prompt's PARKED rule keys on. It lives beside the template so the
-// "[harness facts]" marker and the rule that reads it cannot drift apart.
+// Lives beside the template so the "[harness facts]" marker and the prompt rule
+// that reads it cannot drift apart.
 func ComposeYieldInput(lastMessage string, runningBackgroundTasks int) string {
 	return fmt.Sprintf(
 		"%s\n\n[harness facts] The turn yielded with %d background process(es) still running; the harness will resume the agent when one exits.",
@@ -66,13 +58,9 @@ func ComposeYieldInput(lastMessage string, runningBackgroundTasks int) string {
 	)
 }
 
-// ClaudeMaxTurns caps the Claude backend's agentic turns. The run is a tool-less
-// single-shot judgment; the cap is a runaway backstop, and 2 leaves room for the
-// structured-output turn after the answer.
+// 2 leaves room for the structured-output turn after the answer.
 const ClaudeMaxTurns = 2
 
-// DefaultClaudeClassifierModel is the model the Claude backend classifies with
-// when ATTN_CLAUDE_CLASSIFIER_MODEL is unset.
 const DefaultClaudeClassifierModel = "haiku"
 
 var verdictLineRegex = regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITING_INPUT|WAITING|DONE|IDLE|PARKED)(?:\s*(?:[-:]\s+.*|\([^)]*\)|[.!?]))?\s*$`)
@@ -80,18 +68,13 @@ var verdictLineRegex = regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITIN
 const classifierLogSnippetMaxChars = 600
 
 const (
-	// The classification is a one-word verdict over a short transcript slice, so
-	// the cheapest tier of the current family is the right pick — the cost here
-	// is latency, not tokens, and latency is user-visible: the resolver holds the
-	// pre-settle color until the verdict lands. Measured end to end through the
-	// CLI, low effort: gpt-5.6-luna 3.9s against 9.3s for the claude/haiku path.
+	// The cost here is latency, not tokens. Measured end to end through the CLI at low
+	// effort: gpt-5.6-luna 3.9s against 9.3s for the claude/haiku path.
 	defaultCodexClassifierModel   = "gpt-5.6-luna"
 	defaultCodexReasoningEffort   = "low"
 	defaultCodexClassifierTimeout = 30 * time.Second
 	defaultCodexExecutable        = "codex"
 	codexConfigReasoningEffortKey = "model_reasoning_effort"
-	// codexConfigDisableShellToolKV removes the built-in shell tool: the
-	// classifier only needs the model to emit a verdict, never to run commands.
 	codexConfigDisableShellToolKV = "features.shell_tool=false"
 )
 
@@ -107,7 +90,6 @@ type codexEvent struct {
 	} `json:"error"`
 }
 
-// BuildPrompt creates the classification prompt
 func BuildPrompt(text string) string {
 	return fmt.Sprintf(promptTemplate, text)
 }
@@ -206,7 +188,6 @@ func truncateForLog(value string, maxChars int) string {
 	return value[:maxChars] + "...(truncated)"
 }
 
-// ClaudeClassifierModel resolves the model the Claude backend classifies with.
 func ClaudeClassifierModel() string {
 	if model := strings.TrimSpace(os.Getenv("ATTN_CLAUDE_CLASSIFIER_MODEL")); model != "" {
 		return model
@@ -214,11 +195,6 @@ func ClaudeClassifierModel() string {
 	return DefaultClaudeClassifierModel
 }
 
-// ParseVerdict maps one headless Claude run's output to a state. The
-// schema-validated structured output wins when it carries a verdict; the final
-// assistant text is the fallback for a run that answered in prose (or ended
-// before the structured-output turn). Returns ok=false when neither carries an
-// explicit verdict — callers report "unknown" rather than guessing.
 func ParseVerdict(structuredOutput json.RawMessage, finalText string) (string, bool) {
 	if len(structuredOutput) > 0 {
 		if result, ok := parseVerdictFromJSONResponse(string(structuredOutput)); ok {
@@ -233,7 +209,6 @@ func ParseVerdict(structuredOutput json.RawMessage, finalText string) (string, b
 	return "", false
 }
 
-// TruncateForLog bounds a value echoed into the daemon log.
 func TruncateForLog(value string) string {
 	return truncateForLog(value, classifierLogSnippetMaxChars)
 }
@@ -307,21 +282,15 @@ func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoning
 	args := []string{
 		"exec",
 		"--json",
-		// Never persist a rollout under ~/.codex/sessions: the classifier runs
-		// from the session's own cwd, so a persisted rollout is a decoy that
-		// cwd-based transcript discovery can resolve instead of the session's
-		// real conversation — the classifier would then classify its own prior
-		// verdict. The verdict is read from --output-last-message and stdout;
-		// nothing reads the rollout.
+		// A persisted rollout is a decoy cwd-based transcript discovery can resolve instead
+		// of the real conversation: the classifier would classify its own prior verdict.
 		"--ephemeral",
 		"--output-last-message", lastMessagePath,
-		// Classify regardless of the session's cwd. Codex refuses `exec` outside a
-		// trusted git repo otherwise, which is how a codex turn that ends in an
-		// untrusted dir (e.g. /tmp) gets misclassified as unknown.
+		// Codex otherwise refuses `exec` outside a trusted git repo, so a turn that
+		// ends in an untrusted dir (e.g. /tmp) is misclassified as unknown.
 		"--skip-git-repo-check",
-		// Ignore the user's config.toml entirely: the classifier must not inherit
-		// their MCP servers (which add startup latency, auth noise, and tool-schema
-		// tokens) or other agent settings. Auth is read separately and still works.
+		// The classifier must not inherit the user's MCP servers or agent settings.
+		// Auth is read separately.
 		"--ignore-user-config",
 		"-m", model,
 		"-c", fmt.Sprintf("%s=%q", codexConfigReasoningEffortKey, reasoningEffort),
@@ -357,7 +326,6 @@ func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoning
 	return lastMessage, stdout.String(), err
 }
 
-// ParseResponse parses the LLM response into a state
 func ParseResponse(response string) string {
 	if result, ok := parseVerdictFromResponse(response); ok {
 		return result
@@ -366,19 +334,14 @@ func ParseResponse(response string) string {
 	return "idle"
 }
 
-// LogFunc is a function type for logging
 type LogFunc func(format string, args ...interface{})
 
-// DefaultLogger is a no-op logger
 var DefaultLogger LogFunc = func(format string, args ...interface{}) {}
 
-// SetLogger sets the logger function
 func SetLogger(fn LogFunc) {
 	DefaultLogger = fn
 }
 
-// ClassifyWithCopilot uses Copilot CLI (Haiku model) to classify text.
-// Returns "waiting_input", "idle", or "unknown".
 func ClassifyWithCopilot(text string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")
@@ -414,8 +377,8 @@ func ClassifyWithCopilot(text string, timeout time.Duration) (string, error) {
 		"--no-color",
 		"--no-custom-instructions",
 	}
-	// Use an isolated working directory so classifier runs do not overlap
-	// with interactive Copilot session cwd-based transcript discovery.
+	// An isolated cwd keeps classifier runs out of Copilot's cwd-based transcript
+	// discovery.
 	workDir, err := os.MkdirTemp("", "attn-copilot-classifier-*")
 	if err == nil {
 		defer os.RemoveAll(workDir)
@@ -454,26 +417,14 @@ func ClassifyWithCopilot(text string, timeout time.Duration) (string, error) {
 	return result, nil
 }
 
-// ClassifyWithCodex uses Codex CLI with a single model (default gpt-5.4-mini,
-// low effort; override via ATTN_CODEX_CLASSIFIER_MODEL).
-// Returns "waiting_input", "idle", or "unknown".
 func ClassifyWithCodex(text string, timeout time.Duration) (string, error) {
 	return ClassifyWithCodexExecutable(text, "", timeout)
 }
 
-// ClassifyWithCodexExecutable uses Codex CLI with a single model (default
-// gpt-5.4-mini, low effort; override via ATTN_CODEX_CLASSIFIER_MODEL).
-// Executable resolution order:
-// 1) ATTN_CODEX_EXECUTABLE env var
-// 2) configuredExecutable argument
-// 3) "codex"
-// Returns "waiting_input", "idle", or "unknown".
 func ClassifyWithCodexExecutable(text, configuredExecutable string, timeout time.Duration) (string, error) {
 	return ClassifyWithCodexExecutableInDir(text, configuredExecutable, "", timeout)
 }
 
-// ClassifyWithCodexExecutableInDir is like ClassifyWithCodexExecutable but runs
-// the Codex subprocess from the provided working directory when one is set.
 func ClassifyWithCodexExecutableInDir(text, configuredExecutable, workDir string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")

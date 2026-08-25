@@ -44,8 +44,6 @@ func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate losing the first accepted/final response: the caller retains only
-	// its request key and invokes the same logical request again.
 	second, err := d.startDelegation(msg)
 	if err != nil {
 		t.Fatal(err)
@@ -135,9 +133,8 @@ func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
 	}
 }
 
-// Boundary-bound twice over: the launch creates a real git worktree (child
-// process), and the acceptance assertion measures real elapsed wall-clock —
-// under a fake clock time.Since would read zero and prove nothing.
+// Not synctest-able twice over: the launch creates a real git worktree (child
+// process), and the acceptance assertion measures real elapsed wall-clock.
 func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -244,8 +241,6 @@ func TestDelegationOperationAdoptsReconciledReservedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Startup worker reconciliation found the stable runtime ID that was spawned
-	// before the old daemon could persist its full session association.
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, Label: filepath.Base(cwd), Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	backend.sessionIDs = append(backend.sessionIDs, record.Operation.SessionID)
@@ -339,8 +334,6 @@ func TestDelegationRestartDoesNotOwnWorktreeFromPathJournalAlone(t *testing.T) {
 		"preparing worktree "+path, "", "", path, nil, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	// The daemon stopped after journaling intent but before creation. A different
-	// actor then created the same requested branch/path.
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "feat/external", path)
 	d.runDelegationOperation(record.Operation.OperationID)
 	failed := waitDelegationOperation(t, d, record.Operation.OperationID)
@@ -385,8 +378,6 @@ func TestDelegationRestartDoesNotDeleteReplacementForPreviouslyOwnedWorktree(t *
 	if err := d.store.MarkDelegationWorktreeOwned(record.Operation.OperationID, path, "original-owner-token", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	// The original daemon stopped after recording ownership. During the outage,
-	// another actor replaced the worktree with a new instance at the same path.
 	runGitDaemon(t, mainRepo, "worktree", "remove", path)
 	runGitDaemon(t, mainRepo, "branch", "-D", "feat/replacement")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "feat/replacement", path)

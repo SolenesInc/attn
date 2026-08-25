@@ -25,21 +25,12 @@ const (
 	PaneKindAgent PaneKind = "agent"
 )
 
-// TileKind labels a docked tile by the surface it renders. The layout package
-// treats it as an opaque token: tiles are persisted by where they sit and how
-// big they are, not by what they display. Rendering is entirely a client
-// concern, so new kinds need no daemon change.
 type TileKind string
 
 const (
-	// TileKindMarkdown is the first tile consumer. More kinds can be docked
-	// without touching this package.
 	TileKindMarkdown TileKind = "markdown"
 	TileKindBrowser  TileKind = "browser"
 	TileKindSeed     TileKind = "seed"
-	// TileKindNotebook renders the full editable Notebook surface inside a tile.
-	// Its TileParams hold the open file's path; an empty value is valid and
-	// renders the tile's no-selection picker.
 	TileKindNotebook TileKind = "notebook"
 )
 
@@ -62,30 +53,16 @@ type Pane struct {
 }
 
 type Node struct {
-	Type   string `json:"type"`
-	PaneID string `json:"pane_id,omitempty"`
-	// TileID and TileKind describe a docked tile leaf (Type == "tile").
-	// Tiles are first-class layout citizens alongside agent panes: they take
-	// real space, resize through the same split machinery, and persist with the
-	// layout. TileKind is opaque to the daemon (see TileKind).
-	TileID   string `json:"tile_id,omitempty"`
-	TileKind string `json:"tile_kind,omitempty"`
-	// TileParams is opaque to this package: it persists and reproduces with
-	// the layout, but the daemon's layout machinery never interprets it. A
-	// consumer (e.g. the markdown content service) reads it — for markdown it
-	// holds the absolute path of the file the tile renders.
-	TileParams string `json:"tile_params,omitempty"`
-	// TileSessionID binds a tile to the session it was opened from (e.g. the
-	// terminal pane whose cmd+click or `attn open` docked a markdown tile).
-	// Like TileParams it is opaque to the layout machinery: it persists and
-	// travels with the tile, but only tile consumers interpret it.
+	Type          string    `json:"type"`
+	PaneID        string    `json:"pane_id,omitempty"`
+	TileID        string    `json:"tile_id,omitempty"`
+	TileKind      string    `json:"tile_kind,omitempty"`
+	TileParams    string    `json:"tile_params,omitempty"`
 	TileSessionID string    `json:"tile_session_id,omitempty"`
 	SplitID       string    `json:"split_id,omitempty"`
 	Direction     Direction `json:"direction,omitempty"`
 	Ratio         float64   `json:"ratio,omitempty"`
-	// RatioLocked marks a split whose ratio the user set explicitly (by
-	// dragging the divider) or that anchors a tile. Locked ratios survive
-	// normalization instead of being rebalanced back to an equal split.
+	// RatioLocked survives normalization instead of being rebalanced to an equal split.
 	RatioLocked bool   `json:"ratio_locked,omitempty"`
 	Children    []Node `json:"children,omitempty"`
 }
@@ -227,7 +204,6 @@ func rebalanceSplitChains(node Node) Node {
 	secondChild := rebalanceSplitChains(node.Children[1])
 	node.Children = []Node{firstChild, secondChild}
 
-	// A user-set ratio is authoritative; never rebalance it back to equal.
 	if node.RatioLocked {
 		return node
 	}
@@ -241,8 +217,8 @@ func rebalanceSplitChains(node Node) Node {
 }
 
 func splitChainSpanCount(node Node, direction Direction) int {
-	// A locked split is an opaque unit: its children keep the user's ratio, so
-	// an enclosing chain must not redistribute space through it.
+	// A locked split is an opaque unit: an enclosing chain must not redistribute
+	// space through it.
 	if node.Type != "split" || node.Direction != direction || len(node.Children) < 2 || node.RatioLocked {
 		return 1
 	}
@@ -262,9 +238,8 @@ func normalizeNode(node Node, panesByID map[string]Pane) (Node, bool) {
 	case "tile":
 		tileID := strings.TrimSpace(node.TileID)
 		tileKind := strings.TrimSpace(node.TileKind)
-		// A tile with no identity or kind is meaningless; drop it so an
-		// orphaned tile can't wedge the layout. Tiles are otherwise never
-		// pruned by pane bookkeeping — they have no entry in panesByID.
+		// Drop an identity-less tile so it cannot wedge the layout. Tiles are
+		// otherwise never pruned by pane bookkeeping: they have no panesByID entry.
 		if tileID == "" || tileKind == "" {
 			return Node{}, true
 		}
@@ -353,9 +328,6 @@ func Split(node Node, targetPaneID, newPaneID, splitID string, direction Directi
 	return node, false
 }
 
-// SetSplitRatio sets and locks the ratio of the split identified by splitID.
-// The returned bool reports whether a matching split was found. The ratio is
-// clamped to a small margin so neither side can collapse to zero.
 func SetSplitRatio(node Node, splitID string, ratio float64) (Node, bool) {
 	const margin = 0.05
 	if ratio < margin {
@@ -462,7 +434,6 @@ func collectPaneIDs(node Node, ids *[]string) {
 	}
 }
 
-// HasTile reports whether a docked tile with the given id exists in the tree.
 func HasTile(node Node, tileID string) bool {
 	switch node.Type {
 	case "tile":
@@ -477,7 +448,6 @@ func HasTile(node Node, tileID string) bool {
 	return false
 }
 
-// TileIDs returns the ids of every docked tile in the tree.
 func TileIDs(node Node) []string {
 	var ids []string
 	collectTileIDs(node, &ids)
@@ -495,24 +465,15 @@ func collectTileIDs(node Node, ids *[]string) {
 	}
 }
 
-// hasLeaf reports whether a leaf (pane or tile) with the given id exists.
 func hasLeaf(node Node, leafID string) bool {
 	return HasPane(node, leafID) || HasTile(node, leafID)
 }
 
-// LayoutEmpty reports whether a layout holds no leaves at all — neither terminal
-// panes nor docked tiles. A workspace is torn down only when its layout is
-// empty: a tile the user deliberately left behind keeps the workspace alive
-// even after its last terminal closes. Run this on a normalized layout, where
-// orphaned/invalid leaves have already been pruned.
+// Run LayoutEmpty on a normalized layout.
 func LayoutEmpty(node Node) bool {
 	return len(PaneIDs(node)) == 0 && len(TileIDs(node)) == 0
 }
 
-// findLeaf returns the leaf (pane or tile) with the given id so a move can
-// re-insert it elsewhere with its identity intact — and, for tiles, its kind
-// and params. The bool reports whether such a leaf exists. Leaves carry no
-// children, so the returned node is self-contained.
 func findLeaf(node Node, leafID string) (Node, bool) {
 	switch node.Type {
 	case "pane":
@@ -533,8 +494,6 @@ func findLeaf(node Node, leafID string) (Node, bool) {
 	return Node{}, false
 }
 
-// TileParamsByID returns the opaque params of the tile with the given id.
-// The bool reports whether such a tile exists.
 func TileParamsByID(node Node, tileID string) (string, bool) {
 	switch node.Type {
 	case "tile":
@@ -551,8 +510,6 @@ func TileParamsByID(node Node, tileID string) (string, bool) {
 	return "", false
 }
 
-// TileSessionIDByID returns the bound session id of the tile with the given
-// id. The bool reports whether such a tile exists.
 func TileSessionIDByID(node Node, tileID string) (string, bool) {
 	switch node.Type {
 	case "tile":
@@ -569,8 +526,6 @@ func TileSessionIDByID(node Node, tileID string) (string, bool) {
 	return "", false
 }
 
-// UpdateTileSessionID rebinds an existing tile to a session. It reports
-// whether a matching tile was found.
 func UpdateTileSessionID(node Node, tileID, sessionID string) (Node, bool) {
 	switch node.Type {
 	case "tile":
@@ -595,7 +550,6 @@ func UpdateTileSessionID(node Node, tileID, sessionID string) (Node, bool) {
 	return node, false
 }
 
-// UpdateTileParams replaces the opaque params for an existing tile.
 func UpdateTileParams(node Node, tileID, tileParams string) (Node, bool) {
 	switch node.Type {
 	case "tile":
@@ -620,9 +574,6 @@ func UpdateTileParams(node Node, tileID, tileParams string) (Node, bool) {
 	return node, false
 }
 
-// TileFractionByID returns the share of its immediate split occupied by a
-// tile. Docking uses this when moving an existing tile so a user resize
-// survives re-docking.
 func TileFractionByID(node Node, tileID string) (float64, bool) {
 	if node.Type != "split" {
 		return 0, false
@@ -643,8 +594,6 @@ func TileFractionByID(node Node, tileID string) (float64, bool) {
 	return 0, false
 }
 
-// TileLeaf is a flattened view of a docked tile for consumers that need to
-// act on tiles (e.g. the markdown content service) without walking the tree.
 type TileLeaf struct {
 	TileID        string
 	TileKind      string
@@ -652,7 +601,6 @@ type TileLeaf struct {
 	TileSessionID string
 }
 
-// TileLeaves returns every docked tile in the tree as a flat slice.
 func TileLeaves(node Node) []TileLeaf {
 	var leaves []TileLeaf
 	collectTileLeaves(node, &leaves)
@@ -675,21 +623,8 @@ func collectTileLeaves(node Node, leaves *[]TileLeaf) {
 	}
 }
 
-// DockTile inserts (or moves) a tile leaf beside the anchor leaf. Docking is
-// idempotent and doubles as a move: any existing instance of tileID is removed
-// first, then the tile is re-inserted at the new anchor. `before` controls
-// which side of the anchor the tile lands on (children[0] when true), and
-// `direction` whether the new split is side-by-side (vertical) or stacked
-// (horizontal). `ratio` is the children[0] fraction, like every other split.
-//
-// The anchor may be any leaf — a terminal pane or another tile — so tiles can
-// be docked between existing panes or next to one another. The new split is
-// RatioLocked so a tile keeps its size instead of being equalized with
-// terminals during normalization.
-//
-// tileSessionID binds the tile to the session it was opened from. An empty
-// value carries any existing binding forward, so moving a tile never silently
-// drops its session.
+// `ratio` is the children[0] fraction. An empty tileSessionID carries any
+// existing binding forward, so moving a tile never silently drops its session.
 func DockTile(node Node, anchorID string, direction Direction, before bool, splitID, tileID, tileKind, tileParams, tileSessionID string, ratio float64) (Node, bool) {
 	tileID = strings.TrimSpace(tileID)
 	tileKind = strings.TrimSpace(tileKind)
@@ -717,8 +652,6 @@ func DockTile(node Node, anchorID string, direction Direction, before bool, spli
 		}
 	}
 
-	// Move semantics: drop any existing instance so a re-dock relocates rather
-	// than duplicates the tile.
 	cleaned := node
 	if next, removed := Remove(node, tileID); removed {
 		cleaned = next
@@ -762,11 +695,6 @@ func insertBesideLeaf(node Node, anchorID string, direction Direction, before bo
 	return node, false
 }
 
-// lockedSplit pairs an existing subtree with an incoming leaf under a new split.
-// The split is ratio-locked because the ratio came from an explicit user gesture
-// — a tile dock, or a leaf dropped at a chosen depth — so normalization keeps it
-// instead of rebalancing the pair back to an equal split. `before` places the
-// incoming leaf as children[0] (its left/top side).
 func lockedSplit(existing, incoming Node, direction Direction, before bool, splitID string, ratio float64) Node {
 	children := []Node{existing, incoming}
 	if before {
@@ -782,20 +710,6 @@ func lockedSplit(existing, incoming Node, direction Direction, before bool, spli
 	}
 }
 
-// MoveLeaf relocates an existing leaf (pane or tile) so it sits beside anchorID
-// on the given side. When anchorID is empty the leaf docks against the whole
-// workspace: the entire remaining layout becomes one side of a new root split and
-// the moved leaf the other (a "container" dock). The moved leaf keeps its
-// identity, and for tiles its kind and params. The new split is ratio-locked
-// because the ratio came from the user's drop, so normalization preserves the
-// chosen size. `ratio` is the children[0] fraction, matching DockTile.
-//
-// It is a no-op (returns the input and false) when the move can't or shouldn't
-// happen:
-//   - leafID is empty, or equals anchorID (dropping a leaf on itself)
-//   - leafID is not in the tree
-//   - leafID is the only leaf, so removing it would leave nothing to dock against
-//   - anchorID is non-empty but missing once the leaf is pulled out
 func MoveLeaf(node Node, leafID, anchorID, splitID string, direction Direction, before bool, ratio float64) (Node, bool) {
 	leafID = strings.TrimSpace(leafID)
 	anchorID = strings.TrimSpace(anchorID)
@@ -818,7 +732,6 @@ func MoveLeaf(node Node, leafID, anchorID, splitID string, direction Direction, 
 
 	cleaned, removed := Remove(node, leafID)
 	if !removed || cleaned.Type == "" {
-		// The leaf was the only thing in the tree; there's nowhere to move it.
 		return node, false
 	}
 
@@ -842,11 +755,6 @@ type MoveBetweenLayoutsResult struct {
 	FinalLeafID  string
 }
 
-// MoveLeafBetweenLayouts removes a leaf from source and inserts it into target.
-// It is used for cross-workspace moves where the pane/tile metadata lives
-// outside the tree and must be carried by the caller. If the target already has
-// a leaf with the moved id, conflictSuffix is appended to the moved leaf id
-// before insertion. An empty target layout accepts the moved leaf as its root.
 func MoveLeafBetweenLayouts(source, target Node, leafID, anchorID, splitID string, direction Direction, before bool, ratio float64, conflictSuffix string) (MoveBetweenLayoutsResult, bool) {
 	leafID = strings.TrimSpace(leafID)
 	anchorID = strings.TrimSpace(anchorID)
@@ -913,9 +821,6 @@ func MoveLeafBetweenLayouts(source, target Node, leafID, anchorID, splitID strin
 	}, true
 }
 
-// UndockTile removes a docked tile from the tree, collapsing the split that
-// held it so its sibling reclaims the space. The bool reports whether a tile
-// was found and removed.
 func UndockTile(node Node, tileID string) (Node, bool) {
 	if !HasTile(node, strings.TrimSpace(tileID)) {
 		return node, false

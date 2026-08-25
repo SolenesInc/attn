@@ -40,8 +40,6 @@ const state = (over: Partial<AutoModeState> = {}): AutoModeState => ({
   ...over,
 });
 
-// The section is a view over the hook; driving both together is what makes the
-// promote flow — act, re-read, redraw — an assertion rather than three.
 function Harness(props: {
   getState: () => Promise<AutoModeState>;
   promoteProposal: (id: number) => Promise<AutoModePromotion>;
@@ -95,8 +93,6 @@ describe('AutoModeSettings', () => {
     expect(getState).toHaveBeenCalledTimes(1);
   });
 
-  // The list is the whole reason this section exists. An empty one has to read
-  // as "nobody proposed anything", never as a panel that failed to load.
   it('explains an empty proposal list rather than showing nothing', async () => {
     renderPane(state());
     const empty = await screen.findByTestId('automode-no-proposals');
@@ -120,12 +116,9 @@ describe('AutoModeSettings', () => {
 
     const model = screen.getByTestId('automode-proposal-8');
     expect(model).toHaveTextContent('classifier model');
-    // A CLI caller that named nobody is still shown, rather than left blank.
     expect(model).toHaveTextContent('unattributed');
   });
 
-  // A layer's models are walked in order, and which one judges is the whole
-  // difference between a fallback list and a list somebody reads as a pool.
   it('shows each layer\'s models in order, marking the one that judges', async () => {
     renderPane(state({
       config: config({ classifier_models: ['opencode-go/glm-5.3', 'vendor/backup'] }),
@@ -139,8 +132,6 @@ describe('AutoModeSettings', () => {
     expect(escalation).not.toHaveTextContent('fallback');
   });
 
-  // Promotion is auto mode's trust boundary: this button is the only thing in
-  // the system that turns a proposal into policy.
   it('promotes a proposal and re-reads the result', async () => {
     const promoteProposal = vi.fn().mockResolvedValue(resolved());
     const { getState } = renderPane(state({ proposals: [proposal()] }), { promoteProposal });
@@ -148,13 +139,9 @@ describe('AutoModeSettings', () => {
 
     fireEvent.click(screen.getByTestId('automode-promote-7'));
     await waitFor(() => expect(promoteProposal).toHaveBeenCalledWith(7));
-    // The daemon is authoritative: the config shown is a re-read, not a guess
-    // about what promoting did to it.
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
   });
 
-  // The way in needs the way out: a proposal nobody wants has to be closable
-  // from the same list, or it sits there forever.
   it('discards a proposal and re-reads the result', async () => {
     const discardProposal = vi.fn().mockResolvedValue(resolved());
     const { getState } = renderPane(state({ proposals: [proposal()] }), { discardProposal });
@@ -172,12 +159,9 @@ describe('AutoModeSettings', () => {
 
     fireEvent.click(screen.getByTestId('automode-promote-7'));
     await waitFor(() => screen.getByText('auto mode proposal 7 is already promoted'));
-    // A failed action must not blank a good snapshot.
     expect(screen.getByTestId('automode-proposal-7')).toBeInTheDocument();
   });
 
-  // The policy is shown beside the list so promoting is a decision with the
-  // current state in view, not a guess.
   it('shows the effective policy a session would launch with', async () => {
     renderPane(state({
       config: config({
@@ -192,8 +176,7 @@ describe('AutoModeSettings', () => {
     expect(shown).toHaveTextContent('Auto mode off');
     expect(shown).toHaveTextContent('opencode-go/glm-5.3');
     expect(shown).toHaveTextContent('opencode-go/qwen3.8-max');
-    // The shipped denies are resolved in daemon-side, so they show up here
-    // without anyone having promoted them.
+    // The shipped denies are resolved in daemon-side, so they show up without anyone promoting them.
     expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('*attn automode env*');
     expect(screen.getByTestId('automode-allow')).toHaveTextContent('git push origin*');
     expect(screen.getByTestId('automode-environment')).toHaveTextContent('never touch prod');
@@ -207,8 +190,6 @@ describe('AutoModeSettings', () => {
     expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('Nothing is refused');
   });
 
-  // Piece 1: a human edits the lists here. The app is where promotion lives, so
-  // it is where direct editing lives too — an agent still reaches neither.
   it('adds an allow pattern and re-reads the list', async () => {
     const { addPattern, getState } = renderPane(state());
     await screen.findByTestId('automode-allow-input');
@@ -220,8 +201,6 @@ describe('AutoModeSettings', () => {
 
     await waitFor(() => expect(addPattern).toHaveBeenCalledWith('allow', 'git status*'));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    // The input clears on success, so the next pattern is typed into an empty
-    // field rather than on top of the one that just landed.
     await waitFor(() => expect(screen.getByTestId('automode-allow-input')).toHaveValue(''));
   });
 
@@ -237,7 +216,6 @@ describe('AutoModeSettings', () => {
     await waitFor(() => expect(addPattern).toHaveBeenCalledWith('hard_deny', '*terraform apply*'));
   });
 
-  // A way in needs its way out.
   it('removes a hand-added pattern and re-reads the list', async () => {
     const { removePattern, getState } = renderPane(
       state({ config: config({ allow: ['git push origin*'] }) }),
@@ -249,8 +227,7 @@ describe('AutoModeSettings', () => {
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
   });
 
-  // A shipped hard deny is resolved in at read and never stored: offering a
-  // Remove that cannot work would be a button that lies.
+  // A shipped hard deny is resolved in at read and never stored, so it must not offer a Remove.
   it('marks a shipped hard deny as built-in and gives it no remove button', async () => {
     renderPane(state({
       config: config({
@@ -261,13 +238,10 @@ describe('AutoModeSettings', () => {
     await screen.findByTestId('automode-hard-deny');
 
     expect(screen.getByTestId('automode-hard-deny-builtin')).toHaveTextContent('built-in');
-    // Exactly one row is removable: the promoted one, not the shipped one.
     expect(screen.getAllByTestId('automode-hard-deny-remove')).toHaveLength(1);
     expect(screen.getByLabelText('Remove *terraform apply*')).toBeInTheDocument();
   });
 
-  // A validation refusal belongs beside the input that caused it. Raising it to
-  // the section-wide error would put it where the next re-read wipes it.
   it('shows a refused pattern next to its own input and keeps the draft', async () => {
     const addPattern = vi.fn().mockRejectedValue(new Error(
       'broad allow pattern "*" is refused: an allow entry must name something',
@@ -280,9 +254,7 @@ describe('AutoModeSettings', () => {
 
     const failure = await screen.findByTestId('automode-allow-error');
     expect(failure).toHaveTextContent('an allow entry must name something');
-    // The refused text stays put so it can be corrected rather than retyped.
     expect(screen.getByTestId('automode-allow-input')).toHaveValue('*');
-    // And it lands on the allow list's editor, not the deny one.
     expect(screen.queryByTestId('automode-hard-deny-error')).toBeNull();
   });
 
@@ -296,8 +268,6 @@ describe('AutoModeSettings', () => {
     expect(screen.getByTestId('automode-allow')).toHaveTextContent('x');
   });
 
-  // Promotion has to keep working beside direct editing: the two write paths
-  // land in the same list and neither replaces the other.
   it('promotes a proposal while the same list is directly editable', async () => {
     const promoteProposal = vi.fn().mockResolvedValue(resolved());
     const { addPattern } = renderPane(
@@ -315,8 +285,6 @@ describe('AutoModeSettings', () => {
     await waitFor(() => expect(addPattern).toHaveBeenCalledWith('allow', 'ls*'));
   });
 
-  // The ledger is the fourth beat of the section's story: what the policy above
-  // actually refused.
   it('lists recent denials and what decided them', async () => {
     renderPane(state({
       denials: [{

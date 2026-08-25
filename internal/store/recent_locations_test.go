@@ -18,8 +18,6 @@ func newRecentLocationsStore(t *testing.T) *Store {
 	return s
 }
 
-// seedRecentLocation inserts a row directly so tests control last_seen and
-// can model rows written before upsert-time worktree resolution existed.
 func seedRecentLocation(t *testing.T, s *Store, path, lastSeen string, useCount int) {
 	t.Helper()
 	_, err := s.db.Exec(
@@ -53,9 +51,9 @@ func TestUpsertRecentLocationAccumulatesUseCount(t *testing.T) {
 func TestGetRecentLocationsRanksByFrecency(t *testing.T) {
 	s := newRecentLocationsStore(t)
 	now := time.Now()
-	frequentOld := t.TempDir() // 10 uses 3 days ago: 10 * 0.5 = 5
-	recentOnce := t.TempDir()  // 1 use just now:      1 * 4   = 4
-	staleOnce := t.TempDir()   // 1 use a month ago:   1 * 0.25
+	frequentOld := t.TempDir()
+	recentOnce := t.TempDir()
+	staleOnce := t.TempDir()
 
 	seedRecentLocation(t, s, frequentOld, now.Add(-72*time.Hour).Format(time.RFC3339), 10)
 	seedRecentLocation(t, s, recentOnce, now.Format(time.RFC3339), 1)
@@ -65,8 +63,6 @@ func TestGetRecentLocationsRanksByFrecency(t *testing.T) {
 	if len(locs) != 3 {
 		t.Fatalf("expected 3 locations, got %d", len(locs))
 	}
-	// Pure last_seen ordering would put recentOnce first; frecency keeps the
-	// heavily-used project on top.
 	want := []string{frequentOld, recentOnce, staleOnce}
 	for i, path := range want {
 		if locs[i].Path != path {
@@ -80,21 +76,18 @@ func TestGetRecentLocationsRanksBeforeTruncating(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
 
-	// An old but heavily used project must beat hundreds of fresher one-off
-	// rows, so ranking has to happen over the full table, not a recency-
-	// truncated prefix of it.
 	frequentOld := filepath.Join(root, "frequent-old")
 	if err := os.MkdirAll(frequentOld, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	seedRecentLocation(t, s, frequentOld, now.Add(-30*24*time.Hour).Format(time.RFC3339), 100) // 100 * 0.25 = 25
+	seedRecentLocation(t, s, frequentOld, now.Add(-30*24*time.Hour).Format(time.RFC3339), 100)
 
 	for i := 0; i < 250; i++ {
 		dir := filepath.Join(root, fmt.Sprintf("fresh-%03d", i))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		seedRecentLocation(t, s, dir, now.Format(time.RFC3339), 1) // 1 * 4 = 4
+		seedRecentLocation(t, s, dir, now.Format(time.RFC3339), 1)
 	}
 
 	locs := s.GetRecentLocations(10)
@@ -122,8 +115,6 @@ func TestRecentLocationsCollapseWorktreesIntoMainRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Upserts record the main repo even when the session lives in the
-	// worktree or below it.
 	s.UpsertRecentLocation(worktree)
 	s.UpsertRecentLocation(filepath.Join(worktree, "sub"))
 
@@ -138,7 +129,6 @@ func TestRecentLocationsCollapseWorktreesIntoMainRepo(t *testing.T) {
 		t.Errorf("expected use_count 2, got %d", locs[0].UseCount)
 	}
 
-	// Rows recorded before upsert-time resolution merge at read time.
 	seedRecentLocation(t, s, worktree, time.Now().Format(time.RFC3339), 3)
 	locs = s.GetRecentLocations(10)
 	if len(locs) != 1 {

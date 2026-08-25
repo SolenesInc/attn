@@ -16,16 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn doc` is the document store's operator surface, and until the app
-// runtime exists it is also its only consumer.
-//
-// Everything here goes through the daemon rather than opening the database
-// directly, which is the opposite of `attn bus`. The reason is the change fact: a
-// write that reached the table without publishing one would leave every live
-// query rendering a result set the store no longer agrees with. `attn bus` can
-// take the direct path precisely because its job is to work when the daemon does
-// not.
-
 func runDoc() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeDocHelp(os.Stdout)
@@ -153,7 +143,6 @@ func docFail(verb string, err error) {
 	os.Exit(1)
 }
 
-// docTarget reads the leading <namespace> <collection> every command starts with.
 func docTarget(verb string, args []string) (string, string, []string) {
 	if len(args) < 2 {
 		fmt.Fprintf(os.Stderr, "doc %s: needs <namespace> <collection>\n", verb)
@@ -207,9 +196,6 @@ func runDocCollections(args []string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	// "indexed" rather than "queryable": everything in a body can be read, and
-	// what declaring buys is that these are the ones a query may name — and the
-	// ones it reaches through an index rather than a scan.
 	fmt.Fprintln(w, "NAMESPACE\tCOLLECTION\tINDEXED FIELDS")
 	for _, c := range result.Collections {
 		names := make([]string, 0, len(c.Fields))
@@ -242,16 +228,9 @@ func runDocPut(args []string) {
 	if err != nil {
 		docFail("put", err)
 	}
-	// The seq is the write's position on the durable log, printed because it is
-	// what a caller compares against a later read to know the read includes this
-	// write.
 	fmt.Printf("wrote %s/%s/%s (rev %d, seq %d)\n", namespace, collection, id, result.Rev, result.Seq)
 }
 
-// takeExpectFlag pulls `--expect <rev|absent>` out of a command's arguments and
-// returns what is left, so the positional arguments can still be read by
-// position. absent is offered only where "must not exist" is something the
-// command can act on.
 func takeExpectFlag(verb string, args []string, allowAbsent bool) ([]string, *int) {
 	rest := make([]string, 0, len(args))
 	var expect *int
@@ -309,13 +288,6 @@ func runDocGet(args []string) {
 	printPosition(false, result.AsOfSeq)
 }
 
-// printPosition reports the log position a read was true at, which is what a
-// caller compares against the seq its own write returned to know whether the
-// answer already includes it.
-//
-// It goes to stderr so it does not land in a body someone is piping into jq,
-// and it is skipped under --json for the same reason: a machine reader gets the
-// position from the wire, or from `doc count --json`, which carries it in band.
 func printPosition(asJSON bool, seq int) {
 	if asJSON {
 		return
@@ -368,18 +340,6 @@ func runDocCount(args []string) {
 	fmt.Println(result.Count)
 }
 
-// runDocWatch prints applied windows: what the query holds right now, printed
-// again whenever a write changes it. What travels is smaller than what is
-// printed — a delivery carries ids plus only the bodies this watcher does not
-// already hold — and `changed` is that receipt.
-//
-// It never exits 0 while it has stopped watching. A live query that ends has
-// stopped reporting changes, and a watcher that returns success there leaves
-// whoever ran it looking at a list frozen at the moment the subscription broke.
-// --resume is the way to survive a daemon restart: it resubscribes carrying the
-// revisions it holds, so the daemon sends back only what changed while it was
-// away. A collection that was removed or redeclared out from under the query
-// ends the watch anyway, because resubscribing would fail the same way.
 func runDocWatch(args []string) {
 	namespace, collection, rest := docTarget("watch", args)
 	query, opts := parseDocQueryFlags("watch", namespace, collection, rest)
@@ -396,15 +356,7 @@ func runDocWatch(args []string) {
 		_, ended := client.DocSubscriptionCode(err)
 		switch {
 		case opts.resume && client.DocConnectionLost(err):
-			// The connection went, not the collection. Everything held stays
-			// held, and the resubscribe declares it. Only this ending retries:
-			// every other one recurs on the next attempt, and a watch that
-			// resubscribed through one would spin reporting nothing.
 		case opts.resume && watching && !ended:
-			// The daemon is not answering the door yet. Restarting one takes
-			// long enough that a watch which gave up here would not survive the
-			// thing --resume exists for; a watch that has never connected still
-			// fails immediately, because that is a wrong socket, not an outage.
 			time.Sleep(daemonReconnectInterval)
 		default:
 			docFail("watch", err)
@@ -412,10 +364,8 @@ func runDocWatch(args []string) {
 	}
 }
 
-// daemonReconnectInterval is how often a resuming watch retries a daemon that
-// is not accepting connections. Measured: a stop plus ensure returns the socket
-// in 0.49s, so this polls twice inside the outage it exists for, and costs one
-// connect attempt per tick when the daemon is simply gone.
+// daemonReconnectInterval: measured, a stop plus ensure returns the socket in
+// 0.49s, so a resuming watch polls twice inside the outage it exists for.
 const daemonReconnectInterval = 200 * time.Millisecond
 
 func printDocWindow(window client.DocWindow, asJSON bool) {
@@ -433,13 +383,11 @@ func printDocWindow(window client.DocWindow, asJSON bool) {
 	printDocuments(window.Documents, false)
 }
 
-// docQueryOptions are the flags that shape the output rather than the query.
 type docQueryOptions struct {
 	asJSON bool
 	resume bool
 }
 
-// parseDocQueryFlags reads the query flags shared by query, count and watch.
 func parseDocQueryFlags(verb, namespace, collection string, args []string) (protocol.DocumentQuery, docQueryOptions) {
 	query := protocol.DocumentQuery{Namespace: namespace, Collection: collection}
 	var opts docQueryOptions
@@ -509,10 +457,8 @@ var docWhereOps = []struct {
 	{"<", docstore.OpLt},
 }
 
-// parseDocWhere reads one --where expression. The bound is taken as JSON when it
-// parses as JSON and as a string otherwise, so `status=pending` and
-// `attempts>=5` both mean what they look like without any quoting ceremony. A
-// string that looks like a number can still be written as status='"5"'.
+// parseDocWhere reads one --where expression. The bound is taken as JSON when it parses
+// as JSON and as a string otherwise, so a numeric-looking string needs status='"5"'.
 func parseDocWhere(expr string) (protocol.DocumentFilter, error) {
 	for _, candidate := range docWhereOps {
 		field, value, ok := strings.Cut(expr, candidate.token)
@@ -540,9 +486,6 @@ func docBoundAsJSON(raw string) string {
 	return string(encoded)
 }
 
-// jsonDocument is what --json prints. The wire carries a body as a string
-// because the protocol has no "arbitrary JSON" type, but a caller piping this
-// into jq wants `.body.status`, not a string it has to decode a second time.
 type jsonDocument struct {
 	ID        string          `json:"id"`
 	Body      json.RawMessage `json:"body"`

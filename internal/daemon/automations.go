@@ -69,10 +69,6 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	if err != nil {
 		return nil, err
 	}
-	// A run now exists for this definition (freshly claimed, or the idempotent
-	// dedup of an already-claimed one) whether or not delivery below succeeds;
-	// broadcast so a WS client watching this definition's runs sees it appear
-	// without waiting on the delivery outcome.
 	d.broadcastAutomationsChanged(definitionID)
 	if run.State != store.AutomationRunStatePending {
 		return run, nil
@@ -101,13 +97,6 @@ func (d *Daemon) automationObservationLock(definitionID, subjectKey string, cycl
 	return lock
 }
 
-// handleAutomationCommand is the unix-socket transport for the automations
-// surface: one command set shared with WS (see ws_automations.go), each
-// dispatched to the same action function in automations_actions.go that WS
-// uses, so the two transports can never drift in what a given action returns.
-// The socket is synchronous, so a context.Background()-derived ctx is fine —
-// there is no client-side timeout race to bound here the way WS's
-// wsAutomationMutationTimeoutDuration does.
 func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
 	ctx := context.Background()
 	var result any

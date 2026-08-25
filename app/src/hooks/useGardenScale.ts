@@ -10,22 +10,15 @@ function clamp(value: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(value * 10) / 10));
 }
 
-/**
- * Font scale for the garden surfaces, independent of the app-wide uiScale.
- * `null` means "match app": no override is stored and the `--garden-scale` CSS
- * variable falls back to `var(--ui-scale)`.
- *
- * `appScale` is the current uiScale, used as the starting point when the user
- * first steps away from "match app".
- */
+/** Font scale for the garden surfaces. `null` means "match app": no override is stored
+ * and the `--garden-scale` CSS variable falls back to `var(--ui-scale)`. */
 export function useGardenScale(appScale: number) {
   const { settings, setSetting } = useSettings();
   const initializedFromSettings = useRef(false);
 
   const [scale, setScale] = useState<number | null>(null);
 
-  // Sync from daemon settings when they arrive. Persistence happens in the
-  // action callbacks below, so a synced value is never echoed back.
+  // Persistence happens in the action callbacks below, so a synced value is never echoed back.
   useEffect(() => {
     if (settings[SETTINGS_KEY] && !initializedFromSettings.current) {
       const parsed = parseFloat(settings[SETTINGS_KEY]);
@@ -36,8 +29,6 @@ export function useGardenScale(appScale: number) {
     }
   }, [settings]);
 
-  // Apply the CSS variable to the document root; removing it lets the
-  // stylesheet fallback (var(--ui-scale)) take over.
   useEffect(() => {
     if (scale === null) {
       document.documentElement.style.removeProperty('--garden-scale');

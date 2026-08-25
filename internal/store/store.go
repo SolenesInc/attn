@@ -20,27 +20,15 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// Store manages session state in SQLite
 type Store struct {
 	mu sync.RWMutex
 	db *sql.DB
 
-	// durable reports whether db is backed by a real on-disk file rather
-	// than the in-memory (":memory:") fallback New() uses when the durable
-	// database fails to open. BackupNow refuses to run against a
-	// non-durable store: VACUUM INTO an in-memory fallback would silently
-	// write empty/degraded snapshots into the real backups directory and,
-	// after enough rotation ticks, prune away the last genuine recovery
-	// copies precisely when the durable DB is corrupt or unavailable — the
-	// moment they're needed most.
+	// BackupNow refuses when false: VACUUM INTO an in-memory fallback writes empty snapshots and rotation prunes the real ones.
 	durable bool
 
-	sessions   map[string]*protocol.Session
-	turnStamps map[string]TurnStamps
-	// activityCursors holds the fallback store's half of the activity record
-	// that protocol.Session has nowhere to put. The line and its stamp ride on
-	// the session (the wire carries both); the transcript cursor is daemon-only
-	// and lives here.
+	sessions        map[string]*protocol.Session
+	turnStamps      map[string]TurnStamps
 	activityCursors map[string]string
 	sessionCosts    map[string]SessionCostState
 	agentDriverRuns map[string]AgentDriverReportCursor
@@ -56,57 +44,31 @@ type AgentDriverReportCursor struct {
 	Seq        uint64
 }
 
-// ActiveAgentDriverRun is one live external-driver run, as handed back to a
-// driver that reconnects. Seq is the run's report cursor: a replacement driver
-// process has to continue from it, because applyState discards anything that
-// does not advance it.
+// Seq is the run's report cursor: a replacement driver must continue from it, because applyState discards anything that does not advance it.
 type ActiveAgentDriverRun struct {
-	SessionID string
-	RunID     string
-	Metadata  string
-	Seq       uint64
-	// PluginName is filled by ListActiveAgentDriverRuns, whose caller asks
-	// across plugins; the per-plugin listing leaves it empty.
+	SessionID  string
+	RunID      string
+	Metadata   string
+	Seq        uint64
 	PluginName string
 }
 
-// LaunchIntent captures the per-spawn parameters the daemon needs to
-// relaunch a session without a client. Geometry is deliberately absent:
-// the attaching client owns it.
 type LaunchIntent struct {
 	YoloMode bool `json:"yolo_mode,omitempty"`
-	// AutoMode is the launcher's per-session auto mode choice, or nil for "follow
-	// the promoted config". Persisted because a revive relaunches from this
-	// record alone: without it a session launched with auto mode deliberately off
-	// comes back on, which is the opposite of what the launcher asked for.
-	AutoMode      *bool                        `json:"auto_mode,omitempty"`
-	ApprovalRoute launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
-	Executable    string                       `json:"executable,omitempty"`
-	Model         string                       `json:"model,omitempty"`
-	Effort        string                       `json:"effort,omitempty"`
-	ChiefOfStaff  bool                         `json:"chief_of_staff,omitempty"`
-	// ResumeConversationFile is the conversation file a conversation session was
-	// started from. Kept because a revive is a fresh host: one that died before
-	// writing its own session file has to be told again where to fork from, or
-	// it comes back as an empty conversation.
-	ResumeConversationFile string `json:"resume_conversation_file,omitempty"`
-	// UnattendedLaunch is the complete launch contract for sessions launched
-	// unattended (delegation/automations). Persisting the whole contract makes
-	// the store a sufficient authority to relaunch such a session when the
-	// worker registry is gone (machine restart); zero value = attended.
+	// nil means "follow the promoted config", not off.
+	AutoMode               *bool                        `json:"auto_mode,omitempty"`
+	ApprovalRoute          launchcontract.ApprovalRoute `json:"approval_route,omitempty"`
+	Executable             string                       `json:"executable,omitempty"`
+	Model                  string                       `json:"model,omitempty"`
+	Effort                 string                       `json:"effort,omitempty"`
+	ChiefOfStaff           bool                         `json:"chief_of_staff,omitempty"`
+	ResumeConversationFile string                       `json:"resume_conversation_file,omitempty"`
+	// Zero value means attended.
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
-	// InitialPrompt is the launch's first message to the agent, kept only for
-	// runtimes that can tell whether they already received it — conversation
-	// sessions, whose host reopens its own history and delivers this exactly
-	// when that history is empty. A PTY agent has no such test: its relaunch
-	// resumes a transcript, and replaying the prompt there would re-run a
-	// delegation brief the agent already worked through. So this stays empty
-	// for every PTY session; the spawn pipeline fills it only for an agent
-	// whose driver declares the `conversation` capability.
+	// Empty for every PTY session: a PTY relaunch resumes a transcript, so replaying the prompt re-runs work already done. Filled only for drivers declaring the `conversation` capability.
 	InitialPrompt string `json:"initial_prompt,omitempty"`
 }
 
-// New creates a new in-memory store (backed by SQLite :memory:)
 func New() *Store {
 	db, err := OpenDB(":memory:")
 	if err != nil {
@@ -162,7 +124,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	return &cloned
 }
 
-// NewWithDB creates a store backed by SQLite
 func NewWithDB(dbPath string) (*Store, error) {
 	db, err := OpenDB(dbPath)
 	if err != nil {
@@ -171,31 +132,25 @@ func NewWithDB(dbPath string) (*Store, error) {
 	return &Store{db: db, durable: true}, nil
 }
 
-// NewWithPersistence creates a store that persists to SQLite (replaces JSON persistence)
 func NewWithPersistence(path string) *Store {
-	// Use the new DBPath from config instead of the legacy state path
 	dbPath := config.DBPath()
 	store, err := NewWithDB(dbPath)
 	if err != nil {
-		// Fallback to in-memory if DB fails
 		return New()
 	}
 	return store
 }
 
-// DefaultStatePath returns the default state file path (legacy, for cleanup)
 func DefaultStatePath() string {
 	return config.StatePath()
 }
 
-// execLog executes a query and logs any error (for operations where we don't propagate errors yet)
 func (s *Store) execLog(query string, args ...interface{}) {
 	if _, err := s.db.Exec(query, args...); err != nil {
 		log.Printf("[store] exec error: %v (query: %.50s...)", err, query)
 	}
 }
 
-// Close closes the database connection
 func (s *Store) Close() error {
 	if s.db != nil {
 		return s.db.Close()
@@ -203,14 +158,12 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// Add adds a session to the store and logs persistence failures.
 func (s *Store) Add(session *protocol.Session) {
 	if err := s.AddChecked(session); err != nil {
 		log.Printf("[store] Add: failed to insert session %s: %v", session.ID, err)
 	}
 }
 
-// AddChecked adds a session to the store and returns persistence failures.
 func (s *Store) AddChecked(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -223,12 +176,7 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 		if stored.LastModelRequestAt == nil && stored.StateUpdatedAt != "" {
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
-		// pinned_at, the context-window cap and the activity pair are absent from
-		// the SQLite upsert below, so a re-add never disturbs them there. Carrying
-		// the stored values forward here is what makes the memory branch say the
-		// same thing: each is owned by its own writer (SetSessionPinned,
-		// SetSessionContextWindowCap, UpdateSessionActivity), and a respawn cannot
-		// silently clear any of them.
+		// pinned_at, the context-window cap and the activity pair are absent from the SQLite upsert below; carry the stored values so the memory branch cannot clear what their own writers own.
 		if existing := s.sessions[session.ID]; existing != nil {
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
@@ -261,9 +209,7 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
-	// pinned_at is deliberately absent from both the column list and the
-	// conflict update: the pin is owned by SetSessionPinned, and leaving it out
-	// is what makes a respawn or a state re-add unable to clear it.
+	// pinned_at is deliberately absent from the column list and the conflict update: leaving it out is what makes a respawn unable to clear the pin.
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
 		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
@@ -310,7 +256,6 @@ func (s *Store) AddChecked(session *protocol.Session) error {
 	return nil
 }
 
-// Get retrieves a session by ID
 func (s *Store) Get(id string) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -395,7 +340,6 @@ func (s *Store) Get(id string) *protocol.Session {
 	return &session
 }
 
-// Remove removes a session from the store
 func (s *Store) Remove(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -413,14 +357,11 @@ func (s *Store) Remove(id string) {
 	if err != nil {
 		log.Printf("[store] Remove: failed for session %s: %v", id, err)
 	}
-	// The session's annotation draft is keyed by an id that can never come
-	// back, so it is dropped outright rather than tombstoned.
 	if _, err := s.db.Exec("DELETE FROM session_annotation_drafts WHERE session_id = ?", id); err != nil {
 		log.Printf("[store] Remove: failed to drop annotation draft for session %s: %v", id, err)
 	}
 }
 
-// ClearSessions removes all sessions from the store
 func (s *Store) ClearSessions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -449,8 +390,6 @@ func (s *Store) ClearSessions() {
 	}
 }
 
-// List returns sessions, optionally filtered by state, sorted by label then ID.
-// The ID tie-breaker keeps ordering stable when labels are duplicated.
 func (s *Store) List(stateFilter string) []*protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -568,7 +507,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	return result
 }
 
-// HasSessionInDirectory checks if there's an active session using the given directory
 func (s *Store) HasSessionInDirectory(directory string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -590,7 +528,6 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	return count > 0
 }
 
-// RemoveSessionsInDirectory removes all sessions in the given directory
 func (s *Store) RemoveSessionsInDirectory(directory string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -610,7 +547,6 @@ func (s *Store) RemoveSessionsInDirectory(directory string) {
 	}
 }
 
-// UpdateState updates a session's state and reports whether a session was updated.
 func (s *Store) UpdateState(id, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -638,7 +574,6 @@ func (s *Store) UpdateState(id, state string) bool {
 	return err == nil && updated == 1
 }
 
-// MarkModelRequestStarted advances the request clock monotonically.
 func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -675,7 +610,6 @@ func (s *Store) MarkModelRequestStarted(id string, at time.Time) bool {
 	return updated == 1
 }
 
-// UpdateTodos updates a session's todo list
 func (s *Store) UpdateTodos(id string, todos []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -698,7 +632,6 @@ func (s *Store) UpdateTodos(id string, todos []string) {
 	}
 }
 
-// UpdateBranch updates a session's branch information
 func (s *Store) UpdateBranch(id, branch string, isWorktree bool, mainRepo string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -727,9 +660,6 @@ func (s *Store) UpdateBranch(id, branch string, isWorktree bool, mainRepo string
 	}
 }
 
-// UpdateSessionLabel sets a session's display label. This is the durable
-// authority for the name: registration and respawn paths preserve a non-empty
-// stored label rather than overwrite it, so a user rename sticks.
 func (s *Store) UpdateSessionLabel(id, label string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -746,7 +676,6 @@ func (s *Store) UpdateSessionLabel(id, label string) {
 	}
 }
 
-// Touch updates a session's last seen time
 func (s *Store) Touch(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -765,9 +694,6 @@ func (s *Store) Touch(id string) {
 	}
 }
 
-// SetResumeSessionID stores the agent-native resume session id for an attn session.
-// This allows recovery to use the real agent conversation id when it differs
-// from the attn session id (for example, when using an agent resume picker).
 func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -782,7 +708,6 @@ func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
 	}
 }
 
-// GetResumeSessionID returns the stored agent-native resume session id for an attn session.
 func (s *Store) GetResumeSessionID(id string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -816,8 +741,6 @@ func (s *Store) SetLaunchIntent(id string, intent LaunchIntent) {
 	}
 }
 
-// ClearLaunchIntent removes any stored launch intent for the session, leaving
-// the row as if no launch contract had ever been persisted.
 func (s *Store) ClearLaunchIntent(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -854,14 +777,6 @@ func (s *Store) LaunchIntent(id string) (LaunchIntent, bool) {
 	return intent, true
 }
 
-// MarkSessionIntentionalClose durably records that this session's process is
-// being killed on purpose (user close, delegate teardown, workspace close) —
-// as opposed to dying on its own. Unlike the daemon's in-memory forced-stop
-// mark (30s TTL, lost on restart), this survives both, so the ticket
-// crash/reconcile seam can still tell a close from a crash when it runs late:
-// after the TTL, or from the startup reap after a daemon restart. The mark
-// lives on the session row and is garbage-collected with it (every close path
-// deletes the row moments after the seam consumes the mark).
 func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -877,10 +792,6 @@ func (s *Store) MarkSessionIntentionalClose(id string, now time.Time) {
 	}
 }
 
-// SessionCloseIntentional reports whether the session carries a durable
-// intentional-close mark. Deliberately un-TTL'd: the reap that reads it can run
-// arbitrarily long after the close (the daemon may have been down); staleness
-// is handled by clearing the mark when recovery adopts the session as live.
 func (s *Store) SessionCloseIntentional(id string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -896,10 +807,7 @@ func (s *Store) SessionCloseIntentional(id string) bool {
 	return strings.TrimSpace(closedAt) != ""
 }
 
-// ClearSessionIntentionalClose removes a stale intentional-close mark — set
-// when a close was interrupted (daemon died between the mark and the kill) but
-// the worker turned out to still be alive at recovery. A live session must not
-// carry the mark, or a later genuine crash would be misread as a clean close.
+// A live session must not carry the mark, or a later genuine crash would be misread as a clean close.
 func (s *Store) ClearSessionIntentionalClose(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -914,7 +822,6 @@ func (s *Store) ClearSessionIntentionalClose(id string) {
 	}
 }
 
-// GetAgentMetadata returns opaque plugin-owned JSON for a session.
 func (s *Store) GetAgentMetadata(id string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -930,9 +837,7 @@ func (s *Store) GetAgentMetadata(id string) string {
 	return strings.TrimSpace(metadata)
 }
 
-// ListAgentDriverRuns returns the active external-driver runs owned by a
-// plugin. Session lifetime in this store is authoritative during plugin
-// recovery; private plugin state may only reconnect records returned here.
+// Session lifetime in this store is authoritative during plugin recovery; private plugin state may only reconnect records returned here.
 func (s *Store) ListAgentDriverRuns(pluginName string) []ActiveAgentDriverRun {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -980,10 +885,6 @@ func (s *Store) ListAgentDriverRuns(pluginName string) []ActiveAgentDriverRun {
 	return runs
 }
 
-// ListActiveAgentDriverRuns returns every live external-driver run with the
-// plugin that owns it. Unlike ListAgentDriverRuns it asks nothing about who is
-// installed: a run whose plugin was removed, or whose manifest no longer loads,
-// is still a session declaring a state nobody refreshes.
 func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1029,7 +930,6 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	return runs
 }
 
-// BeginAgentDriverRun records ownership and resets the cursor for a newly launched external agent run.
 func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1063,7 +963,6 @@ func (s *Store) BeginAgentDriverRun(id, pluginName, runID string) bool {
 	return updated == 1
 }
 
-// GetAgentDriverRun returns the active owner and report cursor for an external driver run.
 func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1083,7 +982,6 @@ func (s *Store) GetAgentDriverRun(id string) AgentDriverReportCursor {
 	return cursor
 }
 
-// EndAgentDriverRun invalidates and returns the active external-driver run cursor.
 func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1125,7 +1023,6 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 	return cursor
 }
 
-// ApplyAgentDriverState applies an ordered status report for the active external-driver run.
 func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1185,7 +1082,6 @@ func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string
 	return updated == 1
 }
 
-// ApplyAgentDriverMetadata applies ordered opaque metadata for the active external-driver run.
 func (s *Store) ApplyAgentDriverMetadata(id, runID string, seq uint64, metadata string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1225,7 +1121,6 @@ func (s *Store) ApplyAgentDriverMetadata(id, runID string, seq uint64, metadata 
 	return updated == 1
 }
 
-// SetPRs replaces all PRs, preserving muted state, detail fields, and computing HasNewChanges
 func (s *Store) SetPRs(prs []*protocol.PR) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1234,7 +1129,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 		return
 	}
 
-	// Get existing PRs to preserve muted state and details
 	existing := make(map[string]*protocol.PR)
 	rows, err := s.db.Query(`SELECT id, host, muted, details_fetched, details_fetched_at, mergeable, mergeable_state, ci_status, review_status, head_sha, head_branch, comment_count, approved_by_me, heat_state, last_heat_activity_at FROM prs`)
 	if err == nil {
@@ -1291,7 +1185,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 		}
 	}
 
-	// Get interaction data for HasNewChanges computation
 	interactions := make(map[string]struct {
 		lastSeenSHA          string
 		lastSeenCommentCount int
@@ -1320,21 +1213,17 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 		}
 	}
 
-	// Delete all PRs and re-insert
 	s.execLog("DELETE FROM prs")
 
 	for _, pr := range prs {
 		normalizePRIdentity(pr)
-		// Preserve state from existing
 		if ex, ok := existing[pr.ID]; ok {
 			pr.Muted = ex.Muted
-			pr.ApprovedByMe = ex.ApprovedByMe // Always preserve approval state
+			pr.ApprovedByMe = ex.ApprovedByMe
 			if pr.Host == "" {
 				pr.Host = ex.Host
 			}
 			if ex.DetailsFetched {
-				// Always preserve fetched details - they're more accurate than the basic list response
-				// The details will be re-fetched when the PR becomes "hot" again
 				pr.DetailsFetched = ex.DetailsFetched
 				pr.DetailsFetchedAt = ex.DetailsFetchedAt
 				pr.Mergeable = ex.Mergeable
@@ -1342,23 +1231,19 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 				pr.CIStatus = ex.CIStatus
 				pr.ReviewStatus = ex.ReviewStatus
 			}
-			// Preserve HeadSHA and HeadBranch from existing if not set
 			if protocol.Deref(pr.HeadSHA) == "" {
 				pr.HeadSHA = ex.HeadSHA
 			}
 			if protocol.Deref(pr.HeadBranch) == "" {
 				pr.HeadBranch = ex.HeadBranch
 			}
-			// Preserve heat state
 			if pr.HeatState == nil || *pr.HeatState == protocol.HeatStateCold {
 				pr.HeatState = ex.HeatState
 				pr.LastHeatActivityAt = ex.LastHeatActivityAt
 			}
 		}
 
-		// Compute HasNewChanges based on interaction tracking
 		if inter, ok := interactions[pr.ID]; ok {
-			// PR has been visited before - check for changes
 			headSHA := protocol.Deref(pr.HeadSHA)
 			if headSHA != "" && inter.lastSeenSHA != "" && headSHA != inter.lastSeenSHA {
 				pr.HasNewChanges = true
@@ -1366,16 +1251,13 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 			if protocol.Deref(pr.CommentCount) > inter.lastSeenCommentCount {
 				pr.HasNewChanges = true
 			}
-			// CI status changes only matter for authored or approved PRs
 			ciStatus := protocol.Deref(pr.CIStatus)
 			if (pr.Role == protocol.PRRoleAuthor || pr.ApprovedByMe) && ciStatus != "" {
-				// CI finished (was pending, now success/failure)
 				if inter.lastSeenCIStatus == "pending" && (ciStatus == "success" || ciStatus == "failure") {
 					pr.HasNewChanges = true
 				}
 			}
 		}
-		// If no interaction record, HasNewChanges stays false (first time seeing this PR)
 
 		var mergeableVal *int
 		if pr.Mergeable != nil {
@@ -1383,7 +1265,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 			mergeableVal = &v
 		}
 
-		// Ensure heat_state has a default value (NOT NULL column)
 		heatState := protocol.DerefOr(pr.HeatState, protocol.HeatStateCold)
 
 		s.execLog(`
@@ -1399,7 +1280,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 	}
 }
 
-// AddPR adds or updates a single PR
 func (s *Store) AddPR(pr *protocol.PR) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1414,7 +1294,6 @@ func (s *Store) AddPR(pr *protocol.PR) {
 		mergeableVal = &v
 	}
 
-	// Ensure heat_state has a default value (NOT NULL column)
 	heatState := protocol.DerefOr(pr.HeatState, protocol.HeatStateCold)
 
 	normalizePRIdentity(pr)
@@ -1431,7 +1310,6 @@ func (s *Store) AddPR(pr *protocol.PR) {
 	)
 }
 
-// ListPRs returns PRs, optionally filtered by state, sorted by ID
 func (s *Store) ListPRs(stateFilter string) []*protocol.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1468,7 +1346,6 @@ func (s *Store) ListPRs(stateFilter string) []*protocol.PR {
 	return result
 }
 
-// ToggleMutePR toggles a PR's muted state
 func (s *Store) ToggleMutePR(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1483,7 +1360,6 @@ func (s *Store) ToggleMutePR(id string) {
 	}
 }
 
-// GetPR returns a PR by ID
 func (s *Store) GetPR(id string) *protocol.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1496,7 +1372,6 @@ func (s *Store) GetPR(id string) *protocol.PR {
 	return scanPRRow(row)
 }
 
-// UpdatePRDetails updates the detail fields for a PR
 func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciStatus, reviewStatus, headSHA, headBranch string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1516,7 +1391,6 @@ func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciSt
 		now, mergeableVal, mergeableState, ciStatus, reviewStatus, headSHA, headBranch, id)
 }
 
-// ListPRsByRepo returns all PRs for a specific repo
 func (s *Store) ListPRsByRepo(repo string) []*protocol.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1541,7 +1415,6 @@ func (s *Store) ListPRsByRepo(repo string) []*protocol.PR {
 	return result
 }
 
-// ListPRsByRepoHost returns all PRs for a specific repo on a specific host.
 func (s *Store) ListPRsByRepoHost(repo, host string) []*protocol.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1566,7 +1439,6 @@ func (s *Store) ListPRsByRepoHost(repo, host string) []*protocol.PR {
 	return result
 }
 
-// GetRepoState returns the state for a repo, or nil if not set
 func (s *Store) GetRepoState(repo string) *protocol.RepoState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1590,7 +1462,6 @@ func (s *Store) GetRepoState(repo string) *protocol.RepoState {
 	return &state
 }
 
-// ToggleMuteRepo toggles a repo's muted state
 func (s *Store) ToggleMuteRepo(repo string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1599,12 +1470,10 @@ func (s *Store) ToggleMuteRepo(repo string) {
 		return
 	}
 
-	// Insert if not exists, then toggle
 	s.execLog("INSERT OR IGNORE INTO repos (repo, muted, collapsed) VALUES (?, 0, 0)", repo)
 	s.execLog("UPDATE repos SET muted = NOT muted WHERE repo = ?", repo)
 }
 
-// SetRepoCollapsed sets a repo's collapsed state
 func (s *Store) SetRepoCollapsed(repo string, collapsed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1617,7 +1486,6 @@ func (s *Store) SetRepoCollapsed(repo string, collapsed bool) {
 	s.execLog("UPDATE repos SET collapsed = ? WHERE repo = ?", boolToInt(collapsed), repo)
 }
 
-// ListRepoStates returns all repo states
 func (s *Store) ListRepoStates() []*protocol.RepoState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1649,7 +1517,6 @@ func (s *Store) ListRepoStates() []*protocol.RepoState {
 	return result
 }
 
-// ToggleMuteAuthor toggles a PR author's muted state
 func (s *Store) ToggleMuteAuthor(author string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1658,12 +1525,10 @@ func (s *Store) ToggleMuteAuthor(author string) {
 		return
 	}
 
-	// Insert if not exists, then toggle
 	s.execLog("INSERT OR IGNORE INTO authors (author, muted) VALUES (?, 0)", author)
 	s.execLog("UPDATE authors SET muted = NOT muted WHERE author = ?", author)
 }
 
-// ListAuthorStates returns all author states
 func (s *Store) ListAuthorStates() []*protocol.AuthorState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1694,8 +1559,6 @@ func (s *Store) ListAuthorStates() []*protocol.AuthorState {
 	return result
 }
 
-// MarkPRVisited marks a PR as visited by the user, updating the interaction record
-// and clearing HasNewChanges for subsequent polls
 func (s *Store) MarkPRVisited(prID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1704,7 +1567,6 @@ func (s *Store) MarkPRVisited(prID string) {
 		return
 	}
 
-	// Get current PR state
 	var headSHA, ciStatus sql.NullString
 	var commentCount int
 	err := s.db.QueryRow("SELECT head_sha, comment_count, ci_status FROM prs WHERE id = ?", prID).Scan(&headSHA, &commentCount, &ciStatus)
@@ -1712,7 +1574,6 @@ func (s *Store) MarkPRVisited(prID string) {
 		return
 	}
 
-	// Upsert interaction record
 	now := time.Now().Format(time.RFC3339)
 	s.execLog(`
 		INSERT INTO pr_interactions (pr_id, last_visited_at, last_seen_sha, last_seen_comment_count, last_seen_ci_status)
@@ -1726,7 +1587,6 @@ func (s *Store) MarkPRVisited(prID string) {
 	)
 }
 
-// MarkPRApproved marks a PR as approved by the user
 func (s *Store) MarkPRApproved(prID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1735,7 +1595,6 @@ func (s *Store) MarkPRApproved(prID string) {
 		return
 	}
 
-	// Get current PR state for updating interaction
 	var headSHA, ciStatus sql.NullString
 	var commentCount int
 	err := s.db.QueryRow("SELECT head_sha, comment_count, ci_status FROM prs WHERE id = ?", prID).Scan(&headSHA, &commentCount, &ciStatus)
@@ -1743,7 +1602,6 @@ func (s *Store) MarkPRApproved(prID string) {
 		return
 	}
 
-	// Upsert interaction record with approval timestamp
 	now := time.Now().Format(time.RFC3339)
 	s.execLog(`
 		INSERT INTO pr_interactions (pr_id, last_visited_at, last_approved_at, last_seen_sha, last_seen_comment_count, last_seen_ci_status)
@@ -1757,11 +1615,9 @@ func (s *Store) MarkPRApproved(prID string) {
 		prID, now, now, headSHA.String, commentCount, ciStatus.String,
 	)
 
-	// Also update the PR's approved_by_me flag
 	s.execLog("UPDATE prs SET approved_by_me = 1 WHERE id = ?", prID)
 }
 
-// SetPRHot sets a PR to hot state and updates last activity time
 func (s *Store) SetPRHot(prID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1775,7 +1631,6 @@ func (s *Store) SetPRHot(prID string) {
 		protocol.HeatStateHot, now, prID)
 }
 
-// DecayHeatStates transitions PRs from hot→warm→cold based on elapsed time
 func (s *Store) DecayHeatStates() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1788,16 +1643,13 @@ func (s *Store) DecayHeatStates() {
 	warmThreshold := now.Add(-protocol.HeatHotDuration).Format(time.RFC3339)
 	coldThreshold := now.Add(-protocol.HeatWarmDuration).Format(time.RFC3339)
 
-	// Hot → Warm (after 3 min)
 	s.execLog(`UPDATE prs SET heat_state = ? WHERE heat_state = ? AND last_heat_activity_at < ?`,
 		protocol.HeatStateWarm, protocol.HeatStateHot, warmThreshold)
 
-	// Warm → Cold (after 10 min)
 	s.execLog(`UPDATE prs SET heat_state = ? WHERE heat_state = ? AND last_heat_activity_at < ?`,
 		protocol.HeatStateCold, protocol.HeatStateWarm, coldThreshold)
 }
 
-// GetPRsNeedingDetailRefresh returns visible PRs that need detail refresh based on heat state
 func (s *Store) GetPRsNeedingDetailRefresh() []*protocol.PR {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1806,7 +1658,6 @@ func (s *Store) GetPRsNeedingDetailRefresh() []*protocol.PR {
 		return nil
 	}
 
-	// Get muted repos
 	mutedRepos := make(map[string]bool)
 	repoRows, err := s.db.Query("SELECT repo FROM repos WHERE muted = 1")
 	if err != nil {
@@ -1844,12 +1695,10 @@ func (s *Store) GetPRsNeedingDetailRefresh() []*protocol.PR {
 			continue
 		}
 
-		// Skip muted repos
 		if mutedRepos[pr.Repo] {
 			continue
 		}
 
-		// Check if refresh needed based on heat state
 		detailsFetchedAt := protocol.Timestamp(protocol.Deref(pr.DetailsFetchedAt)).Time()
 		elapsed := now.Sub(detailsFetchedAt)
 		needsRefresh := false
@@ -1860,11 +1709,10 @@ func (s *Store) GetPRsNeedingDetailRefresh() []*protocol.PR {
 			needsRefresh = elapsed > protocol.HeatHotInterval
 		case protocol.HeatStateWarm:
 			needsRefresh = elapsed > protocol.HeatWarmInterval
-		default: // cold
+		default:
 			needsRefresh = elapsed > protocol.HeatColdInterval
 		}
 
-		// Also refresh if details were never fetched
 		if !pr.DetailsFetched {
 			needsRefresh = true
 		}
@@ -1877,9 +1725,6 @@ func (s *Store) GetPRsNeedingDetailRefresh() []*protocol.PR {
 	return result
 }
 
-// Settings methods
-
-// GetSetting returns a setting value by key, or empty string if not set
 func (s *Store) GetSetting(key string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1896,15 +1741,12 @@ func (s *Store) GetSetting(key string) string {
 	return value.String
 }
 
-// SetSetting sets a setting value (upserts)
 func (s *Store) SetSetting(key, value string) {
 	if err := s.SetSettingChecked(key, value); err != nil {
 		log.Printf("[store] SetSetting: %v", err)
 	}
 }
 
-// SetSettingChecked sets a setting value and reports persistence failures to
-// callers whose user-visible action must not succeed without durable state.
 func (s *Store) SetSettingChecked(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1923,9 +1765,6 @@ func (s *Store) SetSettingChecked(key, value string) error {
 	return nil
 }
 
-// DeleteSetting removes a setting row. No-op if the key is absent or the store
-// has no live DB. Used by one-time settings-key migrations to drop the stale
-// row after copying its value to the renamed key.
 func (s *Store) DeleteSetting(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1937,7 +1776,6 @@ func (s *Store) DeleteSetting(key string) {
 	s.execLog(`DELETE FROM settings WHERE key = ?`, key)
 }
 
-// GetAllSettings returns all settings as a map
 func (s *Store) GetAllSettings() map[string]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1963,7 +1801,6 @@ func (s *Store) GetAllSettings() map[string]string {
 	return result
 }
 
-// GetProfileRole returns the session assigned to a profile-wide role.
 func (s *Store) GetProfileRole(role string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1986,7 +1823,6 @@ func (s *Store) GetProfileRole(role string) string {
 	return strings.TrimSpace(sessionID)
 }
 
-// SetProfileRole atomically assigns a profile-wide role to one session.
 func (s *Store) SetProfileRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2016,8 +1852,6 @@ func (s *Store) SetProfileRole(role, sessionID string) error {
 	return err
 }
 
-// ClearProfileRole removes a role only when the expected session still holds
-// it, so a stale client cannot clear a role that has since been transferred.
 func (s *Store) ClearProfileRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2042,11 +1876,6 @@ func (s *Store) ClearProfileRole(role, sessionID string) error {
 	return err
 }
 
-// Recent Locations methods
-
-// resolveRecentLocationPath collapses a path inside a linked git worktree to
-// the worktree's main repository root so all worktrees of a repo share one
-// recent-locations entry. Non-worktree paths are returned unchanged.
 func resolveRecentLocationPath(path string) string {
 	for dir := filepath.Clean(path); ; {
 		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
@@ -2063,9 +1892,6 @@ func resolveRecentLocationPath(path string) string {
 	}
 }
 
-// frecencyScore ranks a location by combining how often it is used with how
-// recently it was used, so a frequently-used project keeps a stable slot near
-// the top of the picker even after one-off sessions elsewhere.
 func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
 	count := float64(useCount)
 	t, err := time.Parse(time.RFC3339, lastSeen)
@@ -2084,7 +1910,6 @@ func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
 	}
 }
 
-// UpsertRecentLocation adds or updates a location in the recent locations table
 func (s *Store) UpsertRecentLocation(path string) {
 	path = resolveRecentLocationPath(path)
 
@@ -2118,8 +1943,6 @@ func (s *Store) UpsertRecentLocation(path string) {
 		path, now)
 }
 
-// GetRecentLocations returns recent locations that still exist on disk,
-// ranked by frecency (frequency weighted by recency)
 func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	if limit <= 0 {
 		limit = 20
@@ -2134,10 +1957,7 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 			raw = append(raw, &cloned)
 		}
 	} else {
-		// Fetch every row: ranking happens below, and pre-truncating here
-		// (e.g. by last_seen) would hide old-but-frequent locations. The
-		// table stays small via missing-path cleanup and
-		// CleanupStaleLocations.
+		// Pre-truncating here (e.g. by last_seen) would hide old-but-frequent locations.
 		rows, err := s.db.Query(`
 			SELECT path, last_seen, use_count
 			FROM recent_locations`)
@@ -2156,8 +1976,6 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	}
 	s.mu.RUnlock()
 
-	// Merge rows recorded before worktree paths collapsed into their main
-	// repository root, and drop entries whose directory disappeared.
 	var toDelete []string
 	merged := make(map[string]*protocol.RecentLocation, len(raw))
 	for _, loc := range raw {
@@ -2197,7 +2015,6 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 		result = result[:limit]
 	}
 
-	// Clean up non-existent paths (async, don't block the read)
 	if len(toDelete) > 0 && s.db != nil {
 		go func() {
 			s.mu.Lock()
@@ -2211,7 +2028,6 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	return result
 }
 
-// CleanupStaleLocations removes entries older than the given duration
 func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2240,7 +2056,6 @@ func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
 	return int(affected)
 }
 
-// RemoveRecentLocation removes a specific location from recent locations
 func (s *Store) RemoveRecentLocation(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2252,8 +2067,6 @@ func (s *Store) RemoveRecentLocation(path string) {
 
 	s.execLog("DELETE FROM recent_locations WHERE path = ?", path)
 }
-
-// Helper functions
 
 func boolToInt(b bool) int {
 	if b {

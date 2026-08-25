@@ -180,12 +180,8 @@ func TestDeliveredUnreadDoesNotRearmUntilNewActivity(t *testing.T) {
 	})
 }
 
-// Boundary-bound: the claim under test is that the catch-up goroutine stays
-// parked on d.deliveryMu while reconstruction holds it. A goroutine blocked on a
-// sync.Mutex is explicitly NOT durably blocked, so a bubble cannot tell "still
-// waiting for the lock" from "about to run" — synctest.Wait would never return.
-// The 100ms here is the wall-clock price of an assertion the fake clock cannot
-// make.
+// Wall-clock bound, not a bubble: a goroutine blocked on a sync.Mutex is not
+// durably blocked, so synctest.Wait would never return here.
 func TestMutationCatchUpRebuildsRemainingUnreadFromNewAttention(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Second

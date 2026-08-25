@@ -82,9 +82,6 @@ describe('the queue arrangement', () => {
   });
 
   it('leaves the tree alone while the arrangement is off, pins and satellites included', () => {
-    // Both new fields are queue vocabulary. The tree predates the queue and is
-    // the arrangement people who never turn it on live in, so a session that
-    // carries either one has to draw exactly where it always did.
     const tagged: TestSession[] = [
       ...sessions,
       { id: 'held', label: 'held', state: 'working', workspaceId: 'ws-b', pinnedAt: '2026-07-26T12:00:00Z' },
@@ -106,8 +103,6 @@ describe('the queue arrangement', () => {
   });
 
   it('draws each agent exactly once — the bands replace the tree, they do not sit on top of it', () => {
-    // The duplication this replaces made a row look like it moved when only one
-    // of an agent's two copies did.
     const { container } = renderSidebar(sessions, true);
 
     const tree = Array.from(container.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
@@ -119,8 +114,6 @@ describe('the queue arrangement', () => {
   });
 
   it('keeps pinned workspaces as groups, and their agents out of both bands', () => {
-    // Pinned is the way out of the queue, so a pinned agent must not be in it —
-    // and the group has to survive, because it is where you go and get that work.
     const { container } = renderSidebar(sessions, true, {}, { 'ws-b': { pinned: true } });
 
     const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
@@ -146,9 +139,6 @@ describe('the queue arrangement', () => {
   });
 
   it('hands the agent over from the keyboard, so the queue is not mouse-only', () => {
-    // The row opens through a real button rather than a click handler on the
-    // row div, which is what makes it reachable by Tab and pressed by Enter or
-    // Space without the component handling either key itself.
     const onSelectSession = vi.fn();
     renderSidebar(sessions, true, { onSelectSession });
 
@@ -171,9 +161,6 @@ describe('the queue arrangement', () => {
   });
 
   it('pins the row\'s own agent without selecting it, from either band', () => {
-    // A gesture aimed at a row acts on that row. `older` and `settled` share a
-    // workspace, so the old behavior — pin the workspace — would have taken the
-    // sibling out too, which is the friction this replaced.
     const onPinSession = vi.fn();
     const onSelectSession = vi.fn();
     renderSidebar(sessions, true, { onPinSession, onSelectSession });
@@ -187,8 +174,6 @@ describe('the queue arrangement', () => {
   });
 
   it('draws a pinned agent in its own band below settled, and unpins it there', () => {
-    // Pinning has to be reversible from where the row lands, or it is a one-way
-    // door out of the queue.
     const onPinSession = vi.fn();
     const onSelectSession = vi.fn();
     const withPin: TestSession[] = [
@@ -202,8 +187,6 @@ describe('the queue arrangement', () => {
     expect(bandRows).toContain('queue-pinned-held');
     expect(bandRows.indexOf('queue-pinned-held')).toBeGreaterThan(bandRows.indexOf('queue-settled-settled'));
 
-    // Neither settle nor snooze: both answer "whose turn is it", and a pinned
-    // agent has stepped out of that question.
     expect(screen.queryByTestId('queue-settle-held')).toBeNull();
     expect(screen.queryByTestId('queue-snooze-held')).toBeNull();
 
@@ -223,15 +206,10 @@ describe('the queue arrangement', () => {
     const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
       .map((row) => row.getAttribute('data-testid'));
     expect(bandRows).not.toContain('queue-settled-shell');
-    // A shell with no agent to be reached through keeps its row: the queue
-    // reorders, it never hides.
     expect(bandRows).toContain('queue-settled-orphan');
   });
 
   it('draws the chief once when its own workspace stays in the tree', () => {
-    // The chief keeps its anchored slot whatever its workspace is, and pin and
-    // mute are both reachable for it, so the surviving group must not draw it
-    // again.
     const pinned = renderSidebar(sessions, true, {}, { 'ws-a': { pinned: true } });
     expect(pinned.getByTestId('queue-chief-chief')).toBeTruthy();
     expect(pinned.queryByTestId('sidebar-session-chief')).toBeNull();
@@ -254,8 +232,6 @@ describe('the queue arrangement', () => {
   });
 
   it('keeps the per-session menu reachable from every band', () => {
-    // Chief of staff, close and reload live on this menu, which the workspace
-    // tree row owns when the queue is off. Queue mode stops drawing that row.
     renderSidebar(sessions, true);
     for (const id of ['chief', 'older', 'settled']) {
       expect(screen.getByTestId(`session-actions-${id}`)).toBeTruthy();
@@ -279,7 +255,6 @@ describe('the queue arrangement', () => {
   });
 
   it('follows turn_owed rather than state for the collapsed rail badge', () => {
-    // `settled` is waiting_input but owes nothing; `older` is working and does.
     const owedOnly: TestSession[] = [
       { id: 'settled', label: 'settled', state: 'waiting_input', workspaceId: 'ws-a' },
       { id: 'owed', label: 'owed', state: 'working', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -304,8 +279,6 @@ describe('snoozing from the sidebar', () => {
   const inAnHour = () => new Date(Date.now() + 3600_000).toISOString();
 
   it('offers snooze on an owed turn and on a settled row alike', () => {
-    // Deferring a run *before* it finishes — so the turn it would open never
-    // opens — is the case the verb exists for, and that agent is settled.
     const onOpenSnooze = vi.fn();
     renderSidebar(sessions, true, { onOpenSnooze });
 
@@ -339,8 +312,6 @@ describe('snoozing from the sidebar', () => {
     expect(bandRows).not.toContain('queue-settled-later');
     expect(bandRows).not.toContain('queue-turn-later');
 
-    // Collapsed by default: a snooze surfaces itself when it wakes, so the
-    // section is for checking on a promise rather than standing room.
     expect(screen.getByTestId('snoozed-section-header').textContent).toContain('Snoozed (1)');
     expect(screen.queryByTestId('queue-snoozed-later')).toBeNull();
   });
@@ -356,7 +327,6 @@ describe('snoozing from the sidebar', () => {
     fireEvent.click(screen.getByTestId('snoozed-section-header'));
     const row = screen.getByTestId('queue-snoozed-later');
     expect(row.querySelector('.queue-row-wake-at')?.textContent).toBeTruthy();
-    // Already closed: waking is the undo, not a second way to dismiss.
     expect(screen.queryByTestId('queue-settle-later')).toBeNull();
 
     fireEvent.click(screen.getByTestId('queue-wake-later'));
@@ -365,7 +335,6 @@ describe('snoozing from the sidebar', () => {
   });
 
   it('sits above the muted workspaces', () => {
-    // *Not yet* is nearer to your attention than *not ever*.
     const deferred: TestSession[] = [
       { id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a', turnSnoozedUntil: inAnHour() },
       { id: 'quiet', label: 'quiet', state: 'idle', workspaceId: 'ws-b' },
@@ -429,15 +398,12 @@ describe('the crew in the sidebar', () => {
       .map((row) => row.getAttribute('data-testid'));
     expect(rows.filter((id) => id?.startsWith('queue-crew-')))
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
-    // Inside the pinned region, above the pins themselves.
     const headers = Array.from(container.querySelectorAll('.queue-bands > *'))
       .map((node) => node.textContent);
     expect(headers.some((text) => text?.startsWith('Pinned'))).toBe(true);
 
-    // Awake vs asleep is visible without reading a label.
     expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
     expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
-    // Pin-shaped, and distinct from an ordinary pinned session.
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
@@ -469,11 +435,9 @@ describe('the crew in the sidebar', () => {
     expect(onSleepCrewMember.mock.calls).toEqual([['keel']]);
     expect(onSelectSession).not.toHaveBeenCalled();
 
-    // Focusing an awake member is not consequential and stays one click.
     fireEvent.click(screen.getByTestId('queue-crew-select-keel'));
     expect(onSelectSession.mock.calls).toEqual([['sess-keel']]);
 
-    // Each act exists only on the side of the day where it makes sense.
     expect(screen.queryByTestId('queue-crew-wake-keel')).toBeNull();
     expect(screen.queryByTestId('queue-crew-sleep-trellis')).toBeNull();
     expect(screen.getByTestId('queue-crew-sleep-keel').getAttribute('aria-label')).toBe('Ask Keel to sleep');
@@ -482,8 +446,6 @@ describe('the crew in the sidebar', () => {
   it('writes a sleeping member as a name while the id stays the address', () => {
     renderCrew([], { onWakeCrewMember: vi.fn() });
     const row = screen.getByTestId('queue-crew-trellis');
-    // The row reads Trellis; every hook into it — test id, data attribute, the
-    // id handed back on wake — is the lowercase id.
     expect(row.textContent).toContain('Trellis');
     expect(row.textContent).not.toContain('trellis');
     expect(row.getAttribute('data-crew-member')).toBe('trellis');
@@ -491,14 +453,11 @@ describe('the crew in the sidebar', () => {
   });
 
   it('keeps the band when the crew is the only thing in it', () => {
-    // Without a crew the pinned band is absent, so the members had nowhere to
-    // render before this.
     renderCrew([]);
     expect(screen.getByTestId('queue-crew-alder')).toBeTruthy();
   });
 
   it('still draws a bound session whose member left the roster', () => {
-    // Dropping the row would hide a running agent.
     renderCrew(
       [{ id: 'sess-ghost', label: 'ghost', state: 'working', workspaceId: 'ws-a', crewMember: 'sable' }] as TestSession[],
       {},
@@ -513,9 +472,7 @@ describe('the crew in the sidebar', () => {
   });
 
   describe('arming a wake', () => {
-    // Waking starts a day of a durable identity and cannot be un-rung, so it
-    // takes two deliberate clicks and an unconfirmed arm must never wake
-    // anyone. Every disarm route is a separate test below.
+      // Waking starts a day of a durable identity and cannot be un-rung, so an unconfirmed arm must never wake anyone.
 
     function armed(member: string) {
       return screen.getByTestId(`queue-crew-${member}`).getAttribute('data-crew-wake');
@@ -530,11 +487,7 @@ describe('the crew in the sidebar', () => {
 
       expect(armed('trellis')).toBe('armed');
       expect(button.getAttribute('aria-label')).toBe('Wake Trellis — click again to confirm');
-      // A word, not only a drawing: the motion is the delight, the text is the
-      // contract, and one of them survives prefers-reduced-motion untouched.
       expect(screen.getByTestId('queue-crew-trellis').textContent).toContain('confirm');
-      // The fill button covers the whole row and is the other confirm target,
-      // so it has to make the same promise.
       expect(screen.getByTestId('queue-crew-select-trellis').getAttribute('aria-label'))
         .toBe('Wake Trellis — click again to confirm');
     });
@@ -553,8 +506,6 @@ describe('the crew in the sidebar', () => {
     });
 
     it('is not a target while it is flaring', () => {
-      // The flare lasts long enough to click into. Re-arming a row whose wake
-      // is already sent would put a second wake one click away.
       const onWakeCrewMember = vi.fn();
       renderCrew([], { onWakeCrewMember });
 
@@ -575,7 +526,6 @@ describe('the crew in the sidebar', () => {
       fireEvent.pointerDown(document.body);
       expect(armed('trellis')).toBeNull();
 
-      // Disarmed for real: the next click arms again rather than waking.
       fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
       expect(onWakeCrewMember).not.toHaveBeenCalled();
     });
@@ -585,7 +535,6 @@ describe('the crew in the sidebar', () => {
       renderCrew([], { onWakeCrewMember });
 
       fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
-      // Reaching for another member's row is a click outside this one.
       fireEvent.pointerDown(screen.getByTestId('queue-crew-wake-alder'));
       fireEvent.click(screen.getByTestId('queue-crew-wake-alder'));
 
@@ -595,8 +544,6 @@ describe('the crew in the sidebar', () => {
     });
 
     it('arms one member at a time for the keyboard too', () => {
-      // A keyboard user reaches the next row by focusing it, never by clicking
-      // outside this one, so focus leaving the row has to disarm it as well.
       const onWakeCrewMember = vi.fn();
       renderCrew([], { onWakeCrewMember });
 
@@ -634,8 +581,7 @@ describe('the crew in the sidebar', () => {
     });
 
     it('wakes once even where React runs the click path twice', () => {
-      // StrictMode double-invokes state updaters, so sending the wake from
-      // inside one would spend two days on the one click this earns.
+      // StrictMode double-invokes state updaters, so sending the wake inside one would spend two days on one click.
       const onWakeCrewMember = vi.fn();
       const data = sidebarData(sessions);
       render(

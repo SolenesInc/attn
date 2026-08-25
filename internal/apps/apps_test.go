@@ -23,8 +23,6 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
-// The name rule exists to serve three surfaces; the document namespace is the
-// strictest, so a name this package accepts must be one the store can address.
 func TestAcceptedNamesMakeValidNamespaces(t *testing.T) {
 	for _, name := range []string{"approval-gate", "a", "9lives", strings.Repeat("a", MaxNameLength)} {
 		if err := ValidateName(name); err != nil {
@@ -41,22 +39,17 @@ func TestNameErrorsSayWhatIsWrong(t *testing.T) {
 	if err == nil {
 		t.Fatal("an over-long name was accepted")
 	}
-	// A limit someone can hit is a limit they must see: the message names the
-	// limit and the ask.
 	if !strings.Contains(err.Error(), "65") || !strings.Contains(err.Error(), "64") {
 		t.Fatalf("error does not name the ask and the limit: %v", err)
 	}
 }
 
-// The reserved set is refused by the same rule every surface uses, so a manifest,
-// the CLI and the daemon cannot disagree about whether `runtime` is an app.
 func TestReservedNamesAreRefused(t *testing.T) {
 	for _, name := range ReservedNames() {
 		err := ValidateName(name)
 		if err == nil {
 			t.Fatalf("ValidateName(%q) = nil, want a refusal", name)
 		}
-		// The refusal teaches: why this one, and what else is taken.
 		if !strings.Contains(err.Error(), "reserved") {
 			t.Errorf("ValidateName(%q) does not say the name is reserved: %v", name, err)
 		}
@@ -68,15 +61,10 @@ func TestReservedNamesAreRefused(t *testing.T) {
 	}
 }
 
-// `runtime` is the one that is not a subcommand: it is the supervised child's own
-// name, and the reason the whole list exists. Naming it explicitly keeps a future
-// edit to the map from quietly dropping it.
 func TestRuntimeIsReserved(t *testing.T) {
 	if err := ValidateName("runtime"); err == nil {
 		t.Fatal("an app could be named runtime, which collides with the shared runtime")
 	}
-	// A name that merely contains a reserved word is still fine — the rule is the
-	// whole name, not a substring.
 	for _, ok := range []string{"runtime-monitor", "my-runtime", "statusboard"} {
 		if err := ValidateName(ok); err != nil {
 			t.Errorf("ValidateName(%q) = %v, want nil", ok, err)
@@ -84,9 +72,6 @@ func TestRuntimeIsReserved(t *testing.T) {
 	}
 }
 
-// A view name is scoped to its app, so the reserved set does not apply to it —
-// and an app's own name is a legal view name, which is what proves the two rules
-// are the same charset rather than two regexps that happen to agree today.
 func TestValidateViewName(t *testing.T) {
 	for _, ok := range []string{"approvals", "a", "pending-v2", "9lives", "runtime", "status"} {
 		if err := ValidateViewName(ok); err != nil {
@@ -113,10 +98,8 @@ func TestDerivedIdentities(t *testing.T) {
 	}
 }
 
-// The build writes the sidecar under a name the daemon and the hub both look
-// for. Nothing links the shell script to this constant, so a rename there would
-// produce a daemon that cannot find its runtime and a remote that is shipped a
-// file nobody starts.
+// Nothing links the build's shell script to this constant, so a rename there produces a
+// daemon that cannot find its runtime.
 func TestRuntimeHostBinaryNameMatchesTheBuild(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {

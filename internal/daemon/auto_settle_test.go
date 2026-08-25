@@ -10,23 +10,14 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-// newAutoSettleDaemon builds a daemon with one codex session that already owes the
-// user a turn (opened on `waiting_input`), auto-settle on, and windows long enough
-// that the real timers never race a hand-fire. The tests drive the phases through
-// autoSettleFire with the live timer handle — the same deterministic path
-// nudge_countdown_test.go uses.
 func newAutoSettleDaemon(t *testing.T) (*Daemon, string) {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "auto-settle.sock"))
 	return d, seedAutoSettleSession(t, d, t.TempDir())
 }
 
-// seedAutoSettleSession installs the fixture's session and settings. It is split
-// out of newAutoSettleDaemon because the turn it opens is stamped with time.Now,
-// and a synctest bubble's clock starts at 2000-01-01: a turn opened outside the
-// bubble is stamped decades AHEAD of every settle made inside it, so the settle
-// lands before the open and the turn reads as still owed. A bubbled test builds
-// the daemon outside (see synctest_test.go) and calls this inside.
+// A synctest bubble's clock starts at 2000-01-01, so a turn opened outside it is stamped
+// decades ahead of every settle made inside: build the daemon outside, call this inside.
 func seedAutoSettleSession(t *testing.T, d *Daemon, dir string) string {
 	t.Helper()
 	id := "session"
@@ -43,9 +34,6 @@ func seedAutoSettleSession(t *testing.T, d *Daemon, dir string) string {
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
 	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
 	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
-	// The turn the whole feature acts on. Opening it here rather than through a
-	// state transition keeps the fixture about auto-settle, not about the
-	// resolver.
 	if !d.store.OpenTurnIfClosed(id, time.Now()) {
 		t.Fatal("OpenTurnIfClosed() = false; the fixture owes no turn")
 	}
@@ -80,8 +68,6 @@ func autoSettlePending(d *Daemon, sessionID string) (*autoSettleTimer, bool) {
 	return entry, ok
 }
 
-// fireAutoSettleNow advances the pending timer by hand, with the live handle, so
-// the identity check in autoSettleFire accepts it.
 func fireAutoSettleNow(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	entry, ok := autoSettlePending(d, sessionID)
@@ -96,9 +82,6 @@ func turnIsOwed(d *Daemon, sessionID string) bool {
 	return d.turnOwed(sessionID)
 }
 
-// The whole feature in one pass: steering an agent back to work arms an invisible
-// delay, the delay elapsing starts a countdown clients can see, and the countdown
-// elapsing closes the turn.
 func TestAutoSettle_ArmsThenCountsDownThenSettles(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 
@@ -113,8 +96,6 @@ func TestAutoSettle_ArmsThenCountsDownThenSettles(t *testing.T) {
 	if entry.phase != autoSettleArming {
 		t.Fatalf("phase = %v, want arming", entry.phase)
 	}
-	// The arming phase is deliberately invisible: a countdown on screen would
-	// announce a settle that has not been decided on yet.
 	clone := d.sessionForBroadcast(d.store.Get(id))
 	if clone.AutoSettleFiresAt != nil {
 		t.Fatalf("auto_settle_fires_at = %q during arming, want absent", *clone.AutoSettleFiresAt)
@@ -148,9 +129,6 @@ func TestAutoSettle_ArmsThenCountsDownThenSettles(t *testing.T) {
 	}
 }
 
-// The behavior that must not be got wrong: an agent that wants the user again
-// aborts the settle, in every state that is not `working`. A settle here would
-// bury exactly the thing the user needs to see.
 func TestAutoSettle_LeavingWorkingAborts(t *testing.T) {
 	for _, state := range []string{
 		protocol.StateWaitingInput,
@@ -166,8 +144,6 @@ func TestAutoSettle_LeavingWorkingAborts(t *testing.T) {
 			if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 				t.Fatal("applyState(working) = false")
 			}
-			// Advance into the visible countdown, which is the worst moment to
-			// get this wrong: the settle is seconds away.
 			fireAutoSettleNow(t, d, id)
 			if _, ok := autoSettlePending(d, id); !ok {
 				t.Fatal("no countdown to abort")
@@ -187,8 +163,6 @@ func TestAutoSettle_LeavingWorkingAborts(t *testing.T) {
 	}
 }
 
-// A re-reported `working` must not restart the delay. The resolver commits the
-// same state repeatedly, so a sliding window would never elapse.
 func TestAutoSettle_ReReportedWorkingKeepsTheSameTimer(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -209,9 +183,6 @@ func TestAutoSettle_ReReportedWorkingKeepsTheSameTimer(t *testing.T) {
 	}
 }
 
-// Cancel keeps the turn, and keeps it through the session simply continuing to
-// work — otherwise the very next re-reported `working` re-arms and the cancel
-// buys the user thirty seconds.
 func TestAutoSettle_CancelKeepsTheTurnAndDoesNotReArm(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -237,8 +208,6 @@ func TestAutoSettle_CancelKeepsTheTurnAndDoesNotReArm(t *testing.T) {
 		t.Fatal("re-armed while the session kept working; the cancel must stand")
 	}
 
-	// Steering the agent again is a new decision, so leaving and re-entering
-	// `working` arms a fresh countdown.
 	d.syncAutoSettle(id, protocol.StateWaitingInput)
 	creditUserInputForNextWorking(t, d, id)
 	d.syncAutoSettle(id, protocol.StateWorking)
@@ -247,14 +216,10 @@ func TestAutoSettle_CancelKeepsTheTurnAndDoesNotReArm(t *testing.T) {
 	}
 }
 
-// dismissArmed reads the flag as a client would, off the broadcast clone.
 func dismissArmed(d *Daemon, sessionID string) bool {
 	return protocol.Deref(d.sessionForBroadcast(d.store.Get(sessionID)).AutoSettleDismissArmed)
 }
 
-// The moment the user knows they want the turn kept is while they are still
-// typing the steer — before the agent is working, so before anything is counting
-// down. Pressing then has to reach the settle that has not been armed yet.
 func TestAutoSettle_ArmedBeforeTheSteerDismissesTheNextSettle(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 
@@ -263,9 +228,6 @@ func TestAutoSettle_ArmedBeforeTheSteerDismissesTheNextSettle(t *testing.T) {
 	if !dismissArmed(d, id) {
 		t.Fatal("no standing dismissal after pressing with nothing counting down")
 	}
-	// The resolver re-reports the state the user armed in while they finish
-	// typing. Retiring the dismissal on one of those would drop the answer in the
-	// gap between the press and the steer.
 	d.syncAutoSettle(id, protocol.StateWaitingInput)
 	if !dismissArmed(d, id) {
 		t.Fatal("the dismissal was retired by a re-reported waiting_input, before it covered anything")
@@ -281,8 +243,6 @@ func TestAutoSettle_ArmedBeforeTheSteerDismissesTheNextSettle(t *testing.T) {
 		t.Fatal("the dismissal did not survive into the stretch it answers")
 	}
 
-	// Spent with the stretch it covered: the next turn is a new decision, and the
-	// chip announcing it has to go.
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWaitingInput, cause: liveSignal{}}) {
 		t.Fatal("applyState(waiting_input) = false")
 	}
@@ -301,8 +261,6 @@ func TestAutoSettle_ArmedBeforeTheSteerDismissesTheNextSettle(t *testing.T) {
 	}
 }
 
-// A standing dismissal outlives the thing it answered, so it is the one
-// countdown answer that needs a way back out.
 func TestAutoSettle_PressingAgainDisarms(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 
@@ -320,9 +278,6 @@ func TestAutoSettle_PressingAgainDisarms(t *testing.T) {
 	}
 }
 
-// Disarming mid-stretch has to hand the session back to the ordinary rule. No
-// state change is coming to do it — the session is already working — so without
-// an arm here the user would sit in a limbo neither answer put them in.
 func TestAutoSettle_DisarmingWhileWorkingReArmsTheSettle(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -330,8 +285,6 @@ func TestAutoSettle_DisarmingWhileWorkingReArmsTheSettle(t *testing.T) {
 	}
 	fireAutoSettleNow(t, d, id)
 
-	// The cancel of a countdown on screen arms the same standing dismissal: it is
-	// what keeps the next re-reported `working` from re-arming what was cancelled.
 	d.handleCancelCountdown(&protocol.CancelCountdownMessage{SessionID: id})
 	if !dismissArmed(d, id) {
 		t.Fatal("cancelling a running countdown left no standing dismissal")
@@ -348,8 +301,6 @@ func TestAutoSettle_DisarmingWhileWorkingReArmsTheSettle(t *testing.T) {
 	}
 }
 
-// Arming against a settle that was never coming would be a chip promising to
-// stop nothing.
 func TestAutoSettle_NothingToDismissDoesNotArm(t *testing.T) {
 	t.Run("feature off", func(t *testing.T) {
 		d, id := newAutoSettleDaemon(t)
@@ -381,8 +332,6 @@ func TestAutoSettle_NothingToDismissDoesNotArm(t *testing.T) {
 	})
 }
 
-// Switching the feature off takes the standing dismissals with it: they answer a
-// settle that can no longer happen.
 func TestAutoSettle_DisablingClearsAStandingDismissal(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	d.handleCancelCountdown(&protocol.CancelCountdownMessage{SessionID: id})
@@ -397,7 +346,6 @@ func TestAutoSettle_DisablingClearsAStandingDismissal(t *testing.T) {
 	}
 }
 
-// Off is off: no timer arms at all, which is what makes the default a true no-op.
 func TestAutoSettle_DisabledNeverArms(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	d.store.SetSetting(SettingAutoSettleEnabled, "false")
@@ -411,8 +359,6 @@ func TestAutoSettle_DisabledNeverArms(t *testing.T) {
 	}
 }
 
-// Switching the feature off must stop a countdown already on screen rather than
-// let it run out under a setting the user has just revoked.
 func TestAutoSettle_DisablingCancelsARunningCountdown(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -437,10 +383,6 @@ func TestAutoSettle_DisablingCancelsARunningCountdown(t *testing.T) {
 	}
 }
 
-// A session that owes nothing has nothing to settle. This is also what keeps
-// shells, the chief, and pinned/muted workspaces out — turnOwed carries those
-// exclusions, so they are excluded here for the same reason they are excluded
-// from the queue.
 func TestAutoSettle_NoTurnOwedNeverArms(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "auto-settle.sock"))
 	id := "session"
@@ -456,8 +398,6 @@ func TestAutoSettle_NoTurnOwedNeverArms(t *testing.T) {
 	})
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
 	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
-	// No OpenTurnIfClosed: nothing is owed. Drive the transition through
-	// syncAutoSettle so the turn applyState would open cannot mask the case.
 	d.store.UpdateState(id, protocol.StateWorking)
 	d.syncAutoSettle(id, protocol.StateWorking)
 
@@ -466,8 +406,6 @@ func TestAutoSettle_NoTurnOwedNeverArms(t *testing.T) {
 	}
 }
 
-// Settling by hand takes the countdown with it: there is no turn left to close,
-// and a countdown left on screen would promise a second settle.
 func TestAutoSettle_ManualSettleCancelsTheCountdown(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -485,9 +423,6 @@ func TestAutoSettle_ManualSettleCancelsTheCountdown(t *testing.T) {
 	}
 }
 
-// The fire-time re-check is a second guard, not the primary one: a session whose
-// state moved without a committed transition reaching syncAutoSettle must still
-// not be settled.
 func TestAutoSettle_FireTimeRecheckRefusesANonWorkingSession(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -497,8 +432,6 @@ func TestAutoSettle_FireTimeRecheckRefusesANonWorkingSession(t *testing.T) {
 
 	outcomes := make(chan string, 1)
 	d.autoSettleFireHook = func(_, outcome string) { outcomes <- outcome }
-	// Move the state behind the timer's back — no applyState, so nothing
-	// cancelled the countdown.
 	d.store.UpdateState(id, protocol.StateWaitingInput)
 
 	fireAutoSettleNow(t, d, id)
@@ -511,16 +444,12 @@ func TestAutoSettle_FireTimeRecheckRefusesANonWorkingSession(t *testing.T) {
 	}
 }
 
-// A stop-time classification deliberately holds the last published state while
-// it decides whether the finished turn is idle or needs input. That held green
-// is presentation stability, not proof the agent is still working, so it must
-// suspend an auto-settle that was armed by the preceding turn.
 func TestAutoSettle_ClassificationSuspendsAndThenReevaluates(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}
-	fireAutoSettleNow(t, d, id) // into the visible countdown
+	fireAutoSettleNow(t, d, id)
 
 	d.recordClassifierStarted(id, time.Now())
 
@@ -531,9 +460,6 @@ func TestAutoSettle_ClassificationSuspendsAndThenReevaluates(t *testing.T) {
 		t.Fatal("classification start settled the turn")
 	}
 
-	// If classification completes while the persisted state is still working,
-	// re-evaluation starts the ordinary arm delay again. A subsequent idle or
-	// waiting-input resolution will cancel it through applyState.
 	d.recordClassifierFinished(id)
 	entry, ok := autoSettlePending(d, id)
 	if !ok || entry.phase != autoSettleArming {
@@ -541,15 +467,12 @@ func TestAutoSettle_ClassificationSuspendsAndThenReevaluates(t *testing.T) {
 	}
 }
 
-// recordClassifierStarted normally removes the timer before it can fire. This
-// pins the other ordering: the callback has already claimed the timer when the
-// evidence lands, so its own fire-time gate must still preserve the turn.
 func TestAutoSettle_FireTimeRecheckRefusesHeldWorkingDuringClassification(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}
-	fireAutoSettleNow(t, d, id) // into the visible countdown
+	fireAutoSettleNow(t, d, id)
 
 	d.recordEvidence(id, time.Now(), func(e *sessionstate.Evidence) {
 		e.ClassifyingSince = time.Now()
@@ -570,23 +493,12 @@ func TestAutoSettle_FireTimeRecheckRefusesHeldWorkingDuringClassification(t *tes
 	}
 }
 
-// End to end on real timers: the feature works without the hand-fire the other
-// tests use.
-//
-// Converted to synctest. The windows no longer need turning down — this runs the
-// production 30s arm and 15s countdown and sleeps exactly them at no wall-clock
-// cost — and the two phases are now separately observable, so a policy that
-// settles too early fails here rather than passing a "within 5 seconds" poll.
 func TestAutoSettle_RealTimersSettleTheTurn(t *testing.T) {
 	d := newBubbleDaemon(t)
 	dir := t.TempDir()
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
-		// Seeded inside the bubble so the turn is opened on the bubble's clock; see
-		// seedAutoSettleSession.
 		id := seedAutoSettleSession(t, d, dir)
-		// The fixture pins hour-long windows so hand-fired tests never race a real
-		// timer. This one is about the real timers, so it takes the defaults.
 		d.store.SetSetting(SettingAutoSettleArmSeconds, "")
 		d.store.SetSetting(SettingAutoSettleCountdownSeconds, "")
 
@@ -594,8 +506,6 @@ func TestAutoSettle_RealTimersSettleTheTurn(t *testing.T) {
 			t.Fatal("applyState(working) = false")
 		}
 
-		// Through the invisible arm delay and into the countdown, with the turn still
-		// owed: settling here would bury the session while the countdown is on screen.
 		time.Sleep(defaultAutoSettleArmSeconds * time.Second)
 		synctest.Wait()
 		if !turnIsOwed(d, id) {
@@ -637,8 +547,6 @@ func TestValidateAutoSettleSeconds(t *testing.T) {
 	}
 }
 
-// The settings payload carries the effective policy, so the UI shows 30/15 rather
-// than blank fields it would have to know the defaults for.
 func TestAutoSettleSettingsSurfaceEffectiveDefaults(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "auto-settle.sock"))
 	settings := d.settingsWithAgentAvailability()
@@ -654,35 +562,13 @@ func TestAutoSettleSettingsSurfaceEffectiveDefaults(t *testing.T) {
 	}
 }
 
-// A turn the user has not dealt with must survive the timer firing at the same
-// instant the session demands them again.
-//
-// The window this pins: runAutoSettle reads `working` and confirms the turn is
-// owed, and only then settles. If a transition into pending_approval commits
-// between those two steps, the timer goes on to settle a turn the user is being
-// asked to act on right now — and syncAutoSettle's cancel, which runs after the
-// state write, arrives too late to stop it. The session would drop off the queue
-// while the agent sits waiting for an answer.
-//
-// The test stands in that exact instant via autoSettlePreSettleHook, because the
-// window is far too narrow to hit by racing goroutines: a version of this test
-// that simply ran the fire and the transition concurrently passed just as
-// happily without the lock as with it.
-//
-// Both orderings are acceptable, and both end the same way. If the timer wins it
-// settles the `working` turn and the pending_approval transition immediately
-// opens a fresh one; if the transition wins the timer sees a non-working session
-// and declines. Either way the user still owes this session a turn, which is why
-// that is the invariant asserted rather than a particular interleaving.
-// Boundary-bound: the hook holds the settle open while a concurrent transition
-// parks on autoSettleFireMu. A goroutine blocked on a sync.Mutex is not durably
-// blocked, so a bubble has no instant at which to call the race staged.
+// A goroutine blocked on a sync.Mutex is not durably blocked, so a bubble has no
+// instant at which to call the race staged; this hook stands in for it.
 func TestAutoSettle_ConcurrentApprovalKeepsTheTurn(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}
-	// Into the visible countdown: the settle is the very next fire.
 	fireAutoSettleNow(t, d, id)
 
 	entry, ok := autoSettlePending(d, id)
@@ -703,9 +589,6 @@ func TestAutoSettle_ConcurrentApprovalKeepsTheTurn(t *testing.T) {
 	}()
 
 	d.autoSettlePreSettleHook = func() {
-		// Turn the approval loose and give it every chance to commit before this
-		// settle proceeds. Serialized correctly, it cannot: it blocks on the
-		// state-transition gate until the settle is done.
 		close(release)
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -721,22 +604,10 @@ func TestAutoSettle_ConcurrentApprovalKeepsTheTurn(t *testing.T) {
 	}
 }
 
-// ---- Typing holds the settle ----
-//
-// attn cannot see inside the agent's TUI, so it cannot tell composing a message
-// from erasing one from pressing Escape. It does not need to: every keystroke
-// means the user's hands are on this session, which is the whole question a
-// pending settle is asking. These cover what that costs and where it stops.
-
-// typeInto is a genuine keystroke arriving from an interactive client, driven
-// through the real pty_input handler so the wiring between typing and the hold
-// is part of what these cover — not just the hold in isolation.
 func typeInto(d *Daemon, sessionID string) {
 	typeIntoAs(d, sessionID, "")
 }
 
-// typeIntoAs is the same with an explicit source tag, for the writes that are
-// attn typing rather than the user.
 func typeIntoAs(d *Daemon, sessionID, source string) {
 	msg := &protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: sessionID, Data: "x"}
 	if source != "" {
@@ -745,8 +616,6 @@ func typeIntoAs(d *Daemon, sessionID, source string) {
 	d.handlePtyInput(nil, msg)
 }
 
-// goQuiet backdates the session's last auto-settle activity so the quiet window
-// has elapsed, standing in for the user taking their hands off the session.
 func goQuiet(d *Daemon, sessionID string) {
 	d.lastInputMu.Lock()
 	defer d.lastInputMu.Unlock()
@@ -760,15 +629,12 @@ func movePointerIn(d *Daemon, sessionID string) {
 	})
 }
 
-// The feature in one pass: typing freezes a running countdown, the freeze is
-// what rides the wire in place of a deadline, and going quiet hands back a whole
-// countdown rather than the sliver that was left.
 func TestAutoSettle_TypingFreezesTheCountdownAndQuietResumesIt(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}
-	fireAutoSettleNow(t, d, id) // into the visible countdown
+	fireAutoSettleNow(t, d, id)
 	counting, _ := autoSettlePending(d, id)
 
 	typeInto(d, id)
@@ -791,7 +657,6 @@ func TestAutoSettle_TypingFreezesTheCountdownAndQuietResumesIt(t *testing.T) {
 		t.Fatal("auto_settle_held absent while frozen; the tile has nothing to freeze on")
 	}
 
-	// Still typing when the quiet check comes round: hold again, settle nothing.
 	fireAutoSettleNow(t, d, id)
 	again, ok := autoSettlePending(d, id)
 	if !ok || again.phase != autoSettleHeld {
@@ -809,9 +674,6 @@ func TestAutoSettle_TypingFreezesTheCountdownAndQuietResumesIt(t *testing.T) {
 		t.Fatalf("after the quiet window: pending=%v entry=%+v, want counting again", ok, resumed)
 	}
 	if window := time.Until(resumed.firesAt); window < 3500*time.Second {
-		// The fixture's countdown is 3600s. A resumed countdown is a whole one:
-		// the frozen bar is drawn full, so releasing into a remainder would drop
-		// the bar the instant the user stopped typing.
 		t.Fatalf("resumed countdown = %v, want the full configured window", window)
 	}
 	clone = d.sessionForBroadcast(d.store.Get(id))
@@ -828,10 +690,6 @@ func TestAutoSettle_TypingFreezesTheCountdownAndQuietResumesIt(t *testing.T) {
 	}
 }
 
-// The race the hold cannot cover on its own: the countdown timer fires in the
-// microseconds around a keystroke, before holdAutoSettle can stop it. This is
-// the one interleaving that would close a turn under the user's hands, so the
-// fire path re-checks rather than trusting that the hold got there first.
 func TestAutoSettle_KeystrokeRacingTheFireHoldsInsteadOfSettling(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -839,8 +697,6 @@ func TestAutoSettle_KeystrokeRacingTheFireHoldsInsteadOfSettling(t *testing.T) {
 	}
 	fireAutoSettleNow(t, d, id)
 
-	// Record the keystroke without holding: exactly the window in which the timer
-	// has already been pulled out of the map and is on its way to the settle.
 	d.lastInputMu.Lock()
 	if d.lastAutoSettleActivityAt == nil {
 		d.lastAutoSettleActivityAt = make(map[string]time.Time)
@@ -920,21 +776,12 @@ func TestAutoSettle_PointerMovementInsideTheSettleStillHoldsIt(t *testing.T) {
 	}
 }
 
-// The narrower half of the same race, and the one a timestamp placed beforehand
-// never reaches: the keystroke arrives *inside* the fire, after the guard has
-// already looked and while the turn is on its way to being closed. The timer is
-// out of the map by then, so the hold the keystroke triggers finds nothing to
-// freeze and the only thing standing between the user and a settled turn is that
-// the check and the write are one step.
-//
-// A whole pty_input, not a hand-placed stamp: the point is that the real path —
-// source filter, stamp, write, hold — cannot slip through the gap.
 func TestAutoSettle_KeystrokeInsideTheSettleStillHoldsIt(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
 		t.Fatal("applyState(working) = false")
 	}
-	fireAutoSettleNow(t, d, id) // into the visible countdown
+	fireAutoSettleNow(t, d, id)
 
 	typed := false
 	d.autoSettlePreSettleHook = func() {
@@ -963,10 +810,6 @@ func TestAutoSettle_KeystrokeInsideTheSettleStillHoldsIt(t *testing.T) {
 	}
 }
 
-// Typing during the arm delay holds it too, but invisibly: the arming phase was
-// never announced, and a paused indicator for a settle nobody has decided on is
-// exactly what the two-phase split exists to avoid. It resumes into arming, not
-// into a countdown it never earned.
 func TestAutoSettle_TypingDuringTheArmDelayHoldsItInvisibly(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -996,9 +839,6 @@ func TestAutoSettle_TypingDuringTheArmDelayHoldsItInvisibly(t *testing.T) {
 	}
 }
 
-// A hold is not a cancel. The user going quiet is not the user answering, so the
-// countdown comes back on its own — where ⌘. stands until the session leaves
-// `working`.
 func TestAutoSettle_HoldExpiresWhereCancelStands(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -1017,9 +857,6 @@ func TestAutoSettle_HoldExpiresWhereCancelStands(t *testing.T) {
 	}
 }
 
-// The agent wanting the user beats everything, including a hold. A held session
-// that leaves `working` drops its timer and its wire flag, the same as a running
-// countdown does.
 func TestAutoSettle_LeavingWorkingClearsAHold(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {
@@ -1044,9 +881,6 @@ func TestAutoSettle_LeavingWorkingClearsAHold(t *testing.T) {
 	}
 }
 
-// attn typing on the user's behalf is not the user typing. A doorbell, a
-// delegation brief, or an attach replay must not hold a countdown open — the
-// hold exists to notice a human at the keyboard.
 func TestAutoSettle_AutomationInputDoesNotHold(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {

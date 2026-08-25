@@ -32,8 +32,6 @@ function makeRun(
   } as AutomationRunSummary;
 }
 
-// A valid v1alpha1 manual spec, so AutomationForm's edit-mode load
-// (specToFormValues) succeeds without a parse error banner.
 function manualSpecJson(overrides: Partial<AutomationFormValues> = {}): string {
   const firstModel = LAUNCH_CATALOG.codex.models[0];
   const values: AutomationFormValues = {
@@ -150,8 +148,6 @@ describe('AutomationsPanel', () => {
 
     await waitFor(() => expect(screen.getByTestId('automation-toggle-error-d1')).toHaveTextContent('daemon refused'));
     expect(props.setEnabled).toHaveBeenCalledWith('d1', false);
-    // Store state was never locally mutated; the checkbox reflects the
-    // (unchanged) definition.enabled from the store, not an optimistic flip.
     expect(toggle).toBeChecked();
   });
 
@@ -219,7 +215,6 @@ describe('AutomationsPanel', () => {
 
     const pendingId = useAutomationsStore.getState().ensureRunRequest('d1');
 
-    // Still pending: the key survives.
     props.fetchDefinitions.mockResolvedValue([
       makeDefinition({
         id: 'd1',
@@ -231,7 +226,6 @@ describe('AutomationsPanel', () => {
     await waitFor(() => expect(props.fetchDefinitions).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useAutomationsStore.getState().pendingRunRequests['d1']).toBe(pendingId));
 
-    // Delivered: the key clears, so the next click mints a fresh id.
     props.fetchDefinitions.mockResolvedValue([
       makeDefinition({
         id: 'd1',
@@ -253,8 +247,6 @@ describe('AutomationsPanel', () => {
         last_run: makeRun({ id: 'r1', occurrence_key: 'manual:restart-key-1', state: 'pending' }),
       }),
     ]);
-    // Simulate relaunch: the store starts empty regardless of what the
-    // daemon still has pending.
     useAutomationsStore.getState().reset();
     render(<AutomationsPanel {...props} />);
 
@@ -343,8 +335,6 @@ describe('AutomationsPanel', () => {
     await waitFor(() => expect(screen.getAllByTestId('automation-run-row')).toHaveLength(2));
   });
 
-  // A run's ticket_id no longer routes anywhere: the app kept no ticket
-  // surface, so the session is the only place a run row can open.
   it('navigates to the session even when the run also carries a ticket_id', async () => {
     const user = userEvent.setup();
     const props = baseProps();
@@ -387,10 +377,6 @@ describe('AutomationsPanel', () => {
     expect(props.onSelectSession).not.toHaveBeenCalled();
   });
 
-  // Form-level coverage (validation, error routing, delete flow) belongs to
-  // AutomationForm.test.tsx. These only prove the overlay opens with the
-  // right target, props are wired through, and closing restores the list —
-  // see EditorTarget's doc comment in AutomationsPanel.tsx.
   describe('form overlay', () => {
     it('opens a fresh form via "New automation" in the header, in create mode', async () => {
       const user = userEvent.setup();
@@ -402,7 +388,6 @@ describe('AutomationsPanel', () => {
 
       expect(await screen.findByTestId('automation-form')).toBeInTheDocument();
       expect(props.getDefinition).not.toHaveBeenCalled();
-      // The list is gone while the form is open.
       expect(screen.queryByTestId('automations-panel-list')).not.toBeInTheDocument();
     });
 
@@ -467,10 +452,6 @@ describe('AutomationsPanel', () => {
       expect(await screen.findByTestId('automations-panel-list')).toBeInTheDocument();
     });
 
-    // D6: the panel refetches definitions on the automations_changed broadcast
-    // (changedTick), which can fire while the user has the form open. That
-    // refetch must update the list only — the open form is never remounted
-    // or reset by the broadcast, only by explicit navigation (a fresh key).
     it('D6: a changedTick bump while the form is open refetches the list but does not remount the open form', async () => {
       const user = userEvent.setup();
       const props = baseProps();
@@ -486,9 +467,7 @@ describe('AutomationsPanel', () => {
       const fetchCallsBefore = props.fetchDefinitions.mock.calls.length;
       useAutomationsStore.getState().bumpChanged();
 
-      // The list-driving fetch re-runs...
       await waitFor(() => expect(props.fetchDefinitions.mock.calls.length).toBeGreaterThan(fetchCallsBefore));
-      // ...but the form was never reloaded and the typed text survives.
       expect(props.getDefinition).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId('automation-form')).toBeInTheDocument();
       expect(screen.getByTestId('automation-form-name')).toHaveValue('still typing');

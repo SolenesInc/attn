@@ -25,8 +25,6 @@ func requestsDeclaration() docstore.CollectionSchema {
 	}
 }
 
-// storeWithRequests returns a store holding the declaration and the documents,
-// each written a second apart so created_at ordering is unambiguous.
 func storeWithRequests(t *testing.T, bodies map[string]string) (*Store, time.Time) {
 	t.Helper()
 	s := New()
@@ -44,9 +42,6 @@ func storeWithRequests(t *testing.T, bodies map[string]string) (*Store, time.Tim
 	return s, base
 }
 
-// declOf reads a collection's declaration. Every document operation takes one,
-// because the declaration is what names the table the documents live in — the
-// same read the daemon does before touching a collection.
 func declOf(t *testing.T, s *Store, namespace, collection string) docstore.CollectionSchema {
 	t.Helper()
 	schema, ok, err := s.DocumentCollection(namespace, collection)
@@ -102,8 +97,6 @@ func queryIDs(t *testing.T, s *Store, q docstore.Query) []string {
 	return ids
 }
 
-// The declaration survives a round trip, which is what lets a surface that did
-// not write it — the CLI, later an extension apply — compile a query against it.
 func TestADeclarationRoundTripsThroughTheDatabase(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -117,15 +110,11 @@ func TestADeclarationRoundTripsThroughTheDatabase(t *testing.T) {
 	if len(got.Fields) != 3 || got.Fields[0].Name != "status" || got.Fields[1].Type != docstore.FieldNumber {
 		t.Fatalf("declaration = %+v", got)
 	}
-	// An undeclared collection is absent, not an error: that is the difference a
-	// query against a collection nobody declared has to report.
 	if _, ok, err := s.DocumentCollection("app/approval-gate", "nothing"); err != nil || ok {
 		t.Fatalf("undeclared collection: ok=%v err=%v", ok, err)
 	}
 }
 
-// A declaration is replaced, not migrated: adding a queryable field leaves every
-// stored document untouched and immediately queryable by the new field.
 func TestRedeclaringAddsAQueryableFieldWithoutTouchingDocuments(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1,"urgent":false,"note":"hi"}`,
@@ -145,8 +134,6 @@ func TestRedeclaringAddsAQueryableFieldWithoutTouchingDocuments(t *testing.T) {
 	}
 }
 
-// A body is stored byte for byte, undeclared fields included. Nothing rewrites a
-// stored document, which is what "no migrations for authors" rests on.
 func TestABodyComesBackExactlyAsWritten(t *testing.T) {
 	body := `{"status":"pending","nested":{"deep":[1,2,{"x":null}]},"undeclared":"kept"}`
 	s, _ := storeWithRequests(t, map[string]string{"a": body})
@@ -159,8 +146,6 @@ func TestABodyComesBackExactlyAsWritten(t *testing.T) {
 	}
 }
 
-// created_at is when the record appeared and survives a replacement; updated_at
-// moves. A "newest first" query means the first of those.
 func TestReplacingADocumentKeepsCreatedAtAndMovesUpdatedAt(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	later := base.Add(time.Hour)
@@ -179,8 +164,6 @@ func TestReplacingADocumentKeepsCreatedAtAndMovesUpdatedAt(t *testing.T) {
 	}
 }
 
-// The compiled query actually executes: filters read the body through
-// json_extract, the sort orders, and the limit bounds.
 func TestFiltersSortAndLimitExecuteAgainstRealJSON(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1,"urgent":false}`,
@@ -221,7 +204,6 @@ func TestFiltersSortAndLimitExecuteAgainstRealJSON(t *testing.T) {
 	}
 }
 
-// The after cursor paginates: the last id of a page names the start of the next.
 func TestTheAfterCursorPaginates(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1}`,
@@ -241,11 +223,6 @@ func TestTheAfterCursorPaginates(t *testing.T) {
 	}
 }
 
-// The boundary a range filter cannot express: every document shares one sort
-// value, so the whole ordering is the id tiebreaker. Paged one at a time, the
-// cursor must walk every document exactly once — `sort > value` would return
-// nothing after the first page and `sort >= value` would return the same
-// document forever.
 func TestPagingAcrossDocumentsThatShareASortValue(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":7}`,
@@ -284,8 +261,6 @@ func TestPagingAcrossDocumentsThatShareASortValue(t *testing.T) {
 	}
 }
 
-// Ties on a partially shared sort value: the cursor has to cross from one group
-// into the next without losing the tied documents on either side of the seam.
 func TestPagingCrossesATieGroupBoundary(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1}`,
@@ -297,8 +272,6 @@ func TestPagingCrossesATieGroupBoundary(t *testing.T) {
 		Namespace: "app/approval-gate", Collection: "requests",
 		Sort: &docstore.Sort{Field: "attempts"}, Limit: 2, After: "b",
 	}
-	// "b" is the first of the pair sharing attempts=2, so its tie partner "c"
-	// must survive the page break.
 	if got := queryIDs(t, s, q); !equalStrings(got, []string{"c", "d"}) {
 		t.Fatalf("page after the first of a tied pair = %v, want [c d]", got)
 	}
@@ -308,10 +281,6 @@ func TestPagingCrossesATieGroupBoundary(t *testing.T) {
 	}
 }
 
-// A declared field says what may be queried, not what a document must carry, so
-// a document missing the sort field is a real row in the ordering. SQLite sorts
-// its NULL first ascending and last descending, and the cursor has to agree in
-// both directions or the missing-field documents vanish from paging.
 func TestPagingOverDocumentsMissingTheSortField(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending"}`,
@@ -350,7 +319,6 @@ func TestPagingOverDocumentsMissingTheSortField(t *testing.T) {
 	}
 }
 
-// An unsorted query is ordered by id alone, and the cursor is that one column.
 func TestPagingAnUnsortedQuery(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending"}`,
@@ -366,8 +334,6 @@ func TestPagingAnUnsortedQuery(t *testing.T) {
 	}
 }
 
-// Timestamps are the sort a live panel actually uses, and two documents written
-// in the same instant tie there too.
 func TestPagingByCreatedAtWithIdenticalTimestamps(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
@@ -397,8 +363,6 @@ func TestPagingByCreatedAtWithIdenticalTimestamps(t *testing.T) {
 	}
 }
 
-// A cursor pointing at a document that is gone is an error, not an empty page:
-// silently returning nothing reads as "end of results" and quietly truncates.
 func TestPagingAfterADeletedDocumentSaysSo(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema, _, err := s.DocumentCollection("app/approval-gate", "requests")
@@ -411,9 +375,6 @@ func TestPagingAfterADeletedDocumentSaysSo(t *testing.T) {
 	}
 }
 
-// Namespace isolation is structural: two namespaces holding the same collection
-// name never see each other's documents, because namespace is part of every
-// address and every statement.
 func TestTwoNamespacesWithTheSameCollectionNameStaySeparate(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"shared-id": `{"status":"pending"}`})
 	other := requestsDeclaration()
@@ -438,7 +399,6 @@ func TestTwoNamespacesWithTheSameCollectionNameStaySeparate(t *testing.T) {
 	}); len(got) != 0 {
 		t.Fatalf("query crossed the namespace boundary: %v", got)
 	}
-	// Deleting one namespace's document leaves the other's alone.
 	if _, err := s.DeleteDocument(declOf(t, s, "app/other", "requests"), "shared-id", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -447,8 +407,6 @@ func TestTwoNamespacesWithTheSameCollectionNameStaySeparate(t *testing.T) {
 	}
 }
 
-// A delete reports whether anything was there, so a caller does not announce a
-// change that did not happen.
 func TestDeleteReportsWhetherADocumentWasThere(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	existed, err := s.DeleteDocument(declOf(t, s, "app/approval-gate", "requests"), "a", nil)
@@ -461,20 +419,13 @@ func TestDeleteReportsWhetherADocumentWasThere(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Revisions and conditional writes
-// ---------------------------------------------------------------------------
-
 func rev(n int64) *int64 { return &n }
 
-// requestsDecl is the declaration every conditional-write test writes through.
 func requestsDecl(t *testing.T, s *Store) docstore.CollectionSchema {
 	t.Helper()
 	return declOf(t, s, "app/approval-gate", "requests")
 }
 
-// A revision is what a reader is handed and what a writer hands back, so it has
-// to advance on every write and be visible on every read.
 func TestARevisionAdvancesWithEveryWrite(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -503,8 +454,6 @@ func TestARevisionAdvancesWithEveryWrite(t *testing.T) {
 	}
 }
 
-// The whole point: a write built on a version somebody else has replaced is
-// refused, and the document it would have clobbered is untouched.
 func TestAWriteExpectingAStaleRevisionIsRefused(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -513,7 +462,6 @@ func TestAWriteExpectingAStaleRevisionIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Somebody else writes between that read and the write below.
 	if _, err := s.PutDocument(schema, "a", []byte(`{"status":"approved"}`), base.Add(time.Second), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -560,8 +508,6 @@ func TestAWriteExpectingTheCurrentRevisionIsAccepted(t *testing.T) {
 	}
 }
 
-// Expecting a revision expects a document. A missing one has to be refused
-// rather than created: the caller asked to edit something, not to write it.
 func TestExpectingARevisionOnAMissingDocumentCreatesNothing(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -580,8 +526,6 @@ func TestExpectingARevisionOnAMissingDocumentCreatesNothing(t *testing.T) {
 	}
 }
 
-// Create-only, out of the same field: revisions start at 1, so expecting 0 is
-// expecting nothing to be there.
 func TestExpectingAbsentCreatesOnlyOnce(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{})
 	schema := requestsDecl(t, s)
@@ -633,8 +577,6 @@ func TestDeleteExpectingAStaleRevisionKeepsTheDocument(t *testing.T) {
 	}
 }
 
-// "Delete this if it is not there" cannot be honoured, and must not quietly
-// become an unconditional delete of the document the caller was protecting.
 func TestDeleteCannotExpectTheDocumentToBeAbsent(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -651,14 +593,8 @@ func TestDeleteCannotExpectTheDocumentToBeAbsent(t *testing.T) {
 	}
 }
 
-// The reason revisions exist, run as the race it protects against: several
-// writers reading, changing and writing back the same document at once. Each one
-// retries on conflict, and the counter has to end at the number of increments —
-// a lost update shows up as a number that is short.
-//
-// Against a database file rather than the in-memory store the other tests use.
-// The in-memory one is pinned to a single connection, so it would serialise the
-// writers at the driver and never exercise two of them reaching SQLite at once.
+// Against a database file: the in-memory store is pinned to a single connection, so it
+// would serialise the writers at the driver and never reach SQLite with two at once.
 func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	s, err := NewWithDB(filepath.Join(t.TempDir(), "contention.db"))
@@ -739,23 +675,16 @@ func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 		t.Fatalf("counter ended at %d after %d increments; %d update(s) were lost",
 			got, writers*perWriter, writers*perWriter-got)
 	}
-	// Every accepted write advanced the revision exactly once, so the revision is
-	// an independent count of the writes that landed.
 	if want := int64(writers*perWriter) + docstore.FirstRev; doc.Rev != want {
 		t.Fatalf("document is at rev %d after %d accepted writes, want %d", doc.Rev, writers*perWriter, want)
 	}
 }
 
-// Removing a collection takes its documents with it, in one transaction: a
-// declaration without documents names nothing, and documents without a
-// declaration cannot be queried.
 func TestRemovingACollectionTakesItsDocuments(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending"}`,
 		"b": `{"status":"pending"}`,
 	})
-	// Held from before the removal: reading through it afterwards is what proves
-	// the storage went, rather than only the registry row that names it.
 	schema := declOf(t, s, "app/approval-gate", "requests")
 
 	n, err := s.DeleteDocumentCollection("app/approval-gate", "requests")
@@ -773,9 +702,6 @@ func TestRemovingACollectionTakesItsDocuments(t *testing.T) {
 	}
 }
 
-// The count behind the slow-query receipt sees one collection: two collections
-// sharing a name under different namespaces are two tables, and neither counts
-// the other's documents.
 func TestCountIsScopedToTheCollection(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`, "b": `{"status":"pending"}`})
 	other := requestsDeclaration()
@@ -792,8 +718,6 @@ func TestCountIsScopedToTheCollection(t *testing.T) {
 	}
 }
 
-// A collection with no matching documents returns an empty result, never nil:
-// the wire carries an empty list, not a null.
 func TestAnEmptyResultIsAnEmptyList(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{})
 	schema, _, err := s.DocumentCollection("app/approval-gate", "requests")
@@ -828,9 +752,6 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// Documents and their declarations survive the daemon that wrote them: reopening
-// the same database returns both, which is what makes a live query's contents
-// durable across a restart rather than an in-memory projection.
 func TestDocumentsSurviveReopeningTheDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
@@ -876,11 +797,6 @@ func TestDocumentsSurviveReopeningTheDatabase(t *testing.T) {
 	}
 }
 
-// A declaration says what may be queried, not what a document must hold, so a
-// field declared `number` may legitimately contain an array or an object.
-// json_extract yields those as JSON text and orders them with everything else,
-// and the cursor has to walk them the same way — binding such a value from Go
-// has no bindable equivalent and fails the statement outright.
 func TestPagingOverCompoundValuesInADeclaredField(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":[1]}`,
@@ -898,9 +814,6 @@ func TestPagingOverCompoundValuesInADeclaredField(t *testing.T) {
 				Namespace: "app/approval-gate", Collection: "requests",
 				Sort: &docstore.Sort{Field: "attempts", Desc: desc}, Limit: 1,
 			}
-			// Whatever order SQLite gives these four, the walk has to visit each
-			// exactly once and then stop — the ordering is SQLite's, the
-			// completeness is the cursor's.
 			seen := map[string]bool{}
 			for i := 0; i < 4; i++ {
 				page := queryIDs(t, s, q)
@@ -923,9 +836,6 @@ func TestPagingOverCompoundValuesInADeclaredField(t *testing.T) {
 	}
 }
 
-// The same for the tie: two documents holding the identical compound value are
-// separated by the id half of the tuple, which is the branch a bound value made
-// unreachable by failing the statement first.
 func TestPagingBetweenTwoIdenticalCompoundValues(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":[1,2]}`,
@@ -940,9 +850,6 @@ func TestPagingBetweenTwoIdenticalCompoundValues(t *testing.T) {
 	}
 }
 
-// A stored value that disagrees with the declared type is also ordinary: the
-// declaration is not a storage schema. The cursor compares whatever json_extract
-// yields, so the walk is complete regardless of how SQLite orders the mix.
 func TestPagingWhenStoredValuesDisagreeWithTheDeclaredType(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":"seven"}`,
@@ -970,8 +877,6 @@ func TestPagingWhenStoredValuesDisagreeWithTheDeclaredType(t *testing.T) {
 	}
 }
 
-// A JSON null is the same absence as a missing key: json_extract yields SQL NULL
-// for both, so the cursor's NULL branch has to cover it.
 func TestPagingOverAnExplicitJSONNull(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":null}`,
@@ -986,14 +891,6 @@ func TestPagingOverAnExplicitJSONNull(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Physical schema: a table per collection, an indexed column per declared field
-// ---------------------------------------------------------------------------
-
-// The point of the whole physical schema: a filtered and sorted query reaches an
-// index rather than reading every document. Asserted through the query planner
-// because the alternative — timing the query — is the kind of test that passes
-// on a fast machine and fails in CI without either result meaning anything.
 func TestAQueryOnADeclaredFieldUsesItsIndex(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1}`,
@@ -1035,9 +932,6 @@ func TestAQueryOnADeclaredFieldUsesItsIndex(t *testing.T) {
 			if !strings.Contains(joined, "USING INDEX") && !strings.Contains(joined, "USING COVERING INDEX") {
 				t.Fatalf("plan does not use an index: %s", joined)
 			}
-			// A sort served by an index needs no sorting pass. The temp B-tree is
-			// what this schema exists to remove, so its absence is the assertion
-			// that matters for an ordered query.
 			if tc.query.Sort != nil && strings.Contains(joined, "TEMP B-TREE") {
 				t.Fatalf("ordered query still sorts in a temp B-tree: %s", joined)
 			}
@@ -1045,10 +939,6 @@ func TestAQueryOnADeclaredFieldUsesItsIndex(t *testing.T) {
 	}
 }
 
-// The declared type is not decoration: it is the affinity of the column the
-// field is compared through, so a body that stores a number as text still
-// compares as a number. Under the shared-table schema this compared as text
-// against every real number, which put "10" before 9.
 func TestADeclaredTypeDecidesHowStoredValuesCompare(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":9}`,
@@ -1061,8 +951,6 @@ func TestADeclaredTypeDecidesHowStoredValuesCompare(t *testing.T) {
 	if !equalStrings(got, []string{"a", "b"}) {
 		t.Fatalf("ascending by attempts = %v, want [a b] — \"10\" must order as the number 10", got)
 	}
-	// And the same value is reachable by a numeric filter, which is the half a
-	// caller notices first.
 	got = queryIDs(t, s, docstore.Query{
 		Namespace: "app/approval-gate", Collection: "requests",
 		Filters: []docstore.Filter{{Field: "attempts", Op: docstore.OpGt, Value: 9}},
@@ -1072,8 +960,6 @@ func TestADeclaredTypeDecidesHowStoredValuesCompare(t *testing.T) {
 	}
 }
 
-// Two collections are two tables, so a field name means whatever each of them
-// declared it to mean. Sharing one table made every declared name global.
 func TestCollectionsWithTheSameFieldNameDoNotShareStorage(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
@@ -1098,9 +984,6 @@ func TestCollectionsWithTheSameFieldNameDoNotShareStorage(t *testing.T) {
 	}
 }
 
-// Redeclaring is DDL, so it has to remove as well as add. A field that leaves
-// the declaration stops being queryable; the documents that carried it are
-// untouched and it works again the moment it is redeclared.
 func TestRedeclaringRemovesAFieldAndCanBringItBack(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":1,"urgent":true}`,
@@ -1132,9 +1015,6 @@ func TestRedeclaringRemovesAFieldAndCanBringItBack(t *testing.T) {
 	}
 }
 
-// Changing a declared field's type has to move its column, because the column's
-// affinity is how two stored values compare. Leaving the old column in place
-// would keep comparing numbers as text while the declaration said otherwise.
 func TestRedeclaringAFieldsTypeChangesHowItCompares(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending","attempts":9}`,
@@ -1154,9 +1034,6 @@ func TestRedeclaringAFieldsTypeChangesHowItCompares(t *testing.T) {
 	}
 }
 
-// Undefining drops the collection's table, which is what returns the space, and
-// declaring the same address again starts empty on a fresh table rather than
-// finding the old documents.
 func TestUndefiningDropsTheStorageAndRedeclaringStartsEmpty(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{"status":"pending"}`,
@@ -1187,12 +1064,9 @@ func TestUndefiningDropsTheStorageAndRedeclaringStartsEmpty(t *testing.T) {
 	}
 }
 
-// A schema that did not come from a read of the registry has no table, and must
-// fail loudly rather than reach a statement. This is the check standing between
-// the registry and every identifier the store executes.
 func TestAnUnmintedSchemaIsRefused(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
-	unminted := requestsDeclaration() // Table is empty: never read back.
+	unminted := requestsDeclaration()
 	if _, _, err := s.GetDocument(unminted, "a"); err == nil {
 		t.Fatal("a schema with no table was accepted")
 	}
@@ -1203,13 +1077,6 @@ func TestAnUnmintedSchemaIsRefused(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Migration 89: carrying a populated v88 store across
-// ---------------------------------------------------------------------------
-
-// seedV88DocumentStore reshapes a head-schema database back into migration 88's
-// document store — one shared `documents` table, a registry with no minting id —
-// and rewinds the migration watermark so reopening replays 89 over real rows.
 func seedV88DocumentStore(t *testing.T, dbPath string) {
 	t.Helper()
 	db, err := OpenDB(dbPath)
@@ -1259,10 +1126,6 @@ func seedV88DocumentStore(t *testing.T, dbPath string) {
 	}
 }
 
-// TestAPopulatedV88StoreIsCarriedIntoItsOwnTables is migration 89's upgrade
-// witness. `attn doc define` and `attn doc put` shipped with migration 88, so a
-// populated v88 database is something an installed profile can already hold, and
-// the rebuild has to bring it forward rather than start it over.
 func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-89.db")
 	seedV88DocumentStore(t, dbPath)
@@ -1290,9 +1153,6 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 		t.Fatalf("timestamps moved: created=%s updated=%s", doc.CreatedAt, doc.UpdatedAt)
 	}
 
-	// The carry builds the collection's columns and indexes from its declaration,
-	// so a field declared under v88 is queryable — and indexed — without anyone
-	// redeclaring it.
 	q := docstore.Query{
 		Namespace: "app/approval-gate", Collection: "requests",
 		Filters: []docstore.Filter{{Field: "status", Op: docstore.OpEq, Value: "open"}},
@@ -1313,16 +1173,11 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 		t.Fatalf("carried collection has no index: %s", joined)
 	}
 
-	// A collection declaring no fields still gets its table.
 	notes := declOf(t, s, "app/notes", "scratch")
 	if _, found, err := s.GetDocument(notes, "n1"); err != nil || !found {
 		t.Fatalf("n1 after migration: found=%v err=%v", found, err)
 	}
 
-	// Documents stored under an address no declaration named cannot happen
-	// through the API, but deleting them would be the wrong answer if they ever
-	// did: they arrive under an empty declaration, readable and one doc_define
-	// away from queryable by field.
 	ghost, ok, err := s.DocumentCollection("app/ghost", "lost")
 	if err != nil || !ok {
 		t.Fatalf("undeclared address was not carried: ok=%v err=%v", ok, err)
@@ -1342,13 +1197,6 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Migration 90: giving documents already stored a revision
-// ---------------------------------------------------------------------------
-
-// seedPreRevisionDocuments builds a database at migration 89's shape — tables
-// per collection, but no revision column — with documents in it, and rewinds the
-// watermark so reopening replays 90 over real rows.
 func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	t.Helper()
 	s, err := NewWithDB(dbPath)
@@ -1368,7 +1216,6 @@ func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 			t.Fatalf("seed %s: %v", doc.id, err)
 		}
 	}
-	// Back to 89: drop the column this migration adds, and forget having run it.
 	if _, err := s.db.Exec(`ALTER TABLE ` + schema.Table + ` DROP COLUMN rev;
 		DELETE FROM schema_migrations WHERE version >= 90;`); err != nil {
 		t.Fatalf("rewind to migration 89: %v", err)
@@ -1378,9 +1225,6 @@ func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	}
 }
 
-// Documents written before revisions existed have to come back with one, and be
-// usable as the token a conditional write hands in — otherwise the first
-// read-modify-write against an upgraded profile is refused forever.
 func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-90.db")
 	seedPreRevisionDocuments(t, dbPath)
@@ -1403,8 +1247,6 @@ func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 		t.Fatalf("the migration rewrote a body: %s", doc.Body)
 	}
 
-	// The carried revision is a real one: writing against it is accepted, and
-	// writing against the revision it replaces is then refused.
 	next, err := s.PutDocument(schema, "r1", []byte(`{"status":"closed","attempts":2}`),
 		time.Date(2026, 8, 4, 9, 0, 0, 0, time.UTC), rev(doc.Rev))
 	if err != nil {
@@ -1418,7 +1260,6 @@ func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 		t.Fatalf("a second write at the carried revision returned %v, want a conflict", err)
 	}
 
-	// Every document in the collection came across, not just the one read above.
 	if got := queryIDs(t, s, docstore.Query{Namespace: "app/approval-gate", Collection: "requests"}); len(got) != 2 {
 		t.Fatalf("documents after migration = %v, want both", got)
 	}

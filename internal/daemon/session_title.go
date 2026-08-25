@@ -16,15 +16,11 @@ import (
 )
 
 const (
-	// maxSessionTitleRunes bounds a generated session title's display length.
-	// Distinct from maxDelegationNameRunes (delegate.go): that 16-rune clamp is
-	// for delegation names, not auto-generated titles.
+	// Distinct from maxDelegationNameRunes (delegate.go), the clamp on delegation names.
 	maxSessionTitleRunes = 48
 	sessionTitleTimeout  = 90 * time.Second
 )
 
-// sessionTitleOutputSchema is the JSON Schema enforced via Claude's
-// --json-schema for the auto-title run.
 const sessionTitleOutputSchema = `{
 	"type": "object",
 	"properties": {
@@ -34,11 +30,6 @@ const sessionTitleOutputSchema = `{
 	"additionalProperties": false
 }`
 
-// maybeGenerateSessionTitle is the Stop-hook seam: when a session still carries
-// its default label (cwd basename), it generates a short title from the
-// conversation using a cheap model of the session's own agent, and writes it as
-// the label. Never panics the daemon on bad input; every early return is either
-// silent (retryable states) or logged via d.logf.
 func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
 		return
@@ -69,24 +60,17 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		SummaryCharCap:    2000,
 	})
 	if err != nil || slice.Empty() || slice.Brief == "" {
-		// No genuine user content yet (or the transcript wasn't readable/found).
-		// Leave the attempted-guard unmarked so a later Stop retries — marking
-		// here would permanently skip titling for a session whose first real
-		// turn hasn't landed yet.
+		// Leave the attempted-guard unmarked so a later Stop retries rather than
+		// permanently skipping this session.
 		return
 	}
 
-	// Marked only now that a real LLM attempt is about to happen: one attempt
-	// per session per daemon lifetime, success or failure. Re-check membership
-	// under the lock — the early check above and this mark are two separate
-	// critical sections with transcript extraction between them, so two
-	// concurrent calls for the same session (e.g. two close-together Stop
-	// events) can both pass the early check; only the first to reach this
-	// point may proceed.
+	// The early check and this mark are separate critical sections, so two
+	// close-together Stop events can both pass it; re-check under the lock.
 	d.sessionTitleMu.Lock()
 	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
 		d.sessionTitleMu.Unlock()
-		return // another caller won the race while we were extracting the slice
+		return
 	}
 	if d.sessionTitleAttempted == nil {
 		d.sessionTitleAttempted = make(map[string]struct{})
@@ -106,8 +90,6 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		return
 	}
 
-	// Re-fetch and re-check: the label may have been renamed (by the user or a
-	// concurrent caller) while the LLM run was in flight.
 	session = d.store.Get(sessionID)
 	if session == nil || !d.sessionMayBeAutoTitled(session) {
 		return
@@ -117,13 +99,8 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	d.publishFact(FactSessionRenamed, sessionID, nil)
 }
 
-// sessionMayBeAutoTitled reports whether nobody has named this session yet.
-// Two ways a session is already named: a crew member is bound to it — the
-// member's name IS its identity — or its label was moved off the cwd basename
-// the launch gave it. A woken member is caught by the label check on its own
-// (its label is the name, `Trellis`, and its home's basename is the id,
-// `trellis`); the member check stays as the backstop for a member session whose
-// label was renamed back to that basename.
+// The member check is the backstop for a member session renamed back to the cwd
+// basename the launch gave it.
 func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 	if session.Label != defaultSessionLabel(session.Directory, session.ID) {
 		return false
@@ -131,9 +108,7 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 	return d.crewMemberBoundTo(session.ID) == ""
 }
 
-// execSessionTitle dispatches the title generation run per the session's own
-// agent driver. Wired onto d.sessionTitleExec in New(); test daemons leave it
-// nil.
+// Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
 	agent := string(session.Agent)
 	switch agent {
@@ -146,9 +121,6 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 	}
 }
 
-// execSessionTitleHeadless runs the claude/codex title generation through the
-// shared HeadlessTaskProvider seam (see internal/daemon/session_instructions.go
-// for the same pattern).
 func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, slice transcript.ConversationSlice) (string, error) {
 	driver := agentdriver.Get(agent)
 	if driver == nil {
@@ -199,12 +171,8 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, sli
 	return result.Text, nil
 }
 
-// execSessionTitleCopilot invokes the copilot CLI directly (Copilot does not
-// implement HeadlessTaskProvider), mirroring the exact command shape of
-// classifier.ClassifyWithCopilot (internal/classifier/classifier.go). Title
-// generation is a distinct concern from stop-time state classification, which
-// internal/classifier owns exclusively (see internal/classifier/CLAUDE.md), so
-// this does not import or call that package.
+// Mirrors the command shape of classifier.ClassifyWithCopilot without importing
+// it: stop-time classification is internal/classifier's alone.
 func execSessionTitleCopilot(ctx context.Context, prompt, model string) (string, error) {
 	executable := strings.TrimSpace(os.Getenv("ATTN_COPILOT_EXECUTABLE"))
 	if executable == "" {
@@ -232,8 +200,6 @@ func execSessionTitleCopilot(ctx context.Context, prompt, model string) (string,
 	return string(output), nil
 }
 
-// buildSessionTitlePrompt builds the title-generation prompt shared by every
-// driver.
 func buildSessionTitlePrompt(slice transcript.ConversationSlice) string {
 	return fmt.Sprintf(`You generate short titles for AI-agent terminal sessions. Based on the conversation excerpt below, produce a concise title (3-7 words, at most 48 characters) that captures what the user is working on. Respond with only the title text - no quotes, no trailing punctuation, no explanation.
 
@@ -242,8 +208,6 @@ func buildSessionTitlePrompt(slice transcript.ConversationSlice) string {
 </conversation>`, slice.Render())
 }
 
-// sessionTitleQuoteClosers maps an opening wrapper rune to the closing rune
-// sanitizeSessionTitle strips it against.
 var sessionTitleQuoteClosers = map[rune]rune{
 	'"':  '"',
 	'\'': '\'',
@@ -251,8 +215,6 @@ var sessionTitleQuoteClosers = map[rune]rune{
 	'“':  '”',
 }
 
-// sanitizeSessionTitle turns raw model output into a display-ready title, or
-// "" when no valid title can be extracted.
 func sanitizeSessionTitle(raw string) string {
 	var line string
 	for _, candidate := range strings.Split(raw, "\n") {
@@ -285,9 +247,7 @@ func sanitizeSessionTitle(raw string) string {
 	return line
 }
 
-// defaultSessionLabel mirrors the recovery-path default at daemon.go:1294-1297:
-// filepath.Base(cwd), falling back to sessionID when the basename is "", ".",
-// or the path separator.
+// Mirrors the recovery-path default in daemon.go.
 func defaultSessionLabel(cwd, sessionID string) string {
 	label := filepath.Base(cwd)
 	if label == "" || label == "." || label == string(filepath.Separator) {
@@ -296,9 +256,6 @@ func defaultSessionLabel(cwd, sessionID string) string {
 	return label
 }
 
-// sessionAutoTitleEnabled reports whether Stop-time auto-titling is on.
-// ATTN_SESSION_AUTO_TITLE of "0"/"false"/"off" (case-insensitive) disables it;
-// anything else, including unset, leaves it enabled.
 func sessionAutoTitleEnabled() bool {
 	switch strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_SESSION_AUTO_TITLE"))) {
 	case "0", "false", "off":
@@ -308,8 +265,6 @@ func sessionAutoTitleEnabled() bool {
 	}
 }
 
-// sessionTitleModel resolves the per-agent title-generation model, honoring a
-// per-agent env override.
 func sessionTitleModel(agent string) string {
 	switch agent {
 	case "claude":

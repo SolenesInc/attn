@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Copilot implements Driver and optional capabilities for GitHub Copilot CLI.
 type Copilot struct{}
 
 var _ Driver = (*Copilot)(nil)
@@ -54,13 +53,8 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if opts.YoloMode {
 		args = append(args, "--yolo")
 	}
-	// Copilot's -i/--interactive starts an interactive session that auto-executes
-	// the prompt and stays alive for steering — the model attn delegation needs,
-	// matching how claude/codex keep an interactive session after their initial
-	// prompt. Do NOT use -p/--prompt: that runs non-interactively and exits after
-	// completion, which would tear the delegated session down immediately.
-	// Verified against copilot CLI v1.0.63 (`copilot --help`; example
-	// `copilot -i "Fix the bug in main.js"`).
+	// -i/--interactive keeps the session alive for steering; -p/--prompt exits and tears
+	// the delegated session down. Verified against copilot CLI v1.0.63.
 	if strings.TrimSpace(opts.InitialPrompt) != "" {
 		args = append(args, "--interactive", opts.InitialPrompt)
 	}
@@ -74,8 +68,6 @@ func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	}
 	return env
 }
-
-// --- TranscriptFinder ---
 
 func (c *Copilot) FindTranscript(sessionID, cwd string, startedAt time.Time) string {
 	return transcript.FindCopilotTranscript(cwd, startedAt)
@@ -97,8 +89,6 @@ func (c *Copilot) RecoveredRunningState(ptyState string) (protocol.SessionState,
 	}
 	return "", false
 }
-
-// --- ClassifierProvider ---
 
 func (c *Copilot) Classify(text string, timeout time.Duration) (string, error) {
 	return classifier.ClassifyWithCopilot(text, timeout)

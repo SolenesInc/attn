@@ -15,37 +15,16 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The document store's daemon half: the fact a write publishes, the live
-// queries that fact wakes, and the IPC surface `attn doc` speaks. One
-// subscription loop serves both transports through a sink; the WebSocket half
-// of it is in documents_ws.go.
-//
-// A subscription re-runs the whole query per delivery — never patches — and
-// diffs bodies against what the subscriber holds. A delivery is safe to drop
-// (each is computed from current state), which the one-slot wake channel relies
-// on; the held-revisions record beside the connection is what must not be lost.
-// The bus fan-out must not write the socket — the bus holds its publish lock
-// across the inline fan-out — so the fact handler only pokes the wake channel.
-//
 // See docs/plans/2026-08-03-ext-a3-doc-store.md.
 
-// docSubscription is one caller watching one query. It holds no declaration on
-// purpose: the delivery loop re-reads it, since a captured one goes stale
-// exactly when it matters.
 type docSubscription struct {
-	id     string
-	query  docstore.Query
-	target string
-	// wake holds at most one pending nudge; dropping extras is correct because
-	// the delivery they would cause is the one the pending nudge will cause.
-	wake chan struct{}
-	// siblings is how many subscriptions the last write woke on this collection,
-	// stamped by the fan-out so the slow-fan-out log line stays off the lock.
+	id       string
+	query    docstore.Query
+	target   string
+	wake     chan struct{}
 	siblings atomic.Int64
 }
 
-// documentChanged is the fact's payload: the address in parts (consumers never
-// parse the subject) plus `deleted`.
 type documentChanged struct {
 	Namespace  string `json:"namespace"`
 	Collection string `json:"collection"`
@@ -53,7 +32,6 @@ type documentChanged struct {
 	Deleted    bool   `json:"deleted,omitempty"`
 }
 
-// documentCollectionRemoved is the undefine fact's payload.
 type documentCollectionRemoved struct {
 	Namespace  string `json:"namespace"`
 	Collection string `json:"collection"`
@@ -65,9 +43,6 @@ type documentCollectionRedeclared struct {
 	Collection string `json:"collection"`
 }
 
-// subscribeDocumentFacts registers the live-query fan-out as its own ephemeral
-// bus consumer — deliberately not a projection, since deliveries go to IPC
-// callers, not WebSocket clients.
 func (d *Daemon) subscribeDocumentFacts() {
 	if d.eventBus == nil || d.docUnsubHooks != nil {
 		return
@@ -84,9 +59,6 @@ func (d *Daemon) unsubscribeDocumentFacts() {
 	}
 }
 
-// documentChangedFact builds the fact for one write or removal; subject is the
-// document's address. Built here, appended by the store inside the write's own
-// transaction, so the store never learns attn's fact names.
 func documentChangedFact(namespace, collection, id string, deleted bool) store.BusEvent {
 	payload, _ := json.Marshal(documentChanged{
 		Namespace: namespace, Collection: collection, ID: id, Deleted: deleted,
@@ -98,9 +70,6 @@ func documentChangedFact(namespace, collection, id string, deleted bool) store.B
 	}
 }
 
-// announceCommittedWrite fans out a fact the store already made durable. The bus
-// reads the log forward, so concurrent commits reach subscribers in seq order
-// however the announce calls race.
 func (d *Daemon) announceCommittedWrite(fact store.BusEvent, seq int64) {
 	if d.eventBus == nil {
 		d.projectToClients(bus.Event{
@@ -111,23 +80,16 @@ func (d *Daemon) announceCommittedWrite(fact store.BusEvent, seq int64) {
 	d.eventBus.Announce()
 }
 
-// publishCollectionRemoved announces a collection and everything in it is gone;
-// no document write to commit with, so it takes the ordinary publish path.
 func (d *Daemon) publishCollectionRemoved(namespace, collection string, documents int) {
 	d.publishFact(FactDocumentCollectionRemoved, docstore.Target(namespace, collection),
 		documentCollectionRemoved{Namespace: namespace, Collection: collection, Documents: documents})
 }
 
-// publishCollectionRedeclared announces a rewritten declaration. The delivery
-// loop re-reads it per wake, so a surviving subscription pays one redundant
-// delivery and a broken one ends now instead of at the next arbitrary write.
 func (d *Daemon) publishCollectionRedeclared(namespace, collection string) {
 	d.publishFact(FactDocumentCollectionRedeclared, docstore.Target(namespace, collection),
 		documentCollectionRedeclared{Namespace: namespace, Collection: collection})
 }
 
-// wakeDocumentSubscriptions is the fact handler for every document fact. It does
-// no I/O.
 func (d *Daemon) wakeDocumentSubscriptions(ev bus.Event) {
 	var namespace, collection string
 	switch ev.Name {
@@ -193,18 +155,14 @@ func (d *Daemon) removeDocSubscription(id string) {
 	d.docSubsMu.Unlock()
 }
 
-// documentSubscriptionCount reports how many live queries are registered; tests
-// use it to prove a subscription dies with its caller.
 func (d *Daemon) documentSubscriptionCount() int {
 	d.docSubsMu.Lock()
 	defer d.docSubsMu.Unlock()
 	return len(d.docSubs)
 }
 
-// runDocQuery answers a query, returning the store's read plus how long it
-// took. The declaration comes back FROM the read: reading it separately first
-// let a redeclare land between schema and SELECT; the store now resolves it
-// inside the same transaction.
+// Returns the declaration FROM the read: resolving it separately let a redeclare
+// land between schema and SELECT.
 func (d *Daemon) runDocQuery(q docstore.Query) (store.QueryRead, time.Duration, error) {
 	if d.store == nil {
 		return store.QueryRead{}, 0, fmt.Errorf("no database")
@@ -226,11 +184,8 @@ func (d *Daemon) runDocQuery(q docstore.Query) (store.QueryRead, time.Duration, 
 	return read, time.Since(started), nil
 }
 
-// Two tripwires. slowDocQuery: a one-shot query this slow is pathological with
-// every declared field indexed. slowDocFanOut matters more — a live query re-runs
-// per committed write, so the cost is one query times the watching subscriptions,
-// invisible to any per-query threshold. Its budget is one 60Hz frame; a healthy
-// fan-out is microseconds.
+// slowDocFanOut is one 60Hz frame: a live query re-runs per committed write, so
+// its cost is one query times the watching subscriptions.
 const (
 	slowDocQuery  = 50 * time.Millisecond
 	slowDocFanOut = 16 * time.Millisecond
@@ -245,10 +200,7 @@ func (d *Daemon) logSlowDocQuery(schema docstore.CollectionSchema, took time.Dur
 		d.documentCountFor(schema), slowDocQuery)
 }
 
-// logSlowDocFanOut reports what one write costs across every subscription
-// watching this collection.
 func (d *Daemon) logSlowDocFanOut(sub *docSubscription, schema docstore.CollectionSchema, took time.Duration) {
-	// The first delivery answers the subscribe, not a write; prices as one.
 	subs := sub.siblings.Load()
 	if subs < 1 {
 		subs = 1
@@ -270,8 +222,6 @@ func (d *Daemon) documentCountFor(schema docstore.CollectionSchema) int {
 	return count
 }
 
-// collectionFor reads a collection's declaration, turning "never declared" into
-// the error every caller wants to report.
 func (d *Daemon) collectionFor(namespace, collection string) (*docstore.CollectionSchema, error) {
 	if d.store == nil {
 		return nil, fmt.Errorf("no database")
@@ -292,20 +242,15 @@ func (d *Daemon) collectionFor(namespace, collection string) (*docstore.Collecti
 	return schema, nil
 }
 
-// undeclaredCollectionError is the one error every caller reports for a
-// never-declared collection; typed so sendDocError codes it without text matching.
 func undeclaredCollectionError(namespace, collection string) error {
 	return &docstore.UndeclaredCollectionError{Namespace: namespace, Collection: collection}
 }
 
-// sendDocError is the document store's one error path: typed docstore errors
-// become machine-readable codes beside the message. Consumers must never match
-// on the English — including here.
+// Consumers must never match on the English — including here.
 func (d *Daemon) sendDocError(conn net.Conn, err error) {
 	d.sendDocErrorAs(conn, err, docErrorCode(err))
 }
 
-// docErrorCode is the code a docstore error answers a request with.
 func docErrorCode(err error) string {
 	switch {
 	case docstore.IsConflict(err):
@@ -318,9 +263,6 @@ func docErrorCode(err error) string {
 	return ""
 }
 
-// subscriptionEndCode is the code the SAME errors carry once a subscription is
-// accepted: no longer "you got it wrong" but "this happened TO it" — removed vs
-// redeclared — which a UI host must tell apart.
 func subscriptionEndCode(err error) string {
 	switch {
 	case docstore.IsUndeclaredCollection(err):
@@ -352,8 +294,6 @@ func (d *Daemon) sendDocErrorAs(conn net.Conn, err error, code string) {
 	}
 }
 
-// IPC handlers.
-
 func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) {
 	schema := collectionSchemaFromProtocol(msg.Schema)
 	if err := schema.Validate(); err != nil {
@@ -369,8 +309,6 @@ func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) 
 		d.sendDocError(conn, err)
 		return
 	}
-	// A first declaration has no watchers; a redeclare can, and they must hear
-	// now or hold a stale window until an unrelated write — or forever.
 	if redeclared {
 		d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
 	}
@@ -390,7 +328,6 @@ func (d *Daemon) handleDocUndefine(conn net.Conn, msg *protocol.DocUndefineMessa
 		d.sendDocError(conn, err)
 		return
 	}
-	// Watchers must see the removal or keep showing records the store no longer holds.
 	d.coalesceSnapshots(func() {
 		d.publishCollectionRemoved(msg.Namespace, msg.Collection, removed)
 	})
@@ -436,9 +373,6 @@ func (d *Daemon) handleDocPut(conn net.Conn, msg *protocol.DocPutMessage) {
 		d.sendDocError(conn, err)
 		return
 	}
-	// The write and its fact are one commit, so the returned seq is the write's
-	// position (comparable against any later read's as_of_seq). A refused write
-	// publishes nothing — the store did not change.
 	fact := documentChangedFact(msg.Namespace, msg.Collection, msg.ID, false)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: *schema, ID: msg.ID, Body: []byte(msg.Body), Expected: expectedRev(msg.ExpectedRev),
@@ -457,7 +391,6 @@ func (d *Daemon) handleDocPut(conn net.Conn, msg *protocol.DocPutMessage) {
 	})
 }
 
-// expectedRev converts the wire's optional int revision to the store's int64.
 func expectedRev(wire *int) *int64 {
 	if wire == nil {
 		return nil
@@ -479,8 +412,6 @@ func (d *Daemon) handleDocGet(conn net.Conn, msg *protocol.DocGetMessage) {
 		d.sendDocError(conn, err)
 		return
 	}
-	// One transaction for declaration, row, and log position, so the position
-	// names the state the document was read from.
 	read, declared, err := d.store.ReadDocument(msg.Namespace, msg.Collection, msg.ID)
 	if err != nil {
 		d.sendDocError(conn, err)
@@ -504,8 +435,6 @@ func (d *Daemon) handleDocDelete(conn net.Conn, msg *protocol.DocDeleteMessage) 
 		d.sendDocError(conn, err)
 		return
 	}
-	// A delete that removed nothing appends no fact, wakes nobody, and has no
-	// position to report.
 	fact := documentChangedFact(msg.Namespace, msg.Collection, msg.ID, true)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: *schema, ID: msg.ID, Delete: true, Expected: expectedRev(msg.ExpectedRev),
@@ -544,9 +473,6 @@ func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {
 	}})
 }
 
-// handleDocCount answers how many documents match, via the same compile the
-// query uses — a badge must not fetch bodies to count, and cannot count past
-// the limit if it does.
 func (d *Daemon) handleDocCount(conn net.Conn, msg *protocol.DocCountMessage) {
 	q, err := documentQueryFromProtocol(msg.Query)
 	if err != nil {
@@ -581,21 +507,11 @@ func (d *Daemon) handleDocCount(conn net.Conn, msg *protocol.DocCountMessage) {
 	}})
 }
 
-// docSink is where one subscription's deliveries and its ending go, and it is
-// the whole difference between the two transports: the unix socket writes both
-// onto the connection that asked, the WebSocket wraps each in an envelope naming
-// the subscription, because one socket there carries many. The loop above it
-// knows neither.
-//
-// deliver returning an error ends the subscription silently — the transport has
-// already lost the caller, so there is nobody left to tell.
 type docSink struct {
 	deliver func(*protocol.DocSubscribeResult) error
 	end     func(err error, code string)
 }
 
-// docSubscriptionQuery decodes a subscribe request and refuses the one query a
-// live subscription cannot answer.
 func docSubscriptionQuery(msg *protocol.DocSubscribeMessage) (docstore.Query, error) {
 	q, err := documentQueryFromProtocol(msg.Query)
 	if err != nil {
@@ -609,29 +525,17 @@ func docSubscriptionQuery(msg *protocol.DocSubscribeMessage) (docstore.Query, er
 	return q, nil
 }
 
-// runDocSubscription is the one live-query loop, shared by both transports: the
-// current window immediately, then a fresh one per relevant write, ending when
-// `done` closes or when the collection can no longer answer. A delivery is ids
-// in order plus only the bodies the subscriber does not hold, tracked as one
-// {id: rev} map.
-//
-// It blocks until the subscription ends, and it must never run inside the bus
-// fan-out: a delivery writes a socket, and the bus holds its publish lock across
-// that fan-out. What the fact handler does is poke this loop's wake channel.
+// MUST never run inside the bus fan-out: a delivery writes a socket and the bus
+// holds its publish lock across that fan-out.
 func (d *Daemon) runDocSubscription(q docstore.Query, have []protocol.DocumentRevision, sink docSink, done <-chan struct{}) {
-	// Registered before the first query: the other order drops a write landing
-	// in between; this one only risks a redundant ids-only delivery.
+	// Registered before the first query: the other order drops a write landing in
+	// between.
 	sub := d.addDocSubscription(q)
 	defer d.removeDocSubscription(sub.id)
 
-	// What the subscriber holds: seeded from `have`, replaced by each delivered
-	// window, never growing past the query's limit.
 	held := heldRevisions(have)
 
 	for delivery := 1; ; delivery++ {
-		// Re-read the declaration per delivery (inside the query's transaction): an
-		// undefine or a field-dropping redeclare must END the subscription, told
-		// apart by code, rather than answer an empty or silently changed window.
 		read, took, err := d.runDocQuery(q)
 		if err != nil {
 			code := docErrorCode(err)
@@ -655,8 +559,6 @@ func (d *Daemon) runDocSubscription(q docstore.Query, have []protocol.DocumentRe
 	}
 }
 
-// handleDocSubscribe is the only IPC handler that keeps its connection: here the
-// connection IS the subscription, so it needs no id and refuses one.
 func (d *Daemon) handleDocSubscribe(conn net.Conn, msg *protocol.DocSubscribeMessage) {
 	if msg.SubscriptionID != nil {
 		d.sendDocError(conn, docstore.InvalidQuery(fmt.Errorf(
@@ -670,7 +572,6 @@ func (d *Daemon) handleDocSubscribe(conn net.Conn, msg *protocol.DocSubscribeMes
 		return
 	}
 
-	// The caller never speaks again, so anything the read returns means gone.
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -686,9 +587,6 @@ func (d *Daemon) handleDocSubscribe(conn net.Conn, msg *protocol.DocSubscribeMes
 	}, gone)
 }
 
-// heldRevisions turns the subscriber's declared `have` into the diff map. A
-// stale or invented claim simply differs from what the store finds, so the body
-// is re-sent and the subscriber converges.
 func heldRevisions(have []protocol.DocumentRevision) map[string]int64 {
 	if len(have) == 0 {
 		return nil
@@ -700,8 +598,6 @@ func heldRevisions(have []protocol.DocumentRevision) map[string]int64 {
 	return held
 }
 
-// windowDelivery turns a read into one delivery plus the revisions held after
-// applying it; a body travels only when the subscriber's revision differs.
 func windowDelivery(delivery int, read store.QueryRead, held map[string]int64) (*protocol.DocSubscribeResult, map[string]int64) {
 	out := &protocol.DocSubscribeResult{
 		Delivery: delivery,
@@ -726,8 +622,6 @@ func (d *Daemon) sendDocResponse(conn net.Conn, resp protocol.Response) {
 	}
 }
 
-// Wire mapping.
-
 func collectionSchemaFromProtocol(s protocol.DocumentCollectionSchema) docstore.CollectionSchema {
 	out := docstore.CollectionSchema{Namespace: s.Namespace, Collection: s.Collection}
 	for _, f := range s.Fields {
@@ -748,9 +642,6 @@ func collectionSchemaToProtocol(s docstore.CollectionSchema) protocol.DocumentCo
 	return out
 }
 
-// documentQueryFromProtocol decodes a wire query; a filter's bound arrives as
-// JSON text (the one polymorphic leaf) and is decoded here so docstore can
-// type-check it.
 func documentQueryFromProtocol(q protocol.DocumentQuery) (docstore.Query, error) {
 	out := docstore.Query{Namespace: q.Namespace, Collection: q.Collection}
 	for _, f := range q.Filters {

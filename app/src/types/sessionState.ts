@@ -8,7 +8,6 @@ export type UISessionState =
   | 'recoverable'
   | 'unknown';
 
-// Normalize daemon state to UI state
 export function normalizeSessionState(state: string): UISessionState {
   switch (state) {
     case 'launching':
@@ -25,10 +24,8 @@ export function normalizeSessionState(state: string): UISessionState {
   }
 }
 
-// `scheduled` and `recoverable` are intentionally excluded: a session parked
-// on a /loop or cron will auto-resume on its own, and a recoverable session
-// auto-revives on open; neither needs steering, so both stay quiet (no attention
-// badge, no drawer entry).
+// `scheduled` and `recoverable` are deliberately excluded: both auto-resume, so
+// neither needs steering.
 export function isAttentionSessionState(state: UISessionState): boolean {
   return state === 'waiting_input' || state === 'pending_approval' || state === 'unknown';
 }

@@ -1,12 +1,5 @@
-/**
- * Map an anchor's (start, end) text offsets to a live DOM Range inside the
- * element carrying the matching data-block-id.
- *
- * The walk mirrors extractBlocks' normalization exactly: every text node in
- * tree order, skipping `data-md-chrome` subtrees, in UTF-16 units. Split text
- * nodes are tolerated by construction, and a boundary landing on a seam
- * attaches START to the later node and END to the earlier one.
- */
+/** Map an anchor's (start, end) text offsets to a live DOM Range inside the element
+ * carrying the matching data-block-id. The walk mirrors extractBlocks' normalization. */
 
 const CHROME_ATTR = 'data-md-chrome';
 
@@ -38,12 +31,8 @@ export function blockDomText(blockEl: Element): string {
   return text;
 }
 
-/**
- * Inverse of `resolveDomRange`, over both Range boundary shapes: a text-node
- * offset is a character index; an element offset is a child index, the point
- * sitting before that child (end of element when it equals childCount). Null
- * when the node is outside `blockEl` or inside chrome.
- */
+/** Inverse of `resolveDomRange`: a text-node offset is a character index, an element
+ * offset a child index. Null when the node is outside `blockEl` or inside chrome. */
 export function domPointToOffset(blockEl: Element, node: Node, offset: number): number | null {
   if (node !== blockEl && !blockEl.contains(node)) {
     return null;
@@ -84,10 +73,8 @@ export function domPointToOffset(blockEl: Element, node: Node, offset: number): 
   return acc; // point lies after every text node in the block
 }
 
-/**
- * Resolve `[start, end)` to a DOM Range within `blockEl`. Null — never a throw
- * — when the range is degenerate or the DOM's text is shorter than `end`.
- */
+/** Resolve `[start, end)` to a DOM Range within `blockEl`. Null — never a throw — when
+ * the range is degenerate or the DOM's text is shorter than `end`. */
 export function resolveDomRange(blockEl: Element, start: number, end: number): Range | null {
   if (start < 0 || end <= start) {
     return null;

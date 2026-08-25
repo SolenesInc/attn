@@ -17,9 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestAutomationDefinitionsGetWSResultCorrelatesRequest exercises the WS list
-// path: an applied definition comes back as one summary correlated by
-// request_id, with the schedule/policy fields pulled from its spec.
 func TestAutomationDefinitionsGetWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -49,9 +46,6 @@ func TestAutomationDefinitionsGetWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationRunsGetWSResultCorrelatesRequest claims one manual run and
-// confirms the WS runs_get result carries it, including the joined
-// occurrence_key, correlated by request_id.
 func TestAutomationRunsGetWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -90,9 +84,6 @@ func TestAutomationRunsGetWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationRunsGetWSResultTruncatesAtCap seeds one more run than
-// automationRunSummaryListCap and confirms the result caps the list and sets
-// truncated=true rather than returning an unbounded payload.
 func TestAutomationRunsGetWSResultTruncatesAtCap(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -132,9 +123,6 @@ func TestAutomationRunsGetWSResultTruncatesAtCap(t *testing.T) {
 	}
 }
 
-// TestAutomationSetEnabledWSResultCorrelatesRequest drives the mutation
-// handler (which runs the store call in a goroutine) and confirms the result
-// is still correlated by request_id once it lands.
 func TestAutomationSetEnabledWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -161,8 +149,6 @@ func TestAutomationSetEnabledWSResultCorrelatesRequest(t *testing.T) {
 		t.Fatalf("set_enabled definition = %+v, want a disabled summary", res.Definition)
 	}
 
-	// Unknown definition surfaces as success=false with an error, not a
-	// transport failure.
 	client2 := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationSetEnabledWS(client2, &protocol.AutomationSetEnabledMessage{
 		Cmd:          protocol.CmdAutomationSetEnabled,
@@ -177,11 +163,6 @@ func TestAutomationSetEnabledWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationDeleteWSResultCorrelatesRequest mirrors
-// TestAutomationSetEnabledWSResultCorrelatesRequest for handleAutomationDeleteWS:
-// a successful delete's result is still correlated by request_id once it
-// lands, and an unknown definition surfaces as success=false with an error
-// rather than a transport failure.
 func TestAutomationDeleteWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -208,8 +189,6 @@ func TestAutomationDeleteWSResultCorrelatesRequest(t *testing.T) {
 		t.Fatalf("expected the definition to be soft-deleted, got %#v err=%v", got, err)
 	}
 
-	// Unknown definition surfaces as success=false with an error, not a
-	// transport failure.
 	client2 := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationDeleteWS(client2, &protocol.AutomationDeleteMessage{
 		Cmd:          protocol.CmdAutomationDelete,
@@ -223,11 +202,6 @@ func TestAutomationDeleteWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupWSResultCorrelatesRequest exercises
-// handleAutomationCleanupWS: a definition with one clean-worktree terminal
-// run reports it in the result's Cleaned field (KeptDirty/KeptActive empty),
-// correlated by request_id; an unknown definition surfaces as success=false,
-// matching delete's business-failure shape.
 func TestAutomationCleanupWSResultCorrelatesRequest(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -270,8 +244,6 @@ func TestAutomationCleanupWSResultCorrelatesRequest(t *testing.T) {
 		t.Fatalf("cleanup result KeptActive = %v, want none", res.KeptActive)
 	}
 
-	// Unknown definition surfaces as success=false with an error, not a
-	// transport failure.
 	client2 := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationCleanupWS(client2, &protocol.AutomationCleanupMessage{
 		Cmd:          protocol.CmdAutomationCleanup,
@@ -285,11 +257,6 @@ func TestAutomationCleanupWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationRunWSResultCorrelatesRequest exercises handleAutomationRunWS
-// (also goroutine-backed) via the same idempotent-dedup technique as
-// TestAutomationRunBroadcastsAfterClaim: pre-claiming and pre-delivering the
-// run under the same request_id means the handler's own claim short-circuits
-// before reaching real delivery/backend machinery.
 func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -329,10 +296,6 @@ func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	}
 }
 
-// TestAutomationRunWSRejectsNonManualTrigger is the WS-level half of Fix F8:
-// handleAutomationRunWS must surface a provider-driven definition's
-// manual-trigger rejection as success=false with the same error text as the
-// daemon-level automationRun path, not a transport-level failure.
 func TestAutomationRunWSRejectsNonManualTrigger(t *testing.T) {
 	d, _, def, _ := setupScheduledDaemon(t, "* * * * *", "fresh", "latest")
 
@@ -350,9 +313,6 @@ func TestAutomationRunWSRejectsNonManualTrigger(t *testing.T) {
 	}
 }
 
-// TestAutomationRunWSMutualExclusion mirrors the unix-socket arm's pr_url /
-// input_json mutual-exclusion guard (Fix F3): the WS arm must reject both
-// being set with the same error text rather than silently ignoring pr_url.
 func TestAutomationRunWSMutualExclusion(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -378,13 +338,6 @@ func TestAutomationRunWSMutualExclusion(t *testing.T) {
 	}
 }
 
-// TestAutomationRunWSRoutesPRURL mirrors the unix-socket arm's pr_url
-// routing (Fix F3): a WS automation_run with only pr_url set must reach
-// automationRunPullRequest, not the manual automationRun path. A manual
-// definition's location isn't repository_worktree, so
-// automationRunPullRequest's own validation rejects it — proving routing
-// without building GitHub fixtures, and with an error text distinct from the
-// manual-path's own errors.
 func TestAutomationRunWSRoutesPRURL(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -412,18 +365,6 @@ func TestAutomationRunWSRoutesPRURL(t *testing.T) {
 	}
 }
 
-// TestAutomationValidateAndApplyAgreeOnCorpus is the regression test for D3
-// (internal/daemon/automations.go's validateAutomationSpec doc comment): a
-// validate command that only ran ParseDefinitionYAML would green-light YAML
-// automation_apply then rejects, because apply layers four more checks on
-// top of parse (resolveDelegationAgent, validateDelegationModelEffort, the
-// codex|claude automatic-approval allowlist, and per-override
-// ValidateLocalClone). Every case here must produce the SAME success/failure
-// verdict — and, on failure, the same error text — from both
-// handleAutomationValidateWS and handleAutomationApplyWS, whether the
-// rejection comes from yaml.v3/ValidateDefinition (parse-level) or from one
-// of validateAutomationSpec's extra checks (seam-level, the case this test
-// exists to pin).
 func TestAutomationValidateAndApplyAgreeOnCorpus(t *testing.T) {
 	const template = `api_version: attn.dev/automations/v1alpha1
 id: %s
@@ -520,11 +461,6 @@ location: {type: directory, path: "%s"}
 				if applyRes.Error == nil || !strings.Contains(*applyRes.Error, tc.wantErr) {
 					t.Fatalf("apply error = %v, want to contain %q", applyRes.Error, tc.wantErr)
 				}
-				// Every refusal in this corpus is a validateAutomationSpec
-				// failure (bad parse or an agent/driver check inside it), so
-				// each must carry the "validation" error_code the WS form
-				// uses to route the failure — none of these are the
-				// identity/revision guards, which are asserted separately.
 				if applyRes.ErrorCode == nil || *applyRes.ErrorCode != "validation" {
 					t.Fatalf("apply error_code = %v, want %q", applyRes.ErrorCode, "validation")
 				}
@@ -533,19 +469,6 @@ location: {type: directory, path: "%s"}
 	}
 }
 
-// TestAutomationApplyWSRefusesIDMismatch pins D4: the WS editor's Save
-// carries expected_id (the id of the definition it loaded), and the daemon
-// must refuse an apply whose YAML id differs rather than silently upserting
-// a second definition and leaving the original (still enabled, still
-// running) untouched — see automationApplyWithGuards's doc comment.
-// TestAutomationCommandApplyOverSocketIsUnguarded pins the other half of the
-// apply unification: the socket/CLI path (attn automation apply) never sets
-// expected_id/expected_revision, so automationApplyWithGuards must enforce
-// NEITHER check for it — an apply that would be refused as an
-// already-exists collision over WS (TestAutomationApplyWSRefusesCreateOverLiveDefinition,
-// which explicitly sends expected_revision: 0) must instead succeed and
-// overwrite in place when dispatched with no guard fields at all, exactly as
-// the old unconditional automationApply did before this unification.
 func TestAutomationCommandApplyOverSocketIsUnguarded(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -602,8 +525,6 @@ func TestAutomationApplyWSRefusesIDMismatch(t *testing.T) {
 		t.Fatalf("apply result error_code = %v, want %q", res.ErrorCode, "id_mismatch")
 	}
 
-	// The original definition must be untouched, and no second definition
-	// created under the renamed id.
 	stillOriginal, err := s.GetAutomationDefinition(original.ID)
 	if err != nil || stillOriginal == nil || stillOriginal.Revision != original.Revision {
 		t.Fatalf("original definition after refused apply = %#v err=%v, want unchanged", stillOriginal, err)
@@ -613,13 +534,6 @@ func TestAutomationApplyWSRefusesIDMismatch(t *testing.T) {
 	}
 }
 
-// TestAutomationApplyWSRefusesCreateOverLiveDefinition pins the create half
-// of the identity guard. Apply is keyed on the id inside the YAML, so a
-// create whose id collides with a live definition would UPDATE that
-// definition in place — the user typing an existing id into a form labelled
-// "New automation" would replace an automation they never opened. A
-// soft-deleted row is not a collision: re-applying its id is how resurrect
-// works, and the editor's list never showed it.
 func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -629,9 +543,6 @@ func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create (no expected_id, expected_revision explicitly 0 — matching what
-	// the real editor always sends for a not-yet-saved definition) carrying
-	// the same id but entirely different content.
 	colliding := strings.Replace(raw, "Check locally.", "Something else entirely.", 1)
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationApplyWS(client, &protocol.AutomationApplyMessage{
@@ -658,7 +569,6 @@ func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 			survivor.Revision, survivor.SpecJSON)
 	}
 
-	// Soft-deleted is not a collision: the same create now resurrects.
 	if err := d.automationDelete(context.Background(), original.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -680,12 +590,6 @@ func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 	}
 }
 
-// TestAutomationApplyWSRefusesStaleRevision pins D5: the WS editor's Save
-// carries expected_revision (the revision it loaded), and the daemon must
-// refuse to clobber a definition that changed elsewhere (another app window,
-// or the CLI) since the editor loaded it — the app cannot silently overwrite
-// a concurrent apply. expected_revision 0 (the create case) never triggers
-// this guard.
 func TestAutomationApplyWSRefusesStaleRevision(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -694,7 +598,6 @@ func TestAutomationApplyWSRefusesStaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A concurrent CLI apply bumps the revision out from under the editor.
 	concurrentlyApplied := strings.Replace(raw, "Manual check", "Manual check (renamed elsewhere)", 1)
 	if _, err := d.automationApply(concurrentlyApplied); err != nil {
 		t.Fatal(err)
@@ -724,17 +627,6 @@ func TestAutomationApplyWSRefusesStaleRevision(t *testing.T) {
 	}
 }
 
-// TestAutomationApplyWSRefusesEditOfDeletedDefinition pins the edit half of
-// the delete/resurrect guard: DeleteAutomationDefinition sets deleted_at
-// without touching revision, so a stale editor's expected_revision still
-// matches after someone else deletes the definition it has open. Unlike a
-// create (expected_revision 0), which deliberately treats a soft-deleted row
-// as resurrectable, a Save from an open editor must refuse rather than
-// silently bring back a definition that automationDelete already tore down
-// (failed pending runs, fenced provider cursors, purged continuity/
-// review-request state) — the alternative is an unattended cron the user
-// deliberately deleted starting to fire again, reported as "saved
-// successfully".
 func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -744,7 +636,6 @@ func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Someone else deletes the definition while the editor still has it open.
 	if err := d.automationDelete(context.Background(), original.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -767,7 +658,6 @@ func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 		t.Fatalf("apply result error_code = %v, want %q", res.ErrorCode, "deleted_elsewhere")
 	}
 
-	// The definition must remain deleted, not resurrected.
 	if live, err := s.GetAutomationDefinition(original.ID); err != nil || live != nil {
 		t.Fatalf("definition after refused edit-of-deleted apply = %#v err=%v, want still absent from the live set", live, err)
 	}
@@ -780,9 +670,6 @@ func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 	}
 }
 
-// TestAutomationDefinitionGetWSStarterTemplate pins D7: definition_id "" is
-// the new-definition case and must return the starter template at revision
-// 0, so create and edit share one frontend code path.
 func TestAutomationDefinitionGetWSStarterTemplate(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -799,8 +686,6 @@ func TestAutomationDefinitionGetWSStarterTemplate(t *testing.T) {
 	if !res.Success || res.SpecYaml == nil {
 		t.Fatalf("definition_get(\"\") result = %+v, want success with spec_yaml set", res)
 	}
-	// No definition means revision 0 / new — the client treats an absent
-	// definition as the create case (see the design's D7).
 	if res.Definition != nil {
 		t.Fatalf("starter template result definition = %+v, want absent (new-definition case)", res.Definition)
 	}
@@ -819,10 +704,6 @@ func TestAutomationDefinitionGetWSStarterTemplate(t *testing.T) {
 	}
 }
 
-// TestAutomationDefinitionGetWSUnknownID surfaces an unknown id as
-// success=false with an error, matching the rest of the automations WS
-// surface's business-failure shape (delete/cleanup/set_enabled), not a
-// transport-level failure.
 func TestAutomationDefinitionGetWSUnknownID(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -841,15 +722,6 @@ func TestAutomationDefinitionGetWSUnknownID(t *testing.T) {
 	}
 }
 
-// TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON is the
-// replacement for the pre-PR2a split-brain regression test: enabled now has
-// exactly one authority (the store's enabled column) and is never present in
-// spec_yaml/spec_json at all, so there is no split-brain to close. This pins
-// the remaining contract instead — toggling via handleAutomationSetEnabledWS
-// must not touch spec content, and definition_get's derive-from-spec_json
-// path (automationDefinitionYAML, now the only path) must keep returning
-// re-appliable YAML after the toggle, with the definition staying disabled
-// across a re-apply of that fetched YAML.
 func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -888,9 +760,6 @@ func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 		t.Fatalf("derived spec_yaml must never carry an enabled key:\n%s", fetched)
 	}
 
-	// spec_json must be the same canonical bytes the store persisted for this
-	// definition, decoding to the spec that was applied — the app form edits
-	// this JSON directly and never parses spec_yaml.
 	var fromWire, stored automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(*getRes.SpecJson), &fromWire); err != nil {
 		t.Fatalf("definition_get spec_json = %q, want valid JSON: %v", *getRes.SpecJson, err)
@@ -922,18 +791,7 @@ func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 	}
 }
 
-// TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating pins the
-// timeout-vs-mutation trap from PR #619's review: automationSetEnabled must
-// abort once its daemon-side deadline (wsAutomationMutationTimeout) elapses
-// while still waiting on automationMu, and must NOT mutate the definition
-// afterward. Without this guard, a slow in-flight delivery holding
-// automationMu for longer than the frontend's 30s client timeout lets the
-// toggle flip after the UI has already reported "timed out" — invisible to
-// the user who believes their click had no effect.
-// Boundary-bound: the behavior under test IS a goroutine waiting on
-// d.automationMu. A goroutine blocked on a sync.Mutex is explicitly not
-// durably blocked, so a bubble's clock would never reach the release and the
-// deadline would never fire.
+// Not synctest-able: a goroutine waiting on d.automationMu is not durably blocked, so a bubble's clock never reaches the release.
 func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub(), wsAutomationMutationTimeout: 50 * time.Millisecond}
@@ -946,8 +804,6 @@ func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 		t.Fatalf("fixture definition = %#v, want enabled", def)
 	}
 
-	// Simulate an in-flight automation delivery holding automationMu well past
-	// the 50ms deadline; released after 200ms.
 	d.automationMu.Lock()
 	released := make(chan struct{})
 	go func() {
@@ -980,7 +836,6 @@ func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 		t.Fatalf("definition after deadline abort = %#v, want still enabled (no late flip)", stored)
 	}
 
-	// Sanity: an uncontended set_enabled once the lock has freed still succeeds.
 	client2 := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationSetEnabledWS(client2, &protocol.AutomationSetEnabledMessage{
 		Cmd:          protocol.CmdAutomationSetEnabled,
@@ -1002,22 +857,7 @@ func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 	}
 }
 
-// TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate pins the run-now
-// half of the timeout-vs-mutation trap: a client that times out waiting for
-// automation_run and retries with the SAME request_id (the fix in
-// AutomationsPanel/useDaemonSocket) must dedup onto the original claim rather
-// than creating a second run, even when both calls contend on automationMu.
-//
-// The run is pre-claimed and pre-marked delivered directly through the store
-// (matching TestAutomationRunBroadcastsAfterClaim's technique) so neither
-// call re-enters deliverAutomationRun/real backend machinery: automationRun's
-// own ClaimManualAutomationRun call idempotently dedups on request_id before
-// either goroutine even reaches automationMu, and both then read back the
-// same already-delivered run once the held lock frees. automationDeliveryHook
-// does not apply here — it only affects deliverObservedAutomationRun's
-// provider-observation path, not automationRun's manual-run path.
-// Boundary-bound for the same reason as the deadline test above: both retries
-// queue on d.automationMu, and a mutex wait is invisible to a bubble.
+// Not synctest-able: both retries queue on d.automationMu, and a mutex wait is invisible to a bubble.
 func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1037,8 +877,6 @@ func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Simulate an in-flight delivery holding automationMu while both retry
-	// attempts arrive and queue behind it.
 	d.automationMu.Lock()
 	released := make(chan struct{})
 	go func() {
@@ -1081,12 +919,6 @@ func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	}
 }
 
-// TestAutomationCommandValidateHasNoPayload pins automation_validate's
-// socket-transport result shape: success with no payload fields at all —
-// there is no generic `data` wrapper in the per-action typed-result design
-// (each action returns its own concrete result message directly), so a
-// payload-free action like validate simply has nothing beyond
-// event/success/request_id on the wire.
 func TestAutomationCommandValidateHasNoPayload(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1106,12 +938,6 @@ func TestAutomationCommandValidateHasNoPayload(t *testing.T) {
 	}
 }
 
-// TestAutomationCommandSetEnabledTogglesColumn is the unix-socket-command half
-// of the enable/disable CLI verbs (cmd/attn/automation.go's "enable"/
-// "disable" cases): CmdAutomationSetEnabled must reach the same
-// automationSetEnabled the WS panel's toggle uses, over
-// handleAutomationCommand's plain net.Pipe transport, following the same
-// technique as TestAutomationCommandOmitsDataWhenActionHasNoPayload.
 func TestAutomationCommandSetEnabledTogglesColumn(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1146,13 +972,6 @@ func TestAutomationCommandSetEnabledTogglesColumn(t *testing.T) {
 	}
 }
 
-// TestAutomationCommandDefinitionGetMissingDefinitionOverSocket is the
-// unix-socket-transport sibling of TestAutomationDefinitionGetWSUnknownID:
-// automation_definition_get for an unknown, non-empty id must surface as
-// success=false with an error over the raw socket dispatch
-// (handleAutomationCommand), the same business-failure shape WS gets — not a
-// transport failure, and not the old generic "data: null" wire quirk (which
-// the typed-per-action-result design no longer has a way to express).
 func TestAutomationCommandDefinitionGetMissingDefinitionOverSocket(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}

@@ -6,14 +6,11 @@ import (
 	"time"
 )
 
-// GardenSeedWatch is one session's explicit standing interest in a seed.
 type GardenSeedWatch struct {
 	WatcherSessionID string
 	SeedID           string
 }
 
-// SetGardenSeedWatch makes the explicit watch exactly as requested and reports
-// whether the stored set changed.
 func (s *Store) SetGardenSeedWatch(watcherSessionID, seedID string, watching bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -38,7 +35,6 @@ func (s *Store) SetGardenSeedWatch(watcherSessionID, seedID string, watching boo
 	return n > 0, err
 }
 
-// GardenSeedWatching reports whether this session explicitly watches the seed.
 func (s *Store) GardenSeedWatching(watcherSessionID, seedID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -52,8 +48,6 @@ func (s *Store) GardenSeedWatching(watcherSessionID, seedID string) (bool, error
 	return watching, nil
 }
 
-// GardenSeedWatches lists the explicit subscriptions. Ringing is event-driven,
-// so this scan costs nothing while the garden is quiet.
 func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -74,8 +68,6 @@ func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
 	return watches, rows.Err()
 }
 
-// ClaimGardenSeedBell atomically claims the unread fence and queues the
-// senderless message that delivers it. An existing fence coalesces the event.
 func (s *Store) ClaimGardenSeedBell(watcherSessionID, seedID, eventKind string, message AgentMessage, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -111,9 +103,6 @@ func (s *Store) ClaimGardenSeedBell(watcherSessionID, seedID, eventKind string, 
 	return true, nil
 }
 
-// ConsumeGardenSeedBell marks the seed read for this watcher. If its doorbell
-// is still queued, the same transaction removes it so a read cannot be followed
-// by stale advice to read again.
 func (s *Store) ConsumeGardenSeedBell(watcherSessionID, seedID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -54,8 +54,6 @@ describe('parseQuery', () => {
     expect(q.unknown).toEqual([]);
   });
 
-  // A query is not a language, so a value nobody implemented has to say so
-  // rather than quietly returning nothing.
   it('names a value its operator does not have instead of matching in silence', () => {
     const q = parseQuery('is:done');
 
@@ -63,9 +61,7 @@ describe('parseQuery', () => {
     expect(q.terms).toEqual([]);
   });
 
-  // `GardenPanel.tsx:250` and `https://…` are ordinary things to search for in
-  // this garden, so only the two operator names are operators and every other
-  // colon is a character.
+  // Only the two operator names are operators; every other colon is a character.
   it('leaves every other colon alone', () => {
     const q = parseQuery('GardenPanel.tsx:250');
 
@@ -73,8 +69,6 @@ describe('parseQuery', () => {
     expect(q.unknown).toEqual([]);
   });
 
-  // Half-typed is a state the reader passes through on the way to every query.
-  // Treating it as an error would make the panel flash red at correct typing.
   it('treats the operator being typed as a request for the values, not a mistake', () => {
     expect(parseQuery('is:').partial).toBe('is');
     expect(parseQuery('is:re').partial).toBe('is');
@@ -82,15 +76,11 @@ describe('parseQuery', () => {
     expect(parseQuery('is:').unknown).toEqual([]);
   });
 
-  // ...but only where the cursor is. A half-typed token with something after it
-  // is finished, and wrong.
   it('stops forgiving a half-typed value once the reader has moved past it', () => {
     expect(parseQuery('is:re socket').unknown).toEqual(['is:re']);
     expect(parseQuery('is:re socket').partial).toBeNull();
   });
 
-  // The panel runs two different lists off this: text searches the subtree,
-  // a bare lens re-filters the level you are standing on.
   it('separates a search from a lens', () => {
     expect(parseQuery('is:any').active).toBe(true);
     expect(parseQuery('is:any').searches).toBe(false);
@@ -117,8 +107,6 @@ describe('the status lens', () => {
   const sleeping = seed({ id: 's-dorm01', title: 'sleeping work', status: 'dormant' });
   const all = [open, done, dropped, ready, sleeping];
 
-  // The garden keeps everything ever harvested, so most of it is done. Closed
-  // work is out of the way until something asks for it.
   it('hides closed seeds until a token asks for them', () => {
     expect(titles(all, 'work')).toEqual(['open work', 'ready work', 'sleeping work']);
     expect(titles(all, 'work is:any')).toHaveLength(5);
@@ -161,14 +149,11 @@ describe('matching', () => {
     expect(titles(seeds, 'hazel')).toEqual(['unrelated']);
   });
 
-  // Two words is the reader narrowing, not widening.
   it('requires every term to hit, though not all in the same place', () => {
     expect(titles(seeds, 'socket daemon')).toEqual(['reconnect the socket']);
     expect(titles(seeds, 'socket garden')).toEqual([]);
   });
 
-  // The ranking is the whole reason a search feels like an answer: the row you
-  // meant is the row your fingers are already on.
   it('ranks an id over a title, a title over a tender, and a tender over a body', () => {
     const pool = [
       seed({ id: 's-body01', title: 'only in the body', body: 'a passing mention of hazel' }),
@@ -193,7 +178,6 @@ describe('matching', () => {
     expect(titles(pool, 'socket')).toEqual(['socket one', 'socket two']);
   });
 
-  // A body hit has to say why it is on screen, and a title hit already does.
   it('gives a snippet only to a row whose title does not explain itself', () => {
     const pool = index(seeds);
     const bodyHit = matchEntry(pool[1], parseQuery('pushed'));

@@ -1,15 +1,5 @@
-/**
- * Pane focus treatment test harness
- *
- * Reproduces the exact DOM shape SessionTerminalWorkspace renders for a
- * multi-leaf workspace. The selected leaf's pseudo-elements paint the edge rail
- * or spotlight corner marks, and the split divider is the workspace-local layer
- * they must stay above. Loads the real stylesheet so the actual cascade and
- * stacking is under test, not a re-description of it. GhosttyTerminal
- * (WASM/canvas) plays no role in this stacking question, so it is not mounted.
- * An unselected docked tile witnesses that all focus styles preserve the shared
- * inactive opacity; dim additionally witnesses that no marker is drawn.
- */
+// Reproduces the DOM shape SessionTerminalWorkspace renders for a multi-leaf
+// workspace, loading the real stylesheet so the actual cascade is under test.
 import { useEffect } from 'react';
 import '../../src/components/SessionTerminalWorkspace/SessionTerminalWorkspace.css';
 import type { HarnessProps } from '../types';

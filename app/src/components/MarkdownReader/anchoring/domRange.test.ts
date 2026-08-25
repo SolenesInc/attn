@@ -1,9 +1,3 @@
-/**
- * domRange walk logic — pure DOM tests (happy-dom): boundary placement,
- * split-text-node tolerance, chrome skipping, UTF-16 offsets, null on
- * DOM/text-model disagreement.
- */
-
 import { describe, expect, it } from 'vitest';
 import { blockDomText, resolveDomRange } from './domRange';
 

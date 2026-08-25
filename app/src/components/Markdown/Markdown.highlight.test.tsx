@@ -2,16 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { Markdown } from './index';
 
-// Stands in for shiki: recognisable markup, and a call log to assert on.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
     `<span style="--shiki-light:#000;--shiki-dark:#fff">${code}</span>`),
 }));
 vi.mock('shiki', () => shikiMock);
 
-// Mermaid is only here to prove it is NOT sent to shiki. Rendering one for real
-// costs a dynamic import and a layout pass whose async tail outlives the test
-// that started it, so it is stubbed the way MarkdownReader's tests stub it.
+// Mermaid is here only to prove it is NOT sent to shiki; rendering one for real
+// leaves an async tail that outlives the test, so it is stubbed.
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn(),
   render: vi.fn(async () => ({ svg: '<svg data-stub="diagram"></svg>' })),
@@ -32,11 +30,6 @@ describe('code highlighting', () => {
     );
   });
 
-  /**
-   * The reason the whole VolatileTextContext exists. A code block in the open
-   * tail is text that can still change meaning, and highlighting it costs one
-   * shiki pass per delta whose result the next delta throws away.
-   */
   it('leaves the open tail of a streaming message alone', async () => {
     shikiMock.codeToHtml.mockClear();
     const { container } = render(<Markdown streaming>{'intro\n\n```ts\nconst answer = 42;'}</Markdown>);
@@ -54,7 +47,6 @@ describe('code highlighting', () => {
     await waitFor(() => {
       expect(container.querySelectorAll('code.markdown-shiki')).toHaveLength(1);
     });
-    // Exactly the settled one: the block still being written is not asked for.
     expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(1);
     expect(shikiMock.codeToHtml).toHaveBeenCalledWith(
       'const answer = 42;\n',

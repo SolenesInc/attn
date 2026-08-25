@@ -9,14 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleTicketComment posts a one-shot comment from the calling agent onto any
-// ticket by id. Unlike handleSetTicketStatus, the ticket is caller-supplied (an
-// agent can comment on a ticket it is not assigned to), so the daemon does not
-// resolve it from the session — but it still authors the comment as the session,
-// the same identity the session uses everywhere else. The comment informs the
-// ticket's participants without enrolling the commenter (comment authorship is
-// not a participation source — see store.UnreadTicketEvents), so a passing note
-// does not subscribe the agent to the ticket's future activity.
+// handleTicketComment posts a comment on any ticket by id, authored as the calling
+// session. Comment authorship is not a participation source (store.UnreadTicketEvents).
 func (d *Daemon) handleTicketComment(conn net.Conn, msg *protocol.TicketCommentMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {
@@ -33,9 +27,6 @@ func (d *Daemon) handleTicketComment(conn net.Conn, msg *protocol.TicketCommentM
 		d.sendError(conn, "ticket comment: comment is required")
 		return
 	}
-	// AddTicketComment fails with ErrTicketNotFound when the id does not exist
-	// (touchTicketTx affects no rows), so an agent naming a bad ticket gets a clear
-	// error rather than a silently dropped comment.
 	d.deliveryMu.Lock()
 	author := d.ticketActorIdentity(sourceSessionID)
 	_, outcome, err := d.store.AddTicketCommentWithOptions(
@@ -60,11 +51,6 @@ func (d *Daemon) handleTicketComment(conn net.Conn, msg *protocol.TicketCommentM
 	}
 	d.deliveryMu.Unlock()
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TicketCommentResult: result})
-	// The comment is an event the ticket's participants did not author, so notify
-	// them (the assignee, the chief). The commenter authored it, so Notify excludes
-	// it — no self-nudge — and comment authorship does not make the commenter a
-	// participant of the ticket going forward.
 	d.notifyTicketObservers(ticketID)
-	// Refresh the app's board view: the activity thread changed.
 	d.publishTicketFact(FactTicketCommented, ticketID)
 }

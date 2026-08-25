@@ -8,15 +8,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// FileActivitySourceOpened marks a file opened as a reader tile, by any route.
 const FileActivitySourceOpened = "opened"
 
-// FileActivitySourceEdited marks a file an agent wrote, reported by the
-// tool-use hook; a weaker intent signal than an open, so it weighs less.
 const FileActivitySourceEdited = "edited"
 
-// Ranking weights: an open is the baseline, an edit weighs less, an
-// in-workspace file beats an equally-scored one without hiding it.
 const (
 	editedWeight     = 0.6
 	inWorkspaceBonus = 1.5
@@ -29,8 +24,6 @@ func sourceWeight(source string) float64 {
 	return 1
 }
 
-// RecordFileActivity increments the (path, source) counter and stamps the
-// time; sessionID is "" when there is none, and the most recent one wins.
 func (s *Store) RecordFileActivity(path, source, sessionID string) {
 	if path == "" || source == "" {
 		return
@@ -56,10 +49,7 @@ func (s *Store) RecordFileActivity(path, source, sessionID string) {
 		path, source, session, time.Now().Format(time.RFC3339))
 }
 
-// GetRecentFiles returns one entry per file, ranked by frecency; a file's
-// sources add (weighted by sourceWeight) and the merged entry keeps the newest
-// timestamp, total count, and most recent source. Rows are never stat'd here —
-// dead files are pruned when opening them fails.
+// Rows are never stat'd here — dead files are pruned when opening them fails.
 func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	if limit <= 0 {
 		limit = 20
@@ -71,8 +61,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 		return nil
 	}
 
-	// Read every row: pre-truncating by last_at would hide old-but-frequent
-	// files.
+	// Pre-truncating by last_at would hide old-but-frequent files.
 	rows, err := s.db.Query(`SELECT path, source, session_id, last_at, count FROM file_activity`)
 	if err != nil {
 		return nil
@@ -102,8 +91,6 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 			continue
 		}
 		existing.Count += entry.Count
-		// Most recent activity names the entry; timestamps are second-granular,
-		// so an open wins a same-second tie with an edit.
 		sameSecondOpen := entry.LastAt == existing.LastAt && entry.Source == FileActivitySourceOpened
 		if entry.LastAt > existing.LastAt || sameSecondOpen {
 			existing.LastAt = entry.LastAt
@@ -139,8 +126,7 @@ func (s *Store) GetRecentFiles(limit int, root string) []protocol.FileActivity {
 	return all
 }
 
-// workspacePrefix normalizes a root into a prefix that only matches paths
-// inside it, so /repo never claims /repo-other.
+// Only matches paths inside root, so /repo never claims /repo-other.
 func workspacePrefix(root string) string {
 	root = strings.TrimSpace(root)
 	if root == "" || root == "/" {
@@ -149,8 +135,6 @@ func workspacePrefix(root string) string {
 	return strings.TrimSuffix(root, "/") + "/"
 }
 
-// DeleteFileActivity forgets every source for a path; called when opening a
-// remembered file fails because it no longer exists.
 func (s *Store) DeleteFileActivity(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

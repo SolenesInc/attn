@@ -23,7 +23,6 @@ export function useTheme() {
   // resolved is state so OS theme changes trigger terminal re-renders.
   const [resolved, setResolved] = useState<ResolvedTheme>('dark');
 
-  // Sync from daemon settings when they arrive
   useEffect(() => {
     if (settings[SETTINGS_KEY] && !initializedFromSettings.current) {
       const value = settings[SETTINGS_KEY];
@@ -34,7 +33,6 @@ export function useTheme() {
     }
   }, [settings]);
 
-  // Persist to daemon settings when preference changes (skip initial sync)
   const lastSavedPreference = useRef<ThemePreference | null>(null);
   useEffect(() => {
     if (lastSavedPreference.current !== null && preference !== lastSavedPreference.current) {
@@ -43,9 +41,6 @@ export function useTheme() {
     lastSavedPreference.current = preference;
   }, [preference, setSetting]);
 
-  // Apply data-theme attribute and update resolved theme
-  // - "system": remove data-theme, let CSS @media handle it; resolve the terminal theme via matchMedia.
-  // - "dark"/"light": set data-theme explicitly
   useEffect(() => {
     if (preference === 'system') {
       document.documentElement.removeAttribute('data-theme');
@@ -56,8 +51,6 @@ export function useTheme() {
     }
   }, [preference]);
 
-  // Listen for OS theme changes (only matters for terminal rendering when preference is "system";
-  // CSS variables update automatically via @media query)
   useEffect(() => {
     if (preference !== 'system') return;
 

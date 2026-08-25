@@ -1,16 +1,3 @@
-// The garden is one object read at two sizes: docked beside your work, or
-// holding the window. This is the box it lives in, and the travel between them.
-//
-// GardenPanel is rendered exactly once, inside a fixed-position element whose
-// rectangle is either the dock slot's or the window's. Nothing unmounts, so the
-// trail, the open seed, the scroll offset and focus survive the promotion by
-// construction rather than by being copied between two instances.
-//
-// The panel is never told which frame it is in — only how wide it is. It draws
-// the walk as a stack or as Miller columns depending on the room it has, so the
-// columns arrive during the flight, when the box gets wide enough to hold them,
-// rather than being switched on at the far end. That is what makes the
-// promotion read as one object growing instead of a second surface opening.
 import FocusTrap from 'focus-trap-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
@@ -30,11 +17,7 @@ export interface FrameRect {
   height: number;
 }
 
-// The window frame's gutter, matching the notebook's fullscreen surface.
 const FULL_INSET = 12;
-// Expand is the reveal and gets the longer beat; collapse is a dismissal and
-// wants to be out of the way. Both on the dock's own easing, so the promotion
-// sounds like the dock it came from.
 const EXPAND_MS = 180;
 const COLLAPSE_MS = 150;
 
@@ -42,13 +25,6 @@ function reduceMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/**
- * The rectangle the dock reserved for the garden, in viewport coordinates.
- *
- * Attach the ref to a detached dock panel's slot (see RightDock): the dock
- * lays the slot out exactly where the panel would have gone — stack offset and
- * `clamp()`'d width included — and paints nothing in it.
- */
 export function useDockSlotRect() {
   const ref = useRef<HTMLDivElement | null>(null);
   const [rect, setRect] = useState<FrameRect | null>(null);
@@ -81,13 +57,9 @@ export function useDockSlotRect() {
 
 export interface GardenFrameProps {
   mode: GardenMode;
-  /** Where the dock reserved room for it. Null until the dock has been laid out. */
   dockRect: FrameRect | null;
-  /** Promote to the window, or hand it back to the dock. */
   onToggleFrame: () => void;
-  /** The bottom of the Escape ladder, below climbing: window → dock → gone. */
   onEscapeFloor: () => void;
-  /** Leave the garden entirely. */
   onClose: () => void;
   seeds: Seed[];
   seedsTotal: number;
@@ -96,13 +68,9 @@ export interface GardenFrameProps {
   onOpenMarkdownArtifact?: (path: string) => void;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   onResumeSeed?: (seedId: string) => void;
-  /** Sessions the daemon still knows — how a board card says its tender left. */
   liveSessions?: Set<string>;
-  /** False until the first push lands; an empty garden and an unread one differ. */
   loaded?: boolean;
-  /** One real lifecycle move, for the board's drop zones and verb menu. */
   moveSeed?: (seedId: string, verb: Verb, reason?: string) => Promise<unknown>;
-  /** Write on a seed's log. */
   noteSeed?: (seedId: string, body: string) => Promise<unknown>;
 }
 
@@ -124,17 +92,8 @@ export function GardenFrame({
   moveSeed,
   noteSeed,
 }: GardenFrameProps) {
-  // Two views over one garden: the list answers what is here, the board answers
-  // how it is moving. The switch lives here rather than in either view, so
-  // neither owns the other — and only in the window, because four columns of
-  // cards need the room.
-  //
-  // The choice belongs to the frame it was made in: promotion lands on the list
-  // whatever the reader last chose, because the gesture says "this, bigger" and
-  // arriving somewhere else would say the opposite. Storing the frame beside the
-  // choice is what makes that a derivation. Clearing it from an effect instead
-  // would paint the board once in a dock-sized box, and the usual alternative —
-  // remount under a key — is the one thing this component exists to avoid.
+  // Reset during render: clearing the view from an effect paints the board once in a
+  // dock-sized box, and remounting under a key is what this component exists to avoid.
   const [chosen, setChosen] = useState<{ mode: GardenMode; view: 'list' | 'board' }>({ mode, view: 'list' });
   if (chosen.mode !== mode) setChosen({ mode, view: 'list' });
   const view = chosen.mode === mode ? chosen.view : 'list';
@@ -152,11 +111,6 @@ export function GardenFrame({
     return () => window.removeEventListener('resize', onResize);
   }, [mode]);
 
-  // In list view the bottom of the Escape ladder is registered by GardenPanel,
-  // under its own climb. The board is a different view with its own trail, and
-  // GardenPanel is not mounted behind it, so the frame carries the floor while
-  // the board is up. It arms when the board appears and the board's climb arms
-  // when the reader walks into a plot — later, so the climb lands above it.
   const showingBoard = mode === 'full' && view === 'board' && Boolean(moveSeed && noteSeed);
   useEscapeStack(onEscapeFloor, showingBoard);
 
@@ -167,9 +121,6 @@ export function GardenFrame({
     if (!promotion) return;
     const root = frameRef.current;
     if (!root) return;
-    // Coming back from the window, the trap releases focus to wherever it sat
-    // before the promotion — which may be nowhere near the garden. The reader is
-    // still reading the garden, so keep focus inside it.
     if (mode === 'dock' && !root.contains(document.activeElement)) {
       (root.querySelector('.garden-frame__body') as HTMLElement | null)?.focus();
     }
@@ -222,10 +173,6 @@ export function GardenFrame({
             clickOutsideDeactivates: false,
             initialFocus: false,
             fallbackFocus: '.garden-frame__body',
-            // The frame is not an overlay that opens over your work and hands
-            // focus back when it goes — it shrinks. Returning focus to whatever
-            // held it before the promotion would take it out of the garden the
-            // reader is still reading.
             returnFocusOnDeactivate: false,
           }}
         >

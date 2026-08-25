@@ -10,15 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// This file holds the shared core for the durable workflow engine's daemon-side
-// IPC. The engine itself runs in the `attn workflow run` CLI process; the daemon
-// only persists (via the S-store CRUD), coalesced-broadcasts run updates to the
-// read-only UI, serves get/list, and relays cancel to the engine process. Both
-// the socket dispatch (engine + CLI) and the WS dispatch (UI) delegate here to
-// shared core funcs (handle* over the socket / handle*WS over WS).
-
-// --- protocol <-> store row conversions -------------------------------------
-
 func workflowRunProtoToRow(run *protocol.WorkflowRun) *store.WorkflowRunRow {
 	if run == nil {
 		return nil
@@ -111,11 +102,6 @@ func workflowCallRowToProto(row *store.WorkflowAgentCallRow) protocol.WorkflowAg
 	}
 }
 
-// --- shared core ------------------------------------------------------------
-
-// getWorkflowRunHydrated loads a run plus its journaled agent calls and returns
-// the protocol shape with AgentCalls populated in durable append order. Returns
-// (nil, nil) when the run is absent.
 func (d *Daemon) getWorkflowRunHydrated(runID string) (*protocol.WorkflowRun, error) {
 	row, err := d.store.GetWorkflowRun(runID)
 	if err != nil {
@@ -139,12 +125,6 @@ func (d *Daemon) getWorkflowRunHydrated(runID string) (*protocol.WorkflowRun, er
 	return run, nil
 }
 
-// listWorkflowRunsHydrated returns runs for a session (empty sessionID = all),
-// newest-first as the store orders them. Agent calls are intentionally OMITTED
-// from list entries: the list view is a summary surface, and hydrating every
-// run's full journal would be O(runs * calls) for a screen that only needs the
-// run header. Callers that need the journal fetch a single run via
-// getWorkflowRunHydrated.
 func (d *Daemon) listWorkflowRunsHydrated(sessionID string) ([]*protocol.WorkflowRun, error) {
 	rows, err := d.store.ListWorkflowRuns(sessionID)
 	if err != nil {
@@ -157,9 +137,6 @@ func (d *Daemon) listWorkflowRunsHydrated(sessionID string) ([]*protocol.Workflo
 	return runs, nil
 }
 
-// applyWorkflowRunUpsert persists the run row plus every embedded AgentCall,
-// re-hydrates, marks the run dirty for a coalesced broadcast, and returns the
-// hydrated run.
 func (d *Daemon) applyWorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.WorkflowRun, error) {
 	if run == nil {
 		return nil, nil
@@ -180,8 +157,6 @@ func (d *Daemon) applyWorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.Wo
 	if err != nil {
 		return nil, err
 	}
-	// A terminal upsert is the engine reporting its finish, so drop its sink from
-	// the registry (bounds the map; the engine process is exiting).
 	if isTerminalWorkflowRunStatus(run.Status) {
 		d.unregisterWorkflowEngine(run.RunID)
 	}
@@ -189,8 +164,6 @@ func (d *Daemon) applyWorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.Wo
 	return hydrated, nil
 }
 
-// isTerminalWorkflowRunStatus reports whether a run status is final (no further
-// engine activity), so the run's engine sink can be dropped from the registry.
 func isTerminalWorkflowRunStatus(status protocol.WorkflowRunStatus) bool {
 	switch status {
 	case protocol.WorkflowRunStatusCompleted,
@@ -202,9 +175,6 @@ func isTerminalWorkflowRunStatus(status protocol.WorkflowRunStatus) bool {
 	}
 }
 
-// applyWorkflowCallUpsert persists a single agent call (ON CONFLICT(run_id,
-// ordinal) updates in place), re-hydrates the owning run, marks it dirty, and
-// returns the hydrated run.
 func (d *Daemon) applyWorkflowCallUpsert(runID string, call *protocol.WorkflowAgentCall) (*protocol.WorkflowRun, error) {
 	if call == nil {
 		return d.getWorkflowRunHydrated(runID)
@@ -224,10 +194,6 @@ func (d *Daemon) applyWorkflowCallUpsert(runID string, call *protocol.WorkflowAg
 	return hydrated, nil
 }
 
-// cancelWorkflowRun marks a run canceled, persists it, relays a cancel control
-// frame to the registered engine sink, and re-broadcasts. Returns (nil, false,
-// nil) when the run is absent. The bool reports whether an engine sink was found
-// to relay to (the engine may have already exited).
 func (d *Daemon) cancelWorkflowRun(runID string) (*protocol.WorkflowRun, bool, error) {
 	row, err := d.store.GetWorkflowRun(runID)
 	if err != nil {
@@ -246,8 +212,6 @@ func (d *Daemon) cancelWorkflowRun(runID string) (*protocol.WorkflowRun, bool, e
 	}
 
 	relayed := d.relayWorkflowCancel(runID)
-	// The run is now terminal (canceled); drop its sink whether or not a relay
-	// target was still registered (the engine also observes cancel via polling).
 	d.unregisterWorkflowEngine(runID)
 
 	hydrated, err := d.getWorkflowRunHydrated(runID)
@@ -257,15 +221,6 @@ func (d *Daemon) cancelWorkflowRun(runID string) (*protocol.WorkflowRun, bool, e
 	d.markWorkflowRunDirty(runID)
 	return hydrated, relayed, nil
 }
-
-// --- socket (engine + CLI) handlers -----------------------------------------
-//
-// Thin wrappers over the core. The
-// engine connects over the unix socket, so upsert/call_upsert register the
-// requesting net.Conn as the run's engine sink for a later cancel relay. Replies
-// use WorkflowActionResultMessage (which carries run/runs) because protocol
-// Response has no workflow field; that keeps one shared reply shape across both
-// transports.
 
 func (d *Daemon) sendWorkflowActionResult(conn net.Conn, action string, run *protocol.WorkflowRun, runs []*protocol.WorkflowRun, runID string, err error) {
 	result := buildWorkflowActionResult(action, run, runs, runID, err)
@@ -299,13 +254,6 @@ func buildWorkflowActionResult(action string, run *protocol.WorkflowRun, runs []
 	return result
 }
 
-// guardWorkflowRunStart enforces the workflows_enabled master switch. A run-level
-// upsert carrying running status is the one and only run START (fresh or resume) —
-// progress is reported via call upserts, and the finish carries a terminal status.
-// Rejecting running-status starts here, at the CLI/engine socket entry (the sole
-// run-creation path), blocks new runs when the feature is off while keeping the
-// persistence core policy-free and still letting a run that was already in flight
-// when the switch flipped off record its terminal result.
 func (d *Daemon) guardWorkflowRunStart(run *protocol.WorkflowRun) error {
 	if run == nil || run.Status != protocol.WorkflowRunStatusRunning {
 		return nil

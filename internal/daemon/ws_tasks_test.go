@@ -13,17 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// testTaskKind is a fake executor kind tests enqueue against. Its behavior (succeed
-// or fail) is controlled per-runner by the closure installInstrumentedTaskRunner
-// hands back, so a single kind covers both the list and retry scenarios.
 const testTaskKind = "test_task"
 
-// installInstrumentedTaskRunner wires a started durable runner onto the daemon with
-// one fake executor whose outcome the returned *atomic.Bool toggles (true = fail).
-// MaxAttempts is 1 with a huge backoff so a single failure lands the task in dead
-// and never auto-requeues, making the retry assertions deterministic. The runner's
-// own tasks dir is a throwaway temp dir, and the OnChange broadcast wiring is
-// attached exactly as startJobQueue does so the wiring is under test too.
 func installInstrumentedTaskRunner(t *testing.T, d *Daemon) (*jobs.Runner, *atomic.Bool) {
 	t.Helper()
 	shouldFail := &atomic.Bool{}
@@ -52,9 +43,6 @@ func installInstrumentedTaskRunner(t *testing.T, d *Daemon) (*jobs.Runner, *atom
 	return runner, shouldFail
 }
 
-// TestTaskToProtocolMapsFieldsAndOmitsPayload verifies the field mapping and,
-// critically, that the internal payload and result (transcript filesystem paths and
-// other kind-specific inputs and outputs) never reach the user-facing protocol type.
 func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 	next := time.Date(2026, 6, 14, 9, 30, 0, 0, time.UTC)
 	created := time.Date(2026, 6, 14, 9, 0, 0, 0, time.UTC)
@@ -95,9 +83,6 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 		t.Fatalf("last_error = %v, want ptr to %q", pt.LastError, "boom")
 	}
 
-	// The protocol struct has no payload or result field, so the only way either
-	// could leak is via JSON. Serialize and assert the secret path is nowhere in
-	// the wire form.
 	raw, err := json.Marshal(pt)
 	if err != nil {
 		t.Fatalf("marshal protocol task: %v", err)
@@ -111,15 +96,12 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 		}
 	}
 
-	// An empty LastError stays a nil pointer (omitted on the wire).
 	task.LastError = ""
 	if got := taskToProtocol(task); got.LastError != nil {
 		t.Fatalf("empty last_error = %v, want nil pointer", got.LastError)
 	}
 }
 
-// TestTasksToProtocolSkipsNil guards the nil-skip in the slice converter so
-// a sparse runner list can never index-panic or emit a zero-value record.
 func TestTasksToProtocolSkipsNil(t *testing.T) {
 	in := []*jobs.Job{
 		{ID: "a", Kind: testTaskKind, UniqueKey: "a", State: jobs.StateQueued},
@@ -132,10 +114,6 @@ func TestTasksToProtocolSkipsNil(t *testing.T) {
 	}
 }
 
-// TestSendTaskListWSResult exercises the websocket list path (the only
-// list path after the unix-socket CLI was removed): a started runner's records
-// come back as a task_list_result correlated by request, with each
-// record's id/kind/state mapped through.
 func TestSendTaskListWSResult(t *testing.T) {
 	d := newNotebookDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -147,7 +125,6 @@ func TestSendTaskListWSResult(t *testing.T) {
 		if _, err := runner.Enqueue(testTaskKind, jobs.EnqueueOptions{UniqueKey: "ws-b"}); err != nil {
 			t.Fatalf("enqueue ws-b: %v", err)
 		}
-		// Let the worker run both to a terminal state so the records are stable.
 		requireTaskState(t, d, testTaskKind, "ws-a", jobs.StateDone)
 		requireTaskState(t, d, testTaskKind, "ws-b", jobs.StateDone)
 
@@ -181,8 +158,6 @@ func TestSendTaskListWSResult(t *testing.T) {
 	})
 }
 
-// TestSendTaskListWSResultNilRunner confirms a nil runner is a successful
-// empty WS result, not a transport error.
 func TestSendTaskListWSResultNilRunner(t *testing.T) {
 	d := newNotebookDaemon(t)
 	d.jobQueue = nil
@@ -197,9 +172,6 @@ func TestSendTaskListWSResultNilRunner(t *testing.T) {
 	}
 }
 
-// TestSendTaskRetryWSResultRequeuesDeadTask drives a real task to dead
-// (MaxAttempts=1 + a failing executor) then retries it over the WS path: the result
-// must carry the task flipped back to queued with NextAttemptAt advanced to ~now.
 func TestSendTaskRetryWSResultRequeuesDeadTask(t *testing.T) {
 	d := newNotebookDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -234,15 +206,12 @@ func TestSendTaskRetryWSResultRequeuesDeadTask(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse next_attempt_at %q: %v", msg.Task.NextAttemptAt, err)
 		}
-		// Retry sets NextAttemptAt = now; allow a small skew on either side of the call.
 		if nextAt.Before(before.Add(-2*time.Second)) || nextAt.After(time.Now().Add(2*time.Second)) {
 			t.Fatalf("next_attempt_at = %s, want ~now (between %s and %s)", nextAt, before, time.Now())
 		}
 	})
 }
 
-// TestSendTaskRetryWSResultNilRunner confirms the disabled-runner retry path
-// is a clear, non-panicking failure result rather than a silent success.
 func TestSendTaskRetryWSResultNilRunner(t *testing.T) {
 	d := newNotebookDaemon(t)
 	d.jobQueue = nil
@@ -257,32 +226,19 @@ func TestSendTaskRetryWSResultNilRunner(t *testing.T) {
 	}
 }
 
-// TestTasksChangedBroadcastReachesClient drives a REAL task transition
-// through the daemon-wired runner and asserts the live tasks_changed
-// broadcast actually lands on a subscribed websocket client with the correct event
-// name. This covers the end-to-end path startJobQueue relies on (runner.OnChange
-// -> the task.changed fact -> wsHub), which the per-handler result tests
-// cannot see: a renamed event or a broken broadcast message would slip past them but
-// is caught here. (That the runner invokes OnChange at all is a tasks-package property
-// already covered by internal/tasks; this test owns the daemon's wiring of it.)
-// Boundary-bound: this one runs the real hub (`go d.wsHub.run()`), whose loop has
-// no exit path — a bubble would never finish. Its siblings above bubble because
-// they drive the client channel directly.
+// Outside a synctest bubble: this runs the real hub (`go d.wsHub.run()`), whose
+// loop has no exit path.
 func TestTasksChangedBroadcastReachesClient(t *testing.T) {
 	d := newNotebookDaemon(t)
 	client := &wsClient{send: make(chan outboundMessage, 8)}
 	d.wsHub.clients[client] = true
 	go d.wsHub.run()
 
-	// installInstrumentedTaskRunner wires runner.OnChange -> the task.changed fact
-	// exactly as startJobQueue does, so a real transition exercises the live path.
 	runner, _ := installInstrumentedTaskRunner(t, d)
 	if _, err := runner.Enqueue(testTaskKind, jobs.EnqueueOptions{UniqueKey: "ws-bcast"}); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
-	// The enqueue and the worker's queued->running->done each fire the broadcast.
-	// Assert at least one tasks_changed reaches the client.
 	deadline := time.After(2 * time.Second)
 	for {
 		select {

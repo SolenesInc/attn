@@ -15,7 +15,6 @@ func TestTicketCRUDRoundTrip(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
 
-	// Migration smoke: the ticket tables migration is part of the latest chain.
 	var maxVersion int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
@@ -59,7 +58,6 @@ func TestTicketCRUDRoundTrip(t *testing.T) {
 		t.Fatalf("timestamps = created %v / updated %v, want %v", got.CreatedAt, got.UpdatedAt, ticketBase)
 	}
 
-	// Missing ticket reads as (nil, nil).
 	missing, err := s.GetTicket("nope")
 	if err != nil || missing != nil {
 		t.Fatalf("GetTicket(missing) = %v, %v; want nil, nil", missing, err)
@@ -92,11 +90,9 @@ func TestTicketIDCollision(t *testing.T) {
 	if !errors.Is(err, ErrTicketIDTaken) {
 		t.Fatalf("collision err = %v, want ErrTicketIDTaken", err)
 	}
-	// The message guides the agent to a fix.
 	if msg := err.Error(); !strings.Contains(msg, "pick a new name") || !strings.Contains(msg, "dup-2") {
 		t.Fatalf("collision message lacks guidance: %q", msg)
 	}
-	// The original ticket is untouched.
 	got, _ := s.GetTicket("dup")
 	if got == nil || got.Title != "first" {
 		t.Fatalf("original overwritten: %+v", got)
@@ -116,7 +112,6 @@ func TestTicketStatusTransitions(t *testing.T) {
 		t.Fatalf("SetTicketStatus working: %v", err)
 	}
 
-	// Into a terminal status stamps closed_at.
 	t2 := ticketBase.Add(2 * time.Minute)
 	got, err := s.SetTicketStatus("tk", TicketStatusDone, "agent7", "shipped", t2)
 	if err != nil {
@@ -126,7 +121,6 @@ func TestTicketStatusTransitions(t *testing.T) {
 		t.Fatalf("ClosedAt = %v, want %v", got.ClosedAt, t2)
 	}
 
-	// Reopening clears closed_at — durable again.
 	t3 := ticketBase.Add(3 * time.Minute)
 	got, err = s.SetTicketStatus("tk", TicketStatusWorking, "you", "more to do", t3)
 	if err != nil {
@@ -136,7 +130,6 @@ func TestTicketStatusTransitions(t *testing.T) {
 		t.Fatalf("ClosedAt = %v, want nil after reopen", got.ClosedAt)
 	}
 
-	// The activity thread captured every move, in order, with from/to + comment.
 	full, err := s.GetTicket("tk")
 	if err != nil {
 		t.Fatalf("GetTicket: %v", err)
@@ -158,7 +151,6 @@ func TestTicketStatusTransitions(t *testing.T) {
 		t.Fatalf("done comment = %q, want shipped", full.Activity[1].Comment)
 	}
 
-	// Unknown ticket / invalid status are errors.
 	if _, err := s.SetTicketStatus("ghost", TicketStatusDone, "", "", t3); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("status on missing = %v, want ErrTicketNotFound", err)
 	}
@@ -213,7 +205,6 @@ func TestTicketCommentsAndEdits(t *testing.T) {
 		t.Fatalf("activity[1].Author = %q, want agent7", got.Activity[1].Author)
 	}
 
-	// Edits / comments on a missing ticket fail rather than orphan.
 	if err := s.EditTicketDescription("ghost", "x", "you", t2); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("edit missing = %v, want ErrTicketNotFound", err)
 	}
@@ -257,7 +248,6 @@ func TestTicketAttachments(t *testing.T) {
 		t.Fatalf("UpdatedAt = %v, want %v (bumped by attach)", got.UpdatedAt, t1)
 	}
 
-	// A filename is required; a missing ticket is rejected.
 	if _, err := s.AddTicketAttachment(TicketAttachment{TicketID: "tk"}, "agent7", t1); err == nil {
 		t.Fatal("AddTicketAttachment with no filename: want error")
 	}
@@ -270,7 +260,6 @@ func TestTicketListAndArchive(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
 
-	// Three tickets across columns.
 	if _, err := s.CreateTicket(Ticket{ID: "backlog", Title: "later"}, "you", ticketBase); err != nil {
 		t.Fatalf("create backlog: %v", err)
 	}
@@ -288,12 +277,10 @@ func TestTicketListAndArchive(t *testing.T) {
 	if len(all) != 3 {
 		t.Fatalf("list len = %d, want 3", len(all))
 	}
-	// Newest first.
 	if all[0].ID != "shipped" || all[2].ID != "backlog" {
 		t.Fatalf("ordering = %s..%s, want shipped..backlog", all[0].ID, all[2].ID)
 	}
 
-	// Status filter.
 	working, err := s.ListTickets(TicketListFilter{Status: TicketStatusWorking})
 	if err != nil {
 		t.Fatalf("ListTickets(working): %v", err)
@@ -302,11 +289,9 @@ func TestTicketListAndArchive(t *testing.T) {
 		t.Fatalf("working filter = %+v, want [active]", working)
 	}
 
-	// Archiving an open ticket is refused.
 	if err := s.ArchiveTicket("active", ticketBase.Add(3*time.Minute)); !errors.Is(err, ErrTicketNotClosed) {
 		t.Fatalf("archive open = %v, want ErrTicketNotClosed", err)
 	}
-	// Archiving a closed ticket clears it from the default board.
 	if err := s.ArchiveTicket("shipped", ticketBase.Add(3*time.Minute)); err != nil {
 		t.Fatalf("ArchiveTicket: %v", err)
 	}
@@ -326,9 +311,6 @@ func TestTicketListAndArchive(t *testing.T) {
 	}
 }
 
-// Reopening an archived ticket un-archives it: a closed+archived ticket moved back
-// to an open status must return to the default board and shed its archived_at, not
-// linger as an invisible zombie immune to the TTL sweep.
 func TestArchivedTicketReopenedBecomesVisible(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -339,12 +321,10 @@ func TestArchivedTicketReopenedBecomesVisible(t *testing.T) {
 	if err := s.ArchiveTicket("zombie", ticketBase.Add(time.Minute)); err != nil {
 		t.Fatalf("ArchiveTicket: %v", err)
 	}
-	// Archived: hidden from the default board.
 	if board, err := s.ListTickets(TicketListFilter{}); err != nil || len(board) != 0 {
 		t.Fatalf("board after archive = %d (err %v), want 0", len(board), err)
 	}
 
-	// Reopen it to an open status.
 	reopened, err := s.SetTicketStatus("zombie", TicketStatusWorking, "you", "back to it", ticketBase.Add(2*time.Minute))
 	if err != nil {
 		t.Fatalf("SetTicketStatus: %v", err)
@@ -356,7 +336,6 @@ func TestArchivedTicketReopenedBecomesVisible(t *testing.T) {
 		t.Fatalf("reopened ClosedAt = %v, want nil", reopened.ClosedAt)
 	}
 
-	// It is visible on the default board again.
 	board, err := s.ListTickets(TicketListFilter{})
 	if err != nil {
 		t.Fatalf("ListTickets: %v", err)
@@ -376,15 +355,12 @@ func TestTicketTTLSweep(t *testing.T) {
 	const ttl = 30 * 24 * time.Hour
 	now := ticketBase
 
-	// An open backlog ticket — never swept.
 	if _, err := s.CreateTicket(Ticket{ID: "open", Title: "live"}, "you", now.Add(-90*24*time.Hour)); err != nil {
 		t.Fatalf("create open: %v", err)
 	}
-	// A recently-closed ticket — within TTL, kept.
 	if _, err := s.CreateTicket(Ticket{ID: "recent", Title: "recent", Status: TicketStatusDone}, "you", now.Add(-5*24*time.Hour)); err != nil {
 		t.Fatalf("create recent: %v", err)
 	}
-	// A long-closed ticket with activity + an attachment — swept, cascading.
 	if _, err := s.CreateTicket(Ticket{ID: "stale", Title: "stale"}, "you", now.Add(-100*24*time.Hour)); err != nil {
 		t.Fatalf("create stale: %v", err)
 	}
@@ -414,7 +390,6 @@ func TestTicketTTLSweep(t *testing.T) {
 		t.Fatal("open backlog ticket was swept")
 	}
 
-	// Cascade: the swept ticket's activity + attachment rows are gone too.
 	var orphanActivity, orphanAttachments, orphanEvents int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM ticket_activity WHERE ticket_id = 'stale'`).Scan(&orphanActivity); err != nil {
 		t.Fatalf("count orphan activity: %v", err)
@@ -434,12 +409,10 @@ func TestTicketAssigneesOwnedByRole(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
 
-	// Empty role -> empty set, never the full table.
 	if ids := s.TicketAssigneesOwnedByRole(""); len(ids) != 0 {
 		t.Fatalf("empty role = %v, want none", ids)
 	}
 
-	// Durable role ownership, not the concrete author, is the delegated signal.
 	if _, err := s.CreateRoleOwnedTicket(Ticket{
 		ID:       "delegated",
 		Title:    "do the thing",
@@ -447,7 +420,6 @@ func TestTicketAssigneesOwnedByRole(t *testing.T) {
 	}, "chief-1", TicketRoleChiefOfStaff, ticketBase); err != nil {
 		t.Fatalf("CreateTicket delegated: %v", err)
 	}
-	// A session-authored ticket without role ownership must not leak into the set.
 	if _, err := s.CreateTicket(Ticket{
 		ID:       "self-authored",
 		Title:    "user work",
@@ -464,9 +436,6 @@ func TestTicketAssigneesOwnedByRole(t *testing.T) {
 		t.Fatalf("non-chief-authored session leaked into set: %v", ids)
 	}
 
-	// Persists after a terminal report (tickets are not archived on terminal
-	// status, so the delegated-from-chief signal survives the report — as the
-	// dispatch rows did).
 	if _, err := s.SetTicketStatus("delegated", TicketStatusDone, "sess-delegated", "shipped", ticketBase.Add(time.Minute)); err != nil {
 		t.Fatalf("SetTicketStatus terminal: %v", err)
 	}
@@ -474,7 +443,6 @@ func TestTicketAssigneesOwnedByRole(t *testing.T) {
 		t.Fatalf("delegated session lost after terminal report: %v", ids)
 	}
 
-	// Archiving the ticket removes the signal.
 	if err := s.ArchiveTicket("delegated", ticketBase.Add(2*time.Minute)); err != nil {
 		t.Fatalf("ArchiveTicket: %v", err)
 	}
@@ -517,11 +485,6 @@ func TestTicketPersistence(t *testing.T) {
 	}
 }
 
-// TestTicketResumeSessionID is the crux of immediate ticket resume: the bound
-// session's agent-native resume key is mirrored onto the ticket so it survives
-// the session row being deleted on close. The key is queryable with no session
-// row present — exactly the post-close state in which the old code fell back to
-// the agent's resume picker.
 func TestTicketResumeSessionID(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -537,13 +500,10 @@ func TestTicketResumeSessionID(t *testing.T) {
 		t.Fatalf("CreateTicket: %v", err)
 	}
 
-	// Nothing captured yet → empty (resolve falls back to the picker).
 	if got := s.GetTicketResumeSessionID(sessionID); got != "" {
 		t.Fatalf("resume id before capture = %q, want empty", got)
 	}
 
-	// Capture mirrors the key onto the bound ticket without bumping updated_at or
-	// emitting an event (purely internal bookkeeping).
 	before, err := s.GetTicket("resume-me")
 	if err != nil {
 		t.Fatalf("GetTicket: %v", err)
@@ -562,8 +522,8 @@ func TestTicketResumeSessionID(t *testing.T) {
 		t.Fatalf("activity changed: %d -> %d", len(before.Activity), len(after.Activity))
 	}
 
-	// The key is durable on the ticket — retrievable with no session row present
-	// (the sessions table is empty here), which is the post-close state.
+	// No session row exists here, which is the post-close state the key has to
+	// survive.
 	if got := s.GetResumeSessionID(sessionID); got != "" {
 		t.Fatalf("session-table resume id = %q, want empty (no session row)", got)
 	}
@@ -571,7 +531,6 @@ func TestTicketResumeSessionID(t *testing.T) {
 		t.Fatalf("ticket resume id = %q, want %q", got, "claude-conv-abc")
 	}
 
-	// A session with no bound ticket: setting is a no-op, getting is empty.
 	if err := s.SetTicketResumeSessionID("unbound", "x"); err != nil {
 		t.Fatalf("SetTicketResumeSessionID unbound: %v", err)
 	}
@@ -580,9 +539,6 @@ func TestTicketResumeSessionID(t *testing.T) {
 	}
 }
 
-// CrashedTicketsForAssignee returns exactly the revivable set: crashed,
-// non-archived, and bound to the given session — nothing in another column,
-// archived, or owned by someone else.
 func TestCrashedTicketsForAssignee(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -651,11 +607,6 @@ func TestSubmitTicketAttachIsAtomicAndIdempotent(t *testing.T) {
 	}
 }
 
-// StrandedTickets is the migration's population: the mid-flight work the garden
-// cutover left on the retired board. Everything else on the board is somebody
-// else's business — a live ticket still drains itself, a closed one is over, an
-// archived one already moved, and an automation run's ticket is daemon
-// bookkeeping that already has a seed.
 func TestStrandedTicketsAreTheDeadOnesStillOnTheBoard(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

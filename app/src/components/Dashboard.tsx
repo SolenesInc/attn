@@ -1,4 +1,3 @@
-// app/src/components/Dashboard.tsx
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { DaemonEndpoint, DaemonPR, RateLimitState } from '../hooks/useDaemonSocket';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
@@ -25,44 +24,20 @@ type DashboardSession = {
   endpointName?: string;
   endpointStatus?: string;
   chiefOfStaff?: boolean;
-  // The daemon's answer to "does this owe me a turn", and since when. Read,
-  // never derived from state: an agent can sit in waiting_input with its turn
-  // already settled, which is exactly the case grouping by state gets wrong.
+  // Read, never derived from state: an agent can sit in waiting_input with its
+  // turn already settled.
   turnOwed?: boolean;
   turnOpenedAt?: string;
-  // When a deferred agent comes back. Its presence is what takes the agent out
-  // of every other group here: a snoozed agent's state is no longer an answer to
-  // anything the user asked, so listing it under Working or Idle says the one
-  // thing that is not true of it — that it is waiting on nothing.
   turnSnoozedUntil?: string;
-  // One present-tense line saying what this agent is doing right now, generated
-  // from its own transcript, and when it was generated. Absent unless the user
-  // turned the feature on and the agent has written something since.
   activity?: string;
   activityAt?: string;
   automation?: AutomationProvenanceValue;
 };
 
-/**
- * How old an activity line gets before the row stops presenting it as current,
- * when nobody has told us otherwise.
- *
- * Generation stops entirely when nobody is watching, so a line can outlive the
- * work it describes by however long the user was away. Three times the slowest
- * default interval (300s, the present tier): anything past that was not
- * generated during a slow tick, it was generated before a gap. A configured
- * cadence overrides it — see the activityStaleMs prop.
- */
+// Three times the slowest default interval (300s): past that it was generated
+// before a gap, not during a slow tick.
 const DEFAULT_ACTIVITY_STALE_MS = 15 * 60 * 1000;
 
-/**
- * The state groups, in the order they read best: the states that used to mean
- * "this wants you" first, then the ones that are just what is happening.
- *
- * In queue mode these describe *settled* agents only — whether an agent wants
- * you is the turn's business, and answering it twice is how home ends up
- * announcing "Waiting for input (3)" directly beneath "All settled".
- */
 const STATE_GROUPS: { state: UISessionState; label: string; testId: string }[] = [
   { state: 'waiting_input', label: 'Waiting for input', testId: 'session-group-waiting' },
   { state: 'pending_approval', label: 'Pending approval', testId: 'session-group-pending' },
@@ -92,29 +67,14 @@ interface DashboardProps {
   onRebootstrapEndpoint?: (endpointId: string) => Promise<void>;
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
-  // Ending a snooze early. Home is the second place a deferral can be undone,
-  // and the only one that does not depend on the queue arrangement being on —
-  // the shortcut and the command menu are both queue-gated, so without this a
-  // snooze made in queue mode would have no way out once it was turned off.
   onWakeTurn?: (id: string) => void;
   onRefreshPRs?: () => void;
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
   onMutedGroupClick?: () => void;
-  // Whether the queue arrangement is on. It selects home's whole shape: turns
-  // first with the settled rest below, or the plain state grouping that is all
-  // there is to say when nothing tracks turns.
   queueModeEnabled?: boolean;
-  // Whether home is waiting for the queue to refill: on, the next turn to open
-  // takes the user to it. Owned by App, which arms it when it hands the user
-  // here after the last turn closed and clears it when they walk here
-  // themselves. Home's job is to say which of the two happened and let the user
-  // change it — an app that moves you on its own has to show you the switch.
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
-  // How old an activity line may get before it stops being presented as
-  // current. Derived from the configured intervals by App (activityStaleMs), so
-  // a user who slows generation down does not get every line dimmed.
   activityStaleMs?: number;
 }
 
@@ -156,20 +116,6 @@ export function Dashboard({
 
   const chiefSession = sessions.find((session) => session.chiefOfStaff);
 
-  /**
-   * Agents the user deferred, soonest wake first, in queue order and out of
-   * everything below.
-   *
-   * Not gated on the queue arrangement, unlike the sidebar's section. A snooze
-   * can only be *made* with the queue on, but it outlives being turned off, and
-   * every other way to wake one early is queue-gated too — so with the setting
-   * off this list is the deferral's only remaining way out.
-   *
-   * The chief is here like any other agent, which is where home parts from the
-   * sidebar: the sidebar pulls the chief out of its bands entirely, but home's
-   * Sessions card lists it alongside the rest, so leaving it out would put a
-   * deferred chief back under a state group that cannot describe it.
-   */
   const snoozedSessions = useMemo(() => (
     sessions.filter((s) => isSnoozed(s.turnSnoozedUntil, now)).sort(compareWakeOrder)
   ), [sessions, now]);
@@ -179,18 +125,12 @@ export function Dashboard({
     return sessions.filter((s) => !deferred.has(s.id));
   }, [sessions, snoozedSessions]);
 
-  // The chief is left out of the turns, exactly as the sidebar band leaves it
-  // out: it has its own card here and its own slot there. That does mean home
-  // can read "all settled" while the chief wants you — the same thing the
-  // sidebar says, which is the lesser of the two surprises.
   const turnSessions = useMemo(() => (
     queueModeEnabled
       ? awakeSessions.filter((s) => s.turnOwed && !s.chiefOfStaff).sort(compareTurnOrder)
       : []
   ), [queueModeEnabled, awakeSessions]);
 
-  // With the queue off nothing has been settled, so every session is grouped by
-  // state and there is no second band to keep them out of.
   const settledSessions = useMemo(() => (
     queueModeEnabled
       ? awakeSessions.filter((s) => !(s.turnOwed && !s.chiefOfStaff))
@@ -205,9 +145,6 @@ export function Dashboard({
 
   const allSettled = queueModeEnabled && turnSessions.length === 0 && sessions.length > 0;
 
-  // What is still in flight once nothing is owed. "All settled" with six agents
-  // mid-turn is a different situation from "all settled" with everything parked,
-  // and the line is the only thing that tells them apart.
   const stillRunning = useMemo(() => {
     const counts = [
       { label: 'working', n: settledSessions.filter((s) => s.state === 'working').length },
@@ -221,10 +158,6 @@ export function Dashboard({
     return counts.map((entry) => `${entry.n} ${entry.label}`).join(' · ');
   }, [settledSessions]);
 
-  // The line reads as what the agent is doing, so a line that has stopped being
-  // refreshed must not keep claiming the present tense. Past the staleness
-  // window it is dimmed and says when it was generated — still worth showing,
-  // no longer presented as now.
   const renderActivityLine = (s: DashboardSession) => {
     const line = s.activity?.trim();
     if (!line) return null;
@@ -242,9 +175,6 @@ export function Dashboard({
     );
   };
 
-  // `wake` replaces the age on a deferred row rather than joining it: the only
-  // question a snoozed row answers is when it comes back, and the turn it would
-  // have aged is already closed.
   const renderSessionRow = (
     s: DashboardSession,
     { age, wake }: { age?: string; wake?: string } = {},
@@ -284,32 +214,23 @@ export function Dashboard({
     </div>
   );
 
-  // Group PRs by repo
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
   const [fadingPRs, setFadingPRs] = useState<Set<string>>(new Set());
   const { sendMuteRepo, sendPRVisited } = useDaemonContext();
 
-  // PRs that are fully hidden (after fade animation)
   const [hiddenPRs, setHiddenPRs] = useState<Set<string>>(new Set());
 
-  // Use centralized PR filtering hook
   const { activePRs, needsAttention } = usePRsNeedingAttention(prs, hiddenPRs);
 
-  // Handle PR action completion (approve/merge success)
-  // Only fade out on merge - approved PRs stay visible (dimmed)
   const handleActionComplete = useCallback((prId: string, action: 'approve' | 'merge') => {
     if (action === 'merge') {
-      // Add to fading set to trigger CSS animation
       setFadingPRs(prev => new Set(prev).add(prId));
-      // After animation completes, fully hide the PR
       setTimeout(() => {
         setHiddenPRs(prev => new Set(prev).add(prId));
       }, 350); // Slightly longer than 0.3s animation
     }
-    // For approve, the PR stays visible but will be dimmed via approved_by_me flag
   }, []);
 
-  // Track hosts per repo (for host badges)
   const repoHosts = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const pr of activePRs) {
@@ -321,18 +242,9 @@ export function Dashboard({
     return map;
   }, [activePRs]);
 
-  /**
-   * The PRs you opened, ahead of the ones you were asked to look at.
-   *
-   * Your own are the short list and the one you come here to find, so they lead
-   * and they stay flat — a repo header over two rows is a level of structure
-   * that only costs a click. The review side keeps the repo groups, because that
-   * is where the volume is and where muting a whole repo is the act that helps.
-   */
   const yourPRs = useMemo(() => activePRs.filter((pr) => pr.role === 'author'), [activePRs]);
   const reviewPRs = useMemo(() => activePRs.filter((pr) => pr.role !== 'author'), [activePRs]);
 
-  // Group the review side by repo
   const prsByRepo = useMemo(() => {
     const grouped = new Map<string, DaemonPR[]>();
     for (const pr of reviewPRs) {
@@ -342,10 +254,7 @@ export function Dashboard({
     return grouped;
   }, [reviewPRs]);
 
-  // One row, two homes. `showRepo` names the repo inline, which the flat "Yours"
-  // list needs and a repo group already answers above its rows.
   const renderPRRow = (pr: DaemonPR, { showRepo = false }: { showRepo?: boolean } = {}) => {
-    // Determine if this is an approved PR without changes (should be dimmed)
     const isApprovedNoChanges = pr.approved_by_me && !pr.has_new_changes;
     const showHost = (repoHosts.get(pr.repo)?.size || 0) > 1;
     return (
@@ -425,7 +334,6 @@ export function Dashboard({
     }
   }, [onRebootstrapEndpoint, syncingEndpointId]);
 
-  // Rate limit countdown
   const [rateLimitCountdown, setRateLimitCountdown] = useState<string | null>(null);
   useEffect(() => {
     if (!rateLimit) {
@@ -476,8 +384,8 @@ export function Dashboard({
         </button>
       </header>
 
-      {/* The queue's terminus. Only in queue mode, because only there does an
-          agent stop wanting you without its state changing. */}
+      {/* Only in queue mode: only there does an agent stop wanting you without
+          its state changing. */}
       {allSettled && (
         <div className="all-settled-banner" data-testid="all-settled">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -486,10 +394,6 @@ export function Dashboard({
           <div className="all-settled-body">
             <span className="all-settled-title">All settled</span>
             <span className="all-settled-detail">{stillRunning}</span>
-            {/* The wait, stated and reversible. It sits inside the banner
-                because it only means anything while nothing is owed: the moment
-                a turn opens it has either taken the user there or it has not,
-                and that is the whole promise. */}
             {onToggleFollowNextTurn && (
               <label className="all-settled-follow" data-testid="follow-next-turn">
                 <input
@@ -504,7 +408,6 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Rate limit banner */}
       {rateLimitCountdown && (
         <div className="rate-limit-banner">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -515,7 +418,6 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Version mismatch banners */}
       {endpoints?.filter(ep => ep.status === 'version_mismatch' || ep.status === 'version_ahead' || ep.status === 'binary_mismatch').map(ep => (
         <div
           key={ep.id}
@@ -547,7 +449,6 @@ export function Dashboard({
       ))}
 
       <div className="dashboard-grid">
-        {/* Sessions Card */}
         <div className="dashboard-card">
           <div className="card-header">
             <h2>Sessions</h2>
@@ -571,19 +472,13 @@ export function Dashboard({
                     ))}
                   </div>
                 )}
-                {/* Settled is a heading, not a group: the state groups below it
-                    are what those agents are doing, now that whether they want
-                    you has already been answered above. */}
                 {queueModeEnabled && stateGroups.length > 0 && (
                   <div className="group-label group-label--section" data-testid="session-group-settled">
                     Settled
                   </div>
                 )}
-                {/* data-session-group marks the groups that describe what an
-                    agent is doing, so a reader can ask for them without
-                    matching the turn band or the snoozed section: those share
-                    the testid prefix and answer a different question. A new
-                    group opts in here or is correctly left out. */}
+                {/* data-session-group marks the groups that describe what an agent
+                    is doing; a new group opts in here or is correctly left out. */}
                 {stateGroups.map((group) => (
                   <div
                     key={group.state}
@@ -595,12 +490,6 @@ export function Dashboard({
                     {group.rows.map((s) => renderSessionRow(s))}
                   </div>
                 ))}
-                {/* Collapsed at the foot of the card, above the muted
-                    workspaces, exactly as the sidebar arranges the same two:
-                    both are the quiet end, and "not yet" sits nearer to your
-                    attention than "not ever". A snooze surfaces itself when it
-                    wakes, so the section is for checking on a promise or
-                    breaking it early — neither worth standing room. */}
                 {snoozedSessions.length > 0 && (
                   <div className="session-group snoozed-group" data-testid="session-group-snoozed">
                     <button
@@ -660,7 +549,6 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* PRs Card */}
         <div className="dashboard-card">
           <div className="card-header">
             <h2>Pull Requests</h2>

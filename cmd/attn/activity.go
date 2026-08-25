@@ -11,11 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn activity` is how session activity is seen and unstuck from a terminal.
-//
-// The lines themselves ride along on `attn list --json` with every other session
-// field. What only lives here is why there are none — the feature off, no agent
-// chosen, or nobody watching — and the way to forget a line that is wrong.
+// `attn activity` reports why there are no activity lines — the feature off, no agent chosen, or nobody watching — and forgets a line that is wrong.
 func runActivity() {
 	args := os.Args[2:]
 	if len(args) == 0 {
@@ -63,8 +59,6 @@ func activityStatus(asJSON bool) {
 		return
 	}
 
-	// The tier first, because it is the answer to "why is nothing appearing"
-	// far more often than anything else here.
 	fmt.Printf("presence: %s\n", status.PresenceTier)
 	if status.PresenceTier == "away" {
 		fmt.Println("  nothing is generated while nobody can see it")
@@ -89,17 +83,12 @@ func activityStatus(asJSON bool) {
 			line = "—"
 		}
 		fmt.Printf("  %-24s %s%s\n", session.Label, line, activityAgeSuffix(session.ActivityAt))
-		// Under the line rather than instead of it: the last good line is still
-		// worth showing, and the failure is why it has stopped moving.
 		if reason := strings.TrimSpace(protocol.Deref(session.Error)); reason != "" {
 			fmt.Printf("  %-24s   last run failed: %s\n", "", reason)
 		}
 	}
 }
 
-// activityAgeSuffix renders how old a line is. A line stops being refreshed the
-// moment nobody is watching, so its age is what separates what an agent is doing
-// from what it was doing when someone last looked.
 func activityAgeSuffix(stamp *string) string {
 	raw := strings.TrimSpace(protocol.Deref(stamp))
 	if raw == "" {

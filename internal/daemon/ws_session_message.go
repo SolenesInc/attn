@@ -6,35 +6,15 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The annotatable window: how much of a session's transcript is handed back for
-// annotation. Annotations address offsets into these strings, so the caps exist
-// only to keep a runaway transcript from being read into memory whole — every
-// one is set far past what real sessions produce.
-//
-// Receipts, measured over the 120 most recent Claude Code transcripts on this
-// machine (2,327 assistant prose blocks): the largest single block was 18,713
-// chars (p99 3,949), and the last 32 blocks of a session totalled at most
-// 21,282 chars (p90 13,486). The per-message cap is 3.4x the largest block ever
-// seen and the window budget is 12x the heaviest tail, so a legitimate session
-// never feels these exist. If one does, the budget is wrong: remeasure and
-// raise it rather than letting a real message go missing.
+// Tripwires, not budgets. Measured over 120 recent Claude Code transcripts (2,327 prose
+// blocks): largest block 18,713 chars (p99 3,949); the last 32 totalled at most 21,282.
 const (
 	annotatableMessageMaxChars = 64 * 1024
 	annotatableWindowMessages  = 32
 	annotatableWindowMaxChars  = 256 * 1024
 )
 
-// handleSessionMessagesGet replies with the markdown of a session's recent
-// assistant messages, oldest first. Read-only: the per-session live transcript
-// owns exact identity, lifecycle, provider normalization, and the bounded
-// rolling window. This handler only translates its snapshot to the wire.
-//
-// Recent messages rather than only the newest, because an annotation is about
-// what the agent said, and the agent saying something else afterwards is not a
-// reason to lose it. A transcript with no annotatable prose — structured
-// verdicts, or pure tool activity — comes back as an empty list with
-// success=true. That is not an error, and the client is expected to say so
-// rather than present an empty annotation surface.
+// A transcript with no annotatable prose comes back as an empty list with success=true, not an error.
 func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.SessionMessagesGetMessage) {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	result := protocol.SessionMessagesGetResultMessage{
@@ -71,8 +51,6 @@ func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.Sessio
 	if snapshot.Detail != "" {
 		result.Detail = protocol.Ptr(snapshot.Detail)
 	}
-	// A window that left something out says which limit it hit and by how much,
-	// so the number can be argued with rather than guessed at.
 	if snapshot.Report.DroppedOversize > 0 {
 		d.logf("session_messages_get: %s: dropped %d message(s) over the %d-char per-message cap (largest %d chars); annotations cannot address a partial message",
 			sessionID, snapshot.Report.DroppedOversize, annotatableMessageMaxChars, snapshot.Report.LargestDropped)

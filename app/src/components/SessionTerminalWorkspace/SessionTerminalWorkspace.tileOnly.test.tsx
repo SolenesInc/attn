@@ -6,8 +6,6 @@ import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter
 import { tileContentKey, type TerminalWorkspaceState } from '../../types/workspace';
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../../contexts/NotebookSurfaceContext';
 
-// The docked markdown tile below reads effectiveNotebookRoot unconditionally
-// via useNotebookSurfaceContext — real usage is always under App's provider.
 const testSurfaceValue: NotebookSurfaceContextValue = {
   makeDaemon: () => ({
     listDir: vi.fn(),
@@ -33,8 +31,6 @@ const browserTileProps = vi.hoisted(() => ({
   current: null as null | { visible: boolean },
 }));
 
-// The terminal surface pulls in the Ghostty WASM model; a tile-only workspace
-// never mounts one, but stub it so the import graph stays light in jsdom.
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
@@ -90,10 +86,6 @@ function renderTileOnly() {
 }
 
 describe('SessionTerminalWorkspace tile-only (sessionless) rendering', () => {
-  // Regression: a workspace with zero agent panes still has to render its docked
-  // tile leaf. Previously the workspace collapsed to the empty placeholder once
-  // the last terminal closed, leaving the tile invisible.
-  // https://github.com/victorarias/attn/pull/257#pullrequestreview-4413194398
   it('renders the docked tile when the workspace has no agent panes', () => {
     const { container } = renderTileOnly();
 
@@ -102,7 +94,6 @@ describe('SessionTerminalWorkspace tile-only (sessionless) rendering', () => {
     expect(tileSurface?.getAttribute('data-pane-id')).toBe('tile-readme');
     expect(tileSurface?.getAttribute('data-tile-kind')).toBe('markdown');
 
-    // The tile's markdown content is actually mounted, not just a placeholder.
     expect(screen.getByRole('heading', { name: 'Project notes' })).toBeInTheDocument();
   });
 
@@ -111,13 +102,9 @@ describe('SessionTerminalWorkspace tile-only (sessionless) rendering', () => {
 
     const workspaceRoot = container.querySelector('[data-session-terminal-workspace="workspace-tiles"]');
     expect(workspaceRoot).not.toBeNull();
-    // The empty-state placeholder renders an element with no child surfaces; the
-    // real layout renders the tile surface inside the panes container.
     expect(workspaceRoot?.querySelector('.session-terminal-panes')).not.toBeNull();
   });
 
-  // With no terminal to own focus, selecting (showing) a tile-only workspace
-  // should focus the tile's scrollable body so keyboard scrolling works at once.
   it('focuses the tile body so the tile-only workspace is keyboard-scrollable', () => {
     const { container } = renderTileOnly();
 

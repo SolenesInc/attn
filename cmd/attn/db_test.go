@@ -12,19 +12,10 @@ import (
 	"github.com/victorarias/attn/internal/daemonctl"
 )
 
-// testPidPath returns a not-yet-created pid-file path in dir: passing it to
-// restoreDatabase exercises the common case where no daemon has ever run
-// (acquireDaemonLock creates and locks it), without any test needing to
-// depend on a real daemon-liveness stand-in.
 func testPidPath(dir string) string {
 	return filepath.Join(dir, "attn.pid")
 }
 
-// TestRestoreDatabase_RefusesWhileRunning proves restoreDatabase refuses to
-// touch anything on disk when another file description already holds the
-// exclusive flock on the pid file (a faithful stand-in for a live daemon
-// holding daemon.acquirePIDLock — flock is per-open-file-description), and
-// that its error tells the operator to stop the daemon.
 func TestRestoreDatabase_RefusesWhileRunning(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -57,10 +48,6 @@ func TestRestoreDatabase_RefusesWhileRunning(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_LatestSelectionPicksNewest proves "latest" (and the
-// default empty string) resolve to the newest rotating attn-<ts>.db by
-// timestamp, ignoring pre-migration snapshots even if they sort later
-// lexically by chance.
 func TestRestoreDatabase_LatestSelectionPicksNewest(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -71,8 +58,6 @@ func TestRestoreDatabase_LatestSelectionPicksNewest(t *testing.T) {
 	writeFile(t, filepath.Join(backupsDir, "attn-20260101-000000.db"), "oldest")
 	writeFile(t, filepath.Join(backupsDir, "attn-20260601-000000.db"), "newest rotating")
 	writeFile(t, filepath.Join(backupsDir, "attn-20260301-000000.db"), "middle")
-	// A pre-migration snapshot with a timestamp that would sort after every
-	// rotating backup above must still be excluded from "latest".
 	writeFile(t, filepath.Join(backupsDir, "attn-premigration-99-20261231-000000.db"), "premigration, must be ignored")
 
 	restoredFrom, _, err := restoreDatabase(dbPath, backupsDir, "latest", pidPath)
@@ -86,7 +71,6 @@ func TestRestoreDatabase_LatestSelectionPicksNewest(t *testing.T) {
 		t.Fatalf("restored db content = %q, want the newest rotating backup's content", got)
 	}
 
-	// Default (empty string) source must behave identically to "latest".
 	writeFile(t, dbPath, "current db again")
 	restoredFrom2, _, err := restoreDatabase(dbPath, backupsDir, "", pidPath)
 	if err != nil {
@@ -97,10 +81,6 @@ func TestRestoreDatabase_LatestSelectionPicksNewest(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_PreservesOldDBAndLeavesBackupInPlace proves the restore
-// preserves (renames, never deletes) the pre-restore attn.db and its -wal/-shm
-// sidecars, copies (not moves) the backup into place, and that the backup
-// file itself survives at its original path afterward.
 func TestRestoreDatabase_PreservesOldDBAndLeavesBackupInPlace(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -129,19 +109,17 @@ func TestRestoreDatabase_PreservesOldDBAndLeavesBackupInPlace(t *testing.T) {
 	if got := readFile(t, dbPath); got != "backup contents" {
 		t.Fatalf("restored db content = %q, want %q", got, "backup contents")
 	}
-	// The backup file itself must still exist, unmodified — restore copies.
 	if got := readFile(t, backupPath); got != "backup contents" {
 		t.Fatalf("backup file was mutated or removed: %q", got)
 	}
-	// The old db's -wal/-shm sidecars must be preserved alongside the
-	// renamed db, not deleted — they can hold uncheckpointed data.
+	// The old db's -wal/-shm sidecars must be preserved alongside the renamed db —
+	// they can hold uncheckpointed data.
 	if got := readFile(t, preservedAs+"-wal"); got != "wal" {
 		t.Fatalf("preserved -wal content = %q, want %q", got, "wal")
 	}
 	if got := readFile(t, preservedAs+"-shm"); got != "shm" {
 		t.Fatalf("preserved -shm content = %q, want %q", got, "shm")
 	}
-	// No stale sidecars should be left at the (now-restored) dbPath.
 	if _, err := os.Stat(dbPath + "-wal"); !os.IsNotExist(err) {
 		t.Fatalf("expected attn.db-wal to be gone from dbPath, stat err = %v", err)
 	}
@@ -150,9 +128,6 @@ func TestRestoreDatabase_PreservesOldDBAndLeavesBackupInPlace(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_NoExistingDBRemovesStraySidecars proves that when there
-// is no existing dbPath to preserve, stray -wal/-shm sidecars (with nothing
-// to be preserved alongside) are still cleaned up as before.
 func TestRestoreDatabase_NoExistingDBRemovesStraySidecars(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -179,12 +154,10 @@ func TestRestoreDatabase_NoExistingDBRemovesStraySidecars(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_MissingBackupsDirErrors proves resolving "latest"
-// against a nonexistent backups dir fails loudly rather than silently no-op'ing.
 func TestRestoreDatabase_MissingBackupsDirErrors(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
-	backupsDir := filepath.Join(dir, "backups") // never created
+	backupsDir := filepath.Join(dir, "backups")
 	pidPath := testPidPath(dir)
 	writeFile(t, dbPath, "current db")
 
@@ -197,10 +170,6 @@ func TestRestoreDatabase_MissingBackupsDirErrors(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_RejectsSourceEqualToDestination proves that passing
-// the live attn.db itself as the restore source is rejected before anything
-// is touched, rather than renaming the source out from under itself and
-// then failing with the live db already gone.
 func TestRestoreDatabase_RejectsSourceEqualToDestination(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -228,11 +197,6 @@ func TestRestoreDatabase_RejectsSourceEqualToDestination(t *testing.T) {
 	}
 }
 
-// TestRestoreDatabase_RejectsNonRegularSource proves that a directory passed
-// as the restore source is rejected (os.Stat succeeds for directories, so
-// this must be an explicit check) before the live db is touched, rather than
-// failing partway through io.Copy after the live db has already been
-// renamed aside and truncated.
 func TestRestoreDatabase_RejectsNonRegularSource(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -255,19 +219,11 @@ func TestRestoreDatabase_RejectsNonRegularSource(t *testing.T) {
 	}
 }
 
-// fixedClock returns a now func pinned to the same instant every call, so
-// preserveExistingDBAt's collision-avoidance loop can be exercised
-// deterministically instead of depending on two calls landing in the same
-// real wall-clock second.
 func fixedClock() func() time.Time {
 	t := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	return func() time.Time { return t }
 }
 
-// TestRestoreDatabase_PreserveNameCollisionIsResolved proves that two
-// restores landing in the same second (so their default UTC-timestamp
-// preserve names would collide) each get their own preserved copy instead of
-// the second restore's preserve-rename silently replacing the first.
 func TestRestoreDatabase_PreserveNameCollisionIsResolved(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -296,11 +252,6 @@ func TestRestoreDatabase_PreserveNameCollisionIsResolved(t *testing.T) {
 	}
 }
 
-// TestPreserveExistingDB_CollisionCheckCoversSidecarTargets proves the
-// collision-avoidance loop rejects a candidate name whose main-file slot is
-// free but whose -wal sidecar slot is already taken by an unrelated file —
-// checking only the main file would let the sidecar rename silently replace
-// that stray file.
 func TestPreserveExistingDB_CollisionCheckCoversSidecarTargets(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -329,9 +280,6 @@ func TestPreserveExistingDB_CollisionCheckCoversSidecarTargets(t *testing.T) {
 	}
 }
 
-// TestPreserveExistingDB_RollsBackIfSidecarRenameFails proves that when the
-// main-file rename succeeds but a sidecar rename then fails, the main-file
-// move is rolled back so dbPath is never left missing.
 func TestPreserveExistingDB_RollsBackIfSidecarRenameFails(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "attn.db")
@@ -342,7 +290,7 @@ func TestPreserveExistingDB_RollsBackIfSidecarRenameFails(t *testing.T) {
 	calls := 0
 	failOnSecondCall := func(oldpath, newpath string) error {
 		calls++
-		if calls == 2 { // the -wal sidecar rename
+		if calls == 2 {
 			return fmt.Errorf("injected rename failure")
 		}
 		return os.Rename(oldpath, newpath)
@@ -362,15 +310,11 @@ func TestPreserveExistingDB_RollsBackIfSidecarRenameFails(t *testing.T) {
 	if got := readFile(t, dbPath+"-wal"); got != "live wal" {
 		t.Fatalf("-wal sidecar was not restored by rollback, content = %q", got)
 	}
-	// The -shm sidecar rename was never reached (the -wal one failed first)
-	// so it should be untouched.
 	if got := readFile(t, dbPath+"-shm"); got != "live shm" {
 		t.Fatalf("-shm sidecar unexpectedly modified, content = %q", got)
 	}
 }
 
-// TestAcquireDaemonLock_NoPidFile proves the lock can be acquired (with no
-// error) when there is no pid file at all yet — acquireDaemonLock creates it.
 func TestAcquireDaemonLock_NoPidFile(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -386,11 +330,8 @@ func TestAcquireDaemonLock_NoPidFile(t *testing.T) {
 	}
 }
 
-// TestAcquireDaemonLock_HeldByAnotherProcess proves acquireDaemonLock refuses
-// (with an operator-facing error) while another open file description holds
-// the exclusive flock on the pid file — a faithful stand-in for a live
-// daemon process holding daemon.acquirePIDLock, since BSD flock is
-// per-open-file-description.
+// BSD flock is per-open-file-description, so a second open file description
+// holding the lock is a faithful stand-in for a live daemon.
 func TestAcquireDaemonLock_HeldByAnotherProcess(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -427,14 +368,6 @@ func TestAcquireDaemonLock_HeldByAnotherProcess(t *testing.T) {
 	release()
 }
 
-// TestAcquireDaemonLock_NonContentionFlockErrorIsNotMisreportedAsRunning
-// proves acquireDaemonLock does not conflate every flock failure with "the
-// daemon is running": only EWOULDBLOCK (the actual contention signal) gets
-// that operator-facing message. Any other flock error must surface as
-// "cannot determine daemon state" instead, since telling the user to stop a
-// daemon that may not even exist would be misleading. Exercised by swapping
-// in a fake flock function that returns a non-EWOULDBLOCK error, mirroring
-// how an exotic failure (e.g. ENOLCK) would present.
 func TestAcquireDaemonLock_NonContentionFlockErrorIsNotMisreportedAsRunning(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -457,29 +390,16 @@ func TestAcquireDaemonLock_NonContentionFlockErrorIsNotMisreportedAsRunning(t *t
 	}
 }
 
-// TestAcquireDaemonLock_ExcludesConcurrentRestore proves the lock is held —
-// not merely probed and released — for as long as the caller keeps it: a
-// daemon-style flock attempt on the same pid file, and a second
-// acquireDaemonLock call standing in for a concurrent `attn db restore`,
-// must both be refused while the first caller has not released, and both
-// must succeed once it has. This is the regression test for the TOCTOU gap
-// where a point-in-time-only probe left a window between the check and the
-// file swap for a daemon to start or a second restore to race in.
 func TestAcquireDaemonLock_ExcludesConcurrentRestore(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
 
-	// Simulates restoreDatabase having acquired the lock and being paused
-	// mid-restore (staging/preserving/swapping) — release is deliberately
-	// not called yet.
 	release, err := acquireDaemonLock(pidPath)
 	if err != nil {
 		t.Fatalf("initial acquireDaemonLock error: %v", err)
 	}
 
-	// A daemon starting up (daemon.acquirePIDLock's exact mechanism: open
-	// with O_RDWR|O_CREATE, then LOCK_EX|LOCK_NB) must not be able to start
-	// while restore holds the lock.
+	// daemon.acquirePIDLock's exact mechanism: O_RDWR|O_CREATE, then LOCK_EX|LOCK_NB.
 	daemonAttempt, err := os.OpenFile(pidPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		t.Fatalf("open pid file as a daemon-style attempt: %v", err)
@@ -491,17 +411,12 @@ func TestAcquireDaemonLock_ExcludesConcurrentRestore(t *testing.T) {
 	}
 	daemonAttempt.Close()
 
-	// A second `attn db restore` (a second acquireDaemonLock call) must
-	// also be excluded.
 	if _, err := acquireDaemonLock(pidPath); err == nil {
 		t.Fatal("expected a concurrent acquireDaemonLock to be excluded while the first is still held")
 	}
 
 	release()
 
-	// Once released, both a daemon-style attempt and a fresh
-	// acquireDaemonLock must succeed — the exclusion must not outlive the
-	// held section.
 	afterRelease, err := acquireDaemonLock(pidPath)
 	if err != nil {
 		t.Fatalf("expected acquireDaemonLock to succeed after release, got: %v", err)
@@ -509,16 +424,10 @@ func TestAcquireDaemonLock_ExcludesConcurrentRestore(t *testing.T) {
 	afterRelease()
 }
 
-// TestAcquireDaemonLock_StampsNonDaemonHolderSentinel proves acquireDaemonLock
-// overwrites whatever pid content is on disk (in this case a stale pid left
-// by a previous daemon) with daemonctl.NonDaemonHolderSentinel as soon as it
-// takes the lock. This is the property daemonctl.Stop relies on: while a
-// non-daemon holder like `attn db restore` owns the lock, Stop must never
-// trust the pid that was there before — it must see the sentinel instead.
 func TestAcquireDaemonLock_StampsNonDaemonHolderSentinel(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
-	writeFile(t, pidPath, "99999") // stale pid from a previous daemon
+	writeFile(t, pidPath, "99999")
 
 	release, err := acquireDaemonLock(pidPath)
 	if err != nil {

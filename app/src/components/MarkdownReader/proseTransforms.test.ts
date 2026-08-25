@@ -134,7 +134,6 @@ describe("unit exports", () => {
   });
 });
 
-// --- rehype plugin -------------------------------------------------------
 
 async function render(markdown: string): Promise<Root> {
   const processor = unified()
@@ -211,7 +210,6 @@ describe("rehypeProseTransforms plugin", () => {
 
   it("skips math-classed spans", async () => {
     const tree = await render("prose \"here\"");
-    // Inject a math-like element the way remark-math/katex would emit it.
     const mathSpan: Element = {
       type: "element",
       tagName: "span",

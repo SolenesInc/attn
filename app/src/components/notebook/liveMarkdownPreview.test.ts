@@ -3,16 +3,11 @@ import { EditorState } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { buildDecorations } from './liveMarkdownPreview';
 
-// buildDecorations works off an EditorState (no view), so the live-preview logic is
-// testable headlessly — CodeMirror's view can't mount under happy-dom, but a state
-// needs no DOM. Each test builds a state with the cursor placed deliberately, since
-// the cursor's line reveals its raw markers (the Obsidian active-line behavior).
 interface Deco {
   from: number;
   to: number;
   class?: string;
-  // The `cls` of a widget-replace (bullet/checkbox), so widgets are distinguishable
-  // from plain hides in the headless test (their spec has no `class`).
+  // The `cls` of a widget-replace, so widgets are distinguishable from plain hides (their spec has no `class`).
   widget?: string;
   attributes?: Record<string, string>;
 }
@@ -43,7 +38,6 @@ function decosFor(doc: string, cursor: number, focused = true): Deco[] {
   return out;
 }
 
-// A hide decoration is a replace with no class AND no widget (Decoration.replace({})).
 const isHide = (d: Deco) => d.class === undefined && d.widget === undefined;
 const hasClass = (decos: Deco[], cls: string) => decos.some((d) => d.class === cls);
 const hasWidget = (decos: Deco[], cls: string) => decos.some((d) => d.widget === cls);
@@ -53,11 +47,9 @@ const hideAt = (decos: Deco[], from: number, to: number) =>
 describe('liveMarkdownPreview decorations', () => {
   it('sizes a heading and hides its leading "# " off the active line', () => {
     const doc = '# Title\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on the "body" line
+    const decos = decosFor(doc, doc.length);
 
-    // The whole heading line (0..7) is sized.
     expect(decos.some((d) => d.class === 'cm-md-h1' && d.from === 0 && d.to === 7)).toBe(true);
-    // The "# " marker (including the trailing space) is hidden.
     expect(hideAt(decos, 0, 2)).toBe(true);
   });
 
@@ -79,89 +71,77 @@ describe('liveMarkdownPreview decorations', () => {
 
   it('reveals the heading marker when the cursor is on the heading line', () => {
     const doc = '# Title\n\nbody';
-    const decos = decosFor(doc, 1); // cursor inside the heading line
+    const decos = decosFor(doc, 1);
 
-    // Sizing persists on the active line...
     expect(hasClass(decos, 'cm-md-h1')).toBe(true);
-    // ...but the raw "# " marker is shown (not hidden) so it can be edited.
     expect(hideAt(decos, 0, 2)).toBe(false);
   });
 
   it('hides all markers when the editor is unfocused, even on the cursor line', () => {
     const doc = '# Title\n\nbody';
-    // Cursor on the heading line, but unfocused → renders fully clean (a freshly
-    // opened note reads like rendered markdown until the user clicks in).
     const decos = decosFor(doc, 1, false);
 
-    expect(hasClass(decos, 'cm-md-h1')).toBe(true); // still sized
-    expect(hideAt(decos, 0, 2)).toBe(true); // "# " hidden despite the cursor
+    expect(hasClass(decos, 'cm-md-h1')).toBe(true);
+    expect(hideAt(decos, 0, 2)).toBe(true);
   });
 
   it('styles bold / italic / code / strikethrough and hides their markers off the active line', () => {
     const doc = 'x **b** *i* `c` ~~s~~\nsecond';
-    const decos = decosFor(doc, doc.length); // cursor on the second line
+    const decos = decosFor(doc, doc.length);
 
     expect(hasClass(decos, 'cm-md-strong')).toBe(true);
     expect(hasClass(decos, 'cm-md-em')).toBe(true);
     expect(hasClass(decos, 'cm-md-code')).toBe(true);
     expect(hasClass(decos, 'cm-md-strike')).toBe(true);
-    // The surrounding **, *, `, ~~ markers are hidden.
     expect(decos.filter(isHide).length).toBeGreaterThan(0);
   });
 
   it('reveals inline markers when the cursor is on their line', () => {
     const doc = 'x **b** *i*\nsecond';
-    const decos = decosFor(doc, 3); // cursor inside the styled first line
+    const decos = decosFor(doc, 3);
 
-    // The styling still applies, but no markers are hidden on the active line.
     expect(hasClass(decos, 'cm-md-strong')).toBe(true);
     expect(decos.filter(isHide).length).toBe(0);
   });
 
   it('renders a link as its text, carrying the href, and hides the URL/brackets', () => {
     const doc = 'see [the note](/knowledge/areas/foo.md) here\nsecond';
-    const decos = decosFor(doc, doc.length); // cursor on the second line
+    const decos = decosFor(doc, doc.length);
 
     const link = decos.find((d) => d.class === 'cm-md-link');
     expect(link).toBeDefined();
     expect(link?.attributes?.['data-href']).toBe('/knowledge/areas/foo.md');
-    // The "](...)" tail and brackets are hidden, leaving just the link text.
     expect(decos.filter(isHide).length).toBeGreaterThan(0);
   });
 
   it('does not hide the ``` fence of a fenced code block as inline code', () => {
     const doc = '```\ncode\n```\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body", away from the fence
+    const decos = decosFor(doc, doc.length);
 
-    // Fenced code is not inline code: no cm-md-code styling is applied to the fence,
-    // and the backtick fence rows are not treated as inline-code markers to hide.
     expect(hasClass(decos, 'cm-md-code')).toBe(false);
   });
 
   it('replaces a bullet marker with a bullet widget off the active line', () => {
     const doc = '- item\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body"
-    // The "-" marker (0..1) is replaced by the bullet widget.
+    const decos = decosFor(doc, doc.length);
     expect(decos.some((d) => d.widget === 'cm-md-bullet' && d.from === 0 && d.to === 1)).toBe(true);
   });
 
   it('reveals the raw bullet marker on the active line', () => {
     const doc = '- item\n\nbody';
-    const decos = decosFor(doc, 2); // cursor inside the list line
+    const decos = decosFor(doc, 2);
     expect(hasWidget(decos, 'cm-md-bullet')).toBe(false);
   });
 
   it('leaves an ordered-list number as written', () => {
     const doc = '1. item\n\nbody';
     const decos = decosFor(doc, doc.length);
-    // No bullet widget and no hide over the "1." marker — numbers are meaningful.
     expect(hasWidget(decos, 'cm-md-bullet')).toBe(false);
     expect(decos.some((d) => isHide(d) && d.from === 0)).toBe(false);
   });
 
   it('renders a task checkbox (hiding its bullet) and reflects checked state', () => {
     const unchecked = decosFor('- [ ] todo\n\nbody', '- [ ] todo\n\nbody'.length);
-    // The "- " bullet+space is hidden; the "[ ]" marker becomes a checkbox widget.
     expect(hideAt(unchecked, 0, 2)).toBe(true);
     expect(hasWidget(unchecked, 'cm-md-bullet')).toBe(false);
     expect(unchecked.some((d) => d.widget === 'cm-md-checkbox' && d.from === 2 && d.to === 5)).toBe(true);
@@ -172,16 +152,14 @@ describe('liveMarkdownPreview decorations', () => {
 
   it('reveals the raw task marker on the active line', () => {
     const doc = '- [ ] todo\n\nbody';
-    const decos = decosFor(doc, 3); // cursor inside the task line
+    const decos = decosFor(doc, 3);
     expect(hasWidget(decos, 'cm-md-checkbox')).toBe(false);
   });
 
   it('paints a fenced code block (lines + dimmed fences + language tag)', () => {
     const doc = '```ts\ncode\n```\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body"
-    // Each of the three fenced rows (starts at 0, 6, 11) gets the code-panel line deco.
+    const decos = decosFor(doc, doc.length);
     expect(decos.filter((d) => d.class === 'cm-md-codeblock').map((d) => d.from)).toEqual([0, 6, 11]);
-    // The fences are dimmed, the language tag styled, and it is NOT inline code.
     expect(hasClass(decos, 'cm-md-codefence')).toBe(true);
     expect(hasClass(decos, 'cm-md-codeinfo')).toBe(true);
     expect(hasClass(decos, 'cm-md-code')).toBe(false);
@@ -189,60 +167,52 @@ describe('liveMarkdownPreview decorations', () => {
 
   it('paints every line of a multi-line blockquote and hides its ">" marks off the active line', () => {
     const doc = '> line one\n> line two\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body"
-    // Both quote lines (starts at 0, 11) get the blockquote line deco.
+    const decos = decosFor(doc, doc.length);
     expect(decos.filter((d) => d.class === 'cm-md-blockquote').map((d) => d.from)).toEqual([0, 11]);
-    // Both "> " marks (including the following space) are hidden.
     expect(hideAt(decos, 0, 2)).toBe(true);
     expect(hideAt(decos, 11, 13)).toBe(true);
   });
 
   it('reveals the ">" mark on the active blockquote line while keeping the line styling', () => {
     const doc = '> line one\n> line two\n\nbody';
-    const decos = decosFor(doc, 2); // cursor inside the first quote line
+    const decos = decosFor(doc, 2);
     expect(decos.filter((d) => d.class === 'cm-md-blockquote').map((d) => d.from)).toEqual([0, 11]);
-    expect(hideAt(decos, 0, 2)).toBe(false); // revealed on its own line
-    expect(hideAt(decos, 11, 13)).toBe(true); // still hidden on the other line
+    expect(hideAt(decos, 0, 2)).toBe(false);
+    expect(hideAt(decos, 11, 13)).toBe(true);
   });
 
   it('hides both marks of a nested blockquote off the active line', () => {
     const doc = '> > x\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body"
-    expect(hideAt(decos, 0, 2)).toBe(true); // outer "> "
-    expect(hideAt(decos, 2, 4)).toBe(true); // inner "> "
+    const decos = decosFor(doc, doc.length);
+    expect(hideAt(decos, 0, 2)).toBe(true);
+    expect(hideAt(decos, 2, 4)).toBe(true);
   });
 
   it('replaces a standalone "---" with the hr widget off the active line, and reveals it on its own line', () => {
     const doc = 'para one\n\n---\n\npara two';
-    const decosOff = decosFor(doc, doc.length); // cursor on "para two"
+    const decosOff = decosFor(doc, doc.length);
     expect(decosOff.some((d) => d.widget === 'cm-md-hr' && d.from === 10 && d.to === 13)).toBe(true);
 
-    const decosOn = decosFor(doc, 10); // cursor on the "---" line
+    const decosOn = decosFor(doc, 10);
     expect(hasWidget(decosOn, 'cm-md-hr')).toBe(false);
   });
 
   it('does not treat a Setext heading underline as a horizontal rule', () => {
     const doc = 'title\n---\n\nbody';
-    const decos = decosFor(doc, doc.length); // cursor on "body"
+    const decos = decosFor(doc, doc.length);
     expect(hasWidget(decos, 'cm-md-hr')).toBe(false);
   });
 
   it('does not decorate a YAML list inside frontmatter, but still decorates a body list', () => {
     const doc = '---\ntags:\n  - one\n  - two\n---\n\n- item\n\nbody';
-    const fmEnd = doc.indexOf('---\n\n') + '---\n'.length; // end of the closing fence line
-    const decos = decosFor(doc, doc.length); // cursor on "body", away from both lists
+    const fmEnd = doc.indexOf('---\n\n') + '---\n'.length;
+    const decos = decosFor(doc, doc.length);
 
-    // No bullet widget anywhere inside the frontmatter block.
     expect(decos.some((d) => d.widget === 'cm-md-bullet' && d.from < fmEnd)).toBe(false);
-    // The body list still gets its bullet.
     expect(decos.some((d) => d.widget === 'cm-md-bullet' && d.from >= fmEnd)).toBe(true);
   });
 
   it('treats an unclosed frontmatter fence as ordinary markdown, matching frontmatterCard', () => {
-    // Opened with "---" but never closed — parseFrontmatter (and frontmatterCard) treat
-    // this as NOT frontmatter at all, so the list lines are plain markdown and still get
-    // their bullet. A transient bullet while the fence is mid-typing beats suppressing
-    // every decoration in the note.
     const doc = '---\ntags:\n  - one\n  - two\n- item';
     expect(() => decosFor(doc, doc.length)).not.toThrow();
     const decos = decosFor(doc, doc.length);

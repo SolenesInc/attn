@@ -7,29 +7,17 @@ import { appBundleURL } from '../../utils/appBundle';
 import { AppViewBoundary } from './AppViewBoundary';
 import { AppViewLoadError, errorText, loadAppView, type AppViewComponent } from './loadAppView';
 import './AppTileHost.css';
-// The SDK components a view renders are styled from attn's build, not the SDK's
-// own chunk — see the header of sdk/attn-app/src/components.tsx.
+// SDK components are styled from attn's build, not the SDK's own chunk.
 import './appSdkComponents.css';
 
-// The host: what stands between a docked tile and an app author's component.
-//
-// It answers one question on every render — is there a version of this app
-// serving this view right now, and did its module load? — and it is the only
-// place a view's failure is visible. Everything it shows in place of a component
-// names the app, says what is wrong, and says the way back; nothing here removes
-// the tile, because a tile the user docked is the user's to undock.
-//
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "The host" and
-// "What the user sees".
+// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
 
 interface AppTileHostProps {
   app: string;
   view: string;
   workspaceId: string;
-  /** The session this workspace has selected, if any. */
   sessionId: string | null;
   tileId: string;
-  /** What the user typed when docking. Opaque to attn. */
   params: string;
 }
 
@@ -48,18 +36,13 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
   const servingVersion = entry?.version_id ?? 0;
   const mountable = !!entry && entry.enabled && declared && servingHash !== '' && servingVersion !== 0;
 
-  // What is on screen, which is not always what is serving: a version that
-  // lands while the user is typing in this tile waits for them to leave.
   const [mounted, setMounted] = useState<Mounted | null>(null);
   const [loadError, setLoadError] = useState<AppViewLoadError | null>(null);
-  // Bumped by `reload` below, and part of the boundary's reset key so a second
-  // attempt gets a fresh boundary rather than the one holding the last error.
+  // Part of the boundary's reset key, so a retry gets a fresh boundary rather
+  // than the one still holding the last error.
   const [attempt, setAttempt] = useState(0);
   const [holdsFocus, setHoldsFocus] = useState(false);
 
-  // A newer version is serving than the one mounted. The remount waits while the
-  // tile holds focus: pulling a component out from under someone mid-keystroke
-  // is worse than showing a stale one for a moment.
   const stale = !!mounted && mountable && mounted.contentHash !== servingHash;
   const deferred = stale && holdsFocus;
 
@@ -102,11 +85,8 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
     });
   }, [app, view, tileId, mounted, sendAppViewCrash]);
 
-  // Retry and Reload both mean "do the load again from scratch". Dropping what
-  // is mounted is the load-bearing half: the boundary's reset key changes the
-  // instant this runs, so a crashed component left in place would be re-rendered
-  // against a fresh boundary, throw again, and report the same crash a second
-  // time — before the new module has even resolved.
+  // Dropping `mounted` is load-bearing: the reset key changes immediately, and a
+  // crashed component left in place throws again against the fresh boundary.
   const reload = useCallback(() => {
     setMounted(null);
     setLoadError(null);
@@ -125,11 +105,8 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
     [workspaceId, sessionId, tileId, params],
   );
 
-  // The namespace is composed here, from the mount's identity, and never taken
-  // from the view: an app addresses its own documents because that is the only
-  // namespace it is handed.
-  // The app a command is addressed to is bound here for the same reason: a view
-  // names the command, and where it runs is the mount's to decide.
+  // Composed from the mount's identity, never taken from the view: an app is
+  // only ever handed its own namespace.
   const runtime = useMemo<AppViewRuntime>(
     () => ({
       namespace: `app/${app}`,
@@ -214,9 +191,8 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
   })();
 
   return (
-    // The data attributes are what `app_view_get_state` reads: the packaged-app
-    // harness has no other way to tell a mounted view from a placeholder that
-    // happens to render text.
+    // `app_view_get_state` reads these attributes: the packaged-app harness has
+    // no other way to tell a mounted view from a placeholder rendering text.
     <div
       className="app-tile-host"
       data-app-view-host={`${app}/${view}`}
@@ -227,8 +203,7 @@ export function AppTileHost({ app, view, workspaceId, sessionId, tileId, params 
     >
       {stale && (
         // Static on purpose: a tile that repaints forever costs battery on a
-        // machine that keeps attn open all day, and this badge has nothing to
-        // animate — it says a thing is true until it stops being true.
+        // machine that keeps attn open all day.
         <div className="app-tile-host-badge" role="status">
           {deferred ? 'A new version is ready — reloading when you leave this tile' : 'Reloading…'}
         </div>

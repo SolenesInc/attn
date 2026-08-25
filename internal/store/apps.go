@@ -8,31 +8,8 @@ import (
 	"time"
 )
 
-// The app registry's persistence (migrations 102 and 105). An app is a
-// manifest-declared, bus-consuming automation running in the shared runtime;
-// this file is the four tables it lives in and nothing else — the lifecycle that
-// stops a delivery loop and the pipeline that builds an artifact are the
-// daemon's.
-//
-// Two absences carry meaning and are load-bearing here:
-//
-//   - There is no enabled bit. An app's enabled state is its bus consumer's
-//     (`app:<name>`), because that one bit both stops delivery and releases the
-//     retention floor. Nothing in this file reads or writes it.
-//   - Removing an app removes its registry row and nothing else. Versions,
-//     invocations and serving steps are history, and the documents under
-//     `app/<name>` are the user's data; deleting either is a separate, explicit
-//     act that does not exist yet, deliberately.
-//
 // See docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
 
-// App is one registered app. CurrentVersionID is 0 until a version has been
-// applied — a registry row can exist ahead of its first successful build.
-//
-// PreviousServingVersionID is the version one step back along the app's serving
-// chain: what bare `attn app rollback` lands on. It is derived from
-// app_serving_steps at read time rather than stored, so it always agrees with
-// the chain, and it is 0 when the app sits at the bottom of its chain.
 type App struct {
 	Name                     string
 	CurrentVersionID         int64
@@ -41,9 +18,6 @@ type App struct {
 	UpdatedAt                time.Time
 }
 
-// appColumnsSQL reads a registry row and derives the version one step back along
-// its serving chain — the current step's parent. Both readers share it so a bare
-// rollback's target is computed one way.
 const appColumnsSQL = `
 	SELECT a.name, a.current_version_id,
 	       (SELECT p.version_id FROM app_serving_steps c
@@ -52,20 +26,6 @@ const appColumnsSQL = `
 	       a.created_at, a.updated_at
 	FROM apps a`
 
-// pushServingStep points an app at a version and records the step it took to get
-// there, inside the caller's transaction. Every path that moves the pointer
-// forward — an apply, a rollback onto a named version — goes through it, so
-// there is no way to move the pointer without extending the chain.
-//
-// The new step's parent is the step the app was on, which is what makes the
-// chain walkable: bare rollback follows parents down, and applying while already
-// walked back parents the new step where the walk stopped, so the way back from
-// it is the version that was actually serving. Nothing above is deleted; a step
-// nothing points at is simply unreachable.
-//
-// Landing on the version already current is not a move — re-applying
-// byte-identical content does exactly that — so it pushes nothing and leaves the
-// chain, and the way back, alone.
 func pushServingStep(tx *sql.Tx, name string, versionID int64, stamp string) (int64, bool, error) {
 	var current, cursor sql.NullInt64
 	err := tx.QueryRow(`SELECT current_version_id, serving_step_id FROM apps WHERE name = ?`, name).
@@ -97,14 +57,6 @@ func pushServingStep(tx *sql.Tx, name string, versionID int64, stamp string) (in
 	return current.Int64, true, err
 }
 
-// AppVersion is an immutable record of one built artifact. ContentHash is the
-// version's identity: applying byte-identical content again reuses this row
-// rather than minting a second one, which is what keeps the invocation log's
-// "which version actually ran" answerable after a long dev session.
-//
-// Declaration is the manifest's frozen snapshot as JSON text, stored rather than
-// re-read from disk so what an old version declared survives editing the
-// manifest — the automation_runs pattern.
 type AppVersion struct {
 	ID           int64
 	AppName      string
@@ -114,13 +66,6 @@ type AppVersion struct {
 	CreatedAt    time.Time
 }
 
-// AppInvocation is one handler run. VersionID is what actually ran, not the
-// pointer the app is on now, so a rollback does not rewrite history.
-//
-// The writer is the runtime (a later stage); this file gives it the append and
-// the read `attn app status` uses. Retention arrives with that writer: an age
-// window has to be measured against real invocation rates, and a number written
-// before there is anything to measure would be a limit with no receipt.
 type AppInvocation struct {
 	ID               int64
 	AppName          string
@@ -153,10 +98,6 @@ const (
 	AppInvocationStatusInterrupted  = "interrupted"
 )
 
-// SaveApp creates a registry row, or touches an existing one. It never moves
-// current_version_id: the pointer moves only through CommitAppVersion,
-// SetAppCurrentVersion and StepAppVersionBack, so no caller can flip an app onto
-// a version by accident.
 func (s *Store) SaveApp(name string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -173,7 +114,6 @@ func (s *Store) SaveApp(name string, now time.Time) error {
 	return err
 }
 
-// GetApp loads one registry row.
 func (s *Store) GetApp(name string) (App, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -192,7 +132,6 @@ func (s *Store) GetApp(name string) (App, bool, error) {
 	}
 }
 
-// ListApps returns every registered app, by name.
 func (s *Store) ListApps() ([]App, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -217,10 +156,6 @@ func (s *Store) ListApps() ([]App, error) {
 	return out, rows.Err()
 }
 
-// DeleteApp removes a registry row and reports whether one was there. Versions,
-// invocations and serving steps are untouched: they are the record of what ran,
-// and an uninstall does not rewrite history. Registering the name again starts a
-// fresh chain — the cursor went with the row, so the old steps are unreachable.
 func (s *Store) DeleteApp(name string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -250,21 +185,8 @@ func (s *Store) DeleteApp(name string) (bool, error) {
 	return n > 0, tx.Commit()
 }
 
-// CommitAppVersion records a built version and points the app at it, in one
-// transaction. It is the whole of what apply changes: everything before it —
-// parse, codegen, typecheck, build — either produced this artifact or failed
-// having changed nothing.
-//
-// A version already recorded for this app under the same content hash is reused
-// rather than duplicated, and the returned row is that existing one. Two
-// consequences worth naming: a dev loop that rebuilds identical output leaves
-// one row, and re-applying an old build is indistinguishable from rolling back
-// to it, which is correct — they are the same artifact.
-//
-// The second return value reports whether this call minted the row. Reuse is a
-// database property here — UNIQUE(app_name, content_hash) — and the caller has
-// no other way to tell an insert from a lookup, so apply can only say "same
-// version as before" honestly if this says so.
+// The bool reports whether this call minted the row: reuse is a database
+// property (UNIQUE(app_name, content_hash)) the caller cannot otherwise see.
 func (s *Store) CommitAppVersion(v AppVersion, now time.Time) (AppVersion, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -336,11 +258,6 @@ func (s *Store) CommitAppVersion(v AppVersion, now time.Time) (AppVersion, bool,
 	return v, created, nil
 }
 
-// SetAppCurrentVersion moves an app onto a version it already has, naming that
-// version — what `attn app rollback <name> <version>` does. It extends the
-// serving chain like an apply does, so the walk starts again from where it lands.
-// It refuses a version belonging to another app rather than leaving one app
-// pointing into another's history.
 func (s *Store) SetAppCurrentVersion(name string, versionID int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -381,15 +298,6 @@ func (s *Store) SetAppCurrentVersion(name string, versionID int64, now time.Time
 	return tx.Commit()
 }
 
-// StepAppVersionBack walks one step down an app's serving chain — what bare
-// `attn app rollback <name>` does — and is the one writer that does not extend
-// it. Walking is a cursor move, so a second bare rollback steps back again
-// rather than returning to where the first started.
-//
-// target is the version the caller resolved from App.PreviousServingVersionID
-// and reported to the user; the move refuses unless the step below still carries
-// it, so a chain that moved between the two calls cannot land the app somewhere
-// nobody was told about.
 func (s *Store) StepAppVersionBack(name string, target int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -437,19 +345,6 @@ func (s *Store) StepAppVersionBack(name string, target int64, now time.Time) err
 	return tx.Commit()
 }
 
-// ListAppServingHistory returns the versions on an app's serving history,
-// currently-serving first and each next one a bare rollback away, up to limit
-// steps. It is how `attn app status` answers the question the walk otherwise
-// only answers by being run: is there another step, and where does it land.
-//
-// The versions below the first are not "the older versions" — a version the
-// walk went past is off the history but still in the version list, and still
-// reachable by name.
-//
-// The second return is how many steps the whole history has, so a caller that
-// shows a capped list can say it was cut. The walk itself is followed a step at
-// a time and never reads this, so the whole chain is scanned only when someone
-// asks to look at it.
 func (s *Store) ListAppServingHistory(name string, limit int) ([]int64, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -493,7 +388,6 @@ func (s *Store) ListAppServingHistory(name string, limit int) ([]int64, int, err
 	return out, steps, rows.Err()
 }
 
-// GetAppVersion loads one version row.
 func (s *Store) GetAppVersion(id int64) (AppVersion, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -515,7 +409,6 @@ func (s *Store) GetAppVersion(id int64) (AppVersion, bool, error) {
 	}
 }
 
-// ListAppVersions returns an app's versions, newest first.
 func (s *Store) ListAppVersions(name string) ([]AppVersion, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -543,13 +436,10 @@ func (s *Store) ListAppVersions(name string) ([]AppVersion, error) {
 	return out, rows.Err()
 }
 
-// CountAppVersions reports how many versions an app has, including after its
-// registry row is gone — which is what lets `attn app remove` say what it kept.
 func (s *Store) CountAppVersions(name string) (int, error) {
 	return s.countAppRows(`SELECT COUNT(*) FROM app_versions WHERE app_name = ?`, name)
 }
 
-// CountAppInvocations reports how many invocations an app has recorded.
 func (s *Store) CountAppInvocations(name string) (int, error) {
 	return s.countAppRows(`SELECT COUNT(*) FROM app_invocations WHERE app_name = ?`, name)
 }
@@ -568,9 +458,6 @@ func (s *Store) countAppRows(query, name string) (int, error) {
 	return n, nil
 }
 
-// AppendAppInvocation records one already-settled handler run and returns its
-// id. StartAppInvocation and SettleAppInvocation are the lifecycle seam for a
-// run whose in-flight state must survive a daemon restart.
 func (s *Store) AppendAppInvocation(inv AppInvocation) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -594,9 +481,6 @@ func (s *Store) AppendAppInvocation(inv AppInvocation) (int64, error) {
 	return res.LastInsertId()
 }
 
-// StartAppInvocation writes the running row before dispatch. A reconcile's
-// reason and claim boundary are part of the attempt, so a retry never has to
-// reconstruct them from requests that may have arrived after it started.
 func (s *Store) StartAppInvocation(inv AppInvocation) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -630,9 +514,8 @@ func (s *Store) StartAppInvocation(inv AppInvocation) (int64, error) {
 	return res.LastInsertId()
 }
 
-// SettleAppInvocation closes one running row. The status predicate makes a
-// daemon-shutdown settlement and startup interruption repair safe to race: one
-// wins, and the terminal answer cannot be rewritten by the loser.
+// The status predicate makes a daemon-shutdown settlement and a startup
+// interruption repair safe to race: the terminal answer cannot be rewritten.
 func (s *Store) SettleAppInvocation(id int64, status, failure string, finishedAt time.Time) (bool, error) {
 	if !terminalAppInvocationStatus(status) {
 		return false, fmt.Errorf("store: %q is not a terminal app invocation status", status)
@@ -670,9 +553,6 @@ func (s *Store) SettleAppInvocation(id int64, status, failure string, finishedAt
 	return n > 0, err
 }
 
-// InterruptRunningAppInvocations repairs attempts a previous daemon could not
-// close. Their reconcile request and cursor are untouched, so an enabled lane
-// still owes the same work after startup.
 func (s *Store) InterruptRunningAppInvocations(now time.Time) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -727,10 +607,6 @@ func (s *Store) InterruptRunningAppInvocations(now time.Time) (int, error) {
 	return len(running), nil
 }
 
-// LatestOwedAppReconcileInvocation returns the newest attempt whose claim is
-// still above the completed request boundary. It is the durable retry identity
-// after a failure or restart. An ok attempt remains visible here if completing
-// its request/cursor transaction failed, so the boundary is never lost.
 func (s *Store) LatestOwedAppReconcileInvocation(name string) (AppInvocation, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -757,7 +633,6 @@ func (s *Store) LatestOwedAppReconcileInvocation(name string) (AppInvocation, bo
 	return inv, true, nil
 }
 
-// ListAppInvocations returns an app's most recent invocations, newest first.
 func (s *Store) ListAppInvocations(name string, limit int) ([]AppInvocation, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -790,23 +665,8 @@ func (s *Store) ListAppInvocations(name string, limit int) ([]AppInvocation, err
 	return out, rows.Err()
 }
 
-// TrimAppInvocations drops invocations that started before cutoff, then drops
-// everything past the newest perApp rows of each app. It reports how many went.
-//
-// Two limits because they answer two different questions. The age window is when
-// a row stops being useful: an invocation whose event has aged off the durable
-// log cannot be re-examined against it. The per-app cap is how large the log is
-// allowed to get, which the age window cannot bound — how many rows thirty days
-// holds depends entirely on how loud the app's subscription is, and the loudest
-// one in attn is three orders of magnitude above the quietest. Both values and
-// their receipts live with the caller (internal/daemon, AppInvocationRetention
-// and AppInvocationsPerApp) — the store keeps no policy. A perApp of zero or
-// less skips the cap.
-//
-// Both sweeps run across every app in one statement rather than per app:
-// retention is a property of the table, and a sweep that walked the registry
-// would miss the rows of an app that has been removed, which are exactly the ones
-// nothing will ever read again.
+// The age window cannot bound the log's size, so both limits exist; their values and receipts
+// live with the caller (AppInvocationRetention, AppInvocationsPerApp).
 func (s *Store) TrimAppInvocations(cutoff time.Time, perApp int) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

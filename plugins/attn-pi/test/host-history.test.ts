@@ -14,17 +14,6 @@ import {
   type SnapshotItem,
 } from "../host/envelope";
 
-/**
- * Slice 5: history and depth.
- *
- * Three things are tested here. Paging is the sharp one — a snapshot is
- * broadcast and a client may already be showing scroll-back, so the window a
- * snapshot carries and the pages behind it have to describe themselves well
- * enough that a client never loses what it has. The notices are what makes a
- * compaction or a retry visible instead of a thirty-second silence. And the
- * verbs are the daemon's half of both.
- */
-
 function harness() {
   const emitted: Envelope[] = [];
   const stream = new EnvelopeStream("attn-session-1", (envelope) => emitted.push(envelope));
@@ -69,8 +58,6 @@ describe("scroll-back paging", () => {
 
     const second = store.page("message:m2");
     expect(ids(second.items)).toEqual(["m1"]);
-    // Nothing older than m1 exists, so a client that draws this page knows it
-    // has the whole conversation and stops asking.
     expect(second.has_more).toBe(false);
   });
 
@@ -161,10 +148,8 @@ describe("compaction and retry notices", () => {
     expect(emitted[1]!.body).toEqual({ id: "n1", level: "error", text: "Gave up after 5 retry attempt(s): still overloaded", done: true });
   });
 
-  // The bug this exists for, caught live on 2026-08-09: a model the provider
-  // had retired answered 404, pi persisted an empty assistant message with
-  // `stopReason: "error"`, and the pane showed nothing at all — the composer
-  // simply reopened as if the agent had chosen not to reply.
+  // Caught live 2026-08-09: a retired model answered 404, pi persisted an empty
+  // assistant message with `stopReason: "error"`, and the pane showed nothing.
   test("a turn the provider refused says so instead of settling in silence", () => {
     const { emitted, mapper } = harness();
     const message = {
@@ -185,8 +170,6 @@ describe("compaction and retry notices", () => {
     expect(emitted[0]!.body).toEqual({
       id: "n1",
       level: "error",
-      // The provider's sentence, dug out of two layers of JSON envelope and
-      // flattened to the one line the row is.
       text: "The agent could not answer: This model models/gemini-2.0-flash is no longer available.",
       done: true,
     });
@@ -258,11 +241,8 @@ describe("history off disk", () => {
     expect(items[1]).toEqual({ kind: "notice", id: "h:e1", level: "info", text: "Model switched to openai/gpt-5.6-luna", done: true });
   });
 
-  // Measured on a real fresh conversation (2026-08-09, pi 0.83.0): pi writes a
-  // model_change and a thinking_level_change into the session file before
-  // anything is said. Drawing those is a conversation claiming it switched
-  // models before it existed — and, because the row is not an assistant
-  // message, it also made every new session declare `waiting_input`.
+  // Measured (2026-08-09, pi 0.83.0): pi writes a model_change and a
+  // thinking_level_change into the session file before anything is said.
   test("the model a session opened on is not a switch", () => {
     const { items } = reconstructTranscript([
       { type: "model_change", id: "e1", provider: "openai", modelId: "gpt-5.6-luna" },
@@ -272,9 +252,6 @@ describe("history off disk", () => {
     expect(conversationInterrupted(items)).toBe(false);
   });
 
-  // A conversation reopened after a provider error must not show the prompt
-  // and then nothing — that reads as the agent having ignored it. The turn is
-  // also still owed, so the session comes back waiting rather than idle.
   test("a turn the provider refused is still explained after a reopen", () => {
     const { items } = reconstructTranscript([
       { type: "message", id: "e1", message: { role: "user", content: [{ type: "text", text: "do it" }] } },
@@ -298,8 +275,6 @@ describe("history off disk", () => {
     expect(items.filter((item) => item.kind === "notice")).toEqual([]);
   });
 
-  // A switch is something that happened TO the conversation. The agent still
-  // had the last word, so the session is idle rather than waiting for one.
   test("a model switched after the agent finished does not read as interrupted", () => {
     const { items } = reconstructTranscript([
       { type: "message", id: "e0", message: { role: "user", content: [{ type: "text", text: "hello" }] } },
@@ -333,18 +308,7 @@ describe("the slice-5 verbs", () => {
   });
 });
 
-/**
- * Retention: the tripwire, not the window.
- *
- * `TRANSCRIPT_RETENTION_*` bounds what the host HOLDS, and a conversation that
- * reaches it has been talking for weeks — 50,000 items is 4.4x the longest
- * conversation anyone on this machine has ever had. Nothing real has ever
- * reached it, which is exactly why the path deserves to be driven here: what it
- * drops is gone for good, and every question a client can still ask has to have
- * an honest answer afterwards.
- */
 describe("retention", () => {
-  /** A store whose retention tripwire is small enough to reach. */
   function retained(count: number, items = 5, bytes = 1 << 20): TranscriptStore {
     const store = new TranscriptStore("epoch-1", 3, 1 << 20, items, bytes);
     for (let index = 1; index <= count; index += 1) {
@@ -357,25 +321,17 @@ describe("retention", () => {
     const store = retained(12);
     expect(store.size).toBe(5);
     expect(store.droppedItems).toBe(7);
-    // The window is applied on the way out and is smaller still.
     expect(ids(store.snapshot().items)).toEqual(["m10", "m11", "m12"]);
   });
 
   test("a snapshot still counts what it no longer holds", () => {
-    // `total` is the conversation's length, not the host's inventory. A client
-    // that is shown 3 of 12 deserves to know the other 9 existed, even for the
-    // ones nobody can serve any more.
     const snapshot = retained(12).snapshot();
     expect(snapshot.total).toBe(12);
     expect(snapshot.truncated).toBe(true);
-    // Two different questions: `has_more` is "can I page for more", which is
-    // false once the window covers everything the host still holds.
     expect(snapshot.has_more).toBe(true);
   });
 
   test("a window covering everything left still reports the conversation as truncated", () => {
-    // Retention has cut the transcript down to inside the window. Nothing can
-    // be paged, and the client is nonetheless showing a fragment.
     const store = new TranscriptStore("epoch-1", 10, 1 << 20, 3, 1 << 20);
     for (let index = 1; index <= 9; index += 1) {
       store.apply("message_end", { id: `m${index}`, role: "assistant", text: `line ${index}` });
@@ -388,9 +344,6 @@ describe("retention", () => {
   });
 
   test("paging past what retention dropped answers with nothing rather than an error", () => {
-    // The zombie edge: a client holding scroll-back the host has since evicted
-    // asks for the page before it. There is no page. The answer has to be an
-    // empty one addressed to that anchor, so the asking client can stop.
     const store = retained(12);
     const page = store.page("message:m2");
     expect(page.before).toBe("message:m2");
@@ -407,8 +360,6 @@ describe("retention", () => {
   });
 
   test("bytes are given back when an item is dropped", () => {
-    // The byte budget is a running total, so a drop that forgot to subtract
-    // would ratchet the store into evicting on every push forever.
     const store = new TranscriptStore("epoch-1", 3, 1 << 20, 4, 1 << 20);
     for (let index = 1; index <= 40; index += 1) {
       store.apply("message_end", { id: `m${index}`, role: "assistant", text: `line ${index}` });
@@ -416,7 +367,6 @@ describe("retention", () => {
     expect(store.size).toBe(4);
     const held = store.snapshot().items;
     expect(ids(held)).toEqual(["m38", "m39", "m40"]);
-    // Four items of "line NN" plus their ids: tens of bytes, not thousands.
     expect(store.retainedBytes).toBeLessThan(200);
     expect(store.retainedBytes).toBeGreaterThan(0);
   });
@@ -432,8 +382,6 @@ describe("retention", () => {
   });
 
   test("one item larger than the whole budget is kept rather than leaving nothing", () => {
-    // Same bargain the window makes for the newest item: a transcript that
-    // evicted its way to empty would show a live conversation as blank.
     const store = new TranscriptStore("epoch-1", 3, 1 << 20, 10_000, 100);
     store.apply("message_end", { id: "m1", role: "assistant", text: "x".repeat(5_000) });
     expect(store.size).toBe(1);
@@ -450,12 +398,6 @@ describe("retention", () => {
   });
 
   test("a message still streaming survives eviction even once it is not the newest", () => {
-    // The shape that makes this reachable: pi opens a tool while the message is
-    // still being written, so the open message is no longer last and the byte
-    // tripwire reaches it. Evicting it there does not just lose the paragraph —
-    // the next delta finds no open message, mints a fresh one from the tail
-    // alone, and the sentence reappears truncated BELOW the tool it was written
-    // above.
     const store = new TranscriptStore("epoch-1", 10, 1 << 20, 10_000, 400);
     store.apply("message_start", { id: "m1", role: "assistant" });
     store.apply("tool_started", { call_id: "c1", name: "bash", summary: "ls" });
@@ -469,8 +411,6 @@ describe("retention", () => {
   });
 
   test("what a still-streaming message held is dropped once it ends", () => {
-    // The reprieve is for the writing, not forever: the budget is enforced again
-    // as soon as the message settles.
     const store = new TranscriptStore("epoch-1", 10, 1 << 20, 10_000, 400);
     store.apply("message_start", { id: "m1", role: "assistant" });
     store.apply("tool_started", { call_id: "c1", name: "bash", summary: "ls" });
@@ -484,26 +424,17 @@ describe("retention", () => {
   });
 
   test("a snapshot says how much is gone for good, and paging never lowers it", () => {
-    // `truncated` only means "this message does not carry everything" and goes
-    // false as a client pages back. `dropped` is the fact that outlives paging,
-    // and it is what tells the app the conversation starts above anything it can
-    // still be shown.
     const store = retained(12);
     expect(store.snapshot().dropped).toBe(7);
     const fresh = new TranscriptStore("epoch-1", 3, 1 << 20);
     for (let index = 1; index <= 12; index += 1) {
       fresh.apply("message_end", { id: `m${index}`, role: "assistant", text: `line ${index}` });
     }
-    // Same conversation, retention never reached: nothing is gone.
     expect(fresh.snapshot().dropped).toBe(0);
     expect(fresh.snapshot().truncated).toBe(true);
   });
 
   test("a message still streaming is not evicted out from under its own deltas", () => {
-    // message_delta finds the open message by id and appends. If retention drops
-    // that message mid-stream, the next delta has nothing to append to and mints
-    // a second message carrying only the tail — the agent's sentence arrives
-    // split in two, under two ids.
     const store = new TranscriptStore("epoch-1", 10, 1 << 20, 10_000, 400);
     store.apply("message_start", { id: "m1", role: "assistant" });
     for (let index = 0; index < 40; index += 1) {
@@ -517,7 +448,6 @@ describe("retention", () => {
 });
 
 describe("retention budget from the environment", () => {
-  /** Reads a budget, keeping whatever it complained about. */
   function budget(raw: string, fallback = 50_000): { value: number; warnings: string[] } {
     const warnings: string[] = [];
     const value = retentionBudget("ATTN_NISSE_RETENTION_ITEMS", raw, fallback, (message) =>

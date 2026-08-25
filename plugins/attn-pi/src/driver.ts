@@ -33,11 +33,6 @@ type Availability =
   | { ok: true; executable: string; version: string }
   | { ok: false; message: string };
 
-// One run = one live pi process launched by this driver. `token` is what the
-// pi-side suite presents to name its run, handed over via env; it IS the run id,
-// so a replacement driver process can rebuild this map from what attn hands back
-// at driver.register. `seq` is the per-run monotonic cursor for session.report_*
-// calls, adopted from attn on recovery and advanced here from then on.
 type RunState = {
   token: string;
   sessionID: string;
@@ -51,13 +46,8 @@ type RunState = {
 
 const deliverMessageTimeoutMs = 10_000;
 
-// How long a run may go without a suite connected before this driver withdraws
-// its declaration. A tripwire, not a deadline: a live pi re-dials within a
-// second of the socket appearing, and the suite's own reconnect backoff is
-// capped at 30s (suite/core.ts), so nothing healthy is anywhere near this. What
-// it catches is a pi that outlived its suite — the extension crashed, or a run
-// adopted from attn whose session is long gone from pi's side — where the
-// alternative is attn showing a state nobody has refreshed since.
+// A tripwire, not a deadline: a live pi re-dials within a second of the socket
+// appearing and the suite's reconnect backoff caps at 30s (suite/core.ts).
 const unbackedRunGraceMs = 120_000;
 
 const defaultRunCommand: RunCommand = async (argv) => {
@@ -115,10 +105,8 @@ export class PiDriver {
       },
     });
     if (!result.ok) throw new Error("attn rejected pi driver registration");
-    // Runs outlive this process: their pi lives in a daemon-owned PTY and keeps
-    // reporting over the relay. Adopting before listen() means the socket only
-    // opens once every inherited token is known, so a suite that re-dials the
-    // instant the path appears is never told its token is unknown.
+    // Adopt before listen(): the socket opens only once every inherited token is
+    // known, so a suite re-dialing the instant the path appears is never refused.
     this.adoptActiveRuns(result.active_runs ?? []);
     await this.relay.listen();
   }
@@ -185,7 +173,6 @@ export class PiDriver {
     return { ok: true };
   }
 
-  // Delegate methods invoked by RelayServer when the pi-side suite calls in.
 
   async suiteHello(connection: RelayConnection, rawParams: unknown): Promise<RelayHelloResult> {
     const params = parseRelayHello(rawParams);
@@ -193,35 +180,26 @@ export class PiDriver {
     run.connection = connection;
     this.markBacked(run);
     if (params.dropped_reports !== undefined) {
-      // The only place a swallowed report is ever heard from. The suite counts
-      // them while it cannot reach anyone and hands the count over here.
       console.error(
         `attn-pi: session ${run.sessionID} could not deliver ${params.dropped_reports} state report(s) while the relay was down`,
       );
     }
     connection.onClose(() => {
-      if (run.connection !== connection) return; // already replaced by a newer dial
+      if (run.connection !== connection) return;
       run.connection = undefined;
       console.error(
         `attn-pi: relay connection for session ${run.sessionID} closed; nothing declares its state until a suite dials back`,
       );
       this.markUnbacked(run, "the pi suite disconnected");
     });
-    // Keep model/thinking pins; the suite is only authoritative for pi's own
-    // native session id and version, which change across resume/fork/new.
     run.metadata = { ...run.metadata, pi_session_id: params.pi_session_id, pi_version: params.pi_version };
     await this.reportMetadata(run);
     if (params.pi_state !== undefined) await this.restateAfterUnknown(run, params.pi_state);
     return { ok: true };
   }
 
-  /**
-   * Hands attn what pi says it is, for attn to use only if it currently says
-   * `unknown` — the daemon, or this driver, having admitted it could not tell.
-   * A hello is news about the channel, not about the agent: declaring it would
-   * restart the clock on a session that has been idle for hours and re-open a
-   * turn the user already settled.
-   */
+  /** Hands attn what pi says it is, to use only while attn says `unknown`: a hello
+   * is news about the channel, and declaring it would re-open a settled turn. */
   private async restateAfterUnknown(run: RunState, state: RelayHelloState): Promise<void> {
     try {
       await this.rpc.request("session.report_state", {
@@ -251,17 +229,9 @@ export class PiDriver {
     const params = parseRelayReportStop(rawParams);
     const run = this.requireRunByToken(params.token);
     const text = params.assistant_text.trim();
-    // Reserve this report's slot in the per-run cursor BEFORE awaiting
-    // classification: a message delivered mid-classification can start a new
-    // turn whose "working" report must outrank this stop. With the seq taken
-    // up front, the daemon's strictly-increasing cursor discards the stale
-    // verdict instead of letting it overwrite live activity.
+    // Reserve the seq BEFORE awaiting classification: a message delivered mid-
+    // classification starts a turn whose report must outrank this stop.
     const seq = this.nextSeq(run);
-    // Two ways to know the answer without asking. Empty text means the agent
-    // settled without saying anything, so there is nothing to await a response
-    // to; `aborted` means the user took the turn back, and they are hardly
-    // waiting on the half-written paragraph they interrupted. Either way, skip
-    // the (up to ~30s) classifier call.
     const verdict = text === "" || params.aborted ? "idle" : await this.classifyStop(run, text);
     await this.rpc.request("session.report_stop", {
       session_id: run.sessionID,
@@ -271,8 +241,6 @@ export class PiDriver {
     });
   }
 
-  // A denial is an append, not a state report: it carries no seq, because
-  // nothing about it can be overtaken by a later report of the same session.
   async suiteReportDenial(rawParams: unknown): Promise<void> {
     const params = parseRelayReportDenial(rawParams);
     const run = this.requireRunByToken(params.token);
@@ -298,7 +266,6 @@ export class PiDriver {
     });
   }
 
-  // Called for the daemon's driver.deliver_message request.
   async deliverMessage(rawParams: unknown): Promise<{ ok: boolean }> {
     const params = parseDeliverMessageParams(rawParams);
     const run = this.runsBySessionID.get(params.session_id);
@@ -330,22 +297,12 @@ export class PiDriver {
     const run: RunState = { token: runID, sessionID, runID, seq: 0, metadata };
     this.runsByToken.set(run.token, run);
     this.runsBySessionID.set(sessionID, run);
-    // Armed from the launch: a pi that starts without the suite loading — a
-    // staging bug, a pi that refused the extension — would otherwise sit in
-    // whatever state attn last recorded, forever.
     this.markUnbacked(run, "the pi suite has not connected since this run was launched");
     return run;
   }
 
-  /**
-   * Rebuilds this driver's run state from the runs attn reports still live.
-   * Called once per registration, which is once per runtime process.
-   *
-   * This plugin registers two agents and attn scopes active runs to the plugin,
-   * so nisse's runs arrive here too. pi metadata is the discriminator, and it is
-   * the same value this driver needs anyway: a run whose metadata is not pi's is
-   * not this driver's to adopt.
-   */
+  /** Rebuilds this driver's run state from the runs attn reports still live. This
+   * plugin registers two agents, so pi metadata is the discriminator. */
   private adoptActiveRuns(runs: ActivePluginRun[]): void {
     for (const run of runs) {
       let metadata: PiMetadata;
@@ -356,10 +313,6 @@ export class PiDriver {
       }
       const seq = run.seq;
       if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 0) {
-        // Nothing this driver could report would survive: attn discards a report
-        // that does not advance the run's cursor, and without the cursor every
-        // seq this process picks is a guess. Declining loudly beats reporting
-        // into a void, which is the failure this recovery path exists to end.
         console.error(
           `attn-pi: not adopting run ${run.run_id} for session ${run.session_id}: driver.register carried no report cursor, so this session's state will not move until it is relaunched`,
         );
@@ -378,19 +331,15 @@ export class PiDriver {
     }
   }
 
-  /**
-   * Starts the grace for a run nothing is declaring state for. When it expires
-   * the driver says `unknown` — the honest answer, and the one attn treats as
-   * wanting the user, rather than leaving a stale declaration standing.
-   */
+  /** Starts the grace for a run nothing is declaring state for. On expiry the driver
+   * says `unknown` rather than leaving a stale declaration standing. */
   private markUnbacked(run: RunState, why: string): void {
     this.markBacked(run);
     const timer = setTimeout(() => {
       run.unbacked = undefined;
       void this.declareUnbacked(run, why);
     }, this.unbackedGraceMs);
-    // Never a reason for this process to stay alive: the runtime exits with its
-    // daemon connection, and a pending alarm must not hold that up.
+    // A pending alarm must not hold up the runtime's exit with its daemon connection.
     timer.unref?.();
     run.unbacked = timer;
   }
@@ -413,8 +362,6 @@ export class PiDriver {
         state: "unknown",
       });
     } catch (error) {
-      // attn is unreachable too, which its own silence watch will notice. One
-      // line so the two halves read together in the log.
       console.error(`attn-pi: could not report unknown for session ${run.sessionID}: ${String(error)}`);
     }
   }
@@ -437,18 +384,12 @@ export class PiDriver {
     return this.suitePath;
   }
 
-  // The auto-mode config travels in the environment rather than argv: prose
-  // entries are multi-line text, and argv is world-readable. The JSON is exactly
-  // what automode/config.ts's loadAutoModeConfig parses, so the session side
-  // reads it without translating. Absent when attn sent none.
+  // The auto-mode config travels in the environment, not argv: argv is
+  // world-readable and prose entries are multi-line.
   private envFor(token: string, autoMode: unknown, sessionID: string): Record<string, string> {
     const env: Record<string, string> = { ATTN_PI_SUITE_SOCKET: this.relay.socketPath, ATTN_PI_TOKEN: token };
     if (autoMode !== undefined && autoMode !== null) {
       env.ATTN_PI_AUTOMODE_CONFIG = JSON.stringify(autoMode);
-      // Where auto mode writes its durable denial record. The daemon names the
-      // file so it sits in the profile's own data dir, beside the daemon that
-      // reads it back — including on a remote host, where the driver runs next
-      // to the remote daemon rather than next to the user.
       const ledger = process.env.ATTN_AUTOMODE_DENIAL_LOG?.trim();
       if (ledger) env.ATTN_PI_AUTOMODE_DENIAL_LOG = ledger;
       env.ATTN_PI_SESSION_ID = sessionID;
@@ -541,8 +482,8 @@ function parseRelayHello(value: unknown): RelayHelloParams {
     pi_session_id: piSessionID.trim(),
     pi_version: piVersion.trim(),
     reason,
-    // A suite too old to send it says nothing, which is not the same as zero;
-    // both read as "no complaint" here, and only a positive count is reported.
+    // A suite too old to send it says nothing, which is not the same as zero.
+    // Only a positive count is reported.
     dropped_reports: typeof dropped === "number" && Number.isFinite(dropped) && dropped > 0 ? dropped : undefined,
     pi_state: piState,
   };

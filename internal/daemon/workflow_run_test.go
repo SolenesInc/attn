@@ -11,9 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// newWorkflowTestDaemon builds a hermetic daemon: an in-memory store and no
-// wsHub. Workflow methods lazy-init their maps and guard the nil wsHub, so this
-// bare construction exercises the production code paths without a live socket.
+// Workflow methods lazy-init their maps and guard the nil wsHub, so this bare
+// construction exercises the production paths with no live socket.
 func newWorkflowTestDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	return &Daemon{store: store.New()}
@@ -50,9 +49,6 @@ func sampleWorkflowCall(runID, ordinal string, status protocol.WorkflowAgentCall
 	}
 }
 
-// upsertOverPipe drives handleWorkflowRunUpsert across an in-memory pipe and
-// returns the decoded action result, mirroring the daemon's socket dispatch so the
-// test exercises the real handler (guard + persist + reply), not just the core.
 func upsertOverPipe(t *testing.T, d *Daemon, run *protocol.WorkflowRun) *protocol.WorkflowActionResultMessage {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()
@@ -74,20 +70,16 @@ func upsertOverPipe(t *testing.T, d *Daemon, run *protocol.WorkflowRun) *protoco
 func TestGuardWorkflowRunStartEnforcesWorkflowsEnabled(t *testing.T) {
 	d := newWorkflowTestDaemon(t)
 
-	// Default (unset) is disabled: a running-status start is refused.
 	if err := d.guardWorkflowRunStart(sampleWorkflowRun("run-1")); err == nil {
 		t.Fatal("expected start to be refused when workflows are disabled")
 	}
 
-	// A terminal-status upsert is never a start, so it passes even while disabled —
-	// an in-flight run must record its result after the switch flips off.
 	finished := sampleWorkflowRun("run-1")
 	finished.Status = protocol.WorkflowRunStatusCompleted
 	if err := d.guardWorkflowRunStart(finished); err != nil {
 		t.Fatalf("terminal upsert should never be gated: %v", err)
 	}
 
-	// Enabling the switch lets a start through.
 	d.store.SetSetting(SettingWorkflowsEnabled, "true")
 	if err := d.guardWorkflowRunStart(sampleWorkflowRun("run-1")); err != nil {
 		t.Fatalf("expected start to be allowed when workflows are enabled: %v", err)
@@ -97,8 +89,6 @@ func TestGuardWorkflowRunStartEnforcesWorkflowsEnabled(t *testing.T) {
 func TestHandleWorkflowRunUpsertRefusesStartWhenWorkflowsDisabled(t *testing.T) {
 	d := newWorkflowTestDaemon(t)
 
-	// Workflows disabled (default): the socket handler rejects the start, returns an
-	// error to the client, and persists nothing.
 	resp := upsertOverPipe(t, d, sampleWorkflowRun("run-1"))
 	if resp.Success {
 		t.Fatal("expected upsert to fail when workflows are disabled")
@@ -112,7 +102,6 @@ func TestHandleWorkflowRunUpsertRefusesStartWhenWorkflowsDisabled(t *testing.T) 
 		t.Fatal("refused run must not be persisted")
 	}
 
-	// Enable workflows: the same start now succeeds and persists.
 	d.store.SetSetting(SettingWorkflowsEnabled, "true")
 	resp = upsertOverPipe(t, d, sampleWorkflowRun("run-1"))
 	if !resp.Success {
@@ -142,7 +131,6 @@ func TestWorkflowRunUpsertHydratesRoundTrip(t *testing.T) {
 		t.Fatal("expected hydrated run, got nil")
 	}
 
-	// Re-fetch independently to prove persistence (not just the returned value).
 	got, err := d.getWorkflowRunHydrated("run-1")
 	if err != nil {
 		t.Fatalf("getWorkflowRunHydrated: %v", err)
@@ -187,13 +175,11 @@ func TestWorkflowCallUpsertConflictUpdatesInPlace(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 
-	// Append a call.
 	call := sampleWorkflowCall("run-1", "0", protocol.WorkflowAgentCallStatusRunning)
 	if _, err := d.applyWorkflowCallUpsert("run-1", &call); err != nil {
 		t.Fatalf("first call upsert: %v", err)
 	}
 
-	// Upsert the SAME (run_id, ordinal): must update in place, not append.
 	call.Status = protocol.WorkflowAgentCallStatusOk
 	call.CompletedAt = protocol.Ptr("2026-06-14T10:05:00Z")
 	run, err := d.applyWorkflowCallUpsert("run-1", &call)
@@ -211,7 +197,6 @@ func TestWorkflowCallUpsertConflictUpdatesInPlace(t *testing.T) {
 		t.Errorf("CompletedAt not updated: %q", protocol.Deref(run.AgentCalls[0].CompletedAt))
 	}
 
-	// A fresh ordinal appends.
 	call2 := sampleWorkflowCall("run-1", "1", protocol.WorkflowAgentCallStatusRunning)
 	run, err = d.applyWorkflowCallUpsert("run-1", &call2)
 	if err != nil {
@@ -261,7 +246,6 @@ func TestWorkflowRunListFiltersBySessionNewestFirst(t *testing.T) {
 	}
 }
 
-// fakeWorkflowEngineSink records control frames relayed to the engine.
 type fakeWorkflowEngineSink struct {
 	mu      sync.Mutex
 	frames  []interface{}
@@ -305,7 +289,6 @@ func TestWorkflowRunCancelRelaysAndPersists(t *testing.T) {
 		t.Error("CompletedAt not set on cancel")
 	}
 
-	// Persistence: re-fetch shows canceled.
 	got, err := d.getWorkflowRunHydrated("run-1")
 	if err != nil {
 		t.Fatalf("refetch: %v", err)
@@ -314,7 +297,6 @@ func TestWorkflowRunCancelRelaysAndPersists(t *testing.T) {
 		t.Errorf("persisted status = %q, want canceled", got.Status)
 	}
 
-	// The fake received exactly one cancel control frame for this run.
 	frames := sink.received()
 	if len(frames) != 1 {
 		t.Fatalf("relayed frames = %d, want 1", len(frames))
@@ -364,7 +346,6 @@ func TestWorkflowBroadcastCoalescesPerRun(t *testing.T) {
 		t.Fatalf("seed run: %v", err)
 	}
 
-	// Ten rapid dirties for one run should collapse into ONE broadcast.
 	for i := 0; i < 10; i++ {
 		d.markWorkflowRunDirty("run-1")
 	}
@@ -380,7 +361,6 @@ func TestWorkflowBroadcastCoalescesPerRun(t *testing.T) {
 	if got[0].Event != protocol.EventWorkflowRunUpdated {
 		t.Errorf("event = %q, want %q", got[0].Event, protocol.EventWorkflowRunUpdated)
 	}
-	// The broadcast carries the FULL hydrated run, including its calls.
 	if got[0].Run.RunID != "run-1" {
 		t.Errorf("broadcast run id = %q, want run-1", got[0].Run.RunID)
 	}
@@ -418,14 +398,10 @@ func TestWorkflowBroadcastFlushesEachDirtyRunOnce(t *testing.T) {
 	}
 }
 
-// fakeWorkflowSink is a no-op engine sink for registry-lifecycle tests.
 type fakeWorkflowSink struct{}
 
 func (fakeWorkflowSink) sendWorkflowControl(interface{}) error { return nil }
 
-// TestWorkflowEngineSinkUnregisteredAtTerminalBoundary proves the engine-sink
-// registry is bounded: both a terminal upsert (engine finished) and a cancel drop
-// the run's sink, so the workflowEngineConn map does not grow for the daemon's life.
 func TestWorkflowEngineSinkUnregisteredAtTerminalBoundary(t *testing.T) {
 	registered := func(d *Daemon, runID string) bool {
 		d.workflowEngineMu.Lock()
@@ -479,7 +455,6 @@ func TestWorkflowEngineSinkUnregisteredAtTerminalBoundary(t *testing.T) {
 		}
 		d.registerWorkflowEngine(runID, fakeWorkflowSink{})
 
-		// A non-terminal (progress) upsert must NOT drop the sink mid-run.
 		if _, err := d.applyWorkflowRunUpsert(sampleWorkflowRun(runID)); err != nil {
 			t.Fatalf("progress upsert: %v", err)
 		}

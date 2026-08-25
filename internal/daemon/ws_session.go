@@ -50,9 +50,6 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		d.publishSessionUnregistered(session)
 		d.dissociateSessionFromWorkspace(session.ID)
 		d.removeWorkspaceLayoutPaneForSession(session.ID)
-		// Closing a session from the app terminates it, which is why this path
-		// also refreshes the list; the socket `unregister` command deregisters
-		// without killing and has never re-pushed.
 		d.publishFact(FactSessionTerminated, session.ID, nil)
 	}
 }
@@ -75,9 +72,6 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 	})
 }
 
-// handleRecentFilesWS answers the file opener's request for recently touched
-// files, frecency-ranked. Local filesystem only: the opener does not browse
-// remote endpoints, so there is no endpoint routing here.
 func (d *Daemon) handleRecentFilesWS(client *wsClient, msg *protocol.RecentFilesMessage) {
 	limit := 20
 	if msg.Limit != nil {
@@ -123,8 +117,6 @@ func (d *Daemon) clearAllSessions() {
 		}
 		d.store.ClearSessions()
 		d.clearChiefOfStaffIfSession(d.chiefOfStaffSessionID())
-		// One fact per session, one list push: clearing twenty sessions has
-		// always been a single message and stays one.
 		for sessionID := range sessionIDs {
 			d.publishFact(FactSessionTerminated, sessionID, nil)
 		}

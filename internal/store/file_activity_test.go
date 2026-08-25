@@ -16,7 +16,6 @@ func newFileActivityStore(t *testing.T) *Store {
 	return s
 }
 
-// seedFileActivity writes a row directly so tests control last_at.
 func seedFileActivity(t *testing.T, s *Store, path, source, lastAt string, count int) {
 	t.Helper()
 	_, err := s.db.Exec(
@@ -41,8 +40,6 @@ func TestRecordFileActivityAccumulatesCount(t *testing.T) {
 	if files[0].Count != 2 {
 		t.Errorf("count = %d, want 2", files[0].Count)
 	}
-	// The latest opener wins, so "which session was this for" tracks the most
-	// recent open rather than the first one.
 	if files[0].SessionID == nil || *files[0].SessionID != "session-2" {
 		t.Errorf("session_id = %v, want session-2", files[0].SessionID)
 	}
@@ -51,9 +48,6 @@ func TestRecordFileActivityAccumulatesCount(t *testing.T) {
 func TestGetRecentFilesMergesSourcesIntoOneEntry(t *testing.T) {
 	s := newFileActivityStore(t)
 
-	// The table keys on (path, source) so the two signals accumulate
-	// independently, but the opener shows one row per file: counts add and the
-	// most recent source names the entry.
 	now := time.Now()
 	seedFileActivity(t, s, "/docs/plan.md", FileActivitySourceOpened, now.Add(-time.Hour).Format(time.RFC3339), 1)
 	seedFileActivity(t, s, "/docs/plan.md", FileActivitySourceEdited, now.Format(time.RFC3339), 1)
@@ -74,9 +68,6 @@ func TestGetRecentFilesSurfacesAFileOnlyAnAgentTouched(t *testing.T) {
 	s := newFileActivityStore(t)
 	now := time.Now()
 
-	// The case the signal exists for: the plan an agent just wrote is offered
-	// even though nobody has opened it. An open of the same age still outranks
-	// it, since the user picking a file is the stronger signal.
 	seedFileActivity(t, s, "/docs/agent-wrote.md", FileActivitySourceEdited, now.Format(time.RFC3339), 1)
 	seedFileActivity(t, s, "/docs/user-opened.md", FileActivitySourceOpened, now.Format(time.RFC3339), 1)
 
@@ -93,12 +84,8 @@ func TestGetRecentFilesPrefersTheCallersWorkspace(t *testing.T) {
 	s := newFileActivityStore(t)
 	now := time.Now()
 
-	// Same score on both sides, so only the workspace bonus can decide. The
-	// stranger stays in the list — the workspace ranks, it does not filter.
 	seedFileActivity(t, s, "/repo/docs/here.md", FileActivitySourceOpened, now.Format(time.RFC3339), 1)
 	seedFileActivity(t, s, "/elsewhere/there.md", FileActivitySourceOpened, now.Format(time.RFC3339), 1)
-	// A sibling directory whose name merely starts with the root must not count
-	// as inside it.
 	seedFileActivity(t, s, "/repo-other/near.md", FileActivitySourceOpened, now.Format(time.RFC3339), 1)
 
 	files := s.GetRecentFiles(10, "/repo")
@@ -113,9 +100,9 @@ func TestGetRecentFilesPrefersTheCallersWorkspace(t *testing.T) {
 func TestGetRecentFilesRanksByFrecency(t *testing.T) {
 	s := newFileActivityStore(t)
 	now := time.Now()
-	frequentOld := "/docs/frequent-old.md" // 10 opens 3 days ago: 10 * 0.5 = 5
-	recentOnce := "/docs/recent-once.md"   // 1 open just now:      1 * 4   = 4
-	staleOnce := "/docs/stale-once.md"     // 1 open a month ago:   1 * 0.25
+	frequentOld := "/docs/frequent-old.md"
+	recentOnce := "/docs/recent-once.md"
+	staleOnce := "/docs/stale-once.md"
 
 	seedFileActivity(t, s, frequentOld, FileActivitySourceOpened, now.Add(-72*time.Hour).Format(time.RFC3339), 10)
 	seedFileActivity(t, s, recentOnce, FileActivitySourceOpened, now.Format(time.RFC3339), 1)
@@ -137,14 +124,11 @@ func TestGetRecentFilesRanksBeforeTruncating(t *testing.T) {
 	s := newFileActivityStore(t)
 	now := time.Now()
 
-	// An old but heavily opened document must beat a burst of fresher one-off
-	// opens, so ranking has to run over the whole table rather than a
-	// recency-truncated prefix of it.
 	seedFileActivity(t, s, "/docs/frequent-old.md", FileActivitySourceOpened,
-		now.Add(-30*24*time.Hour).Format(time.RFC3339), 100) // 100 * 0.25 = 25
+		now.Add(-30*24*time.Hour).Format(time.RFC3339), 100)
 	for i := range 250 {
 		seedFileActivity(t, s, filepath.Join("/docs", "fresh", string(rune('a'+i%26))+string(rune('a'+i/26))+".md"),
-			FileActivitySourceOpened, now.Format(time.RFC3339), 1) // 1 * 4 = 4
+			FileActivitySourceOpened, now.Format(time.RFC3339), 1)
 	}
 
 	files := s.GetRecentFiles(5, "")
@@ -159,8 +143,6 @@ func TestGetRecentFilesRanksBeforeTruncating(t *testing.T) {
 func TestGetRecentFilesDoesNotStatMissingFiles(t *testing.T) {
 	s := newFileActivityStore(t)
 
-	// Recents are listed without touching the disk; a file that has since
-	// disappeared stays in the list until opening it fails.
 	s.RecordFileActivity("/nowhere/gone.md", FileActivitySourceOpened, "")
 	if files := s.GetRecentFiles(10, ""); len(files) != 1 {
 		t.Fatalf("files = %d, want the missing file still listed", len(files))

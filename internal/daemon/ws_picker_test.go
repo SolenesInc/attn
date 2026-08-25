@@ -184,9 +184,6 @@ func TestInspectPickerPathCanonicalizesSymlinkedRepoRoots(t *testing.T) {
 	}
 }
 
-// seedBrowseTree lays out one directory holding a mix of things path mode must
-// distinguish: subdirectories, markdown files, an unrelated file type, git's
-// metadata, and a symlink.
 func seedBrowseTree(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -214,8 +211,6 @@ func entryNames(entries []protocol.DirectoryEntry) []string {
 	return names
 }
 
-// Without an extension filter the listing is directories only — the session
-// picker's long-standing behavior, which path mode must not change.
 func TestListDirectoryEntriesWithoutExtensionsListsDirectoriesOnly(t *testing.T) {
 	root := seedBrowseTree(t)
 
@@ -233,10 +228,6 @@ func TestListDirectoryEntriesWithoutExtensionsListsDirectoriesOnly(t *testing.T)
 	}
 }
 
-// With an extension filter the listing gains matching regular files — and only
-// those: another file type, a symlink (fs_read serves regular files only), and
-// .git stay out, while dot-directories remain visible so a document under
-// ~/.claude is reachable.
 func TestListDirectoryEntriesWithExtensionsAddsMatchingFiles(t *testing.T) {
 	root := seedBrowseTree(t)
 
@@ -244,7 +235,6 @@ func TestListDirectoryEntriesWithExtensionsAddsMatchingFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listDirectoryEntries: %v", err)
 	}
-	// Directories first, then files: "where you can go, then what you can open".
 	if want := []string{".claude", "docs", "plan.md"}; !slicesEqual(entryNames(entries), want) {
 		t.Fatalf("entries = %v, want %v", entryNames(entries), want)
 	}
@@ -256,8 +246,6 @@ func TestListDirectoryEntriesWithExtensionsAddsMatchingFiles(t *testing.T) {
 	}
 }
 
-// The typed last segment filters both groups, and a leading dot reaches a
-// dot-directory rather than being swallowed as a hidden-file rule.
 func TestListDirectoryEntriesFiltersByPrefixAcrossKinds(t *testing.T) {
 	root := seedBrowseTree(t)
 
@@ -278,9 +266,6 @@ func TestListDirectoryEntriesFiltersByPrefixAcrossKinds(t *testing.T) {
 	}
 }
 
-// Asking for files is gated on the authenticated app client: directory names
-// leak tree shape, file names leak the user's documents. An untrusted client
-// gets an error, not a listing.
 func TestBrowseDirectoryFileListingRequiresTrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	root := seedBrowseTree(t)
@@ -297,7 +282,6 @@ func TestBrowseDirectoryFileListingRequiresTrustedClient(t *testing.T) {
 		t.Fatalf("untrusted file listing succeeded: %+v", denied.Entries)
 	}
 
-	// The same client may still browse directories: that surface is unchanged.
 	d.handleBrowseDirectoryWS(untrusted, &protocol.BrowseDirectoryMessage{
 		Cmd:       protocol.CmdBrowseDirectory,
 		InputPath: root + "/",
@@ -311,7 +295,6 @@ func TestBrowseDirectoryFileListingRequiresTrustedClient(t *testing.T) {
 		t.Fatalf("entries = %v, want %v", entryNames(allowed.Entries), want)
 	}
 
-	// The app client gets the files.
 	trusted := trustedFsClient(4)
 	d.handleBrowseDirectoryWS(trusted, &protocol.BrowseDirectoryMessage{
 		Cmd:        protocol.CmdBrowseDirectory,

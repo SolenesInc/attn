@@ -8,20 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The app's window onto the event bus, answering with the same bus.Status that
-// `attn bus status` renders. The daemon adds nothing of its own: one
-// computation, two presentations, so the CLI and the app can never disagree
-// about whether a consumer is behind or a producer is loud.
-//
-// Unlike the CLI's, this snapshot comes from the process that owns the delivery
-// loops, so it can also report which consumers are actually running and what
-// their handlers are failing on.
-
-// handleBusStatusGet answers on the asking client alone: it is one window's
-// diagnostic question, and the answer changes nothing any other window shows.
-//
-// The aggregate walks the whole log (209ms at 945k rows, measured), so it runs
-// on its own goroutine rather than blocking the socket reader.
+// The aggregate walks the whole log (209ms at 945k rows, measured), so it runs on its own
+// goroutine rather than blocking the socket reader.
 func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGetMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
@@ -45,12 +33,8 @@ func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGet
 	}()
 }
 
-// handleBusSetConsumerEnabled flips the kill switch the CLI writes.
-//
-// It writes the database row directly rather than asking the running bus,
-// because that bit is database-only BY DESIGN — delivery re-reads it every
-// cycle, so the switch works whether or not the daemon is healthy. Going
-// through the daemon here would be a second mechanism for the same bit.
+// Writes the database row directly rather than asking the running bus: that bit is
+// database-only BY DESIGN, so the kill switch works whether or not the daemon is healthy.
 func (d *Daemon) handleBusSetConsumerEnabled(client *wsClient, msg *protocol.BusSetConsumerEnabledMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	name := strings.TrimSpace(msg.Consumer)
@@ -96,8 +80,6 @@ func (d *Daemon) handleBusSetConsumerEnabled(client *wsClient, msg *protocol.Bus
 	d.sendToClient(client, result)
 }
 
-// fillBusStatusResult copies the snapshot onto the wire message. Every derived
-// number is already computed; nothing here decides anything.
 func fillBusStatusResult(out *protocol.BusStatusResultMessage, s bus.Status) {
 	out.Earliest = int(s.Earliest)
 	out.Head = int(s.Head)

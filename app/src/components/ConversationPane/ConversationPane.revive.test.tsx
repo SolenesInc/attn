@@ -7,10 +7,6 @@ import { useConversationsStore } from '../../store/conversations';
 import { useSessionStore } from '../../store/sessions';
 import type { UISessionState } from '../../types/sessionState';
 
-// The pane's two jobs when a conversation is not simply running in front of it:
-// ask for a picture it does not have, and offer the way back when the host is
-// gone.
-
 const SESSION = 'sess-1';
 
 function renderPane(options: {
@@ -51,9 +47,6 @@ describe('ConversationPane: attaching', () => {
     expect(sendAgentAttach).not.toHaveBeenCalled();
   });
 
-  // A launching session is about to volunteer its own session_ready and
-  // snapshot, and a recoverable one has no host to answer. Asking either would
-  // put a command error on the socket describing a race, not a fault.
   it.each<UISessionState>(['launching', 'recoverable', 'unknown'])(
     'asks nothing of a %s session',
     (sessionState) => {
@@ -62,9 +55,6 @@ describe('ConversationPane: attaching', () => {
     },
   );
 
-  // StrictMode double-invokes effects. One mount must still be one request:
-  // the ask is idempotent, but a pane that fires it twice per open would do so
-  // for every window of every conversation.
   it('asks once under a replaying mount', () => {
     const sendAgentAttach = renderPane({ sessionState: 'idle', strict: true });
     expect(sendAgentAttach).toHaveBeenCalledTimes(1);
@@ -111,7 +101,6 @@ describe('ConversationPane: recoverable', () => {
   });
 });
 
-/** A pane whose session state can move, the way the daemon moves it. */
 function renderPaneForRerender() {
   const api = {
     sendAgentPrompt: vi.fn(),

@@ -1,7 +1,5 @@
 package ptybackend
 
-// The kitty crossing, from the daemon's side of both backends.
-
 import (
 	"context"
 	"encoding/base64"
@@ -16,8 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// kittyPlaceRGB is one complete kitty transmit-and-place APC for a w x h RGB
-// image. Cells are 8x16 px, so 16x32 is exactly two cells by two.
+// Cells are 8x16 px, so a 16x32 image is exactly two cells by two.
 func kittyPlaceRGB(id uint32, w, h int) string {
 	pix := make([]byte, w*h*3)
 	for i := range pix {
@@ -27,7 +24,6 @@ func kittyPlaceRGB(id uint32, w, h int) string {
 		id, w, h, base64.StdEncoding.EncodeToString(pix))
 }
 
-// kittyPayloadFile writes program output for a spawned child to emit.
 func kittyPayloadFile(t *testing.T, payload string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "payload")
@@ -37,10 +33,8 @@ func kittyPayloadFile(t *testing.T, payload string) string {
 	return path
 }
 
-// releaseAndReadPlacements types the newline the child is blocked on, then
-// reads the stream until a placement event arrives. The handshake is what keeps
-// this deterministic: a child that emits at spawn time can finish before the
-// attach lands.
+// The child blocks on a newline: without that handshake it can emit and finish
+// before the attach lands.
 func releaseAndReadPlacements(t *testing.T, stream Stream, release func() error) OutputEvent {
 	t.Helper()
 	if err := release(); err != nil {
@@ -62,9 +56,6 @@ func releaseAndReadPlacements(t *testing.T, stream Stream, release func() error)
 	}
 }
 
-// The worker backend's half of the crossing. A placement event that arrives and
-// is dropped here is an image the daemon never hears about, and the seq is what
-// orders it against the bytes it was measured on.
 func TestConvertWorkerEventCarriesPlacements(t *testing.T) {
 	seq := uint32(77)
 	evt, ok := convertWorkerEvent(ptyworker.EventEnvelope{
@@ -96,8 +87,6 @@ func TestConvertWorkerEventCarriesPlacements(t *testing.T) {
 	}
 }
 
-// The empty set has to cross too: it is the only thing that ever tells a client
-// to stop drawing an image.
 func TestConvertWorkerEventCarriesTheEmptyPlacementSet(t *testing.T) {
 	seq := uint32(78)
 	evt, ok := convertWorkerEvent(ptyworker.EventEnvelope{
@@ -114,10 +103,6 @@ func TestConvertWorkerEventCarriesTheEmptyPlacementSet(t *testing.T) {
 	}
 }
 
-// The full worker path — separate process, JSON over the session socket — for
-// both halves: the event the worker pushes and the image the daemon pulls back.
-// Opt-in like its neighbours in this package: it builds the attn binary and
-// spawns a real worker.
 func TestWorkerBackend_KittyPlacementsAndImagePull(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping worker integration test in short mode")
@@ -125,8 +110,6 @@ func TestWorkerBackend_KittyPlacementsAndImagePull(t *testing.T) {
 	if os.Getenv("ATTN_RUN_WORKER_INTEGRATION") != "1" {
 		t.Skip("set ATTN_RUN_WORKER_INTEGRATION=1 to run worker integration test")
 	}
-	// The worker inherits the daemon's environment, which is how a
-	// non-production profile turns images on for a live session too.
 	t.Setenv("ATTN_KITTY_STORAGE_LIMIT", "16777216")
 
 	binary := buildAttnBinary(t)
@@ -180,9 +163,6 @@ func TestWorkerBackend_KittyPlacementsAndImagePull(t *testing.T) {
 		t.Errorf("fetched image = %dx%d with %d bytes, want 16x32 with %d", img.Width, img.Height, len(img.Data), 16*32*3)
 	}
 
-	// The not-found code has to survive the RPC as a distinguishable answer:
-	// the daemon drops that placement's render rather than treating the session
-	// as broken.
 	if _, err := backend.KittyImage(context.Background(), sessionID, 999); !errors.Is(err, pty.ErrKittyImageNotFound) {
 		t.Errorf("KittyImage() for an id the worker never stored = %v, want ErrKittyImageNotFound", err)
 	}

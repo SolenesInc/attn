@@ -1,11 +1,5 @@
-// Grid membership: every live agent session is on the grid by default. The user
-// can remove individual sessions, which excludes them until explicitly restored.
-//
-// Exclusions are keyed by the stable sessionId — NOT the runtimeId, which is
-// reassigned when a session's worker is replaced (e.g. across a daemon restart) —
-// so a removed session stays off the grid across app launches. The set is small
-// (you only exclude the handful you don't want to watch); stale ids for closed
-// sessions are harmless and simply never match again, so we don't prune.
+// Exclusions are keyed by the stable sessionId, NOT the runtimeId, which is reassigned
+// when a session's worker is replaced. Stale ids never match again, so nothing prunes them.
 
 const GRID_EXCLUDED_STORAGE_KEY = 'attn.grid.excluded';
 

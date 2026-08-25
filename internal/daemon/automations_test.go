@@ -244,8 +244,6 @@ func TestPrepareRepositoryWorktreeLeavesRevisionFetchFailureRetryable(t *testing
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	// Keep the network failure deterministic and offline while the origin still
-	// validates as the configured GitHub repository.
 	t.Setenv("GIT_SSH_COMMAND", "false")
 	payload, _ := json.Marshal(automation.PullRequestInput{
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
@@ -598,9 +596,6 @@ location:
 	if err != nil || len(firstRuns) != 1 {
 		t.Fatalf("first runs=%#v err=%v", firstRuns, err)
 	}
-	// A later detail-refreshed head in the same still-active request cycle gets
-	// one new occurrence on the existing reviewer binding. Repeating that head
-	// does not fetch or deliver again.
 	snapshotHead.Store(headTwo)
 	demand[0].HeadSHA = protocol.Ptr(headTwo)
 	d.observeGitHubReviewRequests("github.com", demand, observedAt.Add(2*time.Second))
@@ -608,8 +603,6 @@ location:
 	if snapshotGETs.Load() != 3 || delivered.Load() != 2 {
 		t.Fatalf("changed-head snapshot GETs=%d deliveries=%d", snapshotGETs.Load(), delivered.Load())
 	}
-	// Removal closes the durable edge; a later request is a new occurrence but
-	// adopts the original per-subject ticket/session/workspace/pane binding.
 	d.observeGitHubReviewRequests("github.com", nil, observedAt.Add(time.Minute))
 	d.observeGitHubReviewRequests("github.com", demand, observedAt.Add(2*time.Minute))
 	if snapshotGETs.Load() != 4 || delivered.Load() != 3 {
@@ -626,8 +619,6 @@ location:
 	}
 }
 
-// Boundary-bound: the GitHub client talks to an httptest.NewServer over a real
-// TCP socket, so the observer's work is not durably blocked.
 func TestManualPRRefreshFeedsGitHubAutomationObserver(t *testing.T) {
 	var requested atomic.Bool
 	requested.Store(true)
@@ -751,8 +742,6 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	if err != nil || len(runs) != 1 || runs[0].State != "pending" || attempts.Load() != 1 {
 		t.Fatalf("first observation runs=%#v attempts=%d err=%v", runs, attempts.Load(), err)
 	}
-	// Fix F1: the claim broadcasts before delivery is attempted, so an open WS
-	// panel sees the pending run even though delivery below fails retryably.
 	if len(broadcasts) == 0 || broadcasts[0] != "retry-review" {
 		t.Fatalf("broadcasts at claim time=%#v, want [\"retry-review\", ...]", broadcasts)
 	}
@@ -917,26 +906,6 @@ func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	}
 }
 
-// TestFreshThreadAfterTicketSweepGetsItsOwnTicketNotTheOldOne pins the
-// GitHub-review-provider side of the same fix
-// TestValidateAutomationContinuationRefusesOnlyForItsOwnVanishedTicket pins
-// for the scheduled provider (automations_contract_test.go): once the old
-// thread's ticket (and, via SweepExpiredTickets' cascade, its binding) is
-// gone, the withdraw+re-request cycle here already released the binding too
-// (the pre-existing per-subject reap at :693-702, since the ticket was
-// already gone by then), so `second` claims with no binding to inherit from
-// — exactly like a real second review-request cycle after the first one's
-// thread fully aged out. That must mint its own fresh ticket, not refuse.
-//
-// This test used to assert a refusal ("continuity ticket is missing"), with
-// `second`'s reservation deliberately omitting ticket/session ids to lean on
-// a binding that, in this exact scenario, no longer exists — so it resolved
-// to an empty ticket id, not a realistic fresh one. Real callers always
-// reserve full ids up front (see the sole production reservation site,
-// automations.go:319); giving `second` the same shape here is what exposed
-// that the old refusal was firing for the wrong reason (any same-contract
-// history missing its ticket, not specifically req's own thread) rather than
-// a real hazard — see hasPriorAutomationContinuityRun's point 3.
 func TestFreshThreadAfterTicketSweepGetsItsOwnTicketNotTheOldOne(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
@@ -1442,10 +1411,6 @@ func TestReviewRequestCancellationRecoversBeforeReactivation(t *testing.T) {
 	backend := &fakeSpawnBackend{sessionIDs: []string{run.SessionID}}
 	d.ptyBackend = backend
 
-	// Simulate a daemon exit after the provider edge committed inactive but before
-	// runtime cancellation. Generic pending-run recovery notices the inactive edge
-	// and persists the shared withdrawal failure before the next observation sees
-	// that the request is active again.
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -1557,10 +1522,6 @@ func TestContinuationWithdrawalDoesNotCancelDeliveredOriginReviewer(t *testing.T
 	}
 }
 
-// automationBroadcastRecorder installs an automationsBroadcastHook on d and
-// returns a function that snapshots every definition ID broadcast so far,
-// safe for concurrent use since automationSetEnabledWS-style callers run the
-// mutation in a goroutine.
 func automationBroadcastRecorder(d *Daemon) func() []string {
 	var mu sync.Mutex
 	var ids []string
@@ -1607,12 +1568,6 @@ func TestAutomationApplyBroadcastsOnUpsert(t *testing.T) {
 	}
 }
 
-// TestAutomationRunBroadcastsAfterClaim exercises automationRun's post-claim
-// broadcast (automations.go's "after claim" call) without reaching real
-// delivery/backend machinery: the run is pre-claimed and pre-marked delivered
-// directly through the store, so automationRun's own ClaimManualAutomationRun
-// call hits the idempotent same-request-id dedup path and returns without
-// re-entering deliverAutomationRun (run.State != "pending").
 func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1646,10 +1601,6 @@ func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	}
 }
 
-// TestAutomationRunRejectsNonManualTrigger pins Fix F8: driving
-// d.automationRun against a provider-driven (scheduled) definition must be
-// rejected before any occurrence/run row is created — schedule/GitHub
-// observation are the only paths allowed to produce a run for it.
 func TestAutomationRunRejectsNonManualTrigger(t *testing.T) {
 	d, s, def, _ := setupScheduledDaemon(t, "* * * * *", "fresh", "latest")
 
@@ -1657,10 +1608,6 @@ func TestAutomationRunRejectsNonManualTrigger(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cannot be run manually") {
 		t.Fatalf("automationRun err=%v, want a manual-trigger rejection", err)
 	}
-	// automationRun's non-manual check runs before any store write, so runs
-	// being empty is sufficient proof no occurrence was created either — the
-	// two are always inserted together in one transaction (see
-	// ClaimManualAutomationRun).
 	runs, err := s.ListAutomationRuns(def.ID)
 	if err != nil || len(runs) != 0 {
 		t.Fatalf("runs=%#v err=%v, want no run created", runs, err)
@@ -1704,18 +1651,6 @@ func TestAutomationSetEnabledDisableFailsPendingRunsAndBroadcasts(t *testing.T) 
 	}
 }
 
-// TestAutomationSetEnabledReachesRealSocketDispatch closes the gap that let
-// `attn automation enable|disable` regress to "unknown command" in
-// production while every other automation_set_enabled test still passed:
-// TestAutomationCommandSetEnabledTogglesColumn (ws_automations_test.go) calls
-// handleAutomationCommand directly, and the WS-level tests call
-// handleAutomationSetEnabledWS directly — neither one exercises
-// handleConnection's own switch in daemon.go, which is where
-// protocol.CmdAutomationSetEnabled was actually missing from the case list
-// routed to handleAutomationCommand. This drives the command through the
-// real unix-socket dispatch path (handleConnection -> ParseMessage ->
-// switch -> handleAutomationCommand), the same path the CLI uses, so a
-// missing case here fails with "unknown command" the way the live bug did.
 func TestAutomationSetEnabledReachesRealSocketDispatch(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1788,12 +1723,6 @@ func TestAutomationSetEnabledNoOpDoesNotBroadcast(t *testing.T) {
 	}
 }
 
-// TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun drives
-// automation_definitions_get through handleConnection (not the action
-// function directly) to guard against the PR2a class of bug where a command
-// is wired into the schema/constants but never reaches the dispatch switch —
-// and pins that the summary's last_run is populated from the store's
-// per-definition latest-run query, not left for the frontend to backfill.
 func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1844,12 +1773,6 @@ func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing
 	}
 }
 
-// TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision pins
-// the pointer-presence contract on automationApplyWithGuards's
-// expectedID/expectedRevision: the socket/CLI path (automationApply, wrapping
-// automationApplyWithGuards with nil, nil) always overwrites last-writer-wins,
-// while the WS/editor path (always sending non-nil expected_revision) refuses
-// a stale save.
 func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -1864,10 +1787,6 @@ func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *t
 		t.Fatalf("fixture revision = %d, want 1", def.Revision)
 	}
 
-	// Unguarded socket/CLI path: re-applying the same id with no expected
-	// revision at all overwrites unconditionally, even though a WS-style
-	// caller would by now be holding a stale revision (1) once a concurrent
-	// edit bumps it to 2 below.
 	edited := strings.Replace(fmt.Sprintf(manualAutomationYAML, dir), "Check locally.", "Check locally, edited by someone else.", 1)
 	if _, err := d.automationApply(edited); err != nil {
 		t.Fatalf("automationApply (unguarded socket path) on existing id: %v", err)
@@ -1880,9 +1799,6 @@ func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *t
 		t.Fatalf("revision after unguarded concurrent apply = %d, want 2", afterConcurrentEdit.Revision)
 	}
 
-	// WS/editor path: expectedRevision is a non-nil pointer holding the stale
-	// value (1) the editor loaded before the concurrent edit above landed —
-	// must refuse rather than overwrite.
 	staleRevision := 1
 	expectedID := def.ID
 	_, err = d.automationApplyWithGuards(context.Background(), raw, &expectedID, &staleRevision)

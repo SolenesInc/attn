@@ -28,20 +28,15 @@ func (f *fakeReadinessSource) Fetch(context.Context, prWaitOptions) (*prReadines
 	return f.results[index], nil
 }
 
-// waitTuple runs a first-ever wait — no remembered position — and unpacks the
-// result, for the tests that are about the outcome rather than the memory.
 func waitTuple(ctx context.Context, source prReadinessSource, opts prWaitOptions, progress io.Writer) (*prReadiness, prOutcome, []prOutcome, error) {
 	result, err := waitForPRActionable(ctx, source, opts, prWaitCursor{}, progress)
 	return result.Observation, result.Outcome, result.Events, err
 }
 
-// snapshotPayload wraps GraphQL fragments in the envelope gh api graphql emits.
 func snapshotPayload(head, checks, reviews, comments string) []byte {
 	return snapshotPayloadWithRequests(head, checks, reviews, comments, "")
 }
 
-// snapshotPayloadWithRequests additionally sets the PR's requested reviewers,
-// used to prove a stale verdict is suppressed while a re-review is pending.
 func snapshotPayloadWithRequests(head, checks, reviews, comments, requests string) []byte {
 	if checks == "" {
 		checks = `{"__typename":"CheckRun","name":"CI","status":"COMPLETED","conclusion":"SUCCESS"}`
@@ -65,8 +60,6 @@ func mustTime(t *testing.T, value string) time.Time {
 	return parsed
 }
 
-// reReviewObservation builds a readiness carrying the review-baseline fields the
-// waiter uses to distinguish a stale verdict from a fresh one.
 func reReviewObservation(head, checks, review string, requested bool, submitted, latest time.Time) *prReadiness {
 	obs := readinessObservation("12", head, checks, review)
 	obs.ReviewerRequested = requested
@@ -75,9 +68,7 @@ func reReviewObservation(head, checks, review string, requested bool, submitted,
 	return obs
 }
 
-// reviewNode builds one review. GitHub attaches every inline comment to a
-// freshly submitted review, including a reply to a long-dormant thread, and
-// wraps a standalone inline comment in a review with no body of its own.
+// GitHub attaches every inline comment to a freshly submitted review, including a reply to a dormant thread.
 func reviewNode(id, state, body, at, author, oid, inline string) string {
 	return fmt.Sprintf(`{"id":%q,"state":%q,"bodyText":%q,"submittedAt":%q,
 	  "author":{"__typename":"User","login":%q},"commit":{"oid":%q},
@@ -110,7 +101,6 @@ func TestParsePRSnapshotRequiresGreenChecksAndCurrentHeadApproval(t *testing.T) 
 		t.Fatalf("readiness = %#v", readiness)
 	}
 
-	// The same reviews bound to a superseded commit must not satisfy the gate.
 	staleReviews := strings.ReplaceAll(reviews, `"oid":"`+head+`"`, `"oid":"`+oldHead+`"`)
 	readiness, err = parsePRSnapshot(snapshotPayload(head, checks, staleReviews, ""), opts)
 	if err != nil {
@@ -121,9 +111,6 @@ func TestParsePRSnapshotRequiresGreenChecksAndCurrentHeadApproval(t *testing.T) 
 	}
 }
 
-// Bot comments are collected and tagged rather than dropped: they are their own
-// event with their own exit code, so the caller decides whether to care.
-// `--ignore-author` is the only thing that removes a comment outright.
 func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	reviews := reviewNode("r1", "COMMENTED", "a real review remark", "2026-07-19T10:00:00Z", "figgyster", head,
@@ -146,7 +133,6 @@ func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
 		}
 		got = append(got, comment.ID+":"+comment.Kind+":"+comment.Author+":"+kind)
 	}
-	// Sorted oldest-first; the ignored author is gone and the bot is tagged.
 	want := []string{
 		"c1:issue:victorarias:human",
 		"c2:issue:chatgpt-codex-connector:bot",
@@ -159,13 +145,9 @@ func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
 	if len(humanPRComments(readiness.Comments)) != 3 || len(botPRComments(readiness.Comments)) != 1 {
 		t.Fatalf("split = %d human / %d bot", len(humanPRComments(readiness.Comments)), len(botPRComments(readiness.Comments)))
 	}
-	// A COMMENTED review carries no verdict and must not move the review state.
 	if readiness.ReviewState != "waiting" {
 		t.Fatalf("COMMENTED review changed review state: %#v", readiness)
 	}
-	// A prose review is reported as a remark, so it has to carry its prose: a
-	// header with no body sends the caller back to GitHub for the one thing the
-	// event was about.
 	for _, comment := range readiness.Comments {
 		if comment.ID == "r1" && comment.Body != "a real review remark" {
 			t.Fatalf("review comment lost its body: %#v", comment)
@@ -174,7 +156,6 @@ func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
 }
 
 // GitHub wraps a standalone inline comment in a bodyless COMMENTED review.
-// Reporting both made one remark read as "2 new comments".
 func TestParsePRSnapshotDoesNotDoubleCountInlineCommentWrapper(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	wrapper := reviewNode("r1", "COMMENTED", "", "2026-07-19T19:33:19Z", "victorarias", head,
@@ -189,20 +170,15 @@ func TestParsePRSnapshotDoesNotDoubleCountInlineCommentWrapper(t *testing.T) {
 	}
 }
 
-// A reply to a thread older than any newest-N slice of reviewThreads must still
-// be seen. GitHub attaches the reply to a freshly submitted review, so sourcing
-// inline comments from reviews rather than threads makes thread age irrelevant.
 func TestParsePRSnapshotSeesReplyOnLongDormantThread(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	nodes := make([]string, 0, 130)
-	// 128 old reviews, each opening a thread, would push the first thread far
-	// outside a 100-thread window.
+	// 128 old reviews, each opening a thread, push the first thread outside a 100-thread window.
 	for i := range 128 {
 		nodes = append(nodes, reviewNode(
 			fmt.Sprintf("old-r%d", i), "COMMENTED", "", "2026-01-01T00:00:00Z", "victorarias", head,
 			inlineNode(fmt.Sprintf("old-t%d", i), "2026-01-01T00:00:00Z", "victorarias")))
 	}
-	// The reply lands on thread old-t0, but arrives as the newest review.
 	nodes = append(nodes, reviewNode("reply-r", "COMMENTED", "", "2026-07-19T20:00:00Z", "figgyster", head,
 		inlineNode("reply-t", "2026-07-19T20:00:00Z", "figgyster")))
 
@@ -296,8 +272,6 @@ func TestWaitForPRActionableResetsAcrossHeadChangeAndSuppressesDuplicatePolls(t 
 	}
 }
 
-// The motivating regression: a reviewer requesting changes used to fall through
-// to the poll loop and only surface when the whole timeout expired.
 func TestWaitForPRActionableReturnsPromptlyOnChangesRequested(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	observation := readinessObservation("12", head, checksGreen, "changes_requested")
@@ -335,7 +309,6 @@ func TestWaitForPRActionableBaselinesExistingCommentsAndWakesOnNewOnes(t *testin
 	if outcome != outcomeComment || source.calls != 3 {
 		t.Fatalf("outcome=%s calls=%d", outcome, source.calls)
 	}
-	// Only the comment posted during the wait is reported, not the baseline.
 	if len(got.Comments) != 1 || got.Comments[0].ID != "c2" {
 		t.Fatalf("comments = %#v", got.Comments)
 	}
@@ -406,9 +379,6 @@ func TestReportPROutcomeWritesPlainTextAndJSON(t *testing.T) {
 		!strings.Contains(payload.Detail, "requested changes") {
 		t.Fatalf("payload = %#v", payload)
 	}
-	// Comments ride along whatever event won: the waiter has already reduced them
-	// to what arrived during the wait, so withholding them here would only make
-	// the caller re-query for news this poll already had.
 	if len(payload.Comments) != 1 || payload.Comments[0].Author != "victorarias" {
 		t.Fatalf("comments = %#v, want the fresh comment reported beside the verdict", payload.Comments)
 	}
@@ -417,10 +387,6 @@ func TestReportPROutcomeWritesPlainTextAndJSON(t *testing.T) {
 	}
 }
 
-// The regression that motivated the rewrite: figgyster approves with prose, and
-// the approval used to be reported as "a new comment" — exit 4, not 0 — because
-// the review body was collected as commentary and the comment branch returned
-// before the verdict branch was ever evaluated.
 func TestWaitForPRActionableApprovalWithBodyIsOneEvent(t *testing.T) {
 	head := strings.Repeat("f", 40)
 	at := mustTime(t, "2026-07-26T10:00:00Z")
@@ -438,8 +404,6 @@ func TestWaitForPRActionableApprovalWithBodyIsOneEvent(t *testing.T) {
 		t.Fatalf("verdict not read: %#v", observation)
 	}
 
-	// Drive it through the waiter with the verdict arriving during the wait, so
-	// the baseline cannot be what hides the phantom comment.
 	waiting, err := parsePRSnapshot(snapshotPayload(head, "", "", ""), opts)
 	if err != nil {
 		t.Fatal(err)
@@ -456,8 +420,6 @@ func TestWaitForPRActionableApprovalWithBodyIsOneEvent(t *testing.T) {
 		t.Fatalf("events = %v, want the verdict alone", outcomeStrings(events))
 	}
 
-	// A COMMENTED review from the same reviewer stays commentary: it is how they
-	// say something without answering.
 	remark := reviewNode("r2", "COMMENTED", "one question before I approve", "2026-07-26T10:05:00Z", "figgyster", head, "")
 	commented, err := parsePRSnapshot(snapshotPayload(head, "", remark, ""), opts)
 	if err != nil {
@@ -468,9 +430,6 @@ func TestWaitForPRActionableApprovalWithBodyIsOneEvent(t *testing.T) {
 	}
 }
 
-// One poll can hold several events. The exit code names the highest ranked, and
-// the rest must still be reported — a caller that gets `comment` alongside an
-// approval should not have to re-query to learn it can merge once answered.
 func TestWaitForPRActionableRanksConcurrentEventsAndReportsAll(t *testing.T) {
 	head := strings.Repeat("g", 40)
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
@@ -487,9 +446,6 @@ func TestWaitForPRActionableRanksConcurrentEventsAndReportsAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Human comment outranks both the bot's and the approval: someone has to read
-	// it before the approval means anything. The bot ranks below the approval —
-	// nobody is waiting on a doctor report, and it comments on nearly every push.
 	if outcome != outcomeComment {
 		t.Fatalf("outcome = %s, want the human comment to win", outcome)
 	}
@@ -509,9 +465,6 @@ func TestWaitForPRActionableRanksConcurrentEventsAndReportsAll(t *testing.T) {
 	}
 }
 
-// A failing check outranks any comment. The comment check used to return before
-// the check state was ever looked at, so a poll that saw both reported exit 4
-// while its own payload said the checks had failed.
 func TestWaitForPRActionableChecksFailedOutranksComment(t *testing.T) {
 	head := strings.Repeat("h", 40)
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
@@ -532,8 +485,6 @@ func TestWaitForPRActionableChecksFailedOutranksComment(t *testing.T) {
 	}
 }
 
-// A bot comment is its own event with its own exit code, so a caller can wake on
-// a doctor report without treating it as a human waiting for an answer.
 func TestWaitForPRActionableBotCommentIsItsOwnEvent(t *testing.T) {
 	head := strings.Repeat("i", 40)
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
@@ -553,7 +504,6 @@ func TestWaitForPRActionableBotCommentIsItsOwnEvent(t *testing.T) {
 		t.Fatalf("events = %s", got)
 	}
 
-	// --ignore-author silences a bot exactly as it silences a human.
 	ignoring := prWaitOptions{Reviewer: "figgyster", Interval: 0, IgnoreAuthors: []string{"react-doctor"}}
 	snapshot, err := parsePRSnapshot(snapshotPayload(head, "",
 		"", `{"id":"c1","createdAt":"2026-07-26T10:00:00Z","author":{"__typename":"Bot","login":"react-doctor"}}`), ignoring)
@@ -565,11 +515,7 @@ func TestWaitForPRActionableBotCommentIsItsOwnEvent(t *testing.T) {
 	}
 }
 
-// The fixture is a real `gh api graphql` response for the pull request that
-// exposed the bug — figgyster's approval carrying prose, plus a react-doctor
-// comment — with `state` flipped to OPEN so the closed event does not short the
-// wait. Hand-built fragments prove the logic; this proves the field names and
-// author typenames it keys on are GitHub's.
+// A real `gh api graphql` response, with `state` flipped to OPEN so the closed event does not short the wait.
 func TestParsePRSnapshotAgainstRealApprovalPayload(t *testing.T) {
 	payload, err := os.ReadFile(filepath.Join("testdata", "pr-approval-with-body.json"))
 	if err != nil {
@@ -591,8 +537,6 @@ func TestParsePRSnapshotAgainstRealApprovalPayload(t *testing.T) {
 		t.Fatalf("bot comment = %#v, want the react-doctor post tagged as a bot", bots)
 	}
 
-	// End to end: the bot comment arrives during the wait alongside the approval,
-	// and the approval is what the exit code reports.
 	first, err := parsePRSnapshot(payload, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -619,9 +563,6 @@ func outcomeStrings(events []prOutcome) []string {
 	return result
 }
 
-// A re-review request marks any pre-existing verdict as stale: parse must
-// surface that the reviewer is re-requested and when their newest review landed,
-// so the waiter can tell a fresh verdict from the one it started against.
 func TestParsePRSnapshotCapturesReviewRequestAndBaseline(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	reviews := reviewNode("r1", "CHANGES_REQUESTED", "please fix", "2026-07-19T10:00:00Z", "figgyster", head, "")
@@ -643,7 +584,6 @@ func TestParsePRSnapshotCapturesReviewRequestAndBaseline(t *testing.T) {
 		t.Fatalf("timings = submitted %v latest %v", readiness.ReviewSubmittedAt, readiness.LatestReviewAt)
 	}
 
-	// A request for a different reviewer must not mark ours as re-requested.
 	other := `{"requestedReviewer":{"__typename":"User","login":"someone-else"}}`
 	readiness, err = parsePRSnapshot(snapshotPayloadWithRequests(head, "", reviews, "", other), prWaitOptions{Reviewer: "figgyster"})
 	if err != nil {
@@ -654,10 +594,6 @@ func TestParsePRSnapshotCapturesReviewRequestAndBaseline(t *testing.T) {
 	}
 }
 
-// The #633 regression: figgyster's CHANGES_REQUESTED was addressed and figgyster
-// re-requested, but wait-ready exited 3 at once on the stale verdict. With the
-// reviewer re-requested, the pre-baseline verdict must not end the wait; a review
-// submitted after the baseline does.
 func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	baselineAt := mustTime(t, "2026-07-19T10:00:00Z")
@@ -665,7 +601,6 @@ func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T
 
 	stale := reReviewObservation(head, checksGreen, "changes_requested", true, baselineAt, baselineAt)
 	stillStale := reReviewObservation(head, checksGreen, "changes_requested", true, baselineAt, baselineAt)
-	// The re-review lands as an approval; GitHub clears the request as it does.
 	approved := reReviewObservation(head, checksGreen, "approved", false, freshAt, freshAt)
 	source := &fakeReadinessSource{results: []*prReadiness{stale, stillStale, approved}}
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
@@ -681,8 +616,6 @@ func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T
 	if source.calls != 3 {
 		t.Fatalf("returned after %d polls; the stale verdict must not end the wait", source.calls)
 	}
-	// The wait must not look stuck: the held verdict is annotated on the line and
-	// explained once, and the note fires exactly once.
 	text := output.String()
 	if !strings.Contains(text, "review=changes_requested reviewer=figgyster re-requested=true") {
 		t.Fatalf("re-request annotation missing from progress:\n%s", text)
@@ -692,8 +625,6 @@ func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T
 	}
 }
 
-// A re-review that again requests changes is a fresh verdict and returns 3, but
-// only once it is newer than the baseline recorded at wait start.
 func TestWaitForPRActionableReturnsOnFreshChangesRequestedAfterReReview(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	baselineAt := mustTime(t, "2026-07-19T10:00:00Z")
@@ -715,8 +646,6 @@ func TestWaitForPRActionableReturnsOnFreshChangesRequestedAfterReReview(t *testi
 	}
 }
 
-// Not re-requested: an existing verdict is the current state and returns at once.
-// Approval is a state, not an event, so an already-approved PR still returns 0.
 func TestWaitForPRActionableReturnsImmediatelyWithoutReReview(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	at := mustTime(t, "2026-07-19T10:00:00Z")
@@ -742,8 +671,6 @@ func TestWaitForPRActionableReturnsImmediatelyWithoutReReview(t *testing.T) {
 	}
 }
 
-// A caller that has to go read the remark on GitHub is making the follow-up query
-// this command exists to remove, so the words themselves are part of the report.
 func TestReportPROutcomePrintsWhatWasSaid(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	result := readinessObservation("12", head, checksFailed, "changes_requested")
@@ -803,9 +730,6 @@ func TestReportPROutcomePrintsWhatWasSaid(t *testing.T) {
 	}
 }
 
-// The gap between two waits is where events used to disappear: the caller answers
-// a comment, waits again, and the wait baselines from a state that already
-// includes whatever landed while it was working.
 func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
 	head := strings.Repeat("b", 40)
 	first := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(1, 0)}
@@ -817,7 +741,6 @@ func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
 	arrived := readinessObservation("12", head, checksPending, "waiting")
 	arrived.Comments = []prComment{first, gap}
 
-	// The first wait times out having seen only the pre-existing comment.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	timedOut, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{start}}, opts, prWaitCursor{}, &bytes.Buffer{})
@@ -827,14 +750,10 @@ func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
 	if timedOut.Outcome != outcomeTimeout {
 		t.Fatalf("outcome = %s", timedOut.Outcome)
 	}
-	// Even reporting nothing, the wait must carry its baseline forward, or the
-	// next call rebuilds one from a later state and swallows the gap.
 	if strings.Join(timedOut.Cursor.CommentIDs, ",") != "c1" {
 		t.Fatalf("cursor = %#v, want the baseline comment recorded", timedOut.Cursor)
 	}
 
-	// The comment landed while the caller was between waits: the second wait must
-	// report it on its first poll rather than absorb it into a fresh baseline.
 	second, err := waitForPRActionable(context.Background(),
 		&fakeReadinessSource{results: []*prReadiness{arrived}}, opts, timedOut.Cursor, &bytes.Buffer{})
 	if err != nil {
@@ -848,7 +767,6 @@ func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
 		t.Fatalf("cursor = %#v, want the reported comment added", second.Cursor)
 	}
 
-	// And a third wait on the same state has nothing new to say.
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 	third, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{arrived}}, opts, second.Cursor, &bytes.Buffer{})
@@ -860,8 +778,6 @@ func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
 	}
 }
 
-// A failing check stays true until someone pushes, so re-reporting it would make
-// every subsequent wait return instantly with nothing new.
 func TestWaitForPRActionableSuppressesAlreadyReportedFailure(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
@@ -887,7 +803,6 @@ func TestWaitForPRActionableSuppressesAlreadyReportedFailure(t *testing.T) {
 		t.Fatalf("the same failure returned twice: outcome = %s", again.Outcome)
 	}
 
-	// A different failing check on the same commit is a different failure.
 	worse := readinessObservation("12", head, checksFailed, "waiting")
 	worse.Checks = []prCheck{{Name: "CI", State: checksFailed}, {Name: "Lint", State: checksFailed}}
 	changed, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{worse}}, opts, first.Cursor, &bytes.Buffer{})
@@ -898,7 +813,6 @@ func TestWaitForPRActionableSuppressesAlreadyReportedFailure(t *testing.T) {
 		t.Fatalf("a new failing check was suppressed: outcome = %s", changed.Outcome)
 	}
 
-	// So is the same failure after a push.
 	pushed := readinessObservation("12", strings.Repeat("d", 40), checksFailed, "waiting")
 	pushed.Checks = []prCheck{{Name: "CI", State: checksFailed}}
 	repushed, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{pushed}}, opts, first.Cursor, &bytes.Buffer{})
@@ -910,8 +824,6 @@ func TestWaitForPRActionableSuppressesAlreadyReportedFailure(t *testing.T) {
 	}
 }
 
-// --since is the escape hatch: it replays by arrival time, so a caller does not
-// need to know any comment ID to recover a window.
 func TestWaitForPRActionableSinceReplaysByTime(t *testing.T) {
 	head := strings.Repeat("e", 40)
 	old := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(100, 0)}
@@ -920,7 +832,6 @@ func TestWaitForPRActionableSinceReplaysByTime(t *testing.T) {
 	observation.Comments = []prComment{old, recent}
 
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0, Since: time.Unix(200, 0)}
-	// The cursor claims both comments were already reported; --since overrides it.
 	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{observation}}, opts,
 		prWaitCursor{CommentIDs: []string{"c1", "c2"}}, &bytes.Buffer{})
 	if err != nil {
@@ -932,8 +843,6 @@ func TestWaitForPRActionableSinceReplaysByTime(t *testing.T) {
 	}
 }
 
-// snapshotSource drives the waiter through the real snapshot parser, so a test
-// about which comments become events exercises the same path a live wait does.
 type snapshotSource struct {
 	payloads [][]byte
 	calls    int
@@ -948,28 +857,16 @@ func (s *snapshotSource) Fetch(_ context.Context, opts prWaitOptions) (*prReadin
 	return parsePRSnapshot(s.payloads[index], opts)
 }
 
-// The scenario the self-suppression exists for. A wait resumes from where the
-// previous one stopped, so a comment the caller posts between two waits is
-// genuinely new to the cursor and the start-of-wait baseline cannot catch it:
-// answer a reviewer, wait again, and the wait returns instantly quoting you back
-// at yourself.
 func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	mine := `{"id":"c1","createdAt":"2026-07-26T10:00:00Z","bodyText":"answering the review",
 	          "author":{"__typename":"User","login":"victorarias"}}`
 	theirs := `{"id":"c2","createdAt":"2026-07-26T10:05:00Z","bodyText":"one more thing",
 	            "author":{"__typename":"User","login":"figgyster"}}`
-	// Login comparison is case-insensitive: GitHub renders a login in whatever
-	// case it was registered with, and `gh api user` and a comment author need not
-	// agree on it.
+	// GitHub renders a login in whatever case it was registered with.
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: time.Millisecond, SelfLogin: "VictorArias"}
-	// A non-empty cursor is what makes this a resumed wait rather than a first
-	// one, so nothing is baselined away and c1 arrives as unseen.
 	resumed := prWaitCursor{VerdictAt: mustTime(t, "2026-07-26T09:00:00Z")}
-	// The two waits below are supposed to return an event on their first poll.
-	// Given a deadline, one that stops returning fails the assertion below; given
-	// context.Background() it would poll a fixed snapshot forever and hang the
-	// package instead.
+	// Given context.Background() these waits would poll a fixed snapshot forever and hang the package.
 	bounded := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), 10*time.Second)
 	}
@@ -985,7 +882,6 @@ func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
 		t.Fatalf("the caller's own comment ended the wait: outcome=%s comments=%#v", own.Outcome, own.Observation.Comments)
 	}
 
-	// Someone else's comment on the same poll is still the update being waited for.
 	otherCtx, cancelOther := bounded()
 	defer cancelOther()
 	other, err := waitForPRActionable(otherCtx,
@@ -999,8 +895,6 @@ func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
 		t.Fatalf("outcome=%s comments=%#v, want only figgyster's comment", other.Outcome, other.Observation.Comments)
 	}
 
-	// --include-self leaves SelfLogin unresolved, which is also what an
-	// unreachable `gh api user` falls back to: both report every author.
 	opts.SelfLogin = ""
 	includedCtx, cancelIncluded := bounded()
 	defer cancelIncluded()
@@ -1016,8 +910,6 @@ func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
 	}
 }
 
-// The identity lookup costs a `gh` call, so it must not happen when the caller
-// has opted out, and it must never be able to fail a wait.
 func TestResolvePRSelfLoginIsSkippableAndFailureTolerant(t *testing.T) {
 	original := ghSelfLogin
 	t.Cleanup(func() { ghSelfLogin = original })
@@ -1055,16 +947,10 @@ func TestResolvePRSelfLoginIsSkippableAndFailureTolerant(t *testing.T) {
 	}
 }
 
-// --timeout is a promise about when the command returns, and the identity lookup
-// happens before the first poll. Given a clock of its own it would spend up to
-// prSelfLoginTimeout on top of the caller's budget, so `--timeout 1s` against a
-// stalled GitHub would take sixteen seconds to come back.
 func TestResolvePRSelfLoginCannotOutlastTheWaitDeadline(t *testing.T) {
 	original := ghSelfLogin
 	t.Cleanup(func() { ghSelfLogin = original })
 
-	// A GitHub that never answers. Only the context can end this call, so the
-	// deadline the lookup runs under is the one that decides when it returns.
 	ghSelfLogin = func(ctx context.Context, _ string) (string, error) {
 		<-ctx.Done()
 		return "", ctx.Err()
@@ -1080,8 +966,6 @@ func TestResolvePRSelfLoginCannotOutlastTheWaitDeadline(t *testing.T) {
 	if login != "" {
 		t.Fatalf("login = %q, want a stalled lookup to report everyone", login)
 	}
-	// The bound is deliberately loose: the point is prSelfLoginTimeout not being
-	// spent, not the exact millisecond the short budget expires on.
 	if elapsed >= prSelfLoginTimeout {
 		t.Fatalf("lookup took %s with a %s budget: it borrowed its own clock", elapsed, budget)
 	}
@@ -1100,7 +984,6 @@ func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
 	if err := savePRWaitCursor(dir, opts, saved, now); err != nil {
 		t.Fatal(err)
 	}
-	// Host defaults so a --repo owner/name target and a github.com URL agree.
 	path := filepath.Join(dir, "github.com", "victorarias", "attn", "679.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("cursor not at %s: %v", path, err)
@@ -1114,8 +997,6 @@ func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
 		t.Fatalf("loaded = %#v", loaded)
 	}
 
-	// A cursor with nothing recorded in a field says nothing about it, rather than
-	// claiming a verdict at the zero time.
 	encoded, err := json.Marshal(prWaitCursor{CommentIDs: []string{"c1"}})
 	if err != nil {
 		t.Fatal(err)
@@ -1124,8 +1005,6 @@ func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
 		t.Fatalf("cursor = %s", encoded)
 	}
 
-	// A cursor is an optimization over re-baselining: a corrupt one must not stop
-	// the caller from waiting.
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1133,8 +1012,6 @@ func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
 		t.Fatalf("corrupt cursor must report the problem and read as empty: cursor=%#v err=%v", cursor, err)
 	}
 
-	// Cursors nobody has waited on in a month are dropped, and the directory has
-	// no other owner to clean it.
 	stale := filepath.Join(dir, "github.com", "victorarias", "attn", "1.json")
 	if err := os.WriteFile(stale, []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1151,8 +1028,6 @@ func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
 	}
 }
 
-// An empty directory disables the memory, which is what any code path that has no
-// business resolving a data dir passes.
 func TestPRWaitCursorWithoutDirectoryIsInert(t *testing.T) {
 	if err := savePRWaitCursor("", prWaitOptions{Number: 1}, prWaitCursor{CommentIDs: []string{"c1"}}, time.Unix(1, 0)); err != nil {
 		t.Fatal(err)

@@ -6,16 +6,8 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// normalizeWorkflowStamp re-encodes a caller-supplied stamp into the encoding the
-// run listing orders by, and leaves anything it cannot read alone.
-//
-// The normalizing happens here rather than at the writers because created_at is
-// ORDER BY'd as text, so this column's order is the store's promise, not the
-// caller's. The callers reach it through protocol.TimestampNow(), which renders
-// time.Now() in the local zone with a trailing-zero-stripped fraction — two runs
-// started inside one second, or either side of a DST change, came back in an
-// order that was not theirs. That helper is the wire's spelling and is left as
-// it is; this is the one column whose order depends on it.
+// protocol.TimestampNow()'s local-zone, trailing-zero-stripped fraction ordered two runs
+// started inside one second wrongly, and the listing ORDER BYs these stamps as text.
 func normalizeWorkflowStamp(s string) string {
 	if s == "" {
 		return s
@@ -27,15 +19,11 @@ func normalizeWorkflowStamp(s string) string {
 	return t.Format(sortableTimeFormat)
 }
 
-// workflowScanner abstracts *sql.Row and *sql.Rows so a single scanner func can
-// serve both QueryRow and Query loops.
 type workflowScanner interface {
 	Scan(dest ...any) error
 }
 
-// WorkflowRunRow is the store-local representation of a workflow_runs row. It is
-// intentionally NOT a protocol type: S-store stays free of protocol/generated
-// types; the S-proto step owns the wire shape.
+// Intentionally NOT a protocol type: the store stays free of protocol/generated types.
 type WorkflowRunRow struct {
 	RunID       string
 	ScriptPath  string
@@ -54,9 +42,7 @@ type WorkflowRunRow struct {
 	CompletedAt *string
 }
 
-// WorkflowAgentCallRow is the store-local representation of a workflow_agent_calls
-// row. ID is informational on read (it is the durable append-order key) and is
-// ignored on write (AUTOINCREMENT / composite-key-conflict driven).
+// ID is informational on read (the durable append-order key) and ignored on write.
 type WorkflowAgentCallRow struct {
 	ID              int64
 	RunID           string
@@ -76,7 +62,6 @@ type WorkflowAgentCallRow struct {
 	CompletedAt     *string
 }
 
-// UpsertWorkflowRun creates or updates a workflow run, keyed on run_id.
 func (s *Store) UpsertWorkflowRun(run *WorkflowRunRow) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -126,9 +111,6 @@ func (s *Store) UpsertWorkflowRun(run *WorkflowRunRow) error {
 	return err
 }
 
-// UpsertWorkflowAgentCall creates or updates a journaled agent call, keyed on the
-// natural composite key (run_id, ordinal). The composite-key conflict is the
-// divergence-overwrite path used on resume; a fresh ordinal inserts.
 func (s *Store) UpsertWorkflowAgentCall(call *WorkflowAgentCallRow) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,7 +159,6 @@ func (s *Store) UpsertWorkflowAgentCall(call *WorkflowAgentCallRow) error {
 	return err
 }
 
-// GetWorkflowRun returns a workflow run by run_id, or (nil, nil) if absent.
 func (s *Store) GetWorkflowRun(runID string) (*WorkflowRunRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -204,8 +185,7 @@ func (s *Store) GetWorkflowRun(runID string) (*WorkflowRunRow, error) {
 	return run, nil
 }
 
-// ListWorkflowRuns returns workflow runs newest-first. An empty sessionID lists
-// all runs; a non-empty sessionID filters to that session.
+// An empty sessionID lists all runs.
 func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -252,8 +232,7 @@ func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 	return runs, rows.Err()
 }
 
-// ListWorkflowAgentCalls returns all journaled calls for a run in durable append
-// order (ascending id), which reconstructs the journal's Entries() ordering.
+// Ascending id is durable append order, which reconstructs the journal's Entries() ordering.
 func (s *Store) ListWorkflowAgentCalls(runID string) ([]*WorkflowAgentCallRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -286,9 +265,8 @@ func (s *Store) ListWorkflowAgentCalls(runID string) ([]*WorkflowAgentCallRow, e
 	return calls, rows.Err()
 }
 
-// DeleteWorkflowRun removes a run and its journaled calls. The store never enables
-// PRAGMA foreign_keys, so the ON DELETE CASCADE clause is inert; child rows are
-// deleted explicitly.
+// The store never enables PRAGMA foreign_keys, so the ON DELETE CASCADE clause is
+// inert; child rows are deleted explicitly.
 func (s *Store) DeleteWorkflowRun(runID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

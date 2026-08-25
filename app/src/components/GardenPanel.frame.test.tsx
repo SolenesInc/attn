@@ -39,9 +39,7 @@ const middle = plot('s-mid111', 'one panel', 's-crown1');
 const leaf = seed({ id: 's-leaf11', title: 'the actual work', edges: [{ kind: 'part-of', to: 's-mid111' }] });
 const world = [crown, middle, leaf];
 
-// The stub in test/setup.ts never calls anyone back, and the whole point here is
-// what happens *while* the box changes size — so this file installs one that can
-// be driven.
+// The ResizeObserver stub in test/setup.ts never calls anyone back; this file installs a drivable one.
 const observers: Array<{ target: Element; cb: ResizeObserverCallback }> = [];
 class DrivableResizeObserver {
   constructor(private cb: ResizeObserverCallback) {}
@@ -85,8 +83,6 @@ describe('GardenPanel in its frame', () => {
     _resetEscapeStackForTest();
   });
 
-  // The whole promotion rests on this: the renderer follows the box, so growing
-  // the box IS the promotion. Nobody passes the panel a mode.
   describe('the walk follows the width, not the caller', () => {
     it('stacks in a dock-sized box and columns in a window-sized one', () => {
       boxWidth = 520;
@@ -100,9 +96,6 @@ describe('GardenPanel in its frame', () => {
       expect(document.querySelector('.garden-panel.is-columns')).toBeNull();
     });
 
-    // Crossing the threshold replaces the element being measured, so the ref's
-    // cleanup has to release the old observer. One panel, one observer, however
-    // many times it crosses.
     it('leaves no observer behind when the renderer changes', () => {
       boxWidth = 520;
       render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
@@ -141,8 +134,6 @@ describe('GardenPanel in its frame', () => {
     });
   });
 
-  // Escape goes down exactly one level. The order is LIFO and easy to get
-  // backwards — the floor must be reached only when nothing is left above it.
   describe('the escape ladder', () => {
     function ladder() {
       const onEscapeFloor = vi.fn();
@@ -186,11 +177,6 @@ describe('GardenPanel in its frame', () => {
       expect(onClose).not.toHaveBeenCalled();
     });
 
-    // The rungs arm at different moments — the query when you type, the climb
-    // when you walk in — and the stack orders itself by when each turns on. Not
-    // here: reopening onto a trail the garden already had arms the climb and the
-    // floor in one commit, and then nothing but the order they are registered in
-    // decides which one Escape reaches.
     it('climbs rather than demotes when both rungs arm at once', () => {
       useGardenWalk.setState({ trail: ['s-crown1', 's-mid111'] });
       const { onEscapeFloor } = ladder();
@@ -204,15 +190,11 @@ describe('GardenPanel in its frame', () => {
     it('leaves Escape alone when there is no frame under it', () => {
       boxWidth = 520;
       render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
-      // No onEscapeFloor: the rung is not registered at all, so Escape at the
-      // root falls through to whatever is below the garden.
       escape();
       expect(document.querySelector('.garden-panel')).not.toBeNull();
     });
   });
 
-  // The way across is a control in the header, beside the way out, and it says
-  // which direction it goes.
   describe('the header control', () => {
     it('is absent unless there is another frame to go to', () => {
       boxWidth = 520;

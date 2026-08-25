@@ -1,6 +1,3 @@
-// The shape both list panels in Settings repeat: one thing at a time, a busy
-// key naming which row is mid-flight, and one error line for whatever came
-// back. Written out per action that was four setState calls around every await.
 
 import { useCallback, useState } from 'react';
 
@@ -12,11 +9,6 @@ export interface PanelAction {
   /** Which row is mid-flight: an endpoint or plugin id, or null. */
   busyKey: string | null;
   busy: boolean;
-  /**
-   * Run one action, holding the panel busy under `key` until it settles. The
-   * callback owns what success means, so it can clear a form or re-list before
-   * the busy mark comes down.
-   */
   run: (key: string, fallbackMessage: string, action: () => Promise<void>) => Promise<void>;
 }
 

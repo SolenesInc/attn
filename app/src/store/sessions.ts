@@ -14,11 +14,8 @@ import {
 
 export type { TerminalWorkspaceState };
 
-// Sessions whose runtime is being reloaded in place. The reload's exit event
-// can look like a clean voluntary quit (code 0, no signal), which would trip
-// the auto-close-on-clean-exit path in App.tsx and tear down the pane/workspace
-// while the daemon restores the runtime. Consumers (the session-exit handler)
-// check this before treating an exit as end-of-life.
+// A reload's exit event looks like a clean voluntary quit (code 0, no signal),
+// which would trip auto-close-on-clean-exit and tear the pane down mid-restore.
 const reloadingSessionIds = new Set<string>();
 
 export function isSessionReloading(id: string): boolean {
@@ -34,18 +31,8 @@ export interface Session {
   agent: SessionAgent;
   endpointId?: string;
   yoloMode?: boolean;
-  // chiefOfStaff requests that this session be launched already holding the
-  // chief-of-staff role so the notebook guidance is injected on its first boot
-  // (the post-launch promote path can't resume a zero-turn session). Set only at
-  // creation via the new-session dialog's "create as chief" toggle.
   chiefOfStaff?: boolean;
-  // The conversation file this session was started from, carried until the
-  // spawn args are taken. The daemon persists it in the launch intent, so a
-  // revive does not need it back from here.
   resumeConversationFile?: string;
-  // The launcher's per-session auto mode choice, undefined for "follow the
-  // promoted default". Like resumeConversationFile it is carried only until the
-  // spawn args are taken; the daemon persists it in the launch intent.
   autoMode?: boolean;
   transcriptMatched: boolean;
   branch?: string;
@@ -75,13 +62,10 @@ interface LauncherConfig {
 interface SessionStore {
   sessions: Session[];
   activeSessionId: string | null;
-  // Previously-active session IDs, most recent first. Used to restore
-  // selection when the active session disappears.
   recentSessionIds: string[];
   connected: boolean;
   launcherConfig: LauncherConfig;
 
-  // Actions
   connect: () => Promise<void>;
   createSession: (
     label: string,
@@ -92,8 +76,6 @@ interface SessionStore {
     yoloMode: boolean | undefined,
     workspaceId: string,
     chiefOfStaff?: boolean,
-    // An existing conversation to pick up from. Only a conversation agent reads
-    // it; every other agent ignores it.
     resumeConversationFile?: string,
     autoMode?: boolean,
   ) => Promise<string>;
@@ -110,7 +92,6 @@ interface SessionStore {
 const MIN_STABLE_COLS = 20;
 const MIN_STABLE_ROWS = 8;
 
-// Test helper for E2E - allows injecting sessions without PTY
 interface TestSession {
   id: string;
   label: string;
@@ -171,7 +152,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     if (get().connected) return;
 
     try {
-      // Listen for PTY events (no connect call needed - PTY is native now)
       await listenPtyEvents((event) => {
         const msg = event.payload;
         const { sessions } = get();
@@ -205,7 +185,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     resumeConversationFile?: string,
     autoMode?: boolean,
   ) => {
-    // Use provided ID or generate new one
     const id = providedId || crypto.randomUUID();
     if (!providedWorkspaceId) {
       throw new Error('createSession requires workspaceId');
@@ -304,8 +283,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       yolo_mode: session.yoloMode ?? null,
       ...(session.chiefOfStaff ? { chief_of_staff: true } : {}),
       ...(session.resumeConversationFile ? { resume_conversation_file: session.resumeConversationFile } : {}),
-      // Explicit false is a real answer here — "the launcher turned auto mode
-      // off" — so the field is sent whenever it was set, never `&&`-collapsed.
+      // Explicit false is a real answer here, so the field is sent whenever it was
+      // set and is never `&&`-collapsed away.
       ...(session.autoMode !== undefined ? { auto_mode: session.autoMode } : {}),
       ...(selectedExecutable ? { executable: selectedExecutable } : {}),
       ...(session.agent === 'claude' && selectedExecutable
@@ -471,7 +450,6 @@ declare global {
   }
 }
 
-// Expose test helpers for E2E testing (only in development)
 if (import.meta.env.DEV) {
   window.__TEST_INJECT_SESSION = (session: TestSession) => {
     if (!session.workspaceId) {

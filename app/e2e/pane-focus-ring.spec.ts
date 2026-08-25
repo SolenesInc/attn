@@ -1,8 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// Regression witness for the SessionTerminalWorkspace selection-marker z-index:
-// the edge rail and spotlight corner marks must paint above the workspace's own
-// overlays, of which the split divider is the one that shares a pane edge.
 // This needs a real browser because jsdom/happy-dom do not apply the stylesheet.
 test('active-pane selection markers paint above the split divider', async ({ page }) => {
   await page.goto('/test-harness/?component=PaneFocusRing');

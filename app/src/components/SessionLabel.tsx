@@ -2,16 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import './SessionLabel.css';
 
-/**
- * A session name that unfurls out of the sidebar while its row is hovered.
- *
- * Constraints, all load-bearing: the panel starts at the rail's right edge and
- * never re-enters it, or it blacks out the row's hover-revealed `•••` actions;
- * it is a `document.body` portal, since the sidebar's scroller clips overflow;
- * it copies the label's computed typography, which portaling loses; and hover
- * binds to the enclosing `.session-item` row, not this span, which covers only
- * the text line and would drop the reveal on entry through the row's padding.
- */
+// Load-bearing: the panel starts at the rail's right edge and never re-enters it,
+// or it blacks out the row's actions; it portals to document.body past the clip.
 
 const PAD_Y = 6;
 const MAX_PANEL_WIDTH = 460;
@@ -42,13 +34,12 @@ export function SessionLabel({ label }: { label: string }) {
     if (!span) {
       return;
     }
-    // Only reveal what the row cut off; the extra pixel absorbs sub-pixel rounding.
+    // The extra pixel absorbs sub-pixel rounding.
     if (span.scrollWidth <= span.clientWidth + 1) {
       return;
     }
     const rect = span.getBoundingClientRect();
     const style = window.getComputedStyle(span);
-    // The rail's edge, or the row's own if this label is used outside one.
     const rail = span.closest('.sidebar') ?? span.closest('.session-item') ?? span;
     const left = rail.getBoundingClientRect().right;
     setReveal({
@@ -73,7 +64,7 @@ export function SessionLabel({ label }: { label: string }) {
     const row = span.closest('.session-item') ?? span;
     row.addEventListener('pointerenter', show);
     row.addEventListener('pointerleave', hide);
-    // A click can reorder the list under a motionless pointer, leaving the panel
+    // A click can reorder the list under a motionless pointer, stranding the panel
     // over a row it no longer describes.
     row.addEventListener('pointerdown', hide);
     return () => {
@@ -87,8 +78,7 @@ export function SessionLabel({ label }: { label: string }) {
     if (!reveal) {
       return;
     }
-    // Fixed positioning is measured once; capture the scroll so the sidebar's own
-    // scroller invalidates it too.
+    // Capture, so the sidebar's own scroller invalidates the measured position too.
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
     return () => {
@@ -102,8 +92,6 @@ export function SessionLabel({ label }: { label: string }) {
     if (!panel || !reveal) {
       return;
     }
-    // Lift just enough to fit rather than flipping above the row, which would
-    // break the "this row, continued" premise.
     const rect = panel.getBoundingClientRect();
     const overflow = rect.bottom - (window.innerHeight - VIEWPORT_MARGIN);
     if (overflow > 0) {
@@ -120,8 +108,6 @@ export function SessionLabel({ label }: { label: string }) {
               ref={panelRef}
               className="session-label-reveal"
               data-testid="session-label-reveal"
-              // Decoration: the clipped span already carries the full name in the
-              // accessibility tree.
               aria-hidden="true"
               style={{
                 top: reveal.top,
@@ -136,7 +122,7 @@ export function SessionLabel({ label }: { label: string }) {
                 color: reveal.color,
               }}
             >
-              {/* Its own element so the name can arrive a beat after its surface. */}
+              {/* Its own element: the name can arrive a beat after its surface. */}
               <span className="session-label-reveal-text">{label}</span>
             </div>,
             document.body,

@@ -3,13 +3,6 @@ import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import './AppViewParamsPrompt.css';
 
-// What a view asks for when it is docked.
-//
-// The string is opaque to attn: the app declared the label and the placeholder,
-// and what the text means is the app's business. It is asked for here — once, at
-// dock time — because that is the only moment the answer belongs to the user
-// rather than to the app, and because it is what makes two tiles of one view
-// show different things.
 interface AppViewParamsPromptProps {
   /** "reviewer/approvals" — which view is asking. */
   viewTitle: string;
@@ -33,18 +26,15 @@ export function AppViewParamsPrompt({
   useEscapeStack(onClose, true);
 
   const submit = () => {
-    // An empty answer is a legitimate one — the view is told it got none, and
-    // an app that needs it says so far better than a modal that will not close.
+    // An empty answer is a legitimate one: the view is told it got none.
     onSubmit(value.trim());
     onClose();
   };
 
   return (
     <div className="app-view-params-prompt" role="presentation" onClick={onClose}>
-      {/* The trap is what makes the field typable. This prompt opens from the
-          command menu, whose own trap returns focus to the terminal as it
-          closes — after this one has mounted — so a plain focus-on-mount is
-          undone and every keystroke goes to the shell instead. */}
+      {/* The command menu's own trap returns focus to the terminal as it closes,
+          after this mounts, so focus-on-mount alone loses every keystroke. */}
       <FocusTrap
         focusTrapOptions={{
           allowOutsideClick: true,

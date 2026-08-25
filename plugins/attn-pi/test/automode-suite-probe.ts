@@ -1,9 +1,5 @@
-// Loads an extension entrypoint (argv[2]) the way pi does — a default export
-// called with pi's API — and prints what it registered.
-//
-// A subprocess rather than an import: an entrypoint reads its environment once
-// at module scope, which is exactly the behavior under test, and a module
-// loaded twice in one bun process reads it once.
+// A subprocess rather than an import: the entrypoint reads its environment once at
+// module scope, and a module loaded twice in one bun process still reads it once.
 export {};
 
 const registered = { events: [] as string[], commands: [] as string[], flags: [] as string[] };

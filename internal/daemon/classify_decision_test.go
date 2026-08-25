@@ -21,9 +21,6 @@ func TestClassifyPreTranscript(t *testing.T) {
 		wantState         string
 	}{
 		{
-			// An agent sitting out its own build mid-plan has open todos precisely
-			// because it is not finished; reading them as "waiting on the user"
-			// would ring on every yielded stop of a multi-step task.
 			name:              "a yield ignores pending todos and reads the transcript",
 			pendingTodos:      3,
 			transcriptEnabled: true,
@@ -32,8 +29,6 @@ func TestClassifyPreTranscript(t *testing.T) {
 			wantAction:        classifyReadTranscript,
 		},
 		{
-			// No judgment is possible, so nothing is filed: settling idle here
-			// would queue a turn the payload says will resume on its own.
 			name:              "a yield with no classifier files nothing",
 			transcriptEnabled: true,
 			classifierEnabled: false,
@@ -107,8 +102,6 @@ func TestClassifyPostTranscript(t *testing.T) {
 			wantReason: "no_new_assistant_turn",
 		},
 		{
-			// A yield's non-answers all file nothing: unknown or idle here would
-			// move a turn the payload says will resume into the user's queue.
 			name:       "a yield's read error files nothing",
 			err:        errors.New("permission denied"),
 			stop:       stopClassification{yielded: true},
@@ -175,9 +168,6 @@ func TestClassifyVerdict(t *testing.T) {
 			wantReason: "classifier",
 		},
 		{
-			// PARKED's precondition — the harness-facts line — is only in a yield's
-			// input; answered without it, the judge misapplied the rule. Unknown
-			// files no evidence, so the session settles on its own fallback.
 			name:       "a parked verdict without a yield is no verdict",
 			state:      classifier.VerdictParked,
 			wantState:  protocol.StateUnknown,

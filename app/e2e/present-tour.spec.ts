@@ -1,19 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 
-/**
- * PresentTour (the multi-file `@pierre/diffs` CodeView tour reader) component
- * harness coverage. Mirrors e2e/diff-view-comment-interactions.spec.ts's
- * conventions (goto, wait for `__HARNESS__.ready`, wait for real rendered
- * content before interacting — Shiki highlighting is async, and CodeView
- * mounts each file's `<diffs-container>` lazily as it scrolls into the
- * virtualizer's window).
- *
- * The harness (test-harness/harnesses/PresentTourHarness.tsx) seeds a fixed
- * 3-file manifest (src/alpha.ts, src/beta.ts, src/gamma.ts), each with several
- * separate hunks so the tour has real scroll range even with
- * `expandUnchanged: false` collapsing unchanged context.
- */
-
 const UNSEEDED = '/test-harness/?component=PresentTour&seed=0';
 
 async function openHarness(page: Page, url: string) {
@@ -23,12 +9,10 @@ async function openHarness(page: Page, url: string) {
   await page.locator('diffs-container [data-line-number-content]').first().waitFor();
 }
 
-/** All currently-mounted per-file `<diffs-container>` roots, in DOM order. */
 function fileContainers(page: Page): Locator {
   return page.locator('diffs-container');
 }
 
-/** The file path shown in a mounted `<diffs-container>`'s header title. */
 async function titleOf(container: Locator): Promise<string | null> {
   const title = container.locator('[data-title]');
   if ((await title.count()) === 0) return null;
@@ -39,20 +23,14 @@ function calls(page: Page, name: string) {
   return page.evaluate((n) => window.__HARNESS__.getCalls(n), name);
 }
 
-/**
- * Scrolls the tour via a REAL wheel event, not a programmatic scroll.
- * PresentTour pins `.present-tour-scroller` to the top until real user input
- * arrives (ported from DiffView's cold-window defense) — a JS-driven scroll
- * here would be silently snapped back to 0 before any of these tests got to
- * assert anything, since it doesn't count as "the user took over".
- */
+/** A REAL wheel event: PresentTour pins `.present-tour-scroller` to the top
+ * until real user input arrives, so a JS-driven scroll snaps back to 0. */
 async function scrollDown(page: Page, amount: number) {
   const box = await page.locator('.present-tour-scroller').boundingBox();
   if (box) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   }
   await page.mouse.wheel(0, amount);
-  // Let the virtualizer's rAF-driven render loop settle before reading scrollTop.
   await page.waitForTimeout(200);
 }
 
@@ -60,14 +38,8 @@ async function scrollerScrollTop(page: Page): Promise<number> {
   return page.evaluate(() => document.querySelector('.present-tour-scroller')?.scrollTop ?? -1);
 }
 
-/**
- * `scrollToFile` requests a `behavior: 'smooth'` scroll, so the virtualizer
- * keeps mounting/unmounting `<diffs-container>`s while the animation runs.
- * Interacting with an element found mid-animation (e.g. hovering a line to
- * reveal the gutter "+") races the next virtualization pass and detaches —
- * wait for scrollTop to stop moving across two checks before locating
- * anything by index/title.
- */
+/** `scrollToFile` scrolls smoothly, so the virtualizer keeps remounting
+ * `<diffs-container>`s and anything located mid-animation detaches. */
 async function waitForScrollSettle(page: Page) {
   let previous = await scrollerScrollTop(page);
   for (let i = 0; i < 20; i++) {
@@ -78,7 +50,6 @@ async function waitForScrollSettle(page: Page) {
   }
 }
 
-/** Locates the currently-mounted `<diffs-container>` for a given file path, if any. */
 async function findContainerByTitle(page: Page, path: string): Promise<Locator | null> {
   const count = await fileContainers(page).count();
   for (let i = 0; i < count; i++) {
@@ -88,46 +59,27 @@ async function findContainerByTitle(page: Page, path: string): Promise<Locator |
   return null;
 }
 
-/**
- * Opens a draft on the given line via the gutter "+" (hover then click),
- * scoped to one file's container.
- *
- * The diff rows re-render while hover state, draft mounts, and the
- * virtualizer churn, so the "+" can detach between resolving and clicking
- * (observed as `element was detached from the DOM, retrying` until the test
- * times out). Retry the whole hover→click gesture until a new draft form
- * actually appears, skipping the click if a prior attempt already landed.
- *
- * The budgets inside the block are deliberately short and do not follow the
- * config's assertion floor: here a timeout is the detector that ends a failed
- * attempt so the next one can start, and `toPass` is the real bound.
- */
+/** The gutter "+" detaches between resolving and clicking, so the gesture is
+ * retried; the short budgets inside end a failed attempt, `toPass` bounds it. */
 async function openDraftViaGutter(container: Locator, line: Locator) {
   const page = container.page();
   const forms = page.getByTestId('diff-comment-form');
   const before = await forms.count();
   await expect(async () => {
-    if ((await forms.count()) > before) return; // a prior attempt's click landed
+    if ((await forms.count()) > before) return;
     await line.hover();
     await container.locator('[data-utility-button]').click({ timeout: 2000 });
     await expect(forms).toHaveCount(before + 1, { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
 }
 
-/**
- * Collapses the summary card up front so its scroll-triggered fold (an
- * ~0.18s height animation that shifts the whole scroller and churns the
- * virtualizer) can't fire mid-gesture in specs whose subject is draft/form
- * behavior, not the fold. The fold itself is covered by its own spec.
- */
+/** Collapse the summary first: its ~0.18s scroll-triggered fold shifts the
+ * whole scroller and can fire mid-gesture. The fold has its own spec. */
 async function collapseSummaryFirst(page: Page) {
   const summary = page.locator('.present-tour-summary');
   if ((await summary.count()) === 0) return;
   await page.getByTestId('present-tour-summary-toggle').click();
   await expect(summary).toHaveClass(/collapsed/);
-  // The class flips immediately, but the body's height transition
-  // (max-height 0.18s) still runs after — settle it too so the scroller's
-  // layout has fully stopped moving before any gesture below.
   await expect(page.getByTestId('present-tour-summary-body')).toHaveCSS('max-height', '0px');
 }
 
@@ -135,18 +87,12 @@ test.describe('PresentTour rendering', () => {
   test('renders every manifest file as a card inside one scroller, in reading order', async ({ page }) => {
     await openHarness(page, UNSEEDED);
 
-    // The tour is a single scroll surface — exactly one `.present-tour-scroller`,
-    // hosting every file's `<diffs-container>` as a virtualized child.
     await expect(page.locator('.present-tour-scroller')).toHaveCount(1);
 
-    // alpha.ts is first in the manifest and must be the first (and initially
-    // only, before any scrolling) file mounted.
     const containers = fileContainers(page);
     await expect(containers.first()).toBeVisible();
     expect(await titleOf(containers.first())).toBe('src/alpha.ts');
 
-    // Scrolling to the end reveals gamma.ts as the last file, confirming
-    // reading order end-to-end (not just the first item).
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/gamma.ts'));
     await expect.poll(async () => {
       const last = containers.last();
@@ -162,12 +108,6 @@ test.describe('PresentTour rendering', () => {
 });
 
 test.describe('PresentTour reviewed toggle', () => {
-  // Real-browser coverage for the slice-1 "controlled items only re-render on
-  // a version bump" trap (see the module doc), applied to the reviewed
-  // indicator: it's rendered via `renderHeaderPrefix`, a callback-based slot
-  // rather than a field baked into `items`, so this proves the indicator
-  // updates live without relying on jsdom (which can't mount the real
-  // `@pierre/diffs` CodeView at all — see PresentRoot.test.tsx's mock note).
   test('clicking the header Reviewed toggle flips state and calls back to the parent', async ({ page }) => {
     await openHarness(page, UNSEEDED);
 
@@ -182,8 +122,6 @@ test.describe('PresentTour reviewed toggle', () => {
     await expect(toggle).toHaveClass(/is-reviewed/);
     expect(await page.evaluate(() => window.__HARNESS__.getReviewedPaths())).toEqual(['src/alpha.ts']);
 
-    // Click again to un-mark, confirming the version-bump path handles both
-    // directions, not just the initial flip.
     await toggle.click();
     await expect(toggle).not.toHaveClass(/is-reviewed/);
     expect(await page.evaluate(() => window.__HARNESS__.getReviewedPaths())).toEqual([]);
@@ -237,13 +175,10 @@ test.describe('PresentTour rail-driven scroll', () => {
   test('a scroll-to-path request (rail click / j-k) scrolls the tour to that file', async ({ page }) => {
     await openHarness(page, UNSEEDED);
 
-    // Sanity: alpha is showing first, beta is not yet mounted.
     expect(await titleOf(fileContainers(page).first())).toBe('src/alpha.ts');
 
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/beta.ts'));
 
-    // Scrolling all the way to beta (a later file) must actually move the
-    // scroller off zero and mount beta's container.
     await expect.poll(() => scrollerScrollTop(page)).toBeGreaterThan(0);
     await expect.poll(async () => {
       const count = await fileContainers(page).count();
@@ -260,10 +195,6 @@ test.describe('PresentTour rail-driven scroll', () => {
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/gamma.ts'));
     await expect.poll(() => scrollerScrollTop(page)).toBeGreaterThan(0);
 
-    // Scroll back to the top via a real wheel (can't scroll programmatically —
-    // the pin is already disarmed by the prior imperative scroll's own
-    // internal mechanics, but a wheel is the realistic way a user would do
-    // this) then re-request gamma; the tour must scroll back down again.
     await scrollDown(page, -100000);
     await page.waitForTimeout(200);
     const afterUp = await scrollerScrollTop(page);
@@ -286,14 +217,7 @@ test.describe('PresentTour multiple simultaneous drafts across files', () => {
     await expect(forms).toHaveCount(1);
     await forms.nth(0).locator('textarea').fill('Comment on alpha');
 
-    // Scroll to beta and open a second, independent draft there.
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/beta.ts'));
-    // The scroll is smooth-animated (see waitForScrollSettle's doc comment);
-    // let the virtualizer stop churning before interacting by index. Opening
-    // alpha's draft above also grows alpha's rendered height (the comment
-    // form), which can shift beta in/out of the virtualizer's mounted window
-    // right as the animation settles — re-poll after settling rather than a
-    // single lookup.
     await waitForScrollSettle(page);
     let betaContainer: Locator | null = null;
     await expect.poll(async () => {
@@ -305,13 +229,11 @@ test.describe('PresentTour multiple simultaneous drafts across files', () => {
     await openDraftViaGutter(betaContainer!, betaLine);
 
     await expect(forms).toHaveCount(2);
-    // Both boxes coexist with independently-typed text.
     await expect(forms.nth(0).locator('textarea')).toHaveValue('Comment on alpha');
     await forms.nth(1).locator('textarea').fill('Comment on beta');
     await expect(forms.nth(0).locator('textarea')).toHaveValue('Comment on alpha');
     await expect(forms.nth(1).locator('textarea')).toHaveValue('Comment on beta');
 
-    // Saving each independently records the right filepath.
     await forms.nth(1).locator('.save-btn').click();
     await expect.poll(() => calls(page, 'addComment')).toHaveLength(1);
     await forms.nth(0).locator('.save-btn').click();
@@ -334,9 +256,6 @@ test.describe('PresentTour multiple simultaneous drafts across files', () => {
     await forms.nth(0).locator('textarea').fill('Opened first (alpha)');
 
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/beta.ts'));
-    // See the sibling test's comment: alpha's open draft grows its rendered
-    // height, which can shift beta in/out of the virtualizer's mounted
-    // window right as the smooth-scroll animation settles.
     await waitForScrollSettle(page);
     let betaContainer: Locator | null = null;
     await expect.poll(async () => {
@@ -386,7 +305,6 @@ test.describe('PresentTour draft and comment gutter interactions', () => {
   });
 
   test('a seeded comment can be edited and deleted', async ({ page }) => {
-    // seed=1 (default): harness seeds one comment on src/alpha.ts.
     await openHarness(page, '/test-harness/?component=PresentTour');
     await collapseSummaryFirst(page);
 
@@ -408,11 +326,6 @@ test.describe('PresentTour draft and comment gutter interactions', () => {
 });
 
 test.describe('PresentTour summary fold', () => {
-  // Browser-level regression for the listener-never-attached bug: the harness's
-  // `deferred=1` + `settleDiffs()` mode reproduces the live app's loading ->
-  // settled transition (diffs arrive async over the daemon WS), which is
-  // exactly the case unit tests and the default harness mode (diffs
-  // pre-loaded) never exercised.
   test('wheel-scrolling the diff folds the summary card; the toggle re-expands it', async ({ page }) => {
     await page.goto('/test-harness/?component=PresentTour&seed=0&deferred=1');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
@@ -440,12 +353,6 @@ test.describe('PresentTour summary fold', () => {
 
 test.describe('PresentTour deferred-load scroll replay', () => {
   test('a scroll request issued while still loading is replayed once files settle', async ({ page }) => {
-    // `&deferred=1` starts every file `{loading: true}`. CodeView now mounts
-    // immediately (see PresentTour's progressive-load module doc) with each
-    // file rendered as a zero-hunk placeholder `<diffs-container>` rather
-    // than waiting for every diff fetch to settle — so this exercises the
-    // case the rail/j-k effect used to drop: a scroll request that arrives
-    // before a file's real diff item has been admitted.
     await page.goto('/test-harness/?component=PresentTour&seed=0&deferred=1');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await expect.poll(() => fileContainers(page).count()).toBe(3);
@@ -468,8 +375,6 @@ test.describe('PresentTour deferred-load scroll replay', () => {
     }).toBe(true);
     expect(gammaContainer).not.toBeNull();
 
-    // A scroller pinned to the top would leave gamma (the last of 3 files)
-    // out of the virtualizer's mounted window; scrolled-to means it's visible.
     await expect(gammaContainer!).toBeInViewport();
   });
 });

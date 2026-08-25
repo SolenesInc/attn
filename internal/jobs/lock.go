@@ -10,28 +10,12 @@ import (
 	"syscall"
 )
 
-// ErrAlreadyRunning is returned by Start when another live Runner already owns
-// the lock dir. The orphan-recovery and single-instance guarantees assume at most
-// one live Runner per store: two Runners would both claim the same record, both
-// save StateRunning (last-writer-wins, no torn row), and both invoke the handler
-// concurrently — double-applying the durable write. Per-kind concurrency bounds
-// parallelism WITHIN one Runner; it does nothing across processes. The
-// CommitGuard is likewise a per-process in-memory latch with no cross-process
-// coordination, so nothing else can fence that.
+// At most one live Runner per store: two would both claim the same record and double-apply
+// the durable write. Per-kind bounds and CommitGuard are in-process and fence nothing across.
 var ErrAlreadyRunning = errors.New("jobs: another runner already owns this store")
 
-// lockFileName is the single-instance ownership marker inside the lock dir.
 const lockFileName = ".runner.lock"
 
-// AcquireDirLock takes exclusive single-instance ownership for this process by
-// creating <dir>/.runner.lock with O_EXCL. If the file already exists it either
-// belongs to a live process (refuse with ErrAlreadyRunning) or to a crashed one
-// (stale ⇒ steal it). The PID inside lets a restart after a crash reclaim the lock
-// instead of wedging forever. Returns the acquired lock path for ReleaseDirLock.
-//
-// It is a free function so a Store implementation can reach it: the daemon's
-// SQLite-backed store locks under the profile data dir, one runner per profile
-// matching one daemon per profile.
 func AcquireDirLock(dir string, log LogFunc) (string, error) {
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -56,11 +40,9 @@ func AcquireDirLock(dir string, log LogFunc) (string, error) {
 		if !errors.Is(err, os.ErrExist) {
 			return "", err
 		}
-		// The lock exists. Decide whether it is live (refuse) or stale (steal).
 		if pid, alive := lockHolderAlive(path); alive {
 			return "", fmt.Errorf("%w (held by pid %d)", ErrAlreadyRunning, pid)
 		}
-		// Stale lock from a crashed process: remove it and retry the O_EXCL create.
 		// The retry loop closes the race where two starters both see it stale.
 		if rmErr := os.Remove(path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 			return "", rmErr
@@ -69,9 +51,6 @@ func AcquireDirLock(dir string, log LogFunc) (string, error) {
 	}
 }
 
-// ReleaseDirLock removes the lock file if it still belongs to this process. It is
-// best-effort: a failure to remove is logged, not returned, because Stop must not
-// block shutdown on a lock-file cleanup error.
 func ReleaseDirLock(path string, log LogFunc) {
 	if path == "" {
 		return
@@ -80,8 +59,7 @@ func ReleaseDirLock(path string, log LogFunc) {
 		log = func(string, ...interface{}) {}
 	}
 	if pid, _ := lockHolderAlive(path); pid != 0 && pid != os.Getpid() {
-		// Another process re-acquired the lock after we crashed/stalled; do not
-		// delete its marker.
+		// Another process re-acquired the lock; do not delete its marker.
 		return
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -89,10 +67,6 @@ func ReleaseDirLock(path string, log LogFunc) {
 	}
 }
 
-// lockHolderAlive reports the PID recorded in the lock file and whether that
-// process is still alive. An unreadable/garbage lock is treated as stale (alive
-// false) so a corrupt marker can never wedge startup permanently. A lock with no
-// readable PID is also treated as stale.
 func lockHolderAlive(path string) (pid int, alive bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -103,14 +77,11 @@ func lockHolderAlive(path string) (pid int, alive bool) {
 		return 0, false
 	}
 	if pid == os.Getpid() {
-		// Our own lock (shouldn't happen via Start, but be safe): treat as live so
-		// we don't stomp it.
 		return pid, true
 	}
 	return pid, processAlive(pid)
 }
 
-// processAlive reports whether a process with the given pid currently exists.
 // Signal 0 probes liveness without delivering a signal: ESRCH ⇒ gone, EPERM ⇒
 // alive but not ours, nil ⇒ alive.
 func processAlive(pid int) bool {

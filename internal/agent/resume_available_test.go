@@ -21,26 +21,22 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
-// Claude resumes via `claude -r <id>`, which needs a transcript on disk. The
-// transcript is written lazily on the first turn, so resumability == transcript
-// existence.
+// Claude resumes via `claude -r <id>`, which needs a transcript on disk. It is written
+// lazily on the first turn, so resumability == transcript existence.
 func TestClaudeResumeAvailable(t *testing.T) {
 	claude := &Claude{}
 
-	// Empty home: no transcript for this id -> not resumable.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	if ResumeAvailable(claude, "no-transcript-id") {
 		t.Fatal("ResumeAvailable should be false when no transcript exists")
 	}
 
-	// With a transcript on disk -> resumable.
 	writeClaudeTranscriptFixture(t, "has-transcript-id")
 	if !ResumeAvailable(claude, "has-transcript-id") {
 		t.Fatal("ResumeAvailable should be true when the transcript exists")
 	}
 }
 
-// An empty resume id is never resumable: there is nothing to resume.
 func TestResumeAvailableEmptyID(t *testing.T) {
 	if ResumeAvailable(&Claude{}, "") {
 		t.Fatal("ResumeAvailable(\"\") must be false")

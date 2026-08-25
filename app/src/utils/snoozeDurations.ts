@@ -1,8 +1,5 @@
-/**
- * Snooze durations and the arithmetic turning one into an instant. The client
- * computes it: "tomorrow" needs the user's timezone, which a remote daemon does
- * not share. The wire carries an absolute instant.
- */
+// The client computes snooze instants: "tomorrow" needs the user's timezone, which a
+// remote daemon does not share. The wire carries an absolute instant.
 
 export type SnoozeChoiceId = '30m' | '1h' | '8h' | 'tomorrow' | 'saturday' | 'monday';
 
@@ -47,10 +44,8 @@ function tomorrowAtWakeHour(now: Date): Date {
   return at;
 }
 
-/**
- * When a choice wakes, as an absolute instant. Day choices use Date arithmetic,
- * not millisecond addition: +24h across a DST boundary lands at 8am or 10am.
- */
+/** When a choice wakes, as an absolute instant. Day choices use Date arithmetic, not
+ * millisecond addition: +24h across a DST boundary lands at 8am or 10am. */
 export function snoozeInstant(choice: SnoozeChoiceId, now: Date): Date {
   switch (choice) {
     case '30m':
@@ -99,10 +94,6 @@ function dayAndTime(at: Date): string {
   return `${at.toLocaleDateString(undefined, { weekday: 'short' })} ${clockTime(at)}`;
 }
 
-/**
- * Whether a broadcast deadline is still in the future — the client's guard for a
- * snapshot held while the wake lands; the daemon never sends a lapsed deadline.
- */
 export function isSnoozed(until: string | undefined, now: number): boolean {
   if (!until) return false;
   const at = Date.parse(until);

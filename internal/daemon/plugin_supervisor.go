@@ -12,13 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// The plugin runtime is one consumer of internal/supervise: every installed
-// plugin is a supervised child named by its manifest, launched with the plugin
-// environment the daemon computes for that generation. Restart backoff,
-// generation fencing, the stability window, the disconnect grace and the
-// give-up tripwire all live in the shared package; what stays here is how a
-// plugin manifest becomes a process.
-
 const (
 	pluginDesiredRunning = supervise.DesiredRunning
 	pluginDesiredStopped = supervise.DesiredStopped
@@ -42,16 +35,11 @@ type pluginProcessHandle = supervise.Process
 type pluginSupervisorTimer = supervise.Timer
 type pluginSupervisorClock = supervise.Clock
 
-// pluginProcessLauncher turns one manifest into a running process. Log is the
-// supervisor's per-plugin append-only log file, or nil when capture is off.
 type pluginProcessLauncher interface {
 	Start(manifest pluginManifest, env []string, log io.Writer) (pluginProcessHandle, error)
 }
 
 type execPluginProcessLauncher struct {
-	// registryDir, when set, receives a procreap record per spawned process so
-	// `attn profile clean` can reap drivers a crashed daemon left behind (see
-	// plugins.RuntimeRegistryDir).
 	registryDir string
 }
 
@@ -67,9 +55,8 @@ func (l execPluginProcessLauncher) Start(manifest pluginManifest, env []string, 
 	}
 	cmd.Dir = manifest.Dir
 	cmd.Env = env
-	// Group leadership is what lets the reaper sweep whatever the driver
-	// spawned once the driver itself is gone, without touching the daemon's
-	// other children.
+	// Group leadership is what lets the reaper sweep whatever the driver spawned,
+	// without touching the daemon's other children.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	process, err := supervise.StartCommand(cmd, log)
 	if err != nil {
@@ -77,9 +64,8 @@ func (l execPluginProcessLauncher) Start(manifest pluginManifest, env []string, 
 	}
 	if l.registryDir != "" {
 		pid := cmd.Process.Pid
-		// The path carries the pid so a restart's fresh record and the old
-		// process's removal (in Wait, which can straddle the respawn) never
-		// touch the same file.
+		// The path carries the pid so a restart's fresh record and the old process's
+		// removal (in Wait, which can straddle the respawn) never touch the same file.
 		path := filepath.Join(l.registryDir, fmt.Sprintf("%s-%d.json", manifest.Name, pid))
 		if err := procreap.WriteEntry(path, procreap.NewEntry(manifest.Name, pid, pid, cmd.Args)); err == nil {
 			return &reapRegisteredProcess{Process: process, pid: pid, registryPath: path}, nil
@@ -88,8 +74,6 @@ func (l execPluginProcessLauncher) Start(manifest pluginManifest, env []string, 
 	return process, nil
 }
 
-// reapRegisteredProcess removes the procreap registry entry once the process
-// is gone, so profile clean never chases a pid that already exited.
 type reapRegisteredProcess struct {
 	supervise.Process
 	pid          int
@@ -102,7 +86,6 @@ func (p *reapRegisteredProcess) Wait() pluginExit {
 	return exit
 }
 
-// pluginSupervisor adapts the shared supervisor to plugin manifests.
 type pluginSupervisor struct {
 	*supervise.Supervisor
 	launcher pluginProcessLauncher
@@ -129,7 +112,6 @@ func newPluginSupervisor(
 	}
 }
 
-// Ensure starts the plugin, or adopts the manifest for its next start.
 func (s *pluginSupervisor) Ensure(manifest pluginManifest) error {
 	return s.Supervisor.Ensure(manifest.Name, func(req supervise.StartRequest) (supervise.Process, error) {
 		return s.launcher.Start(manifest, s.env(manifest, req.Generation), req.Log)

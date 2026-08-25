@@ -34,24 +34,16 @@ type pluginDriverRegisterResult struct {
 	ActiveRuns []activePluginRun `json:"active_runs,omitempty"`
 }
 
-// activePluginRun hands one live run back to a driver that has just
-// (re)registered. Seq is the run's report cursor, and a replacement driver
-// process cannot work without it: reports are ordered by a strictly-increasing
-// seq per run, so a driver that restarted its own counter has every report
-// discarded. It is sent as a plain number rather than omitempty so a driver can
-// tell "the cursor is zero" from "this daemon does not send cursors".
 type activePluginRun struct {
 	SessionID string          `json:"session_id"`
 	RunID     string          `json:"run_id"`
 	Metadata  json.RawMessage `json:"metadata,omitempty"`
-	Seq       uint64          `json:"seq"`
+	// Plain number, not omitempty: a driver must be able to tell "the cursor is
+	// zero" from "this daemon does not send cursors".
+	Seq uint64 `json:"seq"`
 }
 
 type pluginDriverSpawnParams struct {
-	// Agent names which of the plugin's registered drivers this launch is for.
-	// A plugin may register more than one — attn-pi registers both a PTY-backed
-	// `pi` and a conversation `nisse` — and without it the plugin cannot tell
-	// which one attn is asking to launch.
 	Agent         string                    `json:"agent"`
 	SessionID     string                    `json:"session_id"`
 	RunID         string                    `json:"run_id"`
@@ -63,11 +55,7 @@ type pluginDriverSpawnParams struct {
 	InitialPrompt string                    `json:"initial_prompt,omitempty"`
 	Metadata      json.RawMessage           `json:"metadata,omitempty"`
 	Instructions  *pluginLaunchInstructions `json:"instructions,omitempty"`
-	// The promoted auto-mode config, for a driver that advertises `auto_mode`.
-	// It is the exact JSON shape plugins/attn-pi/automode/config.ts parses, so a
-	// driver forwards it to the session rather than translating it. Config
-	// changes reach new sessions only; a live session is not refreshed.
-	AutoMode *automode.Config `json:"auto_mode,omitempty"`
+	AutoMode      *automode.Config          `json:"auto_mode,omitempty"`
 }
 
 type pluginDriverSpawnResult struct {
@@ -81,10 +69,8 @@ type pluginReportStateParams struct {
 	RunID     string `json:"run_id"`
 	Seq       uint64 `json:"seq"`
 	State     string `json:"state"`
-	// OnlyIfUnknown is a driver answering the question the daemon asked by
-	// declaring `unknown`: this is what the agent says it is, use it if you
-	// still have nothing. Applied unconditionally it would restamp
-	// `state_since` and re-open a settled turn on every reconnect.
+	// Applied unconditionally this would restamp state_since and re-open a settled
+	// turn on every reconnect.
 	OnlyIfUnknown bool `json:"only_if_unknown,omitempty"`
 }
 
@@ -132,9 +118,6 @@ type pluginReportInputTakenParams struct {
 	InputID   string `json:"input_id"`
 }
 
-// One call a driver's agent refused under auto mode. No seq: a denial is an
-// append, not a declaration about the session's current state, so nothing later
-// can overtake it.
 type pluginReportAutoModeDenialParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
@@ -142,8 +125,7 @@ type pluginReportAutoModeDenialParams struct {
 	Action    string `json:"action"`
 	Reason    string `json:"reason"`
 	Rule      string `json:"rule"`
-	// When the session refused it, RFC 3339. Empty falls back to arrival.
-	At string `json:"at"`
+	At        string `json:"at"`
 }
 
 type pluginClassifyStopParams struct {
@@ -375,15 +357,8 @@ func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionI
 	return nil
 }
 
-// handlePluginClassifyStop backs the attn.classify_stop plugin->daemon method:
-// a text-in/verdict-out stop classification service for drivers whose agent
-// declares its own state (rather than attn scraping or classifying it). It
-// validates and authorizes synchronously so malformed or unowned requests
-// fail fast, then classifies on a goroutine and sends the JSON-RPC result
-// itself. This must not block the caller: handlePluginMethod runs on the
-// plugin connection's synchronous read loop, and the classifier LLM call can
-// take 30+ seconds — running it inline would stall every other driver.*
-// request and state report on this plugin connection.
+// Must not block: handlePluginMethod runs on the plugin connection's synchronous
+// read loop, and the classifier call can take 30+ seconds.
 func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCMessage) {
 	var params pluginClassifyStopParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -430,8 +405,8 @@ func validatePluginReportCursor(runID string, seq uint64) error {
 }
 
 func (d *Daemon) applyPluginReportedState(params pluginReportStateParams) bool {
-	// Before the ordering check, not after: a report the cursor discards is still
-	// a driver speaking for this session, which is all the silence alarm asks.
+	// Before the ordering check, not after: a report the cursor discards is still a
+	// driver speaking for this session, which is all the silence alarm asks.
 	d.notePluginDriverReport(params.SessionID)
 	state := strings.TrimSpace(params.State)
 	if params.OnlyIfUnknown {
@@ -516,11 +491,6 @@ func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, session
 	return true
 }
 
-// queueHostReportDuringLaunch is the same holding pen for a conversation
-// session's declared state, which arrives on the host's envelope stream rather
-// than over a plugin connection. The run id is what it matches on: it is minted
-// per launch and handed to exactly one host, so it identifies the reporter as
-// precisely as the plugin connection does for the JSON-RPC drivers.
 func (d *Daemon) queueHostReportDuringLaunch(sessionID string, params pluginReportStateParams) bool {
 	d.pluginDriverMu.Lock()
 	defer d.pluginDriverMu.Unlock()
@@ -539,9 +509,6 @@ func (d *Daemon) queueExitDuringPluginLaunch(info ptybackend.ExitInfo) bool {
 	if !ok || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
 		return false
 	}
-	// The exit is deferred, not delivered: finishPluginSessionLaunch replays it
-	// once the launch it raced is done. Say so, because between here and there
-	// the session looks alive to everything that reads the store.
 	d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", info.ID, info.LifecycleID)
 	d.pluginExits[info.ID] = info
 	return true
@@ -581,10 +548,6 @@ func (d *Daemon) finishPluginSessionLaunch(sessionID string, success bool) *ptyb
 	return nil
 }
 
-// abortPluginSessionLaunch closes plugin-owned resources created by a successful
-// driver.spawn/driver.resume response when attn fails before a durable active
-// run exists. In particular, a driver may already have staged a prompt or
-// credential before PTY spawn or session persistence fails.
 func (d *Daemon) abortPluginSessionLaunch(sessionID, reason string) {
 	d.pluginDriverMu.Lock()
 	launch, ok := d.pluginLaunching[sessionID]
@@ -611,10 +574,6 @@ func (r pendingPluginReport) runID() string {
 	}
 }
 
-// closePluginDriverSession tells the plugin that owns this session's run that
-// the run is over. Both ways out without a notification are silent to the
-// plugin, so they say so in the log: a plugin that never hears its run closed
-// leaks whatever it allocated for it, and the only evidence is here.
 func (d *Daemon) closePluginDriverSession(sessionID, reason string, exitCode *int, signal string) {
 	session := d.store.Get(sessionID)
 	if session == nil {
@@ -650,8 +609,6 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName, sessionID, runID, r
 			d.logf("plugin session close notification failed: plugin=%s session=%s run=%s err=%v", pluginName, sessionID, runID, err)
 			return
 		}
-		// The one line that separates "the daemon never sent it" from "the
-		// plugin never acted on it" when a close goes missing.
 		d.logf("plugin session close notified: plugin=%s session=%s run=%s reason=%s", pluginName, sessionID, runID, params.Reason)
 	}()
 }

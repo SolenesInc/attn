@@ -3,10 +3,8 @@ import type { PackedRgb } from './terminalColor';
 export const TERMINAL_FLOATS_PER_VERTEX = 9;
 export const TERMINAL_FLOATS_PER_QUAD = TERMINAL_FLOATS_PER_VERTEX * 6;
 
-// Reusable CPU-side vertex staging for terminal glyphs and solid quads. A
-// number[] plus `new Float32Array(vertices)` allocates and copies the complete
-// frame on every paint; this buffer writes the GPU's native representation once
-// and only grows when a larger frame actually needs it.
+// A number[] plus `new Float32Array(vertices)` allocates and copies the complete frame
+// on every paint; this writes the GPU native representation once.
 export class TerminalVertexBuffer {
   private scratch: Float32Array;
   private cursor = 0;

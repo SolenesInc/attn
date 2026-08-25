@@ -8,13 +8,7 @@ import (
 )
 
 // A stamp lives in a TEXT column and is ordered and filtered as text, so the
-// encoding carries the whole meaning of "before". These are the instants that
-// catch an encoding that does not: all inside one second, with fractions whose
-// trailing zeros differ, plus one on the second with no fraction at all.
-//
-// Under time.RFC3339Nano — what TimeFormat used to be — their text order is
-// [.12345, .1234, .5, no-fraction], which is neither their order nor a rotation
-// of it.
+// encoding carries the whole meaning of "before".
 func raggedInstants() []time.Time {
 	base := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
 	return []time.Time{
@@ -41,9 +35,8 @@ func TestStoredStampsSortAsTextInTimeOrder(t *testing.T) {
 	}
 }
 
-// Fixed width is what makes the text order hold: a fraction that varies in
-// length compares digit against digit at the wrong place, and a stamp with no
-// fraction ends in 'Z', which is above '.' and above every digit.
+// Fixed width is what makes the text order hold: a stamp with no fraction ends
+// in 'Z', which sorts above '.' and above every digit.
 func TestEveryStoredStampIsTheSameWidth(t *testing.T) {
 	for _, at := range raggedInstants() {
 		got := at.Format(TimeFormat)
@@ -56,9 +49,6 @@ func TestEveryStoredStampIsTheSameWidth(t *testing.T) {
 	}
 }
 
-// Callers hand timestamps in as strings, and the ones they hand in come from
-// somewhere else: a store that predates migration 91, a hand-written whole
-// second, a client working in local time. All of them name an instant.
 func TestATimestampIsAcceptedInAnyRFC3339Form(t *testing.T) {
 	want := time.Date(2026, 8, 5, 10, 0, 0, 500000000, time.UTC)
 	for _, form := range []string{
@@ -80,9 +70,6 @@ func TestATimestampIsAcceptedInAnyRFC3339Form(t *testing.T) {
 	}
 }
 
-// The bound a filter carries is re-encoded, not passed through: a bound in one
-// encoding compared as text against stamps in another is the same defect the
-// stored encoding had, moved to the caller's side.
 func TestATimestampBoundIsReEncodedBeforeItIsCompared(t *testing.T) {
 	for _, form := range []string{
 		"2026-08-05T10:00:00Z",
@@ -103,8 +90,6 @@ func TestATimestampBoundIsReEncodedBeforeItIsCompared(t *testing.T) {
 	}
 }
 
-// A time.Time bound arrives at the same encoding as a string one, so which type
-// a caller reaches for cannot change the answer.
 func TestATimestampBoundEncodesTheSameFromAStringOrATime(t *testing.T) {
 	at := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
 	fromTime := mustCompile(t, Query{
@@ -122,9 +107,6 @@ func TestATimestampBoundEncodesTheSameFromAStringOrATime(t *testing.T) {
 	}
 }
 
-// A string that is not a timestamp used to be bound verbatim, where it compared
-// against every stamp as text and quietly matched some prefix of them. It is a
-// caller mistake, and the error has to be enough to fix it.
 func TestATimestampBoundThatIsNotATimestampIsRefused(t *testing.T) {
 	_, err := Query{
 		Namespace:  "app/approval-gate",

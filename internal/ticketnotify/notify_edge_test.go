@@ -10,14 +10,10 @@ import (
 
 var edgeBase = time.Date(2026, 6, 26, 8, 0, 0, 0, time.UTC)
 
-// failingNudger reports a nudge attempt and fails.
 type failingNudger struct{ called bool }
 
 func (n *failingNudger) Nudge(string) error { n.called = true; return errors.New("pty gone") }
 
-// erroringStore is an EventStore that fails on a chosen method, to exercise error
-// propagation through Consume / Unread / Notify. UnreadTicketEvents returns one
-// unread event (when not failing) so Consume reaches the cursor-write path.
 type erroringStore struct {
 	failUnread bool
 	failSet    bool
@@ -64,8 +60,6 @@ func TestNotifyAndConsumePropagateStoreErrors(t *testing.T) {
 	if _, err := Consume(erroringStore{failUnread: true}, obs, now); !errors.Is(err, errBoom) {
 		t.Fatalf("Consume(failUnread) error = %v, want boom", err)
 	}
-	// failSet exercises the cursor-write path: pending returns an unread event, so
-	// Consume reaches SetTicketCursor, which errors.
 	if _, err := Consume(erroringStore{failSet: true}, obs, now); !errors.Is(err, errBoom) {
 		t.Fatalf("Consume(failSet) error = %v, want boom", err)
 	}
@@ -97,9 +91,6 @@ func TestConsumeEmptyStore(t *testing.T) {
 	}
 }
 
-// The chief consumes the three event kinds the main harness never drives:
-// assigned, description_edited, attachment_added (authored by an agent, so the
-// chief — which excludes its own events — observes them).
 func TestConsumeOtherEventKinds(t *testing.T) {
 	h := newHarness(t)
 	chief := ChiefObserver()

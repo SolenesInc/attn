@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// ResolveRepoDir verifies repoDir is a git repo and falls back to a one-level
-// search under the parent directory (e.g., ~/projects/*/<repo>).
 func ResolveRepoDir(repoDir string) (string, error) {
 	expanded := ExpandPath(repoDir)
 	if isGitRepo(expanded) {
@@ -76,19 +74,11 @@ func originRepoName(path string) string {
 	return repoNameFromRemote(strings.TrimSpace(string(out)))
 }
 
-// OriginOwnerRepo returns the "owner/name" slug for path's origin remote, or
-// "" if path is not a git repo, has no origin, or the remote URL cannot be
-// parsed into owner/name. Handles the common GitHub remote forms:
-// git@github.com:owner/name.git, ssh://git@github.com/owner/name.git,
-// https://github.com/owner/name.git, and trailing-.git-less variants.
 func OriginOwnerRepo(path string) string {
 	_, slug := OriginHostOwnerRepo(path)
 	return slug
 }
 
-// OriginHostOwnerRepo returns the remote host (e.g. "github.com") and the
-// "owner/name" slug for path's origin remote. Both are "" if path is not a
-// git repo, has no origin, or the remote URL cannot be parsed.
 func OriginHostOwnerRepo(path string) (host, ownerRepo string) {
 	out, err := runGitOutput(OpMetadata, path, "remote", "get-url", "origin")
 	if err != nil {
@@ -97,8 +87,6 @@ func OriginHostOwnerRepo(path string) (host, ownerRepo string) {
 	return hostOwnerRepoFromRemote(strings.TrimSpace(string(out)))
 }
 
-// hostOwnerRepoFromRemote parses a git remote URL into a host and an
-// "owner/name" slug.
 func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {
 	if remote == "" {
 		return "", ""
@@ -106,8 +94,6 @@ func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {
 	remote = strings.TrimSuffix(remote, ".git")
 
 	if idx := strings.Index(remote, "://"); idx >= 0 {
-		// URL form (ssh://, https://, git://, ...): authority is up to the
-		// first "/"; strip any user@ prefix and :port suffix from it below.
 		rest := remote[idx+3:]
 		slashIdx := strings.Index(rest, "/")
 		if slashIdx < 0 {

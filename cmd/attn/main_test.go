@@ -126,7 +126,7 @@ func TestFindCopilotTranscript_PrefersClosestStartTime(t *testing.T) {
 		startedAt.Add(-30*time.Minute),
 		true,
 		true,
-		startedAt.Add(2*time.Minute), // Newer modtime, but wrong start window.
+		startedAt.Add(2*time.Minute),
 	)
 
 	got := transcript.FindCopilotTranscript(cwd, startedAt)
@@ -148,7 +148,7 @@ func TestFindCopilotTranscript_FallsBackToNewestModTime(t *testing.T) {
 		"session-a",
 		cwd,
 		startedAt,
-		false, // No start metadata, forces fallback
+		false,
 		true,
 		startedAt.Add(1*time.Minute),
 	)
@@ -158,7 +158,7 @@ func TestFindCopilotTranscript_FallsBackToNewestModTime(t *testing.T) {
 		"session-b",
 		cwd,
 		startedAt,
-		false, // No start metadata, forces fallback
+		false,
 		true,
 		startedAt.Add(2*time.Minute),
 	)
@@ -263,8 +263,6 @@ func TestParseDirectLaunchArgs_LabelAndYolo(t *testing.T) {
 	}
 }
 
-// A member launch names who the session is. The label follows the member, so a
-// member's day is titled after it without anybody typing -s.
 func TestParseDirectLaunchArgs_MemberNamesTheSession(t *testing.T) {
 	parsed, err := parseDirectLaunchArgs([]string{"--member", "trellis"})
 	if err != nil {
@@ -273,14 +271,11 @@ func TestParseDirectLaunchArgs_MemberNamesTheSession(t *testing.T) {
 	if parsed.member != "trellis" {
 		t.Fatalf("member = %q, want trellis", parsed.member)
 	}
-	// The label is the display side of the same member: a name, while the id
-	// the binding takes stays lowercase.
 	if parsed.label != "Trellis" {
 		t.Fatalf("label = %q, want the member's name", parsed.label)
 	}
 }
 
-// -s still wins: the member decides identity, the label decides display.
 func TestParseDirectLaunchArgs_LabelOverridesTheMemberName(t *testing.T) {
 	parsed, err := parseDirectLaunchArgs([]string{"--member", "trellis", "-s", "crew slice 1"})
 	if err != nil {
@@ -291,16 +286,14 @@ func TestParseDirectLaunchArgs_LabelOverridesTheMemberName(t *testing.T) {
 	}
 }
 
-// parseDirectLaunchArgs understands only -s/--resume/--yolo/--member.
-// Everything else is rejected rather than silently forwarded to the agent.
 func TestParseDirectLaunchArgs_RejectsUnrecognizedArgs(t *testing.T) {
 	for _, args := range [][]string{
-		{"--model", "foo"}, // arbitrary agent flag
-		{"--"},             // the old passthrough separator
-		{"--help"},         // must not reach the agent
-		{"random"},         // bare positional
-		{"-s"},             // missing label value
-		{"--member"},       // missing member value
+		{"--model", "foo"},
+		{"--"},
+		{"--help"},
+		{"random"},
+		{"-s"},
+		{"--member"},
 	} {
 		if _, err := parseDirectLaunchArgs(args); err == nil {
 			t.Fatalf("expected error for args %#v, got nil", args)
@@ -462,8 +455,6 @@ func TestWorkspaceContextGuidanceProvidedAtLaunch(t *testing.T) {
 		t.Fatal("workspace launch guidance should suppress hook guidance output")
 	}
 
-	// A chief launch injects chief guidance (not workspace context); its
-	// marker must equally suppress the SessionStart hook's workspace guidance.
 	t.Setenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE", "")
 	t.Setenv("ATTN_CHIEF_GUIDANCE", "append_system_prompt")
 	if !workspaceContextGuidanceProvidedAtLaunch() {
@@ -754,8 +745,6 @@ func TestParseDelegateArgsAcceptsWorkspaceWithWorktree(t *testing.T) {
 	}
 }
 
-// Dispatch-at-plot is a placement-independent aim: it says what the delegate
-// tends, not where it runs, so it composes with every placement.
 func TestParseDelegateArgsAcceptsAPlot(t *testing.T) {
 	parsed, err := parseDelegateArgs([]string{
 		"--source-session", "source-session",
@@ -915,10 +904,6 @@ func TestParseOpenArgs(t *testing.T) {
 		wantSession string
 		wantErr     bool
 	}{
-		// The documented `attn open <file.md> [--session <id>]` trailing form
-		// must honor --session — this is the regression the reviewers flagged:
-		// Go's flag parser stops at the first positional, so a naive Parse would
-		// silently drop a trailing --session.
 		{name: "session after path", args: []string{"README.md", "--session", "sess-1"}, wantPath: "README.md", wantSession: "sess-1"},
 		{name: "session=after path", args: []string{"README.md", "--session=sess-2"}, wantPath: "README.md", wantSession: "sess-2"},
 		{name: "session before path", args: []string{"--session", "sess-3", "README.md"}, wantPath: "README.md", wantSession: "sess-3"},
@@ -959,11 +944,6 @@ func TestSeedOpenTargetClassification(t *testing.T) {
 	}
 }
 
-// TestStopFacts locks what the Stop hook reports to the daemon. The payloads are
-// real Claude Code Stop-hook stdin bodies (trimmed to the fields attn parses),
-// captured from live background Workflow runs and CronCreate/CronDelete probes.
-// Statuses pass through verbatim — the rule that reads them lives in the daemon
-// (see nonTerminalStopState there), so the hook's job is extraction only.
 func TestStopFacts(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -1033,10 +1013,6 @@ func TestStopFacts(t *testing.T) {
 	}
 }
 
-// parseTicketStatusArgs must accept flags on either side of the work-state
-// positional. Go's flag parser stops at the first positional, so the regression
-// here is the documented `ticket status <state> --comment ...` form (flags after
-// the state) silently dropping the flags.
 func TestParseTicketStatusArgs(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1200,9 +1176,6 @@ func TestParseTicketCommentArgs(t *testing.T) {
 			want: ticketCommentArgs{TicketID: "tk", Comment: "looks good"},
 		},
 		{
-			// The footgun the design avoids: flags written AFTER the id still parse,
-			// because the interleave parser peels the id and keeps parsing — a
-			// trailing --session would otherwise be swallowed into the comment.
 			name: "flags after the id still parse",
 			args: []string{"tk", "-m", "the note", "--session", "s1", "--json"},
 			want: ticketCommentArgs{TicketID: "tk", Comment: "the note", Session: "s1", JSON: true},
@@ -1213,8 +1186,6 @@ func TestParseTicketCommentArgs(t *testing.T) {
 			want: ticketCommentArgs{TicketID: "tk", Comment: "the note", Session: "s1"},
 		},
 		{
-			// Dashes inside the quoted message value are safe — it is a flag value, not
-			// re-parsed as flags.
 			name: "dashes inside the message are literal",
 			args: []string{"tk", "-m", "--watch out for the race"},
 			want: ticketCommentArgs{TicketID: "tk", Comment: "--watch out for the race"},
@@ -1250,8 +1221,6 @@ func TestParseTicketCommentArgsErrors(t *testing.T) {
 	}
 }
 
-// The common mistake `comment tk "looks good"` (comment as a bare positional,
-// no -m) should produce an error that points at -m, not the opaque "got 2".
 func TestParseTicketCommentArgsBareCommentHintsMessageFlag(t *testing.T) {
 	_, err := parseTicketCommentArgs([]string{"tk", "looks good"})
 	if err == nil {
@@ -1262,8 +1231,6 @@ func TestParseTicketCommentArgsBareCommentHintsMessageFlag(t *testing.T) {
 	}
 }
 
-// parseTicketIDArgs (subscribe/unsubscribe) takes exactly one id positional with the
-// session/json flags interleavable on either side.
 func TestParseTicketIDArgs(t *testing.T) {
 	cases := []struct {
 		name string

@@ -1,11 +1,7 @@
 package daemon
 
-// Client-facing half of the kitty image feed; the worker observes and stores.
-// Two capabilities, kept apart for the relay: CapabilityKittyImages gates the
-// kitty_placements fan-out, CapabilityBinaryPtyOutput decides only how a blob
-// travels (frame 0x02 vs base64 JSON) — the hub relay wants the first without
-// the second. Nothing is correlated by request id: answers name (session,
-// image id, generation), so a duplicate is an idempotent refill, not an orphan.
+// CapabilityKittyImages gates the kitty_placements fan-out; CapabilityBinaryPtyOutput
+// decides only how a blob travels — the hub relay wants the first without the second.
 
 import (
 	"context"
@@ -19,10 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// placementsToProtocol converts an observed placement set to its wire form.
-// Never nil: the empty set is the only message that says "stop drawing", and a
-// nil slice would marshal to null. (attach_result.snapshot's omitempty dropping
-// it is fine — a restore has no prior placements to clear.)
+// Never nil: the empty set is the only message that says "stop drawing", and a nil slice marshals to null.
 func placementsToProtocol(placements []pty.KittyPlacement) []protocol.KittyPlacement {
 	out := make([]protocol.KittyPlacement, len(placements))
 	for i, p := range placements {
@@ -48,7 +41,6 @@ func placementsToProtocol(placements []pty.KittyPlacement) []protocol.KittyPlace
 	return out
 }
 
-// encodeKittyPlacementsMessage builds the outbound event for one placement set.
 func encodeKittyPlacementsMessage(sessionID string, event ptybackend.OutputEvent) (outboundMessage, error) {
 	payload, err := json.Marshal(protocol.KittyPlacementsMessage{
 		Event:      protocol.EventKittyPlacements,
@@ -62,9 +54,7 @@ func encodeKittyPlacementsMessage(sessionID string, event ptybackend.OutputEvent
 	return outboundMessage{kind: messageKindText, payload: payload}, nil
 }
 
-// kittyImageFormatCode translates ghostty's pixel layout to the protocol code.
-// Explicit, not a cast: a pin that reorders ghostty's values would otherwise
-// silently re-label every client's pixels.
+// Explicit, not a cast: a pin that reorders ghostty's values would silently re-label every client's pixels.
 func kittyImageFormatCode(format ghosttyvt.KittyImageFormat) (byte, bool) {
 	switch format {
 	case ghosttyvt.KittyImageRGB:
@@ -79,10 +69,6 @@ func kittyImageFormatCode(format ghosttyvt.KittyImageFormat) (byte, bool) {
 	return 0, false
 }
 
-// handleGetKittyImage answers a client's pull for the pixels behind a placement.
-// Asking is enough — only the transport is a capability decision. Every failure
-// is an ordinary success=false answer (the session is not broken; the client
-// drops that placement's render), sent as JSON to both kinds of client.
 func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyImageMessage) {
 	provider, ok := d.ptyBackend.(ptybackend.KittyImageProvider)
 	if !ok {
@@ -114,8 +100,7 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 			d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 			return
 		}
-		// Blocking, like PTY output: better a slow client waits than a placement
-		// whose pixels never arrive.
+		// Blocking, like PTY output: better a slow client waits than pixels that never arrive.
 		if !d.sendOutboundBlocking(client, outboundMessage{kind: messageKindBinary, payload: frame}, ptyOutputSendWait) {
 			d.logf("kitty image send failed: id=%s image=%d bytes=%d", msg.ID, image.ID, len(frame))
 		}
@@ -136,8 +121,6 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 	})
 }
 
-// sendKittyImageFailure answers a pull that produced no pixels; it always names
-// the image id, which is what the client correlates by.
 func (d *Daemon) sendKittyImageFailure(client *wsClient, sessionID string, imageID int, reason string) {
 	d.sendToClient(client, protocol.KittyImageResultMessage{
 		Event:   protocol.EventKittyImageResult,

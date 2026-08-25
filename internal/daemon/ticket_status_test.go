@@ -12,9 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// delegateBoundSession runs a real delegation so the returned session has a
-// ticket bound to it (assignee = session, status = working), mirroring the
-// production path the agent's forward channel reports against.
 func delegateBoundSession(t *testing.T, d *Daemon) string {
 	t.Helper()
 	backend := &fakeSpawnBackend{}
@@ -36,29 +33,16 @@ func delegateBoundSession(t *testing.T, d *Daemon) string {
 	return result.SessionID
 }
 
-// bindLegacyTicket puts a ticket on an already-delegated session the way the
-// daemon did before tickets retired. Delegation binds a seed alone now, so this
-// is how the tests that cover the ticket machinery still standing — status,
-// crash stamping, revive, take, subscribe — build the one case that still
-// reaches it: work that was already in flight and ticket-bound at the cutover.
 func bindLegacyTicket(t *testing.T, d *Daemon, sessionID, delegatorSessionID string) string {
 	t.Helper()
 	return bindLegacyTicketTitled(t, d, sessionID, delegatorSessionID, "Migrate the store to X")
 }
 
-// bindLegacyTicketTitled is bindLegacyTicket for a fixture that needs the
-// ticket's title to match the brief its session was delegated with.
 func bindLegacyTicketTitled(t *testing.T, d *Daemon, sessionID, delegatorSessionID, title string) string {
 	t.Helper()
 	return bindLegacyTicketAs(t, d, sessionID, delegatorSessionID, title, true)
 }
 
-// bindLegacyTicketAs is bindLegacyTicketTitled for a fixture that cares which
-// side dispatched: a chief delegation attached the ROLE and nothing else, and
-// any other delegator attached personally and pulled the chief role in as a
-// subscriber. The rule lived on the delegation path that retired with tickets,
-// so it is reproduced here — the tickets that still carry it are the ones that
-// were in flight at the cutover.
 func bindLegacyTicketAs(t *testing.T, d *Daemon, sessionID, delegatorSessionID, title string, ownedByChiefRole bool) string {
 	t.Helper()
 	author := delegatorSessionID
@@ -92,8 +76,6 @@ func callSetTicketStatus(t *testing.T, d *Daemon, sessionID, workState, comment 
 	return callSetTicketStatusByID(t, d, sessionID, workState, comment, "")
 }
 
-// callSetTicketStatusByID is callSetTicketStatus plus an optional ticket id, for
-// the by-id form that bypasses session-bound resolution.
 func callSetTicketStatusByID(t *testing.T, d *Daemon, sessionID, workState, comment, ticketID string) protocol.Response {
 	t.Helper()
 	msg := &protocol.SetTicketStatusMessage{
@@ -120,9 +102,6 @@ func callSetTicketStatusByID(t *testing.T, d *Daemon, sessionID, workState, comm
 	return resp
 }
 
-// The agent reporting ready-for-review moves its bound ticket into the In Review
-// column, echoes the resolved id and status, and records the change authored by
-// the agent's own session.
 func TestSetTicketStatusMovesBoundTicket(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
@@ -191,8 +170,6 @@ func TestSetTicketStatusCatchesUpBeforeMutating(t *testing.T) {
 	}
 }
 
-// A completed report closes the ticket (terminal Done), after which the session
-// has no active ticket and a further report is rejected.
 func TestSetTicketStatusCompletedClosesTicket(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
@@ -242,8 +219,6 @@ func TestSetTicketStatusErrors(t *testing.T) {
 	}
 }
 
-// The work-state -> ticket-column mapping is the contract the agent reports
-// against; lock every reachable state and reject the unreachable ones.
 func TestTicketStatusFromWorkState(t *testing.T) {
 	want := map[protocol.DispatchWorkState]store.TicketStatus{
 		protocol.DispatchWorkStateInProgress:     store.TicketStatusWorking,
@@ -263,11 +238,6 @@ func TestTicketStatusFromWorkState(t *testing.T) {
 	}
 }
 
-// The by-id form is deliberately permissive: a session with no ticket bound to
-// it at all can still move someone else's ticket by naming its id. This is the
-// bug the by-id form exists to fix — on the pre-change handler this call would
-// error "no active ticket bound to this session" because the session lookup
-// happened unconditionally.
 func TestSetTicketStatusByIDMovesUnboundSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := time.Now()
@@ -317,8 +287,6 @@ func TestSetTicketStatusByIDMovesUnboundSession(t *testing.T) {
 	}
 }
 
-// Naming an id that doesn't exist surfaces the store's not-found error rather
-// than falling back to session resolution or panicking.
 func TestSetTicketStatusByIDUnknownTicket(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	resp := callSetTicketStatusByID(t, d, "observer-session", string(protocol.DispatchWorkStateInProgress), "", "does-not-exist")

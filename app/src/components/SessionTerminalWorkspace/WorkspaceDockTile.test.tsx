@@ -23,12 +23,6 @@ import type { SeedDocument } from '../SeedDocumentView';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
-// The root picker's body (NotebookTile → NotebookSurface, CodeMirror-backed)
-// is exercised elsewhere (NotebookTile.test.tsx, NotebookBrowser.test.tsx);
-// stub it here so these tests exercise only the header switcher. NotebookTile
-// forwards its ref straight through to NotebookSurface (see NotebookTile.tsx),
-// so this stub is also the fake ref handle the root-switcher flush-then-switch
-// tests below drive via notebookSurfaceStub.flushPendingSave.
 const notebookSurfaceStub = vi.hoisted(() => ({
   flushPendingSave: vi.fn(async (): Promise<'saved' | 'conflict' | 'error' | 'noop'> => 'noop'),
 }));
@@ -44,10 +38,8 @@ vi.mock('../NotebookSurface', async () => {
   };
 });
 
-// WorkspaceDockTile reads effectiveNotebookRoot for its (notebook-only) root
-// switcher unconditionally via useNotebookSurfaceContext — the real app always
-// renders it under NotebookSurfaceProvider, so every render here needs the same
-// wrapper even for the markdown/browser tiles this file mostly exercises.
+// WorkspaceDockTile reads effectiveNotebookRoot unconditionally, so every render
+// here needs the provider even for the markdown/browser tiles.
 const testSurfaceValue: NotebookSurfaceContextValue = {
   makeDaemon: () => ({
     listDir: vi.fn(),
@@ -93,9 +85,7 @@ const opener = vi.hoisted(() => ({
 vi.mock('@tauri-apps/plugin-opener', () => opener);
 const invokeMock = vi.mocked(invoke);
 
-// jsdom cannot run real mermaid (it needs a canvas/layout engine); mock it the
-// same way app/src/components/Markdown/Markdown.test.tsx does so the shared
-// renderer's mermaid path is exercised here through the dock tile.
+// jsdom cannot run real mermaid (it needs a canvas/layout engine).
 const mermaidMock = vi.hoisted(() => ({
   render: vi.fn(async () => ({ svg: '<svg data-testid="mermaid-svg"></svg>' })),
   initialize: vi.fn(),
@@ -491,9 +481,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
       tileParams: serializeNotebookTileParams({ root: '/tmp/some-other-root' }),
       workspaceDirectory: '/Users/victor/code/attn',
     });
-    // A root-bound tile's NotebookTile body opens its own fs_watch subscription
-    // (see NotebookTile.tsx); let that settle so the assertion isn't racing an
-    // unwrapped state update.
     await act(async () => { await Promise.resolve(); });
 
     const options = Array.from(picker().querySelectorAll('option')).map((option) => option.textContent);
@@ -517,8 +504,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
 
     fireEvent.change(picker(), { target: { value: '' } });
 
-    // The handler now awaits flushPendingSave() (PR #588 second review round)
-    // before calling onUpdateParams, so the call lands after a microtask.
     await waitFor(() => expect(onUpdateParams).toHaveBeenCalledWith(serializeNotebookTileParams({ root: undefined })));
   });
 
@@ -530,8 +515,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
 
     fireEvent.change(picker(), { target: { value: '/Users/victor/code/attn' } });
 
-    // The handler now awaits flushPendingSave() (PR #588 second review round)
-    // before calling onUpdateParams, so the call lands after a microtask.
     await waitFor(() => expect(onUpdateParams).toHaveBeenCalledWith(serializeNotebookTileParams({ root: '/Users/victor/code/attn' })));
   });
 
@@ -557,12 +540,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
     expect(onUpdateParams).not.toHaveBeenCalled();
   });
 
-  // PR #588 second review round: the header switcher must flush the outgoing
-  // root's dirty buffer (via NotebookTile's forwarded ref) BEFORE swapping
-  // tileParams, and abort the swap on a conflict/error rather than letting an
-  // edit vanish behind the root switch. NotebookSurface is stubbed above, and
-  // NotebookTile forwards its ref straight through to it, so
-  // notebookSurfaceStub.flushPendingSave is the fake ref handle here.
   it('flushes the dirty buffer, then updates params, in that order, when flushPendingSave resolves "saved"', async () => {
     const callOrder: string[] = [];
     notebookSurfaceStub.flushPendingSave.mockImplementation(async () => {
@@ -590,7 +567,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
     fireEvent.change(picker(), { target: { value: '/Users/victor/code/attn' } });
 
     await waitFor(() => expect(notebookSurfaceStub.flushPendingSave).toHaveBeenCalled());
-    // Give the (absent) params update a tick to fire before asserting it didn't.
     await act(async () => { await Promise.resolve(); });
     expect(onUpdateParams).not.toHaveBeenCalled();
   });
@@ -607,8 +583,6 @@ describe('WorkspaceDockTile notebook root switcher', () => {
     expect(onUpdateParams).not.toHaveBeenCalled();
   });
 });
-
-// ---- PR6: markdown annotation send flow (spec E13–E15, E18) -----------------
 
 const SEND_PATH = '/tmp/project/README.md';
 const SEND_DOC = 'First paragraph with target words inside it.\n';
@@ -745,13 +719,11 @@ describe('WorkspaceDockTile markdown send flow', () => {
     const onRetargetTile = vi.fn(async () => {});
     const { rebind } = renderSendTile({ onRetargetTile });
     await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 1'); // hydration settled
+      expect(sendButton()).toHaveTextContent('Send 1');
     });
 
     fireEvent.change(picker(), { target: { value: 'sess-b' } });
     expect(onRetargetTile).toHaveBeenCalledWith('sess-b');
-    // The daemon persists the binding and echoes it back via the layout
-    // broadcast; only that echo moves the select.
     rebind('sess-b');
     expect(picker().value).toBe('sess-b');
   });
@@ -767,11 +739,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
 
     fireEvent.change(picker(), { target: { value: 'sess-b' } });
     expect(onRetargetTile).toHaveBeenCalledWith('sess-b');
-    // Optimistic: the daemon's layout-broadcast echo has NOT landed yet
-    // (broadcasts can lag by seconds under WS load), but the pick already
-    // shows in the picker…
     expect(picker().value).toBe('sess-b');
-    // …and a Send inside that window goes to the NEW target, never sess-a.
     fireEvent.click(sendButton());
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
@@ -781,7 +749,6 @@ describe('WorkspaceDockTile markdown send flow', () => {
       );
     });
 
-    // The echo landing simply confirms the pick.
     rebind('sess-b');
     expect(picker().value).toBe('sess-b');
   });
@@ -797,9 +764,9 @@ describe('WorkspaceDockTile markdown send flow', () => {
     });
 
     fireEvent.change(picker(), { target: { value: 'sess-b' } });
-    expect(picker().value).toBe('sess-b'); // optimistic
+    expect(picker().value).toBe('sess-b');
     await waitFor(() => {
-      expect(picker().value).toBe('sess-a'); // rolled back on failure
+      expect(picker().value).toBe('sess-a');
     });
   });
 
@@ -811,9 +778,9 @@ describe('WorkspaceDockTile markdown send flow', () => {
     const placeholder = screen.getByRole('option', { name: 'No session' }) as HTMLOptionElement;
     expect(placeholder.disabled).toBe(true);
     await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 1'); // annotations hydrated…
+      expect(sendButton()).toHaveTextContent('Send 1');
     });
-    expect(sendButton()).toBeDisabled(); // …but there is no target
+    expect(sendButton()).toBeDisabled();
   });
 
   it('disables Send with zero annotations (E14)', async () => {
@@ -854,7 +821,6 @@ describe('WorkspaceDockTile markdown send flow', () => {
       resolveSubmit({ status: 'delivered', generation: 9 });
     });
     expect(screen.getByRole('status')).toHaveTextContent('Sent ✓');
-    // Delivered clear is a local mirror: no re-hydrate, no second daemon clear.
     await waitFor(() => {
       expect(sendButton()).toHaveTextContent('Send 0');
     });
@@ -879,23 +845,17 @@ describe('WorkspaceDockTile markdown send flow', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('failed to clear drafts');
     });
-    // The daemon draft survived, so local state must NOT be emptied — the
-    // sidebar keeps matching what the store will re-hydrate.
     expect(sendButton()).toHaveTextContent('Send 1');
     expect(sendButton()).toBeEnabled();
     expect(screen.queryByText('Sent ✓')).toBeNull();
   });
 
   it('refuses to Send while the draft is not hydrated (stale-draft guard, E14)', async () => {
-    // Hydration never settles (daemon slow/socket blip): local annotations
-    // exist only in memory, so a submit would make the daemon format its
-    // STALE stored draft. Send must refuse instead.
     const { transport, getSpy, submitSpy } = makeSendTransport();
     getSpy.mockImplementation(() => new Promise(() => {}));
     setMarkdownAnnotationsTransport(transport);
     renderSendTile();
 
-    // Create a local annotation through the sidebar's global-comment flow.
     fireEvent.click(screen.getByTitle('Show annotations'));
     fireEvent.click(screen.getByTitle('Add a document-wide comment'));
     fireEvent.change(screen.getByPlaceholderText('Add a global comment...'), {
@@ -911,7 +871,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
       expect(screen.getByRole('status')).toHaveTextContent('still syncing');
     });
     expect(submitSpy).not.toHaveBeenCalled();
-    expect(sendButton()).toHaveTextContent('Send 1'); // nothing lost
+    expect(sendButton()).toHaveTextContent('Send 1');
   });
 
   it('keeps annotations and explains when the target is waiting on approval (E15)', async () => {
@@ -929,7 +889,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
         'Target is waiting for approval — not sent',
       );
     });
-    expect(sendButton()).toHaveTextContent('Send 1'); // draft kept for retry
+    expect(sendButton()).toHaveTextContent('Send 1');
     expect(sendButton()).toBeEnabled();
   });
 
@@ -960,7 +920,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     const body = container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
     fireEvent.focusIn(body);
     const event = pressCmdEnter();
-    expect(event.defaultPrevented).toBe(true); // dispatcher consumed it
+    expect(event.defaultPrevented).toBe(true);
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
         fileMarkdownSource('workspace-1', SEND_PATH),
@@ -978,15 +938,10 @@ describe('WorkspaceDockTile markdown send flow', () => {
       expect(sendButton()).toBeEnabled();
     });
 
-    // Focus elsewhere (e.g. a terminal pane): the shortcut is not REGISTERED,
-    // so the key is not consumed and falls through to the PTY untouched.
     let event = pressCmdEnter();
     expect(event.defaultPrevented).toBe(false);
     expect(submitSpy).not.toHaveBeenCalled();
 
-    // Inside the tile but typing in a textarea (the annotation popover): the
-    // def's editableTarget:'native' skips it — the popover's own ⌘Enter
-    // handler submits the comment instead.
     const body = container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
     const textarea = document.createElement('textarea');
     body.appendChild(textarea);
@@ -996,7 +951,6 @@ describe('WorkspaceDockTile markdown send flow', () => {
     expect(submitSpy).not.toHaveBeenCalled();
     unmount();
 
-    // Zero annotations: registration is gated on count > 0.
     setMarkdownAnnotationsTransport(makeSendTransport([]).transport);
     const zero = renderSendTile();
     await waitFor(() => {

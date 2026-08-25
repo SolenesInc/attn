@@ -33,10 +33,8 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 	d.sendOK(conn)
 }
 
-// observeOrQueueAgentConversation closes the registration race: a provider can
-// emit SessionStart before the spawn path has committed the attn session row.
-// The observation remains the same authoritative signal; applying it is merely
-// delayed until the row exists.
+// observeOrQueueAgentConversation closes the registration race: a provider can emit
+// SessionStart before the spawn path has committed the attn session row.
 func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) {
 	d.pendingConversationMu.Lock()
 	if d.store.Get(observation.SessionID) == nil {
@@ -63,9 +61,6 @@ func (d *Daemon) consumePendingAgentConversation(sessionID string) (agentConvers
 	return observation, ok
 }
 
-// observeAgentConversation is the authoritative transition boundary. Durable
-// state commits before the fact is published, so every consumer can re-read a
-// complete binding and no consumer owns a fragment of the transition.
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
 	changed, err := d.store.TransitionSessionConversation(observation.SessionID, observation.NativeID)
 	if err != nil {
@@ -104,9 +99,8 @@ func (d *Daemon) unsubscribeAgentConversationFacts() {
 	}
 }
 
-// rebindTranscriptWatcherForConversation is a runtime projection of the
-// committed binding. It is deliberately cheap and publishes nothing while the
-// bus fan-out lock is held.
+// rebindTranscriptWatcherForConversation publishes nothing while the bus fan-out
+// lock is held.
 func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
 	session := d.store.Get(event.Subject)
 	if session == nil || !isTranscriptWatchedAgent(session.Agent) {

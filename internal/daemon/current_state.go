@@ -7,10 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// appTicketRow is the board row the apps SDK reads in its current-state
-// snapshot. It lives here rather than in the protocol package because no
-// WebSocket client renders a ticket any more — the app shows the garden — and
-// the SDK's shape is its own contract, not the wire's.
 type appTicketRow struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`
@@ -23,8 +19,6 @@ type appTicketRow struct {
 	ReconciledAt string `json:"reconciled_at,omitempty"`
 }
 
-// appTicketRows is the whole non-archived board as slim rows, for the SDK
-// snapshot alone.
 func (d *Daemon) appTicketRows() []appTicketRow {
 	if d.store == nil {
 		return nil
@@ -59,9 +53,6 @@ func (d *Daemon) appTicketRows() []appTicketRow {
 	return out
 }
 
-// currentStateProjection is the state-bearing part of Initial State. Keeping
-// its assembly here gives app handlers the same local-and-relayed view as the
-// frontend without exposing settings, warnings, or protocol metadata.
 type currentStateProjection struct {
 	Sessions    []protocol.Session
 	Endpoints   []protocol.EndpointInfo
@@ -92,9 +83,8 @@ func (d *Daemon) currentStateProjection() currentStateProjection {
 	}
 }
 
-// appCurrentStateSnapshot is the SDK's bounded current-state read. The bus
-// position is captured before the projection is assembled, so every mutation
-// at or below it is already visible and any later mutation still has a fact.
+// The bus position is captured before the projection is assembled, so every mutation at
+// or below it is already visible and any later one still has a fact.
 type appCurrentStateSnapshot struct {
 	AsOfSeq     int64                       `json:"asOfSeq"`
 	Sessions    []protocol.Session          `json:"sessions"`

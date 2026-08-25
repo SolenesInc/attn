@@ -7,15 +7,13 @@ import (
 	"strings"
 )
 
-// HostInfo represents an authenticated GitHub host.
 type HostInfo struct {
-	Host   string // "github.com" or "ghe.corp.com"
-	APIURL string // "https://api.github.com" or "https://ghe.corp.com/api/v3"
-	Login  string // username
+	Host   string
+	APIURL string
+	Login  string
 	Active bool
 }
 
-// DiscoverHosts discovers authenticated hosts from `gh auth status --json hosts`.
 func DiscoverHosts() ([]HostInfo, error) {
 	output, err := ghAuthStatusHosts()
 	if err != nil {
@@ -24,7 +22,6 @@ func DiscoverHosts() ([]HostInfo, error) {
 	return parseAuthStatusHosts(output)
 }
 
-// GetTokenForHost fetches a token for the given host using `gh auth token -h`.
 // Note: Daemon ensures PATH is set at startup via pathutil.EnsureGUIPath()
 func GetTokenForHost(host string) (string, error) {
 	cmd := exec.Command("gh", "auth", "token", "-h", host)

@@ -14,8 +14,6 @@ const (
 	testDocColl = "requests"
 )
 
-// docCall runs a one-shot handler over a pipe and returns its response, the way
-// an `attn doc` invocation reaches the daemon.
 func docCall(t *testing.T, run func(net.Conn)) protocol.Response {
 	t.Helper()
 	client, server := net.Pipe()
@@ -73,8 +71,6 @@ func deleteDoc(t *testing.T, d *Daemon, id string) bool {
 	return resp.DocDeleteResult.Existed
 }
 
-// window is one delivery as the subscriber sees it once the client rule has been
-// applied: the wire's own order and upsert, plus the documents those resolve to.
 type window struct {
 	delivery  int
 	asOfSeq   int64
@@ -83,16 +79,6 @@ type window struct {
 	documents []protocol.StoredDocument
 }
 
-// liveQuery subscribes and returns a reader for its deliveries plus a stop that
-// disconnects the caller and waits for the handler to finish — the real signal
-// that the subscription has been torn down.
-//
-// It applies the client rule itself rather than calling internal/client's
-// applier: this is a second implementation of the same three sentences, and two
-// implementations disagreeing is the thing the invariant exists to catch. The
-// resolution below is also where the invariant is checked — every id in order
-// must resolve from the bodies this connection has been sent — so every test in
-// this file that reads a delivery is asserting it.
 type liveQuery struct {
 	dec  *json.Decoder
 	stop func()
@@ -104,9 +90,6 @@ func subscribe(t *testing.T, d *Daemon, q protocol.DocumentQuery) *liveQuery {
 	return subscribeResuming(t, d, q, nil)
 }
 
-// subscribeResuming subscribes declaring what the caller already holds. held
-// seeds the applier's cache so a resumed subscription's deliveries resolve the
-// same way a reconnecting client's would.
 func subscribeResuming(t *testing.T, d *Daemon, q protocol.DocumentQuery, held []protocol.StoredDocument) *liveQuery {
 	t.Helper()
 	have := make([]protocol.DocumentRevision, 0, len(held))
@@ -133,9 +116,6 @@ func subscribeResuming(t *testing.T, d *Daemon, q protocol.DocumentQuery, held [
 	return lq
 }
 
-// next reads one delivery and applies it. It blocks until the daemon sends,
-// which is what makes these tests wait on a real signal rather than on a
-// duration.
 func (lq *liveQuery) next(t *testing.T) window {
 	t.Helper()
 	resp := lq.nextRaw(t)
@@ -148,8 +128,6 @@ func (lq *liveQuery) next(t *testing.T) window {
 	return lq.apply(t, resp.DocSubscribeResult)
 }
 
-// apply is the client rule: render order, take each body from upsert if it is
-// there and from the cache otherwise, forget everything not in order.
 func (lq *liveQuery) apply(t *testing.T, result *protocol.DocSubscribeResult) window {
 	t.Helper()
 	arrived := make(map[string]protocol.StoredDocument, len(result.Upsert))
@@ -179,8 +157,6 @@ func (lq *liveQuery) apply(t *testing.T, result *protocol.DocSubscribeResult) wi
 	return out
 }
 
-// nextRaw reads one delivery without requiring it to have succeeded, for the
-// cases where the end of a subscription is the thing under test.
 func (lq *liveQuery) nextRaw(t *testing.T) protocol.Response {
 	t.Helper()
 	var resp protocol.Response
@@ -190,7 +166,6 @@ func (lq *liveQuery) nextRaw(t *testing.T) protocol.Response {
 	return resp
 }
 
-// changed names the ids whose bodies travelled in this delivery.
 func (w window) changed() []string {
 	out := make([]string, 0, len(w.upsert))
 	for _, doc := range w.upsert {
@@ -205,10 +180,6 @@ func testQuery() protocol.DocumentQuery {
 	return protocol.DocumentQuery{Namespace: testDocNS, Collection: testDocColl}
 }
 
-// Subscribing delivers the query's current window straight away, in the same
-// round trip. An extension UI remounts by re-subscribing, so a subscription that
-// only promised future updates would render empty until something happened to
-// change.
 func TestSubscribingDeliversTheCurrentWindowImmediately(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -224,9 +195,6 @@ func TestSubscribingDeliversTheCurrentWindowImmediately(t *testing.T) {
 	}
 }
 
-// A write wakes the subscription, and what arrives is the query's whole current
-// order — never a patch the subscriber has to merge — plus the one body it does
-// not hold.
 func TestAWriteWakesTheSubscriptionWithTheCurrentWindow(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -251,10 +219,6 @@ func TestAWriteWakesTheSubscriptionWithTheCurrentWindow(t *testing.T) {
 	}
 }
 
-// A delete that removed nothing changed nothing, so it must not wake anybody.
-// Proven without waiting on the absence of a message: the next delivery after a
-// no-op delete plus a real write is revision 2, which it could not be if the
-// no-op had also delivered.
 func TestANoOpDeleteDoesNotWakeSubscribers(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -275,7 +239,6 @@ func TestANoOpDeleteDoesNotWakeSubscribers(t *testing.T) {
 	}
 }
 
-// A removal reaches a live query: what it renders must never outlive the store.
 func TestARemovalReachesTheLiveQuery(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -292,9 +255,6 @@ func TestARemovalReachesTheLiveQuery(t *testing.T) {
 	}
 }
 
-// A subscription belongs to one collection. A write next door must not wake it —
-// otherwise every extension pays for every other extension's write traffic, and
-// namespace isolation stops meaning anything on the live path.
 func TestASubscriptionOnlyWakesForItsOwnCollection(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -314,8 +274,6 @@ func TestASubscriptionOnlyWakesForItsOwnCollection(t *testing.T) {
 	lq := subscribe(t, d, testQuery())
 	lq.next(t)
 
-	// A write to the neighbouring namespace, then one to ours. If the neighbour
-	// had woken us, this delivery would be revision 3.
 	if r := docCall(t, func(c net.Conn) {
 		d.handleDocPut(c, &protocol.DocPutMessage{
 			Cmd: protocol.CmdDocPut, Namespace: "app/other", Collection: testDocColl,
@@ -335,8 +293,6 @@ func TestASubscriptionOnlyWakesForItsOwnCollection(t *testing.T) {
 	}
 }
 
-// A caller that disconnects takes its subscription with it. A leaked one would
-// re-run its query on every write for the life of the daemon.
 func TestASubscriptionIsGoneWhenItsCallerDisconnects(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -345,29 +301,23 @@ func TestASubscriptionIsGoneWhenItsCallerDisconnects(t *testing.T) {
 	if n := d.documentSubscriptionCount(); n != 1 {
 		t.Fatalf("subscriptions = %d, want 1", n)
 	}
-	lq.stop() // closes the caller and waits for the handler to return
+	lq.stop()
 	if n := d.documentSubscriptionCount(); n != 0 {
 		t.Fatalf("subscriptions after disconnect = %d, want 0", n)
 	}
 }
 
-// The bus holds its publish lock across fan-out, so a subscriber that is not
-// draining must never be able to hold up a writer. This test would hang rather
-// than fail if the fan-out ever wrote to the socket itself.
 func TestWritesDoNotBlockOnASubscriberThatIsNotReading(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
 	lq := subscribe(t, d, testQuery())
 	lq.next(t)
 
-	// Nothing reads from here on; every one of these must still return.
 	for _, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		putDoc(t, d, id, `{"status":"pending"}`)
 	}
 }
 
-// A query against a collection nobody declared names the collection and the way
-// out, because the reader fixing it is an agent with only the error to go on.
 func TestReadingAnUndeclaredCollectionSaysHowToDeclareIt(t *testing.T) {
 	d := newDaemonForTest(t)
 	resp := docCall(t, func(c net.Conn) {
@@ -386,13 +336,6 @@ func TestReadingAnUndeclaredCollectionSaysHowToDeclareIt(t *testing.T) {
 	}
 }
 
-// A subscription whose query cannot be answered is refused at subscribe time,
-// by the same read that would have served it. The alternative is a subscription
-// that looks accepted and fails on every delivery.
-//
-// The refusal carries invalid_query rather than either subscription-ending code:
-// nothing happened to this subscription, the caller asked for something the
-// collection does not offer, and resubscribing with a corrected query works.
 func TestASubscriptionWithAnUnqueryableFieldIsRefusedUpFront(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -407,18 +350,12 @@ func TestASubscriptionWithAnUnqueryableFieldIsRefusedUpFront(t *testing.T) {
 	if code := protocol.Deref(resp.ErrorCode); code != protocol.ErrorCodeInvalidQuery {
 		t.Fatalf("error code = %q, want %q", code, protocol.ErrorCodeInvalidQuery)
 	}
-	// stop waits for the handler to return, which is when a registered
-	// subscription would have been removed. Registering before the first read is
-	// deliberate — it is what keeps a write landing mid-subscribe from being
-	// missed — so what has to hold is that a refusal still leaves nothing behind.
 	lq.stop()
 	if n := d.documentSubscriptionCount(); n != 0 {
 		t.Fatalf("a refused subscribe left %d subscriptions behind", n)
 	}
 }
 
-// A filter's bound travels as JSON text and is decoded against the field's
-// declared type, so the wire form reaches the same rules the Go form does.
 func TestAFilterBoundArrivesAsJSONAndIsTypeChecked(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -437,7 +374,6 @@ func TestAFilterBoundArrivesAsJSONAndIsTypeChecked(t *testing.T) {
 		t.Fatalf("documents = %+v", docs)
 	}
 
-	// A number against a string field is refused rather than matching nothing.
 	q.Filters = []protocol.DocumentFilter{{Field: "status", Op: "eq", ValueJson: `5`}}
 	if r := docCall(t, func(c net.Conn) {
 		d.handleDocQuery(c, &protocol.DocQueryMessage{Cmd: protocol.CmdDocQuery, Query: q})
@@ -446,8 +382,6 @@ func TestAFilterBoundArrivesAsJSONAndIsTypeChecked(t *testing.T) {
 	}
 }
 
-// Removing a collection tells its live queries, so nothing keeps rendering
-// records the store no longer holds.
 func TestRemovingACollectionReachesItsLiveQueries(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -468,9 +402,6 @@ func TestRemovingACollectionReachesItsLiveQueries(t *testing.T) {
 	if n := resp.DocUndefineResult.DocumentsRemoved; n != 1 {
 		t.Fatalf("removed %d documents, want 1", n)
 	}
-	// The watcher is told the collection is gone, not handed an empty list: an
-	// empty result set claims the collection is still there holding nothing, and
-	// leaves the caller watching an address that can never answer again.
 	final := lq.nextRaw(t)
 	if final.Ok {
 		t.Fatalf("after the collection went, delivery = %+v, want an error", final)
@@ -478,16 +409,11 @@ func TestRemovingACollectionReachesItsLiveQueries(t *testing.T) {
 	if msg := protocol.Deref(final.Error); !strings.Contains(msg, "is not declared") {
 		t.Fatalf("error does not say the collection is gone: %q", msg)
 	}
-	// The code is what a UI host branches on: collection_undefined means the
-	// tile is dead, not that its query was wrong.
 	if code := protocol.Deref(final.ErrorCode); code != protocol.ErrorCodeCollectionUndefined {
 		t.Fatalf("error code = %q, want %q", code, protocol.ErrorCodeCollectionUndefined)
 	}
 }
 
-// The after cursor survives the wire and pages a real tie. `attn doc query
-// --after` is the reachable form of the only pagination the store offers, so it
-// has to be proven from the message in rather than from the compiler alone.
 func TestPagingWithTheAfterCursorOverTheWire(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -521,8 +447,6 @@ func TestPagingWithTheAfterCursorOverTheWire(t *testing.T) {
 	}
 }
 
-// A cursor to a document that has been deleted fails the query rather than
-// returning an empty page that reads as the end of the walk.
 func TestAnAfterCursorToADeletedDocumentIsReported(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -542,10 +466,6 @@ func TestAnAfterCursorToADeletedDocumentIsReported(t *testing.T) {
 	}
 }
 
-// The other way a subscription's collection can move under it: a redeclare that
-// drops a field the live query filters on. The field's column goes with it, so
-// continuing would mean answering a question the collection no longer offers.
-// The watcher is told which field, the same way a fresh query would be.
 func TestRedeclaringWithoutAFieldEndsTheLiveQueriesUsingIt(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -558,7 +478,6 @@ func TestRedeclaringWithoutAFieldEndsTheLiveQueriesUsingIt(t *testing.T) {
 		t.Fatalf("initial = %v, want [a]", got)
 	}
 
-	// Redeclared with no queryable fields at all.
 	resp := docCall(t, func(c net.Conn) {
 		d.handleDocDefine(c, &protocol.DocDefineMessage{
 			Cmd: protocol.CmdDocDefine,
@@ -570,9 +489,6 @@ func TestRedeclaringWithoutAFieldEndsTheLiveQueriesUsingIt(t *testing.T) {
 	if !resp.Ok {
 		t.Fatalf("redeclare: %v", protocol.Deref(resp.Error))
 	}
-	// No write follows: the redeclare itself must wake the subscription and end
-	// it. A quiet collection whose declaration moved is exactly the case where
-	// waiting for the next document change would mean waiting forever.
 	final := lq.nextRaw(t)
 	if final.Ok {
 		t.Fatalf("delivery after the field went = %+v, want an error", final)
@@ -580,19 +496,11 @@ func TestRedeclaringWithoutAFieldEndsTheLiveQueriesUsingIt(t *testing.T) {
 	if msg := protocol.Deref(final.Error); !strings.Contains(msg, "status") {
 		t.Fatalf("error does not name the field that went: %q", msg)
 	}
-	// collection_redeclared rather than collection_undefined: the collection is
-	// still there, and it is the query that can never be answered again.
 	if code := protocol.Deref(final.ErrorCode); code != protocol.ErrorCodeCollectionRedeclared {
 		t.Fatalf("error code = %q, want %q", code, protocol.ErrorCodeCollectionRedeclared)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Conditional writes over the wire
-// ---------------------------------------------------------------------------
-
-// putDocExpecting writes with an expectation and returns the raw response, so a
-// test can assert on a refusal rather than fail on one.
 func putDocExpecting(t *testing.T, d *Daemon, id, body string, expected int) protocol.Response {
 	t.Helper()
 	return docCall(t, func(c net.Conn) {
@@ -619,8 +527,6 @@ func getDoc(t *testing.T, d *Daemon, id string) *protocol.StoredDocument {
 	return resp.DocGetResult.Document
 }
 
-// A write reports the revision it produced, and a read reports the revision it
-// read, so a caller never has to ask for one separately.
 func TestAWriteAndAReadAgreeOnTheRevision(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -642,8 +548,6 @@ func TestAWriteAndAReadAgreeOnTheRevision(t *testing.T) {
 	}
 }
 
-// The refusal has to arrive as an error a caller can act on, and the document it
-// would have replaced has to be exactly as it was.
 func TestAStaleConditionalWriteIsRefusedOverTheWire(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -665,10 +569,6 @@ func TestAStaleConditionalWriteIsRefusedOverTheWire(t *testing.T) {
 	}
 }
 
-// A refused write changed nothing, so it must not wake the collection's live
-// queries: a delivery means "this result set is new", and re-rendering an
-// identical one on every rejected write is the cost the conditional write exists
-// to avoid.
 func TestARefusedWriteDoesNotWakeSubscribers(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -681,9 +581,6 @@ func TestARefusedWriteDoesNotWakeSubscribers(t *testing.T) {
 	}
 	putDoc(t, d, "b", `{"status":"pending"}`)
 
-	// The next delivery is the one the accepted write caused, so it carries both
-	// documents. A delivery holding only the first means the refused write woke
-	// the subscription and this is its result set, with the real one still queued.
 	next := lq.next(t)
 	if got := ids(next); len(got) != 2 {
 		t.Fatalf("first delivery after the refused write = %v, want both documents", got)
@@ -693,8 +590,6 @@ func TestARefusedWriteDoesNotWakeSubscribers(t *testing.T) {
 	}
 }
 
-// Create-only, over the wire: the second create loses and the first document
-// survives it.
 func TestCreateOnlyIsRefusedWhenTheDocumentIsAlreadyThere(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -711,7 +606,6 @@ func TestCreateOnlyIsRefusedWhenTheDocumentIsAlreadyThere(t *testing.T) {
 	}
 }
 
-// A conditional delete refuses the same way, and leaves the document behind.
 func TestAStaleConditionalDeleteIsRefusedOverTheWire(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)

@@ -104,12 +104,6 @@ func TestRemoteCommandSessionID(t *testing.T) {
 			want: "",
 		},
 		{
-			// Hub→remote regression: Submit's draft-read/format/deliver all run
-			// on whichever daemon handles the command, so it must route by the
-			// SAME target_session_id it delivers to — otherwise a hub would
-			// format-and-clear a draft it never wrote (Get/Save/Clear route by
-			// workspace_id) and try to deliver against a session absent from
-			// its own local store.
 			name: "markdown_annotations_submit",
 			cmd:  protocol.CmdMarkdownAnnotationsSubmit,
 			msg:  &protocol.MarkdownAnnotationsSubmitMessage{Path: protocol.Ptr("/tmp/notes.md"), TargetSessionID: protocol.Ptr("sess-md-submit")},
@@ -124,40 +118,24 @@ func TestRemoteCommandSessionID(t *testing.T) {
 			want: "",
 		},
 		{
-			// Hub→remote regression: a turn's stamps are written by the daemon
-			// that owns the session. Settled locally, a hub would write nothing
-			// the remote knows about, and the endpoint's next snapshot would
-			// report the turn still owed and put the row back.
 			name: "settle_turn",
 			cmd:  protocol.CmdSettleTurn,
 			msg:  &protocol.SettleTurnMessage{SessionID: "sess-settle"},
 			want: "sess-settle",
 		},
 		{
-			// Hub→remote regression: the transcript is read from the filesystem
-			// of the machine running the agent. A hub answering locally has no
-			// transcript and no session row, so a remote pane would offer
-			// nothing to annotate.
 			name: "session_messages_get",
 			cmd:  protocol.CmdSessionMessagesGet,
 			msg:  &protocol.SessionMessagesGetMessage{SessionID: "sess-messages"},
 			want: "sess-messages",
 		},
 		{
-			// Hub→remote regression: the submit types into the session's PTY,
-			// which only the daemon running that PTY can do. Handled locally, a
-			// remote pane's Send all would report success and deliver nothing.
 			name: "session_annotations_submit",
 			cmd:  protocol.CmdSessionAnnotationsSubmit,
 			msg:  &protocol.SessionAnnotationsSubmitMessage{SessionID: "sess-anno-submit", Text: "feedback"},
 			want: "sess-anno-submit",
 		},
 		{
-			// Hub→remote regression: annotation drafts are keyed by session in
-			// the owning daemon's store. Read, written, or cleared on the hub
-			// instead, a remote pane would keep a second divergent set — and
-			// the generation ordering that makes two panes converge would be
-			// comparing against the wrong row entirely.
 			name: "session_annotations_get",
 			cmd:  protocol.CmdSessionAnnotationsGet,
 			msg:  &protocol.SessionAnnotationsGetMessage{SessionID: "sess-anno-get"},

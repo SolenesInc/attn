@@ -8,17 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleMarkdownAnnotationsSubmit delivers one persisted annotation draft.
-//
 // Drafts are tombstone-cleared ONLY after a successful delivery; every other
-// outcome (validation error, unknown session, pending_approval skip, PTY
-// write failure) leaves them intact so the user can retry.
-//
-// Read→deliver→clear race: a save landing between the draft read and the
-// clear is cleared too (ClearMarkdownAnnotationDraft tombstones at
-// max(stored, given)). The window is milliseconds, the annotation UI is
-// single-writer, and the client flushes its debounced save before submitting
-// — accepted.
+// outcome leaves them intact so the user can retry.
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
 	targetSession := strings.TrimSpace(protocol.Deref(msg.TargetSessionID))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
@@ -110,10 +101,8 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		}
 		result.Status = annotationSubmitStatusNoted
 	}
-	// Delivered or noted. Tombstone the draft at the generation we read so any
-	// straggling debounced save with generation <= floor is rejected (the
-	// PR5 resurrection guard). A clear failure after the destination accepted
-	// the payload still reports success — never risk duplicate delivery.
+	// Tombstone at the generation we read so a straggling debounced save is rejected.
+	// A clear failure after delivery still reports success — never risk a duplicate.
 	result.Success = true
 	if err := d.store.ClearMarkdownAnnotationDraft(source.draftKey, draft.Generation, time.Now()); err != nil {
 		verb := result.Status

@@ -9,9 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// newMarkdownAnnotationsDaemon returns a test daemon plus a fresh ws client
-// channel for driving the markdown annotation handlers directly (the same
-// harness style as the notebook/task WS tests).
 func newMarkdownAnnotationsDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -152,7 +149,6 @@ func TestMarkdownAnnotationsClearTombstonesAndReturnsFloor(t *testing.T) {
 	if !clear.Success || clear.Generation != 4 {
 		t.Fatalf("clear = %+v, want success with floor 4", clear)
 	}
-	// The tombstone rejects a save at/below its generation (debounced-save race).
 	ghost := mdAnnotationsSave(t, d, "s2", path, []protocol.MarkdownAnnotation{{ID: "ghost", Type: "comment", CreatedAt: 2}}, 4)
 	if ghost.Success || !protocol.Deref(ghost.Stale) {
 		t.Fatalf("save at tombstone gen = %+v, want stale rejection", ghost)
@@ -161,7 +157,6 @@ func TestMarkdownAnnotationsClearTombstonesAndReturnsFloor(t *testing.T) {
 	if !get.Success || len(get.Annotations) != 0 || get.Generation != 4 {
 		t.Fatalf("get after clear = %+v, want empty list floor 4", get)
 	}
-	// Past the tombstone, saving works again.
 	if res := mdAnnotationsSave(t, d, "s3", path, nil, 5); !res.Success {
 		t.Fatalf("save gen 5 after clear = %+v, want success", res)
 	}
@@ -188,8 +183,6 @@ func TestMarkdownAnnotationsCorruptStoredDraftIsErrorResult(t *testing.T) {
 	d := newMarkdownAnnotationsDaemon(t)
 	path := "/tmp/plan.md"
 
-	// Corrupt the stored blob directly (bypasses the typed WS parse, which
-	// would reject malformed annotation JSON before any handler runs).
 	if err := d.store.SaveMarkdownAnnotationDraft(path, "{not json", 1, time.Now()); err != nil {
 		t.Fatalf("seed corrupt draft: %v", err)
 	}

@@ -1,7 +1,5 @@
-// Package sessioninstructions answers bounded questions from one native Codex
-// conversation. It deliberately contains no authorization, workflow, or
-// resource taxonomy: the model interprets the question and attn validates only
-// transcript identity and the excerpts it returns.
+// Package sessioninstructions deliberately holds no authorization, workflow, or resource
+// taxonomy: attn validates only transcript identity and the excerpts returned.
 package sessioninstructions
 
 import (
@@ -29,8 +27,7 @@ const (
 	defaultConversationMax = 120_000
 )
 
-// Error is a stable, safe-to-render command failure. Its Message never
-// includes transcript or question content.
+// Safe to render: Message never includes transcript or question content.
 type Error struct {
 	Code    string
 	Message string
@@ -64,8 +61,6 @@ type ModelRequest struct {
 	PreviousValidationErrors []string
 }
 
-// ModelRunner runs a no-tools model call. The runner receives only the bounded
-// projection and must return the complete candidate, never a partial repair.
 type ModelRunner interface {
 	Run(context.Context, ModelRequest) (ModelAnswer, error)
 }
@@ -293,9 +288,6 @@ var explicitSpeechReportingQuestion = regexp.MustCompile(
 
 func isExplicitSpeechReportingQuestion(question string) bool {
 	q := strings.ToLower(strings.TrimSpace(question))
-	// Assistant evidence can establish only what the assistant said. Mentioning
-	// an agent is not enough: "Was the agent authorized?" remains a claim about
-	// Victor's authorization and needs a user-authored instruction.
 	return explicitSpeechReportingQuestion.MatchString(q)
 }
 
@@ -359,8 +351,8 @@ func exactQuote(text, hint string) string {
 	if at := strings.Index(text, hint); at >= 0 {
 		return text[at : at+len(hint)]
 	}
-	// Normalized matching has no byte-stable offset. Returning the whole original
-	// turn still preserves source bytes and cannot fabricate a quoted fragment.
+	// Normalized matching has no byte-stable offset; the whole turn preserves source bytes
+	// and cannot fabricate a quoted fragment.
 	return text
 }
 
@@ -372,7 +364,6 @@ func optionalTimestamp(value string) *string {
 	return &value
 }
 
-// Prompt returns the fixed, tool-less instruction given to the configured model.
 func Prompt(request ModelRequest) string {
 	var b strings.Builder
 	b.WriteString("Answer the question only from the labeled conversation. Return JSON with answer and evidence; evidence entries need turn_id and a short exact quote hint. For a yes/no question, answer must begin exactly Yes., No., or Unclear. Do not infer external facts from silence. An assistant turn can provide context, but it cannot independently establish what the user authorized; include the preceding assistant question when it is needed to interpret a terse user reply.\n\nQuestion:\n")
@@ -388,7 +379,6 @@ func Prompt(request ModelRequest) string {
 	return b.String()
 }
 
-// ParseModelAnswer accepts the JSON-only final answer requested by Prompt.
 func ParseModelAnswer(text string) (ModelAnswer, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {

@@ -1,9 +1,5 @@
 package pty
 
-// Placement diffing, away from any terminal. This is the observation half of
-// the feed path: the worker never reads a kitty escape, it reads ghostty's
-// placement set before and after and says what moved.
-
 import (
 	"reflect"
 	"testing"
@@ -88,8 +84,6 @@ func TestDiffKittyPlacements(t *testing.T) {
 	}
 }
 
-// Nothing to synthesize means no bytes at all, which is what lets the read loop
-// skip a fan-out rather than send an empty message.
 func TestAppendCSIWritesNothingForZero(t *testing.T) {
 	if got := appendCSI(nil, 0, 'S'); len(got) != 0 {
 		t.Errorf("appendCSI(0) = %q, want nothing", got)

@@ -58,8 +58,6 @@ func TestSessionAnnotationDraftMissingRowIsEmptyGenZero(t *testing.T) {
 }
 
 func TestSessionAnnotationDraftRejectsAnOlderGeneration(t *testing.T) {
-	// Two panes on the same session, or one pane whose writes arrive out of
-	// order. The older list must not overwrite the newer one.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -81,8 +79,6 @@ func TestSessionAnnotationDraftRejectsAnOlderGeneration(t *testing.T) {
 }
 
 func TestSessionAnnotationDraftTombstoneRefusesAnInFlightSave(t *testing.T) {
-	// Sending the set to the agent clears it. A save already in flight when
-	// that happened must not put the sent marks back on the message.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -105,16 +101,12 @@ func TestSessionAnnotationDraftTombstoneRefusesAnInFlightSave(t *testing.T) {
 	if draft.Annotations != "[]" {
 		t.Errorf("annotations = %q, want the cleared list", draft.Annotations)
 	}
-	// The floor a re-mounting client seeds from has to include the tombstone,
-	// or its first save is refused for reasons it cannot see.
 	if draft.Generation != 2 {
 		t.Errorf("generation = %d, want the tombstone's 2", draft.Generation)
 	}
 }
 
 func TestSessionAnnotationDraftClearWorksOnASessionNeverAnnotated(t *testing.T) {
-	// The tombstone IS the row: a client that sends before any save landed
-	// still has to be able to refuse that save.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -141,8 +133,6 @@ func TestSessionAnnotationDraftIsKeyedPerSession(t *testing.T) {
 	if draft.Annotations != "[]" {
 		t.Errorf("session-2 annotations = %q, want its own empty draft", draft.Annotations)
 	}
-	// Sharing the implementation with markdown drafts must not mean sharing
-	// the table: a session id is not a file path.
 	md, err := s.GetMarkdownAnnotationDraft("session-1")
 	if err != nil {
 		t.Fatalf("get markdown draft: %v", err)
@@ -153,8 +143,6 @@ func TestSessionAnnotationDraftIsKeyedPerSession(t *testing.T) {
 }
 
 func TestRemoveSessionDeletesItsAnnotationDraft(t *testing.T) {
-	// A session id is never reused, so a tombstone left behind is a row nobody
-	// can reach. The draft goes with the session.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -209,8 +197,6 @@ func TestClearSessionsDeletesAnnotationDrafts(t *testing.T) {
 }
 
 func TestSessionAnnotationDraftCarriesItsNote(t *testing.T) {
-	// The note is the instruction the marks qualify. It is drafted over the
-	// same minutes they are, so it has to survive a reopened pane the same way.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -240,8 +226,6 @@ func TestSessionAnnotationDraftNoteIsEmptyBeforeAnythingIsSaved(t *testing.T) {
 }
 
 func TestClearSessionAnnotationDraftClearsTheNoteToo(t *testing.T) {
-	// Clearing is what a send does. Leaving the note behind would put the
-	// instruction that was just delivered back on the next turn.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -262,8 +246,6 @@ func TestClearSessionAnnotationDraftClearsTheNoteToo(t *testing.T) {
 }
 
 func TestSessionAnnotationDraftKeepsTheNoteOfTheGenerationThatWon(t *testing.T) {
-	// A refused save must not leave its note behind: the note and the marks
-	// are one draft, and a half-applied one is a draft the user never wrote.
 	s := newSessionAnnotationTestStore(t)
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 
@@ -284,9 +266,8 @@ func TestSessionAnnotationDraftKeepsTheNoteOfTheGenerationThatWon(t *testing.T) 
 }
 
 func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
-	// `attn` has shipped session annotation drafts since schema 86, so real
-	// installs hold rows written by a build that had no note column. They are
-	// carried, not recreated: the marks on them are work the user did.
+	// attn has shipped session annotation drafts since schema 86, so real installs
+	// hold rows written by a build with no note column: they are carried, not recreated.
 	dbPath := filepath.Join(t.TempDir(), "pre-93.db")
 	db, err := OpenDB(dbPath)
 	if err != nil {

@@ -32,8 +32,8 @@ func TestGitHTTPSAuthorizationHeader(t *testing.T) {
 }
 
 func TestNewClient_DefaultsToGitHubAPI(t *testing.T) {
-	// Use a real-looking token (not "test-token") since test-token is blocked
-	// when targeting real GitHub API
+	// A real-looking token: "test-token" is blocked when targeting the real
+	// GitHub API.
 	client, err := NewClient("", "ghp_xxxxxxxxxxxx")
 	if err != nil {
 		t.Fatalf("NewClient error: %v", err)
@@ -45,7 +45,6 @@ func TestNewClient_DefaultsToGitHubAPI(t *testing.T) {
 }
 
 func TestNewClient_BlocksTestTokenWithRealAPI(t *testing.T) {
-	// Should fail because test-token + real API is blocked
 	_, err := NewClient("", "test-token")
 	if err == nil {
 		t.Fatal("NewClient should fail when test-token is used with real GitHub API")
@@ -125,7 +124,6 @@ func TestFetchPullRequestSnapshotUsesOneReadOnlyRequest(t *testing.T) {
 
 func TestClient_SearchAuthoredPRs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify correct endpoint
 		if r.URL.Path != "/search/issues" {
 			t.Errorf("Path = %q, want /search/issues", r.URL.Path)
 		}
@@ -165,7 +163,6 @@ func TestClient_SearchAuthoredPRs(t *testing.T) {
 		t.Fatalf("SearchAuthoredPRs error: %v", err)
 	}
 
-	// Should filter out draft PRs
 	if len(prs) != 1 {
 		t.Fatalf("got %d PRs, want 1 (draft should be filtered)", len(prs))
 	}
@@ -186,7 +183,6 @@ func TestClient_SearchAuthoredPRs(t *testing.T) {
 	}
 }
 
-// Helper function to check if string contains all substrings
 func containsAll(s string, parts ...string) bool {
 	for _, part := range parts {
 		if !contains(s, part) {
@@ -286,7 +282,6 @@ func TestClient_FetchAll(t *testing.T) {
 			"items":       items,
 		}
 
-		// Convert to JSON
 		jsonBytes, _ := json.Marshal(responseData)
 		w.Write(jsonBytes)
 	}))
@@ -362,7 +357,6 @@ func TestClient_ApprovePR(t *testing.T) {
 		capturedMethod = r.Method
 		capturedPath = r.URL.Path
 
-		// Parse request body
 		json.NewDecoder(r.Body).Decode(&capturedBody)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -380,18 +374,15 @@ func TestClient_ApprovePR(t *testing.T) {
 		t.Fatalf("ApprovePR error: %v", err)
 	}
 
-	// Verify correct HTTP method
 	if capturedMethod != "POST" {
 		t.Errorf("HTTP method = %q, want POST", capturedMethod)
 	}
 
-	// Verify correct endpoint
 	expectedPath := "/repos/owner/repo/pulls/42/reviews"
 	if capturedPath != expectedPath {
 		t.Errorf("Path = %q, want %q", capturedPath, expectedPath)
 	}
 
-	// Verify request body contains {"event": "APPROVE"}
 	if capturedBody["event"] != "APPROVE" {
 		t.Errorf("Request body event = %v, want APPROVE", capturedBody["event"])
 	}
@@ -411,7 +402,6 @@ func TestClient_ApprovePR_Error(t *testing.T) {
 		t.Fatal("ApprovePR should return error on 403 response")
 	}
 
-	// Verify error message contains status code
 	if !contains(err.Error(), "403") {
 		t.Errorf("Error message = %q, should contain 403", err.Error())
 	}
@@ -425,7 +415,6 @@ func TestClient_MergePR(t *testing.T) {
 		capturedMethod = r.Method
 		capturedPath = r.URL.Path
 
-		// Parse request body
 		json.NewDecoder(r.Body).Decode(&capturedBody)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -444,32 +433,28 @@ func TestClient_MergePR(t *testing.T) {
 		t.Fatalf("MergePR error: %v", err)
 	}
 
-	// Verify correct HTTP method
 	if capturedMethod != "PUT" {
 		t.Errorf("HTTP method = %q, want PUT", capturedMethod)
 	}
 
-	// Verify correct endpoint
 	expectedPath := "/repos/owner/repo/pulls/42/merge"
 	if capturedPath != expectedPath {
 		t.Errorf("Path = %q, want %q", capturedPath, expectedPath)
 	}
 
-	// Verify request body contains {"merge_method": "squash"}
 	if capturedBody["merge_method"] != "squash" {
 		t.Errorf("Request body merge_method = %v, want squash", capturedBody["merge_method"])
 	}
 }
 
 func TestClient_MergePR_InvalidMethod(t *testing.T) {
-	// Use a mock URL so we can create the client (test-token + real API is blocked)
+	// A mock URL, because test-token against the real API is blocked.
 	client, _ := NewClient("http://localhost:9999", "test-token")
 	err := client.MergePR("owner/repo", 42, "invalid")
 	if err == nil {
 		t.Fatal("MergePR should return error for invalid merge method")
 	}
 
-	// Verify error message mentions invalid method
 	if !contains(err.Error(), "invalid") || !contains(err.Error(), "merge") {
 		t.Errorf("Error message = %q, should mention invalid merge method", err.Error())
 	}

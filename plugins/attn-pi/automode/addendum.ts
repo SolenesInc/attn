@@ -1,6 +1,5 @@
-// The other half of auto mode's model-facing API. denial.ts answers one
-// blocked call; this tells the agent up front that a permission system exists
-// and that the way through it is the conversation, not a workaround.
+// The other half of auto mode's model-facing API: denial.ts answers one blocked call,
+// this tells the agent up front that the way through is the conversation.
 
 export function autoModeSystemPromptAddendum(): string {
   return [

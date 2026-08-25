@@ -19,8 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// newWakeableDaemon is a crew daemon that can spawn: a fake PTY backend records
-// what a wake launched, and a real logger on disk carries the priming receipt.
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
 	t.Helper()
 	d := newCrewDaemon(t)
@@ -50,9 +48,6 @@ func crewSet(t *testing.T, d *Daemon, msg protocol.CrewSetMessage) protocol.Resp
 	return gardenCall(t, func(c net.Conn) { d.handleCrewSet(c, &msg) })
 }
 
-// The slice's acceptance: one verb starts a member's day. The session launches
-// in the member's own directory, bound to it before it spawns, and the roster
-// says the member is awake.
 func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	launchDir := t.TempDir()
@@ -81,12 +76,9 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 		t.Errorf("session launched in %q, want the member's own cwd %q", spawns[0].CWD, launchDir)
 	}
 
-	// Bound: the binding is what `crew_prime` answers, so a wake that spawned
-	// without one would launch a session that is nobody.
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != result.SessionID {
 		t.Fatalf("roster binding = %q, want the woken session %q", got, result.SessionID)
 	}
-	// One durable workspace per member, reused by every day.
 	if d.store.GetWorkspace(crewWorkspaceID("trellis")) == nil {
 		t.Fatalf("no workspace %q was created for the woken member", crewWorkspaceID("trellis"))
 	}
@@ -95,8 +87,6 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	}
 }
 
-// A member's own model is the most specific choice. This is the regression:
-// the old package constant silently overruled both member and daemon config.
 func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "claude-sonnet-4-5")
@@ -154,10 +144,6 @@ func TestCrewWake_OneDayHarnessOverrideDoesNotTakeTheMembersUsualModel(t *testin
 	}
 }
 
-// Display capitalizes, identity does not. Everything a person reads off a woken
-// member — its session label, its pane, its workspace — is written as a name,
-// while the workspace id, the binding and the wire's member field stay the
-// lowercase id.
 func TestCrewWake_NamesTheDayAndKeepsTheIDLowercase(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 
@@ -190,9 +176,6 @@ func TestCrewWake_NamesTheDayAndKeepsTheIDLowercase(t *testing.T) {
 	}
 }
 
-// Two agents with the same identity never run at once. The sidebar's one action
-// must not fail exactly when the member is present, so a second wake names the
-// live day instead of refusing — and launches nothing.
 func TestCrewWake_AnAwakeMemberIsNotWokenTwice(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 
@@ -239,9 +222,6 @@ func (b *crewRuntimeBackend) SessionInfo(_ context.Context, sessionID string) (p
 	return ptybackend.SessionInfo{SessionID: sessionID, Running: running}, nil
 }
 
-// A session row is history, not liveness. Wake probes the bound runtime; when
-// the process exited it releases that exact binding, starts a fresh day, and
-// names the repair in the result.
 func TestCrewWake_ReleasesAnExitedBindingAndStartsAFreshDay(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
@@ -274,8 +254,6 @@ func TestCrewWake_ReleasesAnExitedBindingAndStartsAFreshDay(t *testing.T) {
 	}
 }
 
-// PTY exit is the runtime seam: the generic session row may remain for history
-// or recovery, but the member is asleep as soon as its process is gone.
 func TestCrewBinding_ProcessExitReleasesTheDay(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -308,8 +286,6 @@ func TestCrewBinding_ProcessExitReleasesTheDay(t *testing.T) {
 	}
 }
 
-// Startup may keep a dead generic session as recoverable, but it never keeps
-// the member's seat: the letter and home, not the process row, carry the crew.
 func TestCrewBinding_StartupRecoveryReleasesADeadDay(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("keel", "")
@@ -338,10 +314,6 @@ func TestCrewBinding_StartupRecoveryReleasesADeadDay(t *testing.T) {
 	}
 }
 
-// The binding alone is not a liveness fence: the claimed session becomes
-// visible only later in the spawn pipeline. A second wake that enters during
-// that gap must wait, then resolve to the first day instead of stealing the
-// member and launching a second identity.
 func TestCrewWake_ConcurrentWakesShareTheFirstDay(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	started := make(chan string, 2)
@@ -408,8 +380,6 @@ func TestCrewWake_AnUnknownMemberIsRefusedWithWhereToLook(t *testing.T) {
 	}
 }
 
-// A recorded cwd that has since moved is named, with the verb that fixes it —
-// and the member stays asleep rather than half-woken with a claimed binding.
 func TestCrewWake_ADirectoryThatMovedIsNamedAndNothingIsClaimed(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	launchDir := filepath.Join(t.TempDir(), "moved")
@@ -427,7 +397,6 @@ func TestCrewWake_ADirectoryThatMovedIsNamedAndNothingIsClaimed(t *testing.T) {
 	if err == nil {
 		t.Fatal("a member launched into a directory that is not there")
 	}
-	// The prose names Alder; the command it hands back takes the id.
 	for _, want := range []string{"Alder launches in", launchDir, "attn crew set alder --cwd"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal %q does not name %q", err, want)
@@ -444,8 +413,6 @@ func TestCrewWake_ADirectoryThatMovedIsNamedAndNothingIsClaimed(t *testing.T) {
 	}
 }
 
-// A member whose home records no cwd launches in its own home: the home is what
-// made the member, so a wake never fails for want of a directory.
 func TestCrewWake_AMemberWithNoRecordedDirectoryLaunchesInItsHome(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if _, err := d.crewWake("keel", ""); err != nil {
@@ -460,9 +427,6 @@ func TestCrewWake_AMemberWithNoRecordedDirectoryLaunchesInItsHome(t *testing.T) 
 	}
 }
 
-// Priming is what makes the launched session the member. The block carries the
-// charter and the freshest letter read off the home, and the size is logged —
-// the budget receipt, one greppable line naming what each part cost.
 func TestCrewPrime_ABoundSessionIsPrimedWithItsHomeAndTheSizeIsLogged(t *testing.T) {
 	d, _, readLog := newWakeableDaemon(t)
 	result, err := d.crewWake("trellis", "")
@@ -482,7 +446,7 @@ func TestCrewPrime_ABoundSessionIsPrimedWithItsHomeAndTheSizeIsLogged(t *testing
 	}
 	for _, want := range []string{
 		"You are **Trellis**",
-		"Where I left off.", // the freshest letter
+		"Where I left off.",
 		"2026-08-13T22-20Z-trellis.md",
 	} {
 		if !strings.Contains(block, want) {
@@ -494,14 +458,11 @@ func TestCrewPrime_ABoundSessionIsPrimedWithItsHomeAndTheSizeIsLogged(t *testing
 	if !strings.Contains(log, "crew: priming Trellis") {
 		t.Fatalf("no greppable priming receipt in the daemon log:\n%s", log)
 	}
-	// The logged size is the size of what was injected, not an estimate of it.
 	if !strings.Contains(log, fmt.Sprintf("%d bytes", len(block))) {
 		t.Errorf("the receipt does not report the %d bytes that were injected:\n%s", len(block), log)
 	}
 }
 
-// A session nobody woke as a member is primed with nothing: a worker in a pane
-// never receives a crew identity it did not launch with.
 func TestCrewPrime_AnUnboundSessionIsNobody(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	addSession(t, d, "sess-worker")
@@ -513,9 +474,6 @@ func TestCrewPrime_AnUnboundSessionIsNobody(t *testing.T) {
 	}
 }
 
-// `crew set` is where the launch directory and the awareness dirs come from —
-// registry state, never read out of the member's prose. It has a way in and a
-// way out: passing no awareness dirs clears them.
 func TestCrewSet_RecordsAndClearsWhereAMemberWorks(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	launchDir, awareness := t.TempDir(), t.TempDir()
@@ -535,13 +493,10 @@ func TestCrewSet_RecordsAndClearsWhereAMemberWorks(t *testing.T) {
 	if len(member.AwarenessDirs) != 1 || member.AwarenessDirs[0] != awareness {
 		t.Errorf("awareness dirs = %v, want [%s]", member.AwarenessDirs, awareness)
 	}
-	// It survives the round trip through the registry, which is what the wake
-	// reads.
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "keel").Cwd); got != launchDir {
 		t.Errorf("roster cwd = %q, want %q", got, launchDir)
 	}
 
-	// The way out.
 	resp = crewSet(t, d, protocol.CrewSetMessage{Member: "keel", AwarenessDirs: []string{}})
 	if !resp.Ok {
 		t.Fatalf("clearing awareness dirs: %v", protocol.Deref(resp.Error))
@@ -549,7 +504,6 @@ func TestCrewSet_RecordsAndClearsWhereAMemberWorks(t *testing.T) {
 	if got := memberByID(t, crewList(t, d), "keel").AwarenessDirs; len(got) != 0 {
 		t.Errorf("awareness dirs after the clear = %v, want none", got)
 	}
-	// Clearing one field leaves the other alone.
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "keel").Cwd); got != launchDir {
 		t.Errorf("cwd = %q after clearing awareness dirs, want %q", got, launchDir)
 	}
@@ -580,10 +534,8 @@ func TestCrewSet_RecordsReadsAndClearsAMembersModel(t *testing.T) {
 	}
 }
 
-// The way out has to survive the wire. An empty awareness list marshals away
-// under `omitempty`, so a clear sent as an empty slice reaches the daemon as
-// "leave it alone" and the CLI reports success while nothing changed. This
-// drives the same bytes the client sends, which is the only place that shows.
+// An empty awareness list marshals away under `omitempty`, so a clear sent as an
+// empty slice would reach the daemon as "leave it alone".
 func TestCrewSet_ClearingAwarenessDirsSurvivesTheWire(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	awareness := t.TempDir()
@@ -599,9 +551,6 @@ func TestCrewSet_ClearingAwarenessDirsSurvivesTheWire(t *testing.T) {
 	}
 }
 
-// crewSetOverTheWire builds the message the client builds, marshals it, and
-// decodes it the way the daemon does — so a field the encoder drops is dropped
-// here too.
 func crewSetOverTheWire(t *testing.T, d *Daemon, member string, cwd *string, dirs []string) protocol.Response {
 	t.Helper()
 	msg := protocol.CrewSetMessage{Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, AwarenessDirs: dirs}
@@ -619,8 +568,6 @@ func crewSetOverTheWire(t *testing.T, d *Daemon, member string, cwd *string, dir
 	return gardenCall(t, func(c net.Conn) { d.handleCrewSet(c, decoded.(*protocol.CrewSetMessage)) })
 }
 
-// A directory that is not there is refused at set time. Recording it and failing
-// at the next wake is the wrong end of the day to learn about a typo.
 func TestCrewSet_ADirectoryThatIsNotThereIsRefused(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	missing := filepath.Join(t.TempDir(), "nope")
@@ -732,8 +679,6 @@ func TestCrewSet_ASymlinkedForeignProfileRootIsRefused(t *testing.T) {
 	}
 }
 
-// Every crew verb passes the fence. An outpost holds no part of the crew, so a
-// wake, a set and a prime all refuse there by name.
 func TestCrewWake_AnOutpostHoldsNoneOfIt(t *testing.T) {
 	const home = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	d := newEnrolledDaemon(t, home)
@@ -763,9 +708,6 @@ func TestCrewWake_AnOutpostHoldsNoneOfIt(t *testing.T) {
 	}
 }
 
-// A member lives on the harness its record names: the registry decides, not the
-// caller, so a member registered on codex wakes on codex every morning with
-// nobody typing a flag.
 func TestCrewWake_LaunchesTheHarnessTheMemberIsRegisteredOn(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("codex")}); !resp.Ok {
@@ -785,12 +727,9 @@ func TestCrewWake_LaunchesTheHarnessTheMemberIsRegisteredOn(t *testing.T) {
 	if agent != "codex" {
 		t.Errorf("member woke on %q, want codex", agent)
 	}
-	// The pin names a Claude model; a codex member takes codex's own default.
 	if model != "" {
 		t.Errorf("codex member was pinned to model %q, want the harness default", model)
 	}
-	// The stored session is what the lifecycle tick reads its harness off, so a
-	// codex day must be assumed against codex's prompt-cache lifetime.
 	session := d.store.Get(woken.SessionID)
 	if session == nil {
 		t.Fatalf("no session %q was stored", woken.SessionID)
@@ -803,8 +742,6 @@ func TestCrewWake_LaunchesTheHarnessTheMemberIsRegisteredOn(t *testing.T) {
 	}
 }
 
-// A member with no recorded harness keeps waking where it always has, so the
-// field arriving changes nothing for the members that predate it.
 func TestCrewWake_AnUnsetAgentIsStillTheDefaultHarness(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
@@ -821,8 +758,6 @@ func TestCrewWake_AnUnsetAgentIsStillTheDefaultHarness(t *testing.T) {
 	}
 }
 
-// `--agent` is one day, not a move: it wins over the record for the wake it is
-// typed on, and the record is untouched.
 func TestCrewWake_TheFlagWinsForOneDayWithoutMovingTheMember(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("codex")}); !resp.Ok {
@@ -842,8 +777,6 @@ func TestCrewWake_TheFlagWinsForOneDayWithoutMovingTheMember(t *testing.T) {
 	}
 }
 
-// A harness this daemon cannot launch is refused when it is typed, not at the
-// next morning — and the way out is the same flag, empty.
 func TestCrewSet_RefusesAnUnknownHarnessAndClearsBackToTheDefault(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("nosuchharness")})

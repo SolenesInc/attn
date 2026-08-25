@@ -20,9 +20,6 @@ func fullPriming() Priming {
 	}
 }
 
-// The block is the whole of what a woken member knows about being itself: what
-// a member is, where it lives, what it launched into, where to read its own
-// charter, the letter left for it, and how to leave the next one.
 func TestPriming_BlockCarriesEverythingAWokenMemberNeeds(t *testing.T) {
 	block := fullPriming().Block()
 
@@ -51,9 +48,6 @@ func TestPriming_BlockCarriesEverythingAWokenMemberNeeds(t *testing.T) {
 	}
 }
 
-// Closure names every way a day can turn over. The plain verb stays
-// presence-decided; Victor's explicit sleep request and a requested successor
-// each have their own flag, so a member never has to infer intent at filing.
 func TestPriming_ClosureCarriesHandoffFlagSemantics(t *testing.T) {
 	block := fullPriming().Block()
 
@@ -70,8 +64,6 @@ func TestPriming_ClosureCarriesHandoffFlagSemantics(t *testing.T) {
 	}
 }
 
-// The charter is read, never inlined: a member opens its own file, so the wake
-// never carries a stale copy of the self it is about to read.
 func TestPriming_TheCharterIsReadRatherThanInlined(t *testing.T) {
 	p := fullPriming()
 	p.Charter = "# trellis\n\nI care about the shape of the work."
@@ -85,8 +77,6 @@ func TestPriming_TheCharterIsReadRatherThanInlined(t *testing.T) {
 	}
 }
 
-// The name is a name in prose and an address everywhere else: Trellis speaking
-// to Trellis, living in a lowercase home.
 func TestPriming_TheNameIsCapitalizedOnlyInProse(t *testing.T) {
 	block := fullPriming().Block()
 
@@ -98,17 +88,12 @@ func TestPriming_TheNameIsCapitalizedOnlyInProse(t *testing.T) {
 	}
 }
 
-// A session nobody woke as a member is primed with nothing: the crew block is
-// the identity, so an unbound session must not receive a truncated version of
-// one.
 func TestPriming_AnUnboundSessionGetsNoBlock(t *testing.T) {
 	if got := (Priming{HomeDir: "/somewhere", Charter: "# nobody"}).Block(); got != "" {
 		t.Fatalf("an unbound session was primed with %q", got)
 	}
 }
 
-// A member with no charter and no letter is on its first day, and the block says
-// so with what to do about it rather than leaving two silent gaps.
 func TestPriming_AFirstDayNamesWhatIsMissing(t *testing.T) {
 	block := Priming{Member: "sable", HomeDir: "/homes/sable"}.Block()
 
@@ -125,9 +110,6 @@ func TestPriming_AFirstDayNamesWhatIsMissing(t *testing.T) {
 	}
 }
 
-// A letter nothing like a real one is cut rather than inlined whole, and the cut
-// says where the rest is — a member told half a letter with no path has no way
-// back to the other half.
 func TestPriming_AnOversizeFileIsCutWithWhereTheRestIs(t *testing.T) {
 	p := fullPriming()
 	p.Handoff = strings.Repeat("letter. ", HandoffLimit/4)
@@ -141,11 +123,8 @@ func TestPriming_AnOversizeFileIsCutWithWhereTheRestIs(t *testing.T) {
 	}
 }
 
-// Markdown carries any Unicode, so a cut lands on a rune boundary — a block
-// ending mid-rune is invalid UTF-8 in a system prompt.
 func TestPriming_ACutLandsOnARuneBoundary(t *testing.T) {
 	p := Priming{Member: "keel", HomeDir: "/homes/keel", HandoffName: "2026-08-13T22-20Z-keel.md"}
-	// 3-byte runes never align with the limit, so a naive slice splits one.
 	p.Handoff = strings.Repeat("日", HandoffLimit)
 
 	block := p.Block()
@@ -157,8 +136,6 @@ func TestPriming_ACutLandsOnARuneBoundary(t *testing.T) {
 	}
 }
 
-// The file names are UTC timestamps, so lexicographic order is chronological.
-// Freshest first is what makes names[0] the letter to inline.
 func TestPriming_HandoffNamesSortFreshestFirst(t *testing.T) {
 	names := []string{
 		"2026-08-11T20-00Z-keel.md",

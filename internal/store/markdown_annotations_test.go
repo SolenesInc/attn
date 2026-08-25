@@ -63,15 +63,12 @@ func TestMarkdownAnnotationDraftGenerationMonotonic(t *testing.T) {
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["v2"]`, 2, now); err != nil {
 		t.Fatalf("save gen 2: %v", err)
 	}
-	// Same generation again -> stale.
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["dup"]`, 2, now); !errors.Is(err, ErrStaleMarkdownAnnotationSave) {
 		t.Fatalf("save gen 2 twice = %v, want ErrStaleMarkdownAnnotationSave", err)
 	}
-	// Lower generation -> stale.
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["v1"]`, 1, now); !errors.Is(err, ErrStaleMarkdownAnnotationSave) {
 		t.Fatalf("save gen 1 after 2 = %v, want ErrStaleMarkdownAnnotationSave", err)
 	}
-	// Stale saves must not have overwritten the list.
 	draft, err := s.GetMarkdownAnnotationDraft(testMDPath)
 	if err != nil {
 		t.Fatalf("get: %v", err)
@@ -79,7 +76,6 @@ func TestMarkdownAnnotationDraftGenerationMonotonic(t *testing.T) {
 	if draft.Annotations != `["v2"]` || draft.Generation != 2 {
 		t.Errorf("draft after stale saves = %+v, want gen-2 list intact", draft)
 	}
-	// Higher generation proceeds.
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["v3"]`, 3, now); err != nil {
 		t.Fatalf("save gen 3: %v", err)
 	}
@@ -92,15 +88,12 @@ func TestMarkdownAnnotationDraftTombstoneRejectsStaleSave(t *testing.T) {
 	if err := s.ClearMarkdownAnnotationDraft(testMDPath, 5, now); err != nil {
 		t.Fatalf("clear gen 5: %v", err)
 	}
-	// Save at the tombstone generation -> rejected (the debounced-save-after-
-	// clear race).
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["ghost"]`, 5, now); !errors.Is(err, ErrStaleMarkdownAnnotationSave) {
 		t.Fatalf("save gen 5 after clear(5) = %v, want ErrStaleMarkdownAnnotationSave", err)
 	}
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["ghost"]`, 4, now); !errors.Is(err, ErrStaleMarkdownAnnotationSave) {
 		t.Fatalf("save gen 4 after clear(5) = %v, want ErrStaleMarkdownAnnotationSave", err)
 	}
-	// A generation past the tombstone is accepted.
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["fresh"]`, 6, now); err != nil {
 		t.Fatalf("save gen 6 after clear(5): %v", err)
 	}
@@ -130,7 +123,6 @@ func TestMarkdownAnnotationDraftClearSetsTombstoneAndEmptiesList(t *testing.T) {
 	if draft.Annotations != "[]" {
 		t.Errorf("annotations after clear = %q, want []", draft.Annotations)
 	}
-	// Floor must be >= tombstone so a re-mounting client seeds past it.
 	if draft.Generation != 4 {
 		t.Errorf("generation floor after clear = %d, want 4", draft.Generation)
 	}
@@ -140,8 +132,6 @@ func TestMarkdownAnnotationDraftClearKeepsHighestTombstone(t *testing.T) {
 	s := newMarkdownAnnotationTestStore(t)
 	now := time.Now()
 
-	// Stored generation higher than the clear's generation param: tombstone
-	// must take the max of both so the stored list can never resurrect.
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["a"]`, 7, now); err != nil {
 		t.Fatalf("save gen 7: %v", err)
 	}
@@ -151,7 +141,6 @@ func TestMarkdownAnnotationDraftClearKeepsHighestTombstone(t *testing.T) {
 	if err := s.SaveMarkdownAnnotationDraft(testMDPath, `["ghost"]`, 7, now); !errors.Is(err, ErrStaleMarkdownAnnotationSave) {
 		t.Fatalf("save gen 7 after clear = %v, want ErrStaleMarkdownAnnotationSave", err)
 	}
-	// An earlier, higher tombstone survives a later, lower clear.
 	if err := s.ClearMarkdownAnnotationDraft(testMDPath, 1, now); err != nil {
 		t.Fatalf("second clear: %v", err)
 	}
@@ -168,7 +157,6 @@ func TestMarkdownAnnotationDraftClearIdempotentAndOnMissingRow(t *testing.T) {
 	s := newMarkdownAnnotationTestStore(t)
 	now := time.Now()
 
-	// Clear on a missing row creates the tombstone row.
 	if err := s.ClearMarkdownAnnotationDraft(testMDPath, 3, now); err != nil {
 		t.Fatalf("clear missing row: %v", err)
 	}
@@ -179,7 +167,6 @@ func TestMarkdownAnnotationDraftClearIdempotentAndOnMissingRow(t *testing.T) {
 	if draft.Annotations != "[]" || draft.Generation != 3 {
 		t.Errorf("draft after clear-on-missing = %+v, want empty list floor 3", draft)
 	}
-	// Repeating the clear is a no-op, not an error.
 	if err := s.ClearMarkdownAnnotationDraft(testMDPath, 3, now); err != nil {
 		t.Fatalf("repeat clear: %v", err)
 	}

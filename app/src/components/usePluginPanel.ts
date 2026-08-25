@@ -1,6 +1,5 @@
-// The plugins panel's own state: the source path being typed, the per-plugin
-// priority drafts, and the list re-read that follows every install, removal or
-// priority change.
+// The plugins panel's own state: the source path being typed, the per-plugin priority
+// drafts, and the list re-read after every install, removal or priority change.
 
 import { useCallback, useState } from 'react';
 import type { PluginListResult } from '../hooks/useDaemonSocket';
@@ -9,10 +8,8 @@ import { usePanelAction, type PanelAction } from './settingsPanelAction';
 export interface PluginPanel extends PanelAction {
   sourcePath: string;
   setSourcePath: (next: string) => void;
-  /**
-   * Priority is edited as text and committed on blur, so the draft is a string.
-   * Before the first re-list a plugin has no draft yet, hence the fallback.
-   */
+  /** Priority is edited as text and committed on blur, so the draft is a string.
+   * Before the first re-list a plugin has no draft yet, hence the fallback. */
   priorityDraft: (name: string, fallback?: string) => string;
   setPriorityDraft: (name: string, value: string) => void;
   loading: boolean;

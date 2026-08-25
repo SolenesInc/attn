@@ -81,12 +81,8 @@ function emitInitialState(ws: FakeWebSocket) {
   });
 }
 
-// A keyed request parks its promise under `<cmd>:<id>`, so a `command_error`
-// — which carries no correlation id — has to be matched by command name with
-// that suffix allowed. Without it the caller waits out its own timeout and
-// reports "timed out" instead of what the daemon said: a live remote session
-// reloaded against a parked endpoint showed "Reload session timed out" while
-// the daemon had already answered with the parked reason.
+// A `command_error` carries no correlation id, so it has to be matched by command name
+// with the `<cmd>:<id>` suffix allowed, or the caller reports "timed out" instead.
 describe('useDaemonSocket keyed command errors', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -130,8 +126,6 @@ describe('useDaemonSocket keyed command errors', () => {
       });
     });
 
-    // Drain the request's own timeout: if the match is ever dropped, this fails
-    // on the timeout's wording rather than hanging on a promise nobody settles.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });

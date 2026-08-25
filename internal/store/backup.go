@@ -10,38 +10,22 @@ import (
 	"time"
 )
 
-// backupNamePrefix and backupNameLayout define the on-disk naming scheme for
-// rotating backups: attn-<UTC timestamp YYYYMMDD-HHMMSS>.db. Pre-migration
-// snapshots use a different prefix (see backupNow's premigration variant in
-// sqlite.go) so the rotation prune below never counts or removes them.
+// Rotating backup names: attn-<UTC YYYYMMDD-HHMMSS>.db. Pre-migration snapshots
+// use a different prefix so the rotation prune never counts or removes them.
 const (
 	backupNamePrefix = "attn-"
 	backupNameLayout = "20060102-150405"
 	backupNameSuffix = ".db"
 )
 
-// backupPremigrationKeep caps how many pre-migration snapshots
-// (attn-premigration-<version>-<timestamp>.db) accumulate in the backups
-// dir. These fire rarely (once per schema migration), but a long-lived
-// install crossing many schema versions would otherwise never prune them.
 const backupPremigrationKeep = 5
 
-// premigrationNamePrefix and premigrationTimestampLen let
-// pruneBackupPremigration recognize pre-migration snapshot filenames and
-// pull out the trailing UTC timestamp for chronological sorting, since the
-// embedded schema version varies in digit count and the whole filename does
-// not sort chronologically.
 const premigrationNamePrefix = "attn-premigration-"
 
-// len("20060102-150405")
 const premigrationTimestampLen = len(backupNameLayout)
 
-// BackupNow writes a consistent online snapshot of the store's database to
-// dir/attn-<UTC timestamp YYYYMMDD-HHMMSS>.db using SQLite's VACUUM INTO,
-// then prunes the oldest files in dir so at most keep backups remain.
-// It creates dir if needed. Returns the path of the new backup. It must be
-// safe to call while the daemon is serving traffic (VACUUM INTO reads
-// through a consistent snapshot without blocking writers).
+// BackupNow is safe while the daemon serves traffic: VACUUM INTO reads a
+// consistent snapshot without blocking writers.
 func (s *Store) BackupNow(dir string, keep int) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("backup: store has no open database")
@@ -73,11 +57,7 @@ func (s *Store) BackupNow(dir string, keep int) (string, error) {
 	return target, nil
 }
 
-// pruneBackups removes the oldest rotating backups in dir beyond keep. It
-// only considers files matching the canonical attn-<timestamp>.db name — not
-// pre-migration snapshots (attn-premigration-*.db), which are exempt from
-// rotation. Lexical sort on the fixed-width timestamp format sorts
-// chronologically.
+// Lexical sort on the fixed-width timestamp is chronological.
 func pruneBackups(dir string, keep int) error {
 	if keep < 0 {
 		keep = 0
@@ -113,13 +93,6 @@ func pruneBackups(dir string, keep int) error {
 	return firstErr
 }
 
-// backupPreMigration writes a one-off snapshot of db to
-// dir/attn-premigration-<version>-<timestamp>.db, where dir is the
-// "backups" directory alongside dbPath, before pending migrations run.
-// version identifies the schema version the database is migrating FROM.
-// This name is deliberately excluded from IsRotatingBackupName's pattern so
-// BackupNow's rotation prune never counts or removes it. Returns the path of
-// the snapshot on success.
 func backupPreMigration(db *sql.DB, dbPath string, version int) (string, error) {
 	dir := filepath.Join(filepath.Dir(dbPath), "backups")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -146,12 +119,8 @@ func backupPreMigration(db *sql.DB, dbPath string, version int) (string, error) 
 	return target, nil
 }
 
-// pruneBackupPremigration removes the oldest pre-migration snapshots in dir
-// beyond keep, leaving the rotating attn-<timestamp>.db backups (and
-// anything else) untouched. Snapshots are ordered by the trailing
-// YYYYMMDD-HHMMSS timestamp embedded before the .db suffix, not by the
-// filename as a whole (the embedded schema version varies in digit count,
-// so whole-filename sort does not sort chronologically) and not by mtime.
+// Ordered by the trailing timestamp: the embedded schema version varies in digit
+// count, so a whole-filename sort is not chronological.
 func pruneBackupPremigration(dir string, keep int) error {
 	if keep < 0 {
 		keep = 0
@@ -204,9 +173,6 @@ func pruneBackupPremigration(dir string, keep int) error {
 	return firstErr
 }
 
-// IsRotatingBackupName reports whether name is a canonical rotating backup
-// (attn-<timestamp>.db), excluding pre-migration snapshots
-// (attn-premigration-<version>-<timestamp>.db) which are exempt from prune.
 func IsRotatingBackupName(name string) bool {
 	if !strings.HasPrefix(name, backupNamePrefix) || !strings.HasSuffix(name, backupNameSuffix) {
 		return false

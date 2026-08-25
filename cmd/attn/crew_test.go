@@ -22,8 +22,6 @@ func TestParseCrewListArgs(t *testing.T) {
 	}
 }
 
-// The roster shows every member, awake or asleep — a sleeping member is one
-// action from waking, never something to go find.
 func TestPrintCrewList_ShowsSleepingAndAwakeMembers(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, []protocol.CrewMember{
@@ -36,14 +34,11 @@ func TestPrintCrewList_ShowsSleepingAndAwakeMembers(t *testing.T) {
 			t.Errorf("crew list output is missing %q:\n%s", want, text)
 		}
 	}
-	// The session column is the short id `attn agent peek` takes, not the full one.
 	if strings.Contains(text, "sess-abcdef123456") {
 		t.Errorf("crew list printed a full session id:\n%s", text)
 	}
 }
 
-// The MEMBER column is a name, and the home beside it is the lowercase path the
-// id owns — the two never drift into one another.
 func TestPrintCrewList_WritesTheMemberAsAName(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, []protocol.CrewMember{{ID: "trellis", HomeDir: "/home/.attn/crew/trellis"}})
@@ -56,8 +51,6 @@ func TestPrintCrewList_WritesTheMemberAsAName(t *testing.T) {
 	}
 }
 
-// An empty roster says how a member joins it, rather than leaving the reader
-// with nothing to act on.
 func TestPrintCrewList_EmptyRosterSaysHowToJoinIt(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, nil)
@@ -66,8 +59,6 @@ func TestPrintCrewList_EmptyRosterSaysHowToJoinIt(t *testing.T) {
 	}
 }
 
-// `agent list` is the address book, and a bound session's row says who it is
-// today.
 func TestAgentListRows_CarryTheCrewMember(t *testing.T) {
 	rows := agentListRows(&client.ListResult{
 		Sessions: []protocol.Session{
@@ -82,8 +73,7 @@ func TestAgentListRows_CarryTheCrewMember(t *testing.T) {
 	if rows[1].Member != "" {
 		t.Errorf("unbound row member = %q, want empty", rows[1].Member)
 	}
-	// The column is always on the wire, empty rather than absent: a reader of
-	// the address book must not have to guard for a missing key.
+	// The column is always on the wire, empty rather than absent.
 	encoded, err := json.Marshal(rows[1])
 	if err != nil {
 		t.Fatalf("marshal row: %v", err)
@@ -98,8 +88,6 @@ func TestAgentListRows_CarryTheCrewMember(t *testing.T) {
 	if !strings.Contains(text, "MEMBER") || !strings.Contains(text, "Trellis") {
 		t.Errorf("agent list does not show the member column:\n%s", text)
 	}
-	// An unbound session's cell is the same placeholder every empty cell uses,
-	// not a blank that shifts the columns.
 	if strings.Contains(text, "beta") && !strings.Contains(text, "-") {
 		t.Errorf("an unbound row has no placeholder:\n%s", text)
 	}
@@ -113,7 +101,6 @@ func TestParseCrewWakeArgs(t *testing.T) {
 	if parsed.member != "trellis" || parsed.agent != "codex" || !parsed.json {
 		t.Fatalf("parsed = %+v, want trellis on codex as JSON", parsed)
 	}
-	// The harness is optional: a wake with no --agent takes the daemon's default.
 	if parsed, err := parseCrewWakeArgs([]string{"keel"}); err != nil || parsed.agent != "" {
 		t.Fatalf("parseCrewWakeArgs(keel) = %+v, %v", parsed, err)
 	}
@@ -191,8 +178,6 @@ func TestCrewSleepOutcomeLine_NamesDeliveredQueuedAndAlreadyAsleep(t *testing.T)
 	}
 }
 
-// --awareness-dir repeats and replaces the whole list; passing it once empty is
-// the way out of every dir a member has.
 func TestCrewDirList_RepeatsAndClears(t *testing.T) {
 	var dirs crewDirList
 	for _, value := range []string{"/a", "/b"} {
@@ -213,9 +198,7 @@ func TestCrewDirList_RepeatsAndClears(t *testing.T) {
 	}
 }
 
-// `crew set --agent` is how a member moves harness, and passing it empty is the
-// way back to the default — a distinction a plain string cannot carry, so the
-// parse hands the daemon a pointer.
+// Passing --agent empty is the way back to the default, a distinction a plain string cannot carry.
 func TestParseCrewSetArgs_CarriesTheHarnessAndTheWayBack(t *testing.T) {
 	parsed, err := parseCrewSetArgs([]string{"trellis", "--agent", "codex"})
 	if err != nil {
@@ -236,7 +219,6 @@ func TestParseCrewSetArgs_CarriesTheHarnessAndTheWayBack(t *testing.T) {
 		t.Fatalf("an empty --agent did not reach the daemon as a clear: %+v", cleared.agent)
 	}
 
-	// Naming nothing is refused rather than sent as a write that changes nothing.
 	if _, err := parseCrewSetArgs([]string{"trellis"}); err == nil {
 		t.Error("crew set with no field was accepted")
 	}
@@ -256,8 +238,6 @@ func TestParseCrewSetArgs_CarriesTheModelAndTheWayBack(t *testing.T) {
 	}
 }
 
-// The AGENT column says what a member lives on without anyone having to wake it
-// to find out.
 func TestPrintCrewList_NamesTheHarnessEachMemberRunsOn(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, []protocol.CrewMember{

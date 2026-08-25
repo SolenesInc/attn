@@ -13,15 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The auto-disable clock: one rule, one number, and everything that must NOT
-// trip it.
-//
-// The clock measures fifteen minutes of wall time stuck on the same event, so
-// every test here drives an injected clock. A test that waited out the real
-// window would take a quarter of an hour and prove less, and one that shortened
-// the constant would be testing a number the product does not ship.
-
-// appTestClock is the daemon's clock for these tests, moved by hand.
 type appTestClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -69,14 +60,10 @@ func appNotifications(t *testing.T, d *Daemon, kind string) []store.Notification
 	return out
 }
 
-// failEvery makes a sidecar whose handler always throws.
 func failEvery(message string) func(*fakeAppRuntime, appDispatchRequest) error {
 	return func(*fakeAppRuntime, appDispatchRequest) error { return errors.New(message) }
 }
 
-// The rule itself, and all three of its effects. Asserting only the enabled bit
-// would let a silent auto-disable ship: the bit stops delivery, the fact reaches
-// the rest of the daemon, and the notification is the only one a person sees.
 func TestAppStuckOnOneEventIsDisabledAndSaysSoThreeWays(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -84,8 +71,6 @@ func TestAppStuckOnOneEventIsDisabledAndSaysSoThreeWays(t *testing.T) {
 	startFakeAppRuntime(t, d, failEvery("TypeError: undefined is not a function"))
 	stuck := appEvent("ticket.created", "tk-1", 12)
 
-	// Four failures inside the window change nothing: the rule is time stalled,
-	// not attempts burned.
 	for i := 0; i < 4; i++ {
 		if err := d.deliverAppEvent(context.Background(), "greeter", stuck); err == nil {
 			t.Fatal("a throwing handler reported success")
@@ -96,8 +81,6 @@ func TestAppStuckOnOneEventIsDisabledAndSaysSoThreeWays(t *testing.T) {
 		}
 	}
 
-	// The one that crosses fifteen minutes: four failures put the clock at
-	// twelve, so this is the first delivery past the window.
 	clock.advance(4 * time.Minute)
 	if err := d.deliverAppEvent(context.Background(), "greeter", stuck); err == nil {
 		t.Fatal("a throwing handler reported success")
@@ -114,37 +97,28 @@ func TestAppStuckOnOneEventIsDisabledAndSaysSoThreeWays(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("auto-disable notifications = %d, want 1", len(notes))
 	}
-	// The notification has to carry the way back, or the app is off forever as
-	// far as its owner knows.
 	if !strings.Contains(notes[0].Body, "attn app enable greeter") {
 		t.Fatalf("the notification does not name the way back: %q", notes[0].Body)
 	}
 	if !strings.Contains(notes[0].Body, "ticket.created") || !strings.Contains(notes[0].Detail, "TypeError") {
 		t.Fatalf("the notification does not say what failed: body=%q detail=%q", notes[0].Body, notes[0].Detail)
 	}
-	// One app is off; everything else still runs. That is a warning, and it
-	// reaches the app now rather than at whatever re-pushes the feed next.
 	if notes[0].Severity != store.NotificationWarning {
 		t.Fatalf("severity = %q, want warning", notes[0].Severity)
 	}
 	if created := appFacts(t, d, FactNotificationCreated); len(created) != 1 || created[0].Subject != notes[0].ID {
 		t.Fatalf("notification.created facts = %+v, want one for %s", created, notes[0].ID)
 	}
-	// And the clock is cleared, so re-enabling does not disable it again on the
-	// very next failure.
 	if stall, ok := d.appStallSnapshot("greeter"); ok {
 		t.Fatalf("the disabled app is still on the clock: %+v", stall)
 	}
 }
 
-// Slow is not stuck. A handler that takes minutes but succeeds never touches
-// the clock, however long the app has been running.
 func TestSlowButSucceedingAppIsNeverDisabled(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
 	installApp(t, d, "slowpoke", subscribing("ticket.*"))
 	startFakeAppRuntime(t, d, func(*fakeAppRuntime, appDispatchRequest) error {
-		// Each run "takes" ten minutes on the daemon's clock.
 		clock.advance(10 * time.Minute)
 		return nil
 	})
@@ -169,8 +143,6 @@ func TestSlowButSucceedingAppIsNeverDisabled(t *testing.T) {
 	}
 }
 
-// Unreliable is not stuck either. An app failing on a different fact every time
-// is making progress: its cursor keeps moving, so it is not holding the log.
 func TestAppFailingOnDistinctEventsIsNeverDisabled(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -186,20 +158,16 @@ func TestAppFailingOnDistinctEventsIsNeverDisabled(t *testing.T) {
 			t.Fatalf("flaky was disabled after failing on %d distinct events", seq)
 		}
 	}
-	// Its clock restarted at every new event, so it never accumulated a stall.
 	stall, ok := d.appStallSnapshot("flaky")
 	if !ok || stall.seq != 10 || stall.attempts != 1 {
 		t.Fatalf("stall = %+v (present=%t), want a fresh clock on the last event", stall, ok)
 	}
 }
 
-// Rule 2 again, at the clock rather than at the classification: a sidecar that
-// is down for longer than the window disables nobody.
 func TestARuntimeOutageLongerThanTheWindowDisablesNothing(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
-	// A runtime binary that starts and dies without ever connecting: the outage.
 	t.Setenv(appRuntimeHostOverride, writeExecutableStub(t, "exit 0"))
 	d.appRuntimeSupervise.GiveUpAfter = 1
 	// The connect wait is the one thing here that is real time rather than the
@@ -207,7 +175,6 @@ func TestARuntimeOutageLongerThanTheWindowDisablesNothing(t *testing.T) {
 	d.appRuntimeWait = 20 * time.Millisecond
 
 	stuck := appEvent("ticket.created", "tk-1", 4)
-	// Fail once, then let the daemon's clock run past the window entirely.
 	if err := d.deliverAppEvent(context.Background(), "greeter", stuck); !isRuntimeFailure(err) {
 		t.Fatalf("error %v was not classified as the runtime's", err)
 	}
@@ -224,8 +191,6 @@ func TestARuntimeOutageLongerThanTheWindowDisablesNothing(t *testing.T) {
 	}
 }
 
-// Enabling is the way back, and it has to clear the streak too — otherwise a
-// re-enabled app is disabled again by its very next failure.
 func TestEnablingClearsTheStreakAndResumesDelivery(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -257,7 +222,6 @@ func TestEnablingClearsTheStreakAndResumesDelivery(t *testing.T) {
 		t.Fatalf("enable left the old stall clock running: %+v", stall)
 	}
 
-	// The next failure starts a fresh window rather than tripping the old one.
 	_ = d.deliverAppEvent(context.Background(), "greeter", stuck)
 	if !appEnabled(t, d, "greeter") {
 		t.Fatal("a re-enabled app was disabled again by its first failure")
@@ -267,23 +231,18 @@ func TestEnablingClearsTheStreakAndResumesDelivery(t *testing.T) {
 		t.Fatalf("stall = %+v (present=%t), want a window starting now", stall, ok)
 	}
 
-	// And it really does deliver again.
 	throw = false
 	if err := d.deliverAppEvent(context.Background(), "greeter", stuck); err != nil {
 		t.Fatalf("a re-enabled app did not deliver: %v", err)
 	}
 }
 
-// Auto-disable stops broken code, but an installed app's lane remains durable.
-// Its compactable facts wait at the same frozen cursor as ordinary history.
 func TestADisabledInstalledAppStillHoldsTheRetentionFloor(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
 	installApp(t, d, "greeter", subscribing(FactDocumentChanged))
 	startFakeAppRuntime(t, d, failEvery("boom"))
 
-	// Several invalidations about one subject. Compaction reduces those to the
-	// newest — but only at or below the floor every participating consumer has passed.
 	for i := 0; i < 4; i++ {
 		d.publishFact(FactDocumentChanged, "app/greeter/seen/tk-1", nil)
 	}
@@ -303,8 +262,6 @@ func TestADisabledInstalledAppStillHoldsTheRetentionFloor(t *testing.T) {
 	clock.advance(appAutoDisableStall + time.Minute)
 	waitFor(t, "the stalled app to be disabled", func() bool { return !appEnabled(t, d, "greeter") })
 
-	// Nothing else moved. Disabling stops delivery, but the installed app still
-	// owns this lane and its facts remain retained.
 	removed, err = d.eventBus.Trim()
 	if err != nil {
 		t.Fatalf("trim after the auto-disable: %v", err)
@@ -314,19 +271,9 @@ func TestADisabledInstalledAppStillHoldsTheRetentionFloor(t *testing.T) {
 	}
 }
 
-// How long attn tried, in units that survive the window being moved.
-//
-// Both auto-disable notifications rounded their stall to the minute. The only
-// way anyone witnesses this path without waiting a quarter of an hour is to move
-// the window with ATTN_APP_AUTO_DISABLE_STALL — and every such run read "for
-// 0s", which is the notification saying attn gave up immediately. At the shipped
-// fifteen minutes it was no better: "for 15m" repeats the constant instead of
-// reporting the measurement. Live verification is what read these strings back;
-// the tests beside them checked the phrases around the number, so the number was
-// free to be wrong.
+// Both notifications rounded the stall to the minute, so a moved window read
+// "for 0s": the constant repeated back instead of a measurement.
 func TestAnAutoDisableNotificationReportsHowLongAttnTried(t *testing.T) {
-	// Short enough that rounding to the minute renders it as zero, which is
-	// exactly the operator's case.
 	const window = 25 * time.Second
 
 	t.Run("a handler stuck on one event", func(t *testing.T) {

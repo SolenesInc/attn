@@ -19,7 +19,6 @@ class FakeRPC {
   }
 
   handle(_method: string, _handler: unknown): void {
-    // no-op: this driver never dispatches through its own RPC handle table
   }
 }
 
@@ -42,12 +41,6 @@ function nextSocketPath(): string {
   return join(tmpRoot, `s${socketCounter++}.sock`);
 }
 
-// A minimal ndjson JSON-RPC 2.0 client standing in for the pi-side suite:
-// connects to the driver's relay socket, can send requests (suite -> driver)
-// and answer inbound requests (driver -> suite) via a settable responder.
-// Returned by a test's responder to simulate a suite that never answers a
-// driver -> suite request, so deliverMessage's timeout/close paths can be
-// exercised without a real hung process.
 const NEVER_RESPOND = Symbol("never-respond");
 
 class FakeSuiteClient {
@@ -103,7 +96,7 @@ class FakeSuiteClient {
     if ("method" in message) {
       this.received.push({ method: message.method, params: message.params });
       const result = this.responder ? this.responder(message.method, message.params) : { delivered: true };
-      if (result === NEVER_RESPOND) return; // simulate an unresponsive suite
+      if (result === NEVER_RESPOND) return;
       this.socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
       return;
     }
@@ -115,9 +108,6 @@ class FakeSuiteClient {
   }
 }
 
-// Wires a PiDriver to a listening RelayServer the same way index.ts does:
-// the delegate closes over the `driver` binding since RelayServer and
-// PiDriver each need a reference to the other before either is constructed.
 async function buildHarness(rpc: FakeRPC): Promise<{ driver: PiDriver; relay: RelayServer; socketPath: string }> {
   const socketPath = nextSocketPath();
   let driver: PiDriver;
@@ -135,9 +125,6 @@ async function buildHarness(rpc: FakeRPC): Promise<{ driver: PiDriver; relay: Re
   return { driver, relay, socketPath };
 }
 
-// A bare RelayServer (no PiDriver) for testing wire-level behavior that
-// doesn't depend on driver semantics: unknown methods and deliverMessage's
-// timeout/close-rejection paths.
 async function buildBareRelay(): Promise<{ relay: RelayServer; socketPath: string; connections: () => RelayConnection[] }> {
   const socketPath = nextSocketPath();
   const connections: RelayConnection[] = [];

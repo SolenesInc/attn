@@ -9,9 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The whole point of the generic cancel: the user presses one key at whatever is
-// counting down in front of them, and it stops. A session counting down to both a
-// settle and a nudge loses both.
 func TestCancelCountdown_StopsBothCountdownsOnOneSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -26,7 +23,6 @@ func TestCancelCountdown_StopsBothCountdownsOnOneSession(t *testing.T) {
 	if currentNudgeTimer(d, agentID) == nil {
 		t.Fatal("precondition: no nudge countdown armed")
 	}
-	// Only an owed turn can be auto-settled, so the fixture has to owe one.
 	if !d.store.OpenTurnIfClosed(agentID, time.Now()) {
 		t.Fatal("OpenTurnIfClosed() = false; the fixture owes no turn")
 	}
@@ -49,11 +45,6 @@ func TestCancelCountdown_StopsBothCountdownsOnOneSession(t *testing.T) {
 	}
 }
 
-// A press that lands on a session with nothing to answer — nothing counting
-// down, and auto-settle off, so no settle to dismiss ahead of time — is a no-op,
-// not an error: the shortcut is pressed at whatever is on screen, and a stale
-// press must not settle, doorbell, or otherwise change anything. What the same
-// press does when there IS a settle coming is TestAutoSettle_ArmedBeforeTheSteer.
 func TestCancelCountdown_NoCountdownIsHarmless(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -71,10 +62,6 @@ func TestCancelCountdown_NoCountdownIsHarmless(t *testing.T) {
 	}
 }
 
-// The cancel has to survive merely looking somewhere else. Selecting another
-// session runs the resume in updateNudgeSelection, which re-derives a deadline
-// from the same unread events — so without a standing cancel the nudge the user
-// just called off comes straight back.
 func TestCancelCountdown_NudgeStaysCancelledAcrossSelectionChange(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -89,19 +76,15 @@ func TestCancelCountdown_NudgeStaysCancelledAcrossSelectionChange(t *testing.T) 
 
 		d.handleCancelCountdown(&protocol.CancelCountdownMessage{SessionID: agentID})
 
-		// Select the cancelled session and then leave it: the pause/resume pair is
-		// the path that re-arms.
 		d.setSelectedSession(agentID)
 		d.setSelectedSession(chiefID)
-		// The resume runs on its own goroutine. synctest.Wait returns once it has
-		// finished and every other bubble goroutine is parked, so "no timer" is a
-		// statement about the settled daemon rather than about a 50ms window.
+		// synctest.Wait returns once the resume goroutine has finished and every other bubble
+		// goroutine is parked, so "no timer" is about the settled daemon, not a 50ms window.
 		synctest.Wait()
 
 		if currentNudgeTimer(d, agentID) != nil {
 			t.Fatal("the cancelled nudge re-armed on a selection change")
 		}
-		// The activity did not go away, and neither did the way back to it.
 		clone := d.sessionForBroadcast(d.store.Get(agentID))
 		if !protocol.Deref(clone.TicketUnread) {
 			t.Fatal("cancelling the countdown also cleared the unread indicator")
@@ -109,8 +92,6 @@ func TestCancelCountdown_NudgeStaysCancelledAcrossSelectionChange(t *testing.T) 
 	})
 }
 
-// "Not now" is an answer about what is pending, not a mute. Ticket activity that
-// arrives after the cancel is new information and gets to ask again.
 func TestCancelCountdown_NewerTicketActivityReArmsTheNudge(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -134,9 +115,6 @@ func TestCancelCountdown_NewerTicketActivityReArmsTheNudge(t *testing.T) {
 	})
 }
 
-// Cancelling the settle half keeps the turn owed. This is the behavior the whole
-// feature exists for, asserted through the generic command rather than through
-// the auto-settle internals.
 func TestCancelCountdown_KeepsTheTurnOwed(t *testing.T) {
 	d, id := newAutoSettleDaemon(t)
 	if !d.applyState(sessionStateChange{sessionID: id, state: protocol.StateWorking, cause: liveSignal{}}) {

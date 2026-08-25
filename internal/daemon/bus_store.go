@@ -8,26 +8,14 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// sqlBusStore satisfies the bus.Store seam.
 var _ bus.Store = (*sqlBusStore)(nil)
 
-// sqlBusStore adapts the profile SQLite store to the bus.Store seam. It lives in
-// the daemon — which imports both internal/bus and internal/store — so neither of
-// those packages depends on the other, the same arrangement sqlTaskStore uses for
-// internal/jobs.
-//
-// The translation is mechanical: internal/store speaks BusEvent/BusConsumer rows,
-// internal/bus speaks Event/Consumer values. Payloads cross as JSON text one way
-// and json.RawMessage the other.
+// sqlBusStore adapts the SQLite store to bus.Store here, in the one package that
+// imports both, so neither internal/bus nor internal/store depends on the other.
 type sqlBusStore struct{ store *store.Store }
 
 func (d *Daemon) newSQLBusStore() *sqlBusStore { return &sqlBusStore{store: d.store} }
 
-// NewBusStore adapts a store the caller opened itself. `attn bus trim` uses it
-// to run the same retention pass the daemon's tick runs, against the same
-// policy, without a daemon: the pass is a database operation, and an operator
-// must be able to run one whether or not the daemon is listening — the reason
-// the whole `attn bus` surface is database-direct.
 func NewBusStore(s *store.Store) bus.Store { return &sqlBusStore{store: s} }
 
 func (a *sqlBusStore) Append(e bus.Event, now time.Time) (int64, error) {

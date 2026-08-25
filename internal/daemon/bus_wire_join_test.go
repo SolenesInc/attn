@@ -14,42 +14,20 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The other half of the wire boundary. TestWireTrafficComesFromProjections says
-// only a projection may write to the wire; this says every fact with a
-// projection actually writes, and writes the events it is meant to.
-//
-// The defect that was invisible without it: a projection whose feature tests
-// assert against a broadcast hook fires the hook, then sends. Delete the send
-// and keep the hook and the whole package still passes — measured, by deleting
-// the garden snapshot push and running `go test ./internal/daemon` green.
-//
-// So the observation point here is wsHub.wireTap, which sees the marshalled
-// bytes of every send path, and never a hook.
+// The observation point is wsHub.wireTap — the marshalled bytes of every send
+// path, never a broadcast hook, which a projection can fire without sending.
 
-// wireFixture is how one fact is made real: what it is about, what it carries,
-// and the complete set of wire events publishing it must produce.
-//
-// Everything is optional except events. A fact whose projection re-pushes a
-// whole list needs no subject and no payload at all, which is most of them.
 type wireFixture struct {
-	// events is every `event` name the publish must put on the wire, in any
-	// order. Exact, not "at least": a second projection entry that matched the
-	// same fact by accident would double-push, and that is a defect too.
+	// Exact, not "at least": a second projection entry matching the same fact by
+	// accident would double-push.
 	events []string
-	// subject names the entity the fact is about. Defaults to a subject nothing
-	// resolves, which is correct for a snapshot projection and wrong for one
-	// that re-reads the entity — and the test says which when it fails.
+	// subject defaults to one nothing resolves, which is correct for a snapshot
+	// projection and wrong for one that re-reads the entity.
 	subject func(*wireWorld) string
-	// payload is the fact's body, for the projections that decode one.
 	payload func(*wireWorld) any
 }
 
-// wireFixtures is the whole fact -> wire-event contract, and the only place this
-// test needs editing. A fact that gains a projection and no entry here fails by
-// name; an entry whose fact no longer exists fails as stale.
 var wireFixtures = map[string]wireFixture{
-	// Sessions. Everything but the unregister re-reads the session the subject
-	// names, so the seeded session is the subject.
 	FactSessionStateChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
@@ -94,8 +72,6 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
 	},
-	// The one session fact that does not re-push the session: the app is told
-	// its annotatable window moved and re-reads it with session_messages_get.
 	FactSessionAssistantWindowChanged: {
 		events:  []string{protocol.EventSessionMessagesChanged},
 		subject: (*wireWorld).session,
@@ -109,7 +85,6 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).session,
 	},
 	FactSessionUnregistered: {
-		// The session is gone by then, so it rides in the payload.
 		events:  []string{protocol.EventSessionUnregistered, protocol.EventGardenSeedsUpdated},
 		subject: (*wireWorld).session,
 		payload: func(w *wireWorld) any { return w.d.sessionForBroadcast(w.d.store.Get(w.sessionID)) },
@@ -129,7 +104,6 @@ var wireFixtures = map[string]wireFixture{
 		payload: func(*wireWorld) any { return ptyExit{ExitCode: 0} },
 	},
 
-	// The six facts whose only visible effect is one session-list push.
 	FactSessionTerminated:       {events: []string{protocol.EventSessionsUpdated}},
 	FactSessionBranchChanged:    {events: []string{protocol.EventSessionsUpdated}},
 	FactSessionChiefRoleChanged: {events: []string{protocol.EventSessionsUpdated}},
@@ -137,8 +111,6 @@ var wireFixtures = map[string]wireFixture{
 	FactWorktreeSessionsRemoved: {events: []string{protocol.EventSessionsUpdated}},
 	FactEndpointSessionsChanged: {events: []string{protocol.EventSessionsUpdated}},
 
-	// Workspaces. The registry is the authority, so the subject must be a
-	// workspace it holds.
 	FactWorkspaceRegistered: {
 		events:  []string{protocol.EventWorkspaceRegistered},
 		subject: (*wireWorld).workspace,
@@ -189,7 +161,6 @@ var wireFixtures = map[string]wireFixture{
 		payload: func(w *wireWorld) any { return w.layout() },
 	},
 	FactWorkspaceLayoutRepublished: {
-		// Nothing changed, so the projection reads the layout back itself.
 		events:  []string{protocol.EventWorkspaceLayout},
 		subject: (*wireWorld).workspace,
 	},
@@ -205,7 +176,6 @@ var wireFixtures = map[string]wireFixture{
 		},
 	},
 
-	// The garden: every fact re-pushes the whole list.
 	FactGardenPlanted:               {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenBodyEdited:            {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenResumeIdentityChanged: {events: []string{protocol.EventGardenSeedsUpdated}},
@@ -218,7 +188,6 @@ var wireFixtures = map[string]wireFixture{
 	FactGardenLinked:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenUnlinked:              {events: []string{protocol.EventGardenSeedsUpdated}},
 
-	// PRs and their mute lists.
 	FactPRAppeared:       {events: []string{protocol.EventPRsUpdated}},
 	FactPRUpdated:        {events: []string{protocol.EventPRsUpdated}},
 	FactPRDisappeared:    {events: []string{protocol.EventPRsUpdated}},
@@ -231,15 +200,12 @@ var wireFixtures = map[string]wireFixture{
 		events: []string{protocol.EventAuthorsUpdated},
 	},
 
-	// Worktrees and git.
 	FactWorktreeCreated: {
 		events:  []string{protocol.EventWorktreeCreated},
 		subject: (*wireWorld).worktree,
 		payload: func(w *wireWorld) any { return protocol.Worktree{Path: w.worktreePath} },
 	},
 	FactWorktreeDeleted: {
-		// No payload: the wire event has only ever carried the path, which is
-		// the subject.
 		events:  []string{protocol.EventWorktreeDeleted},
 		subject: (*wireWorld).worktree,
 	},
@@ -259,7 +225,6 @@ var wireFixtures = map[string]wireFixture{
 		payload: func(*wireWorld) any { return gitOperationFixture("operation-1") },
 	},
 
-	// GitHub plumbing.
 	FactRateLimited: {
 		events:  []string{protocol.EventRateLimited},
 		subject: func(*wireWorld) string { return "core" },
@@ -268,7 +233,6 @@ var wireFixtures = map[string]wireFixture{
 	FactGitHubHostAdded:   {events: []string{protocol.EventGitHubHostsUpdated}},
 	FactGitHubHostRemoved: {events: []string{protocol.EventGitHubHostsUpdated}},
 
-	// Endpoints.
 	FactEndpointAdded:   {events: []string{protocol.EventEndpointsUpdated}},
 	FactEndpointRemoved: {events: []string{protocol.EventEndpointsUpdated}},
 	FactEndpointChanged: {events: []string{protocol.EventEndpointsUpdated}},
@@ -277,8 +241,6 @@ var wireFixtures = map[string]wireFixture{
 		payload: func(*wireWorld) any { return protocol.EndpointInfo{ID: "endpoint-1", Status: "connected"} },
 	},
 
-	// Plugins. Four of them re-push settings too, because they change which
-	// agents are available; that second entry is part of the contract.
 	FactPluginInstalled:        {events: []string{protocol.EventPluginsUpdated}},
 	FactPluginUninstalled:      {events: []string{protocol.EventPluginsUpdated}},
 	FactPluginPriorityChanged:  {events: []string{protocol.EventPluginsUpdated}},
@@ -290,14 +252,11 @@ var wireFixtures = map[string]wireFixture{
 	FactTailscaleServeChanged:  {events: []string{protocol.EventSettingsUpdated}},
 	FactSettingChanged:         {events: []string{protocol.EventSettingsUpdated}},
 
-	// Everything else with a panel of its own.
 	FactNotificationCreated: {events: []string{protocol.EventNotificationsUpdated}},
 	FactNotificationRead:    {events: []string{protocol.EventNotificationsUpdated}},
-	// A denial is surfaced as a notification, so it pushes the same list. Its
-	// subject is the session it happened in, which no projection re-reads.
-	FactAutoModeDenied:    {events: []string{protocol.EventNotificationsUpdated}},
-	FactAutomationChanged: {events: []string{protocol.EventAutomationsChanged}},
-	FactTaskChanged:       {events: []string{protocol.EventTasksChanged}},
+	FactAutoModeDenied:      {events: []string{protocol.EventNotificationsUpdated}},
+	FactAutomationChanged:   {events: []string{protocol.EventAutomationsChanged}},
+	FactTaskChanged:         {events: []string{protocol.EventTasksChanged}},
 	FactNotebookFileChanged: {
 		events:  []string{protocol.EventNotebookChanged},
 		subject: func(*wireWorld) string { return "note.md" },
@@ -309,8 +268,6 @@ var wireFixtures = map[string]wireFixture{
 			return &protocol.WorkflowRun{RunID: "run-1", Status: protocol.WorkflowRunStatusRunning}
 		},
 	},
-	// Crew. Every fact re-pushes the whole roster: the sidebar draws every
-	// member, awake or asleep, so there is nothing smaller to send.
 	FactCrewRegistered: {events: []string{protocol.EventCrewUpdated}},
 	FactCrewBound:      {events: []string{protocol.EventCrewUpdated}},
 	FactCrewReleased:   {events: []string{protocol.EventCrewUpdated}},
@@ -324,9 +281,6 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventPresentationUpdated},
 		subject: (*wireWorld).presentation,
 	},
-	// All three re-push the whole registry: the frontend mounts app views from
-	// that snapshot, so a version flip, an enable and a removal are the same
-	// invalidation to it.
 	FactAppVersionChanged: {
 		events:  []string{protocol.EventAppsUpdated},
 		subject: func(*wireWorld) string { return "wire-app" },
@@ -341,11 +295,6 @@ var wireFixtures = map[string]wireFixture{
 	},
 }
 
-// factsWithoutWire are the declared facts that deliberately produce no WebSocket
-// traffic. Same discipline as wireSenderExceptions: an entry is a design
-// decision, and the reason is the point of writing it down. Without this list a
-// projection deleted by accident would look exactly like a fact that never had
-// one.
 var factsWithoutWire = map[string]string{
 	FactDocumentChanged:              "consumed by the live-query fan-out in documents.go, not by WebSocket clients",
 	FactDocumentCollectionRemoved:    "same consumer as document.changed; ends the subscriptions that read the collection",
@@ -359,16 +308,8 @@ var factsWithoutWire = map[string]string{
 	FactTicketChanged:                ticketFactsHaveNoClient,
 }
 
-// ticketFactsHaveNoClient is why every ticket fact stopped projecting: the app
-// shows the garden now, so nothing on a WebSocket renders a board. The facts
-// stay published because they are the durable record behind the ticket read
-// verbs (`attn ticket show`/`list`) and what an app subscribes to.
 const ticketFactsHaveNoClient = "no WebSocket client renders a ticket; the read verbs and subscribing apps read these off the durable log"
 
-// TestEveryProjectedFactReachesTheWire publishes each fact that has a projection
-// and asserts the wire saw exactly the events that fact is contracted to
-// produce. Table-complete in both directions, so it covers a projection written
-// next month without anyone remembering this file exists.
 func TestEveryProjectedFactReachesTheWire(t *testing.T) {
 	facts := declaredFactNames(t)
 
@@ -433,9 +374,6 @@ func TestEveryProjectedFactReachesTheWire(t *testing.T) {
 	}
 }
 
-// wireWorld is one daemon with enough state that a projection re-reading the
-// entity its fact names finds something. Everything a fixture can point at is
-// built up front: a fixture picks, it does not construct.
 type wireWorld struct {
 	t              *testing.T
 	d              *Daemon
@@ -471,8 +409,6 @@ func newWireWorld(t *testing.T) *wireWorld {
 		Title:     "wire",
 		Directory: dir,
 	})
-	// Same ordering the app uses: register the workspace, then put the session
-	// in a pane. A workspace without a layout is not a state the app produces.
 	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID: w.workspaceID,
@@ -507,9 +443,6 @@ func (w *wireWorld) layout() *protocol.WorkspaceLayout {
 	return layout
 }
 
-// gitOperationFixture is the one payload a fixture has to build rather than
-// pick: the daemon keeps no git-operation registry, so the fact is the only
-// record of the operation.
 func gitOperationFixture(id string) protocol.GitOperation {
 	return protocol.GitOperation{
 		ID:     id,
@@ -518,7 +451,6 @@ func gitOperationFixture(id string) protocol.GitOperation {
 	}
 }
 
-// factIsProjected reports whether any wireProjections entry would run for it.
 func factIsProjected(fact string) bool {
 	for _, p := range wireProjections() {
 		if p.filter.Matches(fact) {
@@ -537,9 +469,8 @@ func factIsDeclared(facts []string, fact string) bool {
 	return false
 }
 
-// declaredFactNames reads the fact vocabulary out of bus.go rather than
-// re-listing it here: a new Fact… constant is picked up by parsing, so the only
-// way to add a fact this test does not see is to stop declaring it as one.
+// Parses the fact vocabulary out of bus.go, so the only way to add a fact this
+// test does not see is to stop declaring it as one.
 func declaredFactNames(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()

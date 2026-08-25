@@ -49,7 +49,6 @@ func TestParseRoundTrip(t *testing.T) {
 			if doc.Body != tc.wantBody {
 				t.Fatalf("Body = %q, want %q", doc.Body, tc.wantBody)
 			}
-			// Round-trip: parsing the re-serialized form yields an equal document.
 			reparsed, err := Parse(doc.Bytes())
 			if err != nil {
 				t.Fatalf("reparse: %v", err)
@@ -62,8 +61,6 @@ func TestParseRoundTrip(t *testing.T) {
 	}
 }
 
-// Unknown keys (e.g. written by Obsidian or an external sync tool) must survive
-// a parse + serialize cycle, not be dropped.
 func TestUnknownKeysPreserved(t *testing.T) {
 	raw := "---\ntype: note\ntitle: T\nobsidian-tags: [a, b]\ncustom: 42\n---\nbody\n"
 	doc, err := Parse([]byte(raw))
@@ -84,7 +81,6 @@ func TestUnknownKeysPreserved(t *testing.T) {
 	}
 }
 
-// The read/list path must never fail on malformed frontmatter.
 func TestParsePermissiveOnMalformedYAML(t *testing.T) {
 	raw := "---\ntype: note\n  bad: : indentation\n: nope\n---\nbody\n"
 	if _, err := Parse([]byte(raw)); err == nil {
@@ -100,8 +96,6 @@ func TestParsePermissiveOnMalformedYAML(t *testing.T) {
 }
 
 func TestDocumentAccessors(t *testing.T) {
-	// Type/summary/updated come from frontmatter; the title comes from the body's
-	// first `# H1`, not a frontmatter field.
 	doc, _ := Parse([]byte("---\ntype: note\nsummary: S\nupdated: 2026-06-13T00:00:00Z\n---\n# T\n\nbody\n"))
 	if doc.Type() != "note" || doc.Title() != "T" || doc.Summary() != "S" || doc.Updated() != "2026-06-13T00:00:00Z" {
 		t.Fatalf("accessors = (%q,%q,%q,%q)", doc.Type(), doc.Title(), doc.Summary(), doc.Updated())
@@ -112,9 +106,6 @@ func TestDocumentAccessors(t *testing.T) {
 	}
 }
 
-// Title is the body's first level-1 ATX heading. A frontmatter `title:` is NOT a
-// title source (the canonical title is the `# H1`); the filename is the fallback,
-// supplied by callers when Title() is "".
 func TestTitleFromH1(t *testing.T) {
 	cases := []struct {
 		name string
@@ -142,8 +133,6 @@ func TestTitleFromH1(t *testing.T) {
 	}
 }
 
-// A frontmatter `title:` does not leak into the title — the body's H1 wins, and a
-// note with a frontmatter title but no H1 has no title (callers use the filename).
 func TestFrontmatterTitleIsNotATitleSource(t *testing.T) {
 	withH1, _ := Parse([]byte("---\ntitle: From frontmatter\n---\n# From heading\n"))
 	if got := withH1.Title(); got != "From heading" {
@@ -155,9 +144,6 @@ func TestFrontmatterTitleIsNotATitleSource(t *testing.T) {
 	}
 }
 
-// Type() falls back to a legacy `kind` field so a note an external tool wrote
-// before the field was renamed still resolves. attn always writes `type`, and a
-// present `type` wins over a stray `kind`.
 func TestTypeReadsLegacyKind(t *testing.T) {
 	legacy, _ := Parse([]byte("---\nkind: memory\n---\n"))
 	if legacy.Type() != "memory" {
@@ -169,7 +155,6 @@ func TestTypeReadsLegacyKind(t *testing.T) {
 	}
 }
 
-// A "---" first line without a matching closing fence is not frontmatter.
 func TestNoClosingFenceIsBody(t *testing.T) {
 	raw := "---\nnot really frontmatter\nstill body\n"
 	doc, err := Parse([]byte(raw))
@@ -184,10 +169,6 @@ func TestNoClosingFenceIsBody(t *testing.T) {
 	}
 }
 
-// A document parsed from disk must re-serialize byte-for-byte: comments, key
-// order, line endings, and ambiguous scalars (ids like 007, versions like 1.10)
-// are all preserved. This is the preserve-verbatim round-trip the design
-// requires for Obsidian/sync/user-authored fields.
 func TestParseRoundTripIsByteFaithful(t *testing.T) {
 	raw := "---\ntype: note\nticket: 007\nver: 1.10\n# a human note\nzeta: last\nalpha: first\n---\n\n# Body\n"
 	doc, err := Parse([]byte(raw))

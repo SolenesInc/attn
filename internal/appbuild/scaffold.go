@@ -9,39 +9,14 @@ import (
 	"github.com/victorarias/attn/internal/apps"
 )
 
-// Scaffolding an app.
-//
-// The bar the scaffold has to clear: `attn app new <path>` then `attn app apply
-// <path>` with no edit in between must succeed. A scaffold that needs a human
-// touch first is a scaffold that does not work, and the test asserts exactly
-// that sequence.
-//
-// It writes no package.json and installs nothing. An app has no runtime
-// dependency of its own — the compiler belongs to attn, and the SDK is a symlink
-// into a package attn materializes — so a new app is a directory of text files
-// plus one link.
-//
-// That link is best-effort here and mandatory at apply. Materializing the SDK
-// can need the network once per machine (the toolchain install), and `attn app
-// new` on a plane must still produce a complete, appliable app: when it cannot
-// be made, the scaffold says so and names the command that will make it.
-
-// ScaffoldOptions is one `attn app new`.
 type ScaffoldOptions struct {
-	// Dir is the directory to create. It must not already hold a manifest.
-	Dir string
-	// Name defaults to the directory's base name.
-	Name string
-	// Description is optional prose for the manifest.
+	Dir         string
+	Name        string
 	Description string
-	// StoreDir is the artifact root, `<data-dir>/apps`, where the SDK is
-	// materialized from. Empty skips the link entirely.
-	StoreDir string
-	// Log receives progress lines. Optional.
-	Log func(string)
+	StoreDir    string
+	Log         func(string)
 }
 
-// Scaffold writes a complete, appliable app into opts.Dir.
 func Scaffold(opts ScaffoldOptions) (Manifest, error) {
 	dir, err := filepath.Abs(strings.TrimSpace(opts.Dir))
 	if err != nil {
@@ -52,8 +27,6 @@ func Scaffold(opts ScaffoldOptions) (Manifest, error) {
 		name = filepath.Base(dir)
 	}
 	if err := apps.ValidateName(name); err != nil {
-		// The name usually comes from the directory, so say where it came from —
-		// otherwise the reader looks for a name they never typed.
 		if strings.TrimSpace(opts.Name) == "" {
 			return Manifest{}, fmt.Errorf("%w (the name came from the directory %s; pass --name to choose another)", err, dir)
 		}
@@ -87,9 +60,6 @@ func Scaffold(opts ScaffoldOptions) (Manifest, error) {
 			return Manifest{}, fmt.Errorf("writing %s: %w", path, err)
 		}
 	}
-	// CLAUDE.md is a symlink rather than a copy so the two can never disagree —
-	// the repo's own convention, and the reason an agent finds the same
-	// instructions whichever name its harness looks for.
 	claude := filepath.Join(dir, "CLAUDE.md")
 	_ = os.Remove(claude)
 	if err := os.Symlink("AGENTS.md", claude); err != nil {
@@ -232,9 +202,6 @@ export default {
 `, SDKModule, ManifestName)
 }
 
-// scaffoldView is the tile `attn app new` ships: a live query, a command, and
-// the SDK's components, so an author reads a working example of all three
-// rather than a stub that renders "hello".
 func scaffoldView() string {
 	return fmt.Sprintf(`import {
   Button,
@@ -324,8 +291,6 @@ export default function Sessions({ params }: ViewProps): ReactElement {
 `, SDKModule)
 }
 
-// scaffoldTSConfig carries the same flags apply typechecks with, so the author's
-// editor reports what apply will. Apply does not read this file — see typecheck.
 func scaffoldTSConfig() string {
 	return `{
   "compilerOptions": {

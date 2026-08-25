@@ -2,19 +2,14 @@ import { create } from 'zustand';
 import { WorkflowRun } from '../types/generated';
 
 interface WorkflowRunsStore {
-  // Workflow runs from the daemon, keyed by run_id.
   workflowRuns: Record<string, WorkflowRun>;
 
-  // Immutable upsert keyed by run.run_id. A run with an empty run_id is ignored.
   upsertWorkflowRun: (run: WorkflowRun) => void;
 
-  // Batch upsert; entries with an empty run_id are ignored.
   upsertWorkflowRuns: (runs: WorkflowRun[]) => void;
 
-  // Immutable delete by run_id.
   removeWorkflowRun: (runId: string) => void;
 
-  // Clears the map (test convenience).
   reset: () => void;
 }
 
@@ -49,10 +44,8 @@ export const useWorkflowRunsStore = create<WorkflowRunsStore>((set) => ({
   reset: () => set({ workflowRuns: {} }),
 }));
 
-// selectLatestWorkflowRunForSession returns the most recently created run
-// attached to sessionId, or null. created_at is an ISO-8601 string so a
-// lexicographic max is a correct chronological max. Pure and unit-testable so
-// the App.tsx dock panel can stay a thin selector over the slice.
+// created_at is an ISO-8601 string, so a lexicographic max is a correct
+// chronological max.
 export function selectLatestWorkflowRunForSession(
   runs: Record<string, WorkflowRun>,
   sessionId: string | null | undefined,
@@ -66,16 +59,8 @@ export function selectLatestWorkflowRunForSession(
   return latest;
 }
 
-// workflowRunIdNeedingHydration returns the run_id whose full journal the detail
-// panel should fetch, or null when no fetch is needed. The run list backfill
-// (workflow_run_list) omits each run's agent_calls because it is a summary
-// surface, so a run that reaches the panel only via that backfill renders with no
-// journal ("0/0 calls"). Live runs get their calls from workflow_run_updated
-// broadcasts, but a completed run sees no further broadcasts and would stay
-// call-less after a reload. We therefore hydrate exactly when the panel is open
-// and the shown run has no calls; once getWorkflowRun upserts the hydrated run,
-// agent_calls is non-empty and this returns null (no refetch loop). Pure and
-// unit-testable so the App.tsx effect stays a thin trigger over this decision.
+// workflow_run_list omits agent_calls and a completed run gets no further
+// workflow_run_updated, so it would stay call-less after a reload.
 export function workflowRunIdNeedingHydration(
   panelOpen: boolean,
   run: WorkflowRun | null | undefined,

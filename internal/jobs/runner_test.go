@@ -13,13 +13,8 @@ import (
 	"time"
 )
 
-// testPoll is the dispatch re-scan interval used throughout these tests. It is
-// short so a time-gated requeue is picked up promptly once the fake clock moves;
-// nothing here waits on real elapsed time.
 const testPoll = 2 * time.Millisecond
 
-// newTestRunner builds a started runner over a fresh in-memory store and a
-// manually advanced clock, stopped on test cleanup.
 func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fakeClock) {
 	t.Helper()
 	store := newMemStore()
@@ -38,12 +33,8 @@ func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fake
 	return r, store, clock
 }
 
-// newBubbleRunner builds a started runner for a synctest bubble. Inside a bubble
-// the time package runs on a fake clock, so the runner needs no injected clock
-// (time.Now IS the fake clock, moved by time.Sleep) and no shortened poll
-// interval (production's 1s tick costs no wall-clock time). Stop is registered
-// on the bubble's own T, whose cleanups run inside the bubble — the dispatch
-// goroutines it joins live there.
+// Stop must be registered on the bubble's own T, whose cleanups run inside the
+// bubble alongside the dispatch goroutines it joins.
 func newBubbleRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore) {
 	t.Helper()
 	store := newMemStore()
@@ -150,10 +141,6 @@ func TestJobsWithoutAUniqueKeyAreDistinct(t *testing.T) {
 			t.Fatalf("enqueue b: %v", err)
 		}
 
-		// Both must be in flight together: this is the property coalescing-by-default
-		// would have made impossible, and the one durable activities need. Once
-		// dispatch has settled, both handlers are parked on `release` — so this counts
-		// concurrent runs rather than runs that happened to overlap.
 		synctest.Wait()
 		mu.Lock()
 		inFlight := len(payloads)
@@ -178,7 +165,6 @@ func TestUniqueKeyCoalescesABurstIntoOneRun(t *testing.T) {
 		})
 		mustStart(t, r)
 
-		// Three triggers inside the debounce window, each pushing the run later.
 		var last *Job
 		for i := 0; i < 3; i++ {
 			job, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1", Delay: time.Minute})
@@ -190,8 +176,6 @@ func TestUniqueKeyCoalescesABurstIntoOneRun(t *testing.T) {
 		if store.count() != 1 {
 			t.Fatalf("store holds %d records, want 1 coalesced record", store.count())
 		}
-		// Not "has not run yet" but "will not run": dispatch has settled and the
-		// debounce window is still open.
 		synctest.Wait()
 		if runs.Load() != 0 {
 			t.Fatalf("job ran %d times before its debounce elapsed", runs.Load())
@@ -221,8 +205,6 @@ func TestRunNowOverridesAPendingDebounce(t *testing.T) {
 		if err != nil {
 			t.Fatalf("enqueue run-now: %v", err)
 		}
-		// Without the override this would wait an hour of fake time, which never
-		// arrives in this test.
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID).State; got != StateDone {
 			t.Fatalf("run-now job state = %s, want done", got)
@@ -248,10 +230,8 @@ func TestATriggerArrivingMidRunRunsTheJobAgain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
-		<-entered // the first run is in the handler
+		<-entered
 
-		// The trigger lands while the run is in flight. It must not be dropped, and it
-		// must not tear the in-flight run.
 		if _, err := r.Enqueue("narrate", EnqueueOptions{UniqueKey: "ws-1", RunNow: true}); err != nil {
 			t.Fatalf("mid-run enqueue: %v", err)
 		}
@@ -260,7 +240,7 @@ func TestATriggerArrivingMidRunRunsTheJobAgain(t *testing.T) {
 		}
 		close(release)
 
-		<-entered // the second run, honoring the coalesced trigger
+		<-entered
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID).State; got != StateDone {
 			t.Fatalf("state after the re-run = %s, want done", got)
@@ -271,11 +251,6 @@ func TestATriggerArrivingMidRunRunsTheJobAgain(t *testing.T) {
 	})
 }
 
-// Converted to synctest (spike leg 1). time.Sleep moves the bubble's fake clock,
-// so the backoff windows are advanced by sleeping exactly the interval under
-// test; synctest.Wait replaces every poll loop by blocking until the dispatch
-// loop and the run it launched are done, which is what "the attempt failed"
-// actually means.
 func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, func(o *Options) {
@@ -298,7 +273,6 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			t.Fatalf("enqueue: %v", err)
 		}
 
-		// Attempt 1 fails and schedules a retry one base interval out.
 		synctest.Wait()
 		after1 := mustGet(t, r, job.ID)
 		if after1.State != StateFailed {
@@ -308,7 +282,6 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			t.Errorf("retry scheduled at %s, want %s (one base interval)", got, want)
 		}
 
-		// Attempt 2 fails and doubles the delay.
 		time.Sleep(time.Minute)
 		synctest.Wait()
 		after2 := mustGet(t, r, job.ID)
@@ -319,7 +292,6 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			t.Errorf("second retry scheduled at %s, want %s (doubled)", got, want)
 		}
 
-		// Attempt 3 hits the cap and the job dies.
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
 		dead := mustGet(t, r, job.ID)
@@ -333,8 +305,6 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			t.Errorf("last error = %q, want boom", dead.LastError)
 		}
 
-		// The terminal hook is the notification surface's signal: it must fire once on
-		// the crossing, not on every transient failure and not again afterwards.
 		if got := deadCalls.Load(); got != 1 {
 			t.Errorf("terminal-failure hook fired %d times, want exactly 1", got)
 		}
@@ -342,9 +312,6 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			t.Errorf("terminal-failure hook saw state %v, want dead", got)
 		}
 
-		// A dead job stays dead: nothing re-selects it once the cap is spent. An hour
-		// of fake time really does pass here — every poll tick in it runs a dispatch
-		// pass — so this is the claim itself, not a sleep standing in for it.
 		time.Sleep(time.Hour)
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID); got.Attempts != 3 {
@@ -368,7 +335,6 @@ func TestAJobCanRaiseItsOwnAttemptCap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
-		// With the runner default of 1 this would already be dead.
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID).State; got != StateFailed {
 			t.Fatalf("state after the first attempt = %s, want failed", got)
@@ -420,10 +386,6 @@ func TestRetryRevivesADeadJob(t *testing.T) {
 	})
 }
 
-// Converted to synctest. The load-bearing assertion is a negative — Cancel must
-// still be blocked — which a fixed window can only make probable. synctest.Wait
-// returns when Cancel is parked on the run's done channel with nothing else left
-// to run, so "it did not return" is a fact about a settled system.
 func TestCancelWaitsForTheCommitFence(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, nil)
@@ -437,8 +399,6 @@ func TestCancelWaitsForTheCommitFence(t *testing.T) {
 			defer job.CommitGuard.Leave()
 			close(committing)
 			<-finishCommit
-			// A cancel that arrived while we were inside the fence must not have
-			// cancelled the context out from under the write.
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
@@ -459,7 +419,6 @@ func TestCancelWaitsForTheCommitFence(t *testing.T) {
 			close(cancelReturned)
 		}()
 
-		// Cancel must still be blocked: the run is inside its commit.
 		synctest.Wait()
 		select {
 		case <-cancelReturned:
@@ -484,7 +443,7 @@ func TestCancelBeforeTheFenceStopsTheWrite(t *testing.T) {
 	var wrote atomic.Bool
 	mustRegister(t, r, "commits", func(ctx context.Context, job *Job) (any, error) {
 		close(started)
-		<-ctx.Done() // wait to be cancelled, then try to commit anyway
+		<-ctx.Done()
 		if !job.CommitGuard.Enter() {
 			return nil, errors.New("cancelled before commit")
 		}
@@ -499,13 +458,11 @@ func TestCancelBeforeTheFenceStopsTheWrite(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 	<-started
-	r.Cancel(job.ID) // blocks until the run goroutine has fully exited
+	r.Cancel(job.ID)
 
 	if wrote.Load() {
 		t.Error("the handler committed after being fenced")
 	}
-	// Cancel's contract is that the durable outcome is already recorded when it
-	// returns, with no polling needed here.
 	if got := mustGet(t, r, job.ID).State; got != StateFailed {
 		t.Errorf("state = %s, want failed — the cancelled run recorded its outcome", got)
 	}
@@ -523,19 +480,16 @@ func TestRemoveByKeyForgetsTheJob(t *testing.T) {
 		t.Fatalf("store holds %d records, want 1", store.count())
 	}
 
-	// The caller knows the subject, never the generated id — which is the whole
-	// reason this surface exists.
 	r.RemoveByKey("compact", "ws-1")
 	if store.count() != 0 {
 		t.Errorf("store holds %d records after removal, want 0", store.count())
 	}
-	r.RemoveByKey("compact", "ws-1") // removing what is already gone is a no-op
+	r.RemoveByKey("compact", "ws-1")
 }
 
 func TestStartRequeuesAJobLeftRunningByACrash(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newMemStore()
-		// A record left mid-run by a daemon that died.
 		stale := time.Now().Add(-time.Hour)
 		orphan := &Job{
 			ID:          "orphan",
@@ -585,8 +539,6 @@ func TestPriorityOrdersTheQueue(t *testing.T) {
 			return nil, nil
 		})
 
-		// Enqueue before starting so all three are eligible in the same first pass;
-		// the per-kind cap of 1 then serializes them in selection order.
 		if _, err := r.Enqueue("ordered", EnqueueOptions{Payload: "low", Priority: 1}); err != nil {
 			t.Fatalf("enqueue low: %v", err)
 		}
@@ -613,11 +565,6 @@ func TestPriorityOrdersTheQueue(t *testing.T) {
 	})
 }
 
-// Converted to synctest (spike leg 1). The load-bearing assertion here is a
-// negative — the second serial job must NOT start — which a real sleep can only
-// make probable. synctest.Wait blocks until the dispatch loop has nothing left
-// to do, so "it never started" is a fact about a settled system rather than
-// about 40ms of waiting.
 func TestAKindIsSerializedWithItselfButNotWithOthers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, nil)
@@ -654,7 +601,6 @@ func TestAKindIsSerializedWithItselfButNotWithOthers(t *testing.T) {
 			t.Fatalf("enqueue other: %v", err)
 		}
 
-		// One serial job and the other kind run together; the second serial job waits.
 		synctest.Wait()
 		got := map[string]bool{}
 		for range 2 {
@@ -678,7 +624,6 @@ func TestAKindIsSerializedWithItselfButNotWithOthers(t *testing.T) {
 func TestAnUnregisteredKindFailsInPlace(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newMemStore()
-		// A record from an older build whose kind this binary no longer knows.
 		now := time.Now()
 		stale := &Job{
 			ID:          "stale",
@@ -696,7 +641,6 @@ func TestAnUnregisteredKindFailsInPlace(t *testing.T) {
 		t.Cleanup(r.Stop)
 		mustStart(t, r)
 
-		// It must surface as a failure rather than being silently re-selected forever.
 		synctest.Wait()
 		if got := mustGet(t, r, "stale").State; got != StateDead {
 			t.Fatalf("unknown-kind job state = %s, want dead", got)
@@ -719,8 +663,6 @@ func TestAnUnmarshallableResultFailsTheRun(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
 		mustRegister(t, r, "bad_result", func(context.Context, *Job) (any, error) {
-			// math.Inf has no JSON representation. The work "succeeded", but a result
-			// nobody can read must not be reported as success.
 			return math.Inf(1), nil
 		})
 		mustStart(t, r)
@@ -744,12 +686,8 @@ func TestRetentionTrimsCompletedJobsAndKeepsDeadOnes(t *testing.T) {
 		r, store := newBubbleRunner(t, func(o *Options) {
 			o.MaxAttempts = 1
 			o.Retention = 24 * time.Hour
-			// This test is about the manual Trim call. The runner's own hourly
-			// retention pass is a real ticker, and in a bubble it really fires — 48
-			// times over the window below — so it would trim the record before the
-			// call under test ever ran. Parking it past the window keeps the subject
-			// singular. (Under a fake clock the pass never fired at all, because its
-			// ticker was on real time; that it now runs is the bubble working.)
+			// The hourly retention ticker really fires inside a bubble (48 times over
+			// the window below), so it is parked past it.
 			o.TrimInterval = 30 * 24 * time.Hour
 		})
 		mustRegister(t, r, "ok", func(context.Context, *Job) (any, error) { return nil, nil })
@@ -778,7 +716,6 @@ func TestRetentionTrimsCompletedJobsAndKeepsDeadOnes(t *testing.T) {
 			t.Errorf("trimmed %d fresh jobs, want 0", got)
 		}
 
-		// The retention window itself, at its real length.
 		time.Sleep(48 * time.Hour)
 		if got := r.Trim(); got != 1 {
 			t.Errorf("trimmed %d jobs, want 1 (the completed one)", got)
@@ -786,8 +723,6 @@ func TestRetentionTrimsCompletedJobsAndKeepsDeadOnes(t *testing.T) {
 		if j, _ := r.Get(done.ID); j != nil {
 			t.Error("the completed job survived retention")
 		}
-		// The dead job is the record a failure notification points at, and it only
-		// exists because nobody acted on it. Retention must not swallow it.
 		if j, _ := r.Get(dead.ID); j == nil {
 			t.Error("the dead job was trimmed; it is the actionable record")
 		}
@@ -797,11 +732,6 @@ func TestRetentionTrimsCompletedJobsAndKeepsDeadOnes(t *testing.T) {
 	})
 }
 
-// TestThePeriodicRetentionPassTrimsOnItsOwnInterval covers the runner's own
-// retention ticker, which the test above deliberately parks. Until the bubble
-// arrived the pass had never executed in any test at all: its ticker ran on real
-// time while the tests ran on an injected clock, so an hour of test time never
-// reached it. Here it runs at its shipped interval, with nobody calling Trim.
 func TestThePeriodicRetentionPassTrimsOnItsOwnInterval(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var mu sync.Mutex
@@ -809,8 +739,6 @@ func TestThePeriodicRetentionPassTrimsOnItsOwnInterval(t *testing.T) {
 		r, store := newBubbleRunner(t, func(o *Options) {
 			o.MaxAttempts = 1
 			o.Retention = 24 * time.Hour
-			// TrimInterval is left at DefaultTrimInterval (1h) on purpose: the
-			// interval under test is the shipped one.
 			o.Log = func(format string, args ...any) {
 				if !strings.HasPrefix(format, "jobs: trimmed") {
 					return
@@ -847,8 +775,6 @@ func TestThePeriodicRetentionPassTrimsOnItsOwnInterval(t *testing.T) {
 			t.Fatalf("the failing job settled at %s, want dead", got)
 		}
 
-		// Just inside the retention window: 23 ticks have fired and every one of
-		// them found nothing old enough to take.
 		time.Sleep(24*time.Hour - time.Minute)
 		synctest.Wait()
 		if j, _ := r.Get(old.ID); j == nil {
@@ -858,8 +784,6 @@ func TestThePeriodicRetentionPassTrimsOnItsOwnInterval(t *testing.T) {
 			t.Errorf("retention reported %d trims inside the window, want 0: %v", got, trims)
 		}
 
-		// A second completed job, enqueued a minute before the first ages out. It
-		// is the control: the pass that takes the old record must leave it alone.
 		young, err := r.Enqueue("ok", EnqueueOptions{})
 		if err != nil {
 			t.Fatalf("enqueue young: %v", err)
@@ -869,9 +793,6 @@ func TestThePeriodicRetentionPassTrimsOnItsOwnInterval(t *testing.T) {
 			t.Fatalf("the second job settled at %s, want done", got)
 		}
 
-		// Past the window plus one interval: the first tick after the record aged
-		// out is the one that takes it. A pass on any interval longer than an hour
-		// would still be holding it here.
 		time.Sleep(time.Hour + 2*time.Minute)
 		synctest.Wait()
 		if j, _ := r.Get(old.ID); j != nil {
@@ -904,24 +825,16 @@ func TestAFailedClaimReleasesItsConcurrencySlot(t *testing.T) {
 		})
 		mustStart(t, r)
 
-		// Park the job behind a debounce so the enqueue's own write lands first and
-		// the armed failure is guaranteed to hit the dispatch claim instead.
 		job, err := r.Enqueue("compact", EnqueueOptions{UniqueKey: "ws-1", Delay: time.Minute})
 		if err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
-		// The claim write fails once. If the reserved per-kind slot leaked, the kind
-		// would be saturated forever and nothing of it would ever run again — which
-		// the bubble proves by letting a further hour of dispatch passes run.
 		store.failNextSave(errors.New("disk on fire"))
 		time.Sleep(time.Minute)
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID).State; got != StateQueued {
 			t.Fatalf("state after the claim write failed = %s, want queued (the job is still owed a run)", got)
 		}
-		// The recovery is the point: the very next dispatch pass must be able to
-		// claim it. If the reserved per-kind slot leaked, the kind would be
-		// saturated forever and no sleep here would ever produce a run.
 		time.Sleep(defaultPollInterval)
 		synctest.Wait()
 		if got := mustGet(t, r, job.ID).State; got != StateDone {
@@ -983,9 +896,9 @@ func TestStopDrainsInFlightRuns(t *testing.T) {
 		t.Fatalf("enqueue: %v", err)
 	}
 	<-started
-	r.Stop() // cancels the run and blocks until it has exited
+	r.Stop()
 	if !exited.Load() {
 		t.Error("Stop returned before the in-flight run exited")
 	}
-	r.Stop() // a second Stop must not panic on the closed channel
+	r.Stop()
 }

@@ -9,10 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// pi finds skills only under ~/.agents/skills, and until this landed the only
-// thing writing there was the codex driver's PrepareLaunch — so whether a
-// delegated conversation agent knew how to use `attn ticket` depended on
-// whether codex happened to be installed. The host spawn owes it directly.
 func TestConversationHostSpawnInstallsTheAttnSkill(t *testing.T) {
 	toolHome := t.TempDir()
 	t.Setenv(toolhome.EnvVar, toolHome)
@@ -28,10 +24,7 @@ func TestConversationHostSpawnInstallsTheAttnSkill(t *testing.T) {
 	registerTestPluginDriver(t, pipe, "pi-fixture", map[string]bool{
 		pluginDriverConversationCapability: true,
 	})
-	// The daemon's agent-availability pass installs this too when codex happens
-	// to be on the machine, which would let the assertion below pass without the
-	// spawn doing anything. Clear it right before the spawn so what is asserted
-	// is the spawn's own work — the codex-less machine, reproduced.
+	// The daemon's agent-availability pass installs this too when codex is on the machine, which would let the assertion below pass without the spawn doing anything.
 	skillDir := filepath.Join(toolHome, ".agents", "skills", "attn")
 	if err := os.RemoveAll(skillDir); err != nil {
 		t.Fatalf("clear the skill dir: %v", err)

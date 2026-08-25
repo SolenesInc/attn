@@ -82,8 +82,6 @@ describe('SeedDocumentView', () => {
 
   it('renders the daemon’s artifact set and opens a current markdown artifact', () => {
     const current = { kind: 'markdown_file' as const, path: '/repo/current.md' };
-    // The detached one is still on the log; the set the daemon projected is
-    // what the reader renders, so it must not reappear from the timeline.
     const notes = [
       note({ id: 'n-detach', kind: 'detach', artifact: { kind: 'markdown_file', path: '/repo/old.md' } }),
       note({ id: 'n-current', kind: 'attach', artifact: current }),
@@ -98,8 +96,6 @@ describe('SeedDocumentView', () => {
     );
 
     expect(screen.queryByRole('button', { name: /old\.md/ })).not.toBeInTheDocument();
-    // The row is the object: its kind in words, the file by name, the directory
-    // beside it — the whole path is the title, not the label.
     const artifact = screen.getByRole('button', { name: /current\.md/ });
     expect(artifact).toHaveTextContent('markdown');
     expect(artifact).toHaveAttribute('title', '/repo/current.md');
@@ -120,8 +116,6 @@ describe('SeedDocumentView', () => {
     );
 
     expect(screen.getByText('nb-plan-7')).toBeInTheDocument();
-    // A plain URL reads as its host and path; only the kind gutter says what
-    // sort of thing it is, so there is no icon vocabulary to learn.
     const link = screen.getByRole('link', { name: /example\.test/ });
     expect(link).toHaveAttribute('href', 'https://example.test/pr/1');
     expect(link).toHaveTextContent('link');

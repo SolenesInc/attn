@@ -459,10 +459,7 @@ struct BuildProfileInfo {
     bundle_identifier: &'static str,
 }
 
-/// Returns the compile-time profile baked into this app bundle.
-/// The frontend calls this at startup to verify that the daemon it
-/// connects to reports the same profile — a mismatch is fatal
-/// (the app refuses to operate, per the design gate).
+/// The frontend compares this with the daemon's at startup; a mismatch is fatal.
 #[tauri::command]
 fn get_build_profile() -> BuildProfileInfo {
     BuildProfileInfo {
@@ -492,7 +489,6 @@ fn ensure_daemon(_app: tauri::AppHandle) -> Result<(), String> {
     match run_daemon_ensure(&bin_path) {
         Ok(_) => Ok(()),
         Err(err) => {
-            // Temporary fallback for older or unaccounted-for local states.
             eprintln!("[Daemon] daemon ensure failed: {err}; entering temporary fallback recovery");
             temporary_force_daemon_recovery(&bin_path)
                 .map(|_| {
@@ -513,22 +509,8 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 const CLOSE_ACTIVE_PANE_MENU_ID: &str = "attn-close-active-pane";
-// ⌘. calls off whatever countdown is on screen. It exists as a menu item because
-// that is the only way the keystroke can reach attn at all: macOS claims
-// Command-period as the system cancel gesture (`cancelOperation:`) and consumes it
-// before the WebView dispatches any DOM keydown, so the page's shortcut listener —
-// which owns every other key in the app — never sees it. A menu item gets first
-// look at key equivalents, so it does. Verified against the packaged app: an
-// always-enabled action rebound to ⌘. never fired, and the same action behind this
-// menu item does.
-//
-// The item only carries the keystroke. The behavior stays in the page, reached
-// through the same `attn:native-shortcut` dispatch ⌘W uses, so there is one
-// implementation of "cancel the countdown" and it is the one the pill's click
-// calls too. Because the accelerator is fixed here rather than resolved from the
-// user's keybindings, `session.cancelCountdown` is marked `nativeDelivery` in the
-// frontend's shortcut metadata and the editor shows it as fixed instead of
-// offering a rebind that would silently not apply.
+// macOS consumes Command-period as the system cancel gesture before any DOM
+// keydown, so a menu item is the only way it reaches attn (hence nativeDelivery).
 const CANCEL_COUNTDOWN_MENU_ID: &str = "attn-cancel-countdown";
 const NATIVE_SHORTCUT_EVENT: &str = "attn:native-shortcut";
 const NATIVE_BROWSER_CLOSE_EVENT: &str = "attn:native-browser-close";
@@ -552,10 +534,7 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
         true,
         Some("CmdOrCtrl+."),
     )?;
-    // Always enabled. A disabled NSMenuItem stops responding to its key
-    // equivalent, so gating this on "a countdown is running" would need the menu
-    // to track session state — and the press is already a no-op when nothing is
-    // counting down, because the page registers no handler for the id then.
+    // Always enabled: a disabled NSMenuItem stops responding to its key equivalent.
     let mut inserted_cancel_countdown = false;
 
     for item in menu.items()? {
@@ -586,15 +565,8 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
                     inserted_close_active_pane = true;
                 }
             } else if (is_redo || is_undo) && is_edit_menu {
-                // Drop the predefined Undo/Redo items so they stop claiming the ⌘Z/⇧⌘Z
-                // key equivalents. With them gone both keys reach the WebView: inside the
-                // notebook editor CodeMirror's history keymap handles undo/redo (its
-                // contenteditable is an editable target, so the DOM shortcut resolver
-                // yields ⇧⌘Z to it instead of terminal.toggleZoom), WebKit still handles
-                // undo natively in plain inputs/textareas, and outside editable targets
-                // ⇧⌘Z keeps dispatching terminal.toggleZoom through the resolver —
-                // honoring user rebindings. The menu items would otherwise swallow both
-                // keys in packaged builds (editor undo was dead, zoom did nothing).
+                // Dropped so they stop claiming ⌘Z/⇧⌘Z: in packaged builds the
+                // predefined items swallow both keys before the WebView sees them.
                 submenu.remove_at(position)?;
             }
         }
@@ -616,8 +588,6 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
             inserted_close_active_pane = true;
         }
 
-        // Sits beside Close Pane: both are verbs about the session in front of
-        // you, and File is where attn already puts them.
         if is_file_menu && !inserted_cancel_countdown {
             submenu.insert(&cancel_countdown, 0)?;
             inserted_cancel_countdown = true;
@@ -736,7 +706,6 @@ async fn list_directory(path: String, prefix: Option<String>) -> Result<Vec<Stri
             let metadata = entry.metadata().ok()?;
             if metadata.is_dir() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                // Filter by search term (contains match)
                 if let Some(ref p) = prefix_lower {
                     if !name.to_lowercase().contains(p) {
                         return None;
@@ -749,7 +718,6 @@ async fn list_directory(path: String, prefix: Option<String>) -> Result<Vec<Stri
         })
         .collect();
 
-    // Sort: starts_with matches first, then contains-only, alphabetically within each group
     if let Some(ref p) = prefix_lower {
         directories.sort_by(|a, b| {
             let a_lower = a.to_lowercase();
@@ -765,7 +733,7 @@ async fn list_directory(path: String, prefix: Option<String>) -> Result<Vec<Stri
     } else {
         directories.sort();
     }
-    directories.truncate(50); // Limit to 50 results
+    directories.truncate(50);
 
     Ok(directories)
 }
@@ -1047,10 +1015,8 @@ pub fn run() {
     // any spawned `attn daemon` child that inherits our env).
     profile::apply_build_profile_env();
 
-    // Disable macOS "press and hold for accents" popup so that holding
-    // a key in the terminal produces key repeat instead. Scope the
-    // preference change to the running bundle so a dev install
-    // (com.attn.manager.dev) never overwrites the prod preference.
+    // Disable "press and hold for accents" so a held key in the terminal repeats.
+    // Scoped to the running bundle so a dev install never overwrites the prod pref.
     #[cfg(target_os = "macos")]
     {
         let _ = Command::new("defaults")
@@ -1064,11 +1030,8 @@ pub fn run() {
             .output();
     }
 
-    // Webview-side gate for the UI automation bridge. Injected as an
-    // initialization script so React's `useUiAutomationBridge` sees it
-    // synchronously on first render — no Tauri command roundtrip, no
-    // race with `useEffect`. Reads the same runtime decision as the
-    // Rust-side server so both halves of the bridge agree.
+    // An initialization script, so `useUiAutomationBridge` sees the gate
+    // synchronously on first render rather than racing a command roundtrip.
     let automation_init_script = format!(
         "window.__ATTN_AUTOMATION_ENABLED = {};",
         profile::automation_enabled()
@@ -1146,11 +1109,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .setup(|app| {
             use tauri::Manager;
             ui_automation::maybe_start(&app.handle().clone());
-            // Harness-only: keep attn visible (and unthrottled by WKWebView occlusion)
-            // without ever becoming the active app, so scenarios don't steal focus.
-            // Accessory policy hides the Dock tile and prevents macOS from making
-            // attn frontmost on launch; set_focusable(false) ensures the window
-            // can't take key via a stray click either.
+            // Harness-only: visible so WKWebView does not throttle for occlusion, never
+            // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.
             #[cfg(target_os = "macos")]
             if env::var("ATTN_HARNESS_ALWAYS_ON_TOP")
                 .ok()
@@ -1165,11 +1125,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             Ok(())
         })
         .on_page_load(|webview, _payload| {
-            // Position the window before showing it, so parked harness runs
-            // don't flash at center first. Visible strip is specified in logical
-            // pixels; Tauri's primary_monitor().size() is physical, so we divide
-            // by scale_factor to reason about logical coordinates and then use
-            // LogicalPosition to set the window.
+            // The visible strip is logical pixels while primary_monitor().size() is
+            // physical, hence the scale_factor.
             #[cfg(target_os = "macos")]
             if webview.label() == "main" {
                 if let Ok(px_str) = std::env::var("ATTN_HARNESS_PARK_VISIBLE_PX") {
@@ -1198,11 +1155,9 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                     }
                 }
             }
-            // Show window as soon as page content is loaded (loading screen visible)
             let _ = webview.window().show();
-            // The present window opens from an explicit user action (chip click) and
-            // must take focus: an unfocused, hidden-at-creation WKWebView can leave
-            // requestAnimationFrame parked (blank diff pane) until first focus.
+            // Must take focus: an unfocused, hidden-at-creation WKWebView can leave
+            // requestAnimationFrame parked (blank diff pane).
             if webview.window().label() == PRESENT_WINDOW_LABEL {
                 let _ = webview.window().set_focus();
             }

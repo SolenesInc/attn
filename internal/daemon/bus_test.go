@@ -42,13 +42,9 @@ func TestAssistantWindowFactProjectsOneSessionInvalidation(t *testing.T) {
 	}
 }
 
-// These tests exercise the bus against the REAL sqlBusStore, not the in-memory
-// fake internal/bus uses. A green run in internal/bus only proves the delivery
-// logic; this proves the SQLite adapter carries the same semantics.
+// These run against the REAL sqlBusStore, not the in-memory fake internal/bus uses, so the SQLite adapter's semantics are what is under test.
 
-// requireBus runs the bus's own safety-net poll out and then asks once. Inside a
-// bubble that poll is the slowest thing that can still deliver, so a condition
-// still false afterwards is false for good.
+// Inside a bubble the bus's safety-net poll is the slowest thing that can still deliver, so a condition still false after it is false for good.
 func requireBus(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	time.Sleep(2 * bus.DefaultPollInterval)
@@ -58,8 +54,6 @@ func requireBus(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// A garden mutation publishes a durable, subject-carrying fact — and produces
-// exactly one garden push.
 func TestGardenMutationPublishesAFactAndPushesTheGardenOnce(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -83,14 +77,11 @@ func TestGardenMutationPublishesAFactAndPushesTheGardenOnce(t *testing.T) {
 	if events[0].Name != FactGardenNoted {
 		t.Fatalf("fact name = %q, want %q", events[0].Name, FactGardenNoted)
 	}
-	// The subject is what separates a fact from a snapshot invalidation.
 	if events[0].Subject != "s-1" {
 		t.Fatalf("fact subject = %q, want the seed id", events[0].Subject)
 	}
 }
 
-// The session-state migration kept its call sites, so the wire event it produces
-// must be indistinguishable from the direct broadcast it replaced.
 func TestSessionStateFactProjectsTheSameWireEvent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -121,9 +112,6 @@ func TestSessionStateFactProjectsTheSameWireEvent(t *testing.T) {
 	}
 }
 
-// A new activity line reaches clients the same way every other state change
-// does: the generator publishes a subject-only fact and the projection re-reads
-// the session and re-pushes it. The generator never writes to the hub itself.
 func TestActivityFactProjectsTheSessionSnapshot(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -136,9 +124,6 @@ func TestActivityFactProjectsTheSessionSnapshot(t *testing.T) {
 
 	d.publishFact(FactSessionActivityChanged, "sess-1", nil)
 
-	// The line has to be on the pushed snapshot, not merely announced: a client
-	// that has to ask for it after the event would render a stale row until it
-	// answered.
 	carried := false
 	for _, event := range pushed {
 		if event.Event != protocol.EventSessionStateChanged || event.Session == nil {
@@ -161,8 +146,6 @@ func TestActivityFactProjectsTheSessionSnapshot(t *testing.T) {
 	}
 }
 
-// Over the real SQLite adapter: a durable consumer that was not running catches
-// up from its persisted cursor when it comes back.
 func TestDurableConsumerCatchesUpOverTheSQLiteAdapter(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	synctest.Test(t, func(t *testing.T) {
@@ -198,7 +181,6 @@ func TestDurableConsumerCatchesUpOverTheSQLiteAdapter(t *testing.T) {
 		requireBus(t, "the first delivery", func() bool { return len(snapshot()) == 1 })
 		first.Stop()
 
-		// Facts published while the consumer is gone, including one it filters out.
 		offline := bus.New(bus.Options{Store: backing})
 		for _, fact := range []struct{ name, subject string }{
 			{FactTicketCommented, "tk-1"},
@@ -232,8 +214,6 @@ func TestDurableConsumerCatchesUpOverTheSQLiteAdapter(t *testing.T) {
 			}
 		}
 
-		// The cursor advanced past the filtered-out fact too, so a narrow consumer is
-		// not permanently reported as lagging.
 		rec, ok, err := d.store.GetBusConsumer("ticket-watcher")
 		if err != nil || !ok {
 			t.Fatalf("GetBusConsumer: %v (found=%v)", err, ok)
@@ -247,7 +227,6 @@ func TestDurableConsumerCatchesUpOverTheSQLiteAdapter(t *testing.T) {
 	})
 }
 
-// Status is the operator surface: head, cursors, and the lag between them.
 func TestBusStatusReportsLag(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
@@ -274,14 +253,11 @@ func TestBusStatusReportsLag(t *testing.T) {
 	if st.Consumers[0].Lag != 2 {
 		t.Fatalf("lag = %d, want 2", st.Consumers[0].Lag)
 	}
-	// Registered in the database but with no loop in this process.
 	if st.Consumers[0].Live {
 		t.Fatal("a consumer with no delivery loop reported Live")
 	}
 }
 
-// failingAppendBusStore is the real adapter with a switchable append fault, so
-// the test exercises the actual daemon wiring rather than a hand-built bus.
 type failingAppendBusStore struct {
 	bus.Store
 	mu   sync.Mutex
@@ -304,8 +280,6 @@ func (f *failingAppendBusStore) setFail(err error) {
 	f.mu.Unlock()
 }
 
-// rewireBusWithFailingAppend swaps the daemon's bus for one whose durable append
-// can be made to fail, keeping the hub subscription that ensureEventBus installs.
 func rewireBusWithFailingAppend(t *testing.T, d *Daemon) *failingAppendBusStore {
 	t.Helper()
 	d.stopEventBus()
@@ -316,10 +290,6 @@ func rewireBusWithFailingAppend(t *testing.T, d *Daemon) *failingAppendBusStore 
 	return backing
 }
 
-// A mutation has already committed by the time its fact is published. If the
-// durable append then fails, the wire push must still go out: before the bus
-// existed this was a direct broadcast, and a client cannot be allowed to miss a
-// committed mutation because the event log had a bad night.
 func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backing := rewireBusWithFailingAppend(t, d)
@@ -333,7 +303,6 @@ func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 	if pushes != 1 {
 		t.Fatalf("a committed mutation produced %d pushes while the bus append was failing, want 1", pushes)
 	}
-	// The fact is genuinely lost — only its durability, not the wire.
 	logged, err := d.store.BusEventsSince(0, 10)
 	if err != nil {
 		t.Fatalf("BusEventsSince: %v", err)
@@ -342,8 +311,6 @@ func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 		t.Fatalf("append was supposed to fail, but the log holds %d event(s)", len(logged))
 	}
 
-	// Recovery: once the store is healthy the next fact is durable again, and the
-	// garden still pushes exactly once for it.
 	backing.setFail(nil)
 	d.publishFact(FactGardenNoted, "s-1", nil)
 	if pushes != 2 {
@@ -358,9 +325,6 @@ func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 	}
 }
 
-// The same guarantee for session state. This is the sharper case: the nudge and
-// auto-settle countdowns broadcast without any preceding store write, so nothing
-// upstream gates the push — the bus is the only thing that could drop it.
 func TestSessionStateStillReachesTheWireWhenTheBusAppendFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backing := rewireBusWithFailingAppend(t, d)

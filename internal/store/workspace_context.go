@@ -12,10 +12,6 @@ import (
 var ErrWorkspaceContextConflict = errors.New("workspace context revision conflict")
 var ErrKeeperCompactBackupNotFound = errors.New("keeper compact backup not found")
 
-// KeeperCompactBackup is the source snapshot captured before the keeper's
-// compaction duty rewrites a workspace context, used for direct rollback. It is
-// stored in the workspace_keeper_compact_backups table (renamed off the retired
-// "janitor" persona by migration 52).
 type KeeperCompactBackup struct {
 	WorkspaceID    string
 	SourceRevision int
@@ -26,8 +22,6 @@ type KeeperCompactBackup struct {
 	CreatedAt      string
 }
 
-// GetWorkspaceContext returns the canonical context. A workspace without
-// context has revision zero and empty content.
 func (s *Store) GetWorkspaceContext(workspaceID string) (*protocol.WorkspaceContext, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -57,7 +51,6 @@ func (s *Store) GetWorkspaceContext(workspaceID string) (*protocol.WorkspaceCont
 	return &context, nil
 }
 
-// ListWorkspaceContexts returns canonical contexts in workspace creation order.
 func (s *Store) ListWorkspaceContexts() ([]protocol.WorkspaceContext, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -96,8 +89,6 @@ func (s *Store) ListWorkspaceContexts() ([]protocol.WorkspaceContext, error) {
 	return contexts, nil
 }
 
-// UpdateWorkspaceContext replaces the canonical content when expectedRevision
-// still matches. It returns changed=false for an identical update.
 func (s *Store) UpdateWorkspaceContext(workspaceID, content, updatedBySessionID string, expectedRevision int) (*protocol.WorkspaceContext, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -179,8 +170,6 @@ func (s *Store) HasWorkspaceContext(workspaceID string) bool {
 	return s.db.QueryRow(`SELECT 1 FROM workspace_contexts WHERE workspace_id = ?`, workspaceID).Scan(&exists) == nil
 }
 
-// ApplyKeeperCompactResult atomically stores the compacted context
-// and the source snapshot needed for direct rollback.
 func (s *Store) ApplyKeeperCompactResult(
 	workspaceID string,
 	content string,
@@ -292,8 +281,6 @@ func (s *Store) GetKeeperCompactBackup(workspaceID string) (*KeeperCompactBackup
 	return &backup, nil
 }
 
-// RestoreKeeperCompactBackup restores only when the compacted
-// revision is still canonical, so later user edits are never overwritten.
 func (s *Store) RestoreKeeperCompactBackup(
 	workspaceID string,
 	updatedBySessionID string,

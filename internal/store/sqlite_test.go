@@ -63,9 +63,8 @@ func TestMigrationOrderError(t *testing.T) {
 	}
 }
 
-// latestSchemaVersion is the highest version in the migrations slice. It is NOT
-// the same as len(migrations): versions 49 and 50 are burned (see sqlite.go), so
-// there is a gap and the max version exceeds the migration count.
+// NOT len(migrations): versions 49 and 50 are burned (see sqlite.go), so the max
+// version exceeds the migration count.
 func latestSchemaVersion() int {
 	max := 0
 	for _, m := range migrations {
@@ -86,7 +85,6 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Verify tables exist by querying them
 	tables := []string{"sessions", "prs", "repos", "workspace_contexts", "workspace_keeper_compact_backups", "profile_roles", "chief_of_staff_dispatches", "agent_messages", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events"}
 	for _, table := range tables {
 		var count int
@@ -119,7 +117,6 @@ func TestOpenDB_ReopensExistingDB(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create and insert data
 	db1, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() error = %v", err)
@@ -130,7 +127,6 @@ func TestOpenDB_ReopensExistingDB(t *testing.T) {
 	}
 	db1.Close()
 
-	// Reopen and verify data persists
 	db2, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen error = %v", err)
@@ -157,7 +153,6 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Check schema version matches total migrations
 	version, err := GetSchemaVersion(db)
 	if err != nil {
 		t.Fatalf("GetSchemaVersion() error = %v", err)
@@ -166,7 +161,6 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 		t.Errorf("schema version = %d, want %d", version, latestSchemaVersion())
 	}
 
-	// Verify all migrations recorded
 	var count int
 	err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	if err != nil {
@@ -181,7 +175,6 @@ func TestMigrations_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Open DB twice
 	db1, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() first error = %v", err)
@@ -194,7 +187,6 @@ func TestMigrations_Idempotent(t *testing.T) {
 	}
 	defer db2.Close()
 
-	// Should still have same number of migrations
 	var count int
 	err = db2.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
 	if err != nil {
@@ -242,15 +234,6 @@ func TestMigration73RepairsAutomationProfileMigration70Collision(t *testing.T) {
 	}
 }
 
-// TestMigration75DefaultsExistingRowsToEmptySpecYAML mirrors
-// TestMigration73RepairsAutomationProfileMigration70Collision's technique:
-// roll a real DB back to just before migration 75 (drop the column it adds,
-// delete its schema_migrations record), seed a row in that pre-75 shape, then
-// reopen so migrations 75 and 76 both run for real. Migration 75's own
-// contribution (defaulting spec_yaml to ”) is still exercised here, but the
-// column migration 76 immediately drops afterward, so the row surviving with
-// its other columns intact — rather than the now-removed spec_yaml value —
-// is what this test pins post-PR2a.
 func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-75.db")
 	db, err := OpenDB(dbPath)
@@ -265,10 +248,8 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 		db.Close()
 		t.Fatalf("seed legacy row: %v", err)
 	}
-	// A fresh OpenDB already runs migration 76, which drops spec_yaml, so the
-	// head-schema automation_definitions table already has the pre-75 shape
-	// (no spec_yaml column) — only the schema_migrations record needs
-	// rolling back.
+	// A fresh OpenDB already runs migration 76, which drops spec_yaml, so only the
+	// schema_migrations record needs rolling back.
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 75`); err != nil {
 		db.Close()
 		t.Fatalf("roll back to pre-migration-75 schema: %v", err)
@@ -283,9 +264,6 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	}
 	defer migrated.Close()
 
-	// Migration 76 wipes automation_definitions unconditionally, so the
-	// legacy row itself is gone by design — assert that (not spec_yaml,
-	// which no longer exists as a column at all).
 	var defCount int
 	if err := migrated.QueryRow(`SELECT COUNT(*) FROM automation_definitions`).Scan(&defCount); err != nil {
 		t.Fatalf("count automation_definitions: %v", err)
@@ -304,14 +282,6 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 	}
 }
 
-// TestMigration76ClearsAutomationStateAndDropsSpecYAML pins the v2 clean-slate
-// rebuild (docs/plans/2026-07-21-automations-v2-simplification.md, PR2a):
-// roll a real DB forward to migration 75's shape (spec_yaml column present,
-// populated), seed one row in every automation table plus a ticket wired to a
-// run via automation_run_id, then reopen so migration 76 runs for real.
-// Every automation table must come back empty, automation_definitions must no
-// longer have a spec_yaml column, and the ticket's automation_run_id must be
-// NULL — nothing may survive referencing a row this migration wipes.
 func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-76.db")
 	db, err := OpenDB(dbPath)
@@ -320,12 +290,8 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// Roll the fresh (head-schema) automation_definitions table back to its
-	// migration-75 shape: spec_yaml present, migration 76 unrecorded. The
-	// review edges table is also rolled back to its pre-77 shape (accepted_cycle
-	// present) purely so this test's seed data — carried over unmodified from
-	// before migration 77 existed — can still insert; migration 76 itself
-	// never touched that column.
+	// Review edges go back to their pre-77 shape only so the seed below inserts;
+	// migration 76 never touched it.
 	if _, err := db.Exec(`
 		ALTER TABLE automation_definitions ADD COLUMN spec_yaml TEXT NOT NULL DEFAULT '';
 		ALTER TABLE automation_review_request_edges ADD COLUMN accepted_cycle INTEGER NOT NULL DEFAULT 0;
@@ -441,18 +407,6 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	}
 }
 
-// TestMigration77ClearsRunsBindingsAndEdges pins the v2 explicit run/binding
-// state rebuild (docs/plans/2026-07-21-automations-v2-simplification.md,
-// PR2b): roll a real DB forward to migration 76's shape (accepted_cycle
-// present on review edges, continuity bindings keyed by definition+continuity
-// only, runs without cancel_reason/attempts), seed one row in every automation
-// table plus a ticket wired to a run via automation_run_id, then reopen so
-// migration 77 runs for real. Every automation table must come back empty,
-// accepted_cycle must be gone from automation_review_request_edges, the new
-// cancel_reason/attempts columns must exist on automation_runs, the new
-// id/status/released_reason/released_at columns must exist on
-// automation_continuity_bindings with its unique-active index, and the
-// ticket's automation_run_id must be NULL.
 func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-77.db")
 	db, err := OpenDB(dbPath)
@@ -461,10 +415,6 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// Roll the fresh (head-schema) automation tables back to their
-	// migration-76 shape: accepted_cycle present, bindings without
-	// id/status, runs without cancel_reason/attempts, migration 77
-	// unrecorded.
 	if _, err := db.Exec(`
 		DROP TABLE automation_runs;
 		CREATE TABLE automation_runs (
@@ -654,8 +604,6 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 		t.Fatalf("idx_automation_bindings_active count = %d, want 1", activeIndexCount)
 	}
 
-	// The unique-active partial index must reject a second active binding
-	// for the same definition+continuity_key.
 	if _, err := migrated.Exec(
 		`INSERT INTO automation_continuity_bindings (id, definition_id, continuity_key, ticket_id, session_id, workspace_id, pane_id, status, created_at, updated_at) VALUES ('b1', 'legacy-def', 'fresh', 't1', 's1', 'w1', 'p1', 'active', ?, ?)`,
 		now, now,
@@ -670,20 +618,6 @@ func TestMigration77ClearsRunsBindingsAndEdges(t *testing.T) {
 	}
 }
 
-// TestMigratesPopulatedPreAutomationsDatabaseToHead guards migrations 73-76
-// against a REAL pre-existing database, not an empty or already-migrated one.
-// Migration 73's `ALTER TABLE tickets ADD COLUMN automation_run_id` is the
-// highest-risk statement in the trio: every other test exercises it against a
-// fresh or already-migrated tickets table. Just deleting schema_migrations
-// rows wouldn't exercise that risk either — 73/74's CREATE TABLE IF NOT
-// EXISTS and the ALTER's columnExists guard would silently no-op against a
-// DB that still has the automation schema. So this test seeds tickets,
-// sessions, and prs rows through a real head-schema store, physically
-// rewinds the on-disk schema to its pre-73 shape (dropping the automation
-// tables and the tickets column, mirroring
-// TestMigration75DefaultsExistingRowsToEmptySpecYAML's technique), reopens so
-// migrations 73-76 run for real, and asserts every legacy row survived
-// alongside the new schema.
 func TestMigratesPopulatedPreAutomationsDatabaseToHead(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "pre-automations.db")
 
@@ -693,10 +627,8 @@ func TestMigratesPopulatedPreAutomationsDatabaseToHead(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	// Seeded via raw SQL rather than CreateTicket: CreateTicket's INSERT
-	// names automation_run_id explicitly, which would make seeding itself
-	// (not just the post-migration assertions below) depend on migration 73
-	// having already run — muddying the mutation-check this test exists for.
+	// Seeded via raw SQL: CreateTicket INSERT names automation_run_id, which would
+	// make the seed itself depend on migration 73 having already run.
 	tickets := []Ticket{
 		{ID: "legacy-ticket-1", Title: "Legacy ticket one", Status: TicketStatusTodo},
 		{ID: "legacy-ticket-2", Title: "Legacy ticket two", Status: TicketStatusWorking, Assignee: "agent-a"},
@@ -791,9 +723,6 @@ func TestMigratesPopulatedPreAutomationsDatabaseToHead(t *testing.T) {
 		t.Fatalf("schema version = %d, want %d", version, latestSchemaVersion())
 	}
 
-	// Every pre-existing row must survive with its original values, and
-	// automation_run_id must exist and be NULL for all of them (a legacy
-	// ticket has no automation provenance).
 	for _, tk := range tickets {
 		var title, status, assignee string
 		var automationRunID sql.NullString
@@ -834,7 +763,6 @@ func TestMigratesPopulatedPreAutomationsDatabaseToHead(t *testing.T) {
 		t.Fatalf("migrated PR = %+v, want title/repo/number preserved", gotPR)
 	}
 
-	// The new automation schema must exist alongside the preserved data.
 	for _, table := range []string{
 		"automation_definitions", "automation_occurrences", "automation_runs",
 		"automation_provider_cursors", "automation_review_request_edges",
@@ -960,7 +888,6 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Verify migrated columns exist by querying them
 	migratedColumns := []struct {
 		table  string
 		column string
@@ -1033,9 +960,8 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if _, err := migrated.Exec(`SELECT recoverable FROM sessions LIMIT 1`); err == nil {
 		t.Fatal("recoverable column still exists after migration")
 	}
-	// Rewind past 79: the runner resumes from MAX(version), so deleting only
-	// row 79 would leave a later migration's row holding the watermark and
-	// migration 79 would never re-run.
+	// Rewind past 79: the runner resumes from MAX(version), so deleting only row 79
+	// would leave a later row holding the watermark and 79 would never re-run.
 	if _, err := migrated.Exec(`DELETE FROM schema_migrations WHERE version >= 79`); err != nil {
 		t.Fatalf("rewind migration 79 after column drop: %v", err)
 	}
@@ -1242,8 +1168,8 @@ func TestMigration49_BackfillsRankInCreatedAtOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open raw sqlite db: %v", err)
 	}
-	// Pre-49 workspaces table: no rank column. Rows are inserted out of created_at
-	// order so the backfill must read created_at, not insertion/rowid order.
+	// Rows are inserted out of created_at order so the backfill must read created_at,
+	// not insertion/rowid order.
 	if _, err := rawDB.Exec(`
 		CREATE TABLE workspaces (
 			id TEXT PRIMARY KEY,
@@ -1302,12 +1228,10 @@ func TestMigration49_BackfillsRankInCreatedAtOrder(t *testing.T) {
 	}
 	rows.Close()
 
-	// created_at order is first < second < third, so ranks must sort the same way.
 	if !(ranks["ws-first"] < ranks["ws-second"] && ranks["ws-second"] < ranks["ws-third"]) {
 		t.Fatalf("ranks not strictly increasing in created_at order: %#v", ranks)
 	}
 
-	// Idempotent: reopening must not re-rank already-ranked rows.
 	db.Close()
 	reopened, err := OpenDB(dbPath)
 	if err != nil {
@@ -1401,31 +1325,26 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create DB and schema manually up to migration 19, then pre-add prs.host.
 	db, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() setup error = %v", err)
 	}
 	db.Close()
 
-	// Re-open raw and force migration state back to 19 while keeping host column.
 	raw, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() reopen setup error = %v", err)
 	}
 
-	// Delete migration markers for v20+ to simulate partially migrated DBs in the wild.
 	if _, err := raw.Exec("DELETE FROM schema_migrations WHERE version >= 20"); err != nil {
 		raw.Close()
 		t.Fatalf("DELETE migration >=20 markers error = %v", err)
 	}
 	if _, err := raw.Exec("ALTER TABLE prs ADD COLUMN host TEXT NOT NULL DEFAULT 'github.com'"); err != nil {
-		// On already-host databases this may fail; that still matches the scenario.
 		_ = err
 	}
 	raw.Close()
 
-	// Should not fail on duplicate host column when applying v20.
 	db2, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB() should handle existing prs.host in migration 20, got error = %v", err)
@@ -1440,7 +1359,6 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 		t.Fatalf("schema version = %d, want %d", version, latestSchemaVersion())
 	}
 
-	// Unique index from migration 20 should exist.
 	var idxName string
 	err = db2.QueryRow(`
 		SELECT name FROM sqlite_master
@@ -1453,7 +1371,6 @@ func TestMigration20_IdempotentWhenHostColumnAlreadyExists(t *testing.T) {
 		t.Fatalf("index name = %q, want idx_prs_host_repo_number", idxName)
 	}
 
-	// Migration table should contain version 20.
 	var count int
 	if err := db2.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 20").Scan(&count); err != nil {
 		t.Fatalf("count migration 20 row error = %v", err)
@@ -1558,11 +1475,6 @@ func TestMigration31_IdempotentWhenEndpointIDColumnAlreadyExists(t *testing.T) {
 	}
 }
 
-// TestMigration52RenamesKeeperBackupsAndRealignsSentinel proves the keeper rename
-// migration actually transforms a LEGACY DB: it renames the janitor-named backup
-// table to the keeper-named one and rewrites the persisted 'attn-janitor' sentinel
-// to 'attn-keeper' on existing workspace_contexts rows. (The fresh-DB happy path is
-// already covered by the table-existence test; this exercises the legacy data path.)
 func TestMigration52RenamesKeeperBackupsAndRealignsSentinel(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -1571,12 +1483,8 @@ func TestMigration52RenamesKeeperBackupsAndRealignsSentinel(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Seed a context row, then roll the DB back to a pre-52 shape: plant the legacy
-	// 'attn-janitor' sentinel, drop the keeper-named table, recreate the legacy
-	// janitor-named one, and unrecord migration 52 (and everything after it) so
-	// migrateDB re-applies it. getCurrentVersion is MAX-based, so a higher recorded
-	// version (53+) would otherwise gate 52's re-run out; the later migrations are
-	// idempotent and simply re-run as no-ops.
+	// getCurrentVersion is MAX-based, so a higher recorded version would gate the
+	// re-run out. The later migrations are idempotent and re-run as no-ops.
 	s.AddWorkspace(&protocol.Workspace{ID: "workspace-1", Title: "W", Directory: t.TempDir()})
 	if _, _, err := s.UpdateWorkspaceContext("workspace-1", "ctx", "session-1", 0); err != nil {
 		t.Fatalf("seed context: %v", err)
@@ -1654,13 +1562,10 @@ func TestMigration53AddsClosedStateColumnIdempotently(t *testing.T) {
 		return false
 	}
 
-	// A fresh DB has the column from migration 53.
 	if !hasClosedState() {
 		t.Fatal("closed_state column missing after migrations")
 	}
 
-	// Re-applying migration 53 over an existing column must be a no-op (the
-	// columnExists guard), not a duplicate-column error. Unrecord 53 and re-migrate.
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 53`); err != nil {
 		t.Fatalf("unrecord migration 53: %v", err)
 	}
@@ -1720,9 +1625,8 @@ func TestMigration118CarriesTicketBoardScaleToGardenScale(t *testing.T) {
 			}
 			defer s.Close()
 
-			// Roll back to a pre-118 shape so migrateDB re-applies it over the
-			// seeded rows. getCurrentVersion is MAX-based, so the recorded
-			// version has to come out too.
+			// getCurrentVersion is MAX-based, so the recorded version has to come out too
+			// for migrateDB to re-apply 118 over the seeded rows.
 			for k, v := range tc.seed {
 				if _, err := s.db.Exec(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`, k, v); err != nil {
 					t.Fatalf("seed %s: %v", k, err)

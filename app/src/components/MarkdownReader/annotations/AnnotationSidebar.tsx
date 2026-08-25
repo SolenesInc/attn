@@ -1,21 +1,3 @@
-/**
- * AnnotationSidebar — the right rail inside the markdown tile listing every
- * annotation in document order.
- *
- * Contract (spec E18–E22):
- * - cards sorted by document position (anchor.startLine, then anchor.start);
- *   globals last, by createdAt — lines are re-baselined fresh so sorting on
- *   them is exact;
- * - card click focuses: highlight glows + scrolls to center (engine skips
- *   the scroll for just-created ids); orphan cards never scroll (nothing is
- *   painted);
- * - orphan cards show an "⚠ moved" badge, the quote, and `~line N (moved)`
- *   with the last-known startLine; still deletable;
- * - hover-reveal delete per card (delete is the undo — donor parity);
- * - header: count pill (collapse toggle), "+ Global comment", "Clear all"
- *   with an inline two-step confirm wired to the tombstoning clear.
- */
-
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationOrphanReason } from './useAnnotations';
 import { LABEL_COLOR_MAP, quickLabelById } from './quickLabels';

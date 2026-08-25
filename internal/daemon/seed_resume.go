@@ -8,18 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Seed "Resume" reopens the agent that tends a seed. The daemon owns the whole
-// composite — validate, register workspace, add pane, spawn, roll back on
-// failure — mirroring delegate(). The frontend sends one command and focuses
-// the result; the session and pane reach it through the normal
-// session_registered / workspace_layout_updated broadcasts.
-//
-// The inputs all come from the daemon. A dispatch record is authoritative when
-// one exists; a seed-owned identity is the fallback for pre-garden and external
-// conversations attn did not launch.
-//
-// Resume writes NOTHING to the seed: reopening a delegate is not a note about
-// its work, and the seed's lifecycle is only ever moved by a deliberate verb.
+// Resume writes NOTHING to the seed: reopening a delegate is not a note about its
+// work, and the seed's lifecycle is only ever moved by a deliberate verb.
 
 type seedResumeOutcome struct {
 	SessionID      string
@@ -27,9 +17,6 @@ type seedResumeOutcome struct {
 	AlreadyRunning bool
 }
 
-// resumeSeed reopens the conversation attached to seedID. A surviving tender's
-// session id stays stable; an external conversation uses its agent-native id as
-// the new container id. A tracked container is focused, not spawned twice.
 func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
@@ -45,9 +32,8 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 	sessionID := strings.TrimSpace(seed.TenderSession)
 	if sessionID != "" {
 		if existing := d.store.Get(sessionID); existing != nil {
-			// The tender is still tracked — focus it instead of spawning a duplicate.
-			// Re-spawning its id would poison the local store; a dead-but-recoverable
-			// pane revives itself via the attach path on mount.
+			// The tender is still tracked — re-spawning its id would poison the local store;
+			// a dead-but-recoverable pane revives itself via the attach path on mount.
 			return &seedResumeOutcome{
 				SessionID:      existing.ID,
 				WorkspaceID:    existing.WorkspaceID,
@@ -71,8 +57,6 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 			return nil, fmt.Errorf("%s was tended by session %s, which attn did not launch — nothing to reopen", seedID, sessionID)
 		}
 		seedFallback = true
-		// An external conversation has no attn container id to preserve. Reusing
-		// its native id gives repeat Resume clicks one stable container to focus.
 		if sessionID == "" {
 			sessionID = resumeID
 		}
@@ -86,25 +70,20 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 		return nil, fmt.Errorf("%s has no agent session to resume", seedID)
 	}
 
-	// A dispatch-backed resume lets the spawn pipeline resolve its mirrored id.
-	// A seed-backed resume passes it directly; ResumePicker still provides the
-	// cwd picker if the driver says the conversation is gone.
 	var directResume *string
 	if seedFallback {
 		directResume = protocol.Ptr(resumeID)
 	}
 
-	// A worktree may have been removed since the session closed — validate before
-	// any side effects so a missing directory is a clean error, not a phantom
-	// workspace left behind.
+	// A worktree may have been removed since the session closed — validate before any
+	// side effects so a missing directory is a clean error, not a phantom workspace.
 	directory, err := validateDelegationDirectory(cwd)
 	if err != nil {
 		return nil, err
 	}
 
-	// Register the workspace under the same id delegate() uses. Only unregister it on
-	// rollback if this call created it — a re-register is idempotent and preserves a
-	// stored rename (handleRegisterWorkspace's title guard), so it must survive.
+	// Unregister on rollback only if this call created the workspace — a re-register is
+	// idempotent and preserves a stored rename (handleRegisterWorkspace's title guard).
 	workspaceID := "workspace-" + sessionID
 	rollback := d.newDelegationRollback()
 	if d.store.GetWorkspace(workspaceID) == nil {
@@ -135,8 +114,7 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 	rollback.onPaneCreated(sessionID)
 
 	// ResumePicker (not a passed ResumeSessionID) keeps handleSpawnSession the single
-	// resume-id resolver: its resume branch resolves the mirrored id for this
-	// session, downgrading to the cwd-scoped picker when the transcript is gone.
+	// resume-id resolver, downgrading to the cwd picker when the transcript is gone.
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSession(spawnClient, &protocol.SpawnSessionMessage{
 		Cmd:             protocol.CmdSpawnSession,
@@ -169,10 +147,6 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 	return &seedResumeOutcome{SessionID: sessionID, WorkspaceID: workspaceID}, nil
 }
 
-// handleSeedResume runs the resume composite and replies with a
-// seed_resume_result, correlated by request_id. The reply carries the session to
-// focus; the session and pane themselves reach the UI through the normal
-// broadcasts.
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
 	outcome, err := d.resumeSeed(msg.SeedID)

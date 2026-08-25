@@ -1,10 +1,5 @@
-// app/src/components/KeyCaptureInput.tsx
-// Records a binding for the shortcut editor. In 'combo' mode it captures one
-// keystroke; in 'chord' mode it captures a leader then a follow key. While
-// recording it suspends the global shortcut dispatcher across every step so
-// recording a combo (even an always-enabled one like ⌘Q) never fires its
-// action. The parent owns "which row is recording" so only one capture is ever
-// active.
+// While recording, the global shortcut dispatcher is suspended across every step,
+// so capturing a combo never fires its action.
 
 import { useEffect, useRef, useState } from 'react';
 import { Binding, Combo, Chord } from '../shortcuts/registry';
@@ -38,7 +33,6 @@ export function KeyCaptureInput({
   onCancel,
 }: KeyCaptureInputProps) {
   const [error, setError] = useState<string | null>(null);
-  // The captured leader while a chord is being recorded (step 1 -> step 2).
   const [leader, setLeader] = useState<Combo | null>(null);
 
   const onCaptureRef = useRef(onCapture);
@@ -76,7 +70,6 @@ export function KeyCaptureInput({
         onCaptureRef.current(result.def);
         return;
       }
-      // Chord: first capture the leader, then the follow key.
       if (!leaderRef.current) {
         if (isRiskyBinding(result.def)) {
           setError('A chord leader needs a ⌘ or ⌥ modifier.');

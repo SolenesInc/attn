@@ -203,10 +203,6 @@ func TestParseDelegatePlacementAndWorktree(t *testing.T) {
 	}
 }
 
-// TestParseMessageRejectsRetiredDispatchCommands asserts the chief-of-staff
-// dispatch command namespace is fully gone: every retired verb now parses as an
-// unknown command rather than a recognized one. set_ticket_status (the surviving
-// agent self-report) is covered separately.
 func TestParseMessageRejectsRetiredDispatchCommands(t *testing.T) {
 	retired := []string{
 		"list_dispatches",

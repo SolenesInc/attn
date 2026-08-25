@@ -24,10 +24,8 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   };
 }
 
-// A row says what is exceptional about a seed and nothing else: most seeds are
-// takeable, so being takeable earns no word and being held up does. What the
-// panel owns is the reverse direction of an edge — edges are stored on the seed
-// they point from, so "who blocks me" only exists by reading the whole garden.
+// Edges are stored on the seed they point FROM, so "who blocks me" only exists by
+// reading the whole garden.
 describe('GardenPanel edges', () => {
   const blocker = seed({ id: 's-aaa111', title: 'the blocker', ready: true });
   const blocked = seed({
@@ -35,9 +33,6 @@ describe('GardenPanel edges', () => {
     title: 'the blocked one',
     edges: [{ kind: 'part-of', to: 's-ccc111' }],
   });
-  // The crown carries plot progress the way the daemon always pushes it for a
-  // seed with children — and the way the panel needs it, since children only
-  // render inside their plot now.
   const crown = seed({
     id: 's-ccc111',
     title: 'the crown',
@@ -62,8 +57,6 @@ describe('GardenPanel edges', () => {
     expect(screen.getByText('blocked by 1')).toBeInTheDocument();
   });
 
-  // Harvesting the blocker is the whole point of the edge: the dependent stops
-  // being blocked at the next read, with nobody clearing anything by hand.
   it('stops counting a harvested blocker', () => {
     const { rerender } = render(
       <GardenPanel isOpen onClose={vi.fn()} seedsTotal={3} seeds={chain('planted')} />,
@@ -111,9 +104,6 @@ describe('GardenPanel edges', () => {
     expect(container.querySelector('.garden-relations')?.textContent).toContain('the discovered work');
   });
 
-  // A blocker in another plot still blocks. Walking into a plot scopes what is
-  // listed, but edges are read against the whole push — or a seed held up from
-  // outside reads as free.
   it('counts a blocker from outside the plot it is standing in', () => {
     const away = seed({
       id: 's-ddd111',

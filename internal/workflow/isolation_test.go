@@ -14,9 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// recordingStub captures the AgentCall it received so a test can assert the host
-// threaded isolation/model/schema off the agent() opts object. It returns a fixed
-// schema-valid result so the engine completes.
 type recordingStub struct {
 	mu     sync.Mutex
 	calls  []AgentCall
@@ -40,9 +37,6 @@ func (s *recordingStub) only(t *testing.T) AgentCall {
 	return s.calls[0]
 }
 
-// TestHostThreadsIsolationModelSchemaToStub drives the FULL engine path and proves
-// the host extracts isolation/model off the agent() opts object and threads them
-// (plus the schema) into the AgentCall handed to the stub.
 func TestHostThreadsIsolationModelSchemaToStub(t *testing.T) {
 	stub := &recordingStub{result: json.RawMessage(`{"ok":true}`)}
 	script := `export const meta={name:'t',description:'d'};
@@ -72,9 +66,6 @@ func TestHostThreadsIsolationModelSchemaToStub(t *testing.T) {
 	}
 }
 
-// TestHostDefaultsIsolationEmptyWhenNoOpt proves the no-isolation path: an agent()
-// call with no isolation opt yields call.Isolation == "" (the shared-working-tree,
-// E3-byte-identical default), and an unknown isolation value normalizes to "".
 func TestHostDefaultsIsolationEmptyWhenNoOpt(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -98,10 +89,6 @@ func TestHostDefaultsIsolationEmptyWhenNoOpt(t *testing.T) {
 	}
 }
 
-// --- worktree round-trip (real git, hermetic) -------------------------------
-
-// initTestRepo creates a temp git repo with a user config + an initial commit so
-// `git worktree add` and `git status` behave normally. Returns the repo dir.
 func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -126,7 +113,6 @@ func initTestRepo(t *testing.T) string {
 	return git.CanonicalizePath(dir)
 }
 
-// worktreePaths returns the set of worktree paths git currently tracks for repo.
 func worktreePaths(t *testing.T, repo string) map[string]bool {
 	t.Helper()
 	entries, err := git.ListWorktrees(repo)
@@ -158,17 +144,12 @@ func newIsolationTestDriverAgent(t *testing.T, repo string, runner headlessRunne
 	return da
 }
 
-// TestWorktreeIsolationKeepsMutatedWorktree (Case A): the subagent writes a file
-// into its fresh worktree CWD. The call returns the schema result AND the worktree
-// is KEPT (still listed by git) because the mutations are the consumed side effect.
 func TestWorktreeIsolationKeepsMutatedWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 
 	var sawCWD string
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		sawCWD = req.CWD
-		// The subagent ran in a FRESH worktree: not the main repo, a real dir, and a
-		// registered worktree.
 		if req.CWD == repo {
 			t.Fatalf("isolated call ran in the main repo, not a fresh worktree: %q", req.CWD)
 		}
@@ -178,8 +159,6 @@ func TestWorktreeIsolationKeepsMutatedWorktree(t *testing.T) {
 		if !worktreePaths(t, repo)[git.CanonicalizePath(req.CWD)] {
 			t.Fatalf("worktree CWD %q is not a registered worktree", req.CWD)
 		}
-		// Mutate the worktree (a tracked-but-modified file => git-dirty) AND write
-		// the schema result so the call succeeds.
 		if err := os.WriteFile(filepath.Join(req.CWD, "README.md"), []byte("mutated by agent\n"), 0o600); err != nil {
 			t.Fatalf("agent write into worktree: %v", err)
 		}
@@ -195,7 +174,6 @@ func TestWorktreeIsolationKeepsMutatedWorktree(t *testing.T) {
 	if !jsonStringEqual(string(got), `{"answer":"did work"}`) {
 		t.Fatalf("result = %s, want {\"answer\":\"did work\"}", got)
 	}
-	// The mutated worktree must be KEPT.
 	if !worktreePaths(t, repo)[git.CanonicalizePath(sawCWD)] {
 		t.Fatalf("mutated worktree %q was removed; it must be kept", sawCWD)
 	}
@@ -204,8 +182,6 @@ func TestWorktreeIsolationKeepsMutatedWorktree(t *testing.T) {
 	}
 }
 
-// TestWorktreeIsolationRemovesCleanWorktree (Case B): the subagent writes ONLY the
-// schema result (no tree change). The worktree is AUTO-REMOVED after the run.
 func TestWorktreeIsolationRemovesCleanWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 
@@ -215,8 +191,6 @@ func TestWorktreeIsolationRemovesCleanWorktree(t *testing.T) {
 		if !worktreePaths(t, repo)[git.CanonicalizePath(req.CWD)] {
 			t.Fatalf("worktree CWD %q is not a registered worktree", req.CWD)
 		}
-		// No tree change: only the result file (which lives in runTmpDir, not the
-		// worktree), so the worktree stays git-clean.
 		writeValid(t, req.ResultPath, `{"answer":"no edits"}`)
 		return agentdriver.HeadlessTaskResult{}, nil
 	}}
@@ -229,7 +203,6 @@ func TestWorktreeIsolationRemovesCleanWorktree(t *testing.T) {
 	if !jsonStringEqual(string(got), `{"answer":"no edits"}`) {
 		t.Fatalf("result = %s", got)
 	}
-	// The clean worktree must be AUTO-REMOVED.
 	if worktreePaths(t, repo)[git.CanonicalizePath(sawCWD)] {
 		t.Fatalf("clean worktree %q is still listed; it must be auto-removed", sawCWD)
 	}
@@ -238,8 +211,6 @@ func TestWorktreeIsolationRemovesCleanWorktree(t *testing.T) {
 	}
 }
 
-// TestWorktreeIsolationNoneRunsInWorkingTree (Case C): isolation == "" runs in the
-// shared working tree and creates NO worktree.
 func TestWorktreeIsolationNoneRunsInWorkingTree(t *testing.T) {
 	repo := initTestRepo(t)
 	before := worktreePaths(t, repo)
@@ -262,17 +233,12 @@ func TestWorktreeIsolationNoneRunsInWorkingTree(t *testing.T) {
 	}
 }
 
-// TestWorktreeIsolationFailedRunKeepsMutatedWorktree proves the cleanup rule is
-// outcome-independent: a FAILED run that still dirtied the worktree keeps it (so a
-// partial mutation is never silently discarded), while the call still returns the
-// terminal error (engine -> null).
 func TestWorktreeIsolationFailedRunKeepsMutatedWorktree(t *testing.T) {
 	repo := initTestRepo(t)
 
 	var sawCWD string
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		sawCWD = req.CWD
-		// Dirty the tree but NEVER write a result -> terminal failure after retries.
 		_ = os.WriteFile(filepath.Join(req.CWD, "README.md"), []byte("half-done\n"), 0o600)
 		return agentdriver.HeadlessTaskResult{}, nil
 	}}
@@ -290,8 +256,6 @@ func TestWorktreeIsolationFailedRunKeepsMutatedWorktree(t *testing.T) {
 	}
 }
 
-// TestWorktreeIsolationModelOverride proves call.Model overrides the agent's
-// default model for the isolated subagent request.
 func TestWorktreeIsolationModelOverride(t *testing.T) {
 	repo := initTestRepo(t)
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
@@ -301,7 +265,7 @@ func TestWorktreeIsolationModelOverride(t *testing.T) {
 		writeValid(t, req.ResultPath, `{"answer":"ok"}`)
 		return agentdriver.HeadlessTaskResult{}, nil
 	}}
-	da := newIsolationTestDriverAgent(t, repo, runner) // default model "test-model"
+	da := newIsolationTestDriverAgent(t, repo, runner)
 
 	if _, err := da.Run(context.Background(), AgentCall{Ordinal: ordForTest(), Prompt: "x", Schema: json.RawMessage(testSchema), Isolation: "worktree", Model: "override-model"}); err != nil {
 		t.Fatalf("Run error: %v", err)

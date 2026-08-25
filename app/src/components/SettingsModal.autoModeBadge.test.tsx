@@ -68,8 +68,6 @@ function renderModal(isOpen = true) {
 }
 
 describe('SettingsModal auto mode badge', () => {
-  // Proposals nobody sees are proposals that rot: the count has to be on the
-  // nav row before anyone opens the section.
   it('counts waiting proposals on the nav row without opening the section', async () => {
     daemonApi.sendAutoModeGet.mockResolvedValue(autoModeState(3));
     renderModal();
@@ -77,9 +75,7 @@ describe('SettingsModal auto mode badge', () => {
     const nav = await screen.findByTestId('settings-nav-autoMode');
     await waitFor(() => expect(nav).toHaveTextContent('3'));
     expect(nav.querySelector('.settings-nav-count')).toHaveClass('waiting');
-    // Reading happens once for both surfaces, not once per surface.
     expect(daemonApi.sendAutoModeGet).toHaveBeenCalledTimes(1);
-    // Still on whichever section was open — the badge did not navigate anyone.
     expect(screen.queryByTestId('settings-automode-config')).toBeNull();
   });
 
@@ -101,8 +97,6 @@ describe('SettingsModal auto mode badge', () => {
     expect(screen.getByTestId('settings-section-autoMode')).toBeInTheDocument();
   });
 
-  // A closed panel holds nothing: no read while it is shut, and no stale
-  // snapshot kept across a close.
   it('reads nothing while the modal is closed', async () => {
     daemonApi.sendAutoModeGet.mockClear();
     daemonApi.sendAutoModeGet.mockResolvedValue(autoModeState(2));

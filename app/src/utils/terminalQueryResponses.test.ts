@@ -5,9 +5,8 @@ const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
 
 describe('stripDaemonOwnedResponses', () => {
-  // The daemon owns CPR, DA1, and OSC 10/11/12 color replies; the frontend
-  // must not forward its own, or the shell reads the duplicate reply as
-  // stray input.
+  // The daemon owns CPR, DA1, and OSC 10/11/12 color replies; a forwarded duplicate
+  // is read by the shell as stray input.
 
   it('drops a standalone cursor position report', () => {
     expect(stripDaemonOwnedResponses(ESC + '[24;1R')).toBe('');

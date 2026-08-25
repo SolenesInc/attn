@@ -1,8 +1,4 @@
 // @vitest-environment node
-// The first-party binding read against the real module: every accessor the app
-// calls, exercised on content whose expected value is obvious from the VT that
-// produced it. The struct offsets in abi.ts are asserted here by consequence —
-// a layout that moved upstream reads the wrong byte and fails a case by name.
 // @ts-expect-error -- @types/node is only a transitive peer here (see kittyWireRewrite.parity.test.ts)
 import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
@@ -109,8 +105,6 @@ describe('GhosttyTerminal', () => {
     t.write('end\r\n');
     t.update();
 
-    // Oldest row first: the two fillers, then each styled line as the next
-    // pushed it out of the 2-row screen.
     expect(t.getScrollbackLength()).toBe(7);
     const first = (row: number) => t.getScrollbackLine(row)![0];
     expect(first(0)).toMatchObject({ codepoint: 'f'.codePointAt(0), fg_r: 0x44, fg_g: 0x55, fg_b: 0x66, bg_r: 0x11, bg_g: 0x22, bg_b: 0x33 });
@@ -135,7 +129,6 @@ describe('GhosttyTerminal', () => {
 
   it('exposes a combining cluster as one grapheme string', () => {
     const t = terminal();
-    // Mode 2027 keeps the cluster in a single cell.
     t.write('\x1b[?2027h');
     t.write('é');
     t.update();
@@ -158,11 +151,7 @@ describe('GhosttyTerminal', () => {
     t.free();
   });
 
-  // The app reads the cursor and the viewport straight after writing the bytes
-  // that moved them — OSC 133 segmentation records a command block's row that
-  // way, and a restore seeds block anchors that way. Reading the render state
-  // without syncing answers as of the previous frame, which put every block on
-  // a stale row and broke click-to-select after an attach.
+  // A read without syncing answers as of the previous frame.
   it('reads back a write without an explicit update', () => {
     const t = terminal(20, 5);
     t.write('abc');
@@ -173,12 +162,7 @@ describe('GhosttyTerminal', () => {
     t.free();
   });
 
-  // A read between frames must not eat the repaint: ghostty hands over the
-  // dirty set once and clears it, so the sync those reads trigger has to
-  // accumulate rather than consume.
-  // Reads sync the render state, and only markClean() ends a frame. A read
-  // between frames must therefore leave the dirty set intact — otherwise a
-  // block-anchor or cursor read would silently eat somebody's repaint.
+  // ghostty hands the dirty set over once and clears it, so a read between frames must accumulate.
   it('keeps dirty rows through a read that syncs the render state', () => {
     const t = terminal(20, 5);
     t.update();
@@ -219,7 +203,7 @@ describe('GhosttyTerminal', () => {
 
   it('reads DEC modes, including the ones the app gates behavior on', () => {
     const t = terminal();
-    expect(t.getMode(7)).toBe(true); // wraparound, on by default
+    expect(t.getMode(7)).toBe(true);
     expect(t.hasBracketedPaste()).toBe(false);
     t.write('\x1b[?2004h\x1b[?1006h\x1b[?7l');
     expect(t.hasBracketedPaste()).toBe(true);
@@ -241,10 +225,7 @@ describe('GhosttyTerminal', () => {
     t.free();
   });
 
-  // Every scalar getter shares one wasm scratch buffer, so each must read
-  // exactly the width the ABI declares for its field. rowWrapsIntoNext leaves a
-  // 64-bit row handle there, and hover detection calls it on the row above the
-  // pointer before the next wheel event asks about mouse tracking.
+  // Every scalar getter shares one wasm scratch buffer, so each must read exactly the ABI width.
   it('answers scalar reads truthfully after a wide write left a handle in the scratch buffer', () => {
     const t = terminal(20, 5, { scrollbackLimit: 1 << 20 });
     for (let i = 0; i < 40; i += 1) t.write(`line${i}\r\n`);
@@ -277,9 +258,6 @@ describe('GhosttyTerminal', () => {
     t.free();
   });
 
-  // Readers that want one line must not pay for the grid. The row this hands
-  // back has to be indistinguishable from getViewport()'s slice of it,
-  // including the blank tail past the row's last written cell.
   it('reads one active row without decoding the rest of the viewport', () => {
     const t = terminal(20, 4);
     t.write('alpha\r\nbravo\r\ncharlie');
@@ -297,9 +275,7 @@ describe('GhosttyTerminal', () => {
     t.free();
   });
 
-  // The flag marks the row the text wraps OUT of, not the one it continues
-  // into. Callers ask the opposite question, and reading it in the wrong
-  // direction silently drops a link that soft-wraps across rows.
+  // The flag marks the row the text wraps OUT of; the wrong direction silently drops a soft-wrapped link.
   it('marks the row a soft wrap starts on, not the one it continues onto', () => {
     const t = terminal(10, 5);
     t.write('0123456789abc');

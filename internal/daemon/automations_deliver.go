@@ -33,9 +33,6 @@ func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	var retryable *retryableAutomationDeliveryError
 	if errors.As(deliveryErr, &retryable) {
-		// A session can be live before its startup screen is verifiable. Keep the
-		// durable run pending so an explicit retry or daemon recovery re-enters the
-		// stable-ID ensure path instead of stranding an agent behind a failed run.
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
 	}
@@ -49,8 +46,6 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	now := time.Now()
 	var persistErr error
-	// Keep any stable-ID workspace, pane, or session artifacts for diagnosis and
-	// steering. Recovery never creates a second artifact set.
 	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
 	}
@@ -59,9 +54,6 @@ func (d *Daemon) failAutomationRun(run *store.AutomationRun, deliveryErr error) 
 	} else if ticket != nil {
 		comment := automationFailureComment(run, ticket, deliveryErr.Error())
 		if ticket.AutomationRunID != "" && ticket.AutomationRunID != run.ID {
-			// A later per-subject occurrence must not rewrite the outcome of the
-			// successful run that created the shared reviewer ticket. The failed run
-			// remains visible in run history and the ticket receives durable activity.
 			if _, err := d.store.AddTicketComment(ticket.ID, "automation:"+run.DefinitionID, comment, now); err != nil {
 				persistErr = errors.Join(persistErr, fmt.Errorf("record continuation failure: %w", err))
 			}
@@ -89,11 +81,6 @@ func automationFailureComment(run *store.AutomationRun, ticket *store.Ticket, me
 	return comment
 }
 
-// cancelAutomationRun mirrors failAutomationRun's ticket/broadcast side
-// effects for a run that never gets to run, rather than one that ran and
-// failed: state becomes cancelled with reason, not failed. Used for
-// withdrawal (reason review_withdrawn) so the terminal state matches why
-// nothing was delivered, distinct from a genuine delivery failure.
 func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message string) (*store.AutomationRun, error) {
 	now := time.Now()
 	var persistErr error
@@ -178,23 +165,12 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 		return err
 	}
 	d.publishTicketFact(FactTicketChanged, run.TicketID)
-	// This pending->delivered transition broadcast has no unit-test coverage:
-	// every unit test that reaches deliverAutomationRun's success path does so
-	// through automationDeliveryHook (bypassing this real delivery return) or
-	// forces a deterministic pre-broadcast failure (e.g.
-	// TestDisabledAutomationRefusesRecoveredPendingDelivery,
-	// TestScheduledPendingRunRecoversOnRestart's failed-transition variant).
-	// Reaching this line for real requires a full materializeAutomationRun spawn, which is
-	// out of reach for a unit test; the invariant is pinned live instead by
-	// scenario-automation-surface.mjs leg2_run_now_and_navigable, which drives
-	// a real run-now to `delivered` and asserts the panel reflects it.
+	// No unit-test coverage: pinned live by scenario-automation-surface.mjs
+	// leg2_run_now_and_navigable.
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	return nil
 }
 
-// materializeAutomationRun performs the ticket-first sequence of side effects
-// that turns a WorkRequest into a live ticket, workspace, pane, and session,
-// verifying delivery at the end.
 func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.WorkRequest) (automation.DeliveryResult, error) {
 	if err := d.ensureAutomationTicket(ctx, req); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("ensure ticket: %w", err)
@@ -221,9 +197,7 @@ func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.Wo
 	return automation.DeliveryResult{TicketID: req.IDs.TicketID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
 }
 
-// automationBindingStoreAdapter adapts *store.Store to automation.BindingStore,
-// the dependency-inverted seam ResolveContinuation depends on instead of
-// touching tickets directly. internal/automation never imports internal/store.
+// The seam that keeps internal/automation from ever importing internal/store.
 type automationBindingStoreAdapter struct{ store *store.Store }
 
 func (a automationBindingStoreAdapter) GetActiveContinuityBinding(definitionID, continuityKey string) (*automation.Binding, error) {
@@ -254,9 +228,6 @@ func (d *Daemon) resolveAutomationContinuation(definitionID, continuityKey, ownT
 	return cont, nil
 }
 
-// validateAutomationContinuation fails unsafe later cycles before materializeAutomationRun's
-// ticket-first side effects. prepareAutomationLocation and ensureAutomationSession repeat the critical
-// checks as defense in depth after the durable event has been accepted.
 func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) error {
 	if req.ContinuityKey == "" {
 		return nil
@@ -266,11 +237,8 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 		return err
 	}
 	if ticket == nil {
-		// req's own thread's binding is either absent, active pointing at req's
-		// own not-yet-created ticket (the thread being born right now), or
-		// active with a ticket that has genuinely vanished (e.g.
-		// store.SweepExpiredTickets) — only the last case self-heals; see
-		// automation.ResolveContinuation.
+		// A binding pointing at req's own not-yet-created ticket is the thread being
+		// born; only a genuinely vanished ticket self-heals.
 		_, err := d.resolveAutomationContinuation(req.DefinitionID, req.ContinuityKey, req.IDs.TicketID)
 		return err
 	}
@@ -292,8 +260,6 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 	if !originSnapshot.ContinuationContract().Equal(reqContract) {
 		return errors.New("automation reviewer contract changed; refusing to reuse a session with stale instructions")
 	}
-	// GitHub continuity stays bound to one PR subject while its immutable head
-	// input advances. Scheduled occurrences carry a different payload shape.
 	if req.Provider == "github" {
 		originOccurrence, err := d.store.GetAutomationOccurrence(origin.OccurrenceID)
 		if err != nil || originOccurrence == nil {
@@ -374,16 +340,10 @@ func (d *Daemon) ensureAutomationTicket(_ context.Context, req automation.WorkRe
 			return err
 		}
 		d.publishTicketFact(FactTicketChanged, req.IDs.TicketID)
-		// The ticket event is the durable payload. Use the ordinary content-free
-		// doorbell so an idle live reviewer learns that a new cycle is waiting.
 		d.notifyTicketObservers(req.IDs.TicketID)
 		return nil
 	}
 	if req.ContinuityKey != "" {
-		// See resolveAutomationContinuation: an active binding pointing at req's
-		// own not-yet-created ticket is the thread being born right now, not
-		// dangling; only a binding whose ticket has genuinely vanished
-		// self-heals (releases the binding) rather than refusing here.
 		if _, err := d.resolveAutomationContinuation(req.DefinitionID, req.ContinuityKey, req.IDs.TicketID); err != nil {
 			return err
 		}
@@ -563,8 +523,8 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 			}
 			return automation.PreparedLocation{}, fmt.Errorf("inspect reviewer continuity worktree: %w", err)
 		}
-		// A delivered origin proves that this stable session owned the worktree.
-		// Preserve its commits, branch switch, and local changes when resuming.
+		// A delivered origin proves this stable session owned the worktree: preserve
+		// its commits, branch switch, and local changes when resuming.
 		sessionPersisted = true
 	}
 	if _, err := attngit.EnsureAutomationSessionWorktree(mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted); err != nil {
@@ -629,18 +589,14 @@ func (d *Daemon) ensureAutomationSession(_ context.Context, req automation.WorkR
 		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.WorkspaceID != req.IDs.WorkspaceID || string(existing.Agent) != req.Launch.Agent {
 			return fmt.Errorf("persisted session does not match automation snapshot")
 		}
-		// Startup PTY recovery only adopts a still-live worker; it never respawns
-		// one from this incomplete session row. A live worker therefore already
-		// has this run's original launch contract. If no worker survived,
-		// handleSpawnSession below recreates it from the immutable run snapshot.
 	}
 	inputPath, err := d.ensureAutomationOccurrenceInput(req)
 	if err != nil {
 		return err
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
-		// Worker recovery adopted the already-correct original launch. Do not ask
-		// the backend to spawn the stable session ID a second time.
+		// Worker recovery adopted the original launch; do not spawn the stable
+		// session ID a second time.
 		return d.verifyUnattendedLaunch(req)
 	}
 	if continuationRun != nil {
@@ -665,12 +621,8 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if definition, err := d.store.GetAutomationDefinition(req.DefinitionID); err == nil && definition != nil {
 		definitionName = definition.Name
 	}
-	// An automation run reports where every other launched agent reports: its
-	// seed. The bind is keyed by session id, so a continuation run re-binds the
-	// seed the first occurrence planted rather than planting a second one, and
-	// the run's ticket — still what continuation, retention and crash
-	// classification are keyed on — moves from the daemon's mirror of what the
-	// agent does in the garden.
+	// Keyed by session id, so a continuation run re-binds the seed the first
+	// occurrence planted rather than planting a second one.
 	seedID, err := d.bindDelegationSeed(req.IDs.SessionID, "", req.Prompt, req.DefinitionID, "", directory, req.Launch.Agent, false)
 	if err != nil {
 		return err
@@ -776,9 +728,6 @@ func automationSessionPrompt(configuredPrompt, inputPath, seedID, definitionName
 
 const codexDirectoryTrustPrompt = "Do you trust the contents of this directory?"
 
-// stripANSIForPromptMatch removes terminal control sequences from a rendered VT
-// stream so screen prompts can be matched independently of formatting and cursor
-// positioning.
 func stripANSIForPromptMatch(data []byte) string {
 	out := make([]byte, 0, len(data))
 	for i := 0; i < len(data); {
@@ -820,12 +769,8 @@ func stripANSIForPromptMatch(data []byte) string {
 	return string(out)
 }
 
-// passUnattendedLaunchGate completes the one driver-owned confirmation that is
-// still shown for some non-repository directories even when Codex receives an
-// explicit trusted-project override. Definition application is the user's
-// authorization for the configured directory; occurrence payload never affects
-// this choice. Exact screen matching keeps ordinary prompts and agent input out
-// of this path.
+// Applying the definition IS the user's authorization for that directory; exact
+// screen matching keeps other prompts out.
 func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil
@@ -856,8 +801,6 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 			} else if acknowledged {
 				return nil
 			} else if time.Until(deadline) < 5*time.Second && len(payload) > 0 {
-				// A populated screen with no trust chooser after the startup half of
-				// the window means the launch did not need this compatibility gate.
 				return nil
 			}
 		}

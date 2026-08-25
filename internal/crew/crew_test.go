@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-// writeCrewFixture builds a copy of the real `~/.attn/crew` shape: three
-// members, each with a charter and dated handoff files, plus the loose CREW.md
-// that sits beside the homes. Copied by shape, never from the live directory.
+// Built by shape, never copied from the live `~/.attn/crew`.
 func writeCrewFixture(t *testing.T) string {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "crew")
@@ -69,8 +67,6 @@ func TestScanHomes_ReadsEveryHomeAndPointsAtItsFiles(t *testing.T) {
 	}
 }
 
-// The registry records where a home lives; the prose stays on disk. Nothing a
-// scan produces carries the charter's text.
 func TestScanHomes_CarriesNoProse(t *testing.T) {
 	root := writeCrewFixture(t)
 	body := "the charter's own words"
@@ -93,9 +89,7 @@ func TestScanHomes_CarriesNoProse(t *testing.T) {
 
 func TestScanHomes_SkipsWhatIsNotAHome(t *testing.T) {
 	root := writeCrewFixture(t)
-	// A directory with no charter is not a home — a stray notes folder.
 	mustWrite(t, filepath.Join(root, "scratch", "note.md"), "not a member\n")
-	// A directory whose name cannot be a member id is named, not swallowed.
 	mustWrite(t, filepath.Join(root, "Not A Member", CharterFileName), "# nope\n")
 
 	var warnings []string
@@ -113,8 +107,6 @@ func TestScanHomes_SkipsWhatIsNotAHome(t *testing.T) {
 	}
 }
 
-// A fresh install has no crew directory. That is an empty roster, not a
-// failure: nothing should log or refuse over it.
 func TestScanHomes_MissingDirectoryIsAnEmptyRoster(t *testing.T) {
 	members, err := ScanHomes(filepath.Join(t.TempDir(), "no-crew-here"), func(string, ...any) {
 		t.Error("a missing crew directory warned")
@@ -140,7 +132,6 @@ func TestValidateID(t *testing.T) {
 	}
 }
 
-// The limit failure names the limit, its value, and the ask.
 func TestValidateID_LongNameNamesTheLimitAndTheAsk(t *testing.T) {
 	asked := strings.Repeat("a", MaxIDChars+7)
 	err := ValidateID(asked)
@@ -163,8 +154,6 @@ func TestResolve_FoldsCaseAndAnswersNoForStrangers(t *testing.T) {
 			t.Errorf("Resolve(%q) = %v, %v; want trellis", name, member.ID, ok)
 		}
 	}
-	// A worker's free-string name is not a member and resolving says so rather
-	// than erroring: unregistered tenders keep tending.
 	if _, ok := Resolve("some-worker", members); ok {
 		t.Error("Resolve matched an unregistered name")
 	}
@@ -173,8 +162,6 @@ func TestResolve_FoldsCaseAndAnswersNoForStrangers(t *testing.T) {
 	}
 }
 
-// A record written by a later attn stays readable: unknown keys are ignored,
-// which is what lets the schema move without migrating anything.
 func TestDecode_IgnoresUnknownKeys(t *testing.T) {
 	member, err := Decode([]byte(`{"id":"keel","home_dir":"/h","mood":"curious"}`))
 	if err != nil {
@@ -185,8 +172,7 @@ func TestDecode_IgnoresUnknownKeys(t *testing.T) {
 	}
 }
 
-// A declared field a query filters on must exist in every stored body, or a
-// filter on `binding_session = ""` would not match the sleeping members.
+// A declared field a query filters on must exist in every stored body, or a filter on `binding_session = ""` would not match the sleeping members.
 func TestEncode_WritesDeclaredFieldsEvenWhenEmpty(t *testing.T) {
 	encoded, err := Member{ID: "keel"}.Encode()
 	if err != nil {
@@ -199,8 +185,6 @@ func TestEncode_WritesDeclaredFieldsEvenWhenEmpty(t *testing.T) {
 	}
 }
 
-// A filed letter answers only the day that wrote it: the record outlives the
-// binding on purpose, so the read is what makes it inert once the day changes.
 func TestFiledLetterFor_AnswersOnlyTheSessionThatFiledIt(t *testing.T) {
 	member := Member{ID: "keel", LetterPath: "/homes/keel/handoffs/a.md", LetterSession: "day-1"}
 	if path, ok := member.FiledLetterFor("day-1"); !ok || path != member.LetterPath {
@@ -222,8 +206,6 @@ func TestMembersSchema_IsAValidDeclaration(t *testing.T) {
 	}
 }
 
-// Display capitalizes, identity does not: the same string reads as a name to a
-// person and stays the lowercase id everywhere it addresses something.
 func TestDisplayName_WritesTheIDAsAName(t *testing.T) {
 	for id, want := range map[string]string{
 		"trellis":   "Trellis",
@@ -242,8 +224,6 @@ func TestDisplayName_WritesTheIDAsAName(t *testing.T) {
 	}
 }
 
-// The rule is one-way: a display name still resolves to the member it names, so
-// nothing that looks up an id has to know about the capitalization.
 func TestDisplayName_StillResolvesToItsMember(t *testing.T) {
 	members := []Member{{ID: "trellis"}, {ID: "keel"}}
 	member, ok := Resolve(DisplayName("keel"), members)
@@ -255,8 +235,6 @@ func TestDisplayName_StillResolvesToItsMember(t *testing.T) {
 	}
 }
 
-// Where a holder can be either a member or a bare session, only the member
-// branch is a name: a session id is never dressed up as one.
 func TestHolderName_NamesTheMemberAndLeavesASessionAlone(t *testing.T) {
 	if got := HolderName("trellis", "sess-a"); got != "Trellis" {
 		t.Errorf("HolderName(trellis, sess-a) = %q, want Trellis", got)

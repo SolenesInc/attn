@@ -46,16 +46,13 @@ describe('extractFrontmatter', () => {
   });
 
   it('counts delimiter lines in lineCount (the strip-side lineOffset)', () => {
-    // ---            line 1
-    // title: x       line 2
-    // ---            line 3
     const { lineCount } = extractFrontmatter('---\ntitle: x\n---\nFirst paragraph\n');
     expect(lineCount).toBe(3);
   });
 
   it('rejects the YAML document-end marker, matching remark-frontmatter', () => {
     // remark-frontmatter only closes on `---`; with `...` it renders the block
-    // as prose, so extracting a card here would show the frontmatter twice.
+    // as prose.
     expect(extractFrontmatter('---\ntitle: x\n...\nBody\n')).toEqual(NONE);
   });
 

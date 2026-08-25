@@ -6,13 +6,6 @@ import (
 	"time"
 )
 
-// Durable event bus substrate (migration 84): an append-only log whose
-// AUTOINCREMENT seq doubles as the cursor space, plus a registry of named
-// consumers. Delivery semantics live in internal/bus, reached through an
-// interface so neither package imports the other.
-
-// BusEvent is one fact on the log. Payload is opaque JSON (empty when the
-// subject says everything); Source names the publisher for diagnosis.
 type BusEvent struct {
 	Seq       int64
 	Name      string
@@ -22,9 +15,6 @@ type BusEvent struct {
 	CreatedAt time.Time
 }
 
-// BusConsumer is a durable consumer's registration and position. PinsRetention
-// is derived when listing: installed app consumers retain their backlog even
-// while disabled. It is never persisted separately from the app registry.
 type BusConsumer struct {
 	Name          string
 	Cursor        int64
@@ -34,8 +24,6 @@ type BusConsumer struct {
 	UpdatedAt     time.Time
 }
 
-// AppendBusEvent appends a fact and returns its seq. No dedup: two identical
-// facts in a row are a real occurrence, not a retry.
 func (s *Store) AppendBusEvent(e BusEvent, now time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -46,8 +34,6 @@ func (s *Store) AppendBusEvent(e BusEvent, now time.Time) (int64, error) {
 	return appendBusEventWith(s.db, e, now)
 }
 
-// appendBusEventWith takes whatever runs the statement: a composite write (see
-// CommitDocumentWrite) passes its transaction so fact and change are one commit.
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	res, err := x.Exec(`
 		INSERT INTO bus_events (name, subject, payload, source, created_at)
@@ -59,8 +45,6 @@ func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
 	return res.LastInsertId()
 }
 
-// BusEventsSince returns up to limit events with seq greater than cursor, in
-// seq order; filtering is the caller's job.
 func (s *Store) BusEventsSince(cursor int64, limit int) ([]BusEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -95,8 +79,6 @@ func (s *Store) BusEventsSince(cursor int64, limit int) ([]BusEvent, error) {
 	return events, rows.Err()
 }
 
-// BusBounds returns the lowest and highest seq in the log (both 0 when empty);
-// a cursor below the low bound has missed events that no longer exist.
 func (s *Store) BusBounds() (earliest, head int64, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -111,7 +93,6 @@ func (s *Store) BusBounds() (earliest, head int64, err error) {
 	return lo.Int64, hi.Int64, nil
 }
 
-// GetBusConsumer loads a consumer registration by name.
 func (s *Store) GetBusConsumer(name string) (BusConsumer, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -160,7 +141,6 @@ func (s *Store) SaveBusConsumer(c BusConsumer, now time.Time) error {
 	return err
 }
 
-// SetBusConsumerCursor persists a consumer's position (the delivery hot path).
 func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -174,8 +154,6 @@ func (s *Store) SetBusConsumerCursor(name string, cursor int64, now time.Time) e
 	return err
 }
 
-// AdvanceBusConsumerCursor moves a cursor forward without allowing an older
-// fence observed by another transaction to rewind it.
 func (s *Store) AdvanceBusConsumerCursor(name string, cursor int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -189,14 +167,6 @@ func (s *Store) AdvanceBusConsumerCursor(name string, cursor int64, now time.Tim
 	return err
 }
 
-// SetBusConsumerEnabled flips the kill switch for a consumer, and reports
-// whether there was a row to flip.
-//
-// The report is what a caller checks a moment after reading the registration:
-// between the read and this write the consumer may have been unregistered, and
-// an UPDATE that matches nothing is indistinguishable from a successful flip
-// without it. A caller that answers "disabled" for a consumer that no longer
-// exists has told its user something untrue.
 func (s *Store) SetBusConsumerEnabled(name string, enabled bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -218,9 +188,6 @@ func (s *Store) SetBusConsumerEnabled(name string, enabled bool, now time.Time) 
 	return n > 0, err
 }
 
-// SetAppBusConsumerEnabled flips an app consumer. changed distinguishes a real
-// transition from an idempotent request. Re-enabling resumes from the frozen
-// cursor; it does not create a reconciliation request.
 func (s *Store) SetAppBusConsumerEnabled(appName string, enabled bool, now time.Time) (exists, changed bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -254,13 +221,8 @@ func (s *Store) SetAppBusConsumerEnabled(appName string, enabled bool, now time.
 	return true, true, tx.Commit()
 }
 
-// DeleteBusConsumer removes a registration. Deleting a row that is not there is
-// success, not an error: the caller is an uninstall path, and an uninstall that
-// fails the second time it runs is a worse surface than one that says nothing.
-//
-// An abandoned row is not harmless. While it exists and is enabled it holds the
-// cursor floor down, so retention and compaction cannot pass it — forever, for a
-// consumer nobody serves. Deleting the row is what ends that.
+// DeleteBusConsumer removes a registration; deleting a row that is not there is success.
+// While an abandoned row exists and is enabled it holds the cursor floor down.
 func (s *Store) DeleteBusConsumer(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -272,7 +234,6 @@ func (s *Store) DeleteBusConsumer(name string) error {
 	return err
 }
 
-// ListBusConsumers returns every registration, by name.
 func (s *Store) ListBusConsumers() ([]BusConsumer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -310,9 +271,6 @@ func (s *Store) ListBusConsumers() ([]BusConsumer, error) {
 	return out, rows.Err()
 }
 
-// TrimBusEvents deletes events older than cutoff that every enabled consumer
-// and every installed app consumer has passed. A disabled installed app keeps
-// its backlog; a disabled orphan row with no app registry entry pins nothing.
 func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -338,11 +296,8 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 	return int(n), err
 }
 
-// CompactBusEvents keeps only the newest fact per subject among the named
-// names, at or below floor (the cursor floor: every enabled consumer and every
-// installed app consumer has read those rows, so removal costs no delivery and
-// punches no holes above the floor). Which names are compactable is
-// internal/bus's call. An empty name list compacts nothing, not everything.
+// CompactBusEvents keeps only the newest fact per subject among the named names, at or below
+// the cursor floor. An empty name list compacts nothing, not everything.
 func (s *Store) CompactBusEvents(names []string, floor int64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -359,7 +314,6 @@ func (s *Store) CompactBusEvents(names []string, floor int64) (int, error) {
 	for _, n := range names {
 		args = append(args, n)
 	}
-	// The correlated MAX walks idx_bus_events_subject (subject, seq).
 	res, err := s.db.Exec(`
 		DELETE FROM bus_events
 		WHERE name IN (`+placeholders+`)
@@ -377,28 +331,16 @@ func (s *Store) CompactBusEvents(names []string, floor int64) (int, error) {
 	return int(n), err
 }
 
-// BusProducer is one fact class's contribution to the log: how many events it
-// holds, what they weigh, how many distinct entities they describe, and how many
-// landed inside each cutoff BusProducers was asked about.
 type BusProducer struct {
 	Name     string
 	Events   int64
 	Bytes    int64
 	Subjects int64
-	// Recent is aligned with the cutoffs passed to BusProducers, one count per
-	// cutoff, each counting events at or after it.
-	Recent []int64
+	Recent   []int64
 }
 
-// BusProducers reports every fact class on the log with its totals and its
-// counts inside each cutoff, loudest first. Which windows are worth asking about
-// is internal/bus's call, so this takes the cutoffs rather than naming them.
-//
-// One pass over bus_events answers all of it, including the row count and bytes
-// BusLogSize would scan for separately — the aggregate subsumes it rather than
-// paying for the table twice. Measured on a copy of production: 209ms at 945k
-// rows (~0.22us/row), against 106ms for BusLogSize alone. That is an on-demand
-// cost, which is why nothing polls it on a timer.
+// BusProducers reports every fact class with its totals and per-cutoff counts, loudest first.
+// Measured on a copy of production: 209ms at 945k rows, which is why nothing polls it.
 func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -443,14 +385,6 @@ func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
 	return out, rows.Err()
 }
 
-// BusPendingBytes sums what the log holds above a cursor — one consumer's
-// backlog, weighed the same way BusProducers weighs the whole log so the two
-// numbers are comparable.
-//
-// It walks the seq primary key over the backlog alone, so it costs in proportion
-// to what is being held rather than to the log. Only asked about a consumer
-// already known to be pinning retention past its tripwire: a healthy bus never
-// runs it.
 func (s *Store) BusPendingBytes(above int64) (int64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -469,10 +403,6 @@ func (s *Store) BusPendingBytes(above int64) (int64, error) {
 	return bytes, nil
 }
 
-// BusEventTimeAt returns the timestamp of the first event at or above seq, and
-// whether one exists. Both callers ask an age question — how old the log's tail
-// is, and how long a consumer's oldest unread event has been waiting — and both
-// resolve through the seq primary key, so neither scans.
 func (s *Store) BusEventTimeAt(seq int64) (time.Time, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -494,8 +424,6 @@ func (s *Store) BusEventTimeAt(seq int64) (time.Time, bool, error) {
 	}
 }
 
-// BusLogSize reports the log's row count and event-text bytes. Bytes measures
-// the rows themselves, not the database file — SQLite pages are shared.
 func (s *Store) BusLogSize() (rows int64, bytes int64, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

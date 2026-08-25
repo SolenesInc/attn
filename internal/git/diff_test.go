@@ -1,4 +1,3 @@
-// internal/git/diff_test.go
 package git
 
 import (
@@ -7,8 +6,6 @@ import (
 	"sort"
 	"testing"
 )
-
-// Test helper functions (pure functions, no git needed)
 
 func TestParseGitStatus(t *testing.T) {
 	t.Parallel()
@@ -24,8 +21,8 @@ func TestParseGitStatus(t *testing.T) {
 		{"R050", "renamed"},
 		{"C", "copied"},
 		{"T", "typechange"},
-		{"X", "modified"}, // Unknown defaults to modified
-		{"", "modified"},  // Empty defaults to modified
+		{"X", "modified"},
+		{"", "modified"},
 	}
 
 	for _, tt := range tests {
@@ -55,8 +52,8 @@ func TestParseGitPorcelainStatus(t *testing.T) {
 		{"M ", "modified"},
 		{" M", "modified"},
 		{"MM", "modified"},
-		{"  ", "modified"}, // Empty status
-		{"", "modified"},   // Too short
+		{"  ", "modified"},
+		{"", "modified"},
 	}
 
 	for _, tt := range tests {
@@ -75,19 +72,15 @@ func TestExtractRenamePath(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// Simple rename
 		{"old.go => new.go", "new.go"},
 		{"src/old.go => src/new.go", "src/new.go"},
 
-		// Brace format - directory rename
 		{"{old => new}/file.go", "new/file.go"},
 		{"src/{old => new}/file.go", "src/new/file.go"},
 
-		// Brace format - file rename in directory
 		{"dir/{old.go => new.go}", "dir/new.go"},
 		{"src/dir/{old.go => new.go}", "src/dir/new.go"},
 
-		// No rename (passthrough)
 		{"file.go", "file.go"},
 		{"src/file.go", "src/file.go"},
 	}
@@ -102,24 +95,18 @@ func TestExtractRenamePath(t *testing.T) {
 	}
 }
 
-// Integration tests with actual git repos
-
 func TestGetBranchDiffFiles_CommittedChanges(t *testing.T) {
 	t.Parallel()
-	// Create temp git repo
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 
-	// Create a branch point (origin/main simulation)
 	runGit(t, dir, "branch", "base-point")
 
-	// Make some changes
 	writeFile(t, dir, "new-file.go", "package main\n\nfunc main() {}\n")
 	runGit(t, dir, "add", "new-file.go")
 	runGit(t, dir, "commit", "-m", "add new file")
 
-	// Get diff against base-point
 	files, err := GetBranchDiffFiles(dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
@@ -145,15 +132,12 @@ func TestGetBranchDiffFiles_UncommittedChanges(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 
-	// Create initial file and commit
 	writeFile(t, dir, "existing.go", "package main\n")
 	runGit(t, dir, "add", "existing.go")
 	runGit(t, dir, "commit", "-m", "init")
 
-	// Create base point
 	runGit(t, dir, "branch", "base-point")
 
-	// Make uncommitted change
 	writeFile(t, dir, "existing.go", "package main\n\n// modified\n")
 
 	files, err := GetBranchDiffFiles(dir, "base-point")
@@ -178,20 +162,16 @@ func TestGetBranchDiffFiles_MixedChanges(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 
-	// Create initial file and commit
 	writeFile(t, dir, "file1.go", "package main\n")
 	runGit(t, dir, "add", "file1.go")
 	runGit(t, dir, "commit", "-m", "init")
 
-	// Create base point
 	runGit(t, dir, "branch", "base-point")
 
-	// Commit a new file
 	writeFile(t, dir, "file2.go", "package util\n")
 	runGit(t, dir, "add", "file2.go")
 	runGit(t, dir, "commit", "-m", "add file2")
 
-	// Make uncommitted changes to both
 	writeFile(t, dir, "file1.go", "package main\n// uncommitted\n")
 	writeFile(t, dir, "file2.go", "package util\n// uncommitted\n")
 
@@ -200,7 +180,6 @@ func TestGetBranchDiffFiles_MixedChanges(t *testing.T) {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
 
-	// Sort for consistent comparison
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Path < files[j].Path
 	})
@@ -209,7 +188,6 @@ func TestGetBranchDiffFiles_MixedChanges(t *testing.T) {
 		t.Fatalf("expected 2 files, got %d: %+v", len(files), files)
 	}
 
-	// file1.go - only uncommitted changes (not in committed diff)
 	if files[0].Path != "file1.go" {
 		t.Errorf("expected file1.go, got %q", files[0].Path)
 	}
@@ -217,7 +195,6 @@ func TestGetBranchDiffFiles_MixedChanges(t *testing.T) {
 		t.Error("file1.go should have HasUncommitted=true")
 	}
 
-	// file2.go - committed + uncommitted
 	if files[1].Path != "file2.go" {
 		t.Errorf("expected file2.go, got %q", files[1].Path)
 	}
@@ -234,15 +211,12 @@ func TestGetBranchDiffFiles_DeletedFile(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 
-	// Create file and commit
 	writeFile(t, dir, "to-delete.go", "package main\n")
 	runGit(t, dir, "add", "to-delete.go")
 	runGit(t, dir, "commit", "-m", "init")
 
-	// Create base point
 	runGit(t, dir, "branch", "base-point")
 
-	// Delete the file
 	os.Remove(filepath.Join(dir, "to-delete.go"))
 	runGit(t, dir, "add", "to-delete.go")
 	runGit(t, dir, "commit", "-m", "delete file")
@@ -271,7 +245,6 @@ func TestGetBranchDiffFiles_UntrackedFile(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 	runGit(t, dir, "branch", "base-point")
 
-	// Create untracked file
 	writeFile(t, dir, "untracked.go", "package main\n")
 
 	files, err := GetBranchDiffFiles(dir, "base-point")
@@ -301,7 +274,6 @@ func TestGetBranchDiffFiles_NoChanges(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 	runGit(t, dir, "branch", "base-point")
 
-	// No changes since base-point
 	files, err := GetBranchDiffFiles(dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
@@ -318,16 +290,13 @@ func TestGetBranchDiffFiles_InvalidBaseRef(t *testing.T) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 
-	// Create uncommitted file
 	writeFile(t, dir, "file.go", "package main\n")
 
-	// Invalid base ref should gracefully fall back to just uncommitted
 	files, err := GetBranchDiffFiles(dir, "nonexistent-ref")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
 
-	// Should still show the uncommitted file
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file (uncommitted), got %d: %+v", len(files), files)
 	}
@@ -340,7 +309,6 @@ func TestGetBranchDiffFiles_LineStats(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 	runGit(t, dir, "branch", "base-point")
 
-	// Create file with known line count
 	writeFile(t, dir, "stats.go", "line1\nline2\nline3\n")
 	runGit(t, dir, "add", "stats.go")
 	runGit(t, dir, "commit", "-m", "add stats file")
@@ -354,7 +322,6 @@ func TestGetBranchDiffFiles_LineStats(t *testing.T) {
 		t.Fatalf("expected 1 file, got %d", len(files))
 	}
 
-	// New file should have additions but no deletions
 	if files[0].Additions != 3 {
 		t.Errorf("expected 3 additions, got %d", files[0].Additions)
 	}
@@ -362,5 +329,3 @@ func TestGetBranchDiffFiles_LineStats(t *testing.T) {
 		t.Errorf("expected 0 deletions, got %d", files[0].Deletions)
 	}
 }
-
-// writeFile is defined in stash_test.go

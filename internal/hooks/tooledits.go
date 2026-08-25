@@ -6,20 +6,8 @@ import (
 	"strings"
 )
 
-// MarkdownEdits returns the absolute markdown files a completed tool call
-// wrote, read from the agent's PostToolUse payload. Both supported agents
-// report the same envelope (tool_name, tool_input, cwd) but describe an edit
-// differently:
-//
-//   - Claude names the tool (Edit, Write, MultiEdit, NotebookEdit) and carries
-//     the target in tool_input.file_path (notebook_path for NotebookEdit).
-//   - Codex routes every file write through apply_patch, whose tool_input.command
-//     is the patch envelope; the touched paths are its file headers.
-//
-// Coverage is deliberately partial: a file an agent rewrites through the shell
-// (`sed -i`, a heredoc) arrives as an ordinary Bash call with no attributable
-// path, and is not recorded. Deletions are skipped — a path that no longer
-// exists is not worth a slot in the opener.
+// Coverage is deliberately partial: a file rewritten through the shell (`sed -i`, a
+// heredoc) arrives as a Bash call with no attributable path; deletions are skipped.
 func MarkdownEdits(toolName string, toolInput json.RawMessage, cwd string) []string {
 	var paths []string
 	switch toolName {
@@ -58,7 +46,7 @@ func MarkdownEdits(toolName string, toolInput json.RawMessage, cwd string) []str
 		}
 		if !filepath.IsAbs(path) {
 			if cwd == "" {
-				continue // nothing to resolve a relative path against
+				continue
 			}
 			path = filepath.Join(cwd, path)
 		}
@@ -72,9 +60,7 @@ func MarkdownEdits(toolName string, toolInput json.RawMessage, cwd string) []str
 	return edited
 }
 
-// applyPatchTargets reads the file headers out of a Codex apply_patch envelope.
-// A rename is reported at its destination ("*** Move to:"), which is the file
-// that now exists.
+// A rename is reported at its destination, which is the file that now exists.
 func applyPatchTargets(patch string) []string {
 	var targets []string
 	for _, line := range strings.Split(patch, "\n") {
@@ -84,7 +70,7 @@ func applyPatchTargets(patch string) []string {
 			targets = append(targets, strings.TrimSpace(line[strings.Index(line, ": ")+2:]))
 		case strings.HasPrefix(line, "*** Move to: "):
 			// A move follows the "Update File" header for its source, which no
-			// longer exists once the patch applies. Replace it.
+			// longer exists once the patch applies.
 			if len(targets) > 0 {
 				targets = targets[:len(targets)-1]
 			}

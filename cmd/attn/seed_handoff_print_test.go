@@ -16,8 +16,6 @@ func seedNote(id, kind, body string) protocol.SeedNote {
 	}
 }
 
-// The slice's acceptance, at the surface a successor actually reads: the
-// handoff is above the seed, not under its body and not buried in the log.
 func TestFprintSeedShowPutsTheHandoffFirst(t *testing.T) {
 	left := seedNote("n-aaaaaa", garden.NoteKindHandoff, "the join test is the gate")
 	var buf bytes.Buffer
@@ -35,7 +33,6 @@ func TestFprintSeedShowPutsTheHandoffFirst(t *testing.T) {
 	if strings.Index(out, "the join test is the gate") > strings.Index(out, "s-7k3f9m") {
 		t.Fatalf("the handoff renders after the seed:\n%s", out)
 	}
-	// Rendered once. The same paragraph twice on one screen reads as a bug.
 	if n := strings.Count(out, "the join test is the gate"); n != 1 {
 		t.Fatalf("the handoff body appears %d times, want once:\n%s", n, out)
 	}
@@ -44,8 +41,6 @@ func TestFprintSeedShowPutsTheHandoffFirst(t *testing.T) {
 	}
 }
 
-// A seed nobody handed over says nothing about handoffs, and its log is
-// whole.
 func TestFprintSeedShowWithoutAHandoff(t *testing.T) {
 	var buf bytes.Buffer
 	fprintSeedShow(&buf, &protocol.SeedShowResult{
@@ -63,8 +58,6 @@ func TestFprintSeedShowWithoutAHandoff(t *testing.T) {
 	}
 }
 
-// Dropping the handoff from the log must not turn a shown note into a hidden
-// one: what is withheld is counted against the window the daemon read.
 func TestFprintSeedShowCountsWhatItWithheld(t *testing.T) {
 	left := seedNote("n-aaaaaa", garden.NoteKindHandoff, "over to you")
 	notes := []protocol.SeedNote{left}
@@ -84,9 +77,6 @@ func TestFprintSeedShowCountsWhatItWithheld(t *testing.T) {
 	}
 }
 
-// A handoff read in the log — an older one, or one on `attn seed notes` — is
-// labelled, so it is recognisable as written to a successor rather than to
-// nobody.
 func TestFprintNotesLabelsAHandoff(t *testing.T) {
 	var buf bytes.Buffer
 	fprintNotes(&buf, []protocol.SeedNote{
@@ -113,8 +103,6 @@ func TestFprintNotesLabelsAHandoff(t *testing.T) {
 	}
 }
 
-// Tending confirms the claim first — the tender needs to know it landed — and
-// primes with the handoff on the same screen.
 func TestFprintTransitionPrimesOnTend(t *testing.T) {
 	left := seedNote("n-aaaaaa", garden.NoteKindHandoff, "start at the docstore compiler")
 	var buf bytes.Buffer
@@ -131,7 +119,6 @@ func TestFprintTransitionPrimesOnTend(t *testing.T) {
 		t.Fatalf("tend did not print the handoff:\n%s", out)
 	}
 
-	// A move that carries none says nothing about handoffs.
 	buf.Reset()
 	fprintTransition(&buf, &protocol.SeedTransitionResult{
 		Seed: protocol.Seed{ID: "s-7k3f9m", Status: "dormant"},
@@ -141,8 +128,6 @@ func TestFprintTransitionPrimesOnTend(t *testing.T) {
 	}
 }
 
-// A multi-line handoff stays readable: every line is indented under its header,
-// so the note is one block instead of prose that runs into the seed below it.
 func TestFprintHandoffIndentsEveryLine(t *testing.T) {
 	left := seedNote("n-aaaaaa", garden.NoteKindHandoff, "first line\nsecond line\n")
 	var buf bytes.Buffer

@@ -15,19 +15,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// `attn bus` is the operator surface for the durable event bus: what the log
-// holds, who is reading it, how far behind each reader is, and the kill switch.
-//
-// It reads and writes the profile database directly rather than going through
-// the daemon's IPC protocol. That is deliberate on both counts. Status is a
-// diagnostic and does not deserve a protocol version bump; and the enabled bit is
-// database-only BY DESIGN — a consumer is killed by flipping a row, and the
-// daemon re-reads that bit on every delivery cycle, so the switch works whether
-// or not the daemon is listening. (The automations discipline: a kill switch that
-// depends on the thing it is killing is not a kill switch.)
-//
-// Live and Stalled are in-process facts and therefore absent here; the daemon log
-// carries stalls.
+// Reads and writes the profile database directly rather than going through daemon IPC:
+// the enabled bit is database-only BY DESIGN, so the kill switch works with no daemon.
 func runBus() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeBusHelp(os.Stdout)
@@ -95,51 +84,39 @@ commands:
 `)
 }
 
-// The --json shape. Every field the human rendering shows is here, because a
-// script reading this must never have to shell out twice or re-derive a rate.
-// The original fields keep their names and meaning.
 type busStatusJSON struct {
 	Earliest int64 `json:"earliest"`
 	Head     int64 `json:"head"`
-	// Rows and Bytes are what the log actually holds, as opposed to the span of
-	// the seq space. They are the receipt for the invariant compaction upholds:
-	// the log stays proportional to the data it describes, never to how often
-	// that data is written. Bytes counts the event text — name, subject, payload,
-	// source, stamp — not the size of the database file, which is shared with
-	// every other table and would answer a different question.
+	// Bytes counts the event text — name, subject, payload, source, stamp — not the
+	// database file, which is shared with every other table.
 	Rows     int64  `json:"rows"`
 	Bytes    int64  `json:"bytes"`
 	OldestAt string `json:"oldest_at,omitempty"`
 	NewestAt string `json:"newest_at,omitempty"`
-	// Delivering is false when the snapshot was read from the database rather
-	// than from the daemon that owns the delivery loops, which is what makes
-	// each consumer's `live` field meaningless.
-	Delivering        bool    `json:"delivering"`
-	RetentionSeconds  float64 `json:"retention_seconds"`
-	SurgeRatePerHour  float64 `json:"surge_rate_per_hour"`
-	SurgeWindowSecs   float64 `json:"surge_window_seconds"`
-	RecentWindowSecs  float64 `json:"recent_window_seconds"`
-	BaselineWindowSec float64 `json:"baseline_window_seconds"`
-	// PinAlarmSeconds is the tripwire a retention pin crosses to be reported, so
-	// a script reads the limit beside the value rather than assuming the default.
-	PinAlarmSeconds float64             `json:"pin_alarm_seconds"`
-	Producers       []busProducerReport `json:"producers"`
-	Consumers       []busConsumerReport `json:"consumers"`
-	Health          []busHealthReport   `json:"health"`
+	// False when the snapshot came from the database rather than the daemon that owns the
+	// delivery loops, which makes each consumer `live` field meaningless.
+	Delivering        bool                `json:"delivering"`
+	RetentionSeconds  float64             `json:"retention_seconds"`
+	SurgeRatePerHour  float64             `json:"surge_rate_per_hour"`
+	SurgeWindowSecs   float64             `json:"surge_window_seconds"`
+	RecentWindowSecs  float64             `json:"recent_window_seconds"`
+	BaselineWindowSec float64             `json:"baseline_window_seconds"`
+	PinAlarmSeconds   float64             `json:"pin_alarm_seconds"`
+	Producers         []busProducerReport `json:"producers"`
+	Consumers         []busConsumerReport `json:"consumers"`
+	Health            []busHealthReport   `json:"health"`
 }
 
 type busProducerReport struct {
-	Name             string  `json:"name"`
-	Events           int64   `json:"events"`
-	Bytes            int64   `json:"bytes"`
-	Subjects         int64   `json:"subjects"`
-	Share            float64 `json:"share"`
-	RecentPerHour    float64 `json:"recent_per_hour"`
-	BaselinePerHour  float64 `json:"baseline_per_hour"`
-	SustainedPerHour float64 `json:"sustained_per_hour"`
-	SurgePerHour     float64 `json:"surge_per_hour"`
-	// SurgeWindowSeconds names which window tripped, so a script can act on the
-	// crossing without parsing the health sentence written for a human.
+	Name               string  `json:"name"`
+	Events             int64   `json:"events"`
+	Bytes              int64   `json:"bytes"`
+	Subjects           int64   `json:"subjects"`
+	Share              float64 `json:"share"`
+	RecentPerHour      float64 `json:"recent_per_hour"`
+	BaselinePerHour    float64 `json:"baseline_per_hour"`
+	SustainedPerHour   float64 `json:"sustained_per_hour"`
+	SurgePerHour       float64 `json:"surge_per_hour"`
 	SurgeWindowSeconds float64 `json:"surge_window_seconds"`
 	Surging            bool    `json:"surging"`
 }
@@ -155,9 +132,7 @@ type busConsumerReport struct {
 	Stalled             string `json:"stalled,omitempty"`
 	OldestUnreadAt      string `json:"oldest_unread_at,omitempty"`
 	HoldsRetentionFloor bool   `json:"holds_retention_floor"`
-	// PinAlarm says that pin is past the tripwire, and PinnedBytes is what the
-	// backlog weighs — read only for a consumer that is alarming, so a script can
-	// tell "0 bytes held" from "not measured" by the flag beside it.
+	// The flag beside it is what tells "0 bytes held" from "not measured".
 	PinAlarm    bool  `json:"pin_alarm"`
 	PinnedBytes int64 `json:"pinned_bytes"`
 }
@@ -241,14 +216,8 @@ func runBusStatus(args []string) {
 	s, closeStore := openBusStore()
 	defer closeStore()
 
-	// The same snapshot the daemon serves the app, computed by the same code
-	// against the same database. This bus registers no consumer and is never
-	// started: it is here to read, so Live and Stalled stay unset and the
-	// snapshot says so (delivering=false).
-	// The retention-pin tripwire comes from this process's environment for the
-	// same reason it does in the daemon: the two must draw the line in the same
-	// place, or this table calls a consumer fine while a notification calls it
-	// stuck. Anything it has to say goes to stderr, so --json stays machine-clean.
+	// The retention-pin tripwire comes from this process environment because it must draw
+	// the line where the daemon draws it, or this table and a notification disagree.
 	b := bus.New(bus.Options{
 		Store:       daemon.NewBusStore(s),
 		Compactable: daemon.CompactableFacts,
@@ -273,15 +242,10 @@ func runBusStatus(args []string) {
 	writeBusStatus(os.Stdout, status, time.Now())
 }
 
-// busProducerLines caps the producer table in the human rendering. The loudest
-// classes are the point; a real log carries ~50 of them and the tail is noise on
-// a terminal. What is dropped is named and totalled below the table, and --json
-// never truncates.
+// A real log carries ~50 producer classes and the tail is noise. --json never
+// truncates.
 const busProducerLines = 15
 
-// writeBusStatus renders the snapshot for a terminal: the log, then who writes
-// to it, then who reads it, then what is wrong. Health goes last because it is
-// what the reader leaves with.
 func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 	fmt.Fprintf(w, "log: seq %d..%d, %d event(s) holding %s",
 		s.Earliest, s.Head, s.Rows, humanBytes(s.Bytes))
@@ -310,8 +274,6 @@ func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 				p.RecentPerHour, p.BaselinePerHour)
 		}
 		_ = tw.Flush()
-		// A quiet truncation would read as "these are all the fact classes".
-		// Say what was left out and what it adds up to, and where to see it.
 		if rest := s.Producers[len(shown):]; len(rest) > 0 {
 			var events int64
 			var share float64
@@ -334,8 +296,6 @@ func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 		for _, c := range s.Consumers {
 			name := c.Name
 			switch {
-			// Holding the floor is normal; holding it past the tripwire is the
-			// thing to act on, so the two must not read alike in the table.
 			case c.PinAlarm:
 				name += fmt.Sprintf(" (PINNING %s)", humanBytes(c.PinnedBytes))
 			case c.HoldsRetentionFloor:
@@ -363,7 +323,6 @@ func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 	}
 }
 
-// humanAge renders a duration at the scale an operator reads it at.
 func humanAge(d time.Duration) string {
 	switch {
 	case d >= 48*time.Hour:
@@ -377,12 +336,6 @@ func humanAge(d time.Duration) string {
 	}
 }
 
-// runBusTrim runs one retention pass against the profile database.
-//
-// It builds a bus over the same store rather than reimplementing the pass, so
-// there is exactly one definition of what a pass does, which classes it may
-// compact, and where the cursor floor sits. The bus is never started: Trim is a
-// database operation, and the goroutines Start would raise are for delivery.
 func runBusTrim(args []string) {
 	for _, a := range args {
 		switch a {
@@ -417,15 +370,14 @@ func runBusTrim(args []string) {
 	}
 	fmt.Printf("removed %d event(s); log now holds %d of %d, weighing %s\n",
 		removed, after, before, humanBytes(bytes))
-	// A pass that could not run exits non-zero. "removed 0" is also what a
-	// clean log prints, so without this a script cannot tell the two apart.
+	// Also what a clean log prints, so a failed pass has to exit non-zero for a
+	// script to tell the two apart.
 	if passErr != nil {
 		fmt.Fprintf(os.Stderr, "bus trim: %v\n", passErr)
 		os.Exit(1)
 	}
 }
 
-// humanBytes renders the log's weight at the scale an operator reads it at.
 func humanBytes(n int64) string {
 	switch {
 	case n >= 1<<20:
@@ -470,8 +422,8 @@ func runBusSetEnabled(args []string, enabled bool) {
 	fmt.Printf("consumer %q %sd\n", name, verb)
 }
 
-// busStderrLog is what the bus says to a person running a bus command: stderr,
-// so it never lands in the middle of --json output someone is parsing.
+// Keeps bus logging off stdout, so it never lands in the middle of --json output
+// someone is parsing.
 func busStderrLog(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }

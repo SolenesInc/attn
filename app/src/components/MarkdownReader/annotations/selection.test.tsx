@@ -1,9 +1,3 @@
-/**
- * evaluateSelection — pure selection→pending-anchor mapping over a real
- * rendered reader DOM (happy-dom Ranges, synthetic SelectionLike objects;
- * no fake mouse geometry).
- */
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { MarkdownReader } from '../index';

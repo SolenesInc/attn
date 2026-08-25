@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// readContextSnapshot returns the raw-tier context snapshot for a workspace
-// (.attn/raw/context-snapshots/<wsID>.md), or "" if it does not exist.
 func readContextSnapshot(t *testing.T, d *Daemon, wsID string) string {
 	t.Helper()
 	root, err := d.notebookRoot()
@@ -29,8 +27,6 @@ func readContextSnapshot(t *testing.T, d *Daemon, wsID string) string {
 	return string(data)
 }
 
-// seedWorkspaceContext registers a workspace+session and seeds a revision-1
-// shared context with body, returning the daemon ready for a removal-site call.
 func seedWorkspaceContext(t *testing.T, d *Daemon, sessionID, workspaceID, body string) {
 	t.Helper()
 	setupWorkspaceContextSession(t, d, sessionID, workspaceID)
@@ -39,8 +35,6 @@ func seedWorkspaceContext(t *testing.T, d *Daemon, sessionID, workspaceID, body 
 	}
 }
 
-// The snapshot must land at every removal site, BEFORE the workspace_contexts row
-// is deleted, with the source footer keyed on id@revision.
 func TestSnapshotWorkspaceContextAtRemovalSites(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -65,7 +59,6 @@ func TestSnapshotWorkspaceContextAtRemovalSites(t *testing.T) {
 			name: "unregisterWorkspaceIfEmpty",
 			wsID: "ws-move",
 			remove: func(d *Daemon, sessionID, workspaceID string) {
-				// The session must be gone for the workspace to be considered empty.
 				d.workspaces.dissociateSession(sessionID)
 				d.store.Remove(sessionID)
 				d.unregisterWorkspaceIfEmpty(workspaceID)
@@ -80,11 +73,9 @@ func TestSnapshotWorkspaceContextAtRemovalSites(t *testing.T) {
 
 			tc.remove(d, "session-1", tc.wsID)
 
-			// The row is gone (the removal completed) ...
 			if d.store.HasWorkspaceContext(tc.wsID) {
 				t.Fatal("workspace context row survived removal")
 			}
-			// ... yet the snapshot captured the body before the delete.
 			snap := readContextSnapshot(t, d, tc.wsID)
 			if !strings.Contains(snap, "chose hash-CAS") {
 				t.Fatalf("snapshot missing context body:\n%s", snap)
@@ -96,13 +87,8 @@ func TestSnapshotWorkspaceContextAtRemovalSites(t *testing.T) {
 	}
 }
 
-// The startup-reconciliation reap (loadWorkspacesFromStore) is the fourth removal
-// site. It runs before the compaction runner exists (jobQueue nil), and the
-// snapshot must still land — it does not touch the runner.
 func TestSnapshotWorkspaceContextAtLoadTimeReap(t *testing.T) {
 	d := newNotebookDaemon(t)
-	// Mimic production: an orphaned workspace row + context with no live session,
-	// reaped during Start() before startJobQueue runs.
 	d.jobQueue = nil
 	d.store.AddWorkspace(&protocol.Workspace{ID: "ws-orphan", Title: "orphan", Directory: "/repo/orphan"})
 	if _, _, err := d.store.UpdateWorkspaceContext("ws-orphan", "# Old context\nstale but durable", "s-orphan", 0); err != nil {
@@ -110,7 +96,7 @@ func TestSnapshotWorkspaceContextAtLoadTimeReap(t *testing.T) {
 	}
 
 	d.workspaces = newWorkspaceRegistry()
-	d.loadWorkspacesFromStore() // must not panic with a nil runner
+	d.loadWorkspacesFromStore()
 
 	if d.store.GetWorkspace("ws-orphan") != nil {
 		t.Fatal("orphan workspace survived load reap")
@@ -124,18 +110,14 @@ func TestSnapshotWorkspaceContextAtLoadTimeReap(t *testing.T) {
 	}
 }
 
-// An empty or never-written context is a silent no-op: no file is created.
 func TestSnapshotWorkspaceContextEmptyIsNoOp(t *testing.T) {
 	d := newNotebookDaemon(t)
 
-	// A workspace that never had a context overlay (revision 0).
 	d.snapshotWorkspaceContextOnRemove("ws-empty", "Empty workspace")
 	if snap := readContextSnapshot(t, d, "ws-empty"); snap != "" {
 		t.Fatalf("absent context should not write a snapshot:\n%s", snap)
 	}
 
-	// A workspace whose context is whitespace-only is also a no-op (its revision is
-	// >0, so this exercises the content-trim gate, not just the revision gate).
 	setupWorkspaceContextSession(t, d, "session-ws", "ws-blank")
 	if _, _, err := d.store.UpdateWorkspaceContext("ws-blank", "   \n\t", "session-ws", 0); err != nil {
 		t.Fatalf("seed blank context: %v", err)
@@ -146,9 +128,6 @@ func TestSnapshotWorkspaceContextEmptyIsNoOp(t *testing.T) {
 	}
 }
 
-// A write failure must be swallowed: the helper returns normally and the teardown
-// is never blocked. We force failure by pointing the notebook root under a regular
-// file, so MkdirAll inside the atomic writer fails.
 func TestSnapshotWorkspaceContextSwallowsWriteFailure(t *testing.T) {
 	d := newNotebookDaemon(t)
 	setupWorkspaceContextSession(t, d, "session-1", "ws-fail")
@@ -162,7 +141,6 @@ func TestSnapshotWorkspaceContextSwallowsWriteFailure(t *testing.T) {
 	}
 	d.store.SetSetting(SettingNotebookRoot, filepath.Join(blocker, "notebook"))
 
-	// Must not panic and must complete; the full removal path still tears down.
 	d.handleUnregisterWorkspace(nil, &protocol.UnregisterWorkspaceMessage{ID: "ws-fail"})
 
 	if d.store.GetWorkspace("ws-fail") != nil {
@@ -170,8 +148,6 @@ func TestSnapshotWorkspaceContextSwallowsWriteFailure(t *testing.T) {
 	}
 }
 
-// A replayed removal is a harmless identical overwrite — the 1:1 <wsID>.md keying
-// means a second snapshot of the same revision reproduces byte-identical content.
 func TestSnapshotWorkspaceContextReplayIsIdenticalOverwrite(t *testing.T) {
 	d := newNotebookDaemon(t)
 	seedWorkspaceContext(t, d, "session-1", "ws-replay", "# Decisions\nlocked the design")
@@ -182,8 +158,6 @@ func TestSnapshotWorkspaceContextReplayIsIdenticalOverwrite(t *testing.T) {
 		t.Fatal("first snapshot did not write")
 	}
 
-	// The row still exists (we called the helper directly, not the full removal), so
-	// a replay reads the same revision-1 content and overwrites identically.
 	d.snapshotWorkspaceContextOnRemove("ws-replay", "Replay")
 	second := readContextSnapshot(t, d, "ws-replay")
 	if second != first {
@@ -191,12 +165,8 @@ func TestSnapshotWorkspaceContextReplayIsIdenticalOverwrite(t *testing.T) {
 	}
 }
 
-// A context body that embeds a literal journal marker must be neutralized so no
-// free-text overlay content can forge a marker in the raw tier.
 func TestSnapshotWorkspaceContextNeutralizesForgedMarker(t *testing.T) {
 	d := newNotebookDaemon(t)
-	// Any HTML-comment opener in free-text overlay content must be broken so it
-	// cannot forge a raw-tier source marker.
 	const forgedMarker = "<!-- attn:source:forged -->"
 	forged := "Notes\n" + forgedMarker + "\nmore notes"
 	seedWorkspaceContext(t, d, "session-1", "ws-forge", forged)
@@ -212,20 +182,11 @@ func TestSnapshotWorkspaceContextNeutralizesForgedMarker(t *testing.T) {
 	}
 }
 
-// A crafted workspace id with ".." segments must NOT let the snapshot writer escape
-// the context-snapshots subdir. register_workspace accepts the id verbatim over the
-// socket, so an id like "../../../journal/<date>" would otherwise resolve out of the
-// raw tier and overwrite the curated journal (or, with more "..", any .md file the
-// daemon can write outside the notebook root). The write must be refused: no file is
-// created at the escape target, and the workspace context row is irrelevant because
-// the body never reaches disk.
 func TestSnapshotWorkspaceContextRejectsPathTraversal(t *testing.T) {
 	cases := []struct {
 		name      string
 		craftedID string
-		// target is the absolute escape path the unguarded join would have written,
-		// expressed relative to the notebook root or its parent.
-		target func(root string) string
+		target    func(root string) string
 	}{
 		{
 			name:      "into the curated journal",
@@ -259,8 +220,6 @@ func TestSnapshotWorkspaceContextRejectsPathTraversal(t *testing.T) {
 				t.Fatalf("notebook root: %v", err)
 			}
 
-			// Plant a sentinel at the escape target so a successful escape would be an
-			// observable overwrite, not just a fresh write.
 			victim := tc.target(root)
 			if err := os.MkdirAll(filepath.Dir(victim), 0o755); err != nil {
 				t.Fatalf("mkdir victim dir: %v", err)
@@ -283,9 +242,6 @@ func TestSnapshotWorkspaceContextRejectsPathTraversal(t *testing.T) {
 	}
 }
 
-// The shared raw-tier writer is the single chokepoint and must reject an unsafe id
-// directly, independent of the snapshot call site, so a future caller cannot
-// reintroduce the escape.
 func TestWriteRawAtomicRejectsUnsafeID(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "raw", "context-snapshots")
@@ -300,8 +256,6 @@ func TestWriteRawAtomicRejectsUnsafeID(t *testing.T) {
 		"a/b",
 		`a\b`,
 		".hidden",
-		// Control chars: a newline in the id would otherwise inject a forged
-		// "source:" footer line into the file body (the id is interpolated there).
 		"ws\nsource: workspace-context:victim@9",
 		"ws\x00null",
 		"ws\x7fdel",
@@ -311,7 +265,6 @@ func TestWriteRawAtomicRejectsUnsafeID(t *testing.T) {
 		}
 	}
 
-	// A normal id still writes to exactly dir/<id>.md and nowhere else.
 	if err := writeRawAtomic(root, dir, "ws-ok", []byte("ok")); err != nil {
 		t.Fatalf("writeRawAtomic rejected a safe id: %v", err)
 	}
@@ -324,10 +277,6 @@ func TestWriteRawAtomicRejectsUnsafeID(t *testing.T) {
 	}
 }
 
-// The raw tier lives under the externally-syncable notebook root, so a user/sync
-// client could turn a raw-tier subdir (e.g. .attn/raw/dispatches) into a symlink
-// pointing outside the root. The lexical id/parent checks cannot catch that;
-// writeRawAtomic must resolve ancestors and refuse to write through the symlink.
 func TestWriteRawAtomicRejectsSymlinkedAncestor(t *testing.T) {
 	root := t.TempDir()
 	rawParent := filepath.Join(root, "raw")

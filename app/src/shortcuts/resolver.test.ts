@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// The app is macOS-only; pin platform detection so eventToBinding's Control
-// rejection is exercised deterministically.
 vi.mock('./platform', () => ({
   isMacLikePlatform: () => true,
   isAccelKeyPressed: (e: KeyboardEvent) => e.metaKey,
@@ -57,7 +55,6 @@ describe('resolvedShortcutEntries', () => {
     setShortcutOverrides({ 'app.quit': null });
     const ids = resolvedShortcutEntries().map(([id]) => id);
     expect(ids).not.toContain('app.quit');
-    // app.quit is the first registry entry; the next one should now lead.
     const registryIds = Object.keys(SHORTCUTS);
     expect(ids[0]).toBe(registryIds[1]);
   });
@@ -65,7 +62,6 @@ describe('resolvedShortcutEntries', () => {
 
 describe('findConflict', () => {
   it('finds a different shortcut using the same combo', () => {
-    // dock.attention is ⌘⇧P by default.
     expect(findConflict({ key: 'p', meta: true, shift: true }, 'session.new')).toBe('dock.attention');
   });
 
@@ -74,7 +70,6 @@ describe('findConflict', () => {
   });
 
   it('respects allowed-conflict pairs (session.close vs terminal.close on ⌘W)', () => {
-    // Re-binding session.close to ⌘W must not flag terminal.close as a conflict.
     expect(findConflict({ key: 'w', meta: true }, 'session.close')).toBeNull();
   });
 
@@ -125,9 +120,7 @@ describe('isRiskyBinding', () => {
   });
 
   it('evaluates the leader for a chord', () => {
-    // Accelerator on the leader -> safe, even though the follow key is bare.
     expect(isRiskyBinding({ leader: { key: 'k', meta: true }, then: { key: 'd' } })).toBe(false);
-    // Bare leader -> risky (would collide with typing before the chord arms).
     expect(isRiskyBinding({ leader: { key: 'k' }, then: { key: 'd' } })).toBe(true);
   });
 });
@@ -152,14 +145,11 @@ describe('chord overrides', () => {
   });
 
   it('finds a conflict for a chord whose leader equals an existing combo', () => {
-    // ⌘G is view.toggleGrid. A chord with leader ⌘G conflicts with it.
     expect(findConflict({ leader: { key: 'g', meta: true }, then: { key: 'x' } }, 'dock.attention'))
       .toBe('view.toggleGrid');
   });
 
   it('lets a chord leader coexist with a different existing combo', () => {
-    // ⌘K is ui.actionMenu (combo). A chord leader of ⌘J (jumpToWaiting) would
-    // conflict; a leader on an unused accel like ⌘⌥J does not.
     expect(findConflict({ leader: { key: 'j', meta: true, alt: true }, then: { key: 'x' } }, 'dock.attention'))
       .toBeNull();
   });
@@ -188,7 +178,7 @@ describe('parseKeybindingsConfig', () => {
   });
 
   it('drops malformed overrides so the id falls back to its default', () => {
-    const raw = JSON.stringify({ overrides: { 'session.new': { meta: true } } }); // no key
+    const raw = JSON.stringify({ overrides: { 'session.new': { meta: true } } });
     const cfg = parseKeybindingsConfig(raw);
     expect('session.new' in cfg.overrides).toBe(false);
   });
@@ -208,7 +198,6 @@ describe('dock config', () => {
     expect(parseKeybindingsConfig(undefined).dock).toEqual(DEFAULT_DOCK);
     expect(parseKeybindingsConfig(JSON.stringify({ overrides: {} })).dock).toEqual(DEFAULT_DOCK);
     expect(parseKeybindingsConfig(JSON.stringify({ dock: 'nope' })).dock).toEqual(DEFAULT_DOCK);
-    // items present but not an array -> default
     expect(parseKeybindingsConfig(JSON.stringify({ dock: { items: 5 } })).dock).toEqual(DEFAULT_DOCK);
   });
 

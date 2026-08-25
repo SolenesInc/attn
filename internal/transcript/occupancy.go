@@ -5,33 +5,16 @@ import (
 	"strings"
 )
 
-// How full a live session's context is, read off the same provider records the
-// cost extractor reads. The two quantities are different and must not be
-// confused: TokenUsage SUMS a message's iterations because every one of them was
-// billed, while occupancy is the size of the LAST request's prompt — what the
-// session is carrying right now, and what the harness compacts when it grows
-// past its own limit.
+// Not TokenUsage: that SUMS a message's iterations because each was billed, while occupancy is the size of the LAST request's prompt.
 
-// ContextObservation is what one record says about a session's context.
 type ContextObservation struct {
-	// Tokens is the prompt the model was handed: everything the session carries,
-	// cached or not.
 	Tokens int64
-	// Window is the harness's own context window, or 0 when the record does not
-	// state one. Codex reports it on every token_count; Claude's transcript never
-	// mentions it, which is why the budget cannot be a fraction of it.
+	// Window is 0 when the record states none. Claude's transcript never states one, so the budget cannot be a fraction of it.
 	Window int64
 }
 
-// SupportsContextOccupancy reports whether attn can read context fill from this
-// harness's transcript. It tracks SupportsUsage on purpose: both answers come
-// from the same provider records, and an agent attn cannot cost is an agent
-// attn cannot measure the context of either.
 func SupportsContextOccupancy(agent string) bool { return SupportsUsage(agent) }
 
-// ContextOccupancy reads one complete provider JSONL record. It is stateless:
-// every record that carries an occupancy carries the whole absolute figure, so
-// the newest reading wins and a replayed record says the same thing twice.
 func ContextOccupancy(agent string, line []byte) (ContextObservation, bool) {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "claude":
@@ -54,9 +37,6 @@ func claudeContextOccupancy(line []byte) (ContextObservation, bool) {
 		return ContextObservation{}, false
 	}
 	fields := *entry.Message.Usage
-	// A message that made several requests reports each one; the last is the
-	// prompt the session is actually carrying. Adding them would count the same
-	// carried context once per request and read as full long before it is.
 	if n := len(fields.Iterations); n > 0 {
 		fields = fields.Iterations[n-1]
 	}
@@ -79,8 +59,7 @@ func codexContextOccupancy(line []byte) (ContextObservation, bool) {
 		Type string `json:"type"`
 		Info *struct {
 			LastTokenUsage struct {
-				// Codex's input_tokens already includes cached_input_tokens, so it is
-				// the whole prompt on its own.
+				// Codex's input_tokens already includes cached_input_tokens, so it is the whole prompt on its own.
 				InputTokens int64 `json:"input_tokens"`
 			} `json:"last_token_usage"`
 			ModelContextWindow int64 `json:"model_context_window"`

@@ -180,7 +180,6 @@ func TestWorkspaceRegistry_AssociateAndDissociate(t *testing.T) {
 	if r.workspaceIDForSession("s1") != "ws1" {
 		t.Fatal("association lookup failed")
 	}
-	// re-associate to a different workspace clears the previous link
 	if !r.associateSession("s1", "ws2", "Session 1") {
 		t.Fatal("re-associate should succeed")
 	}
@@ -194,12 +193,10 @@ func TestWorkspaceRegistry_AssociateAndDissociate(t *testing.T) {
 		t.Fatalf("ws2 sessionIDs = %v, want [s1]", ids)
 	}
 
-	// associate to a non-existent workspace returns false and changes nothing
 	if r.associateSession("s2", "missing", "Session 2") {
 		t.Fatal("associate to unknown workspace should fail")
 	}
 
-	// dissociate returns the workspace, remaining session count, and removes the link
 	if got, remaining := r.dissociateSession("s1"); got != "ws2" || remaining != 0 {
 		t.Fatalf("dissociate returned (%q, %d), want (ws2, 0)", got, remaining)
 	}
@@ -306,7 +303,6 @@ func TestHandleRegisterWorkspace_BroadcastsRegisteredThenStateChanged(t *testing
 		t.Fatalf("workspace payload missing or wrong: %+v", events[0].Workspace)
 	}
 
-	// Second registration should publish state_changed instead
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
 		ID:        "ws1",
@@ -378,7 +374,6 @@ func TestHandleUnregisterWorkspace_BroadcastsOnlyForKnown(t *testing.T) {
 	d := newDaemonForTest(t)
 	cap := captureBroadcasts(d)
 
-	// Unknown workspace: no broadcast
 	d.handleUnregisterWorkspace(nil, &protocol.UnregisterWorkspaceMessage{
 		Cmd: protocol.CmdUnregisterWorkspace,
 		ID:  "missing",
@@ -387,7 +382,6 @@ func TestHandleUnregisterWorkspace_BroadcastsOnlyForKnown(t *testing.T) {
 		t.Fatalf("expected no broadcast for unknown workspace, got %d", len(events))
 	}
 
-	// Register then unregister
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
 		ID:        "ws1",
@@ -418,7 +412,6 @@ func TestRecomputeWorkspaceStatus_UpdatesOnSessionStateChange(t *testing.T) {
 		Directory: "/repo",
 	})
 
-	// Add a session to the store and bind it to the workspace
 	d.store.Add(&protocol.Session{
 		ID:             "s1",
 		Label:          "s1",
@@ -433,7 +426,6 @@ func TestRecomputeWorkspaceStatus_UpdatesOnSessionStateChange(t *testing.T) {
 
 	cap := captureBroadcasts(d)
 
-	// Session goes to working — workspace should recompute to Working and broadcast
 	d.store.UpdateState("s1", protocol.StateWorking)
 	d.recomputeAndBroadcastWorkspaceForSession("s1")
 
@@ -557,7 +549,6 @@ func TestRegisterWorkspace_PersistsToStoreAndUpsertsRecentLocation(t *testing.T)
 		t.Fatalf("persisted workspace mismatch: %+v", persisted)
 	}
 
-	// Recent locations should include the workspace's directory.
 	found := false
 	for _, loc := range d.store.GetRecentLocations(50) {
 		if loc != nil && loc.Path == dir {
@@ -590,16 +581,13 @@ func TestUnregisterWorkspace_CascadeClosesMemberSessions(t *testing.T) {
 		Cmd: protocol.CmdUnregisterWorkspace, ID: "ws1",
 	})
 
-	// Both sessions should be gone from the store.
 	if d.store.Get("s1") != nil || d.store.Get("s2") != nil {
 		t.Fatal("member sessions were not removed from the store")
 	}
-	// Workspace itself is gone from the store.
 	if d.store.GetWorkspace("ws1") != nil {
 		t.Fatal("workspace was not removed from the store")
 	}
 
-	// Broadcast order: two session_unregistered, then workspace_unregistered.
 	events := cap.snapshot()
 	if len(events) != 3 {
 		t.Fatalf("expected 3 broadcasts (2 session_unregistered + 1 workspace_unregistered), got %d: %+v", len(events), events)
@@ -619,8 +607,7 @@ func TestLoadWorkspacesFromStore_RebuildsRegistryAndReassociates(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())
 
-	// Seed the store directly, simulating state that was persisted before a
-	// daemon restart.
+	// Seed the store directly, simulating state persisted before a daemon restart.
 	d.store.AddWorkspace(&protocol.Workspace{ID: "ws1", Title: "ws", Directory: "/repo"})
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "s1", Agent: protocol.SessionAgentCodex, Directory: "/repo",
@@ -629,12 +616,9 @@ func TestLoadWorkspacesFromStore_RebuildsRegistryAndReassociates(t *testing.T) {
 		StateSince:  now, StateUpdatedAt: now, LastSeen: now,
 	})
 
-	// Fresh registry; load from the store.
 	d.workspaces = newWorkspaceRegistry()
 	d.loadWorkspacesFromStore()
 
-	// Registry should know about ws1, the session-to-workspace link, and the
-	// rollup status (working).
 	if got := d.workspaces.workspaceIDForSession("s1"); got != "ws1" {
 		t.Fatalf("association not reloaded: got %q, want ws1", got)
 	}
@@ -736,8 +720,6 @@ func TestAssociateSessionWithWorkspace_PersistsToStore(t *testing.T) {
 		t.Fatalf("workspace_id was not persisted on session: %+v", got)
 	}
 
-	// Unregister deletes the session row; it should not leave behind a
-	// workspace-less persisted session.
 	d.store.Remove("s1")
 	d.dissociateSessionFromWorkspace("s1")
 	got = d.store.Get("s1")

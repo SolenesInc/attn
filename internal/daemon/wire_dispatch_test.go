@@ -10,15 +10,8 @@ import (
 	"testing"
 )
 
-// Agents locate code by grepping names, so a wire command name that appears only
-// in internal/protocol (constant, TypeSpec schema, generated code) forces a
-// second search to reach the code that runs it. These tests keep every wire
-// command name greppable at every switch case that dispatches it:
-//
-//	case protocol.CmdDeleteWorktree: // wire: delete_worktree
-//
-// Adding a command, or a second dispatch site for one, without the comment fails
-// TestWireCommandsAreGreppable.
+// Every wire command name stays greppable at its dispatch site via a `// wire: <name>`
+// comment. A new command, or a second dispatch site, without that comment fails here.
 
 var (
 	wireConstRe   = regexp.MustCompile(`\b(Cmd[A-Za-z0-9]+)\s*=\s*"([a-z0-9_]+)"`)
@@ -27,19 +20,14 @@ var (
 	wireCommentRe = regexp.MustCompile(`//\s*wire:\s*(.*)$`)
 )
 
-// dispatchFiles hold the command switches: the WebSocket dispatch, the
-// unix-socket dispatch, and the automation sub-dispatch.
 var dispatchFiles = []string{"websocket.go", "daemon.go", "automations.go"}
 
-// dispatchSite is one `case protocol.Cmd...:` line and the wire names visible in
-// the comment attached to it.
 type dispatchSite struct {
 	where     string
 	constants []string
 	annotated []string
 }
 
-// wireCommands maps every protocol.Cmd* constant to its wire string.
 func wireCommands(t *testing.T) map[string]string {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "protocol", "constants.go"))
@@ -56,9 +44,6 @@ func wireCommands(t *testing.T) map[string]string {
 	return out
 }
 
-// dispatchSites reads the wire comment trailing each case line, or the
-// contiguous // block directly above it. Both forms put the name inside the
-// window ripgrep prints for the case.
 func dispatchSites(t *testing.T) []dispatchSite {
 	t.Helper()
 	var sites []dispatchSite
@@ -130,8 +115,6 @@ func TestWireCommandsAreGreppable(t *testing.T) {
 	}
 }
 
-// A wire comment that drifts from its constant is worse than none: it sends the
-// next reader to the wrong handler with full confidence.
 func TestWireCommentsMatchTheirConstants(t *testing.T) {
 	commands := wireCommands(t)
 	byWire := map[string]string{}

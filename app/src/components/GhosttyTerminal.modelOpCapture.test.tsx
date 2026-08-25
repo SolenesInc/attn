@@ -1,10 +1,3 @@
-// Capture-on-fault wiring: when the model traps, the model_fault diagnostics
-// record must carry a decodable ring of the inputs that model was fed.
-//
-// This fails if the ring is hooked at the wrong layer (post-wrapper, so the
-// bytes no longer match what the app was asked to write), if a call site is
-// missed (the fit resize path, the reset path), if the capture is not attached
-// to the record, or if the epoch is not reset when the pane rebuilds.
 import { act, render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { base64ToBytes, type ModelFaultCapture } from '../utils/ghosttyModelOpRing';
@@ -27,8 +20,6 @@ const mocks = vi.hoisted(() => {
         terminal.cols = cols;
         terminal.rows = rows;
       },
-      // Wraparound on, so the no-reflow resize path takes its mode-7 dance —
-      // the same shape production runs.
       getMode: () => true,
       getScrollbackLength: () => 0,
       getViewport: () => [],
@@ -41,8 +32,6 @@ const mocks = vi.hoisted(() => {
       free: () => undefined,
       isAlternateScreen: () => false,
       hasMouseTracking: () => false,
-      // A restore swaps the model's whole state; the ring records the bytes,
-      // and this mock only has to hand back an empty history driver.
       adoptSnapshot: () => ({ rows: 0, next: () => null, close: () => undefined }),
     };
     terminals.push(terminal);
@@ -149,8 +138,6 @@ describe('GhosttyTerminal model-op capture', () => {
       await waitFor(() => expect(handle).not.toBeNull());
       const terminal = handle as unknown as GhosttyTerminalHandle;
 
-      // A restore (the attach snapshot the model is rebuilt from), then live
-      // output, a reset, a fit resize, and one more write.
       await act(async () => {
         await terminal.restoreSnapshot(new Uint8Array([0x64, 0x75, 0x6d, 0x70]));
         await terminal.write('live output');
@@ -166,7 +153,6 @@ describe('GhosttyTerminal model-op capture', () => {
         await terminal.write('after resize');
       });
 
-      // Now trap on the next render, the way the production render-OOB fault did.
       mocks.control.failNextRender = true;
       await act(async () => {
         await terminal.write('trapping write');
@@ -176,20 +162,17 @@ describe('GhosttyTerminal model-op capture', () => {
       const capture = mocks.noteModelFaultCalls[0][1].capture as ModelFaultCapture;
       expect(capture).toBeDefined();
 
-      // The restore chunk is the base state, kept apart from the op ring.
       expect(capture.snapshot).toMatchObject({ len: 4, truncated: false });
       expect(decoder.decode(base64ToBytes(capture.snapshot!.b64))).toBe('dump');
       expect(capture.snapshotTruncated).toBe(false);
 
-      // Every live input, in order, exactly as the app was asked to write it —
-      // not the OSC 133 / grapheme-mode segmentation of it.
       expect(capture.ops.map((op) => op.kind)).toEqual([
-        'write', // live output
-        'reset', // marker; its RIS bytes are the next op
-        'write', // \x1bc
-        'resize', // fit
-        'write', // after resize
-        'write', // trapping write
+        'write',
+        'reset',
+        'write',
+        'resize',
+        'write',
+        'write',
       ]);
       expect(writeText(capture, 0)).toBe('live output');
       expect(writeText(capture, 2)).toBe('\x1bc');
@@ -199,8 +182,6 @@ describe('GhosttyTerminal model-op capture', () => {
       expect(capture.droppedOps).toBe(0);
       expect(capture.droppedForRecordBudget).toBe(0);
 
-      // The mode-7 dance reached the model but is NOT in the ring: capture is
-      // pre-wrapper, and the replay tool reproduces the wrapper from noReflow.
       expect(mocks.terminals[0].writes).toContain('\x1b[?7l');
       const capturedWrites = capture.ops
         .map((op, index) => (op.kind === 'write' ? writeText(capture, index) : ''))

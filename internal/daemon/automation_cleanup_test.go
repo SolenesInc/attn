@@ -14,11 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestAutomationCleanupPartitionsCleanAndDirtyWorktrees pins A4's core
-// behavior: given two terminal runs with real worktrees, one clean and one
-// dirty, cleanup removes the clean one's worktree and reports it in
-// `cleaned`, leaves the dirty one's worktree in place and reports it in
-// `kept_dirty` — with no age/count gate (unlike A3's retention sweep).
 func TestAutomationCleanupPartitionsCleanAndDirtyWorktrees(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -45,8 +40,6 @@ func TestAutomationCleanupPartitionsCleanAndDirtyWorktrees(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Recent runs (well within any retention window) confirm cleanup has no
-	// age or count gate: A3 would leave these alone entirely.
 	now := time.Now()
 	cleanRun := claimTerminalAutomationRun(t, s, def, "cleanup-clean-1", now, automationResolvedLocationJSON(t, mainRepo, cleanWorktree))
 	dirtyRun := claimTerminalAutomationRun(t, s, def, "cleanup-dirty-1", now, automationResolvedLocationJSON(t, mainRepo, dirtyWorktree))
@@ -72,10 +65,6 @@ func TestAutomationCleanupPartitionsCleanAndDirtyWorktrees(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupNeverTouchesRowsOrArtifacts pins that, unlike A3's
-// retention sweep, cleanup is disk-only: after cleaning a clean worktree,
-// the run/occurrence rows and the occurrence artifact file are all still
-// present — only the worktree is gone.
 func TestAutomationCleanupNeverTouchesRowsOrArtifacts(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -129,9 +118,6 @@ func TestAutomationCleanupNeverTouchesRowsOrArtifacts(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupSecondRunIsNoOp pins that invoking cleanup again
-// after a successful pass reports nothing new: the worktree that was
-// already removed is not re-reported as cleaned.
 func TestAutomationCleanupSecondRunIsNoOp(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -184,12 +170,6 @@ func TestAutomationCleanupSecondRunIsNoOp(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupLiveSessionSkipped pins that a terminal run whose
-// session still exists in the store keeps its worktree, and that the user
-// is told so via keptActive rather than the run disappearing from the
-// result with no explanation. Unlike A3's retention sweep, cleanup has no
-// age/count gate at all, so without the safety check it would remove a live
-// thread's worktree out from under it on the very next on-demand cleanup.
 func TestAutomationCleanupLiveSessionSkipped(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -230,12 +210,6 @@ func TestAutomationCleanupLiveSessionSkipped(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupReclaimsSoftDeletedDefinition pins that cleanup still
-// works after its definition is soft-deleted: automationCleanup deliberately
-// uses GetAutomationDefinitionIncludingDeleted rather than
-// GetAutomationDefinition, precisely so a user can reclaim a retired
-// automation's worktrees on demand instead of waiting for the retention
-// sweep to eventually reach it.
 func TestAutomationCleanupReclaimsSoftDeletedDefinition(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -278,13 +252,6 @@ func TestAutomationCleanupReclaimsSoftDeletedDefinition(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupBoundThreadReportsKeptActive pins the exact bug found
-// live (packaged run automation-lifecycle-2026-07-20T19-58-08-613Z, leg 3): a
-// terminal run whose session row is already gone but whose continuity
-// binding survives must land in keptActive, not vanish from the result. A
-// continuity thread reuses one session id and one shared worktree across
-// every occurrence, so a session row being absent does not mean the thread —
-// or the worktree this run points at — is dead.
 func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -314,9 +281,6 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 	if err := s.MarkAutomationRunDelivered(run.ID, automationResolvedLocationJSON(t, mainRepo, worktree), now); err != nil {
 		t.Fatal(err)
 	}
-	// No session row is ever added: the thread's session has already been
-	// garbage-collected, exactly like leg 3 closing the session before
-	// cleanup. Only the surviving continuity binding protects the worktree.
 
 	cleaned, keptDirty, keptActive, err := d.automationCleanup(context.Background(), def.ID)
 	if err != nil {
@@ -333,10 +297,6 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupThreeWayPartition pins the full three-bucket contract
-// in one call: a clean unbound run, a dirty unbound run, and a bound run
-// under one definition land in cleaned, kept_dirty, and kept_active
-// respectively — exactly one id per bucket, no id in two.
 func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -378,9 +338,6 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 		}
 		return run
 	}
-	// Empty continuity keys never write a binding (ClaimManualAutomationRun's
-	// "" subjectKey has the same effect elsewhere in this file), so clean and
-	// dirty are genuinely unbound; only "singleton" binds boundRun's session.
 	cleanRun := claim("schedule:clean", "", "partition-clean", cleanWorktree)
 	dirtyRun := claim("schedule:dirty", "", "partition-dirty", dirtyWorktree)
 	boundRun := claim("schedule:bound", "singleton", "partition-bound", boundWorktree)
@@ -400,13 +357,6 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 	}
 }
 
-// TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread pins the
-// kept_active schema comment's claim (main.tsp, ~:2702) that "only the
-// daemon log distinguishes them": a live-session run and a bound-thread run
-// both land in the same keptActive bucket the caller sees, so the only place
-// a user (or an on-call reading daemon.log) can tell which is which is the
-// log line cleanup emits per run. Assert against the captured log content
-// itself, not just the buckets already covered above.
 func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -437,8 +387,6 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	}
 
 	now := time.Now()
-	// Live session: an unbound (empty continuityKey) run whose session row
-	// still exists.
 	liveRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:live", "", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
 		RunID: "run-log-live", OccurrenceID: "occ-log-live", TicketID: "ticket-log-live", SessionID: "session-log-live", WorkspaceID: "workspace-log-live", PaneID: "pane-log-live",
 	})
@@ -453,8 +401,6 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: liveRun.WorkspaceID,
 	})
 
-	// Bound thread: a "singleton"-continuity run whose session row is gone
-	// but whose binding survives.
 	boundRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:bound", "singleton", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
 		RunID: "run-log-bound", OccurrenceID: "occ-log-bound", TicketID: "ticket-log-bound", SessionID: "session-log-bound", WorkspaceID: "workspace-log-bound", PaneID: "pane-log-bound",
 	})

@@ -11,24 +11,12 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// agent_peek is the passive half of agents conversing and observing: one agent
-// reads another session's state, todos, last assistant message, and rendered
-// screen, all from what the daemon already holds. Nothing here writes to the
-// target's PTY or wakes its agent — watching must cost the observed session
-// nothing.
-
-// agentPeekMessageMaxChars bounds the last assistant message. Same receipt as
-// the annotatable window (ws_session_message.go): the largest prose block seen
-// across 120 transcripts was 18,713 chars, so 64KiB is a tripwire only a
-// runaway transcript touches.
+// Receipt (shared with ws_session_message.go): the largest prose block across
+// 120 transcripts was 18,713 chars, so 64KiB is a tripwire.
 const agentPeekMessageMaxChars = annotatableMessageMaxChars
 
-// agentShortIDLength matches what `attn agent list` prints, so an id the daemon
-// puts in front of an agent is one that agent can paste back.
 const agentShortIDLength = 8
 
-// agentPeekSnapshotTimeout matches the model-capture snapshot budget: the
-// worker answers from its parsed terminal without touching the agent process.
 const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
@@ -43,10 +31,6 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 	})
 }
 
-// resolveSessionByIDOrPrefix accepts a full session id or a unique prefix —
-// `attn agent list` prints 8-char short ids, and every other `attn agent`
-// command takes them back. The error code names what went wrong: an ambiguous
-// prefix is the caller's to lengthen, not ours to guess.
 func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
 	target = strings.TrimSpace(target)
 	if target == "" {
@@ -101,8 +85,6 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	return result
 }
 
-// agentPeekScreen degrades to nil — never an error — when the backend cannot
-// serve a snapshot (no provider, old worker, no rendered frame yet).
 func (d *Daemon) agentPeekScreen(sessionID string) *protocol.AgentPeekScreen {
 	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {

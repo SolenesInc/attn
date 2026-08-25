@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The pattern an agent types is the whole payload, and it routinely contains
-// spaces and wildcards. These pin that flags never eat part of it.
-
 func TestAutoModeStripFlagsKeepsThePattern(t *testing.T) {
 	cases := []struct {
 		args []string
@@ -28,8 +25,6 @@ func TestAutoModeStripFlagsKeepsThePattern(t *testing.T) {
 	}
 }
 
-// --limit takes a value, so its argument must not survive as a positional and
-// be read as part of a pattern.
 func TestAutoModeStripFlagsDropsAValuedFlagsArgument(t *testing.T) {
 	if got := stripFlags([]string{"--limit", "5"}); len(got) != 0 {
 		t.Fatalf("stripFlags dropped %v, want nothing left", got)
@@ -51,9 +46,6 @@ func TestAutoModeTakeStringFlagReadsBothForms(t *testing.T) {
 	}
 }
 
-// The denials feed is what a person or an agent reads to see what auto mode
-// refused, so every column has to be there: when, which session, who decided,
-// the blocked call, and the reason.
 func TestAutoModeDenialsRenderEveryColumn(t *testing.T) {
 	var out bytes.Buffer
 	writeAutoModeDenials(&out, []protocol.AutoModeDenialInfo{{
@@ -84,8 +76,6 @@ func TestAutoModeDenialsSayWhenThereAreNone(t *testing.T) {
 	}
 }
 
-// A feed that clipped and did not say so reads as a whole episode, which is the
-// failure the ledger exists to end.
 func TestAutoModeDenialsNameWhatTheLedgerLost(t *testing.T) {
 	var out bytes.Buffer
 	writeAutoModeDenials(&out, nil, "3 older denials were dropped when the local ledger rotated")

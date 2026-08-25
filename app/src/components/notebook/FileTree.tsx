@@ -1,42 +1,22 @@
-// A lazy filesystem tree over the daemon's generic fs surface. It renders the real
-// folder hierarchy under the root: the root's immediate children on mount, and each
-// directory's children only when it is expanded (one fs_list per opened node — the
-// tree never walks the whole disk up front). Files are selectable; directories
-// toggle open/closed. An fs_changed bump re-lists the root and every open directory
-// so external/agent edits surface without losing the user's expansion state.
-//
-// This component is purely presentational over the injected `listDir` — it knows
-// nothing about the websocket — so it is unit-testable with a mock and reusable
-// wherever a filesystem tree is needed (the notebook browser is the first consumer).
-
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import type { FsEntry } from '../../hooks/useDaemonSocket';
 import './FileTree.css';
 
 interface FileTreeProps {
-  // List one directory's immediate children. '' = the root directory itself.
   listDir: (path: string) => Promise<FsEntry[]>;
-  // The currently selected FILE path (root-relative), highlighted in the tree.
   selectedPath: string | null;
-  // A file node was activated (clicked). Directories never call this — they toggle.
   onSelectFile: (path: string) => void;
-  // Bumped whenever fs content changes, so the tree re-lists its open directories.
   changeSignal?: number;
 }
 
-// The root directory's key in the children/expanded/loading maps. Kept distinct from
-// any real entry path (entry paths are always non-empty) so the root never collides.
 const ROOT = '';
 
 export function FileTree({ listDir, selectedPath, onSelectFile, changeSignal = 0 }: FileTreeProps) {
-  // Per-directory listing cache (key = directory path, ROOT for the root). Presence
-  // of a key means that directory has been listed at least once.
   const [children, setChildren] = useState<Map<string, FsEntry[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
 
-  // Avoid setting state after unmount (a slow list resolving post-close).
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -54,9 +34,6 @@ export function FileTree({ listDir, selectedPath, onSelectFile, changeSignal = 0
     });
   }, []);
 
-  // List one directory and fold the result into the caches. Errors are recorded per
-  // directory (so one failed node does not blank the rest); a successful list clears
-  // any prior error for that directory.
   const loadDir = useCallback(
     async (dir: string) => {
       markLoading(dir, true);
@@ -82,28 +59,20 @@ export function FileTree({ listDir, selectedPath, onSelectFile, changeSignal = 0
     [listDir, markLoading],
   );
 
-  // List the root on mount.
   useEffect(() => {
     void loadDir(ROOT);
-    // loadDir is stable for a stable listDir; we intentionally list once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadDir]);
 
-  // Re-list the root and every open directory when fs content changes, preserving
-  // expansion. (Skip the initial 0 so this does not double-list on mount.)
   useEffect(() => {
     if (changeSignal === 0) return;
     void loadDir(ROOT);
     for (const dir of expanded) void loadDir(dir);
-    // expanded is read as a live snapshot; we don't want to re-run when it changes,
-    // only when the change signal bumps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [changeSignal, loadDir]);
 
-  // Toggle a directory open/closed. List it on first open (no cached listing yet);
-  // a re-open reuses the cache. `expanded`/`children` are read from the closure
-  // (both are deps), so the load decision is made outside any setState updater —
-  // updaters must stay pure (StrictMode invokes them twice).
+  // The load decision is made outside any setState updater — StrictMode invokes
+  // updaters twice.
   const toggleDir = useCallback(
     (dir: string) => {
       const isOpen = expanded.has(dir);
@@ -118,8 +87,6 @@ export function FileTree({ listDir, selectedPath, onSelectFile, changeSignal = 0
     [expanded, children, loadDir],
   );
 
-  // Render one directory's entries at the given depth. Recurses into open
-  // subdirectories. Returns null when the directory has not been listed yet.
   const renderDir = (dir: string, depth: number) => {
     const entries = children.get(dir);
     const isLoading = loading.has(dir);
@@ -214,8 +181,6 @@ export function FileTree({ listDir, selectedPath, onSelectFile, changeSignal = 0
   );
 }
 
-// Indent a row by its depth. Kept as inline padding (not a per-depth class) so the
-// tree nests to any depth without a fixed ladder of CSS rules.
 function indent(depth: number): CSSProperties {
   return { paddingLeft: `${8 + depth * 14}px` };
 }

@@ -1,22 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-/**
- * Centralized Escape key dismiss stack.
- *
- * Rule: global Cmd-key shortcuts → shortcut registry.
- *       Modal/overlay dismiss → this hook.
- *
- * When an overlay opens, it pushes a dismiss callback onto the stack.
- * Escape calls only the top handler (LIFO), so nested overlays dismiss
- * in the right order automatically.
- *
- * Capture phase is intentional: fires before terminal and element-level
- * handlers, so overlays always close regardless of what has DOM focus.
- * When the stack is non-empty, stopPropagation() prevents the event from
- * reaching background inputs (terminal, CodeMirror, etc.).
- * All Escape dismiss handlers — including nested sub-states — must go
- * through this hook so the LIFO ordering stays correct.
- */
+// Every Escape dismiss handler must go through this hook, or LIFO ordering breaks.
+// Capture phase is deliberate: it beats terminal and element-level handlers to the key.
 
 const stack: Array<() => void> = [];
 

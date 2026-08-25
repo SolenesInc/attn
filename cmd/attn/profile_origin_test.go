@@ -9,8 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// TestMain keeps every config-path lookup in this package inside a temp dir, so
-// no test can resolve production ~/.attn. See AGENTS.md "Test safety".
+// Keeps every config-path lookup in this package inside a temp dir, so no test can
+// resolve production ~/.attn. See AGENTS.md "Test safety".
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-cmd-test")
 	if err != nil {
@@ -29,7 +29,6 @@ func TestProfileOriginRoundTrip(t *testing.T) {
 		Branch:     "wily-raccoon",
 		RecordedAt: "2026-08-02T00:00:00Z",
 	}
-	// Install can run before the daemon has ever created the data dir.
 	if err := writeProfileOrigin(dataDir, want); err != nil {
 		t.Fatalf("writeProfileOrigin() error: %v", err)
 	}
@@ -50,8 +49,6 @@ func TestReadProfileOriginAbsentOrUnusable(t *testing.T) {
 	}{
 		{name: "no origin file", write: false},
 		{name: "malformed json", content: "{not json", write: true},
-		// A record with no worktree cannot attribute anything, so it must read as
-		// absent rather than as a match-everything origin.
 		{name: "blank worktree", content: `{"worktree":"  "}`, write: true},
 		{name: "missing worktree key", content: `{"branch":"x"}`, write: true},
 	}
@@ -70,8 +67,6 @@ func TestReadProfileOriginAbsentOrUnusable(t *testing.T) {
 	}
 }
 
-// The origin file must live inside the data dir, so cleaning a profile takes its
-// provenance with it and a later reinstall cannot inherit a stale worktree.
 func TestOriginPathIsInsideDataDir(t *testing.T) {
 	dataDir := t.TempDir()
 	if got, want := originPath(dataDir), filepath.Join(dataDir, "origin.json"); got != want {
@@ -85,8 +80,6 @@ func TestCountLiveWorkers(t *testing.T) {
 		t.Fatalf("countLiveWorkers() = %d on an empty data dir, want 0", got)
 	}
 
-	// A registry entry outlives its process; counting files would overstate what
-	// is actually running.
 	write := func(session string, pid int) {
 		path := filepath.Join(dataDir, "workers", "d-1", "registry", session+".json")
 		if err := ptyworker.WriteRegistryAtomic(path, ptyworker.RegistryEntry{
@@ -112,8 +105,6 @@ func TestSocketLiveOnMissingSocket(t *testing.T) {
 	}
 }
 
-// A socket file left behind by a dead daemon must not read as a running one —
-// that is the difference between "clean me" and "leave me alone".
 func TestSocketLiveIgnoresStaleSocketFile(t *testing.T) {
 	stale := filepath.Join(t.TempDir(), "attn.sock")
 	if err := os.WriteFile(stale, nil, 0600); err != nil {

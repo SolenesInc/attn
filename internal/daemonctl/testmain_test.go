@@ -7,10 +7,8 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// TestMain scopes every test in this package to an explicit temp data dir so
-// no test can resolve config.DataDir() to the real ~/.attn — see
-// docs/plans/2026-07-18-db-loss-mitigation.md. Individual tests that need
-// their own isolation layer a t.Setenv("ATTN_DATA_DIR", ...) on top.
+// Scopes every test in this package to a temp data dir so none can resolve
+// config.DataDir() to the real ~/.attn. See docs/plans/2026-07-18-db-loss-mitigation.md.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-test-data-*")
 	if err != nil {

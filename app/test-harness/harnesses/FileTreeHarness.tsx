@@ -1,11 +1,5 @@
-/**
- * FileTree Test Harness
- *
- * Renders the lazy filesystem tree in a real browser against an in-memory fixture
- * tree, so the lazy expand/collapse, selection highlight, and theming can be
- * exercised and eyeballed. listDir resolves from the fixture with a small delay so
- * the "Loading…" state is observable; every call is recorded for assertions.
- */
+/** FileTree harness: the lazy filesystem tree in a real browser against an in-memory
+ * fixture. listDir resolves with a delay so "Loading…" is observable; calls are recorded. */
 import { useCallback, useEffect, useState } from 'react';
 // Pull in the app's design tokens (--color-*, --accent) so the tree renders with the
 // real theme rather than undefined variables.

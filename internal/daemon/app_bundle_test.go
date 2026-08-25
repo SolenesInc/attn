@@ -11,11 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/appbuild"
 )
 
-// The bundle route. What these pin is that the URL is the whole contract: the
-// path is content-addressed, so it may be cached forever and may be fetched
-// from another origin, and every segment of it is validated before anything
-// touches the filesystem.
-
 const bundleTestHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func seedViewArtifact(t *testing.T, d *Daemon, app, hash, view, content string) {
@@ -51,8 +46,6 @@ func TestBundleRouteServesAViewCacheableForeverAndCrossOrigin(t *testing.T) {
 	if !strings.Contains(string(body), "export default") {
 		t.Fatalf("the served module is not the artifact: %q", string(body))
 	}
-	// A module script is fetched in CORS mode from tauri://localhost. Without
-	// this header the import fails before the module is ever parsed.
 	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Fatalf("Access-Control-Allow-Origin is %q, so a tauri://localhost import cannot read it", got)
 	}
@@ -85,8 +78,6 @@ func TestBundleRouteAnswersThePreflightAndRefusesWrites(t *testing.T) {
 
 func TestBundleRouteRefusesAPathItCannotValidateBeforeTouchingDisk(t *testing.T) {
 	d := newAppDaemon(t)
-	// The escape it must not permit: a hash segment that walks out of the store.
-	// It is refused by shape, so no path is ever built from it.
 	traversal := appBundleRoutePrefix + "reviewer/" + "../../../../etc/approvals.js"
 	if _, _, _, err := parseAppBundlePath(traversal); err == nil {
 		t.Fatalf("a traversal path parsed: %q", traversal)
@@ -111,8 +102,6 @@ func TestBundleRouteRefusesAPathItCannotValidateBeforeTouchingDisk(t *testing.T)
 
 func TestBundleRouteNamesTheVersionWhenTheArtifactIsGone(t *testing.T) {
 	d := newAppDaemon(t)
-	// A name nothing in this package ever seeds: the artifact store is one temp
-	// dir for the whole package, so "never applied" has to be spelled out.
 	resp := getBundle(t, d, http.MethodGet, AppBundleURLPath("neverapplied", bundleTestHash, "approvals"))
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("a missing artifact: status %d, want 404", resp.StatusCode)
@@ -120,8 +109,6 @@ func TestBundleRouteNamesTheVersionWhenTheArtifactIsGone(t *testing.T) {
 	body := make([]byte, 1024)
 	n, _ := resp.Body.Read(body)
 	text := string(body[:n])
-	// A tile pointing at a version whose artifacts were removed is the realistic
-	// way here, so the reader is told which version and where to look next.
 	for _, want := range []string{"approvals", "neverapplied", appbuild.ShortHash(bundleTestHash), "attn app status neverapplied"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("the 404 does not name %q: %s", want, text)

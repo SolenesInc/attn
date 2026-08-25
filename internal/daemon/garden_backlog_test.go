@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// seedBacklogTicket writes one board ticket the way the pre-cutover CLI did.
 func seedBacklogTicket(t *testing.T, d *Daemon, id, title, description string, status store.TicketStatus, assignee string) {
 	t.Helper()
 	if _, err := d.createTicketWithUniqueSlug(store.Ticket{
@@ -31,8 +30,6 @@ func gardenSeeds(t *testing.T, d *Daemon) []garden.Seed {
 	return read.seeds
 }
 
-// The whole unbound todo column becomes seeds, description and all, and each
-// ticket leaves the board without losing its record.
 func TestBacklogConversionPlantsUnboundTodosAsSeeds(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedBacklogTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusTodo, "")
@@ -70,7 +67,6 @@ func TestBacklogConversionPlantsUnboundTodosAsSeeds(t *testing.T) {
 	}
 }
 
-// The pass runs on every boot, so a second run must find nothing left to do.
 func TestBacklogConversionIsIdempotent(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedBacklogTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusTodo, "")
@@ -83,8 +79,6 @@ func TestBacklogConversionIsIdempotent(t *testing.T) {
 	}
 }
 
-// Everything else on the board stays exactly where it is: a done ticket has no
-// garden equivalent, and an assigned todo is somebody's.
 func TestBacklogConversionLeavesBoundAndClosedTicketsAlone(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedBacklogTicket(t, d, "held-todo", "Held todo", "somebody has this", store.TicketStatusTodo, "sess-a")

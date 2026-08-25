@@ -212,8 +212,6 @@ func TestEnroll_AdoptsAStandaloneHome(t *testing.T) {
 }
 
 func TestEnroll_IntoADataDirThatDoesNotExistYet(t *testing.T) {
-	// A home enrolls a remote right after installing the binary there, before any
-	// daemon has run: the data dir does not exist and there is no daemon id yet.
 	root := filepath.Join(t.TempDir(), "never-started")
 
 	result, err := Enroll(root, homeID)
@@ -227,8 +225,6 @@ func TestEnroll_IntoADataDirThatDoesNotExistYet(t *testing.T) {
 		t.Fatalf("record home = %q, want %q", record.HomeDaemonID, homeID)
 	}
 
-	// The daemon that starts there next keeps the enrollment rather than
-	// declaring itself a home.
 	id, err := EnsureDaemonID(root)
 	if err != nil {
 		t.Fatalf("EnsureDaemonID: %v", err)
@@ -303,7 +299,6 @@ func TestLeave_MakesTheDaemonAHomeAgain(t *testing.T) {
 		t.Fatalf("daemon is not a home after leaving: %+v", status)
 	}
 
-	// The way out is what unblocks the second home; enrolling now succeeds.
 	if _, err := Enroll(root, homeID); err != nil {
 		t.Fatalf("Enroll after Leave: %v", err)
 	}

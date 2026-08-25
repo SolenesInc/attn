@@ -18,8 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// TerminalTheme carries the frontend's resolved terminal colors as "#rrggbb"
-// hex strings; zero-value fields fall back to built-in dark defaults.
+// Colors are "#rrggbb"; a zero-value field falls back to the dark default.
 type TerminalTheme struct {
 	Foreground  string
 	Background  string
@@ -27,50 +26,36 @@ type TerminalTheme struct {
 	ANSIPalette [16]string
 }
 
-// Default OSC 10/11/12 colors, matching the frontend's built-in dark theme.
 const (
 	defaultThemeForeground = "#d4d4d4"
 	defaultThemeBackground = "#1e1e1e"
 	defaultThemeCursor     = "#d4d4d4"
 )
 
-// infoSnapshotHook is a test-only seam fired inside info() between the ghostty
-// serialize and the LastSeq read. nil in production.
 var infoSnapshotHook func()
 
-// readLoopSeqGapHook is a test-only seam fired after a chunk's seq is
-// allocated but before the chunk is applied under replayMu. nil in production.
 var readLoopSeqGapHook func()
 
-// colorSchemeReplyHook is a test-only seam fired after a DSR 996 reply is
-// written. nil in production.
 var colorSchemeReplyHook func()
 
 type sessionSubscriber struct {
-	id     string
-	send   func(data []byte, seq uint32) bool
-	onDrop func(reason string)
-	// onPlacements receives the kitty placement set whenever a chunk moved it;
-	// nil for subscribers that do not draw. See OnPlacements.
+	id           string
+	send         func(data []byte, seq uint32) bool
+	onDrop       func(reason string)
 	onPlacements func(update PlacementUpdate)
 }
 
 type terminalQueries struct {
 	da1 bool
 	cpr bool
-	// osc10/osc11/osc12 count OCCURRENCES, not presence: each query needs its
-	// own reply or the program hangs. Derived from oscQueryOrder.
+	// Occurrences, not presence: each query needs its own reply or the program hangs.
 	osc10 int
 	osc11 int
 	osc12 int
-	// oscQueryOrder lists the OSC color codes (10/11/12) queried, in ask order
-	// — clients that pair replies positionally depend on it.
+	// In ask order: clients pair replies positionally.
 	oscQueryOrder []int
-	// colorScheme counts DSR `CSI ? 996 n` color-scheme queries, the same way
-	// the OSC counts do: one reply per ask.
-	colorScheme int
-	// da1BeforeCPR records that the chunk asked DA1 before CPR.
-	da1BeforeCPR bool
+	colorScheme   int
+	da1BeforeCPR  bool
 }
 
 type Session struct {
@@ -78,82 +63,64 @@ type Session struct {
 	cwd   string
 	agent string
 
-	// resizeMu makes compare-and-apply one ordered operation across clients.
 	resizeMu sync.Mutex
 	metaMu   sync.RWMutex
 	cols     uint16
 	rows     uint16
 	// Cell size in device pixels; zero until the first measured fit.
-	cellW uint16
-	cellH uint16
-	// Exact totals distinguish same-grid pixel updates from repeated fits.
-	pixelW uint16
-	pixelH uint16
-	// A failed ioctl leaves the logical geometry retryable.
+	cellW        uint16
+	cellH        uint16
+	pixelW       uint16
+	pixelH       uint16
 	resizeFailed bool
 
 	ptmx  *os.File
 	child *childProcess
-	// cleanupDir is the shell-startup overlay to remove when the session ends;
-	// "" for the agents that need none. A path, not a closure, because an
-	// in-place worker upgrade hands it to the image that adopts the session.
+	// A path, not a closure: an in-place worker upgrade hands it to the image
+	// that adopts the session.
 	cleanupDir string
 
-	// ghostty is the server-authoritative parsed terminal (libghostty-vt):
-	// approval detection, query replies, screen snapshots, attach restore.
 	ghostty *ghosttyvt.Terminal
 	// wireFeed owns writes into ghostty and returns the bytes the wire carries
 	// instead. nil exactly when ghostty is nil; every use is nil-guarded.
 	wireFeed *wireFeeder
-	// kittyEpoch is the offset folded into every kitty generation this session
-	// reports; wireFeed holds the same value for the placement half, this
-	// field serves kittyImage. Set at construction. See mintKittyEpoch.
+	// wireFeed holds the same epoch for the placement half; this one serves
+	// kittyImage, and the two must fold the same value.
 	kittyEpoch uint64
 	seqCounter atomic.Uint32
 
-	// replayMu makes Ghostty feeds and lastReplaySeq atomic for snapshots, so
-	// a re-attaching frontend never drops a chunk that landed between the
-	// payload snapshot and the watermark read. fanOut stays outside it.
+	// replayMu makes ghostty feeds and lastReplaySeq atomic for snapshots, so a
+	// chunk landing between payload and watermark is never dropped.
 	replayMu      sync.Mutex
 	lastReplaySeq uint32
 
 	subMu       sync.RWMutex
 	subscribers map[string]*sessionSubscriber
 
-	// writeMu guards every ptmx access that is not a Read: writes, the resize
-	// ioctl, and the close — Fd() must not race Close. ptmxClosed makes a late
-	// caller a no-op instead of a use of a dead fd.
+	// writeMu guards every ptmx access that is not a Read: Fd() must not race
+	// Close, and ptmxClosed makes a late caller a no-op rather than a dead fd.
 	writeMu    sync.Mutex
 	ptmxClosed bool
 
-	// themeMu guards theme, which seeds OSC 10/11/12 and DSR 996 replies, and
-	// reportedScheme, the light/dark answer the child was last told — the
-	// gate that keeps SetTheme from re-announcing a scheme that did not move.
 	themeMu        sync.RWMutex
 	theme          TerminalTheme
 	reportedScheme colorScheme
-	// colorSchemeReports is set by the child's DECSET 2031 and cleared by its
-	// DECRST: unsolicited scheme reports are what that mode subscribes to, and
-	// a child that never asked for them must not receive any.
+	// A child that never subscribed with DECSET 2031 must receive no report.
 	colorSchemeReports atomic.Bool
 
-	// harnessSignals and shellSignals read state signals off the RAW stream;
-	// neither alters the bytes. shellSignals is nil for non-shell agents.
+	// Both read off the RAW stream and alter no bytes. shellSignals is nil for
+	// non-shell agents.
 	harnessSignals *harnessSignalObserver
 	shellSignals   *shellSignalArbiter
 	onState        func(obs Observation)
 
-	// lastSignal is the most recent observation either observer emitted, kept
-	// so a restarted daemon can READ the level: an agent parked at its prompt
-	// writes nothing, so there would otherwise be no evidence until the user
-	// typed. Written by both emitters, read from the info RPC.
+	// Kept so a restarted daemon can read the level: an agent parked at its
+	// prompt writes nothing, so no evidence would arrive until the user typed.
 	lastSignalMu sync.RWMutex
 	lastSignal   *Observation
 
-	// quiescing/quiesced stop the read loop at a chunk boundary for an
-	// in-place worker upgrade; handoffCarryover is the unfinished escape the
-	// loop was holding, and initialCarryover the one an adopted session starts
-	// with. See handoff.go.
+	// Carryovers are unfinished escapes: what the loop held at quiesce, and what
+	// an adopted session starts with. See handoff.go.
 	quiescing        atomic.Bool
 	quiesced         chan struct{}
 	handoffCarryover []byte
@@ -225,10 +192,8 @@ func (s *Session) fanOut(data []byte, seq uint32) {
 	}
 }
 
-// fanOutPlacements hands one placement update to every subscriber that asked
-// for placements. Called AFTER the chunk's bytes are fanned out and with
-// replayMu released: an update states where images sit on the grid THOSE bytes
-// produce, so it must not arrive first.
+// Call AFTER the chunk's bytes are fanned out and with replayMu released: the
+// update describes the grid those bytes produce, so it must not arrive first.
 func (s *Session) fanOutPlacements(update PlacementUpdate) {
 	s.subMu.RLock()
 	var subs []*sessionSubscriber
@@ -244,11 +209,7 @@ func (s *Session) fanOutPlacements(update PlacementUpdate) {
 	}
 }
 
-// forceResync drops every subscriber with reason, reaching each client as a
-// pty_desync: the frontend resets and re-attaches for a fresh snapshot — the
-// escape hatch for a chunk whose grid effect the wire could not express
-// (wireFeeder). Call with replayMu released; the callbacks take their own
-// locks.
+// Call with replayMu released; the callbacks take their own locks.
 func (s *Session) forceResync(reason string) {
 	s.subMu.Lock()
 	subs := make([]*sessionSubscriber, 0, len(s.subscribers))
@@ -265,11 +226,8 @@ func (s *Session) forceResync(reason string) {
 	}
 }
 
-// PTY reads are coalesced before fan-out: macOS pty reads return tiny chunks
-// under load (~100 bytes), and MESSAGE COUNT, not byte volume, balloons the
-// WebKit frontend. A read with nothing queued behind it is emitted
-// immediately — echo latency unchanged; a flood batch is bounded by
-// ptyCoalesceWindow.
+// macOS pty reads return ~100-byte chunks under load, and message COUNT, not
+// byte volume, balloons the WebKit frontend.
 const (
 	ptyReadBufBytes     = 16 * 1024
 	ptyCoalesceMaxBytes = 256 * 1024
@@ -281,9 +239,8 @@ type ptyRead struct {
 	err  error
 }
 
-// nextCoalescedRead returns the next batch of PTY output, blocking for the
-// first read; with no further read queued it is returned as-is. The returned
-// error belongs to the last read folded in; callers must not receive after it.
+// The returned error belongs to the last read folded in; callers must not
+// receive after it.
 func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration) ([]byte, error) {
 	first := <-reads
 	if first.err != nil {
@@ -319,8 +276,6 @@ func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration)
 }
 
 func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(string, ...interface{})) {
-	// A handed-over session keeps its PTY and its overlay: the image that
-	// adopts it owns both.
 	handedOver := false
 	defer func() {
 		if handedOver {
@@ -366,12 +321,9 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				data := chunk[:boundary]
 				queries := detectTerminalQueries(data)
 
-				// A reply makes preceding input observable to the child, so apply
-				// its mode changes before any concurrent theme update can race in.
 				s.trackColorSchemeReports(data)
-				// The worker is the single, always-on responder for CPR, DA1,
-				// and OSC 10/11/12 — race-free regardless of frontend
-				// attach/replay timing; the frontend answers none of these.
+				// The worker is the single responder for CPR, DA1 and OSC
+				// 10/11/12; the frontend answers none of these.
 				if len(queries.oscQueryOrder) > 0 {
 					s.writeOSCColorResponses(queries, logf)
 				}
@@ -391,20 +343,16 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				placementsMoved := false
 				s.replayMu.Lock()
 				if s.wireFeed != nil {
-					// Feed under the same lock as the seq watermark so a
-					// snapshot stays atomic with it; the placement set read in
-					// the same hold is tied to these bytes by the seq.
+					// Feed under the same lock as the seq watermark so a snapshot
+					// stays atomic with it.
 					wire, resync = s.wireFeed.feed(data)
 					placements, placementsMoved = s.wireFeed.changedPlacements()
 				}
 				s.lastReplaySeq = seq
 				s.replayMu.Unlock()
-				// Drain ghostty's query responses AFTER the lock (the sink has
-				// its own mutex).
 				s.drainGhosttyResponses(logf)
-				// Answer CPR/DA1 after the chunk is applied so the reported
-				// cursor is current, in ask order — fish sends ESC[6n ESC[0c
-				// and blocks its prompt redraw until it gets both.
+				// After the chunk is applied, in ask order: fish sends ESC[6n
+				// ESC[0c and blocks its prompt redraw until it gets both.
 				if queries.da1BeforeCPR {
 					s.writeDeviceAttributesResponse(logf)
 					s.writeCursorPositionResponse(logf)
@@ -416,14 +364,11 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 						s.writeDeviceAttributesResponse(logf)
 					}
 				}
-				// An empty wire chunk means the feeder is holding an
-				// unterminated escape; dedup (`seq > last_seq`) tolerates the
-				// missing seq.
+				// An empty wire chunk means the feeder holds an unterminated
+				// escape; dedup (`seq > last_seq`) tolerates the missing seq.
 				if len(wire) > 0 {
 					s.fanOut(wire, seq)
 				}
-				// After the bytes, never before: the set describes the grid
-				// they produce.
 				if placementsMoved {
 					s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
 				}
@@ -433,7 +378,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					}
 					s.forceResync(resync)
 				}
-				// The signal observers read the RAW chunk, not the wire.
 				if s.harnessSignals != nil && s.onState != nil {
 					for _, obs := range s.harnessSignals.Observe(data, time.Now()) {
 						s.emitSignal(obs)
@@ -449,10 +393,8 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			}
 		}
 		if err != nil {
-			// A deadline we asked for is a handoff, not an ending: everything
-			// the reader had already pulled came back with it and is applied
-			// above, and what is left sits in the kernel for the next image.
-			// The child is NOT reaped — it is still running, and still ours.
+			// A deadline we asked for is a handoff, not an ending: the child is
+			// NOT reaped, and the rest of the output waits in the kernel.
 			if errors.Is(err, os.ErrDeadlineExceeded) && s.quiescing.Load() {
 				handedOver = true
 				s.handoffCarryover = append([]byte(nil), carryover...)
@@ -502,11 +444,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	}
 }
 
-// drainGhosttyResponses clears the ghostty terminal's accumulated query
-// responses and forwards the ones the scan-based responder does not cover
-// (kitty CSI ? u, etc.) to the PTY, so the worker answers every query and a
-// snapshot-restored client can suppress all responses. Call after replayMu is
-// released; the sink has its own lock.
+// Takes replayMu itself; call with it released.
 func (s *Session) drainGhosttyResponses(logf func(string, ...interface{})) {
 	// The nil check and the drain are one critical section: teardown nils the
 	// field under replayMu, so checking outside would drain a freed terminal.
@@ -531,10 +469,6 @@ func (s *Session) drainGhosttyResponses(logf func(string, ...interface{})) {
 	}
 }
 
-// stripScannerOwnedResponses removes the response classes the scan-based
-// responder already emits — CPR (CSI … R), DA (CSI … c), OSC 10/11/12 color
-// reports — so forwarding the remainder never double-answers. Unrecognized
-// bytes are preserved so a partial stream is never silently dropped.
 func stripScannerOwnedResponses(resp []byte) []byte {
 	out := make([]byte, 0, len(resp))
 	for i := 0; i < len(resp); {
@@ -544,7 +478,7 @@ func stripScannerOwnedResponses(resp []byte) []byte {
 			continue
 		}
 		switch resp[i+1] {
-		case '[': // CSI … final byte in 0x40–0x7e
+		case '[':
 			j := i + 2
 			for j < len(resp) && !(resp[j] >= 0x40 && resp[j] <= 0x7e) {
 				j++
@@ -561,7 +495,7 @@ func stripScannerOwnedResponses(resp []byte) []byte {
 				out = append(out, seq...)
 			}
 			i = j + 1
-		case ']': // OSC … terminated by BEL or ST (ESC \)
+		case ']':
 			j := i + 2
 			for j < len(resp) {
 				if resp[j] == 0x07 {
@@ -587,8 +521,6 @@ func stripScannerOwnedResponses(resp []byte) []byte {
 	return out
 }
 
-// isOSCColorReport reports whether an OSC sequence is a 10/11/12 color report
-// (ESC ] 1{0,1,2} ;) — the codes the scan-based responder answers.
 func isOSCColorReport(seq []byte) bool {
 	const prefixLen = 5 // ESC ] 1 X ;
 	if len(seq) < prefixLen || seq[0] != 0x1b || seq[1] != ']' || seq[2] != '1' {
@@ -597,12 +529,8 @@ func isOSCColorReport(seq []byte) bool {
 	return (seq[3] == '0' || seq[3] == '1' || seq[3] == '2') && seq[4] == ';'
 }
 
-// childProcess is the agent on the far end of the PTY. A spawned session owns
-// an *exec.Cmd. A session ADOPTED after an in-place worker upgrade holds only
-// a pid — which is enough, because the upgrade replaced the worker's image
-// with execve and that keeps the pid: the agent is still this process's child,
-// so waiting on it still yields its status. Receipts:
-// docs/plans/2026-08-22-worker-inplace-upgrade.md.
+// An adopted session holds only a pid: the in-place upgrade execve'd the worker
+// and kept its pid, so the agent is still this process's child.
 type childProcess struct {
 	cmd *exec.Cmd // nil when adopted
 	pid int
@@ -615,8 +543,6 @@ func (c *childProcess) processID() int {
 	return c.pid
 }
 
-// wait reports the child's exit the way exec does, so parseExitStatus reads
-// both origins the same way.
 func (c *childProcess) wait() error {
 	if c == nil {
 		return errors.New("no child process")
@@ -659,9 +585,6 @@ func parseExitStatus(waitErr error) (int, string) {
 	return status.ExitStatus(), ""
 }
 
-// emitSignal is the single exit for both signal observers: it remembers the
-// observation before handing it on. Both callers run on their own goroutine,
-// hence the guard.
 func (s *Session) emitSignal(obs Observation) {
 	s.lastSignalMu.Lock()
 	stored := obs
@@ -670,8 +593,6 @@ func (s *Session) emitSignal(obs Observation) {
 	s.onState(obs)
 }
 
-// LastSignal is the most recent level either observer emitted, false when none
-// — what a reconnecting daemon reads to recover evidence it missed.
 func (s *Session) LastSignal() (Observation, bool) {
 	s.lastSignalMu.RLock()
 	defer s.lastSignalMu.RUnlock()
@@ -696,7 +617,6 @@ func (s *Session) markExited(exitCode int, signal string) {
 	})
 }
 
-// sessionInfo reads lifecycle metadata without serializing the terminal.
 func (s *Session) sessionInfo() SessionInfo {
 	s.metaMu.RLock()
 	cols := s.cols
@@ -751,20 +671,17 @@ func (s *Session) subscriptionInfo() AttachInfo {
 func (s *Session) info() AttachInfo {
 	metadata := s.sessionInfo()
 
-	// Serialize the ghostty terminal and read the watermark atomically: every
-	// byte in the dump has seq <= LastSeq, every live chunk to apply has
-	// seq > LastSeq. Without this a chunk written between the two is lost.
+	// Serialize and read the watermark atomically, or a chunk written between
+	// the two is lost.
 	s.replayMu.Lock()
 	var ghosttySnapshot []byte
-	// libghostty-vt surfaces no scrollback-truncation flag yet; reported false
-	// until the native serializer exposes one.
+	// libghostty-vt surfaces no scrollback-truncation flag yet.
 	var ghosttyTruncated bool
 	if s.ghostty != nil {
 		snapshot := s.ghostty.Serialize()
 		ghosttySnapshot = snapshot.Payload
 	}
-	// Blocks and placements resolve inside the SAME hold: the attach snapshot
-	// is an atomic {dump, blocks, placements, watermark} quadruple.
+	// Same hold: {dump, blocks, placements, watermark} is one atomic quadruple.
 	var ghosttyBlocks []AttachBlockData
 	var ghosttyPlacements []KittyPlacement
 	if s.wireFeed != nil {
@@ -774,14 +691,13 @@ func (s *Session) info() AttachInfo {
 	replayWatermark := s.lastReplaySeq
 	s.replayMu.Unlock()
 
-	// Test seam; fired after the unlock so it never deadlocks the read loop.
+	// After the unlock, or it deadlocks the read loop.
 	if infoSnapshotHook != nil {
 		infoSnapshotHook()
 	}
 
-	// LastSeq is the dedup boundary. screenSnapshot() reports the same
-	// covered-chunk semantics; the two must not diverge or the first live
-	// chunk after an attach is silently lost (or double-applied).
+	// LastSeq is the dedup boundary; screenSnapshot() must report the same
+	// covered-chunk semantics or the first live chunk after an attach is lost.
 	return AttachInfo{
 		LastSeq:                    replayWatermark,
 		Cols:                       metadata.Cols,
@@ -798,8 +714,6 @@ func (s *Session) info() AttachInfo {
 	}
 }
 
-// snapshotFormat names the format of bytes this build just encoded. Nothing to
-// name when there are no bytes.
 func snapshotFormat(snapshot []byte) string {
 	if len(snapshot) == 0 {
 		return ""
@@ -807,9 +721,7 @@ func snapshotFormat(snapshot []byte) string {
 	return buildinfo.SnapshotFormat
 }
 
-// kittyImage copies one stored image out of the session's terminal. Under
-// replayMu like every terminal read: teardown nils the terminal under that
-// lock. No terminal and an unknown id give the same ordinary answer.
+// Under replayMu like every terminal read: teardown nils the terminal there.
 func (s *Session) kittyImage(imageID uint32) (KittyImage, error) {
 	s.replayMu.Lock()
 	defer s.replayMu.Unlock()
@@ -820,20 +732,14 @@ func (s *Session) kittyImage(imageID uint32) (KittyImage, error) {
 	if !ok {
 		return KittyImage{}, fmt.Errorf("%w: image %d", ErrKittyImageNotFound, imageID)
 	}
-	// The second and last fold of the epoch (readPlacements is the other): the
-	// two halves must speak the same numbering or the pull repeats forever.
+	// readPlacements folds the same epoch; the two halves must agree or the
+	// pull repeats forever.
 	img.Generation += s.kittyEpoch
 	return img, nil
 }
 
-// screenSnapshot is a lean, read-only ghostty viewport serialization plus the
-// sequence watermark — no scrollback or replay history, cheap enough for many
-// sessions at once; no subscriber, no geometry claim.
-//
-// Captured under replayMu so LastSeq names exactly the last chunk baked in,
-// matching info()/Attach semantics. seqCounter would be wrong here: the read
-// loop increments it BEFORE applying the chunk, so a snapshot in that gap
-// would claim bytes the screen does not contain.
+// seqCounter would be wrong as the watermark here: the read loop increments it
+// BEFORE applying the chunk, so a snapshot in that gap overclaims.
 func (s *Session) screenSnapshot() ScreenSnapshotInfo {
 	s.metaMu.RLock()
 	cols := s.cols
@@ -883,16 +789,12 @@ func (s *Session) input(data []byte) error {
 	return err
 }
 
-// resize applies a client's geometry to the grid, the worker terminal and the
-// kernel's winsize. xpixel/ypixel are the pane's TOTAL device pixels; zero
-// means no pixel geometry, and the session then reports the totals its
-// remembered cell size implies — an attach-time reconcile must not blank out
-// what a fit already measured.
+// xpixel/ypixel are the pane's TOTAL device pixels; zero means none, and the
+// remembered cell size then implies the totals a reconcile must not blank out.
 func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	s.resizeMu.Lock()
 	defer s.resizeMu.Unlock()
 
-	// The cell is derived once, here; everything downstream speaks cells.
 	cellW, cellH := uint16(0), uint16(0)
 	if xpixel > 0 && ypixel > 0 && cols > 0 && rows > 0 {
 		cellW, cellH = xpixel/cols, ypixel/rows
@@ -906,8 +808,8 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 		cellW, cellH = s.cellW, s.cellH
 		if cellW > 0 && cellH > 0 {
 			if cols == prevCols && rows == prevRows && prevPixelW > 0 && prevPixelH > 0 {
-				// Preserve exact totals, including division remainders, when a
-				// same-grid reconcile carries no new measurement.
+				// Exact totals, division remainders included, on a same-grid
+				// reconcile that carries no new measurement.
 				xpixel, ypixel = prevPixelW, prevPixelH
 			} else {
 				xpixel, ypixel = cols*cellW, rows*cellH
@@ -925,15 +827,11 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	s.pixelW, s.pixelH = xpixel, ypixel
 	s.resizeFailed = false
 	s.metaMu.Unlock()
-	// The resize mutates the same terminal info() serializes, so it belongs in
-	// that critical section. No-reflow because every client frame is: the
-	// app's fit and replay resize with DEC wraparound off
-	// (app/src/utils/ghosttyResize.ts), and every row-indexed mapping across
-	// the wire — placements above all — rides on the grids being equal.
+	// No-reflow because every client frame is (app/src/utils/ghosttyResize.ts):
+	// row-indexed wire mappings ride on the grids staying equal.
 	s.replayMu.Lock()
 	if s.ghostty != nil {
-		// Before the grid resize so the terminal never answers a size report
-		// from the old cell against the new grid.
+		// Before the grid resize, or a size report answers with the old cell.
 		if cellW > 0 && cellH > 0 {
 			s.ghostty.SetCellPixelSize(int(cellW), int(cellH))
 		}
@@ -941,9 +839,8 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 			s.ghostty.ResizeNoReflow(int(cols), int(rows))
 		}
 	}
-	// A resize moves images without producing a byte of output, so no chunk
-	// carries the correction; deferring to "the next chunk" fails on an idle
-	// session, the common case.
+	// A resize produces no output, so no chunk carries the correction and an
+	// idle session would never get one.
 	var placements []KittyPlacement
 	placementsHeld := false
 	if s.wireFeed != nil {
@@ -952,21 +849,16 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	seq := s.lastReplaySeq
 	s.replayMu.Unlock()
 
-	// Stamped with the replay watermark, not a fresh seq: no bytes were
-	// produced. Clients take a set whose seq is >= the last applied, and every
-	// emission carries the WHOLE set, so any dropped one is healed by the next.
+	// The replay watermark, not a fresh seq: no bytes were produced.
 	if placementsHeld {
 		s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
 	}
 
-	// The ioctl reaches the master's fd, so it must not overlap the close.
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if s.ptmxClosed {
 		return true, nil
 	}
-	// xpixel/ypixel are ws_xpixel/ws_ypixel: the pane's total pixel size, which
-	// an image emitter reads through TIOCGWINSZ to decide how large to draw.
 	err := s.withPTMXFd(func(fd uintptr) error {
 		return setWinsize(fd, cols, rows, xpixel, ypixel)
 	})
@@ -978,8 +870,6 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	return true, err
 }
 
-// closePTMX closes the pty exactly once, shutting out the writers and the
-// resize ioctl that share writeMu.
 func (s *Session) closePTMX() {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
@@ -990,9 +880,7 @@ func (s *Session) closePTMX() {
 	_ = s.ptmx.Close()
 }
 
-// sigtermToHUPGrace is how long kill waits for a SIGTERM'd child before
-// escalating to SIGHUP: interactive shells ignore SIGTERM by design but every
-// shell honors terminal hangup.
+// Interactive shells ignore SIGTERM by design, but every shell honors hangup.
 const sigtermToHUPGrace = 2 * time.Second
 
 func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
@@ -1042,11 +930,8 @@ func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 	}
 }
 
-// closePTY releases the pty and the native terminal state behind it. Teardown
-// takes replayMu — the same lock info() and resize() hold — because
-// Manager.Remove can hand an already-looked-up session to an in-flight attach;
-// both fields are nil'd under the lock so a late reader sees absence, not a
-// freed handle.
+// Both fields are nil'd under replayMu so an in-flight attach sees absence
+// rather than a freed handle.
 func (s *Session) closePTY() {
 	s.closePTMX()
 
@@ -1089,8 +974,6 @@ func detectTerminalQueries(data []byte) terminalQueries {
 	}
 }
 
-// SetTheme replaces the colors used to answer OSC 10/11/12 queries. Safe to
-// call concurrently with the read loop.
 func (s *Session) SetTheme(theme TerminalTheme) error {
 	if s.ghostty != nil {
 		if err := s.ghostty.SetColorTheme(ghosttyColorTheme(theme)); err != nil {
@@ -1103,10 +986,6 @@ func (s *Session) SetTheme(theme TerminalTheme) error {
 	changed := scheme != s.reportedScheme
 	s.reportedScheme = scheme
 	s.themeMu.Unlock()
-	// A child subscribed to DECSET 2031 keeps its own theme in step from these
-	// reports; one that never subscribed is not written to, and neither is one
-	// whose scheme did not move — a repaint nobody asked for is what the mode
-	// exists to avoid.
 	if changed && s.colorSchemeReports.Load() {
 		s.writeColorSchemeReport(scheme)
 	}
@@ -1153,9 +1032,7 @@ func (s *Session) currentTheme() TerminalTheme {
 	return s.theme
 }
 
-// writeOSCColorResponses answers every OSC 10/11/12 query in
-// queries.oscQueryOrder, one reply per query in ask order — the order a
-// positional-pairing client depends on.
+// One reply per query, in ask order: clients pair them positionally.
 func (s *Session) writeOSCColorResponses(queries terminalQueries, logf func(string, ...interface{})) {
 	theme := s.currentTheme()
 	fg := hexColorToOSCValue(theme.Foreground, defaultThemeForeground)
@@ -1186,8 +1063,6 @@ func (s *Session) writeOSCColorResponses(queries terminalQueries, logf func(stri
 	}
 }
 
-// colorScheme is the light/dark preference a `CSI ? 996 n` query asks for.
-// The zero value means the child has not been told anything yet.
 type colorScheme int
 
 const (
@@ -1196,10 +1071,8 @@ const (
 	colorSchemeLight
 )
 
-// themeColorScheme derives the light/dark answer from the theme's background,
-// with the WCAG relative luminance and the >= 0.5 cut pi itself applies to the
-// OSC 11 color it falls back to (pi 0.83.0, theme.ts getThemeForRgbColor). The
-// two answers come from one background and one rule, so they cannot disagree.
+// WCAG relative luminance with the >= 0.5 cut pi applies to the OSC 11 color it
+// falls back to (pi 0.83.0, theme.ts getThemeForRgbColor).
 func themeColorScheme(theme TerminalTheme) colorScheme {
 	background := theme.Background
 	if !isValidHexColor(background) {
@@ -1220,9 +1093,8 @@ func themeColorScheme(theme TerminalTheme) colorScheme {
 	return colorSchemeDark
 }
 
-// writeColorSchemeResponses answers every `CSI ? 996 n` query in the chunk.
-// pi asks this before it falls back to OSC 11, so an unanswered query leaves
-// it running on an environment guess for a terminal that knows the answer.
+// pi asks this before falling back to OSC 11, so an unanswered query leaves it
+// on an environment guess.
 func (s *Session) writeColorSchemeResponses(count int, logf func(string, ...interface{})) {
 	s.themeMu.Lock()
 	scheme := themeColorScheme(s.theme)
@@ -1240,16 +1112,13 @@ func (s *Session) writeColorSchemeResponses(count int, logf func(string, ...inte
 	}
 }
 
-// writeColorSchemeReport sends an unsolicited scheme report, which is what a
-// child that enabled DECSET 2031 is listening for.
 func (s *Session) writeColorSchemeReport(scheme colorScheme) {
 	s.writeMu.Lock()
 	_, _ = s.ptmx.Write(colorSchemeReport(scheme))
 	s.writeMu.Unlock()
 }
 
-// colorSchemeReport is the DSR reply the color-palette-notification protocol
-// defines: `CSI ? 997 ; 1 n` for dark, `; 2 n` for light.
+// The color-palette-notification DSR reply: `CSI ? 997 ; 1 n` dark, `; 2 n` light.
 func colorSchemeReport(scheme colorScheme) []byte {
 	if scheme == colorSchemeLight {
 		return []byte("\x1b[?997;2n")
@@ -1257,8 +1126,7 @@ func colorSchemeReport(scheme colorScheme) []byte {
 	return []byte("\x1b[?997;1n")
 }
 
-// trackColorSchemeReports follows the child's DECSET/DECRST 2031, the mode
-// that subscribes to unsolicited scheme reports. Last one in the chunk wins.
+// Last DECSET/DECRST 2031 in the chunk wins.
 func (s *Session) trackColorSchemeReports(data []byte) {
 	set := bytes.LastIndex(data, []byte("\x1b[?2031h"))
 	reset := bytes.LastIndex(data, []byte("\x1b[?2031l"))
@@ -1268,14 +1136,12 @@ func (s *Session) trackColorSchemeReports(data []byte) {
 	s.colorSchemeReports.Store(set > reset)
 }
 
-// countColorSchemeQueries counts DSR color-scheme queries (ESC [ ? 9 9 6 n).
 func countColorSchemeQueries(data []byte) int {
 	return bytes.Count(data, []byte("\x1b[?996n"))
 }
 
-// hexColorToOSCValue converts "#rrggbb" into the "rgb:RRRR/GGGG/BBBB" value
-// XTerm-style OSC color replies use, doubling each 8-bit channel by repeating
-// its hex pair. Falls back to fallbackHex (assumed valid) when malformed.
+// XTerm-style OSC replies want "rgb:RRRR/GGGG/BBBB": each 8-bit channel is its
+// hex pair repeated.
 func hexColorToOSCValue(value, fallbackHex string) string {
 	if !isValidHexColor(value) {
 		value = fallbackHex
@@ -1297,10 +1163,8 @@ func isValidHexColor(value string) bool {
 	return true
 }
 
-// writeCursorPositionResponse answers a CPR query from the authoritative
-// screen model. The daemon is the single CPR responder — fish blocks its
-// prompt redraw on the resize-triggered CPR — and the frontend deliberately
-// does not answer, so there is no double-reply.
+// The daemon is the single CPR responder; the frontend deliberately answers
+// none, so there is no double-reply.
 func (s *Session) writeCursorPositionResponse(logf func(string, ...any)) {
 	row, col := 1, 1
 	// Under replayMu: teardown nils the terminal under that lock.
@@ -1318,11 +1182,10 @@ func (s *Session) writeCursorPositionResponse(logf func(string, ...any)) {
 	}
 }
 
-// writeDeviceAttributesResponse answers a DA1 query. Like CPR, the daemon is
-// the single responder: after a reattach the frontend can be mid-remount and
-// miss it, and fish then stalls for its ~10 s query timeout.
+// The daemon is the single responder: after a reattach the frontend can be
+// mid-remount and miss it, and fish stalls for its ~10s query timeout.
 func (s *Session) writeDeviceAttributesResponse(logf func(string, ...any)) {
-	// DA1 response: VT100 with Advanced Video Option.
+	// VT100 with Advanced Video Option.
 	s.writeMu.Lock()
 	_, _ = s.ptmx.Write([]byte("\x1b[?1;2c"))
 	s.writeMu.Unlock()
@@ -1331,15 +1194,13 @@ func (s *Session) writeDeviceAttributesResponse(logf func(string, ...any)) {
 	}
 }
 
-// indexDA1Query returns the offset of the first CSI Primary Device Attributes
-// query (ESC [ c or ESC [ 0 c), or -1. It ignores DA2 (ESC [ > c).
+// DA1 is ESC [ c or ESC [ 0 c; DA2 (ESC [ > c) is ignored.
 func indexDA1Query(data []byte) int {
 	for i := 0; i < len(data)-2; i++ {
 		if data[i] != 0x1b || data[i+1] != '[' {
 			continue
 		}
 		j := i + 2
-		// Skip digit parameters (0x30-0x39) and semicolons (0x3b)
 		for j < len(data) && ((data[j] >= '0' && data[j] <= '9') || data[j] == ';') {
 			j++
 		}
@@ -1350,8 +1211,6 @@ func indexDA1Query(data []byte) int {
 	return -1
 }
 
-// indexCPRQuery returns the offset of the first DSR 6 / CPR query
-// (ESC [ 6 n), or -1.
 func indexCPRQuery(data []byte) int {
 	for i := 0; i < len(data)-3; i++ {
 		if data[i] == 0x1b && data[i+1] == '[' && data[i+2] == '6' && data[i+3] == 'n' {
@@ -1363,8 +1222,7 @@ func indexCPRQuery(data []byte) int {
 
 func containsCPRQuery(data []byte) bool { return indexCPRQuery(data) >= 0 }
 
-// oscColorQueryPrefixes are the recognized OSC color query prefixes (ESC ]
-// <code> ; ?). An OSC color SET (no "?") never matches.
+// An OSC color SET (no "?") never matches these.
 var oscColorQueryPrefixes = [...]struct {
 	code   int
 	prefix []byte
@@ -1374,8 +1232,6 @@ var oscColorQueryPrefixes = [...]struct {
 	{12, []byte("\x1b]12;?")},
 }
 
-// scanOSCColorQueries scans data for non-overlapping OSC 10/11/12 color
-// queries and returns their codes in encounter order.
 func scanOSCColorQueries(data []byte) []int {
 	var codes []int
 	for i := 0; i < len(data); {

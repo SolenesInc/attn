@@ -15,10 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn agent` is how one attn-living agent reaches another. `list` is the
-// address book — session ids are exposed nowhere else an agent looks — `peek`
-// reads a session without interrupting it, and `msg` speaks to one.
-
 const agentShortIDLength = 8
 
 func runAgent() {
@@ -69,8 +65,6 @@ func parseAgentListArgs(args []string) (agentListArgs, error) {
 	return agentListArgs{json: *jsonOut}, nil
 }
 
-// agentListRow is the address-book projection: everything another agent needs
-// to pick a target and address it, nothing more.
 type agentListRow struct {
 	ID        string `json:"id"`
 	Label     string `json:"label"`
@@ -79,10 +73,8 @@ type agentListRow struct {
 	Directory string `json:"directory"`
 	State     string `json:"state"`
 	TurnOwed  bool   `json:"turn_owed"`
-	// Member is the crew member this session is bound as — "this session is
-	// trellis today" — empty for the unbound majority. Always written, like
-	// every other column: a key that disappears makes every reader of this
-	// address book guard for it.
+	// The crew member this session is bound as, empty for the unbound majority.
+	// Always written: a key that disappears makes every reader guard for it.
 	Member string `json:"member"`
 }
 
@@ -166,8 +158,6 @@ func agentShortID(id string) string {
 	return id[:agentShortIDLength]
 }
 
-// agentListCell truncates a value to keep columns aligned; the full value is
-// always available via --json.
 func agentListCell(value string, width int) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -221,8 +211,6 @@ func runAgentPeek(args []string) {
 	printAgentPeek(os.Stdout, result)
 }
 
-// agentPeekErrorMessage names the session the caller asked for: the reader is
-// an agent that must fix its own command line, not a human staring at a UI.
 func agentPeekErrorMessage(target string, err error) string {
 	message := strings.TrimSpace(err.Error())
 	switch strings.TrimSpace(strings.TrimPrefix(message, "daemon error: ")) {
@@ -276,8 +264,6 @@ func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	}
 }
 
-// formatAgentPeekTime shows local wall-clock time; peek is read while looking
-// at a live daemon, so the date matters only when it is not today.
 func formatAgentPeekTime(value string) string {
 	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(value))
 	if err != nil {
@@ -306,8 +292,6 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 	if len(args) < 2 {
 		return agentMsgArgs{}, errors.New(usage)
 	}
-	// Without the separator a leading dash is a mistyped flag far more often
-	// than it is the message, and reading `--json` as text would send it.
 	if !literal && (strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-")) {
 		return agentMsgArgs{}, errors.New(
 			usage + `; a message that starts with - goes after --, as: attn agent msg -- <id> "-text"`)
@@ -338,9 +322,8 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 	if strings.TrimSpace(parsed.content) == "" {
 		return agentMsgArgs{}, errors.New("the message is empty")
 	}
-	// The daemon refuses this too, and is the authority. It is checked here
-	// because a message far past the limit dies as a broken pipe on the way
-	// there — the socket hangs up mid-write and the refusal never comes back.
+	// The daemon is the authority, but a message far past the limit dies as a broken
+	// pipe on the way there and its refusal never comes back.
 	if size := len(strings.TrimSpace(parsed.content)); size > protocol.AgentMessageMaxChars {
 		return agentMsgArgs{}, fmt.Errorf(
 			"message is %d bytes and the limit is %d; send the gist and point at the rest",
@@ -378,8 +361,6 @@ func agentMsgOutcomeLine(result *protocol.AgentMsgResult) string {
 	return fmt.Sprintf("%s: %s (id %s)", result.Status, result.Detail, result.MessageID)
 }
 
-// agentMsgErrorMessage separates the two ids a send names, so a caller that
-// mistyped one knows which.
 func agentMsgErrorMessage(parsed agentMsgArgs, err error) string {
 	message := strings.TrimSpace(err.Error())
 	code := client.ErrorCode(err)

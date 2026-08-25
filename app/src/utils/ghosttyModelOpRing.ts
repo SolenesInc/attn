@@ -1,34 +1,19 @@
-// Capture-on-fault ring for the Ghostty WASM terminal model: the raw inputs fed
-// to a pane's model, dumped into the `model_fault` diagnostics record so a trap
-// ships with its own repro (app/scripts/replay-ghostty-model-fault.mjs).
-//
-// Contract: one ring per pane per model (`beginEpoch` drops the previous
-// model's ops); ops are recorded BEFORE they reach the model; every retained
-// write is a COPY, since the bytes are views into buffers the app does not own
-// and are written later on an async chain; a restore is the replay's base state,
-// so it gets its own budget and restarts the epoch. Nothing re-encodes until a
-// fault.
-//
-// Caps (tripwires), per pane:
-//   - 512 KB of retained write bytes. Measured: live PTY chunks run 1–16 KB.
-//   - 2048 ops. Measured: a divider drag emits ~1 resize per frame, ~30s of it.
-//   - 512 KB of snapshot dump. Measured over 106 real attach snapshots
-//     (`ghostty_snapshot_bytes=`): p50 11.2 KB, p90 12.5 KB, max 16.0 KB — 32x
-//     the largest observed, so `snapshotTruncated` marks an abnormal capture.
-//   - 2 MB of encoded capture per diagnostics record, past the largest the caps
-//     above can produce (≈1.37 MB base64); the diagnostics log has no per-record
-//     limit of its own.
+// Every retained write is a COPY: the bytes are views into buffers the app does
+// not own and are written later on an async chain.
 
 export type ModelOp =
   | { t: number; kind: 'write'; bytes: Uint8Array }
   | { t: number; kind: 'resize'; cols: number; rows: number; noReflow: boolean }
-  // A marker only: the reset's effect is the RIS write recorded right after it,
-  // so a replay applies nothing for a `reset`.
   | { t: number; kind: 'reset' };
 
+// Tripwire: measured live PTY chunks run 1–16 KB.
 export const MODEL_OP_RING_MAX_BYTES = 512 * 1024;
+// Tripwire: measured ~1 resize per frame during a divider drag, ~30s of it.
 export const MODEL_OP_RING_MAX_OPS = 2048;
+// Tripwire: measured over 106 real attach snapshots, p50 11.2 KB / max 16.0 KB;
+// 32x the largest observed, so `snapshotTruncated` marks an abnormal capture.
 export const MODEL_OP_RING_MAX_SNAPSHOT_BYTES = 512 * 1024;
+// Tripwire: past the ≈1.37 MB base64 the caps above can produce.
 export const MODEL_FAULT_CAPTURE_MAX_BYTES = 2 * 1024 * 1024;
 
 export const MODEL_FAULT_CAPTURE_VERSION = 1;
@@ -41,11 +26,8 @@ export type EncodedModelOp =
 export interface EncodedModelSnapshot {
   cols: number;
   rows: number;
-  /** Base64 of the VT dump the model was restored from. */
   b64: string;
-  /** Bytes retained (== the dump's length unless `truncated`). */
   len: number;
-  /** Bytes the daemon sent that did not fit the cap. */
   dropped: number;
   /** A PREFIX of what the model received, so a replay diverges and is refused. */
   truncated: boolean;
@@ -58,32 +40,23 @@ export interface ModelFaultCapture {
   startCols: number | null;
   startRows: number | null;
   snapshot: EncodedModelSnapshot | null;
-  /** Mirrors `snapshot.truncated` so a refusal check needs no nesting. */
   snapshotTruncated: boolean;
   ops: EncodedModelOp[];
   opCount: number;
   retainedWriteBytes: number;
-  /** Evicted by the ring's caps since the epoch began. */
   droppedOps: number;
   droppedWriteBytes: number;
-  /** Evicted at encode time to fit MODEL_FAULT_CAPTURE_MAX_BYTES. */
   droppedForRecordBudget: number;
-  /** Size of this capture once serialized, within ~1%. */
   encodedBytesEstimate: number;
 }
 
 export interface GhosttyModelOpRing {
-  /** Start (or restart) the ring for a freshly constructed model. */
   beginEpoch(cols: number, rows: number): void;
-  /** Raw bytes about to be written to the model, pre-wrapper. */
   noteWrite(bytes: Uint8Array): void;
-  /** A chunk of an attach-restore VT dump; the first clears the ring. */
   noteRestoreChunk(bytes: Uint8Array, cols: number, rows: number): void;
   noteResize(cols: number, rows: number, noReflow: boolean): void;
-  /** Marker for a model reset; see ModelOp's `reset` variant. */
   noteReset(): void;
   clear(): void;
-  /** Retained ops, oldest first. */
   ops(): ModelOp[];
   stats(): {
     opCount: number;
@@ -93,7 +66,6 @@ export interface GhosttyModelOpRing {
     snapshotBytes: number;
     snapshotTruncated: boolean;
   };
-  /** Encode for a diagnostics record. Only called on the fault path. */
   capture(): ModelFaultCapture;
 }
 
@@ -106,7 +78,6 @@ interface SnapshotState {
   truncated: boolean;
 }
 
-// Per-op JSON overhead for sizing a capture; rounded up so it never undershoots.
 const WRITE_OP_OVERHEAD_BYTES = 56;
 const RESIZE_OP_OVERHEAD_BYTES = 84;
 const RESET_OP_OVERHEAD_BYTES = 32;
@@ -149,7 +120,6 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
   let startRows: number | null = null;
   let epochStartedAt = now();
   let snapshot: SnapshotState | null = null;
-  // True while consecutive restore chunks arrive; any other op ends it.
   let restoreInProgress = false;
 
   const evictOldest = () => {
@@ -162,7 +132,6 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
       retainedWriteBytes -= op.bytes.length;
       droppedWriteBytes += op.bytes.length;
     }
-    // A dropped resize is the geometry the survivors ran at; carry it forward.
     if (op?.kind === 'resize') {
       startCols = op.cols;
       startRows = op.rows;
@@ -178,8 +147,6 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
     if (op.kind === 'write') {
       retainedWriteBytes += op.bytes.length;
     }
-    // An op is atomic, so a write larger than the budget is kept: the ring can
-    // exceed the cap by one op, and `droppedWriteBytes` says what it cost.
     while (retainedWriteBytes > MODEL_OP_RING_MAX_BYTES && count > 1) {
       evictOldest();
     }
@@ -298,7 +265,6 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
         }
       }
 
-      // Deterministic fit: drop oldest until it fits, reporting the count.
       let droppedForRecordBudget = 0;
       let captureStartCols = startCols;
       let captureStartRows = startRows;
@@ -346,7 +312,6 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
   return out;
 }
 
-// Decode a capture back into replayable ops.
 export function decodeModelFaultCapture(capture: ModelFaultCapture): {
   cols: number | null;
   rows: number | null;

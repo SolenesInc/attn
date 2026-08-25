@@ -45,9 +45,6 @@ func TestTurnStampsStartEmpty(t *testing.T) {
 	}
 }
 
-// The guard on OpenTurnIfClosed is what keeps a row from moving in the queue
-// while the user works with the agent: a second turn-opening state must not
-// re-age an outstanding turn.
 func TestOpenTurnIfClosedDoesNotMoveAnOpenTurn(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
@@ -93,8 +90,6 @@ func TestSettleThenOpenStartsANewTurn(t *testing.T) {
 	}
 }
 
-// Settling a session that is still running is the ordinary move, not an edge
-// case — it is what keeps an empty queue reachable while agents work.
 func TestSettleWithoutAnOpenTurnIsRecorded(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
@@ -106,7 +101,6 @@ func TestSettleWithoutAnOpenTurnIsRecorded(t *testing.T) {
 	if got := s.TurnStamps("s1").SettledAt; !got.Equal(settled) {
 		t.Errorf("settled_at = %v, want %v", got, settled)
 	}
-	// A turn opened before that settle stays closed.
 	if s.OpenTurnIfClosed("s1", settled.Add(-time.Hour)) {
 		if stamps := s.TurnStamps("s1"); stamps.OpenedAt.After(stamps.SettledAt) {
 			t.Error("a turn opened before the settle stamp still owes")
@@ -127,8 +121,6 @@ func TestTurnStampsForUnknownSession(t *testing.T) {
 	}
 }
 
-// The migration backfills sessions already sitting in a turn-opening state, so
-// enabling the queue shows the honest outstanding board rather than an empty one.
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
 	db, err := OpenDB(dbPath)

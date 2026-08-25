@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 )
 
-// seedDriverRun adds a session in `state` with a live run owned by pluginName.
 func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string, state protocol.SessionState) {
 	t.Helper()
 	now := protocol.TimestampNow().String()
@@ -33,8 +32,8 @@ func TestHandlePTYState_VetoNamesTheDriverThatHasNotRegisteredYet(t *testing.T) 
 	d := newTraceDaemon(t)
 	seedDriverRun(t, d, "unregistered-driver", "snipe-plugin", "run-1", protocol.SessionStateIdle)
 
-	// The watch-subscribe replay a daemon restart fires, which beats
-	// driver.register by about a second on a live pi session.
+	// The watch-subscribe replay a daemon restart fires beats driver.register by about a
+	// second on a live pi session.
 	d.handlePTYState("unregistered-driver", pty.Observation{
 		Source: pty.SourceWorkerInfo,
 		Claim:  protocol.StateWorking,
@@ -80,8 +79,6 @@ func TestPluginDriverSilence_ArmsRunsWhosePluginIsNotEvenInstalled(t *testing.T)
 		d.pluginDriverSilenceGraceOverride = time.Minute
 		seedDriverRun(t, d, "orphaned", "removed-plugin", "run-1", protocol.SessionStateWorking)
 
-		// Daemon startup arms over the runs, not the catalog: this plugin is not
-		// in it, so nothing else would ever arm this session.
 		d.armPluginDriverSilenceWatchForEveryRun()
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
@@ -133,8 +130,6 @@ func TestPluginDriverSilence_ARelaunchedRunOutranksTheOldAlarm(t *testing.T) {
 		seedDriverRun(t, d, "relaunched", "snipe-plugin", "run-1", protocol.SessionStateWorking)
 
 		d.armPluginDriverSilenceWatch("snipe-plugin")
-		// The session relaunched under a new run, and its driver declared it
-		// working — the alarm armed for run-1 is about a run nobody is waiting on.
 		d.store.EndAgentDriverRun("relaunched")
 		if !d.store.BeginAgentDriverRun("relaunched", "snipe-plugin", "run-2") {
 			t.Fatal("BeginAgentDriverRun(run-2) failed")
@@ -166,9 +161,7 @@ func TestPluginDriverSilence_ClosedSessionCancelsTheAlarm(t *testing.T) {
 	})
 }
 
-// The way back out of `unknown`: the driver comes back, the suite says what pi
-// is, and attn takes it because it has nothing better. Elsewhere it must not,
-// or a reconnect would restamp `state_since` and re-open a settled turn.
+// A reconnect must not restamp `state_since` and re-open a settled turn.
 func TestPluginReportedState_OnlyIfUnknownRestatesNothingElse(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	seedDriverRun(t, d, "restated", "snipe-plugin", "run-1", protocol.SessionStateUnknown)
@@ -198,7 +191,6 @@ func TestPluginReportedState_OnlyIfUnknownStillDisarmsTheAlarm(t *testing.T) {
 		seedDriverRun(t, d, "reconnected", "snipe-plugin", "run-1", protocol.SessionStateWorking)
 
 		d.armPluginDriverSilenceWatch("snipe-plugin")
-		// A report attn does not apply is still a driver speaking for the run.
 		d.applyPluginReportedState(pluginReportStateParams{
 			SessionID: "reconnected", RunID: "run-1", Seq: 1, State: protocol.StateIdle, OnlyIfUnknown: true,
 		})

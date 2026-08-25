@@ -1,7 +1,5 @@
-// Shared, grid-level constants for the WebGL grid renderer. Every tile uses the
-// SAME font / size / dpr — a hard invariant for the renderer, whose
-// single shared glyph atlas rasterizes each glyph once at the canonical size and
-// shrinks it per-tile via the baked vertex transform.
+// One shared glyph atlas backs every tile: font, size and dpr must stay
+// identical across tiles.
 import {
   FONT_FAMILY,
   TERMINAL_SCROLLBACK_BYTES,
@@ -11,9 +9,6 @@ export { FONT_FAMILY, TERMINAL_SCROLLBACK_BYTES };
 
 export const FONT_SIZE = 13;
 
-// Representative per-tile terminal geometry. Tiles are observer thumbnails, so a
-// modest fixed grid keeps each live model cheap; the live screen geometry of the
-// real session is whatever the daemon reports — we render it scaled to fit.
 export const TILE_COLS = 80;
 export const TILE_ROWS = 24;
 
@@ -23,9 +18,7 @@ export interface CellMetrics {
   baseline: number;
 }
 
-// Canonical (logical px) cell metrics, measured once and shared by all tiles.
-// Mirrors WebGlTerminalRenderer's constructor math so glyph placement matches
-// the production renderer.
+// Mirrors WebGlTerminalRenderer's constructor math; the two must move together.
 export function measureCanonicalCell(
   fontSize: number = FONT_SIZE,
   fontFamily: string = FONT_FAMILY,

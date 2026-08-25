@@ -20,8 +20,6 @@ func parseOptionalAutomationTime(value string) *time.Time {
 	return &parsed
 }
 
-// Automation run states. A run's state transitions are one-way:
-// pending -> delivered, pending -> failed, or pending -> cancelled.
 const (
 	AutomationRunStatePending   = "pending"
 	AutomationRunStateDelivered = "delivered"
@@ -29,17 +27,12 @@ const (
 	AutomationRunStateCancelled = "cancelled"
 )
 
-// Automation run cancel reasons, set alongside AutomationRunStateCancelled.
 const (
 	AutomationCancelReasonReviewWithdrawn    = "review_withdrawn"
 	AutomationCancelReasonDefinitionDisabled = "definition_disabled"
 	AutomationCancelReasonDefinitionDeleted  = "definition_deleted"
 )
 
-// Automation continuity binding statuses and release reasons. Bindings are
-// append-only: a released row is never reactivated or deleted, only
-// superseded by a fresh row on the next claim for that (definition,
-// continuity_key).
 const (
 	AutomationBindingStatusActive   = "active"
 	AutomationBindingStatusReleased = "released"
@@ -70,12 +63,6 @@ type AutomationRun struct {
 	DeliveredAt                              *time.Time
 }
 
-// AutomationContinuityBinding is one append-only row recording a continuity
-// thread's stable ticket/session/workspace/pane identity. A definition/
-// continuity_key pair has at most one active row at a time (enforced by
-// idx_automation_bindings_active); releasing it never deletes the row, it
-// only flips status and records why, so a later claim for the same key
-// appends a fresh active row rather than resurrecting the old one.
 type AutomationContinuityBinding struct {
 	ID, DefinitionID, ContinuityKey          string
 	TicketID, SessionID, WorkspaceID, PaneID string
@@ -89,9 +76,6 @@ type AutomationOccurrence struct {
 	ObservedAt, CreatedAt                                              time.Time
 }
 
-// AutomationProvenanceRecord is the store-side material needed to build the
-// protocol's derived automation provenance. Definition and occurrence data stay
-// canonical in their own tables; callers render this joined read model.
 type AutomationProvenanceRecord struct {
 	RunID, DefinitionID, DefinitionName, DefinitionSpecJSON string
 	SessionID, TicketID                                     string
@@ -166,9 +150,8 @@ func githubReviewPayloadHead(payloadJSON string) string {
 	return strings.ToLower(strings.TrimSpace(payload.HeadSHA))
 }
 
-// githubReviewCycleStatus treats a legacy cycle-only occurrence with no readable
-// head as covering the cycle. Old data must not replay merely because a newer
-// daemon cannot recover the head that produced it.
+// githubReviewCycleStatus treats a legacy cycle-only occurrence with no readable head as
+// covering the cycle: old data must not replay because the head cannot be recovered.
 func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey string, cycle int, headSHA string) (hasOccurrence, hasPending, matchesHead bool, err error) {
 	base := githubReviewOccurrenceBase(subjectKey, cycle)
 	prefix := base + ":"
@@ -203,11 +186,6 @@ func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey
 	return hasOccurrence, hasPending, matchesHead, rows.Err()
 }
 
-// UpsertAutomationDefinition applies a definition's name/spec_json. `enabled`
-// is not a parameter: it has exactly one authority, the enabled COLUMN. A
-// brand-new row (including the resurrection of a soft-deleted one) is always
-// inserted enabled; an update of a live row leaves its current enabled value
-// untouched — apply never toggles enabled, only SetAutomationEnabled does.
 func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.Time) (*AutomationDefinition, error) {
 	s.mu.Lock()
 	locked := true
@@ -226,9 +204,8 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	defer tx.Rollback()
 	var revision, oldEnabled int
 	var oldSpec, deletedAt string
-	// Deliberately not filtered by deleted_at='': a soft-deleted row must be
-	// found here too, so applying the same id resurrects it (clears
-	// deleted_at) instead of colliding with the PRIMARY KEY on an INSERT.
+	// Deliberately not filtered by deleted_at='': a soft-deleted row must be found here too,
+	// so applying the same id resurrects it instead of colliding with the PRIMARY KEY.
 	err = tx.QueryRow(`SELECT revision, spec_json, enabled, deleted_at FROM automation_definitions WHERE id=?`, id).Scan(&revision, &oldSpec, &oldEnabled, &deletedAt)
 	enabled := true
 	activation := err == sql.ErrNoRows
@@ -239,10 +216,6 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	case nil:
 		wasDeleted := deletedAt != ""
 		if wasDeleted {
-			// Resurrection always re-enables and always bumps revision, even with
-			// an unchanged spec, so the daemon's contract comparison (old revision
-			// vs new) can tell resurrection apart from a no-op reapply and always
-			// rotate continuity bindings for it.
 			revision++
 		} else {
 			enabled = oldEnabled != 0
@@ -261,11 +234,6 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 			return nil, err
 		}
 	} else if enabled {
-		// Fence provider snapshots that began before this definition became
-		// active (or was reapplied). Observation timestamps are captured before
-		// provider fetches, so an in-flight stale refresh cannot launch work under
-		// a newly enabled revision. Unlike activation baselining, this runs on
-		// every apply that leaves the definition enabled, not just a transition.
 		if err := fenceAutomationProviderCursorsTx(tx, id, now); err != nil {
 			return nil, err
 		}
@@ -278,9 +246,6 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	return s.GetAutomationDefinition(id)
 }
 
-// activateAutomationReviewRequestsTx leaves current demand for the first fresh
-// observation of each host to baseline. Edge history stays intact so later
-// request cycles remain monotonic across disable, delete, and resurrection.
 func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID string, now time.Time) error {
 	if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=?`, formatTicketTime(now), definitionID); err != nil {
 		return err
@@ -291,34 +256,12 @@ func activateAutomationReviewRequestsTx(tx *sql.Tx, definitionID string, now tim
 	return fenceAutomationProviderCursorsTx(tx, definitionID, now)
 }
 
-// fenceAutomationProviderCursorsTx records the instant a definition became (or
-// remained) enabled as its github_review_requested provider fence. Observation
-// timestamps are captured before provider fetches, so an in-flight stale
-// refresh started before this fence cannot launch work under the newly
-// enabled/reapplied revision.
 func fenceAutomationProviderCursorsTx(tx *sql.Tx, definitionID string, now time.Time) error {
 	fence := now.UTC().Format(sortableTimeFormat)
 	_, err := tx.Exec(`INSERT INTO automation_provider_cursors(definition_id,provider,scope,observed_at) VALUES(?,'github_review_requested','*',?) ON CONFLICT(definition_id,provider,scope) DO UPDATE SET observed_at=excluded.observed_at`, definitionID, fence)
 	return err
 }
 
-// SetAutomationEnabled flips a definition's enabled flag and, on an actual
-// disabled->enabled transition, performs the same store-side effects Upsert
-// does for that transition: preparing a per-host activation baseline and
-// fencing provider cursors. It is a no-op (changed=false, no side effects, no
-// revision bump) when the definition already has the requested state.
-// Returns (nil, false, nil) for an unknown or soft-deleted definition.
-//
-// Unlike UpsertAutomationDefinition, this is not a spec apply — the caller
-// (the panel's toggle, or the CLI's enable/disable verbs) supplies only a
-// bool, not a new spec. `enabled` has exactly one authority, the enabled
-// COLUMN — the spec carries no enabled field at all — so there is nothing
-// else to keep in sync here.
-//
-// revision does NOT bump on this transition: revision guards spec content,
-// and enabled is no longer spec content, so a toggle changes nothing a
-// concurrent editor's stale-save guard (automationApplyWithGuards, which
-// compares only revision) needs to catch.
 func (s *Store) SetAutomationEnabled(id string, enabled bool, now time.Time) (*AutomationDefinition, bool, error) {
 	s.mu.Lock()
 	locked := true
@@ -395,11 +338,6 @@ func (s *Store) GetAutomationDefinition(id string) (*AutomationDefinition, error
 	return d, err
 }
 
-// GetAutomationDefinitionIncludingDeleted reads a definition regardless of
-// soft-delete state, for automationApply's pre-upsert load (to detect
-// resurrection and compare the old ContinuationContract, see
-// internal/automation) and for callers that need to confirm a definition
-// once existed.
 func (s *Store) GetAutomationDefinitionIncludingDeleted(id string) (*AutomationDefinition, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -427,9 +365,6 @@ func scanAutomationContinuityBinding(scanner interface{ Scan(...any) error }) (*
 	return &b, nil
 }
 
-// GetActiveAutomationContinuityBinding returns the active binding row for
-// (definitionID, continuityKey), or nil if none is active. There is at most
-// one, enforced by idx_automation_bindings_active.
 func (s *Store) GetActiveAutomationContinuityBinding(definitionID, continuityKey string) (*AutomationContinuityBinding, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -443,11 +378,6 @@ func (s *Store) GetActiveAutomationContinuityBinding(definitionID, continuityKey
 	return b, err
 }
 
-// ReleaseAutomationContinuityBinding releases the active binding row for
-// (definitionID, continuityKey), if any — a no-op (not an error) when there
-// is none. The row is never deleted: status flips to released and
-// released_reason/released_at record why and when, so the next claim for
-// this key appends a fresh active row instead of reusing this one.
 func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, reason string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -461,10 +391,6 @@ func (s *Store) ReleaseAutomationContinuityBinding(definitionID, continuityKey, 
 	return err
 }
 
-// ReleaseAutomationContinuityBindings releases every active binding row for
-// definitionID (see ReleaseAutomationContinuityBinding) — used when a
-// definition's contract is deleted wholesale (automationDelete), rather than
-// one continuity key at a time.
 func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -478,12 +404,6 @@ func (s *Store) ReleaseAutomationContinuityBindings(definitionID, reason string,
 	return err
 }
 
-// getOrCreateActiveAutomationContinuityBindingTx resolves the active binding
-// for (definitionID, continuityKey), reusing its ticket/session/workspace/
-// pane ids into ids when one exists, or appending a fresh active row seeded
-// from ids when none does. Bindings are never updated back to active and
-// never deleted (see AutomationContinuityBinding's doc comment) — a released
-// row is simply superseded by this fresh one.
 func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey string, ids *AutomationRunReservation, now time.Time) error {
 	var createdAt, updatedAt string
 	err := tx.QueryRow(
@@ -505,16 +425,8 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 	}
 }
 
-// AutomationSessionHasContinuityBinding reports whether sessionID is still
-// referenced by some ACTIVE continuity binding, checked globally across every
-// definition rather than scoped to one. That matches
-// automationRunWorktreePath's worktree layout (worktrees/<sessionID>/<repo>),
-// which is keyed on session id alone: a bound thread's shared worktree can
-// only be identified by session id, not by definition. The daemon's
-// automationRunCleanupSafety uses this to protect that shared worktree even
-// once the thread's own session row has been garbage collected — the
-// session-liveness check above it only catches the case where the row is
-// still there. A released binding no longer protects its worktree.
+// AutomationSessionHasContinuityBinding checks ACTIVE bindings across all definitions: a
+// bound thread's shared worktree is keyed on session id alone.
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -532,8 +444,6 @@ func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, e
 	return exists != 0, nil
 }
 
-// DeactivateAutomationReviewRequestEdges retires current review demand while
-// preserving cycle history for a possible resurrection of the definition.
 func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -544,12 +454,6 @@ func (s *Store) DeactivateAutomationReviewRequestEdges(definitionID string, now 
 	return err
 }
 
-// FenceAutomationProviderCursors records now as a definition's
-// github_review_requested provider fence, so an in-flight stale observation
-// started before this call cannot act on the definition afterward. Mirrors
-// the fencing UpsertAutomationDefinition performs inline on every enabled
-// apply (fenceAutomationProviderCursorsTx); automationDelete calls this
-// directly since a delete isn't part of an apply's own transaction.
 func (s *Store) FenceAutomationProviderCursors(definitionID string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -567,11 +471,6 @@ func (s *Store) FenceAutomationProviderCursors(definitionID string, now time.Tim
 	return tx.Commit()
 }
 
-// DeleteAutomationDefinition soft-deletes a definition by setting
-// deleted_at. Runs, occurrences, tickets, sessions, and on-disk artifacts are
-// untouched here — automationDelete fails pending runs and clears
-// continuity/review-request state before calling this. Returns an error for
-// an unknown or already-deleted id.
 func (s *Store) DeleteAutomationDefinition(id string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -614,12 +513,6 @@ func (s *Store) ListAutomationDefinitions() ([]AutomationDefinition, error) {
 	return out, rows.Err()
 }
 
-// ListAutomationDefinitionIDsIncludingDeleted returns every definition id,
-// including soft-deleted ones. Unlike ListAutomationDefinitions (which the
-// UI/CLI use and which filters deleted_at=”), the A3 retention sweep and A4
-// cleanup both need to reach a deleted definition's runs too — deleting a
-// definition retires it but explicitly leaves its runs/artifacts for these
-// two mechanisms to eventually clean up (see automationDelete's doc comment).
 func (s *Store) ListAutomationDefinitionIDsIncludingDeleted() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -689,19 +582,6 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	return run, true, e
 }
 
-// ClaimScheduledAutomationRun claims one scheduled occurrence, keyed by the
-// intended instant's occurrence key. Idempotent on (definition_id, provider,
-// occurrence_key): a second claim for the same key returns the existing run
-// without consuming the reservation. expectedRevision guards against the
-// observation race where the snapshot was built from a definition revision
-// read before this transaction: a mismatch rejects the claim and lets the
-// next tick re-read and re-decide, mirroring ClaimGitHubReviewAutomationRun.
-// continuityKey is "" for scheduled continuity fresh (every occurrence gets
-// its own reservation IDs) or "singleton" for scheduled continuity singleton,
-// in which case the reservation's ticket/session/workspace/pane IDs are bound
-// once per definition (via the active continuity binding row) and reused by
-// every later occurrence, mirroring ClaimGitHubReviewAutomationRun's
-// per-subject binding reuse.
 func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continuityKey string, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reservation AutomationRunReservation) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -735,10 +615,8 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	}
 	ids := reservation
 	if continuityKey != "" {
-		// A later occurrence must not overtake an earlier one whose ticket has
-		// not been created yet: delivery would otherwise mistake the
-		// not-yet-created ticket for one already swept, the same hazard
-		// ClaimGitHubReviewAutomationRun guards against per subject.
+		// A later occurrence must not overtake an earlier one whose ticket does not exist yet:
+		// delivery would mistake the not-yet-created ticket for one already swept.
 		var undeliveredPredecessor int
 		if err := tx.QueryRow(`
 			SELECT EXISTS(
@@ -774,8 +652,6 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	return run, true, e
 }
 
-// GetAutomationScheduleCursor returns the last observed instant recorded by
-// SetAutomationScheduleCursor for this definition, ok=false when unset.
 func (s *Store) GetAutomationScheduleCursor(definitionID string) (time.Time, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -797,8 +673,6 @@ func (s *Store) GetAutomationScheduleCursor(definitionID string) (time.Time, boo
 	return at, true, nil
 }
 
-// SetAutomationScheduleCursor records the schedule's cursor instant, on the
-// shared automation_provider_cursors table (provider "schedule", scope "*").
 func (s *Store) SetAutomationScheduleCursor(definitionID string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -809,9 +683,6 @@ func (s *Store) SetAutomationScheduleCursor(definitionID string, at time.Time) e
 	return err
 }
 
-// ReconcileAutomationReviewRequests is the cycle-only compatibility entry point.
-// GitHub observers use ReconcileAutomationReviewRequestHeads so a later head in
-// one active request cycle becomes eligible without inventing another poller.
 func (s *Store) ReconcileAutomationReviewRequests(definitionID, host string, subjectKeys []string, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
 	observations := make([]AutomationReviewRequestObservation, 0, len(subjectKeys))
 	for _, subjectKey := range subjectKeys {
@@ -820,9 +691,6 @@ func (s *Store) ReconcileAutomationReviewRequests(definitionID, host string, sub
 	return s.ReconcileAutomationReviewRequestHeads(definitionID, host, observations, observedAt)
 }
 
-// ReconcileAutomationReviewRequestHeads records complete current review demand
-// for one host. It returns active edges whose observed head has no occurrence yet,
-// or whose immutable pending occurrence must be retried before a newer head.
 func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string, observations []AutomationReviewRequestObservation, observedAt time.Time) ([]AutomationReviewRequestCandidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -911,11 +779,6 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 		if _, err := tx.Exec(`UPDATE automation_review_request_edges SET active=0,updated_at=? WHERE definition_id=? AND subject_key=?`, updatedRaw, definitionID, subjectKey); err != nil {
 			return nil, err
 		}
-		// The binding stays active as long as its ticket exists (a re-request
-		// continues the thread); only when the ticket is genuinely gone does
-		// withdrawal release the binding, via ReleaseAutomationContinuityBinding
-		// (see automations_github.go's cancellation path) rather than deleting
-		// this row.
 		if _, err := tx.Exec(`
 			UPDATE automation_continuity_bindings
 			SET status=?,released_reason=?,released_at=?,updated_at=?
@@ -1003,12 +866,6 @@ func (s *Store) GitHubReviewAutomationRunStillRequested(runID string) (bool, err
 	return active == 1 && (occurrenceKey == base || strings.HasPrefix(occurrenceKey, base+":")), nil
 }
 
-// ListWithdrawnGitHubReviewUndeliveredRuns returns the current withdrawn
-// cycle's pending run, or its cancelled run when cancellation still needs to
-// be reconciled (e.g. the daemon exited between recording withdrawal and
-// stopping a partially launched PTY). Delivery is the handoff to ordinary
-// ticket/session ownership; persisted stable IDs alone are not, because they
-// may precede successful launch verification.
 func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host string) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1066,9 +923,6 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	baseKey := githubReviewOccurrenceBase(subjectKey, cycle)
 	headSHA := githubReviewPayloadHead(payloadJSON)
 	occurrenceKey := githubReviewOccurrenceKey(subjectKey, cycle, headSHA)
-	// A pending immutable occurrence always wins over a later provider head. The
-	// caller retries it first; a subsequent observation catches up to the latest
-	// head after delivery settles.
 	var existingID string
 	err = tx.QueryRow(`
 		SELECT r.id
@@ -1087,8 +941,6 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if err != sql.ErrNoRows {
 		return nil, false, err
 	}
-	// Idempotent on (definition_id, provider, occurrence_key): any existing run
-	// for this exact request cycle and head is returned as-is.
 	err = tx.QueryRow(`SELECT r.id FROM automation_occurrences o JOIN automation_runs r ON r.occurrence_id=o.id WHERE o.definition_id=? AND o.provider='github' AND o.occurrence_key=?`, definitionID, occurrenceKey).Scan(&existingID)
 	if err == nil {
 		tx.Rollback()
@@ -1098,9 +950,6 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if err != sql.ErrNoRows {
 		return nil, false, err
 	}
-	// A legacy cycle-only occurrence had no SHA in its identity. Its payload is
-	// authoritative when readable; an unreadable/missing head is conservatively
-	// treated as already accepted so upgrading never replays old work.
 	if headSHA != "" {
 		var legacyID, legacyPayload string
 		err = tx.QueryRow(`
@@ -1130,11 +979,8 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if enabled == 0 {
 		return nil, false, fmt.Errorf("automation %q is disabled", definitionID)
 	}
-	// A later request cycle must not overtake the initial delivery for this
-	// subject. The continuity binding can exist before its ticket does; accepting
-	// another cycle in that window would make delivery mistake a not-yet-created
-	// ticket for a swept one. Leave the edge unaccepted so a later provider
-	// refresh retries it after the pending run settles or creates its ticket.
+	// A later request cycle must not overtake the initial delivery for this subject: the
+	// binding can exist before its ticket, and delivery would mistake it for a swept one.
 	var undeliveredPredecessor int
 	if err := tx.QueryRow(`
 		SELECT EXISTS(
@@ -1168,10 +1014,6 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	return run, true, err
 }
 
-// EnsureAutomationContinuationTicket records a later accepted occurrence on the
-// already-bound ticket exactly once. The run remains the forward provenance link;
-// the ticket's immutable automation_run_id continues to identify the run that
-// originally created the worker.
 func (s *Store) EnsureAutomationContinuationTicket(ticketID, sessionID, runID, occurrencePath, author string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1222,10 +1064,6 @@ func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun,
 
 const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,ticket_id,session_id,workspace_id,pane_id,resolved_location_json,created_at,updated_at,delivered_at`
 
-// automationRunColumnsQualified is automationRunColumns with each column
-// prefixed by the automation_runs alias `r`, for queries that join against
-// another table (automation_occurrences, automation_review_request_edges)
-// which also has an `id` column — an unqualified `id` there is ambiguous.
 const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.ticket_id,r.session_id,r.workspace_id,r.pane_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
 
 func (s *Store) getAutomationRunUnlocked(id string) (*AutomationRun, error) {
@@ -1281,18 +1119,12 @@ func (s *Store) ListAutomationRuns(definitionID string) ([]AutomationRun, error)
 	return out, rows.Err()
 }
 
-// AutomationRunWithOccurrenceKey pairs a run with its occurrence's
-// occurrence_key, for surfaces (the WS runs list) that need to show which
-// provider occurrence produced the run without exposing its full payload.
 type AutomationRunWithOccurrenceKey struct {
 	AutomationRun
 	OccurrenceKey string
 	Provenance    AutomationProvenanceRecord
 }
 
-// ListAutomationRunsWithOccurrenceKeys returns up to limit runs for
-// definitionID, newest first, each carrying its occurrence's occurrence_key
-// via one join (mirrors ListAutomationRuns's columns/ordering).
 func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit int) ([]AutomationRunWithOccurrenceKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1334,12 +1166,6 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 	return out, rows.Err()
 }
 
-// LatestAutomationRunPerDefinition returns, for every definition that has at
-// least one run, its single most-recent run (by created_at, ties broken by
-// id) paired with its occurrence's occurrence_key — one query, used to embed
-// last_run in the definitions listing instead of the panel issuing one
-// automation_runs_get per definition. A definition with zero runs has no
-// entry in the returned map.
 func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWithOccurrenceKey, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1385,9 +1211,6 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 	return out, rows.Err()
 }
 
-// ListLatestAutomationProvenanceRecords returns the newest joined provenance
-// per session or ticket. A continuity thread therefore exposes its latest
-// accepted occurrence without every session snapshot scanning retained history.
 func (s *Store) ListLatestAutomationProvenanceRecords() ([]AutomationProvenanceRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1523,11 +1346,6 @@ func (s *Store) MarkAutomationRunFailed(id, message string, now time.Time) error
 	return e
 }
 
-// MarkAutomationRunCancelled transitions a run to cancelled, recording why.
-// It sets state and cancel_reason only — last_error, resolved_location_json,
-// and every other column are left as they were, since cancellation is not a
-// delivery failure: it's withdrawal, disable, or delete overtaking a run
-// that hadn't been delivered yet.
 func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1538,19 +1356,8 @@ func (s *Store) MarkAutomationRunCancelled(id, reason string, now time.Time) err
 	return err
 }
 
-// ListPrunableAutomationRuns returns definitionID's terminal (delivered,
-// failed, or cancelled) runs older than olderThan that fall outside the
-// newest keep runs (by created_at, across all states — a pending run still
-// counts toward keep, so it DOES bump an older terminal run out of
-// protection, same as any other run would), and are not the origin run of a
-// still-bound continuity thread (tickets.automation_run_id is set once at
-// thread creation and never updated, so it always points at the thread's
-// oldest run — pruning it would permanently break every later occurrence,
-// see automationContinuationOrigin). Session liveness and worktree
-// cleanliness are daemon-side concerns this package cannot check; this only
-// narrows by count/state/age/origin, per A3's fixed retention policy.
-// Cancelled runs share failed's retention window rather than a separate one:
-// both are non-delivered terminal outcomes with the same evidentiary value.
+// ListPrunableAutomationRuns excludes the origin run of a still-bound continuity thread:
+// tickets.automation_run_id is set once, so pruning it breaks every later occurrence.
 func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderThan time.Time) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1588,12 +1395,6 @@ func (s *Store) ListPrunableAutomationRuns(definitionID string, keep int, olderT
 	return out, rows.Err()
 }
 
-// ListTerminalAutomationRuns returns every delivered/failed/cancelled run for
-// definitionID, oldest first, with no count or age gate — unlike
-// ListPrunableAutomationRuns, which only surfaces runs outside the retention
-// window. A4's explicit "automation cleanup" command uses this: it reclaims
-// disk space for every terminal run right now, not just the ones retention
-// would eventually get to.
 func (s *Store) ListTerminalAutomationRuns(definitionID string) ([]AutomationRun, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1621,11 +1422,6 @@ func (s *Store) ListTerminalAutomationRuns(definitionID string) ([]AutomationRun
 	return out, rows.Err()
 }
 
-// DeleteAutomationRun removes a run and its occurrence row in one
-// transaction. It does not touch on-disk artifacts (worktrees, occurrence
-// JSON) — callers (the A3 retention sweep, A4 cleanup does not call this)
-// remove those first. Deleting an already-gone run is a no-op, not an error,
-// since sweep candidates are gathered once and acted on afterward.
 func (s *Store) DeleteAutomationRun(runID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

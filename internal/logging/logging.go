@@ -35,7 +35,6 @@ func New(path string) (*Logger, error) {
 }
 
 func newWithLimits(path string, maxBytes, retainedBytes, sizeCheckBytes int64) (*Logger, error) {
-	// Ensure directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
@@ -109,10 +108,7 @@ func (l *Logger) Debugf(format string, args ...interface{}) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
 
-// DebugEnabled reports whether debug-level logging is on (DEBUG env >= debug).
-// Hot-path callers use this to skip building log arguments (e.g. byte previews)
-// entirely when debug logging is off, since Go evaluates call arguments eagerly
-// and Info-level writes are not level-gated.
+// Callers use this to skip building log arguments: Go evaluates them eagerly and Info-level writes are not level-gated.
 func (l *Logger) DebugEnabled() bool {
 	return l.debug
 }

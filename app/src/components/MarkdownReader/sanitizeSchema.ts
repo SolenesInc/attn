@@ -1,19 +1,5 @@
-/**
- * Sanitize schema for raw HTML inside markdown documents (rehype-raw output).
- * Extends rehype-sanitize's GitHub `defaultSchema`: no `style` attribute, no
- * event handlers, `script`/`style` stripped with their content.
- *
- * NO-NETWORK INVARIANT: every fetchable URL attribute is either gated by a
- * component renderer (img `src`, a `href` — resolveMarkdownTarget +
- * convertFileSrc) or absent from this schema. `srcSet`/`sizes` stay out because
- * hast-util-sanitize keys `protocols` by property name, so `srcSet` gets no
- * protocol check while browsers prefer it over the gated `src`; `video`,
- * `picture`, and `source` stay out for want of a renderer.
- *
- * Ordering contract: runs BEFORE rehypeSourceAnchors/rehypeAlerts, so the
- * reader's own `data-*` attributes are stamped after sanitization and are never
- * whitelisted here.
- */
+// NO-NETWORK INVARIANT: every fetchable URL attribute is either gated by a component
+// renderer (img `src`, a `href`) or absent from this schema. Runs BEFORE rehypeAlerts.
 
 import { defaultSchema, type Options } from 'rehype-sanitize';
 

@@ -12,9 +12,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
-// fakeRunner simulates a headless subagent by writing (or not) the request's
-// ResultPath and returning a result/error per the scripted behave function. It
-// exercises every driverAgent branch without spawning a process.
 type fakeRunner struct {
 	calls  []agentdriver.HeadlessTaskRequest
 	behave func(call int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error)
@@ -74,7 +71,6 @@ func TestDriverAgentHappySchemaPath(t *testing.T) {
 	if !jsonStringEqual(string(got), `{"answer":"yes"}`) {
 		t.Fatalf("result = %s, want {\"answer\":\"yes\"}", got)
 	}
-	// The schema path must wire the return_result MCP server.
 	req := runner.calls[0]
 	if req.ToolName != "return_result" || req.MCPServerName == "" {
 		t.Fatalf("schema path did not wire the result sink: %+v", req)
@@ -87,7 +83,6 @@ func TestDriverAgentHappySchemaPath(t *testing.T) {
 func TestDriverAgentDetectMissingThenRetrySucceeds(t *testing.T) {
 	runner := &fakeRunner{behave: func(call int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		if call == 0 {
-			// Model ignored the tool: write nothing, exit clean.
 			return agentdriver.HeadlessTaskResult{}, nil
 		}
 		writeValid(t, req.ResultPath, `{"answer":"recovered"}`)
@@ -112,7 +107,6 @@ func TestDriverAgentDetectMissingThenRetrySucceeds(t *testing.T) {
 
 func TestDriverAgentRetriesExhaustedResolvesNull(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, _ agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		// Never write a result.
 		return agentdriver.HeadlessTaskResult{}, nil
 	}}
 	da := newTestDriverAgent(t, runner, 2)
@@ -124,7 +118,6 @@ func TestDriverAgentRetriesExhaustedResolvesNull(t *testing.T) {
 	if got != nil {
 		t.Fatalf("terminal failure returned non-nil result: %s", got)
 	}
-	// maxRetries=2 => 3 attempts total.
 	if len(runner.calls) != 3 {
 		t.Fatalf("runner calls = %d, want 3 (initial + 2 retries)", len(runner.calls))
 	}
@@ -132,8 +125,6 @@ func TestDriverAgentRetriesExhaustedResolvesNull(t *testing.T) {
 
 func TestDriverAgentNonZeroExitButFileWrittenIsSuccess(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		// Exit non-zero AND write a valid result: the error->null adapter must NOT
-		// treat a written, schema-valid result as a failure.
 		writeValid(t, req.ResultPath, `{"answer":"despite-exit"}`)
 		return agentdriver.HeadlessTaskResult{Diagnostics: "headless agent process failed"}, errors.New("exit status 1")
 	}}
@@ -153,7 +144,6 @@ func TestDriverAgentNonZeroExitButFileWrittenIsSuccess(t *testing.T) {
 
 func TestDriverAgentTerminalExitWithNoFileResolvesNull(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, _ agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		// Persistent non-zero exit, no file ever written.
 		return agentdriver.HeadlessTaskResult{Diagnostics: "headless agent authentication failed"},
 			errors.New("exit status 1")
 	}}
@@ -166,7 +156,6 @@ func TestDriverAgentTerminalExitWithNoFileResolvesNull(t *testing.T) {
 	if got != nil {
 		t.Fatalf("terminal failure returned non-nil result: %s", got)
 	}
-	// Diagnostics should be journaled in the error message.
 	if !strings.Contains(err.Error(), "authentication failed") {
 		t.Fatalf("diagnostics not surfaced: %v", err)
 	}
@@ -177,7 +166,6 @@ func TestDriverAgentTerminalExitWithNoFileResolvesNull(t *testing.T) {
 
 func TestDriverAgentNoSchemaReturnsCapturedText(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		// No-schema path must NOT wire a result sink.
 		if req.MCPServerName != "" || req.ToolName != "" {
 			t.Fatalf("no-schema path wired an MCP server: %+v", req)
 		}
@@ -214,13 +202,8 @@ func TestDriverAgentNoSchemaTerminalFailureResolvesNull(t *testing.T) {
 	}
 }
 
-// TestDriverAgentThroughEngineSchemaPath drives the FULL engine path: agent()
-// with a {schema} opts object dispatches to the driverAgent (as Config.Stub),
-// the fake runner writes a schema-valid result, and the script receives the
-// object. This proves opts.schema parsing + the seam end-to-end.
 func TestDriverAgentThroughEngineSchemaPath(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		// Confirm the schema actually reached the driver from the JS opts object.
 		if len(req.Schema) == 0 {
 			t.Fatalf("schema did not reach the driver: %+v", req)
 		}
@@ -249,8 +232,6 @@ func TestDriverAgentThroughEngineSchemaPath(t *testing.T) {
 	}
 }
 
-// TestDriverAgentThroughEngineResolvesNull proves a never-produced result
-// resolves the agent() promise to NULL through the engine (never throws).
 func TestDriverAgentThroughEngineResolvesNull(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, _ agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		return agentdriver.HeadlessTaskResult{}, nil // never writes a result
@@ -277,9 +258,6 @@ func TestDriverAgentThroughEngineResolvesNull(t *testing.T) {
 	}
 }
 
-// newWritableTestDriverAgent builds a driverAgent with an explicit working tree
-// and session MCP servers so the E3 writable/CWD/ExtraMCPServers threading can be
-// asserted on the built request.
 func newWritableTestDriverAgent(t *testing.T, runner headlessRunner, workingTree string, servers []agentdriver.MCPServerSpec) *driverAgent {
 	t.Helper()
 	da, err := NewDriverAgent(DriverAgentOptions{
@@ -299,10 +277,6 @@ func newWritableTestDriverAgent(t *testing.T, runner headlessRunner, workingTree
 	return da
 }
 
-// TestDriverAgentSchemaPathIsWritableWithCWDAndExtraServers asserts the schema
-// path builds a writable request whose CWD is the working tree and whose
-// ExtraMCPServers carry the session MCP servers — in addition to the wired
-// return_result sink (E2 behavior preserved).
 func TestDriverAgentSchemaPathIsWritableWithCWDAndExtraServers(t *testing.T) {
 	tree := t.TempDir()
 	servers := []agentdriver.MCPServerSpec{{
@@ -333,19 +307,14 @@ func TestDriverAgentSchemaPathIsWritableWithCWDAndExtraServers(t *testing.T) {
 	if len(req.ExtraMCPServers) != 1 || req.ExtraMCPServers[0].Name != "session_tools" {
 		t.Fatalf("session MCP servers not threaded into ExtraMCPServers: %+v", req.ExtraMCPServers)
 	}
-	// E2 behavior preserved: return_result sink still wired.
 	if req.ToolName != resultToolName || req.MCPServerName != "attn_workflow_result" {
 		t.Fatalf("schema path no longer wires the result sink: %+v", req)
 	}
-	// Scratch paths in the sink argv must stay absolute under the run temp dir.
 	if !containsArg(req.MCPServerArgs, "--result-file") {
 		t.Fatalf("result sink argv lost --result-file: %v", req.MCPServerArgs)
 	}
 }
 
-// TestDriverAgentNoSchemaPathIsWritableWithCWDAndExtraServers asserts the same
-// writable/CWD/ExtraMCPServers threading for the no-schema path, which must NOT
-// wire a result sink (E2 behavior preserved).
 func TestDriverAgentNoSchemaPathIsWritableWithCWDAndExtraServers(t *testing.T) {
 	tree := t.TempDir()
 	servers := []agentdriver.MCPServerSpec{{
@@ -371,15 +340,11 @@ func TestDriverAgentNoSchemaPathIsWritableWithCWDAndExtraServers(t *testing.T) {
 	if len(req.ExtraMCPServers) != 1 || req.ExtraMCPServers[0].Name != "session_tools" {
 		t.Fatalf("session MCP servers not threaded into ExtraMCPServers: %+v", req.ExtraMCPServers)
 	}
-	// E2 behavior preserved: no result sink on the no-schema path.
 	if req.MCPServerName != "" || req.ToolName != "" {
 		t.Fatalf("no-schema path wired an MCP result sink: %+v", req)
 	}
 }
 
-// TestDriverAgentCWDFallsBackToRunTmpDirWhenNoWorkingTree asserts that with an
-// empty WorkingTree the CWD falls back to the run temp dir (so subagents still
-// run somewhere valid), for both the schema and no-schema paths.
 func TestDriverAgentCWDFallsBackToRunTmpDirWhenNoWorkingTree(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		if len(req.Schema) != 0 {

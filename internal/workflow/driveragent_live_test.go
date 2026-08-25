@@ -11,13 +11,6 @@ import (
 	"time"
 )
 
-// TestDriverAgentLiveCodexRoundTrip drives ONE real `codex exec` round-trip
-// through the driverAgent with a tiny schema and asserts a schema-valid object
-// comes back. It SKIPS cleanly when codex auth/network is unavailable so the
-// default suite stays green. Opt in by NOT setting ATTN_SKIP_LIVE_CODEX.
-//
-// It requires a real `attn` binary to host the result-sink subcommand, so it
-// builds one into a temp dir (the test binary itself is not `attn`).
 func TestDriverAgentLiveCodexRoundTrip(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("ATTN_RUN_LIVE_CODEX")) == "" {
 		t.Skip("set ATTN_RUN_LIVE_CODEX=1 to run the live codex round-trip")
@@ -30,7 +23,6 @@ func TestDriverAgentLiveCodexRoundTrip(t *testing.T) {
 		t.Skip("codex auth.json not found; skipping live round-trip")
 	}
 
-	// Build a real attn binary to host `_workflow-result-mcp`.
 	tmp := t.TempDir()
 	attnPath := filepath.Join(tmp, "attn")
 	build := exec.Command("go", "build", "-o", attnPath, "github.com/victorarias/attn/cmd/attn")
@@ -71,12 +63,6 @@ func TestDriverAgentLiveCodexRoundTrip(t *testing.T) {
 	t.Logf("live codex round-trip returned: %s", result)
 }
 
-// TestDriverAgentLiveWritableCodexRoundTrip drives ONE real `codex exec` writable
-// round-trip: the subagent both EDITS a file in a temp working tree AND returns a
-// schema-valid result via return_result. It asserts BOTH side effects. Like the
-// read-only live test it SKIPS cleanly when codex/auth is unavailable; opt in with
-// ATTN_RUN_LIVE_CODEX=1. Without a live binary, the writable round-trip is left to
-// manual / E4 verification (the hermetic argv + threading tests cover the wiring).
 func TestDriverAgentLiveWritableCodexRoundTrip(t *testing.T) {
 	if strings.TrimSpace(os.Getenv("ATTN_RUN_LIVE_CODEX")) == "" {
 		t.Skip("set ATTN_RUN_LIVE_CODEX=1 to run the live writable codex round-trip (otherwise verified manually / in E4)")
@@ -89,7 +75,6 @@ func TestDriverAgentLiveWritableCodexRoundTrip(t *testing.T) {
 		t.Skip("codex auth.json not found; skipping live writable round-trip")
 	}
 
-	// Build a real attn binary to host `_workflow-result-mcp`.
 	tmp := t.TempDir()
 	attnPath := filepath.Join(tmp, "attn")
 	build := exec.Command("go", "build", "-o", attnPath, "github.com/victorarias/attn/cmd/attn")
@@ -98,7 +83,6 @@ func TestDriverAgentLiveWritableCodexRoundTrip(t *testing.T) {
 		t.Fatalf("build attn: %v", err)
 	}
 
-	// A separate working tree the subagent will edit. Scratch stays in RunTmpDir.
 	tree := t.TempDir()
 	target := filepath.Join(tree, "OUTPUT.txt")
 
@@ -126,14 +110,12 @@ func TestDriverAgentLiveWritableCodexRoundTrip(t *testing.T) {
 		t.Fatalf("live writable codex round-trip failed: %v", runErr)
 	}
 
-	// 1) The schema-valid result came back.
 	var obj struct {
 		Wrote string `json:"wrote"`
 	}
 	if err := json.Unmarshal(result, &obj); err != nil {
 		t.Fatalf("result is not the schema object: %s (%v)", result, err)
 	}
-	// 2) The file mutation actually landed in the working tree.
 	contents, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatalf("subagent did not write OUTPUT.txt in the working tree: %v", err)

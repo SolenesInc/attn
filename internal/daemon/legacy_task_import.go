@@ -8,10 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// One-time handover from the retired task runner's `tasks` table to the job
-// queue; a no-op on every boot after the first. The legacy meta keys are pinned
-// here literally, not shared with the enqueue sites: they describe a format
-// nothing writes anymore, so live payload types can change without breaking this.
+// One-time handover from the retired task runner's `tasks` table to the job queue. The
+// legacy meta keys are pinned literally: they describe a format nothing writes anymore.
 const (
 	legacyMetaTranscript      = "transcript"
 	legacyMetaWorkspace       = "workspace"
@@ -19,10 +17,8 @@ const (
 	legacyMetaReconcileInputs = "reconcile_inputs"
 )
 
-// importLegacyTasks hands the task table's remaining rows to the jobs table.
-// Runs before the queue is constructed, so nothing races it; the move is atomic
-// in the store (MigrateLegacyTasks), so any failure leaves every old row intact
-// for the next start to retry.
+// importLegacyTasks runs before the queue is constructed, so nothing races it, and the
+// move is atomic in the store: any failure leaves every old row for the next start.
 func (d *Daemon) importLegacyTasks() {
 	if d.store == nil {
 		return
@@ -38,11 +34,8 @@ func (d *Daemon) importLegacyTasks() {
 	}
 }
 
-// legacyTaskToJob is the job one legacy row becomes; it always returns a record,
-// because a row it cannot fully read is still owed work. The legacy id is
-// PRESERVED as the job id — failure notifications record it as SourceID and the
-// panel's Retry deep-links through it. Untranslatable meta yields a payload-less
-// job, never a dropped row: its handler reports the missing inputs.
+// legacyTaskToJob always returns a record: the legacy id is preserved as the job id, and
+// untranslatable meta yields a payload-less job rather than a dropped row.
 func (d *Daemon) legacyTaskToJob(rec store.LegacyTaskRecord) store.JobRecord {
 	payload, err := legacyTaskPayload(rec)
 	if err != nil {
@@ -67,8 +60,6 @@ func (d *Daemon) legacyTaskToJob(rec store.LegacyTaskRecord) store.JobRecord {
 	return job
 }
 
-// legacyTaskPayload translates one legacy meta blob into the payload its kind's
-// handler now decodes; empty string means "carries nothing", which handlers tolerate.
 func legacyTaskPayload(rec store.LegacyTaskRecord) (string, error) {
 	raw := strings.TrimSpace(rec.MetaJSON)
 	if raw == "" || raw == "null" {
@@ -94,7 +85,6 @@ func legacyTaskPayload(rec store.LegacyTaskRecord) (string, error) {
 		}
 		payload = narrateWorkspacePayload{DailyPass: true}
 	case reconcileKind:
-		// Already the payload's JSON object; carry it across verbatim.
 		return meta[legacyMetaReconcileInputs], nil
 	default:
 		return "", nil

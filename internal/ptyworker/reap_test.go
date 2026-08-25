@@ -12,17 +12,13 @@ import (
 	"time"
 )
 
-// fakeWorker is a control socket that speaks just enough of the worker RPC to
-// answer hello + remove, recording what it was asked and what identity it was
-// given.
 type fakeWorker struct {
 	listener   net.Listener
 	gotHello   chan HelloParams
 	gotRemove  chan struct{}
 	rejectAuth bool
-	// proc is the process the worker "is": accepting remove exits it, the way a
-	// real worker's runtime stops. Never the test's own PID — a regressed
-	// identity gate would then SIGTERM the test runner instead of failing.
+	// Never the test's own PID — a regressed identity gate would SIGTERM the test
+	// runner instead of failing.
 	proc *exec.Cmd
 }
 
@@ -91,7 +87,6 @@ func (w *fakeWorker) serve() {
 					default:
 					}
 					_ = enc.Encode(ResponseEnvelope{Type: "res", ID: req.ID, OK: true})
-					// Exit like a real worker whose runtime was stopped.
 					_ = w.proc.Process.Signal(syscall.SIGTERM)
 				default:
 					_ = enc.Encode(ResponseEnvelope{
@@ -104,29 +99,10 @@ func (w *fakeWorker) serve() {
 	}
 }
 
-// spawnSleeper starts a real child process that ReapDataDir can be pointed at,
-// so "did the worker actually die" is answered by process state rather than by a
-// mock's bookkeeping.
 func spawnSleeper(t *testing.T, marker string) *exec.Cmd {
 	t.Helper()
-	// The marker rides in argv as sh's $0 so the identity check has something
-	// unique to find, mirroring --registry-path on a real worker. The trailing
-	// `:` matters: with a lone simple command, sh exec's it directly and the
-	// process argv becomes bare `sleep 60`, losing the marker — which made this
-	// helper a race rather than a fixture.
-	//
-	// The leading `echo` is the readiness signal, and the helper does not return
-	// until it arrives. `Start()` returning does not mean argv is readable:
-	// Linux closes the exec pipe that unblocks the parent in begin_new_exec,
-	// before create_elf_tables publishes the new argv, so /proc/<pid>/cmdline
-	// can still read back empty when the parent looks straight away. Measured on
-	// Linux under 20 spinning shells, 10 of 400 spawns had no argv on the first
-	// read (worst wait 3.5ms) and 0 of 400 missed once gated on this byte; the
-	// gate took TestProcessHasArgIdentifiesOwnProcess from 14 failures in 2000
-	// runs to 0 in 2000 under the same load. argv is in place before the child
-	// executes its first instruction, so a byte from the child proves it is
-	// published, and proves it without consulting processHasArg, which this file
-	// also has to test honestly.
+	// The trailing `:` matters: with a lone simple command sh exec's it directly and argv
+	// becomes bare `sleep 60`. The leading `echo` gates on argv being readable.
 	stdout, ready, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("sleeper readiness pipe: %v", err)
@@ -146,9 +122,7 @@ func spawnSleeper(t *testing.T, marker string) *exec.Cmd {
 	})
 	go func() { _, _ = cmd.Process.Wait() }()
 
-	// A tripwire, not a wait a healthy spawn ever feels: the readiness byte
-	// lands in microseconds, and only a sleeper that never execs at all reaches
-	// this deadline.
+	// A tripwire: the readiness byte lands in microseconds.
 	if err := stdout.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		t.Fatalf("sleeper readiness deadline: %v", err)
 	}
@@ -167,8 +141,6 @@ func writeEntry(t *testing.T, dataDir, sessionID string, entry RegistryEntry) st
 	return path
 }
 
-// The normal path: a reachable worker is shut down over its own authenticated
-// control socket, carrying the identity the registry recorded.
 func TestReapDataDirRemovesViaControlSocket(t *testing.T) {
 	dataDir := t.TempDir()
 	worker := startFakeWorker(t, dataDir, false)
@@ -211,10 +183,8 @@ func TestReapDataDirRemovesViaControlSocket(t *testing.T) {
 	}
 }
 
-// A registry entry whose process is already gone is reported, not signalled.
 func TestReapDataDirReportsAlreadyGone(t *testing.T) {
 	dataDir := t.TempDir()
-	// Exit a real child so the PID is genuinely dead rather than never-existing.
 	cmd := exec.Command("true")
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("run true: %v", err)
@@ -229,9 +199,6 @@ func TestReapDataDirReportsAlreadyGone(t *testing.T) {
 	}
 }
 
-// A worker that died between writing its handoff and exec'ing leaves both files
-// behind, and nothing else globs that directory. The reap that disposes of its
-// registry entry disposes of them too.
 func TestReapDataDirRemovesTheHandoffOfADeadWorker(t *testing.T) {
 	dataDir := t.TempDir()
 	cmd := exec.Command("true")
@@ -260,8 +227,6 @@ func TestReapDataDirRemovesTheHandoffOfADeadWorker(t *testing.T) {
 	}
 }
 
-// The fallback that matters: no control socket, but the live process is
-// positively identified as this entry's worker, so it is signalled and dies.
 func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 	dataDir := t.TempDir()
 	registryPath := filepath.Join(dataDir, "workers", "d-1", "registry", "sess-wedged.json")
@@ -286,11 +251,8 @@ func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 	}
 }
 
-// The safety property: an unreachable socket plus a PID that is NOT this worker
-// must never be signalled, however tempting the dead entry looks.
 func TestReapDataDirRefusesToSignalUnidentifiedProcess(t *testing.T) {
 	dataDir := t.TempDir()
-	// A live process that carries no trace of this registry entry — the shape a
 	// recycled PID takes.
 	cmd := spawnSleeper(t, "unrelated-process-marker")
 
@@ -313,8 +275,6 @@ func TestReapDataDirRefusesToSignalUnidentifiedProcess(t *testing.T) {
 	}
 }
 
-// A worker that rejects the handshake is not thereby fair game for a signal:
-// without identity confirmation it is reported, not killed.
 func TestReapDataDirDoesNotSignalOnAuthFailure(t *testing.T) {
 	dataDir := t.TempDir()
 	worker := startFakeWorker(t, dataDir, true)
@@ -341,7 +301,6 @@ func TestReapDataDirDoesNotSignalOnAuthFailure(t *testing.T) {
 	}
 }
 
-// Every registry entry under the data dir is visited, across daemon instances.
 func TestReapDataDirVisitsEveryInstance(t *testing.T) {
 	dataDir := t.TempDir()
 	for _, inst := range []string{"d-old", "d-new"} {

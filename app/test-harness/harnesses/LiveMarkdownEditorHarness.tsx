@@ -1,19 +1,11 @@
-/**
- * LiveMarkdownEditor Test Harness
- *
- * Renders the CodeMirror-backed live-preview editor in a real browser (CM can't
- * mount under happy-dom), so its rendering and interactions can be exercised and
- * eyeballed. Exposes window.__HARNESS__ controls: the current value is recorded on
- * every change, and link-follow / selection callbacks are recorded too.
- */
+/** Renders the CodeMirror live-preview editor in a real browser (CM can't mount under
+ * happy-dom). window.__HARNESS__ records value changes, link-follow and selection. */
 import { useCallback, useEffect, useRef, useState } from 'react';
-// Pull in the app's design tokens so the transparent editor renders over the real
-// dark pane (otherwise it sits on the browser's default white page, which is exactly
-// the kind of theme mismatch this editor is supposed to avoid).
+// The app's design tokens, so the transparent editor renders over the real dark pane
+// instead of the browser's default white page.
 import '../../src/App.css';
-// The notebook layout CSS bounds the editor's height (.notebook-browser-live-editor is
-// a flex column whose react-codemirror child is flex:1, so .cm-scroller actually
-// overflows and scrolls) — exactly the chain the real document pane provides.
+// Bounds the editor's height (.notebook-browser-live-editor flex column, react-codemirror
+// flex:1) so .cm-scroller actually overflows — the chain the real document pane provides.
 import '../../src/components/NotebookBrowser.css';
 import { LiveMarkdownEditor, type LiveMarkdownEditorHandle, type LiveSelection } from '../../src/components/notebook/LiveMarkdownEditor';
 import type { HarnessProps } from '../types';
@@ -44,10 +36,8 @@ const answer = 42;
 // scroll to. Each line is uniquely numbered so an external edit can target one.
 const LONG = `# Long note\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph line number ${i + 1} of the long note.`).join('\n\n')}\n`;
 
-// Editing-harness controls the spec drives directly (kept off the typed HarnessAPI,
-// which is a fixed shape). applyExternal pushes content through the scroll-preserving
-// minimal-edit handle; swapValue replaces the controlled `value` wholesale (the old
-// full-document-replace path) so the spec can contrast the two.
+// Editing-harness controls the spec drives directly. applyExternal goes through the
+// scroll-preserving minimal-edit handle; swapValue replaces `value` wholesale.
 interface EditorHarnessControls {
   applyExternal: (next: string) => void;
   swapValue: (next: string) => void;

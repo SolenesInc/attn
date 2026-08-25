@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// hubSendMethods are the ways the daemon puts something on the wire for more
-// than one client. A call to any of them is wire traffic.
 var hubSendMethods = map[string]bool{
 	"Broadcast":                    true,
 	"BroadcastValue":               true,
@@ -21,40 +19,24 @@ var hubSendMethods = map[string]bool{
 	"SendValueToMatchingClients":   true,
 }
 
-// daemonSendHelpers are the daemon's own wrappers around those methods. They
-// are wire traffic too, from the caller's point of view.
 var daemonSendHelpers = map[string]bool{
 	"broadcastMessage":      true,
 	"broadcastRawWSMessage": true,
 }
 
-// wireSenderExceptions is the enumerated list A2 closes on: the functions that
-// may reach the hub without a fact behind them. Everything else must publish,
-// and the projection does the sending.
-//
-// Adding an entry here is a design decision, not a formality — it says this
-// traffic is not a state change any consumer could subscribe to. Read the
-// reason before you add one.
+// Adding an entry is a design decision, not a formality: it says this traffic is
+// not a state change any consumer could subscribe to.
 var wireSenderExceptions = map[string]string{
-	// The projection table. Its closures are projections; they just do not have
-	// their own names.
 	"buildWireProjections": "the projection table itself",
 
-	// The plumbing itself. Projections call these.
 	"broadcastMessage":      "the generic value sender every projection uses",
 	"broadcastRawWSMessage": "the remote relay: the fact was already published on the remote daemon's bus, and re-publishing it locally would duplicate it",
 
-	// Byte streams. High volume, no entity worth subscribing to, and the tile
-	// and attach paths route by a per-client predicate that pub/sub cannot
-	// express.
 	"broadcastFsChanged":   "filesystem change bursts, coalesced per watcher rather than per file",
 	"broadcastTileContent": "workspace tile content bytes, sent only to the clients subscribed to that tile",
 	"handleHostEvent":      "a conversation host's envelope stream: render deltas the daemon never reads, on the same direct path as pty_output. The daemon's picture of the session is built from its own state, never from one of these",
 }
 
-// TestWireTrafficComesFromProjections pins the boundary A2 establishes: a state
-// change reaches clients by publishing a fact, and only a projection turns a
-// fact into bytes. A new broadcaster that skips the bus fails here.
 func TestWireTrafficComesFromProjections(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -111,7 +93,6 @@ func TestWireTrafficComesFromProjections(t *testing.T) {
 	}
 }
 
-// isHubSend matches d.wsHub.<send>(...).
 func isHubSend(sel *ast.SelectorExpr) bool {
 	if !hubSendMethods[sel.Sel.Name] {
 		return false
@@ -120,7 +101,6 @@ func isHubSend(sel *ast.SelectorExpr) bool {
 	return ok && inner.Sel.Name == "wsHub"
 }
 
-// isDaemonSendHelper matches d.broadcastMessage(...) and friends.
 func isDaemonSendHelper(sel *ast.SelectorExpr) bool {
 	if !daemonSendHelpers[sel.Sel.Name] {
 		return false

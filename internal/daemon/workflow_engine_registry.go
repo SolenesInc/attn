@@ -8,19 +8,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// workflowEngineSink is a destination the daemon can push a workflow control
-// frame to. The engine runs in a SEPARATE process (the `attn workflow run` CLI)
-// and connects over the unix socket, so the production sink wraps that net.Conn;
-// a fake sink (tests) also satisfies this interface, so a single registry serves
-// every transport.
 type workflowEngineSink interface {
 	sendWorkflowControl(msg interface{}) error
 }
 
-// connWorkflowEngineSink adapts the engine's request net.Conn into a sink by
-// json-encoding control frames back onto the same connection. This is the
-// SOCKET upsert path: the engine that registered a run is the one we relay a
-// cancel to.
 type connWorkflowEngineSink struct {
 	conn net.Conn
 }
@@ -29,9 +20,8 @@ func (s connWorkflowEngineSink) sendWorkflowControl(msg interface{}) error {
 	return json.NewEncoder(s.conn).Encode(msg)
 }
 
-// registerWorkflowEngine records the sink that owns a run so a later cancel can
-// reach the engine process. Lazy-inits the map so a directly-constructed
-// &Daemon{store: ...} test daemon does not panic.
+// The map is lazy-inited so a directly-constructed &Daemon{store: ...} test
+// daemon does not panic.
 func (d *Daemon) registerWorkflowEngine(runID string, sink workflowEngineSink) {
 	if d == nil || strings.TrimSpace(runID) == "" || sink == nil {
 		return
@@ -44,7 +34,6 @@ func (d *Daemon) registerWorkflowEngine(runID string, sink workflowEngineSink) {
 	d.workflowEngineConn[runID] = sink
 }
 
-// unregisterWorkflowEngine drops a run's engine sink (engine exited / run done).
 func (d *Daemon) unregisterWorkflowEngine(runID string) {
 	if d == nil {
 		return
@@ -54,10 +43,6 @@ func (d *Daemon) unregisterWorkflowEngine(runID string) {
 	delete(d.workflowEngineConn, runID)
 }
 
-// relayWorkflowCancel looks up the engine sink for a run and pushes a cancel
-// control frame. It reuses WorkflowRunCancelMessage as the on-wire control frame
-// so the engine decodes the same shape it would receive directly. Returns
-// whether a sink existed (relayed).
 func (d *Daemon) relayWorkflowCancel(runID string) bool {
 	if d == nil {
 		return false

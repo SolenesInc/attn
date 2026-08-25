@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// SentFiles returns the absolute paths a completed SendUserFile call handed
-// the user, read from Claude's PostToolUse payload. SendUserFile is the one
-// tool that means "look at this", so its files are worth surfacing; which of
-// them attn can actually show is the daemon's call, so no type filtering
-// happens here. Codex has no equivalent tool, so its payloads never match.
 func SentFiles(toolName string, toolInput json.RawMessage, cwd string) []string {
 	if toolName != "SendUserFile" {
 		return nil
@@ -31,7 +26,7 @@ func SentFiles(toolName string, toolInput json.RawMessage, cwd string) []string 
 		}
 		if !filepath.IsAbs(path) {
 			if cwd == "" {
-				continue // nothing to resolve a relative path against
+				continue
 			}
 			path = filepath.Join(cwd, path)
 		}

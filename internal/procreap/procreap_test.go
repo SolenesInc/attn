@@ -22,11 +22,8 @@ func writeScript(t *testing.T, body string) string {
 	return path
 }
 
-// orphan stands in for a child whose daemon died without shutting it down: a
-// group-leading process nothing is waiting on, described only by a registry
-// entry — exactly what `attn profile clean` finds. The body must touch
-// $READY_FILE once its traps are installed; the reap's first SIGTERM must not
-// race the script's setup.
+// body must touch $READY_FILE once its traps are installed, or the reap's first
+// SIGTERM races the script's setup.
 func orphan(t *testing.T, dir, id, body string) Entry {
 	t.Helper()
 	readyFile := filepath.Join(t.TempDir(), "ready")
@@ -37,8 +34,8 @@ func orphan(t *testing.T, dir, id, body string) Entry {
 		t.Fatalf("start orphan: %v", err)
 	}
 	pid := cmd.Process.Pid
-	// Reap the exit ourselves so the pid does not linger as a zombie, which
-	// would answer signal 0 forever and hang waitForGone.
+	// Reap the exit ourselves so the pid does not linger as a zombie, which would
+	// answer signal 0 forever and hang waitForGone.
 	go func() { _ = cmd.Wait() }()
 	t.Cleanup(func() {
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
@@ -84,24 +81,9 @@ while true; do sleep 0.05; done
 	}
 }
 
-// The identity gate is only as good as the stamp's resolution. A stamp coarser
-// than the interval in which the kernel can hand the same pid to a different
-// process lets an imposter through the gate, and the reaper then SIGTERMs,
-// SIGKILLs and group-sweeps a stranger — the kill-by-pattern this package
-// exists to avoid.
-//
-// The floor a stamp has to beat is the pid-reuse interval, which requires a
-// full wrap of the pid space: measured at 2m37s on macOS (92043 spawns at
-// 588/s, ceiling ~99998) and at more than 4 minutes on Linux (1949409 spawns at
-// 8123/s without a single reuse, pid_max 4194304). Each platform's
-// stampResolution — 1µs from the Darwin sysctl, 10ms from Linux's /proc — sits
-// orders of magnitude under that, and this pins it: processes spawned that far
-// apart must carry different stamps. A second-granularity source (Darwin's
-// `ps -o lstart=`, whose strftime %c drops everything below a second) fails
-// here.
+// Measured pid-reuse floor: 2m37s on macOS, over 4m on Linux, against stampResolution
+// of 1µs (Darwin sysctl) / 10ms (/proc). A second-granularity source fails here.
 func TestStartTimeStampResolvesFasterThanPidsAreReused(t *testing.T) {
-	// Generous multiple of the platform floor, still five orders of magnitude
-	// under the measured reuse interval.
 	separation := 20 * stampResolution
 	if separation < time.Millisecond {
 		separation = time.Millisecond
@@ -134,9 +116,6 @@ func TestStartTimeStampResolvesFasterThanPidsAreReused(t *testing.T) {
 	}
 }
 
-// The stamp must also be stable: re-reading a live process has to reproduce
-// what was recorded at spawn, or every reap would degrade to "unidentified"
-// and clean would quietly stop reaping anything.
 func TestStartTimeStampIsStableAcrossReads(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -153,8 +132,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// A cooperative child — one whose SIGTERM handler runs its teardown — is
-// terminated by the first signal; the reap never escalates.
 func TestReapTerminatesACooperativeOrphan(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -179,8 +156,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// A wedged child that ignores SIGTERM is SIGKILLed after the grace window,
-// together with whatever stayed in its group.
 func TestReapKillsAnOrphanThatIgnoresSIGTERM(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -198,8 +173,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// The identity gate: a registry entry whose pid now belongs to a different
-// process (recorded start time no longer matches) must not be signalled.
 func TestReapLeavesARecycledPIDAlone(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -220,8 +193,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// An empty recorded start time (the spawn-time read failed) reads as "cannot
-// identify", never as "safe to signal".
 func TestReapRefusesAnEntryWithNoStartTime(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
@@ -242,9 +213,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// An entry whose process already exited is reported gone and nothing is
-// signalled — the common case after a clean daemon shutdown that could not
-// remove its records.
 func TestReapReportsADeadEntryAsAlreadyGone(t *testing.T) {
 	dir := t.TempDir()
 	script := writeScript(t, "exit 0\n")
@@ -264,16 +232,12 @@ func TestReapReportsADeadEntryAsAlreadyGone(t *testing.T) {
 	}
 }
 
-// A directory with no registry at all reaps to nothing.
 func TestReapOfAnEmptyDirIsQuiet(t *testing.T) {
 	if results := ReapDir(t.TempDir(), testGrace); len(results) != 0 {
 		t.Fatalf("expected no results, got %+v", results)
 	}
 }
 
-// A record this build cannot decode — corrupt, or written by a future version —
-// describes a process that will now never be reaped. Reporting it is the whole
-// point: staying silent would read as "nothing was registered".
 func TestReapReportsAnUnreadableRecord(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "e1.json"), []byte("{not json"), 0o600); err != nil {
@@ -297,15 +261,9 @@ func TestReapReportsAnUnreadableRecord(t *testing.T) {
 	}
 }
 
-// The reap tears down what a host's dispose would: the cooperative path is the
-// only one that reaches tool subprocesses (they lead their own groups), so a
-// child that forwards its teardown to a grandchild stands in for it here.
 func TestReapCooperativeTeardownReachesTheDetachedChild(t *testing.T) {
 	dir := t.TempDir()
 	childPIDFile := filepath.Join(t.TempDir(), "child.pid")
-	// `set -m` puts the background sleep in its own process group, the way
-	// pi's tool subprocesses run — where the group sweep cannot reach it and
-	// only the cooperative teardown does.
 	orphan(t, dir, "e1", `
 set -m
 sleep 300 &
@@ -340,13 +298,10 @@ while true; do sleep 0.05; done
 	}
 }
 
-// A recorded child that shared its manager's process group (pgid != pid) is
-// signalled alone: a group signal would hit processes the entry does not own.
+// Spawned WITHOUT Setpgid: the child shares this test process's group, so a group
+// SIGKILL from the reap would take the test run down with it.
 func TestReapNeverGroupSignalsASharedGroupEntry(t *testing.T) {
 	dir := t.TempDir()
-	// Spawn WITHOUT Setpgid: the child shares this test process's group. A
-	// group SIGKILL from the reap would take the test run down with it — the
-	// test passing at all is the assertion.
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	script := writeScript(t, "READY_FILE="+readyFile+`
 trap '' TERM

@@ -12,12 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// A park has to survive the daemon that made it.
-//
-// Restarts are ordinary — an upgrade, a crash, a reboot — and while the park
-// lived only in the supervisor's memory each one lazy-started the same broken
-// host, spent the whole backoff schedule on it again, and raised a second
-// critical notification for one outage the user had already been told about.
 func TestParkedRuntimeSurvivesADaemonRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	launches := filepath.Join(t.TempDir(), "launches")
@@ -37,16 +31,13 @@ func TestParkedRuntimeSurvivesADaemonRestart(t *testing.T) {
 	if parked.ParkedAt.IsZero() {
 		t.Fatal("a parked runtime carries no park time")
 	}
-	// The phase flips before the park's side effects land, and teardown must not
-	// race them: the park row is written first (a daemon dying here comes back
-	// parked and silent — the designed behavior), the notification second. Wait
-	// for the notification while the daemon that owes it is still alive.
+	// The phase flips before the park's side effects land: the park row is written
+	// first, the notification second.
 	waitFor(t, "the parked runtime's notification to land", func() bool {
 		return len(appNotifications(t, first, notificationKindAppRuntimeParked)) == 1
 	})
 	launchesBefore := launchCount(t, launches)
 
-	// The daemon goes away — an upgrade, a crash, a reboot. Its database does not.
 	first.stopAppRuntime()
 	stopAppDaemon(t, first)
 
@@ -76,21 +67,15 @@ func TestParkedRuntimeSurvivesADaemonRestart(t *testing.T) {
 		t.Fatalf("last_exit after restart = %v, want the recorded exit code 3", status.Runtime.LastExit)
 	}
 
-	// The point of all of it: the broken host is never launched again.
 	if got := launchCount(t, launches); got != launchesBefore {
 		t.Fatalf("the restarted daemon launched the host %d more time(s); a restored park must spawn nothing",
 			got-launchesBefore)
 	}
-	// One outage, one critical notification. A second one for the same park is
-	// the surface that cannot be ignored repeating itself.
 	if notes := appNotifications(t, second, notificationKindAppRuntimeParked); len(notes) != 1 {
 		t.Fatalf("app-runtime-parked notifications after a restart = %d, want the original 1", len(notes))
 	}
 }
 
-// The restore has to be in place before anything can lazy-start the runtime. A
-// dispatch is the caller that would: it arrives on the first fact an app is due,
-// which on a fresh daemon is immediately.
 func TestRestoredParkIsInPlaceBeforeTheFirstDispatch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	launches := filepath.Join(t.TempDir(), "launches")
@@ -103,9 +88,6 @@ func TestRestoredParkIsInPlaceBeforeTheFirstDispatch(t *testing.T) {
 	installApp(t, d, "greeter", subscribing("ticket.*"))
 	t.Cleanup(d.stopAppRuntime)
 
-	// No restoreAppRuntimePark call: the dispatch path builds the supervisor
-	// itself, and it must find the park already applied. This is the race the
-	// persisted park exists to close, so it is asserted rather than commented.
 	err := d.deliverAppEvent(context.Background(), "greeter", appEvent("ticket.created", "tk-1", 1))
 	if !isRuntimeFailure(err) {
 		t.Fatalf("dispatch into a restored park returned %v, want a runtime failure", err)
@@ -120,7 +102,6 @@ func TestRestoredParkIsInPlaceBeforeTheFirstDispatch(t *testing.T) {
 	if !ok || snapshot.Phase != supervise.PhaseParked {
 		t.Fatalf("snapshot after a dispatch = %+v, want parked", snapshot)
 	}
-	// Not the app's fault, so it must not be on the auto-disable clock.
 	rows := invocationsOf(t, d, "greeter")
 	if len(rows) != 1 || rows[0].Status != appInvocationStatusRuntimeError {
 		t.Fatalf("invocations = %+v, want one runtime_error", rows)
@@ -130,9 +111,6 @@ func TestRestoredParkIsInPlaceBeforeTheFirstDispatch(t *testing.T) {
 	}
 }
 
-// The way out has to erase the way in. A restart that revived the runtime but
-// left the row behind would re-park it on the next daemon start — the door back
-// from parked opening exactly once.
 func TestRestartClearsThePersistedPark(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	seedParkedRuntime(t, dbPath, 10)
@@ -154,9 +132,6 @@ func TestRestartClearsThePersistedPark(t *testing.T) {
 	}
 }
 
-// A daemon that has never run an app must still say so. Reading the park back is
-// not a reason to build a supervisor, and "not started" is a different answer
-// from "stopped" — the second sends a reader looking for a fault.
 func TestRestoreLeavesAnUnparkedDaemonUntouched(t *testing.T) {
 	d := newAppDaemonOn(t, filepath.Join(t.TempDir(), "attn.db"))
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -169,11 +144,6 @@ func TestRestoreLeavesAnUnparkedDaemonUntouched(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-
-// newAppDaemonOn is newAppDaemon against a database the test owns, so one test
-// can park a runtime, drop the daemon, and bring a second one up over the same
-// state — which is all a daemon restart is.
 func newAppDaemonOn(t *testing.T, dbPath string) *Daemon {
 	t.Helper()
 	persistent, err := store.NewWithDB(dbPath)
@@ -181,7 +151,7 @@ func newAppDaemonOn(t *testing.T, dbPath string) *Daemon {
 		t.Fatalf("open %s: %v", dbPath, err)
 	}
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	// The bus is built around the store it was constructed with, so the two move
+	// The bus is built around the store it was constructed with: move the two
 	// together or the daemon publishes into a database nobody reads.
 	d.stopEventBus()
 	_ = d.store.Close()
@@ -195,15 +165,12 @@ func newAppDaemonOn(t *testing.T, dbPath string) *Daemon {
 	return d
 }
 
-// stopAppDaemon takes a daemon down the way a process exit does, database and
-// all. Idempotent, so a test may end one early and still have its cleanup run.
 func stopAppDaemon(t *testing.T, d *Daemon) {
 	t.Helper()
 	d.stopEventBus()
 	_ = d.store.Close()
 }
 
-// seedParkedRuntime writes the row a previous daemon's give-up would have left.
 func seedParkedRuntime(t *testing.T, dbPath string, attempts int) time.Time {
 	t.Helper()
 	s, err := store.NewWithDB(dbPath)
@@ -225,8 +192,6 @@ func seedParkedRuntime(t *testing.T, dbPath string, attempts int) time.Time {
 	return parkedAt
 }
 
-// countingHostStub is a runtime host that records every launch and dies, so a
-// test can assert a spawn that must not happen rather than only its aftermath.
 func countingHostStub(t *testing.T, marks string) string {
 	t.Helper()
 	return writeExecutableStub(t, "echo started >> "+marks+"\nexit 3")

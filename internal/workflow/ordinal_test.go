@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// ordinalResultMap runs a script with the given stub and returns ordinal->result.
-// It compares the *logical mapping*, not journal append order (which legitimately
-// varies with resolution timing — that is exactly what we are proving is
-// irrelevant to the ordinals).
 func ordinalResultMap(t *testing.T, stub AgentStub, script string) map[string]string {
 	t.Helper()
 	eng := New(Config{Stub: stub, WatchdogTimeout: 5 * time.Second})
@@ -34,23 +30,15 @@ func ordinalResultMap(t *testing.T, stub AgentStub, script string) map[string]st
 	return out
 }
 
-// deterministicResult is a pure function of the prompt, independent of the
-// ordinal (and the schema/isolation). It matches the StubFunc AgentCall shape.
 func deterministicResult(call AgentCall) (json.RawMessage, error) {
 	b, _ := json.Marshal("R:" + call.Prompt)
 	return b, nil
 }
 
-// scriptedDeterministicResult adapts deterministicResult to the 2-arg resultFor
-// signature NewScriptedStub expects (the gated stub does not vary by schema).
 func scriptedDeterministicResult(ordinal OrdinalPath, prompt string) (json.RawMessage, error) {
 	return deterministicResult(AgentCall{Ordinal: ordinal, Prompt: prompt})
 }
 
-// TestPipelineOrdinalStabilityUnderReorder is the crux E1 proof: a pipeline whose
-// stage-1 calls resolve in OPPOSITE orders across two runs must produce identical
-// ordinal->result mappings. The ScriptedStub gates each call's resolution so we
-// can release stage-1 of item0 before vs after item1.
 func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 	script := `
 		const out = await pipeline(["X", "Y"],
@@ -59,8 +47,6 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 		return out;
 	`
 
-	// The four ordinals the pipeline produces (item x stage), with site lines.
-	// Discover them with an all-release run first.
 	all := NewScriptedStub(scriptedDeterministicResult)
 	all.ReleaseAll()
 	baseline := ordinalResultMap(t, all, script)
@@ -68,7 +54,6 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 		t.Fatalf("expected 4 calls, got %d: %v", len(baseline), baseline)
 	}
 
-	// Identify the stage-1 ordinals (they contain "/st1/").
 	var st1 []string
 	for ord := range baseline {
 		if containsSeg(ord, "st1") {
@@ -80,10 +65,6 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 		t.Fatalf("expected 2 stage-1 ordinals, got %v (all=%v)", st1, baseline)
 	}
 
-	// Runs in a synctest bubble. The separation between the two stage-1 releases
-	// used to be a 15ms sleep hoping the first resolution landed first;
-	// synctest.Wait returns only when the engine has nothing left to do, so the
-	// releases are genuinely serialized and the two orders are genuinely opposite.
 	runWithReleaseOrder := func(order []string) map[string]string {
 		out := map[string]string{}
 		synctest.Test(t, func(t *testing.T) {
@@ -94,14 +75,11 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 				r, _ := eng.Run(context.Background(), script, nil)
 				done <- r
 			}()
-			// Release stage-0 calls so the pipeline can reach stage 1.
 			for ord := range baseline {
 				if !containsSeg(ord, "st1") {
 					stub.Release(ord)
 				}
 			}
-			// Now release the two stage-1 calls in the requested order, each fully
-			// resolved before the next, so the resolutions truly interleave differently.
 			for _, ord := range order {
 				synctest.Wait()
 				stub.Release(ord)
@@ -130,9 +108,6 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 		t.Fatalf("reordered runs disagree with the baseline:\n baseline=%v\n got=%v", baseline, forward)
 	}
 
-	// Strong assertion on the actual binding: item-0-stage-1 must carry the result
-	// derived from item-0-stage-0 ("R:s2:R:s1:X"), and item-1-stage-1 from item 1,
-	// regardless of resolution order.
 	for ord, val := range forward {
 		if containsSeg(ord, "pi0") && containsSeg(ord, "st1") {
 			if val != "R:s2:R:s1:X" {
@@ -147,14 +122,6 @@ func TestPipelineOrdinalStabilityUnderReorder(t *testing.T) {
 	}
 }
 
-// releaseOrderedMap runs script under a fresh ScriptedStub, releases the given
-// ordinals (in order, each fully resolved before the next) and then opens all
-// remaining gates. It returns the ordinal->result mapping. The phased release
-// lets a test drive the post-await continuations to resolve in a chosen order.
-//
-// Runs in a synctest bubble: the second wave's separation was a 15ms sleep, and
-// is now synctest.Wait — the engine having nothing left to do, which is what the
-// sleep was standing in for.
 func releaseOrderedMap(t *testing.T, script string, firstWave, secondWave []string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -187,13 +154,6 @@ func releaseOrderedMap(t *testing.T, script string, firstWave, secondWave []stri
 	return out
 }
 
-// TestPipelinePostAwaitOrdinalStability is the load-bearing case the older
-// stability test missed: a stage callback that issues an agent() AFTER its OWN
-// internal `await`. Without the async-context carry, the post-await call resumes
-// with an unwound path stack and gets a temporal ordinal (bare callsite + global
-// counter) assigned by subagent resolution order — so reversing which second call
-// resolves first would re-bind ordinals to the wrong item. This proves the
-// post-await ordinal is structural (carries its pi/st prefix) and stable.
 func TestPipelinePostAwaitOrdinalStability(t *testing.T) {
 	script := `
 		const out = await pipeline(["X", "Y"], async (v, item, i) => {
@@ -209,7 +169,6 @@ func TestPipelinePostAwaitOrdinalStability(t *testing.T) {
 		t.Fatalf("expected 4 calls, got %d: %v", len(baseline), baseline)
 	}
 
-	// The two post-await ("b:") calls are the timing-sensitive ones.
 	var firstWave, secondWave []string
 	for ord, v := range baseline {
 		if strings.HasPrefix(v, "R:b:") {
@@ -233,9 +192,6 @@ func TestPipelinePostAwaitOrdinalStability(t *testing.T) {
 		t.Fatalf("reordered runs disagree with baseline:\n baseline=%v\n got=%v", baseline, forward)
 	}
 
-	// Strong binding assertion: the post-await call under pi0 must carry item X's
-	// chained result, pi1 must carry item Y's — regardless of resolution order, and
-	// every post-await ordinal must keep its structural prefix (no bare callsite).
 	for ord, val := range forward {
 		if !strings.HasPrefix(val, "R:b:") {
 			continue
@@ -252,10 +208,6 @@ func TestPipelinePostAwaitOrdinalStability(t *testing.T) {
 	}
 }
 
-// TestParallelPostAwaitOrdinalStability is the parallel analogue: thunks that issue
-// agent() after an internal await (via a shared-callsite helper) must keep their
-// slot-indexed ordinal across the await rather than collapsing to a globally
-// counted, resolution-ordered one.
 func TestParallelPostAwaitOrdinalStability(t *testing.T) {
 	script := `
 		const mk = async (n) => {
@@ -292,7 +244,6 @@ func TestParallelPostAwaitOrdinalStability(t *testing.T) {
 	if !reflect.DeepEqual(forward, reverse) {
 		t.Fatalf("parallel post-await ordinals differ under reorder:\n fwd=%v\n rev=%v", forward, reverse)
 	}
-	// Each post-await ("y:") call must keep its slot prefix and bind to its slot's value.
 	for ord, val := range forward {
 		if !strings.HasPrefix(val, "R:y:") {
 			continue
@@ -310,8 +261,6 @@ func TestParallelPostAwaitOrdinalStability(t *testing.T) {
 	}
 }
 
-// TestParallelOrdinalStabilityUnderReorder: parallel slots resolving in opposite
-// orders still produce identical slot-indexed ordinals.
 func TestParallelOrdinalStabilityUnderReorder(t *testing.T) {
 	script := `
 		const out = await parallel([
@@ -334,8 +283,6 @@ func TestParallelOrdinalStabilityUnderReorder(t *testing.T) {
 	}
 	sort.Strings(ords)
 
-	// Runs in a synctest bubble; see runWithReleaseOrder in
-	// TestPipelineOrdinalStabilityUnderReorder for why the sleeps are gone.
 	runWithReleaseOrder := func(order []string) map[string]string {
 		out := map[string]string{}
 		synctest.Test(t, func(t *testing.T) {
@@ -367,7 +314,6 @@ func TestParallelOrdinalStabilityUnderReorder(t *testing.T) {
 	if !reflect.DeepEqual(forward, reverse) {
 		t.Fatalf("parallel ordinals differ under reorder:\n fwd=%v\n rev=%v", forward, reverse)
 	}
-	// Slot 0 must carry "R:a", slot 1 "R:b", slot 2 "R:c" — by position, not timing.
 	for ord, val := range forward {
 		switch {
 		case containsSeg(ord, "ps0") && val != "R:a":
@@ -380,8 +326,6 @@ func TestParallelOrdinalStabilityUnderReorder(t *testing.T) {
 	}
 }
 
-// TestLoopCounterOrdinals: a for-loop issuing N agent() calls at one call site
-// gets per-call-site counter ordinals #0..#N-1, in deterministic execution order.
 func TestLoopCounterOrdinals(t *testing.T) {
 	script := `
 		const out = [];
@@ -395,8 +339,6 @@ func TestLoopCounterOrdinals(t *testing.T) {
 	if len(m) != 4 {
 		t.Fatalf("expected 4 calls, got %d: %v", len(m), m)
 	}
-	// All four share a call-site but differ only by the #N counter, and each maps
-	// to its loop iteration's prompt result.
 	wantByCounter := map[int]string{0: "R:call-0", 1: "R:call-1", 2: "R:call-2", 3: "R:call-3"}
 	seenCounters := map[int]bool{}
 	for ord, val := range m {
@@ -413,10 +355,6 @@ func TestLoopCounterOrdinals(t *testing.T) {
 	}
 }
 
-// TestPhaseNotInIdentity: renaming a phase() label must not change ordinals (the
-// phase is positional/sequential, not label-based, so a rename is a 100% cache
-// hit on resume). Here we assert two scripts differing only in the phase string
-// produce ordinals that match on the cache predicate.
 func TestPhaseRenameKeepsCacheHits(t *testing.T) {
 	scriptA := `phase("planning"); const a = await agent("p"); return a;`
 	scriptB := `phase("BUILDING"); const a = await agent("p"); return a;`
@@ -431,7 +369,6 @@ func TestPhaseRenameKeepsCacheHits(t *testing.T) {
 		t.Fatalf("run A LiveCalls=%d want 1", r1.LiveCalls)
 	}
 
-	// Resume with the renamed phase: must be a 100% cache hit.
 	eng2 := New(Config{Journal: jour, Stub: StubFunc(deterministicResult), WatchdogTimeout: 5 * time.Second})
 	r2, err := eng2.Resume(context.Background(), scriptB, nil)
 	if err != nil {
@@ -441,8 +378,6 @@ func TestPhaseRenameKeepsCacheHits(t *testing.T) {
 		t.Fatalf("phase rename should be 100%% cache hit: live=%d cached=%d", r2.LiveCalls, r2.CachedCalls)
 	}
 }
-
-// --- small helpers ---
 
 func containsSeg(ordinal, seg string) bool {
 	for _, part := range splitOrdinal(ordinal) {

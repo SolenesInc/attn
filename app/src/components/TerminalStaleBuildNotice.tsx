@@ -4,11 +4,7 @@ interface TerminalStaleBuildNoticeProps {
   onDismiss: () => void;
 }
 
-// Where the reload lives, drawn rather than screenshotted so it follows the
-// theme and stays legible at 200px. It mirrors the real surfaces: a sidebar row
-// with the ••• button (Sidebar.tsx) opening the actions popover, with the
-// Reload session item picked out (SessionActionsPopover.tsx). It moves when
-// they move.
+// Mirrors Sidebar.tsx and SessionActionsPopover.tsx, and moves when they move.
 function ReloadHint() {
   return (
     <svg
@@ -36,11 +32,6 @@ function ReloadHint() {
   );
 }
 
-// Shown when the daemon says this session's pty-worker holds a different
-// libghostty-vt than the app AND could not be upgraded in place. Nothing is
-// broken yet, and the session keeps running; the two terminals just stop
-// agreeing about the grid, which shows up as a garbled pane after an image or a
-// redraw. A reload replaces the worker.
 export function TerminalStaleBuildNotice({ onDismiss }: TerminalStaleBuildNoticeProps) {
   return (
     <div className="terminal-stale-build-notice" role="status" data-testid="terminal-stale-build-notice">

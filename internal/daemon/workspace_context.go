@@ -147,10 +147,6 @@ func (d *Daemon) checkoutWorkspaceContext(msg *protocol.WorkspaceContextCheckout
 	return d.checkoutWorkspaceContextForSession(session, protocol.Deref(msg.Force))
 }
 
-// checkoutWorkspaceContextForSession performs the checkout for an explicit
-// session/workspace identity. Unlike checkoutWorkspaceContext it does not require
-// the session row to exist, which lets plugin launch preparation stage guidance
-// before a successful PTY spawn is persisted.
 func (d *Daemon) checkoutWorkspaceContextForSession(session *protocol.Session, force bool) (*protocol.WorkspaceContextResult, error) {
 	if session == nil || strings.TrimSpace(session.ID) == "" || strings.TrimSpace(session.WorkspaceID) == "" {
 		return nil, errors.New("workspace context checkout requires session and workspace ids")
@@ -283,13 +279,8 @@ func (d *Daemon) updateWorkspaceContext(msg *protocol.WorkspaceContextUpdateMess
 	if changed {
 		d.broadcastWorkspaceContextChanged(canonical)
 		d.enqueueWorkspaceContextCompaction(canonical)
-		// A content-changing context write is a daily-narrate activity event: it marks
-		// the workspace active so the nightly daily-narrate cron narrates it even on a
-		// day with no session end. A no-op update (changed == false) does NOT mark
-		// activity — there is nothing new for the daily backstop to narrate. The
-		// keeper's compaction write is NOT an activity signal (it only reshapes
-		// existing content), so this is hooked at the agent/user write chokepoint, not
-		// the keeper compaction apply path.
+		// Hooked at the agent/user write chokepoint, not in compaction: the keeper's
+		// compaction write is not an activity signal, and a no-op update marks nothing.
 		d.markNotebookWorkspaceActivity(session.WorkspaceID)
 	}
 	return result, changed, nil

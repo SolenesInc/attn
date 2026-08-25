@@ -1,7 +1,5 @@
 import { test, expect } from './fixtures';
 
-// Helper to inject a session into the local UI store (represents UI-created session)
-// This is needed because sessions must be created via UI - daemon-only sessions won't appear in Dashboard
 async function injectLocalSession(
   page: import('@playwright/test').Page,
   session: { id: string; label: string; state: string; cwd?: string }
@@ -18,8 +16,6 @@ async function injectLocalSession(
   }, session);
 }
 
-// Helper to create a session in both local store AND daemon
-// This sets up the full E2E flow: local session + daemon tracking + WebSocket updates
 async function createSession(
   page: import('@playwright/test').Page,
   daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string; workspace_id?: string }) => Promise<void> },
@@ -27,10 +23,8 @@ async function createSession(
 ) {
   const cwd = session.cwd || '/tmp/test';
 
-  // 1. Create local session (for UI to show it)
   await injectLocalSession(page, { ...session, cwd });
 
-  // 2. Register with daemon (for state tracking via WebSocket)
   await daemon.injectSession({
     id: session.id,
     label: session.label,
@@ -46,21 +40,17 @@ test.describe('Session State Changes', () => {
     await daemon.start();
     await page.goto('/');
 
-    // Wait for app to be ready
     await page.waitForSelector('.dashboard');
 
-    // Create sessions in both local store and daemon (true E2E setup)
-    // Each session has a unique cwd so daemon can track them independently
+    // A unique cwd per session is what lets the daemon track them independently.
     await createSession(page, daemon, { id: 's1', label: 'Working Task', state: 'working', cwd: '/tmp/test/s1' });
     await createSession(page, daemon, { id: 's2', label: 'Needs Input', state: 'waiting_input', cwd: '/tmp/test/s2' });
     await createSession(page, daemon, { id: 's3', label: 'Finished', state: 'idle', cwd: '/tmp/test/s3' });
 
-    // Verify grouping headers
     await expect(page.locator('[data-testid="session-group-working"]')).toBeVisible();
     await expect(page.locator('[data-testid="session-group-waiting"]')).toBeVisible();
     await expect(page.locator('[data-testid="session-group-idle"]')).toBeVisible();
 
-    // Verify sessions in correct groups
     await expect(page.locator('[data-testid="session-s1"][data-state="working"]')).toBeVisible();
     await expect(page.locator('[data-testid="session-s2"][data-state="waiting_input"]')).toBeVisible();
     await expect(page.locator('[data-testid="session-s3"][data-state="idle"]')).toBeVisible();
@@ -96,15 +86,12 @@ test.describe('Session State Changes', () => {
     await page.goto('/');
     await page.waitForSelector('.dashboard');
 
-    // Create sessions in both local store and daemon
     await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
     await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
     await createSession(page, daemon, { id: 's3', label: 'Idle', state: 'idle', cwd: '/tmp/test/s3' });
 
-    // Wait for sessions to appear
     await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-    // Verify colors (RGB equivalents)
     const workingDot = page.locator('[data-testid="session-s1"] [data-testid="state-indicator"]');
     const waitingDot = page.locator('[data-testid="session-s2"] [data-testid="state-indicator"]');
     const idleDot = page.locator('[data-testid="session-s3"] [data-testid="state-indicator"]');
@@ -119,22 +106,17 @@ test.describe('Session State Changes', () => {
     await page.goto('/');
     await page.waitForSelector('.dashboard');
 
-    // Create sessions with different states
     await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
     await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
     await createSession(page, daemon, { id: 's3', label: 'Idle', state: 'idle', cwd: '/tmp/test/s3' });
 
-    // Wait for sessions to load
     await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-    // Open attention drawer through the action menu.
     await page.keyboard.press('Meta+k');
     await page.getByText('Open attention drawer').click();
 
-    // Wait for drawer to open
     await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();
 
-    // Only waiting_input session should appear
     await expect(page.locator('[data-testid="attention-session-s2"]')).toBeVisible();
     await expect(page.locator('[data-testid="attention-session-s1"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="attention-session-s3"]')).not.toBeVisible();

@@ -35,8 +35,7 @@ describe('serializeBrowserControlResultMessage', () => {
 });
 
 // The Rust commands take one `geometry` argument and reject anything else at
-// deserialization, which no typechecker on this side can see. These pin the
-// payload shape both commands are called with.
+// deserialization, which no typechecker on this side can see.
 describe('browser host geometry payload', () => {
   const rect = { x: 10, y: 20, width: 300, height: 400 };
 

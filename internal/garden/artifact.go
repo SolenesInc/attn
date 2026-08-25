@@ -6,37 +6,17 @@ import (
 	"strings"
 )
 
-// An artifact is a document a seed's work produced or leans on. The seed
-// records the association and nothing else: where a document actually lives
-// stays with the canonical-artifact lifecycle
-// (docs/plans/2026-07-18-canonical-plan-artifact-lifecycle.md).
-//
-// The association is a typed reference on an `attach` log entry, and `detach`
-// is the way out. The current set is a projection over the log — attach minus
-// detach — so the log stays the whole truth about a seed and nothing has to be
-// kept in sync with it.
-
-// Artifact kinds. Each names which of the reference's fields carry it, and
-// nothing else in the reference may be set: the daemon validates a shape, it
-// never reads meaning out of a string a caller composed.
 const (
-	// ArtifactMarkdownFile is a markdown document at a path — the one kind a
-	// seed's artifact set opens as its own file tile.
 	ArtifactMarkdownFile = "markdown_file"
-	// ArtifactNotebook is a Notebook document, addressed by its id.
-	ArtifactNotebook = "notebook"
-	// ArtifactRepository is a path inside a named repository.
-	ArtifactRepository = "repository"
-	// ArtifactURL is anything reachable by URL and nothing attn stores.
-	ArtifactURL = "url"
+	ArtifactNotebook     = "notebook"
+	ArtifactRepository   = "repository"
+	ArtifactURL          = "url"
 )
 
-// ArtifactKinds is every kind, in the order an unknown one is refused against.
 var ArtifactKinds = []string{ArtifactMarkdownFile, ArtifactNotebook, ArtifactRepository, ArtifactURL}
 
-// ArtifactReference is one typed association. Optional fields are omitted
-// rather than written empty: unlike a seed's declared fields, nothing queries
-// these, and an empty string beside a set one reads as a second answer.
+// Optional fields are omitted rather than written empty: an empty string beside
+// a set one reads as an answer.
 type ArtifactReference struct {
 	Kind               string `json:"kind"`
 	NotebookDocumentID string `json:"notebook_document_id,omitempty"`
@@ -45,14 +25,9 @@ type ArtifactReference struct {
 	URL                string `json:"url,omitempty"`
 }
 
-// MaxArtifactFieldChars bounds each field of a reference. A path, a repository
-// name, a Notebook id and a URL are all short by nature; this is a tripwire
-// past anything real — the longest path in this repo is 84 characters — so a
-// caller that puts a document *in* the field is told, instead of storing it.
+// A tripwire: the longest path in this repo is 84 characters.
 const MaxArtifactFieldChars = 2048
 
-// trimArtifact is the one place a reference's fields are cleaned, so validation
-// and storage never disagree about what was actually written.
 func (a ArtifactReference) trimmed() ArtifactReference {
 	return ArtifactReference{
 		Kind:               strings.TrimSpace(strings.ToLower(a.Kind)),
@@ -63,8 +38,6 @@ func (a ArtifactReference) trimmed() ArtifactReference {
 	}
 }
 
-// ValidateArtifact accepts a reference and hands back the trimmed form to
-// store, or refuses naming the kind, the field it wanted, and what it got.
 func ValidateArtifact(raw ArtifactReference) (ArtifactReference, error) {
 	a := raw.trimmed()
 	if a.Kind == "" {
@@ -103,13 +76,9 @@ func ValidateArtifact(raw ArtifactReference) (ArtifactReference, error) {
 	return a, nil
 }
 
-// artifactFields is the whole table: what each kind must carry, and what it may.
 func artifactFields(kind string) (required, allowed []string) {
 	switch kind {
 	case ArtifactMarkdownFile:
-		// A markdown file may name the repository it lives in — the same document
-		// at the same path in two worktrees is one artifact, and the repository is
-		// what says which.
 		return []string{"path"}, []string{"path", "repository"}
 	case ArtifactNotebook:
 		return []string{"notebook_document_id"}, []string{"notebook_document_id"}
@@ -135,8 +104,6 @@ func (a ArtifactReference) field(name string) string {
 	return ""
 }
 
-// Label is how a reference reads on a log line and in the artifact set: the
-// field that identifies it, which is the part a person recognizes.
 func (a ArtifactReference) Label() string {
 	switch {
 	case a.Path != "":
@@ -151,17 +118,10 @@ func (a ArtifactReference) Label() string {
 	return a.Kind
 }
 
-// Identity is what the attach-minus-detach projection keys on, so a detach
-// naming the same document as an earlier attach removes it. Every field
-// participates: two references differing anywhere are two artifacts, and
-// silently collapsing them would drop one from the set.
 func (a ArtifactReference) Identity() string {
 	return strings.Join([]string{a.Kind, a.Path, a.NotebookDocumentID, a.Repository, a.URL}, "\x00")
 }
 
-// DefaultNoteBody is the log line written when an attach or detach carries no
-// words of its own. It renders the typed reference; it never reads meaning out
-// of one.
 func DefaultNoteBody(kind string, a ArtifactReference) string {
 	verb := "attached"
 	if kind == NoteKindDetach {
@@ -173,13 +133,6 @@ func DefaultNoteBody(kind string, a ArtifactReference) string {
 	return fmt.Sprintf("%s %s", verb, a.Label())
 }
 
-// CurrentArtifacts projects a seed's current set from its log: attach adds,
-// detach removes, newest wins. Notes arrive newest first, as every garden read
-// hands them over, and are replayed oldest first so the newest verb decides.
-//
-// The set is the projection and nothing else — there is no stored list to drift
-// from it, which is why a note nobody could decode is skipped rather than
-// failing the read.
 func CurrentArtifacts(notes []Note) []ArtifactReference {
 	current := map[string]ArtifactReference{}
 	order := []string{}
@@ -191,10 +144,6 @@ func CurrentArtifacts(notes []Note) []ArtifactReference {
 		key := note.Artifact.Identity()
 		switch note.Kind {
 		case NoteKindAttach:
-			// The attach that made it current decides where it sits, so a
-			// re-attach after a detach moves it to the end rather than
-			// reappearing in a slot it was removed from — and, since a detached
-			// key stays in order, listing it twice.
 			order = append(slices.DeleteFunc(order, func(held string) bool { return held == key }), key)
 			current[key] = *note.Artifact
 		case NoteKindDetach:

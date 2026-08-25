@@ -12,11 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The alarm's whole job is to be believed. A durable row per tick for a
-// condition that can last days would teach the user to ignore the feed, and a
-// row that never comes is the state this exists to end. These pin the rule
-// between the two: once per episode, and a new episode may speak again.
-
 func pinAlarmDaemon() *Daemon {
 	return &Daemon{store: store.New()}
 }
@@ -42,10 +37,6 @@ func unread(t *testing.T, d *Daemon) []store.NotificationRecord {
 	return list
 }
 
-// One look cannot tell an outage from a machine that just woke up: on wake the
-// oldest unread event is as old as the sleep and the delivery loop has not
-// polled yet. Two looks a whole interval apart can, because by then the cursor
-// has moved. So the first sighting never notifies.
 func TestFirstSightingOfAPinDoesNotNotify(t *testing.T) {
 	d := pinAlarmDaemon()
 
@@ -57,8 +48,6 @@ func TestFirstSightingOfAPinDoesNotNotify(t *testing.T) {
 	}
 }
 
-// Confirmed at the same cursor, it is said once — and stays said once however
-// long the condition lasts.
 func TestConfirmedPinNotifiesExactlyOnce(t *testing.T) {
 	d := pinAlarmDaemon()
 	pin := samplePin("app:ticketwatch", 900)
@@ -67,7 +56,6 @@ func TestConfirmedPinNotifiesExactlyOnce(t *testing.T) {
 	if n := d.recordBusPins([]bus.Pin{pin}); n != 1 {
 		t.Fatalf("notified %d on the confirming sighting, want 1", n)
 	}
-	// The condition holds for another ten checks; the feed does not grow.
 	for i := 0; i < 10; i++ {
 		if n := d.recordBusPins([]bus.Pin{pin}); n != 0 {
 			t.Fatalf("re-notified while the same episode was held (check %d)", i+2)
@@ -85,20 +73,15 @@ func TestConfirmedPinNotifiesExactlyOnce(t *testing.T) {
 	}
 }
 
-// A cleared condition ends the episode. When it comes back it is a new outage
-// and the user has to hear about it — silence here is how the second one goes
-// unnoticed.
 func TestClearedThenRecrossedPinNotifiesAgain(t *testing.T) {
 	d := pinAlarmDaemon()
 	first := samplePin("app:ticketwatch", 900)
 
 	d.recordBusPins([]bus.Pin{first})
 	d.recordBusPins([]bus.Pin{first})
-	// The consumer caught up: nothing is pinning.
 	if n := d.recordBusPins(nil); n != 0 {
 		t.Fatalf("notified on a cleared condition")
 	}
-	// It stalls again, further along the log.
 	second := samplePin("app:ticketwatch", 4200)
 	if n := d.recordBusPins([]bus.Pin{second}); n != 0 {
 		t.Fatalf("a new episode notified on its first sighting")
@@ -111,9 +94,6 @@ func TestClearedThenRecrossedPinNotifiesAgain(t *testing.T) {
 	}
 }
 
-// A cursor that moved is a consumer that read something: whatever was wrong is
-// over, even if it is stuck again by the next check. Confirmation is against the
-// same position, never merely against the same name.
 func TestMovedCursorRestartsTheConfirmation(t *testing.T) {
 	d := pinAlarmDaemon()
 
@@ -126,13 +106,11 @@ func TestMovedCursorRestartsTheConfirmation(t *testing.T) {
 	}
 }
 
-// Two consumers can be stuck at once, and each is its own episode.
 func TestEpisodesAreTrackedPerConsumer(t *testing.T) {
 	d := pinAlarmDaemon()
 	a, b := samplePin("app:one", 10), samplePin("app:two", 20)
 
 	d.recordBusPins([]bus.Pin{a})
-	// b appears one check later, so it is not confirmed when a is.
 	if n := d.recordBusPins([]bus.Pin{a, b}); n != 1 {
 		t.Fatalf("notified %d, want only the confirmed one", n)
 	}
@@ -141,26 +119,21 @@ func TestEpisodesAreTrackedPerConsumer(t *testing.T) {
 	}
 }
 
-// The user reads a notification and an agent reads an error; the same text has
-// to let either act. It names what is held, the tripwire it crossed, and a
-// command that ends it.
 func TestPinNotificationCarriesTheFindingAndTheWayOut(t *testing.T) {
 	body := busPinNotificationBody(samplePin("app:ticketwatch", 900))
 
 	for _, want := range []string{
-		"app:ticketwatch", // who
-		"3h",              // how long it has held
-		"1h",              // the tripwire it crossed
-		"seq 900",         // where the floor is stuck
-		"412 events",      // what is held
+		"app:ticketwatch",
+		"3h",
+		"1h",
+		"seq 900",
+		"412 events",
 		"30.3 KB",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body is missing %q:\n%s", want, body)
 		}
 	}
-	// An app consumer gets the app way out, including the parked-runtime case
-	// that is the usual cause.
 	for _, want := range []string{"attn app status ticketwatch", "attn app runtime restart", "attn bus disable app:ticketwatch"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body is missing the way out %q:\n%s", want, body)
@@ -168,8 +141,6 @@ func TestPinNotificationCarriesTheFindingAndTheWayOut(t *testing.T) {
 	}
 }
 
-// The advice is chosen from the consumer's name, so a consumer that is not an
-// app is never told to restart the app runtime.
 func TestNonAppPinNotificationOffersTheBusWayOut(t *testing.T) {
 	body := busPinNotificationBody(samplePin("notifier", 12))
 
@@ -183,9 +154,6 @@ func TestNonAppPinNotificationOffersTheBusWayOut(t *testing.T) {
 	}
 }
 
-// A check less frequent than a quarter of its own tripwire reports an outage
-// long after the tripwire named it; one that runs every second buys nothing on
-// a condition measured in hours.
 func TestPinAlarmIntervalTracksTheTripwire(t *testing.T) {
 	for _, tc := range []struct {
 		age  time.Duration
@@ -193,8 +161,8 @@ func TestPinAlarmIntervalTracksTheTripwire(t *testing.T) {
 	}{
 		{bus.DefaultPinAlarmAge, 15 * time.Minute},
 		{4 * time.Hour, time.Hour},
-		{2 * time.Minute, time.Minute},  // floored
-		{10 * time.Second, time.Minute}, // floored
+		{2 * time.Minute, time.Minute},
+		{10 * time.Second, time.Minute},
 	} {
 		if got := busPinAlarmInterval(tc.age); got != tc.want {
 			t.Errorf("interval for a %s tripwire = %s, want %s", tc.age, got, tc.want)
@@ -202,10 +170,6 @@ func TestPinAlarmIntervalTracksTheTripwire(t *testing.T) {
 	}
 }
 
-// The daemon wires the tripwire in two places — the bus it builds and the
-// recurring check that watches it — and they have to be the same number. Reading
-// it once is also what keeps the log from announcing the limit twice at every
-// boot. (Where the number itself comes from is internal/bus's own test.)
 func TestTheDaemonResolvesTheTripwireOnce(t *testing.T) {
 	t.Setenv(bus.PinAlarmAgeEnv, "90s")
 	logPath := filepath.Join(t.TempDir(), "daemon.log")
@@ -232,10 +196,6 @@ func TestTheDaemonResolvesTheTripwireOnce(t *testing.T) {
 	}
 }
 
-// The wiring, end to end on a real store and a real bus: a consumer row whose
-// cursor sits under an aged log becomes a durable warning after the confirming
-// check, and nothing before it. Every piece above this tests one link; this is
-// the one that fails when the handler is reading the wrong bus.
 func TestPinAlarmHandlerNotifiesFromARealLog(t *testing.T) {
 	t.Setenv(bus.PinAlarmAgeEnv, "1h")
 	d := &Daemon{store: store.New()}
@@ -271,14 +231,11 @@ func TestPinAlarmHandlerNotifiesFromARealLog(t *testing.T) {
 	if !strings.Contains(list[0].Title, "app:ticketwatch") {
 		t.Errorf("title does not name the consumer: %q", list[0].Title)
 	}
-	// The finding is measured, not guessed: three unread events above seq 1.
 	if !strings.Contains(list[0].Body, "3 events") {
 		t.Errorf("body does not carry what is held: %q", list[0].Body)
 	}
 }
 
-// A healthy bus must cost nothing to confirm and say nothing at all — the check
-// runs on every daemon forever, and a tripwire working code never feels.
 func TestPinAlarmHandlerIsSilentOnAHealthyBus(t *testing.T) {
 	t.Setenv(bus.PinAlarmAgeEnv, "1h")
 	d := &Daemon{store: store.New()}

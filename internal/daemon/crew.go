@@ -14,27 +14,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The crew's daemon half: the registry collection, the binding a session
-// launches with, and the single-holder rule over it.
-//
-// The daemon is where a binding is decided. Registration carries the member
-// name, the daemon resolves it against the registry and writes the claim
-// against the revision it read — so two launches racing for the same member
-// produce one binding and one named refusal, not two trellises.
-//
-// Every crew verb passes the enrollment fence first: the crew has exactly one
-// owner — the home daemon — and an outpost holds no part of it.
-//
-// Whether a stored binding still binds is judged at read, the same liveness
-// rule the garden's Tender.Holds uses: a binding naming a session the daemon
-// no longer knows has released on its own. Session teardown also clears the
-// record, so a roster read shows the truth rather than a stale day.
-
-// ensureCrewCollections declares the registry at startup. Like the garden's,
-// it runs on every daemon, home or outpost, because a declaration is schema
-// and not state: an outpost's roster stays empty (the fence refuses every
-// write), and declaring it anyway means `attn enrollment leave` makes a daemon
-// a working home immediately rather than at its next restart.
+// Runs on every daemon, home or outpost, because a declaration is schema and
+// not state: `attn enrollment leave` then works at once.
 func (d *Daemon) ensureCrewCollections() {
 	if d.store == nil {
 		return
@@ -50,11 +31,8 @@ func (d *Daemon) ensureCrewCollections() {
 	}
 }
 
-// importCrewHomes registers every home under `<data-dir>/crew/` that the
-// registry does not know yet. Files are canonical: the import records where a
-// home lives, never what it says, and an existing registry record is never
-// touched — the write is create-only, so re-running at every startup costs
-// nothing and picks up a home the user added by hand since the last one.
+// Files are canonical: the import records where a home lives, never what it
+// says, and the write is create-only so re-running costs nothing.
 func (d *Daemon) importCrewHomes() {
 	if d.store == nil {
 		return
@@ -90,7 +68,7 @@ func (d *Daemon) importCrewHomes() {
 		}
 		if err := d.writeCrewMember(*schema, member, docstore.ExpectAbsent); err != nil {
 			if docstore.IsConflict(err) {
-				continue // already registered; the record is authoritative
+				continue
 			}
 			d.logf("crew: importing %s: %v", crew.DisplayName(member.ID), err)
 			continue
@@ -100,8 +78,6 @@ func (d *Daemon) importCrewHomes() {
 	}
 }
 
-// crewCollection reads the members declaration, which carries the minted table
-// name every query compiles against.
 func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 	if d.store == nil {
 		return nil, errors.New("no database")
@@ -109,10 +85,6 @@ func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(crew.Namespace, crew.CollectionMembers)
 }
 
-// writeCrewMember stores one member record against the revision the caller
-// read (docstore.ExpectAbsent for a create), committing the document with the
-// docstore's own change fact so live queries on the roster wake like any other
-// write.
 func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) error {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return err
@@ -132,13 +104,8 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 	return nil
 }
 
-// readCrewMembers reads the whole roster. The crew is people the user named
-// one by one — three today — so docstore.MaxLimit is not a bound anything
-// real approaches; a roster past it would be a different product.
-//
-// Every crew read is this one query, so one receipt covers them all: measured
-// 2026-08-14 at a three-member roster, 25µs on an M5. That is what a session
-// broadcast pays, and what a garden action pays to resolve its tender.
+// docstore.MaxLimit is not a bound anything real approaches. Measured
+// 2026-08-14 at a three-member roster: 25µs on an M5.
 func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document, error) {
 	members, docs, err := d.readCrewMembersRaw()
 	if err != nil {
@@ -152,9 +119,8 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 	return members, docs, nil
 }
 
-// readCrewMembersRaw is reserved for startup import, where invalid copied rows
-// must be enumerated so each refusal can be logged. Every operational read goes
-// through readCrewMembers and therefore through the path fence.
+// Reserved for startup import, where invalid copied rows must be enumerated.
+// Every operational read goes through readCrewMembers and its path fence.
 func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Document, error) {
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  crew.Namespace,
@@ -180,12 +146,8 @@ func (d *Daemon) readCrewMembersRaw() ([]crew.Member, map[string]docstore.Docume
 	return members, docs, nil
 }
 
-// updateCrewMember reads a member, lets mutate decide its new body, and writes
-// it against the revision it was read at — remaking the decision when the record
-// moves underneath, because a conflict is not a refusal. mutate returns false to
-// abandon the write without an error: nothing needed changing, which a caller
-// racing the record's own owner must be able to say. Three attempts is a
-// tripwire; two writers contending is one retry.
+// mutate returns false to abandon the write without an error. Three attempts is
+// a tripwire; two writers contending is one retry.
 func (d *Daemon) updateCrewMember(memberID string, mutate func(*crew.Member) (bool, error)) (crew.Member, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return crew.Member{}, err
@@ -219,16 +181,12 @@ func (d *Daemon) updateCrewMember(memberID string, mutate func(*crew.Member) (bo
 	return crew.Member{}, fmt.Errorf("the registry record for %q was rewritten under all %d attempts to update it; try again", memberID, attempts)
 }
 
-// crewBindingLive reports whether a stored binding still binds: a non-empty
-// session the daemon still knows. The read-time judgment, shared by the
-// single-holder claim, the roster read, and session decoration.
+// Whether a stored binding still binds is judged at read: a non-empty session
+// the daemon still knows.
 func (d *Daemon) crewBindingLive(member crew.Member) bool {
 	return member.BindingSession != "" && d.sessionExists(member.BindingSession)
 }
 
-// migrateCrewTicketIdentity adopts one day's ticket participation into the
-// member before a binding moves or disappears. It is idempotent, so registration
-// retries and daemon restarts can safely run it again.
 func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string) error {
 	identity := store.TicketMemberIdentity(memberID)
 	for _, sessionID := range sessionIDs {
@@ -243,10 +201,8 @@ func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string
 	return nil
 }
 
-// migrateCrewTicketIdentities upgrades session-keyed ticket state already on
-// disk. Claim/release cannot cover a daemon upgrade whose live binding survives
-// the restart, and LetterSession recovers the immediate predecessor after a
-// sleep completed before this version first ran.
+// claim/release cannot cover a daemon upgrade whose live binding survives a
+// restart.
 func (d *Daemon) migrateCrewTicketIdentities() error {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
@@ -260,17 +216,8 @@ func (d *Daemon) migrateCrewTicketIdentities() error {
 	return nil
 }
 
-// claimCrewBinding stamps sessionID as memberName's active binding — the
-// identity mechanism: the session is the member because this claim succeeded
-// at its launch. It refuses an unregistered name, and refuses a member whose
-// current day is still live, because two agents with the same identity never
-// run at once. Re-claiming the binding a session already holds is idempotent,
-// so a client re-announcing a live session keeps its identity, and claiming a
-// second member for one session moves it rather than doubling it.
-//
-// A conflict is not a refusal — the record moved between the read and the
-// write, so the decision is remade against what is there now. Three attempts
-// is a tripwire — two launches contending is one retry.
+// Refuses an unregistered name, and a member whose current day is still live: two agents
+// with the same identity never run at once. Three attempts is a tripwire.
 func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return "", err
@@ -299,9 +246,8 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 			return "", fmt.Errorf("%s is already awake in session %s; two agents with the same identity never run at once — wait for that day to end, or wake another member",
 				crew.DisplayName(member.ID), shortSessionID(member.BindingSession))
 		}
-		// Past every refusal, so the claim is going to land: drop any other name
-		// this session already answered to. A refused claim is not reached here,
-		// and leaves the session the member it already was.
+		// Past every refusal, so the claim is going to land: a refused claim never
+		// reaches here and leaves the session the member it already was.
 		d.releaseCrewBindingsExcept(*schema, members, docs, member.ID, sessionID)
 		previousSessionID := member.BindingSession
 		if err := d.migrateCrewTicketIdentity(member.ID, previousSessionID); err != nil {
@@ -324,11 +270,8 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 	return "", fmt.Errorf("the registry record for %q was rewritten under all %d attempts to bind it; try again", memberName, attempts)
 }
 
-// releaseCrewBindingIfSession clears any binding naming sessionID. Called from
-// every session-removal path, mirroring the chief-of-staff role clear; a path
-// that misses it costs nothing but a stale record the liveness judgment
-// already ignores. It is quiet by design — most sessions were never bound, and
-// on an outpost the roster is empty — so it reads before it fences.
+// A path that misses it costs only a stale record the liveness judgment already
+// ignores, so it reads before it fences.
 func (d *Daemon) releaseCrewBindingIfSession(sessionID string) {
 	if d.store == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -347,10 +290,8 @@ func (d *Daemon) releaseCrewBindingIfSession(sessionID string) {
 	d.releaseCrewBindingsExcept(*schema, members, docs, "", sessionID)
 }
 
-// releaseCrewBinding clears one member's binding only when it still names the
-// session the caller observed. Unlike the broad teardown helper, this path
-// returns failures because a wake must not launch a second day until the dead
-// day's seat is known to be free.
+// Returns failures, unlike the broad teardown: a wake must not launch a second
+// day until the dead day seat is known free.
 func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 	released := false
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
@@ -373,9 +314,6 @@ func (d *Daemon) releaseCrewBinding(memberID, sessionID string) (bool, error) {
 	return true, nil
 }
 
-// releaseExitedCrewBinding releases a day whose runtime is known dead and
-// remembers that fact for the next wake receipt. The member becomes visibly
-// asleep now; naming the release later must not keep the seat occupied.
 func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
@@ -408,9 +346,6 @@ func (d *Daemon) takeCrewExitedSession(memberID string) string {
 	return sessionID
 }
 
-// releaseCrewBindingsExcept clears every binding naming sessionID other than
-// keepID's, against a roster the caller already read. One session answers to
-// one name: a session that becomes somebody drops whoever it was first.
 func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, members []crew.Member, docs map[string]docstore.Document, keepID, sessionID string) {
 	for _, member := range members {
 		if member.BindingSession != sessionID || member.ID == keepID {
@@ -430,10 +365,8 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 	}
 }
 
-// crewMembersBySession maps live bindings for one broadcast, so decorating a
-// session list costs one roster read rather than one per session. Empty —
-// never an error — when the roster is empty or unreadable: decoration must not
-// fail a broadcast. Receipt for the read on readCrewMembers.
+// Empty, never an error, when the roster is unreadable: decoration must not fail
+// a broadcast.
 func (d *Daemon) crewMembersBySession() map[string]string {
 	if d.store == nil {
 		return nil
@@ -458,9 +391,8 @@ func (d *Daemon) crewMembersBySession() map[string]string {
 	return out
 }
 
-// crewMemberBoundTo names the member a session is living as, or "" when it is
-// nobody. Read the roster rather than the session record: CrewMember is a
-// broadcast decoration, so it is nil on everything d.store.Get returns.
+// Read the roster rather than the session record: CrewMember is a broadcast
+// decoration, so it is nil on everything d.store.Get returns.
 func (d *Daemon) crewMemberBoundTo(sessionID string) string {
 	if d.store == nil || strings.TrimSpace(sessionID) == "" {
 		return ""
@@ -480,9 +412,7 @@ func (d *Daemon) crewMemberBoundTo(sessionID string) string {
 	return ""
 }
 
-// decorateCrewMember marks the session living a member's current day. Mirrors
-// decorateChiefOfStaffWithSessionID: set only when bound, cleared otherwise so
-// it round-trips as an omitted field.
+// Cleared otherwise so it round-trips as an omitted field.
 func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession map[string]string) {
 	if session == nil {
 		return
@@ -494,11 +424,7 @@ func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession 
 	session.CrewMember = nil
 }
 
-// resolveTenderMember snaps a garden actor's free-string member name to its
-// registered id where one exists — `Tender.Is` then compares real addresses —
-// and fills the name from the session's own binding when the caller named
-// nobody, because a bound session IS its member. An unregistered name passes
-// through untouched: the registry never becomes a requirement to tend.
+// An unregistered name passes through: the registry is never a requirement.
 func (d *Daemon) resolveTenderMember(memberName, sessionID string) string {
 	memberName = strings.TrimSpace(memberName)
 	if memberName == "" {
@@ -517,14 +443,10 @@ func (d *Daemon) resolveTenderMember(memberName, sessionID string) string {
 	return memberName
 }
 
-// IPC handlers.
-
 func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 	d.sendError(conn, fmt.Sprintf("crew %s: %v", verb, err))
 }
 
-// crewMemberWire is the one projection of a member onto the wire, shared by the
-// roster read, the set result, and the sidebar's push.
 func (d *Daemon) crewMemberWire(member crew.Member) protocol.CrewMember {
 	wire := protocol.CrewMember{
 		ID:          member.ID,
@@ -541,18 +463,13 @@ func (d *Daemon) crewMemberWire(member crew.Member) protocol.CrewMember {
 		wire.Model = protocol.Ptr(member.Model)
 	}
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)
-	// The wire carries only a binding that still binds: whether a session is
-	// live is judged here, at read, so a caller never has to.
+	// Only a binding that still binds reaches the wire; liveness is judged here.
 	if d.crewBindingLive(member) {
 		wire.BindingSession = protocol.Ptr(member.BindingSession)
 	}
 	return wire
 }
 
-// crewForBroadcast is the payload of both initial_state and crew_updated. An
-// outpost has no roster to push; not an error here, because initial_state is
-// not a crew command and a refusal in a snapshot would be noise on every
-// connect.
 func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	if d.store == nil {
 		return nil
@@ -574,9 +491,6 @@ func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	return out
 }
 
-// projectCrewRoster re-pushes the roster to every client. The sidebar draws
-// every member, awake or asleep, so there is nothing smaller to send than the
-// whole list.
 func (d *Daemon) projectCrewRoster() {
 	if d.store == nil {
 		return

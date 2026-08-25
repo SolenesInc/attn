@@ -12,24 +12,6 @@ import (
 	"testing"
 )
 
-// The wire-trace goldens are the safety net for the event-bus migration.
-//
-// Moving a broadcast onto the bus is only correct if clients cannot tell. That
-// is a claim about bytes, so these tests record every payload the hub sends —
-// through all five send paths, not just the typed Broadcast the older
-// BroadcastRecorder hooks — and pin them.
-//
-// Two goldens, because a migration can break in two different ways:
-//
-//   - the producer golden drives each broadcaster directly, so a change to the
-//     payload a fact projects shows up as a diff;
-//   - the flow golden drives handlers the way a client does, so a call site that
-//     stops emitting anything shows up as a missing line. A producer that is
-//     migrated but never published from would still pass the producer golden.
-//
-// Regenerate with `go test ./internal/daemon -run TestWireTrace -update`, and
-// read the diff — a moved line is a change in what the app receives.
-
 var updateWireGoldens = flag.Bool("update", false, "update wire-trace golden files")
 
 var (
@@ -37,26 +19,19 @@ var (
 	wireUUIDPattern      = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
-// wireRecorder attaches a trace to a daemon built by NewForTesting, which does
-// not go through TestHarnessBuilder.
 func wireRecorder(d *Daemon) *WireTrace {
 	trace := &WireTrace{}
 	d.wsHub.wireTap = trace.record
 	return trace
 }
 
-// normalizeWirePayload renders one payload as stable, diffable JSON. Values that
-// change between runs — timestamps, generated ids, temp directories, durations —
-// become fixed placeholders so the golden captures shape and content rather than
-// the clock.
 func normalizeWirePayload(payload []byte, paths map[string]string) string {
 	var decoded any
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		return fmt.Sprintf("<unparseable: %s>", string(payload))
 	}
 	normalized := normalizeWireValue("", decoded, paths)
-	// HTML escaping off: the placeholders are angle-bracketed, and <tmp>
-	// in a golden is unreadable in a diff.
+	// HTML escaping off: <tmp> in a golden is unreadable in a diff.
 	var buf strings.Builder
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
@@ -87,8 +62,6 @@ func normalizeWireValue(key string, v any, paths map[string]string) any {
 	case string:
 		return normalizeWireString(typed, paths)
 	case float64:
-		// Durations are the only numbers that move between runs, and they are
-		// always named for it.
 		if strings.HasSuffix(key, "_ms") || strings.HasSuffix(key, "_seconds") {
 			return "<duration>"
 		}
@@ -98,14 +71,8 @@ func normalizeWireValue(key string, v any, paths map[string]string) any {
 	}
 }
 
-// isEnvironmentProbedKey reports whether a value describes the host rather than
-// the daemon. Agent availability is a PATH lookup, so it reads "true" on a
-// machine with the CLI installed and "false" on a CI runner. Pinning it would
-// make the golden a statement about the host, and the migration these goldens
-// guard cannot change it either way.
-//
-// Matched by suffix on purpose: a new agent driver adds its own key, and the
-// golden should not start depending on the runner the day that lands.
+// Agent availability is a PATH lookup, so pinning it would make the golden a statement
+// about the host. Matched by suffix so a new driver's key does not depend on the runner.
 func isEnvironmentProbedKey(key string) bool {
 	return strings.HasSuffix(key, "_available")
 }
@@ -127,10 +94,8 @@ func normalizeWireString(s string, paths map[string]string) string {
 	return s
 }
 
-// wireHomeDir is the host's home directory. Paths the daemon derives from it —
-// the notebook root, say — would otherwise pin the golden to whoever ran it:
-// /Users/victor on a laptop, /home/runner in CI. Tests must not redirect HOME,
-// so the golden normalizes the value instead.
+// Paths the daemon derives from the host's home — the notebook root, say — would pin
+// the golden to whoever ran it, and tests must not redirect HOME.
 var wireHomeDir = func() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -153,8 +118,6 @@ func sortedPathsLongestFirst(paths map[string]string) []string {
 	return keys
 }
 
-// renderWireTrace turns a trace into the golden's text form: one numbered,
-// event-labelled block per payload.
 func renderWireTrace(trace *WireTrace, paths map[string]string) string {
 	payloads := trace.Payloads()
 	names := trace.EventNames()
@@ -193,8 +156,6 @@ func assertWireGolden(t *testing.T, name, got string) {
 		path, firstWireDiff(string(want), got))
 }
 
-// firstWireDiff reports the first differing line with a little context, which is
-// far more usable than dumping two multi-kilobyte traces.
 func firstWireDiff(want, got string) string {
 	wantLines := strings.Split(want, "\n")
 	gotLines := strings.Split(got, "\n")

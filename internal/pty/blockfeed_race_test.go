@@ -13,14 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// testPromptMark is the one marker these tests write. They exist to prove the
-// skeleton's locking contract, not parsing, and the real segmenter handles a
-// well-formed prompt-start under any chunking (corpus-tested next door).
 var testPromptMark = []byte("\x1b]133;A\x07")
 
-// pinningBlockTable keeps every successfully pinned primary-screen ref and
-// resolves them at snapshot time — the smallest table that exercises the
-// {dump, blocks, watermark} atomicity the skeleton promises. All calls arrive
 // under replayMu (blockFeeder's contract), so no internal locking.
 type pinningBlockTable struct {
 	refs []blockRef
@@ -62,13 +56,6 @@ func (t *pinningBlockTable) Close() {
 	t.refs = nil
 }
 
-// TestBlockSnapshotAtomicity proves the Phase 3a rails invariant: block rows,
-// the VT dump, and the seq watermark are captured under one replayMu hold, so
-// a snapshot taken WHILE the read loop is scrolling the terminal still has
-// every block row pointing at the right content in its own dump. If block
-// resolution ever moves outside the hold (or the feed path pins outside it),
-// rows resolved against a moved terminal index the wrong dump line and this
-// fails.
 func TestBlockSnapshotAtomicity(t *testing.T) {
 	const cols, rows = 80, 24
 	const marks = 150
@@ -91,7 +78,7 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),
@@ -101,12 +88,8 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 	s.wireFeed = &wireFeeder{term: gt, blocks: &blockFeeder{term: gt, table: table}}
 	go s.readLoop(nil, func(string, ...any) {})
 
-	// Writer: each iteration opens a "block" (marker pins the cursor row, then
-	// the MARK line renders on it) followed by filler that keeps the terminal
-	// scrolling under the snapshotter. Total rows stay far below the
-	// scrollback cap so every ref must remain resolvable. Paced so the read
-	// loop applies markers incrementally instead of one coalesced pipe read —
-	// the snapshotter must observe genuinely mid-stream states.
+	// Without the pacing the read loop takes one coalesced pipe read and the
+	// snapshotter never observes a mid-stream state.
 	go func() {
 		for i := 0; i < marks; i++ {
 			line := fmt.Sprintf("\x1b]133;A\x07MARK-%04d\r\nfiller-%04d-a\r\nfiller-%04d-b\r\n", i, i, i)
@@ -144,10 +127,6 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 		}
 	}
 
-	// Hammer snapshots while the writer scrolls the terminal: every snapshot
-	// must be self-consistent regardless of where it lands in the stream.
-	// Partial tables (0 < blocks < marks) prove the checks genuinely raced
-	// the read loop rather than only observing the settled end state.
 	partialChecks := 0
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -168,8 +147,6 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 		t.Fatal("every snapshot saw the settled table; the race was never exercised")
 	}
 
-	// Settled state: every mark pinned, in order, each resolving to its own
-	// MARK line in the final dump.
 	settled := s.info()
 	if len(settled.GhosttyBlocks) != marks {
 		t.Fatalf("settled snapshot has %d blocks, want %d", len(settled.GhosttyBlocks), marks)
@@ -182,9 +159,6 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 		}
 	}
 
-	// Teardown: the pipe closes, the read loop exits, closePTY's ordering
-	// (table refs freed, then the terminal) leaves no live refs — the leak
-	// contract every real block-table test must also assert.
 	_ = w.Close()
 	select {
 	case <-s.exited:

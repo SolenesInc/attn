@@ -66,10 +66,6 @@ function renderSocket() {
   );
 }
 
-// The daemon's WebSocket port carries no file permissions, so the app proves
-// itself with the profile's client token. Two halves matter to the user: the
-// hello carries it, and a refusal ends the reconnect loop showing what the
-// daemon said — which names the file to read — instead of blinking forever.
 describe('useDaemonSocket client token', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -119,10 +115,8 @@ describe('useDaemonSocket client token', () => {
     await waitFor(() => {
       expect(result.current.connectionError).toContain('/tmp/.attn-dev/client-token');
     });
-    // Retrying cannot help until someone changes the token, and a reconnect loop
-    // would bury the message that says how. The close handler decides this
-    // synchronously and says so — asserting on the socket count instead would
-    // pass on its own, since the backoff has not elapsed by here either way.
+    // Asserting on the socket count instead would pass on its own, since the backoff has not
+    // elapsed by here either way.
     expect(errors.mock.calls.flat().join(' ')).toContain('Circuit open, not retrying');
     expect(FakeWebSocket.instances).toHaveLength(1);
 

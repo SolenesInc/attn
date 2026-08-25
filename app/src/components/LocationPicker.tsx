@@ -91,23 +91,11 @@ interface LocationPickerProps {
   projectsDirectory?: string;
   agentAvailability?: AgentAvailability;
   endpoints?: DaemonEndpoint[];
-  // chiefExists is the profile-wide "a chief of staff already holds the role"
-  // signal. The "create as chief" toggle is shown only when no chief exists yet
-  // (the role is single-holder), so a second one is never created by accident.
   chiefExists?: boolean;
-  // Agents whose sessions run in a headless host rather than a PTY. Only those
-  // can pick a conversation up, so it is what gates the resume bar.
   conversationAgents?: Set<string>;
-  // Lists the conversations this daemon has recorded. Absent in tests and in
-  // any host that does not offer them; the bar simply does not appear.
   onListPastConversations?: () => Promise<PastConversationsResult>;
 }
 
-/**
- * One row of the resume picker: what was said in the conversation, where it ran,
- * and how long ago. A conversation with nothing readable in it still gets a row
- * — the file is what resumes, not the label.
- */
 function pastConversationLabel(conversation: PastConversation): string {
   const folder = conversation.cwd.split('/').filter(Boolean).pop() || conversation.cwd;
   const preview = conversation.preview.trim();
@@ -128,10 +116,8 @@ const MAX_RECENT_LOCATIONS = 10;
 const SESSION_AGENT_KEY = 'new_session_agent';
 const SESSION_YOLO_KEY = 'new_session_yolo';
 const SESSION_DESTINATION_KEY = 'new_session_destination';
-// READ-ONLY, daemon-computed: the promoted auto mode config's enabled_default.
-// The toggle starts here so the picker shows what a session would get, and the
-// launcher's answer is always sent explicitly — a default that moves later must
-// not silently move a session that was already launched.
+// READ-ONLY, daemon-computed. The launcher always sends its answer explicitly,
+// so a default that moves later cannot move an already-launched session.
 const AUTOMODE_DEFAULT_KEY = 'automode_enabled_default';
 const AUTOMODE_CAPABILITY = 'auto_mode';
 const LOCAL_TARGET = '__local__';
@@ -188,16 +174,10 @@ function yoloSettingKeys(targetId: string, daemonInstanceId?: string): string[] 
   return keys;
 }
 
-// A repo is habitually worked on in a fresh worktree or habitually in its main
-// checkout, and which one is a property of the repo, not of the session being
-// started — so the last destination chosen for it is remembered and reopened.
-// Only the two deliberate choices are recorded: opening an existing worktree is
-// a one-off ("resume that one"), not a habit, and leaves the memory alone.
 type RepoDestination = 'new_worktree' | 'main_repo';
 
-// The remembered destination is scoped to the target as well as the repo path,
-// since the same path on this machine and on a remote endpoint are different
-// checkouts worked on in different ways. Mirrors yoloSettingKeys.
+// Scoped to the target as well as the path — the same path locally and on a
+// remote are different checkouts. Mirrors yoloSettingKeys.
 function repoDestinationSettingKey(repoRoot: string, endpointId?: string): string {
   const endpoint = endpointId?.trim();
   const scope = endpoint ? `endpoint_${endpoint}` : 'local';
@@ -302,7 +282,6 @@ export function LocationPicker({
   const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const autoModeTouchedRef = useRef(false);
-  // The conversation this session will pick up from, '' for a fresh one.
   const [resumeFile, setResumeFile] = useState('');
   const [pastConversations, setPastConversations] = useState<PastConversation[]>([]);
   const [pastConversationsError, setPastConversationsError] = useState('');
@@ -312,10 +291,8 @@ export function LocationPicker({
   const [pickerOperation, setPickerOperation] = useState<string | null>(null);
   const [hasSelectedSinceTab, setHasSelectedSinceTab] = useState(true);
   const [autoHighlight, setAutoHighlight] = useState(false);
-  // True only once the recents request issued for the current open/endpoint
-  // has resolved. Cached recents from a previous open still render, but they
-  // must never drive the automatic highlight: bare Enter could launch a path
-  // from another target.
+  // Cached recents still render but must never drive the automatic highlight:
+  // bare Enter could launch a path from another target.
   const [recentsFresh, setRecentsFresh] = useState(false);
   const autoHighlightDoneRef = useRef(false);
   const requestGenerationRef = useRef(0);
@@ -448,23 +425,13 @@ export function LocationPicker({
 
   const savedAgent = normalizeAgent(settings[SESSION_AGENT_KEY]);
   const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
-  // Only a driver that advertises auto_mode is handed the config at spawn, so
-  // only its sessions have anything to toggle.
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
-  // The "create as chief" toggle is offered only when no chief exists yet (the
-  // role is single-holder), the selected agent has a guidance launch path
-  // (claude/codex only, matching the daemon's agentSupportsChiefReload gate), and
-  // this is the new-workspace flow — a split into an existing workspace
-  // (purpose==='session') routes through createSplitSession, which never carries
-  // the chief flag, so showing the toggle there would be a silent no-op.
+  // The agent gate matches the daemon's agentSupportsChiefReload.
   const chiefToggleEligible = !chiefExists && purpose !== 'session' && (agent === 'claude' || agent === 'codex');
 
-  // Picking a conversation up is offered only for an agent that HAS
-  // conversations, and only against this machine: the listing is a read of this
-  // daemon's own data dir, so a remote target would be offered files it cannot
-  // open. A split (purpose==='session') routes through createSplitSession, which
-  // carries no resume, so showing it there would be a silent no-op.
+  // The listing reads this daemon's own data dir, so a remote target would be
+  // offered files it cannot open. A split carries no resume either way.
   const resumeEligible = purpose !== 'session'
     && selectedEndpointId === undefined
     && onListPastConversations !== undefined
@@ -521,20 +488,11 @@ export function LocationPicker({
     }
   }, [chiefToggleEligible]);
 
-  // The toggle follows the promoted default only until someone answers for
-  // themselves. The picker can open before the settings snapshot lands, so a
-  // default arriving late must still move an untouched toggle — but once a
-  // human has flipped it, a default that changes underneath must not launch the
-  // opposite of what they chose.
   useEffect(() => {
     if (autoModeTouchedRef.current) return;
     setAutoMode((prev) => (prev === autoModeDefault ? prev : autoModeDefault));
   }, [autoModeDefault]);
 
-  // The listing is read once per opening of the bar, and dropped when the bar
-  // goes away — switching agent or target must not leave a resume selected that
-  // the launch would then silently ignore. `cancelled` is what keeps a slow read
-  // from landing on a picker that has moved on.
   useEffect(() => {
     if (!resumeEligible || !onListPastConversations) {
       setResumeFile('');
@@ -666,10 +624,6 @@ export function LocationPicker({
     }
   }, [highlightedIndex, highlightedItemKey]);
 
-  // Pre-highlight the top recent location when it loads so a bare Enter opens
-  // it. Only fresh recents qualify (never a cached list from a previous open
-  // or target). One-shot per open: typing or tab-completing consumes it, and
-  // Esc still closes the picker while the automatic highlight is in place.
   useEffect(() => {
     if (!isOpen || mode !== 'path-input' || !recentsFresh || autoHighlightDoneRef.current || visibleRecent.length === 0) {
       return;
@@ -883,9 +837,8 @@ export function LocationPicker({
   const rememberedDestination = repoDestinationKey
     ? parseRepoDestination(settings[repoDestinationKey])
     : undefined;
-  // Recorded on the way out, and only when it actually moves — the picker is
-  // opened constantly, and re-storing the same value would broadcast a settings
-  // snapshot to every client for nothing.
+  // Only when it actually moves: re-storing the same value would broadcast a
+  // settings snapshot to every client for nothing.
   const rememberRepoDestination = useCallback((destination: RepoDestination) => {
     if (!repoDestinationKey || settings[repoDestinationKey] === destination) {
       return;
@@ -1030,8 +983,8 @@ export function LocationPicker({
 
   const handleEscape = useCallback(() => {
     if (mode === 'repo-options') {
-      // RepoOptions pushes its own sub-state handlers (pendingDeletePath, showNewWorktree)
-      // above this one in the escape stack. This branch fires only when those are inactive.
+      // RepoOptions pushes its own handlers above this one in the escape
+      // stack, so this branch fires only when those are inactive.
       handleBack();
     } else if (highlightedItemKey && !autoHighlight) {
       setHighlightedItemKey(null);
@@ -1181,9 +1134,8 @@ export function LocationPicker({
           <div className="picker-resume-bar">
             <div className="picker-agent-label">CONVERSATION</div>
             <div className="picker-resume-controls">
-              {/* A fork, not an append: the chosen conversation is copied into
-                  the new session and never written to, so the same one can be
-                  picked up twice and the session it came from keeps running. */}
+              {/* A fork, not an append: the chosen conversation is copied and
+                  never written to, so the session it came from keeps running. */}
               <select
                 className="picker-resume-select"
                 data-testid="location-picker-resume"

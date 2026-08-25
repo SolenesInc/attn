@@ -7,19 +7,8 @@ import (
 	"time"
 )
 
-// A plot in motion. Progress is what a crown row answers at a glance — how far
-// the plot has drained — and Stale is the judgment query: which seeds claim
-// attention they are not getting. Both are pure functions over seeds, like the
-// rest of this package, so every surface renders the same answer.
-
-// Progress is one plot's children counted by where they stand. The crown is not
-// counted — its work is its children, and it closes by harvest, not by tending.
-//
-// Ready and Blocked overlap nothing: ready is open with no open blocker and no
-// holder, blocked is open with at least one open blocker. Together with Growing
-// and Dormant they still do not partition the open set — a planted seed whose
-// plot-mate holds the only open path is neither — so Total is carried rather
-// than derived.
+// Ready, Blocked, Growing and Dormant do NOT partition the open set — a planted seed
+// whose plot-mate holds the only open path is in none — so Total is carried.
 type Progress struct {
 	Total    int
 	Done     int
@@ -30,8 +19,6 @@ type Progress struct {
 	Blocked  int
 }
 
-// PlotProgress counts one crown's plot. ready is the garden-wide readiness
-// answer (from Ready), so progress and `attn seed ready` cannot disagree.
 func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress {
 	blocked := blockedIDs(seeds)
 	var p Progress
@@ -60,20 +47,10 @@ func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress 
 	return p
 }
 
-// DefaultStaleWindow is how long an open seed may sit without log movement
-// before `attn seed ls --stale` names it. Measured 2026-08-14 against
-// production ticket activity (the nearest real log): 276 gaps between
-// consecutive activity on the same ticket; p50 0.3h, p99 45h, max 356h. Healthy
-// continued work essentially never pauses more than two days, so a week is a
-// tripwire ~3.7× past the p99 — a seed quiet that long is claiming attention it
-// is not getting.
+// Measured 2026-08-14 on production ticket activity: 276 gaps, p50 0.3h, p99 45h,
+// max 356h. A week is a tripwire ~3.7x past the p99.
 const DefaultStaleWindow = 7 * 24 * time.Hour
 
-// Stale reports the open seeds whose log has not moved within window, in the
-// order given. lastMoved is the newest movement per seed — the document's own
-// updated stamp or its newest note, whichever is later; a seed missing from it
-// is skipped rather than judged on no evidence. Stale is a query, never a
-// reaper: a person (or later a crew member) decides what withers.
 func Stale(seeds []Seed, lastMoved map[string]time.Time, window time.Duration, now time.Time) []Seed {
 	out := []Seed{}
 	for _, seed := range seeds {
@@ -91,26 +68,19 @@ func Stale(seeds []Seed, lastMoved map[string]time.Time, window time.Duration, n
 	return out
 }
 
-// PlotChildSpec is one child in a plot planting. Blocks names sibling step
-// slugs this child holds back — the only sequencing a plot carries; children
-// are parallel by default.
 type PlotChildSpec struct {
 	Title  string   `json:"title"`
 	Body   string   `json:"body,omitempty"`
 	Blocks []string `json:"blocks,omitempty"`
 }
 
-// PlotSpec is a whole plot as one payload: the crown and its children, planted
-// together so an agent captures a chunk of work in one command.
 type PlotSpec struct {
 	Title    string          `json:"title"`
 	Body     string          `json:"body,omitempty"`
 	Children []PlotChildSpec `json:"children"`
 }
 
-// ParsePlotSpec reads a plot payload off the command line. Unknown keys are
-// refused here — a typo'd "block" silently planting an unsequenced plot is the
-// kind of quiet wrong this surface must not do.
+// Refuses unknown keys: a typo'd "block" would silently plant an unsequenced plot.
 func ParsePlotSpec(raw []byte) (PlotSpec, error) {
 	var spec PlotSpec
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
@@ -124,10 +94,6 @@ func ParsePlotSpec(raw []byte) (PlotSpec, error) {
 	return spec, nil
 }
 
-// ValidatePlotSpec refuses everything that cannot be planted, before anything
-// is written: bad titles or bodies, duplicate step slugs (blocks address
-// siblings by slug, so two children may not share one), blocks naming no
-// sibling, and blocks that cycle.
 func ValidatePlotSpec(spec PlotSpec) error {
 	if err := ValidatePlant(spec.Title, spec.Body); err != nil {
 		return fmt.Errorf("crown: %w", err)
@@ -167,7 +133,6 @@ func slugList(children []PlotChildSpec) []string {
 	return out
 }
 
-// blocksCycle walks the sibling blocks graph and reports one edge on a cycle.
 func blocksCycle(children []PlotChildSpec, slugs map[string]int) (string, string, bool) {
 	const unseen, visiting, done = 0, 1, 2
 	state := make([]int, len(children))

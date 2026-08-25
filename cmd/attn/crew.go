@@ -13,12 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn crew` is the roster's agent surface. A crew member is a durable named
-// identity — charter, handoff line, address — whose sessions are its days; the
-// registry serves reads over the active profile's plain-markdown crew homes.
-// Launching bound is `attn <agent> --member <name>`; this command answers who
-// exists and who is awake.
-
 func runCrew() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeCrewHelp(os.Stdout)
@@ -135,10 +129,7 @@ func parseCrewWakeArgs(args []string) (crewWakeArgs, error) {
 	return crewWakeArgs{member: member, agent: strings.TrimSpace(*agent), json: *jsonOut}, nil
 }
 
-// parseMemberAndFlags reads `<member>` and its flags in either order. Go's flag
-// package stops at the first positional, and `attn crew wake trellis --agent
-// codex` is how anyone types it — so the member is lifted out and the rest
-// parsed behind it.
+// Go's flag package stops at the first positional, so the member is lifted out first.
 func parseMemberAndFlags(fs *flag.FlagSet, args []string, verb string) (string, error) {
 	if err := fs.Parse(args); err != nil {
 		return "", err
@@ -246,8 +237,6 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(protocol.Deref(result.SessionID)))
 }
 
-// crewDirList collects a repeatable flag. An explicit empty value clears the
-// list — the way out of every awareness dir the member has.
 type crewDirList struct {
 	values []string
 	set    bool
@@ -263,9 +252,8 @@ func (l *crewDirList) Set(value string) error {
 	return nil
 }
 
-// crewSetArgs is what one `crew set` asks for. A nil pointer is a field the
-// caller did not name, which the daemon leaves as it was; a pointer to the
-// empty string is the way out of one.
+// A nil pointer is a field the caller did not name, which the daemon leaves as it was;
+// a pointer to the empty string is the way out of one.
 type crewSetArgs struct {
 	member    string
 	cwd       *string

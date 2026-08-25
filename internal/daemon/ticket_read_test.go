@@ -45,11 +45,6 @@ func callTicketInboxRequest(t *testing.T, d *Daemon, sessionID string, mode *pro
 	return resp.TicketInboxResult.Bundles
 }
 
-// The inbox is a consume keyed on observer identity: a delegated agent's brief is
-// delivered via the spawn prompt and pre-consumed at delegation, so its inbox starts
-// EMPTY rather than echoing the assignment it already holds; it then sees later
-// chief steers but never its own events; the chief sees the agent's reports but never
-// its own; and a second read is empty because the first advanced the cursor.
 func TestTicketInboxConsumesByIdentity(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -70,13 +65,10 @@ func TestTicketInboxConsumesByIdentity(t *testing.T) {
 	agentSession := result.SessionID
 	ticketID := bindLegacyTicketTitled(t, d, agentSession, chiefSessionID, "Migrate the store to X")
 
-	// Agent's first read is empty: the brief was delivered out of band via the spawn
-	// prompt, so the created event is pre-consumed and never re-served as inbox noise.
 	if bundles := callTicketInbox(t, d, agentSession); len(bundles) != 0 {
 		t.Fatalf("agent inbox = %+v, want empty (brief delivered via spawn prompt)", bundles)
 	}
 
-	// A later chief steer DOES reach the agent: an event it did not author, unread.
 	commentOnTicket(t, d, ticketID, "one more thing to check")
 	steer := callTicketInbox(t, d, agentSession)
 	if len(steer) != 1 || steer[0].TicketID != ticketID {
@@ -86,13 +78,10 @@ func TestTicketInboxConsumesByIdentity(t *testing.T) {
 		t.Fatalf("agent inbox events = %+v, want one commented event", steer[0].Events)
 	}
 
-	// Second read: empty — the first consume advanced the agent's cursor.
 	if again := callTicketInbox(t, d, agentSession); len(again) != 0 {
 		t.Fatalf("second agent inbox = %+v, want empty", again)
 	}
 
-	// The agent reports ready-for-review. Its own event is self-authored, so it
-	// stays out of the agent's inbox but lands in the chief's.
 	callSetTicketStatus(t, d, agentSession, string(protocol.DispatchWorkStateReadyForReview), "take a look")
 	if again := callTicketInbox(t, d, agentSession); len(again) != 0 {
 		t.Fatalf("agent inbox after self-report = %+v, want empty", again)
@@ -157,14 +146,10 @@ func TestCrewMemberCursorSurvivesDayTurnoverAndWatchUsesIt(t *testing.T) {
 	}
 }
 
-// Routing contract for an ORDINARY delegation: the delegated agent's report reaches
-// both the session that delegated it and the chief of staff, which was not the
-// creator and reads through its durable role identity.
 func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	_, creatorSessionID, _ := setupDelegationSource(t, d, backend)
-	// A chief exists but is a different session, so it never touches this delegation.
 	chiefSessionID := "session-chief"
 	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, chiefSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
@@ -183,8 +168,6 @@ func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 	agentSession := result.SessionID
 	ticketID := bindLegacyTicketAs(t, d, agentSession, creatorSessionID, "Plain delegated task.", false)
 
-	// The creator drains the created event it authored nothing of interest on, so the
-	// assertion below is about the agent's report alone.
 	callTicketInbox(t, d, creatorSessionID)
 	callTicketInbox(t, d, chiefSessionID)
 
@@ -210,7 +193,6 @@ func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 		}
 	}
 
-	// A steer from the delegator reaches the agent — the note channel back to it.
 	commentOnTicket(t, d, ticketID, "one more thing to check")
 	steer := callTicketInbox(t, d, agentSession)
 	if len(steer) != 1 || len(steer[0].Events) != 1 ||
@@ -219,10 +201,6 @@ func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 	}
 }
 
-// When the creator IS the chief, the ticket attaches to the durable role and to
-// nothing else: the acting session gets no subscription of its own, so nothing
-// keeps nudging it once the role moves on. It still observes through both of its
-// identities, and the agent's report reaches its inbox once, through the role.
 func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -244,7 +222,6 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	agentSession := result.SessionID
 	ticketID := bindLegacyTicketTitled(t, d, agentSession, chiefSessionID, "Migrate the store to X")
 
-	// The chief observes through both identities.
 	observers := d.ticketObserversForSession(chiefSessionID)
 	if len(observers) != 2 {
 		t.Fatalf("chief observers = %+v, want session and role identities", observers)
@@ -266,8 +243,6 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	callTicketInbox(t, d, chiefSessionID)
 	callSetTicketStatus(t, d, agentSession, string(protocol.DispatchWorkStateReadyForReview), "take a look")
 
-	// The report is queued on the role and on nothing else, so the chief's own
-	// session identity has an empty queue.
 	queued := map[string]int{}
 	for _, observer := range observers {
 		events, err := d.store.UnreadTicketEventsFor(observer.ID, observer.AuthorID)

@@ -10,13 +10,10 @@ describe('HeaderSettlingIndicator', () => {
   it('says what is happening in words, not in a number', () => {
     render(<HeaderSettlingIndicator firesAt={FIRES_AT} />);
     expect(screen.getByTestId('settling-indicator')).toHaveTextContent('Settling…');
-    // The countdown is deliberately visual: nothing on the chip counts seconds.
     expect(screen.getByTestId('settling-indicator').textContent).not.toMatch(/\d/);
   });
 
   it('names the key that stops it, on the chip itself', () => {
-    // The whole point of the pill is that a settle is never silent; a user who
-    // reads it must not then have to go hunting for how to stop it.
     const { container } = render(<HeaderSettlingIndicator firesAt={FIRES_AT} />);
     expect(container.querySelector('.countdown-cancel-hint-key')?.textContent).toBe('⌘.');
     expect(screen.getByText('keep')).toBeTruthy();
@@ -34,8 +31,6 @@ describe('HeaderSettlingIndicator', () => {
     fireEvent.click(screen.getByTestId('settling-indicator'));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
-    // Selecting a session because you kept its turn would be a second, unasked-for
-    // action — and in a split, the header is a drag handle.
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
@@ -56,9 +51,6 @@ describe('HeaderSettlingIndicator', () => {
     it('says it is paused, and animates nothing', () => {
       const { container } = render(<HeaderSettlingIndicator held />);
       expect(screen.getByTestId('settling-indicator')).toHaveTextContent('Settling paused');
-      // No deadline arrives while held, so there is nothing to animate against —
-      // a bar still transitioning here would be counting down to a time the
-      // daemon has withdrawn.
       const fill = container.querySelector('.settling-header-track-fill') as HTMLElement;
       expect(fill).toBeTruthy();
       expect(fill.style.transition).toBe('');
@@ -66,7 +58,6 @@ describe('HeaderSettlingIndicator', () => {
     });
 
     it('still names the key that stops it for good', () => {
-      // A hold expires by itself; ⌘. is how the user says never mind at all.
       const onCancel = vi.fn();
       render(<HeaderSettlingIndicator held onCancel={onCancel} />);
       expect(screen.getByText('keep')).toBeTruthy();
@@ -80,16 +71,11 @@ describe('HeaderSettleKeptChip', () => {
   it('says the turn is kept, with nothing running', () => {
     const { container } = render(<HeaderSettleKeptChip />);
     expect(screen.getByTestId('settle-kept-chip')).toHaveTextContent('Turn kept');
-    // No deadline exists, so there must be nothing that looks like one: a track
-    // under this chip would read as a countdown frozen at full.
     expect(container.querySelector('.settling-header-track')).toBeNull();
     expect(container.querySelector('.settling-dot')).toBeNull();
   });
 
   it('names the key that undoes it, on the chip itself', () => {
-    // A standing dismissal outlives the countdown it answered, so unlike every
-    // other indicator here it is the only thing on screen pointing at its own
-    // way out.
     const { container } = render(<HeaderSettleKeptChip />);
     expect(container.querySelector('.countdown-cancel-hint-key')?.textContent).toBe('⌘.');
     expect(screen.getByText('undo')).toBeTruthy();
@@ -123,9 +109,6 @@ describe('SidebarSettlingBar', () => {
   });
 
   it('holds the bar full and still while the user types, rather than dropping it', () => {
-    // The row is the only thing on screen representing an off-tile session. A bar
-    // that vanished on the first keystroke and reappeared seconds later would read
-    // as the settle being called off, which it is not.
     const { container } = render(<SidebarSettlingBar held />);
     expect(screen.getByTestId('settling-sidebar-bar')).toBeInTheDocument();
     const fill = container.querySelector('.settling-sidebar-bar-fill') as HTMLElement;
@@ -155,7 +138,6 @@ describe('CountdownFill', () => {
   });
 
   it('snaps to the end with no animation when the deadline has already passed', () => {
-    // A remount after the fact must not animate a countdown that is over.
     const { container } = render(
       <CountdownFill firesAt={ALREADY_PASSED} className="probe" direction="drain" />,
     );

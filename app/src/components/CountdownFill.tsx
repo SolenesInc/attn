@@ -1,20 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-/**
- * A one-shot bar animated against an absolute deadline using a CSS transition —
- * no per-tick setInterval, which would re-render every row on every tick. One
- * render, and the browser animates the rest; a hidden or backgrounded tile costs
- * nothing, because a transition on an unpainted element is not composited.
- *
- * `direction` picks which way it reads. 'fill' grows 0% -> 100%, for something
- * arriving. 'drain' shrinks 100% -> 0%, for something running out — a countdown
- * you might want to stop is more legible as time being consumed than as progress
- * being made, and the two directions are what keeps two concurrent countdowns on
- * the same row distinguishable at a glance.
- *
- * A mid-countdown remount restarts the animation from its endpoint but still
- * arrives at the right instant, since only the deadline is known, not the window.
- */
+/** A one-shot bar animated against an absolute deadline with a CSS transition, so no
+ * per-tick re-render. 'fill' grows 0% -> 100%; 'drain' shrinks 100% -> 0%. */
 export function CountdownFill({
   firesAt,
   className,

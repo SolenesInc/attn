@@ -31,14 +31,11 @@ describe('urlAtColumn', () => {
 });
 
 describe('hyperlinkRangeAt', () => {
-  // A row of uris (or null) at each index, closed over by uriAtIndex — the
-  // fake IS the test input, standing in for what ghostty's OSC 8 lookup returns.
   function uriAtIndexOver(uris: (string | null)[]) {
     return (index: number) => uris[index] ?? null;
   }
 
   it('returns the full range for a label containing spaces', () => {
-    // "Learn more" behind one hidden uri, surrounded by plain text.
     const uris = [null, null, null, null, 'https://x.test', 'https://x.test', 'https://x.test',
       'https://x.test', 'https://x.test', 'https://x.test', 'https://x.test', 'https://x.test',
       'https://x.test', 'https://x.test', null, null];
@@ -129,8 +126,6 @@ describe('pathCandidatesForFragment', () => {
   });
 
   it('finds a path starting mid-fragment after a non-path prefix (agent TUI tool lines)', () => {
-    // Claude Code prints tool calls as `Read(/abs/path` — the fragment under
-    // the pointer carries the call-name prefix.
     const candidates = pathCandidatesForFragment('Read(/Users/victor/projects/attn/AGENTS.md', 2);
     expect(candidates.map((candidate) => candidate.path)).toContain('/Users/victor/projects/attn/AGENTS.md');
     const mid = candidates.find((candidate) => candidate.path.startsWith('/Users'));
@@ -163,7 +158,6 @@ describe('logicalLineAt', () => {
   });
 
   it('joins a wrapped group around the hovered row, padding interior rows to cols', () => {
-    // "Read(/tmp/abc/def.md)" wrapped at 10 cols over 3 rows.
     const rows = ['Read(/tmp/', 'abc/def.md', ')'];
     const { rowTextAt, isContinuationRow } = access(rows, [false, true, true]);
     for (const hovered of [0, 1, 2]) {

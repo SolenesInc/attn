@@ -4,8 +4,6 @@ import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
 
-// The terminal surface pulls in the Ghostty WASM model; stub it so the import
-// graph stays light (this spec only cares about the pane header).
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
@@ -14,14 +12,6 @@ vi.mock('../GhosttyTerminal', async () => {
     }),
   };
 });
-
-/**
- * The pane header used to be conditional — a split-view drag handle that a
- * nudge, ticket, presentation, or settle countdown could also summon onto a lone
- * tile. It is unconditional now, because it carries the session's generated
- * name, and which agent you are looking at is not a detail to hide behind a
- * split.
- */
 
 const GENERATED_NAME = 'judge yielded stops so background waits stay green';
 
@@ -97,8 +87,6 @@ describe('SessionTerminalWorkspace pane header', () => {
   });
 
   it('offers rename on a lone tile, where a wrong generated name is most visible', () => {
-    // The name is generated, so the place it is shown is exactly the place a bad
-    // one needs correcting — previously this button was split-view only.
     const onRenameSession = vi.fn();
     renderLonePane({ onRenameSession });
 
@@ -210,8 +198,6 @@ describe('SessionTerminalWorkspace pane header', () => {
 
     expect(container.querySelector('.workspace-pane-title')?.textContent).toBe('shell');
   });
-  // A delegated pane says what it reports to. The header used to carry the
-  // bound ticket; the seed is where reporting lives now.
   it('carries the seed a delegated session reports to, and opens it', () => {
     const onOpenSeed = vi.fn();
     renderLonePane({

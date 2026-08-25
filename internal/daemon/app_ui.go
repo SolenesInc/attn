@@ -14,41 +14,16 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The app registry as the UI sees it: what is mountable, and the report that
-// comes back when one of those mounts crashes.
-//
-// A4 published `app.version.changed`, `app.enabled.changed` and `app.removed`
-// with no projection, because the registry had no UI surface. It has one now, so
-// each of the three re-pushes this snapshot — which is the whole reload
-// mechanism: a version flip moves an app's content hash, and a mounted tile
-// remounts because its bundle URL moved.
-//
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "The app UI
-// registry" and "Reload".
+// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md
 
-// appViewCrashEvent is the event name a render crash is recorded against. A
-// crash has no fact behind it, so it names itself rather than borrowing a bus
-// fact's name and claiming a seq it does not have.
 const appViewCrashEvent = "app.view.crashed"
 
-// appViewCrashErrorLimit bounds what a client can write into the invocation log
-// in one report.
-//
-// The tripwire is the log, not the message: a component stack from a deep tree
-// is a few kilobytes, and this is ~8x past the largest React has produced in
-// this app. A crash loop is bounded by mount attempts, and the invocation log
-// already caps rows per app — this caps how big one of those rows can get. Over
-// the limit the text is truncated with a line saying so, never dropped: half a
-// stack still names the component.
+// appViewCrashErrorLimit sits ~8x past the largest component stack React has
+// produced in this app. Over it the text is truncated with a line saying so.
 const appViewCrashErrorLimit = 32 * 1024
 
-// appRegistryForWire is every app on THIS daemon, with the views its serving
-// version declares.
-//
-// Deliberately not built from appSummary: that answer joins the bus consumer's
-// cursor and lag, which costs a bus-head read per push and means nothing to a
-// tile. What a tile needs is the content hash (its bundle URL), the version id
-// (what to stamp a crash with) and the enabled bit.
+// Deliberately not appSummary: that joins the bus consumer's cursor and lag,
+// costing a bus-head read per push for something a tile ignores.
 func (d *Daemon) appRegistryForWire() []protocol.AppRegistryEntry {
 	if d.store == nil {
 		return nil
@@ -62,7 +37,6 @@ func (d *Daemon) appRegistryForWire() []protocol.AppRegistryEntry {
 	for _, row := range rows {
 		entry, err := d.appRegistryEntry(row)
 		if err != nil {
-			// One unreadable app must not blank the picker for every other one.
 			d.logf("apps: describing app %s for the UI registry: %v", row.Name, err)
 			continue
 		}
@@ -97,17 +71,9 @@ func (d *Daemon) appRegistryEntry(row store.App) (protocol.AppRegistryEntry, err
 	return entry, nil
 }
 
-// appViewsForWire reads a version's views out of its frozen declaration.
-//
-// The declaration is the only description of a version the daemon holds, and it
-// is what makes a rollback honest: an old version offers the views it was built
-// with, not the ones the manifest names today.
 func appViewsForWire(declaration string, logf func(string, ...any)) []protocol.AppViewInfo {
 	views, err := appbuild.DeclaredViews(declaration)
 	if err != nil {
-		// A declaration this daemon recorded should always parse; if it does not,
-		// an app with no views is the safe answer — nothing mounts, rather than
-		// something mounting under a name that was never validated.
 		if logf != nil {
 			logf("apps: reading the views of a stored declaration: %v", err)
 		}
@@ -127,10 +93,6 @@ func appViewsForWire(declaration string, logf func(string, ...any)) []protocol.A
 	return out
 }
 
-// appDeclarationDescription reads the manifest's description back out of a
-// frozen declaration, for the one line the dock picker shows under a view. A
-// description is decoration: a declaration that will not parse costs the picker
-// a subtitle, not the app.
 func appDeclarationDescription(declaration string) string {
 	var snapshot struct {
 		Description string `json:"description"`
@@ -141,17 +103,14 @@ func appDeclarationDescription(declaration string) string {
 	return strings.TrimSpace(snapshot.Description)
 }
 
-// projectAppsUpdated re-pushes the whole registry. A snapshot rather than a
-// delta because every mounted tile has to re-decide what it is serving, and the
-// list is a handful of rows.
 func (d *Daemon) projectAppsUpdated() {
 	if d.store == nil {
 		return
 	}
 	d.projectSnapshot(snapshotApps, func() {
 		apps := d.appRegistryForWire()
-		// AppsUpdatedMessage is its own top-level type, so the hub's
-		// WebSocketEvent-only broadcast listener cannot see it; tests use this hook.
+		// AppsUpdatedMessage is its own top-level type, invisible to the hub's
+		// WebSocketEvent-only broadcast listener; tests use this hook.
 		if d.appsBroadcastHook != nil {
 			d.appsBroadcastHook(apps)
 		}
@@ -165,15 +124,8 @@ func (d *Daemon) projectAppsUpdated() {
 	})
 }
 
-// handleAppViewCrash records a caught render error as an invocation of the app,
-// stamped with the version that served the bundle.
-//
-// It deliberately does NOT advance the app's stall clock. That clock counts
-// deliveries of one bus event failing over and over, because such an app holds
-// the durable log's retention floor open for every other consumer. A crashing
-// tile pins nothing: nobody is waiting on it, and charging it toward
-// auto-disable would let a person opening a broken workspace disable an app
-// whose handlers are healthy.
+// Deliberately does NOT advance the app's stall clock: that clock exists because
+// a stuck consumer holds the retention floor open, and a crashing tile pins nothing.
 func (d *Daemon) handleAppViewCrash(_ *wsClient, msg *protocol.AppViewCrashMessage) {
 	name := strings.TrimSpace(msg.App)
 	if err := apps.ValidateName(name); err != nil {
@@ -188,10 +140,6 @@ func (d *Daemon) handleAppViewCrash(_ *wsClient, msg *protocol.AppViewCrashMessa
 	if d.store == nil {
 		return
 	}
-	// The version has to be one of this app's: the report arrives from a client
-	// and the invocation log's whole value is that "which version ran" is
-	// answerable. A stamp that names another app's version, or none, is dropped
-	// rather than recorded under a lie.
 	version, ok, err := d.store.GetAppVersion(int64(msg.VersionID))
 	if err != nil {
 		d.logf("apps: reading version %d for a view crash report of %s: %v", msg.VersionID, name, err)
@@ -222,21 +170,14 @@ func (d *Daemon) handleAppViewCrash(_ *wsClient, msg *protocol.AppViewCrashMessa
 		Error:        text,
 		StartedAt:    now,
 	})
-	// The invocation is the countable record; the log is where the author looks.
-	// `attn app logs <app>` is what the crashed tile tells them to run, and an
-	// invocation row truncates the stack that says which line threw.
 	if err := appendAppLogLines(AppRuntimeLogPath(d.socketPath), name, fmt.Sprintf(
 		"view %s crashed while rendering (version %d)\n%s", view, version.ID, text)); err != nil {
 		d.logf("apps: writing the view crash of %s/%s to the app log: %v", name, view, err)
 	}
 }
 
-// appendAppLogLines adds one app's lines to the shared runtime log, each under
-// the tag `attn app logs` filters by.
-//
-// The supervisor's capture holds the same file open with O_APPEND, so both
-// writers land at the end; the whole block goes out in one write so a crash's
-// stack cannot interleave with what a handler is printing at the same moment.
+// The supervisor's capture holds the same file open with O_APPEND, so the block goes out
+// in ONE write and a crash's stack cannot interleave with a handler's output.
 func appendAppLogLines(path, app, text string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

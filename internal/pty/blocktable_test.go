@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// fakeBlockRef is a pure blockRef for block-table tests: it resolves to a fixed
-// SCREEN point and counts Free calls so a test can assert every native ref
-// would have been freed (the pure analogue of ghosttyvt.LiveTrackedRefs).
 type fakeBlockRef struct {
 	x, y  int
 	freed *int
@@ -156,12 +153,9 @@ func blocksEqual(got, want blkBlock, pending bool) bool {
 	if !i32PtrEq(got.ExitCode, want.ExitCode) {
 		return false
 	}
-	// endRow is absent on a pending block by construction; the corpus omits it.
 	if !pending && !i32PtrEq(got.EndRow, want.EndRow) {
 		return false
 	}
-	// command: corpus completed blocks always carry a (possibly empty) command;
-	// pending blocks carry one only once pre-exec has been seen.
 	wantCmd := ""
 	if want.Command != nil {
 		wantCmd = *want.Command
@@ -171,17 +165,11 @@ func blocksEqual(got, want blkBlock, pending bool) bool {
 		gotCmd = *got.Command
 	}
 	if want.Command == nil && got.Command != nil {
-		// pending-before-pre-exec: corpus has no command, table must not invent one
 		return got.Command == nil
 	}
 	return wantCmd == gotCmd
 }
 
-// TestBlockTableCorpus proves the Go worker block table produces the same
-// lifecycle state as the shared corpus (proven against the client
-// TerminalBlockStore by app/src/utils/terminalBlocks.corpus.test.ts). It also
-// asserts the leak contract: after Close, every ref the table ever held is
-// freed exactly once.
 func TestBlockTableCorpus(t *testing.T) {
 	for _, c := range loadBlockCorpus(t) {
 		t.Run(c.Name, func(t *testing.T) {

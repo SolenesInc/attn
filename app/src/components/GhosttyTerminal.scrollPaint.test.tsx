@@ -1,10 +1,4 @@
-// What one wheel gesture costs while the viewport sits in scrollback.
-//
-// A macOS trackpad delivers wheel events far faster than the display refreshes
-// and adds a momentum tail after the fingers lift, so the two things that must
-// hold are: the paint happens once per frame no matter how many events landed,
-// and reading a visible row reads that row rather than reassembling every
-// visible cell.
+// A macOS trackpad delivers wheel events far faster than the display refreshes.
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -180,7 +174,6 @@ describe('GhosttyTerminal scroll paint', () => {
     await act(async () => {
       wheelUp(surface, 12);
     });
-    // Nothing painted yet: the events only moved the offset.
     expect(mocks.counts.render).toBe(0);
 
     await act(async () => {
@@ -188,7 +181,6 @@ describe('GhosttyTerminal scroll paint', () => {
     });
 
     expect(mocks.counts.render).toBe(1);
-    // Every event counted — coalescing the paint must not drop scrolled rows.
     expect(mocks.renderViewportOffsets).toEqual([12]);
     expect(handle.getVisibleContent().viewportY).toBe(SCROLLBACK - 12);
   });
@@ -226,9 +218,6 @@ describe('GhosttyTerminal scroll paint', () => {
   });
 });
 
-// Who owns the wheel. A program that asked for mouse reports gets them and the
-// viewport stays put; every other pane scrolls. The model answers that question,
-// and a wrong answer is invisible until you try to scroll and nothing moves.
 describe('GhosttyTerminal wheel ownership', () => {
   it('hands the wheel to a program tracking the mouse', async () => {
     const { handle, surface, onInput } = await mountTerminal();

@@ -7,10 +7,6 @@ import {
   type DocumentSubscriber,
 } from "@victorarias/attn-app"
 
-// useQuery holds A3.4's delivery contract so a view never meets it. What is
-// asserted here is that contract from the view's side: render `order`, take each
-// body from `upsert` or the cache, forget the rest — and, across a remount,
-// resume by declaring what is still held so only what changed travels.
 
 type Body = { status: string }
 
@@ -94,13 +90,11 @@ describe("useQuery", () => {
         upsert: [doc("a", 1, "pending"), doc("b", 1, "pending")],
       })
     })
-    // b left the window; a's body did not travel, because the view already holds it.
     act(() => {
       host.latest().onDelivery({ delivery: 2, asOfSeq: 2, order: ["a"], upsert: [] })
     })
 
     expect(screen.getByTestId("ids").textContent).toBe("a:pending")
-    // The forget rule reaches the resume token too: b is no longer claimed.
     expect(host.latest().have()).toEqual([{ id: "a", rev: 1 }])
   })
 
@@ -136,8 +130,6 @@ describe("useQuery", () => {
       })
     })
     const before = host.subscribers.length
-    // A window ordering a document whose body was neither sent nor held: the
-    // subscription is broken, and the remedy is a fresh one with no `have`.
     act(() => {
       host.latest().onDelivery({ delivery: 2, asOfSeq: 2, order: ["ghost"], upsert: [] })
     })
@@ -186,9 +178,6 @@ describe("useQuery", () => {
 
 
   it("shows nothing of the previous query when the query changes", () => {
-    // A view that changes its filter, sort or limit asks a different question.
-    // Rendering the old answer under the new label — and calling it live — is the
-    // one way a window can lie about what it is.
     const host = fakeRuntime({ liveOnSubscribe: false })
     function Limited({ limit }: { limit: number }) {
       const { docs, live, asOfSeq } = useQuery<Body>("changes", { limit })
@@ -225,14 +214,10 @@ describe("useQuery", () => {
     expect(screen.getByTestId("ids").textContent).toBe("")
     expect(screen.getByTestId("seq").textContent).toBe("0")
     expect(screen.getByTestId("live").textContent).toBe("not live")
-    // The new question is asked with no bodies claimed: they answered the old one.
     expect(host.latest().have()).toEqual([])
   })
 
   it("keeps two mounts of the same query out of each other's bodies", () => {
-    // The daemon credits `have` per subscription. One shared cache would let one
-    // tile's forget-delete invalidate bodies the daemon still credits to the
-    // other, so the second holder resumes nothing instead.
     const host = fakeRuntime()
     const first = mount(host.runtime, "shared")
     act(() => {
@@ -247,12 +232,10 @@ describe("useQuery", () => {
 
     const second = mount(host.runtime, "shared")
     expect(host.latest().have()).toEqual([])
-    // The first tile still holds what it was sent.
     expect(firstSubscriber.have()).toEqual([{ id: "a", rev: 4 }])
 
     second.unmount()
     first.unmount()
-    // With both released, a remount resumes from the holder's cache again.
     mount(host.runtime, "shared")
     expect(host.latest().have()).toEqual([{ id: "a", rev: 4 }])
   })

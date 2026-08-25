@@ -1,9 +1,3 @@
-/**
- * QuickLabelPicker — cursor-hint positioning with viewport clamping (E14),
- * one-tick-deferred outside dismiss (E15), digit/Alt+digit selection and
- * Escape (E16), and grouped label rendering.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import {
@@ -35,8 +29,7 @@ function renderPicker(overrides: Partial<FloatingQuickLabelPickerProps> = {}) {
   return { view, props };
 }
 
-// jsdom lays nothing out, so the picker measures 0 and stays below the anchor.
-// A placement test has to say how tall it is.
+// jsdom lays nothing out, so a placement test has to say how tall the picker is.
 function withPickerHeight(height: number) {
   Object.defineProperty(HTMLDivElement.prototype, 'offsetHeight', {
     configurable: true,
@@ -77,7 +70,7 @@ describe('QuickLabelPicker', () => {
     renderPicker({ cursorHint: { x: 300, y: 110 } });
     const picker = document.querySelector<HTMLElement>('.md-quick-label-picker')!;
     expect(picker.style.left).toBe('272px');
-    expect(picker.style.top).toBe('126px'); // anchor bottom (120) + 6 gap
+    expect(picker.style.top).toBe('126px');
   });
 
   it('clamps to the viewport with 12px padding (E14)', () => {
@@ -87,14 +80,12 @@ describe('QuickLabelPicker', () => {
   });
 
   it('goes above the anchor when its measured height does not fit below', () => {
-    // The picker is as tall as the label set makes it. It used to flip on a
-    // guessed 220px, which a ten-row list already exceeded — so adding labels
-    // pushed the last ones off the bottom of the window, unclickable.
+    // The picker is as tall as the label set makes it: flipping on a guessed 220px
+    // pushed a ten-row list's last labels off the bottom of the window.
     withPickerHeight(300);
     const anchorEl = makeAnchor({ top: window.innerHeight - 40, bottom: window.innerHeight - 20 });
     renderPicker({ anchorEl });
     const picker = document.querySelector<HTMLElement>('.md-quick-label-picker')!;
-    // anchor top (innerHeight - 40) - 6 gap - 300 height
     expect(picker.style.top).toBe(`${window.innerHeight - 346}px`);
   });
 
@@ -111,14 +102,11 @@ describe('QuickLabelPicker', () => {
     const outside = document.createElement('div');
     document.body.appendChild(outside);
 
-    // Before the one-tick deferral elapses (the opening click's own
-    // pointerdown), nothing dismisses.
     act(() => {
       outside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     });
     expect(props.onDismiss).not.toHaveBeenCalled();
 
-    // After the deferred listener installs, outside pointerdown dismisses.
     act(() => {
       vi.advanceTimersByTime(1);
     });

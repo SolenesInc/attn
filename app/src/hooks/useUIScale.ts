@@ -13,7 +13,6 @@ export function useUIScale() {
 
   const [scale, setScale] = useState<number>(DEFAULT_SCALE);
 
-  // Sync from daemon settings when they arrive
   useEffect(() => {
     if (settings[SETTINGS_KEY] && !initializedFromSettings.current) {
       const parsed = parseFloat(settings[SETTINGS_KEY]);
@@ -24,17 +23,14 @@ export function useUIScale() {
     }
   }, [settings]);
 
-  // Persist to daemon settings when scale changes (skip initial sync)
   const lastSavedScale = useRef<number | null>(null);
   useEffect(() => {
-    // Don't save if this is the initial value from settings
     if (lastSavedScale.current !== null && scale !== lastSavedScale.current) {
       setSetting(SETTINGS_KEY, scale.toString());
     }
     lastSavedScale.current = scale;
   }, [scale, setSetting]);
 
-  // Apply CSS variable to document root
   useEffect(() => {
     document.documentElement.style.setProperty('--ui-scale', scale.toString());
   }, [scale]);

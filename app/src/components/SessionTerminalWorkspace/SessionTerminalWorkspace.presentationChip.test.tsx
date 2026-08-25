@@ -6,7 +6,7 @@ import type { TerminalWorkspaceState } from '../../types/workspace';
 import type { Presentation } from '../../types/generated';
 
 // The terminal surface pulls in the Ghostty WASM model; stub it so the import
-// graph stays light in jsdom (this spec only cares about the pane header).
+// graph stays light in jsdom.
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
@@ -39,9 +39,6 @@ function makePresentation(overrides: Partial<Presentation> = {}): Presentation {
 }
 
 describe('SessionTerminalWorkspace presentation chip', () => {
-  // The header is always present now (see SessionTerminalWorkspace.paneHeader
-  // .test.tsx); what this spec owns is that an open, unsubmitted presentation
-  // puts its chip inside it, on a lone pane as much as a split one.
   it('renders the chip in the header when the pane session has a presentation', () => {
     const onOpenPresentation = vi.fn();
     render(
@@ -95,8 +92,6 @@ describe('SessionTerminalWorkspace presentation chip', () => {
       />,
     );
 
-    // The header is unconditional now: it names the session even with no chip
-    // to host. On a lone tile it is the non-draggable variant.
     const header = document.querySelector('.workspace-pane-header');
     expect(header?.className).toContain('workspace-pane-header--static');
     expect(document.querySelector('.workspace-pane-title')?.textContent).toBe('shell');

@@ -22,20 +22,14 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// wsClient represents a connected WebSocket client
 type wsClient struct {
 	conn *websocket.Conn
-	// rawConn is the TCP connection the HTTP server accepted, kept because the
-	// WebSocket wrapper offers no way back to the socket and an evicted client
-	// has to be cut off at that level. Nil for connections served outside
-	// initHTTPServer (tests).
-	rawConn   net.Conn
-	send      chan outboundMessage
-	recv      chan []byte // incoming messages for ordered processing
-	slowCount int         // tracks consecutive failed sends
-	// writing is set while the write pump has a message in the socket. Together
-	// with the queue depth it answers the only question anyone asks about a
-	// client that went quiet: does the daemon still owe it anything?
+	// The WebSocket wrapper offers no way back to the socket, and an evicted
+	// client has to be cut off there.
+	rawConn     net.Conn
+	send        chan outboundMessage
+	recv        chan []byte
+	slowCount   int
 	writing     atomic.Bool
 	sendMu      sync.RWMutex
 	sendClosed  bool
@@ -43,62 +37,41 @@ type wsClient struct {
 	closeReason string
 	connectedAt time.Time
 
-	// Browser-host eligibility requires both the expected Tauri origin and the
-	// per-profile secret delivered only to the trusted main webview.
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
-	// bearerAuthorized records that this connection cleared ATTN_WS_AUTH_TOKEN
-	// at the HTTP layer, which stands in for the client token — see handleWS.
-	bearerAuthorized bool
+	bearerAuthorized         bool
 
-	// PTY subscriptions keyed by session ID
-	attachedStreams map[string]ptybackend.Stream // session -> stream
-	attachedRemote  map[string]struct{}          // remote runtime IDs attached for this client
-	pendingRemote   map[string]struct{}          // remote runtime IDs awaiting attach_result
+	attachedStreams map[string]ptybackend.Stream
+	attachedRemote  map[string]struct{}
+	pendingRemote   map[string]struct{}
 	attachMu        sync.Mutex
 
-	// Live document queries this client holds, by client-minted id. See
-	// documents_ws.go; the ceiling is protocol.DocSubscriptionsPerClient.
 	docSubscriptions clientDocSubscriptions
 
-	// Docked tile content subscriptions keyed by workspace + tile ID.
 	tileContentSubscriptions map[string]struct{}
 	tileContentPending       map[string]time.Time
 	tileContentMu            sync.RWMutex
 
-	// admitted guards hub registration and the initial_state push, which happen
-	// when client_hello passes rather than when the socket opens. A client that
-	// helloes twice is still admitted once.
-	admitted sync.Once
-	// Identity + capabilities declared via client_hello.
+	admitted      sync.Once
 	clientKind    string
 	clientVersion string
-	// clientID survives this client's reconnects (it is the client process that
-	// mints it), which is what makes it possible to answer a returning client
-	// about the connection before this one. Empty for clients that omit it.
-	clientID     string
-	capabilities map[string]struct{}
-	identityMu   sync.RWMutex
+	clientID      string
+	capabilities  map[string]struct{}
+	identityMu    sync.RWMutex
 
-	// What this client last reported it can see, and when. Read on its own lock
-	// because it is rewritten on every heartbeat while identity is written once.
-	// A client that never reports leaves the zero value here, which reads as
-	// away — see client_presence.go.
+	// Its own lock: presence is rewritten on every heartbeat while identity is
+	// written once.
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
-	// Git status subscription state
 	gitStatusDir        string
 	gitStatusStop       chan struct{}
 	gitStatusRefresh    chan gitStatusRefreshRequest
-	gitStatusHash       string // hash of last sent status for dedup
+	gitStatusHash       string
 	gitStatusEndpointID string
 	gitStatusMu         sync.Mutex
 }
 
-// HasCapability reports whether the client advertised the given
-// capability via client_hello. False for clients that never sent hello.
-// Capability strings are arbitrary; see protocol.Capability* constants.
 func (c *wsClient) HasCapability(cap string) bool {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
@@ -122,12 +95,8 @@ func (c *wsClient) setBrowserHostAuthenticated(authenticated bool) {
 	c.browserHostAuthenticated = authenticated
 }
 
-// isTrustedAppClient reports whether this connection is the authenticated attn
-// app itself: trusted Tauri origin, per-profile browser-host secret verified via
-// client_hello, and the tauri-app client kind. It is IsBrowserHost minus the
-// browser-host capability — identity, not feature opt-in. Arbitrary fs roots
-// are gated on it: without this, any accepted local WebSocket client could use
-// fs_* {root} to read or overwrite files anywhere in the user's home.
+// Arbitrary fs roots are gated on this: without it any accepted local
+// WebSocket client could fs_* anywhere in the user's home.
 func (c *wsClient) isTrustedAppClient() bool {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
@@ -151,9 +120,6 @@ func (c *wsClient) speaksWorkspaceProtocol() bool {
 	return c.HasCapability(protocol.CapabilityWorkspaceSessions)
 }
 
-// setIdentity records the hello payload on the client. Idempotent —
-// later hellos overwrite earlier ones, which is the right behavior if a
-// client ever wants to re-declare (no current case, but cheap).
 func (c *wsClient) setIdentity(kind, version string, caps []string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
@@ -165,26 +131,18 @@ func (c *wsClient) setIdentity(kind, version string, caps []string) {
 	}
 }
 
-// setClientID records the identity that spans this client's reconnects. Kept
-// apart from setIdentity, which describes only the connection it is called on.
 func (c *wsClient) setClientID(id string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
 	c.clientID = id
 }
 
-// ClientID is the identity this client carries across its own reconnects, or
-// empty if it never claimed one.
 func (c *wsClient) ClientID() string {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
 	return c.clientID
 }
 
-// owed counts the messages the daemon is still holding for this client: the
-// queue plus the one it is currently trying to hand over. Zero means the daemon
-// has nothing for it, which is how a connection that simply died is told apart
-// from a client that could not keep up.
 func (c *wsClient) owed() int {
 	n := len(c.send)
 	if c.writing.Load() {
@@ -258,7 +216,6 @@ func (c *wsClient) sendWithWait(message outboundMessage, wait time.Duration) boo
 	}
 }
 
-// stopGitStatusPoll stops any active git status subscription for this client.
 func (c *wsClient) stopGitStatusPoll() {
 	c.gitStatusMu.Lock()
 	defer c.gitStatusMu.Unlock()
@@ -383,18 +340,10 @@ func (c *wsClient) clearRemoteAttach(sessionID string) {
 	}
 }
 
-// BroadcastListener is called for each broadcast event (for testing)
 type BroadcastListener func(event *protocol.WebSocketEvent)
 
-// WireTap observes every text payload the hub puts on the wire, from every send
-// path, after marshalling.
-//
-// BroadcastListener sees only Broadcast — one of five entry points, and the only
-// one that carries a typed *protocol.WebSocketEvent. Everything sent as a typed
-// message (BroadcastValue) or already-marshalled bytes (BroadcastRawText,
-// Send*ToMatchingClients) is invisible to it, which is roughly a fifth of the
-// daemon's production send sites. The tap is what lets a test compare complete
-// wire traces across a refactor.
+// BroadcastListener sees only Broadcast, so typed messages and
+// already-marshalled bytes are invisible to it.
 type WireTap func(payload []byte)
 
 type messageKind int
@@ -409,26 +358,21 @@ type outboundMessage struct {
 	payload []byte
 }
 
-// wsHub manages all WebSocket connections
 type wsHub struct {
 	clients    map[*wsClient]bool
 	broadcast  chan outboundMessage
 	unregister chan *wsClient
 	mu         sync.RWMutex
-	// evictions remembers, per client_id, why the hub hung up — read back on the
-	// client's next hello. Its own lock: evictions are filed under h.mu.
+	// Its own lock: evictions are filed under h.mu.
 	evictions         map[string]evictionRecord
 	evictionMu        sync.Mutex
 	logf              func(format string, args ...interface{})
-	broadcastListener BroadcastListener // Optional listener for testing
-	wireTap           WireTap           // Optional full-trace listener for testing
+	broadcastListener BroadcastListener
+	wireTap           WireTap
 }
 
 const (
-	maxSlowCount = 3 // disconnect after this many consecutive failed sends
-	// slowClientCloseReason is both the WebSocket close reason and, when the
-	// close frame cannot get through, the reason repeated to the client on its
-	// next connection.
+	maxSlowCount          = 3
 	slowClientCloseReason = "client too slow"
 	maxPTYDimValue        = 65535
 	// The kernel's winsize fields are all uint16, pixels included.
@@ -443,7 +387,7 @@ func newWSHub() *wsHub {
 		clients:    make(map[*wsClient]bool),
 		broadcast:  make(chan outboundMessage, 256),
 		unregister: make(chan *wsClient),
-		logf:       func(format string, args ...interface{}) {}, // no-op by default
+		logf:       func(format string, args ...interface{}) {},
 	}
 }
 
@@ -468,9 +412,6 @@ func (h *wsHub) run() {
 		case client := <-h.unregister:
 			h.mu.Lock()
 			delete(h.clients, client)
-			// A connection refused at client_hello was never in the map, and
-			// its write pump still has to be let go. Both calls are idempotent,
-			// so the eviction path having run first costs nothing.
 			client.closeSendChannel()
 			client.stopGitStatusPoll()
 			h.mu.Unlock()
@@ -480,9 +421,8 @@ func (h *wsHub) run() {
 			var toRemove []*wsClient
 			for client := range h.clients {
 				if client.trySend(message) {
-					client.slowCount = 0 // reset on successful send
+					client.slowCount = 0
 				} else {
-					// Client buffer full
 					client.slowCount++
 					if client.slowCount >= maxSlowCount {
 						h.logf("WebSocket client too slow (%d missed), disconnecting", client.slowCount)
@@ -492,7 +432,6 @@ func (h *wsHub) run() {
 					}
 				}
 			}
-			// Remove slow clients outside the iteration
 			for _, client := range toRemove {
 				delete(h.clients, client)
 				h.evict(client, slowClientCloseReason)
@@ -502,18 +441,13 @@ func (h *wsHub) run() {
 	}
 }
 
-// add takes a client into the fan-out, synchronously: from the caller's next
-// line the client is receiving broadcasts. Its counterpart is asynchronous
-// because a disconnect is discovered on the read pump, not asked for.
 func (h *wsHub) add(client *wsClient) {
 	h.mu.Lock()
 	h.clients[client] = true
 	h.mu.Unlock()
 }
 
-// Broadcast sends an event to all connected clients
 func (h *wsHub) Broadcast(event *protocol.WebSocketEvent) {
-	// Call listener if set (for testing)
 	if h.broadcastListener != nil {
 		h.broadcastListener(event)
 	}
@@ -628,14 +562,11 @@ func (h *wsHub) broadcastValue(message interface{}) {
 	out := outboundMessage{kind: messageKindText, payload: data}
 	select {
 	case h.broadcast <- out:
-		// Message queued for broadcast
 	default:
-		// Broadcast channel full - this indicates the hub is overwhelmed
 		h.logf("WebSocket broadcast channel full, dropping outbound message")
 	}
 }
 
-// ClientCount returns number of connected clients
 func (h *wsHub) ClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -720,7 +651,6 @@ func websocketOriginPatternsForRequest(r *http.Request) []string {
 	return patterns
 }
 
-// handleWS handles WebSocket connections
 func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if !isAllowedWSOrigin(origin, r.Host) {
@@ -729,9 +659,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// An operator-set bearer means this port was deliberately exposed beyond
-	// loopback (tailscale serve). Clearing it proves the same thing the client
-	// token proves, at the layer that fits the caller: a browser served from
-	// that port cannot read a file on the daemon's disk.
+	// loopback (tailscale serve), which proves what the client token proves.
 	bearerAuthorized := false
 	if required := config.WSAuthToken(); required != "" {
 		provided := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -752,16 +680,13 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		d.logf("WebSocket accept error: %v", err)
 		return
 	}
-	// Keep unauthenticated and ordinary clients on a modest command-sized
-	// budget. The authenticated browser host receives its larger capture budget
-	// only after client_hello verifies the per-profile secret.
 	conn.SetReadLimit(defaultWebSocketReadBytes)
 
 	client := &wsClient{
 		conn:               conn,
 		rawConn:            rawConnFrom(r.Context()),
 		send:               make(chan outboundMessage, 256),
-		recv:               make(chan []byte, 256), // buffer for incoming messages
+		recv:               make(chan []byte, 256),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
 		bearerAuthorized:   bearerAuthorized,
@@ -770,29 +695,21 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		pendingRemote:      make(map[string]struct{}),
 	}
 
-	// Not registered with the hub yet, and no initial_state: both wait for
-	// client_hello to present this profile's token. A connection the daemon has
-	// not authorized receives nothing it did not ask for — the hub is the only
-	// fan-out, so staying out of it is what keeps every broadcast away from it.
+	// The hub is the only fan-out, so staying out of it until client_hello keeps
+	// every broadcast away from an unauthorized connection.
 	d.logf("WebSocket connection accepted, awaiting client_hello")
 
-	// Start ping keepalive (detects dead connections, keeps proxies happy)
 	done := make(chan struct{})
 	go d.wsPingLoop(client, done)
 
-	// Handle client lifecycle
 	go d.wsWritePump(client)
-	go d.wsMsgPump(client) // NEW: message processing goroutine
+	go d.wsMsgPump(client)
 	d.wsReadPump(client)
 
-	// Signal ping loop to stop when read pump exits
 	close(done)
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	// home_daemon_id equals daemon_instance_id on a home daemon; a different id
-	// tells the client — the app, or a home's relay — that it is talking to an
-	// outpost, whose garden and crew asks belong to that home.
 	homeDaemonID := ""
 	if status, err := d.enrollmentStatus(); err == nil {
 		homeDaemonID = status.HomeDaemonID
@@ -824,19 +741,11 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	_ = d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
 
-	// Fetch details for all PRs in background (app launch)
 	go d.fetchAllPRDetails()
 }
 
-// defaultWSWriteTimeout bounds one message hand-off. Carried over unchanged
-// from when this pump was written; a client that cannot take one message in
-// ten seconds is not a slow client, it is a stopped one. Measured against a
-// real app whose socket had been frozen: a 400-session snapshot left 409,117
-// bytes stuck in the client's receive queue and the pump sat on this deadline
-// for its full length, while the hub's slow-count never reached 2.
-//
-// Tests shrink it per daemon via Daemon.wsWriteTimeout; the pump captures the
-// resolved value once at start.
+// Measured against a real app with a frozen socket: a 400-session snapshot left 409,117
+// bytes stuck in the client's receive queue while the hub's slow-count never reached 2.
 const defaultWSWriteTimeout = 10 * time.Second
 
 func (d *Daemon) wsWriteTimeoutDuration() time.Duration {
@@ -846,15 +755,6 @@ func (d *Daemon) wsWriteTimeoutDuration() time.Duration {
 	return defaultWSWriteTimeout
 }
 
-// wsWritePump hands one message at a time to a client.
-//
-// A write that runs out of time is the eviction the hub's slow-count rule was
-// meant to catch and usually does not: one full snapshot to a client that has
-// stopped draining exhausts the deadline long before 256 more messages queue up
-// behind it. It is the same fact about the same client, so it is filed the same
-// way — for the client's return, since nothing can reach it now. The transport
-// itself needs no help here: the library tears it down when its own write
-// deadline expires.
 func (d *Daemon) wsWritePump(client *wsClient) {
 	writeTimeout := d.wsWriteTimeoutDuration()
 	stalled := false
@@ -884,9 +784,8 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 		elapsed := time.Since(start)
 		cancel()
 		if err != nil {
-			// The library reports a timed-out write and a write to a connection
-			// closed underneath it through the same error, and which one it
-			// picks is a race. The clock is ours and says which happened.
+			// The library reports a timed-out write and a write to a connection closed
+			// underneath it through the same error, and which it picks is a race.
 			stalled = elapsed >= writeTimeout
 			if stalled {
 				d.logf("WebSocket client took longer than %s to accept a message, giving up on it", writeTimeout)
@@ -904,15 +803,10 @@ func (d *Daemon) sendOutboundBlocking(client *wsClient, message outboundMessage,
 	return client.sendWithWait(message, wait)
 }
 
-// wsMsgPump processes incoming messages in FIFO order
-// This runs in a dedicated goroutine to avoid blocking the read loop
 func (d *Daemon) wsMsgPump(client *wsClient) {
 	for data := range client.recv {
-		// A refused client_hello closes the send channel and leaves the write
-		// pump to deliver the refusal. Handling what the client had already
-		// pipelined behind that hello would answer with a second verdict — and
-		// the gates that hang up on their own would close the socket out from
-		// under the refusal that is still queued.
+		// A refused client_hello leaves the write pump to deliver the refusal;
+		// answering what the client pipelined behind it would answer twice.
 		if client.sendChannelClosed() {
 			continue
 		}
@@ -921,17 +815,12 @@ func (d *Daemon) wsMsgPump(client *wsClient) {
 	d.logf("WebSocket message pump exited")
 }
 
-// sendChannelClosed reports that the daemon has finished with this client and
-// is only waiting for the write pump to drain.
 func (c *wsClient) sendChannelClosed() bool {
 	c.sendMu.RLock()
 	defer c.sendMu.RUnlock()
 	return c.sendClosed
 }
 
-// The keepalive defaults, both carried over unchanged from when this loop was
-// written. Tests shrink them per daemon via Daemon.wsPingInterval and
-// Daemon.wsPingTimeout; the loop captures the resolved values once at start.
 const (
 	defaultWSPingInterval = 30 * time.Second
 	defaultWSPingTimeout  = 10 * time.Second
@@ -951,16 +840,8 @@ func (d *Daemon) wsPingTimeoutDuration() time.Duration {
 	return defaultWSPingTimeout
 }
 
-// wsPingLoop sends periodic pings to keep the connection alive and detect dead
-// clients.
-//
-// This is the exit a stalled app actually takes: measured live with the app's
-// socket frozen, the unanswered ping beat both the hub's slow-count and the
-// write pump's deadline to it, twice out of two. So it has to say the same
-// thing they do — but only when it is the same thing. A client that owes the
-// daemon nothing and stops answering is a connection that died; a client the
-// daemon is still holding messages for is one that could not keep up, and that
-// one deserves an answer when it comes back.
+// Measured with the app's socket frozen, the unanswered ping beat both the hub's
+// slow-count and the write pump's deadline to it, twice out of two.
 func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 	pingTimeout := d.wsPingTimeoutDuration()
 	ticker := time.NewTicker(d.wsPingIntervalDuration())
@@ -984,10 +865,8 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 						undelivered: owed,
 					})
 				}
-				// Not conn.Close: that waits out its close handshake against a
-				// peer that has already stopped answering, which is five more
-				// seconds of a connection both ends are done with (measured
-				// live: ping failed at 20:22:32, the socket went at 20:22:37).
+				// Not conn.Close: it waits out its close handshake against a peer that has
+				// stopped answering — measured live, five more seconds.
 				client.hangUp(websocket.StatusGoingAway, "ping timeout", evictionCloseGrace)
 				return
 			}
@@ -1002,24 +881,21 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 		d.dropFsWatchClient(client)
 		d.dropDocSubscriptions(client)
 		d.detachAllSessions(client)
-		close(client.recv) // signal wsMsgPump to exit
+		close(client.recv)
 		d.wsHub.unregister <- client
 		client.conn.Close(websocket.StatusNormalClosure, "")
 		d.logf("WebSocket client disconnected (%d remaining)", d.wsHub.ClientCount())
 	}()
 
 	for {
-		// No read timeout - clients don't send data regularly.
-		// Connection liveness is detected by ping loop.
-		// If ping fails, it closes the connection which unblocks this Read().
+		// No read timeout: liveness comes from the ping loop, whose close unblocks
+		// this Read.
 		_, data, err := client.conn.Read(context.Background())
 		if err != nil {
 			d.logf("WebSocket read error: %v", err)
 			return
 		}
 
-		// Enqueue for ordered processing. If the queue is saturated, close the
-		// client rather than silently dropping commands.
 		select {
 		case client.recv <- data:
 		default:
@@ -1075,18 +951,15 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.sendCommandError(client, cmd, "daemon_recovering")
 		return
 	}
-	// Record the UI selection before remote routing. A host-side `attn open`
-	// without --session must fail against the selected remote id rather than
-	// silently reusing a stale local selection.
+	// Recorded before remote routing: a host-side `attn open` without --session
+	// must fail against the selected remote id, not a stale local selection.
 	if cmd == protocol.CmdSessionSelected {
 		d.setSelectedSession(msg.(*protocol.SessionSelectedMessage).ID)
 	}
 	if cmd == protocol.CmdWorkspaceSelected {
 		d.setSelectedWorkspace(msg.(*protocol.WorkspaceSelectedMessage).WorkspaceID)
 	}
-	// Websocket commands are UI-origin (unlike unix-socket CLI/agent commands),
-	// so a UI-presence allowlist here is a proxy for "the user is at the app
-	// right now" — surfaced on the ticket inbox result for watching agents.
+	// UI-origin commands stand in for the user being at the app right now.
 	if isUserPresenceCommand(cmd) {
 		d.recordUserActivity(time.Now())
 	}
@@ -1148,16 +1021,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdTicketAttach: // wire: ticket_attach
 		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
 	case protocol.CmdSeedResume: // wire: seed_resume
-		// Reopening a delegate spawns a session; like crew_wake the composite is
-		// the daemon's, so it runs off the read loop.
 		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
-		// Waking spawns a session; the composite is the daemon's, so it runs off
-		// the read loop like every other spawning command.
 		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep
-		// Delivering can wait for the member to take the prompt, so it runs off
-		// the websocket read loop like every other fallible async action.
 		go d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdFsList: // wire: fs_list
 		fsList := msg.(*protocol.FsListMessage)
@@ -1357,9 +1224,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled: // wire: bus_set_consumer_enabled
 		d.handleBusSetConsumerEnabled(client, msg.(*protocol.BusSetConsumerEnabledMessage))
-	// Auto mode's app-only verbs. Promotion and direct editing are here and
-	// nowhere else: a human in the app is the trust boundary a CLI caller cannot
-	// fake.
+	// App-only: a human in the app is the trust boundary a CLI caller cannot fake.
 	case protocol.CmdAutoModeGet: // wire: automode_get
 		d.handleAutoModeGet(client, msg.(*protocol.AutoModeGetMessage))
 	case protocol.CmdAutoModePromote: // wire: automode_promote
@@ -1593,23 +1458,16 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 			return protocol.Deref(typed.TargetSessionID)
 		}
 	case protocol.CmdSettleTurn: // wire: settle_turn
-		// The turn's stamps live in the store of the daemon that owns the
-		// session, so settling a remote row has to reach that daemon. Handled
-		// locally it would write nothing the remote knows about, and the next
-		// snapshot from the endpoint would put the row straight back.
+		// The turn's stamps live in the store of the daemon that owns the session; handled locally,
+		// the endpoint's next snapshot would put the row straight back.
 		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdCancelCountdown: // wire: cancel_countdown
-		// Same reasoning as settle_turn: the countdowns runs in the daemon that
-		// owns the session, so the cancel has to reach it.
 		if typed, ok := msg.(*protocol.CancelCountdownMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdSnoozeTurn: // wire: snooze_turn
-		// Same again: the deadline is stored beside the turn stamps and the wake
-		// timer runs in the owning daemon. `until` is already absolute, so it
-		// crosses endpoints without any timezone reinterpretation.
 		if typed, ok := msg.(*protocol.SnoozeTurnMessage); ok {
 			return typed.SessionID
 		}
@@ -1618,31 +1476,18 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 			return typed.SessionID
 		}
 	case protocol.CmdPinSession: // wire: pin_session
-		// The pin is a column on the session row, and turn_owed is derived from
-		// it by the daemon that owns that row. Pinned on the hub instead, it
-		// would write to a session the hub does not have and the next snapshot
-		// from the endpoint would put the row straight back in the queue.
 		if typed, ok := msg.(*protocol.PinSessionMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdSetSessionContextWindowCap: // wire: set_session_context_window_cap
-		// Same shape as the queue pin: the cap is a column on the session row,
-		// and the reload that applies it runs where the worker lives.
 		if typed, ok := msg.(*protocol.SetSessionContextWindowCapMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdSessionMessagesGet: // wire: session_messages_get
-		// The transcript is read from the filesystem of the machine running the
-		// agent, and the session row lives in that daemon's store. A hub that
-		// answered locally would find neither.
 		if typed, ok := msg.(*protocol.SessionMessagesGetMessage); ok {
 			return typed.SessionID
 		}
 	case protocol.CmdSessionAnnotationsGet: // wire: session_annotations_get
-		// Annotation drafts are keyed by session in the owning daemon's store,
-		// so all three of get/save/clear have to reach the same daemon the
-		// messages came from. Answered locally the hub would keep a second,
-		// divergent set that the pane's own terminal never sees.
 		if typed, ok := msg.(*protocol.SessionAnnotationsGetMessage); ok {
 			return typed.SessionID
 		}
@@ -1655,9 +1500,6 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 			return typed.SessionID
 		}
 	case protocol.CmdSessionAnnotationsSubmit: // wire: session_annotations_submit
-		// The submit writes into the session's PTY, which only the daemon
-		// running that PTY can do. Answered locally a hub would have no session
-		// to type into, so a remote pane's Send all would silently do nothing.
 		if typed, ok := msg.(*protocol.SessionAnnotationsSubmitMessage); ok {
 			return typed.SessionID
 		}
@@ -1806,9 +1648,6 @@ func remoteCommandPTYTargetID(cmd string, msg interface{}) string {
 			return typed.ID
 		}
 	case protocol.CmdGetKittyImage: // wire: get_kitty_image
-		// The pixels live in the worker that owns the PTY, so a pull for a
-		// remote session has to reach the daemon that hosts it; the answer
-		// comes back through the relay like the placements that provoked it.
 		if typed, ok := msg.(*protocol.GetKittyImageMessage); ok {
 			return typed.ID
 		}
@@ -1914,9 +1753,6 @@ func (d *Daemon) sendCommandError(client *wsClient, cmd, errMsg string) {
 	d.sendToClient(client, event)
 }
 
-// sendToClient queues one message for a client. The bool says whether it was
-// queued — a caller that keeps state alive for this client (a live subscription)
-// needs to know it has lost them; the rest of the callers do not, and ignore it.
 func (d *Daemon) sendToClient(client *wsClient, message interface{}) bool {
 	data, err := json.Marshal(message)
 	if err != nil {

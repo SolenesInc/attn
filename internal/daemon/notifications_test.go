@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestNotifyTaskTerminalFailurePersistsNotification closes the producer→store
-// leg: the queue's terminal-failure sink turns a dead job into a durable,
-// unread notification with the fields the detail dialog + Retry need.
 func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
 	d := &Daemon{store: store.New()} // nil wsHub: broadcast is a guarded no-op
 
@@ -51,15 +48,12 @@ func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
 	}
 }
 
-// A nil store (the runner-disabled mode) drops the notification without panicking.
 func TestNotifyTaskTerminalFailureNilStoreIsNoop(t *testing.T) {
 	d := &Daemon{}
 	d.notifyTaskTerminalFailure(&jobs.Job{Kind: reconcileKind, State: jobs.StateDead})
-	// no panic == pass
 }
 
 func TestRenderTaskFailureNotification(t *testing.T) {
-	// Known kind → friendly title; singular attempt wording.
 	got := renderTaskFailureNotification(&jobs.Job{
 		ID: "job-9", Kind: reconcileKind, UniqueKey: "t-9", Attempts: 1, LastError: "nope",
 	})
@@ -69,7 +63,6 @@ func TestRenderTaskFailureNotification(t *testing.T) {
 	if want := "attn retried 1 attempt and gave up. Retry to run it again."; got.Body != want {
 		t.Fatalf("singular body = %q, want %q", got.Body, want)
 	}
-	// Unknown kind → generic title carrying the raw kind; plural wording.
 	other := renderTaskFailureNotification(&jobs.Job{ID: "job-x", Kind: "mystery", Attempts: 2})
 	if other.Title != "Background task failed: mystery" {
 		t.Fatalf("unknown-kind title = %q", other.Title)
@@ -79,9 +72,6 @@ func TestRenderTaskFailureNotification(t *testing.T) {
 	}
 }
 
-// A dead background job is a warning: it stays failed until the user retries it,
-// but nothing keeps degrading while it waits. It is deliberately not critical —
-// the ambient surface is reserved for what breaks silently and stays broken.
 func TestTaskFailureNotificationIsWarning(t *testing.T) {
 	if got := renderTaskFailureNotification(&jobs.Job{
 		ID: "job-9", Kind: reconcileKind, Attempts: 1,
@@ -101,7 +91,6 @@ func TestTaskFailureNotificationIsWarning(t *testing.T) {
 		t.Fatalf("persisted severity = %+v, want one warning row", list)
 	}
 
-	// A warning does not light the ambient critical surface.
 	n, title, err := d.store.UnreadCriticalNotifications()
 	if err != nil {
 		t.Fatalf("unread critical: %v", err)
@@ -111,9 +100,6 @@ func TestTaskFailureNotificationIsWarning(t *testing.T) {
 	}
 }
 
-// The wire shape carries the stored severity, and normalizes on the way out so a
-// row holding something unrecognized reaches the app as info rather than as a
-// severity it has no styling for.
 func TestNotificationToProtocolCarriesSeverity(t *testing.T) {
 	for _, tc := range []struct {
 		stored store.NotificationSeverity

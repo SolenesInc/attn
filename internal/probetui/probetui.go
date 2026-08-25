@@ -1,14 +1,5 @@
-// Package probetui renders deterministic byte-for-byte terminal output that
-// mirrors the VT vocabulary of a real coding agent's TUI (codex-cli or
-// claude), without running the real agent. It backs the `attn _probe-tui`
-// harness fixture: a fake "agent" the packaged-app harness can launch that
-// exercises the same private-mode sets, cursor addressing, and query
-// sequences a real agent does, so terminal-handling regressions can be
-// caught without a live model in the loop.
-//
-// Renderers are pure functions of (style, geometry, seq): no wall-clock
-// time, randomness, or PID leaks into the output, so a captured transcript
-// is reproducible.
+// No wall-clock time, randomness, or PID may leak into the output, or a captured
+// transcript stops being reproducible.
 package probetui
 
 import (
@@ -20,7 +11,6 @@ import (
 	"time"
 )
 
-// Style selects which real agent's VT vocabulary to mirror.
 type Style string
 
 const (
@@ -28,7 +18,6 @@ const (
 	StyleClaude Style = "claude"
 )
 
-// ParseStyle parses a --style flag value.
 func ParseStyle(s string) (Style, error) {
 	switch Style(s) {
 	case StyleCodex:
@@ -40,8 +29,6 @@ func ParseStyle(s string) (Style, error) {
 	}
 }
 
-// Startup returns the byte sequence the probe emits once on start, before
-// the first frame: mode sets and (per style) terminal queries.
 func Startup(style Style, cols, rows int) []byte {
 	switch style {
 	case StyleCodex:
@@ -53,9 +40,6 @@ func Startup(style Style, cols, rows int) []byte {
 	}
 }
 
-// Frame returns one full deterministic repaint for the given geometry and
-// monotonically increasing seq. Content depends only on (style, cols, rows,
-// seq).
 func Frame(style Style, cols, rows int, seq int) []byte {
 	switch style {
 	case StyleCodex:
@@ -67,8 +51,6 @@ func Frame(style Style, cols, rows int, seq int) []byte {
 	}
 }
 
-// OnResize returns the bytes emitted in response to a size change, BEFORE
-// the next Frame at the new geometry.
 func OnResize(style Style, cols, rows int) []byte {
 	switch style {
 	case StyleCodex:
@@ -80,8 +62,6 @@ func OnResize(style Style, cols, rows int) []byte {
 	}
 }
 
-// Teardown returns the graceful shutdown sequence (mode resets; claude
-// style exits the alternate screen).
 func Teardown(style Style) []byte {
 	switch style {
 	case StyleCodex:
@@ -93,11 +73,6 @@ func Teardown(style Style) []byte {
 	}
 }
 
-// Run drives the probe against w until ctx is done or a resize arrives on
-// winch: Startup, then a Frame every interval and on each resize (via
-// OnResize followed by a Frame at the new geometry), then Teardown on
-// ctx.Done. size returns the current terminal geometry. Run never reads
-// input.
 func Run(
 	ctx context.Context,
 	w io.Writer,
@@ -158,8 +133,6 @@ func Run(
 	}
 }
 
-// --- shared VT construction helpers ----------------------------------------
-
 func csi(params string, final byte) []byte {
 	return []byte("\x1b[" + params + string(final))
 }
@@ -211,11 +184,6 @@ func hyperlink(url, text string) []byte {
 	return b.Bytes()
 }
 
-// bannerGeometryRow and bannerStyleRow are the two fixed-shape rows both
-// styles' Frame must paint exactly once, at rows 1 and 2 respectively.
-// Callers truncate each to cols when painting. Split across two rows (was
-// one) so the identifying content survives narrow (~20 col) panes where a
-// single combined banner line clipped past recognition.
 func bannerGeometryRow(cols, rows int) string {
 	return fmt.Sprintf("ATTN-PROBE %dx%d", cols, rows)
 }
@@ -224,8 +192,6 @@ func bannerStyleRow(style Style, seq int) string {
 	return fmt.Sprintf("style=%s seq=%d READY", style, seq)
 }
 
-// fillRow is a deterministic fill pattern for a non-banner row, a function
-// only of (cols, rows, seq, row).
 func fillRow(cols, rows, seq, row int) string {
 	ch := byte('#')
 	if (row+seq+rows)%2 == 1 {
@@ -241,8 +207,7 @@ func fillRow(cols, rows, seq, row int) string {
 	return string(b)
 }
 
-// truncateToWidth clamps s to at most cols visible columns, assuming
-// single-width ASCII content (the only content probetui renders).
+// Assumes single-width ASCII, the only content probetui renders.
 func truncateToWidth(s string, cols int) string {
 	if cols <= 0 {
 		return ""

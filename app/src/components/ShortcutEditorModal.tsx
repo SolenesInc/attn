@@ -1,8 +1,3 @@
-// app/src/components/ShortcutEditorModal.tsx
-// Editor for rebinding keyboard shortcuts. Every shortcut is rebindable; a
-// protected few can't be left unbound. Conflicts are resolved VSCode-style:
-// binding a taken combo asks to reassign, unbinding the previous holder.
-// Saves immediately on each edit. Chords and "show in dock" land in later PRs.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
@@ -25,15 +20,12 @@ interface ShortcutEditorModalProps {
   onClose: () => void;
 }
 
-// A requested change to a shortcut: an explicit binding (combo or chord), or
-// 'default' to restore the registry default. Both flow through the same
-// conflict check.
 type BindingChange = Binding | 'default';
 
 interface PendingReassign {
   id: ShortcutId;
   change: BindingChange;
-  binding: Binding; // the effective binding, for display + conflict messaging
+  binding: Binding;
   conflictId: ShortcutId;
 }
 
@@ -53,11 +45,8 @@ function effectiveBinding(id: ShortcutId, change: BindingChange): Binding {
   return change === 'default' ? SHORTCUTS[id] : change;
 }
 
-// The value to persist: undefined (drop override → default) when the change is
-// a reset or resolves to the default binding, otherwise the explicit binding.
-// A chord is never the default (defaults are all combos), so it must always be
-// persisted — using the combo keystroke-equivalence here would wrongly drop a
-// chord whose leader equals the default combo (e.g. ⌘K-then-D on ⌘K).
+// A chord is never the default, so it must always be persisted: keystroke-equivalence
+// would wrongly drop a chord whose leader equals the default combo (⌘K-then-D on ⌘K).
 function overrideValue(id: ShortcutId, change: BindingChange): Binding | undefined {
   if (change === 'default') return undefined;
   if (isChord(change)) return change;
@@ -77,9 +66,8 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
 
   useEscapeStack(onClose, isOpen && recordingId === null && pending === null);
 
-  // The modal stays mounted (it just renders null when closed), so reset any
-  // in-flight recording (and the search query) when it closes — otherwise it
-  // reopens stuck recording, which re-suspends the global shortcut dispatcher.
+  // The modal stays mounted, so reset any in-flight recording on close, or it
+  // reopens stuck recording and re-suspends the global dispatcher.
   useEffect(() => {
     if (!isOpen) {
       setRecordingId(null);
@@ -90,17 +78,14 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
     }
   }, [isOpen]);
 
-  // Focus the filter box on open. The modal stays mounted, so the HTML
-  // autoFocus attribute (mount-only) won't fire on reopen; do it imperatively.
-  // Runs after FocusTrap's initial focus, so the search input wins.
+  // Runs after FocusTrap's initial focus, so the search input wins; the
+  // mount-only autoFocus attribute would not fire on reopen.
   useEffect(() => {
     if (isOpen) searchRef.current?.focus();
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Substring filter over the visible label and the currently-shown keys
-  // (formatShortcut(id) resolves overrides, so users search what they see).
   const q = query.trim().toLowerCase();
   const matchesQuery = (id: ShortcutId) =>
     SHORTCUT_META[id].label.toLowerCase().includes(q) ||
@@ -116,10 +101,6 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
     setRowError(null);
   };
 
-  // Single entry point for any binding change (rebind or reset-to-default).
-  // Conflict detection runs for both, so restoring a default that another
-  // action has since claimed triggers the same reassign flow as a rebind
-  // instead of silently creating a duplicate binding.
   const applyBinding = (id: ShortcutId, change: BindingChange) => {
     setRecordingId(null);
     setRowError(null);
@@ -184,12 +165,8 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
               className="shortcut-editor-search-input"
               placeholder="Filter shortcuts…"
               value={query}
-              // Clear any in-flight recording/reassign BEFORE the filter takes
-              // keystrokes. While a row records, KeyCaptureInput owns a
-              // capture-phase window keydown listener that would otherwise grab
-              // the first character typed here and bind it to that row — and the
-              // event never reaches onChange. Focus/mousedown fire first, so we
-              // tear that listener down before the keystroke lands.
+              // Clear any in-flight recording BEFORE the filter takes keystrokes: a recording row's
+              // capture-phase keydown listener would grab the first character typed here.
               onFocus={clearTransient}
               onMouseDown={clearTransient}
               onChange={(e) => {
@@ -266,8 +243,7 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
                     const binding = kb.resolve(id);
                     const customized = kb.isCustomized(id);
                     const isProtected = kb.isProtected(id);
-                    // The macOS menu bar owns this key, so there is no rebind to
-                    // offer: a combo recorded here would never reach the action.
+                    // The macOS menu bar owns this key, so a combo recorded here never reaches the action.
                     const isNative = isNativeDeliveryShortcut(id);
                     const isPending = pending?.id === id;
                     return (

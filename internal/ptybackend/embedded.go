@@ -13,8 +13,6 @@ type EmbeddedBackend struct {
 	manager *pty.Manager
 }
 
-// SessionTerminalBuild answers with this process's own build: the embedded
-// backend runs the terminal in the daemon, so it can never be a version behind.
 func (b *EmbeddedBackend) SessionTerminalBuild(string) (string, bool) {
 	return buildinfo.SnapshotFormat, true
 }
@@ -117,9 +115,8 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 			subscriberID,
 			send,
 			onDrop,
-			// Same stream as the bytes, so a set stays ordered behind the output it
-			// was measured on — the worker backend gets that ordering from the
-			// connection's send queue, this one from the stream channel.
+			// Placements ride the byte stream so a set stays ordered behind the
+			// output it was measured on.
 			onPlacements,
 		)
 	}
@@ -144,8 +141,6 @@ func (b *EmbeddedBackend) Attach(_ context.Context, sessionID, subscriberID stri
 	}, stream, nil
 }
 
-// KittyImage serves the pixels behind a placement straight out of the session's
-// terminal — no hop, because this backend hosts the terminal in-process.
 func (b *EmbeddedBackend) KittyImage(_ context.Context, sessionID string, imageID uint32) (pty.KittyImage, error) {
 	return b.manager.KittyImage(sessionID, imageID)
 }

@@ -1,10 +1,3 @@
-/**
- * Test Harness Types
- *
- * Shared types for component test harnesses used with Playwright.
- * Each harness exposes a window.__HARNESS__ API for test control.
- */
-
 export interface HarnessAPI {
   /** Name of the component being tested */
   componentName: string;

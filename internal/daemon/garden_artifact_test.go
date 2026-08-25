@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// artifactNote writes one attach or detach the way `attn seed attach` does.
 func artifactNote(t *testing.T, d *Daemon, seedID, kind, body string, artifact *protocol.SeedArtifactReference) protocol.Response {
 	t.Helper()
 	msg := protocol.SeedNoteMessage{
@@ -27,8 +26,6 @@ func markdownArtifact(path string) *protocol.SeedArtifactReference {
 	return &protocol.SeedArtifactReference{Kind: garden.ArtifactMarkdownFile, Path: protocol.Ptr(path)}
 }
 
-// The whole attach lifecycle over the real handlers: the log keeps every verb,
-// and `show` answers with the set rather than the timeline.
 func TestSeedArtifactsAttachAndDetachThroughTheLog(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Ship the thing"})
@@ -36,8 +33,6 @@ func TestSeedArtifactsAttachAndDetachThroughTheLog(t *testing.T) {
 	if resp := artifactNote(t, d, seed.ID, garden.NoteKindAttach, "", markdownArtifact("docs/plans/thing.md")); !resp.Ok {
 		t.Fatalf("attach: %v", protocol.Deref(resp.Error))
 	}
-	// A caller with nothing to add gets a body rendered from the reference, so
-	// the log reads as prose rather than as an empty line with a payload.
 	if resp := artifactNote(t, d, seed.ID, garden.NoteKindAttach, "", markdownArtifact("docs/plans/thing.md")); resp.Ok {
 		if body := resp.SeedNoteResult.Note.Body; body != "attached docs/plans/thing.md" {
 			t.Fatalf("default body = %q", body)
@@ -66,17 +61,12 @@ func TestSeedArtifactsAttachAndDetachThroughTheLog(t *testing.T) {
 		t.Fatalf("after detach artifacts = %+v, want the notebook alone", current)
 	}
 
-	// Detaching removes it from the set and from neither the log nor its count:
-	// the seed's memory of what happened is not edited by what is current now.
 	log := show(t, d, seed.ID)
 	if log.NotesTotal != 4 {
 		t.Fatalf("log holds %d entries, want the four verbs", log.NotesTotal)
 	}
 }
 
-// The set is projected over the whole log, not over the bounded window `show`
-// renders — an attach older than the newest few entries is exactly the one a
-// window would lose.
 func TestSeedArtifactsSurviveABusyLog(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Long haul"})
@@ -96,11 +86,6 @@ func TestSeedArtifactsSurviveABusyLog(t *testing.T) {
 	}
 }
 
-// A log longer than one query's page: the oldest entry is the attach, so a
-// projection that stopped at the first page would answer with no artifacts at
-// all. The page size is lowered rather than a thousand notes written — the
-// property is that the read pages to the end, not what the store's own maximum
-// happens to be.
 func TestSeedArtifactsPageToTheEndOfTheLog(t *testing.T) {
 	d := newGardenDaemon(t)
 	d.gardenNotePageSize = 3
@@ -117,7 +102,6 @@ func TestSeedArtifactsPageToTheEndOfTheLog(t *testing.T) {
 		t.Fatalf("artifacts = %+v, want plan.md still current several pages down", result.Artifacts)
 	}
 
-	// And the detach reaches it from the same distance.
 	if resp := artifactNote(t, d, seed.ID, garden.NoteKindDetach, "", markdownArtifact("plan.md")); !resp.Ok {
 		t.Fatalf("detach: %v", protocol.Deref(resp.Error))
 	}

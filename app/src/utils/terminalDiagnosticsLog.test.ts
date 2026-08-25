@@ -47,8 +47,6 @@ describe('paint anomaly detection', () => {
 
   it('does not flag a renderer skip (quads null) as an under-drawn paint', () => {
     const pane = 'pane-skip-not-underdraw';
-    // A skip means "nothing dirty, canvas untouched" — the surface still shows
-    // the previous draw. It must never be judged against model content.
     recordPaint({ ...baseSample, pane, modelPrintable: 500, quads: null });
 
     expect(ringEventsFor(pane).filter((event) => event.kind === 'incident')).toHaveLength(0);
@@ -131,8 +129,6 @@ describe('noteModelFault', () => {
 
     const event = ringEventsFor(pane).find((entry) => entry.kind === 'model_fault');
     const capture = event?.capture as Record<string, unknown>;
-    // The summary keeps the shape of the evidence without the evidence itself:
-    // an incident record written seconds later embeds the last 400 ring events.
     expect(capture).toMatchObject({ opCount: 1, retainedWriteBytes: 4096, snapshotTruncated: false });
     expect(capture.ops).toBeUndefined();
     expect(JSON.stringify(event).length).toBeLessThan(1024);
@@ -150,7 +146,6 @@ describe('blank-after-resize watchdog', () => {
   });
 
   function armAgentResize(pane: string) {
-    // The watchdog only arms on a real geometry change of an agent pane.
     noteResize(pane, {
       source: 'fit',
       paneKind: 'agent',
@@ -171,7 +166,6 @@ describe('blank-after-resize watchdog', () => {
       lastPaintQuads: 0,
       active: true,
     }));
-    // Seed pane health so the watchdog has a resize timestamp to compare with.
     recordPaint({
       pane,
       session: 's-test',
@@ -278,10 +272,10 @@ describe('grid-overflow detector', () => {
     const unregister = registerRenderProbe(pane, () => probeWith({
       rows, cellHeight: 21, clientHeight: 540,
     }));
-    vi.advanceTimersByTime(1600); // onset
-    vi.advanceTimersByTime(1600); // still clipping → edge-triggered, no repeat
-    rows = 25; // a refit floored it back
-    vi.advanceTimersByTime(1600); // resolution
+    vi.advanceTimersByTime(1600);
+    vi.advanceTimersByTime(1600);
+    rows = 25;
+    vi.advanceTimersByTime(1600);
     unregister();
 
     const reasons = ringEventsFor(pane)
@@ -333,9 +327,9 @@ describe('grid-overflow detector', () => {
         rows: 25, cellHeight: 21, clientHeight: 525,
         cols: 80, cellWidth: 9, clientWidth: 720,
       })));
-    vi.advanceTimersByTime(1600); // onset
+    vi.advanceTimersByTime(1600);
     clipping = false;
-    vi.advanceTimersByTime(1600); // both model signals clean → resolution
+    vi.advanceTimersByTime(1600);
     unregister();
 
     const reasons = ringEventsFor(pane)
@@ -402,10 +396,10 @@ describe('clip repair watchdog', () => {
       repair,
     );
     try {
-      vi.advanceTimersByTime(1600); // sweep 1: clipping
+      vi.advanceTimersByTime(1600);
       clipping = false;
-      vi.advanceTimersByTime(1600); // sweep 2: clear
-      vi.advanceTimersByTime(20000); // long tail, in case a stray timer fires late
+      vi.advanceTimersByTime(1600);
+      vi.advanceTimersByTime(20000);
 
       expect(repair).toHaveBeenCalledTimes(0);
     } finally {
@@ -413,9 +407,8 @@ describe('clip repair watchdog', () => {
     }
   });
 
-  // Sweep ticks land on multiples of BOTTOM_CLIP_SWEEP_MS (1500ms). A repair
-  // only fires once Date.now() >= nextAttemptAtMs AT a sweep tick, so the
-  // observed delay is the backoff rounded UP to the next tick, never short of it.
+  // Sweep ticks land on multiples of BOTTOM_CLIP_SWEEP_MS (1500ms), so the observed
+  // delay is the backoff rounded UP to the next tick, never short of it.
   it('backs off 3000ms before the 2nd repair and 10000ms before the 3rd, with the clip persisting', () => {
     const pane = 'pane-repair-backoff';
     const repair = vi.fn();
@@ -451,7 +444,7 @@ describe('clip repair watchdog', () => {
       expect(repair).toHaveBeenCalledTimes(3);
 
       vi.advanceTimersByTime(60000); // clip persists well past the 3rd attempt's backoff
-      expect(repair).toHaveBeenCalledTimes(3); // no 4th attempt — the watchdog gave up
+      expect(repair).toHaveBeenCalledTimes(3);
 
       const giveUps = ringEventsFor(pane)
         .filter((event) => event.kind === 'incident' && event.reason === 'bottom_clip_repair_gave_up');
@@ -475,7 +468,7 @@ describe('clip repair watchdog', () => {
       vi.advanceTimersByTime(4500); // 3 sweeps: 1st repair fires
       expect(repair).toHaveBeenCalledTimes(1);
       clipping = false;
-      vi.advanceTimersByTime(1600); // clip clears
+      vi.advanceTimersByTime(1600);
 
       const resolved = ringEventsFor(pane)
         .filter((event) => event.kind === 'incident' && event.reason === 'bottom_clip_resolved');

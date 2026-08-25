@@ -56,10 +56,6 @@ interface SelectedTile {
   tileId: string;
 }
 
-// A sessionless workspace only exists because the user left a docked tile
-// behind (the daemon tears down workspaces that hold no leaves at all). They're
-// hidden by default and revealed through the sidebar display popover; the
-// preference lives in App so every workspace-order derivation stays consistent.
 function isSessionless(workspace: SidebarWorkspace): boolean {
   return workspace.sessions.length === 0;
 }
@@ -137,57 +133,36 @@ interface SidebarProps {
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
   collapsed: boolean;
-  /** The non-default build profile. Empty keeps the production sidebar exact. */
   profile?: string;
   headerActions: SidebarHeaderAction[];
-  // The ambient critical-notification surface. Optional so existing Sidebar
-  // tests render without wiring it; absent or zero-count renders nothing.
   criticalNotifications?: CriticalNotificationState;
   onOpenNotifications?: () => void;
-  // Current grid shape + a handler to choose a new one (also opens grid mode).
-  // Optional so existing Sidebar tests render without wiring the grid picker.
   gridLayout?: GridLayout;
   onSelectGridLayout?: (layout: GridLayout) => void;
-  // Config-driven dock chips (ordered). Built in App from the keybindings config.
   dockItems?: DockItem[];
   dockCollapsed?: boolean;
   onToggleDockCollapsed?: () => void;
-  // The queue arrangement's bands, or null when the arrangement is off. While it
-  // is on the tree below is reduced to what the bands exclude: pinned and
-  // tile-only workspaces.
   queue?: QueueBandsModel<LocalSession> | null;
-  /** The crew roster: every member, awake or asleep, drawn in the pinned region. */
   crew?: CrewMemberView[];
-  /** Start a sleeping member's day. */
   onWakeCrewMember?: (member: string) => void;
-  /** Ask an awake member to close its day and sleep. */
   onSleepCrewMember?: (member: string) => void;
   onSettleTurn?: (id: string) => void;
-  /** Open the snooze duration menu for a row, anchored at the click. */
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;
-  /**
-   * Sessions whose terminal tile is on screen right now. The auto-settle
-   * countdown lives on the tile, so the sidebar draws it only for the sessions
-   * NOT in here — otherwise the same countdown would run twice, once on the tile
-   * the user is watching and once on its row.
-   */
+  /** The auto-settle countdown lives on the tile, so the sidebar draws it only
+      for sessions NOT in here, or it would run twice. */
   onScreenSessionIds?: ReadonlySet<string>;
   mutedWorkspaces?: SidebarWorkspace[];
   mutedExpanded?: boolean;
   onMutedExpandedChange?: (expanded: boolean) => void;
   onMuteWorkspace?: (workspaceId: string, endpointId?: string) => void;
   onPinWorkspace?: (workspaceId: string, pinned: boolean) => void;
-  /** Pin or release one agent, leaving its workspace and siblings in the queue. */
   onPinSession?: (sessionId: string, pinned: boolean) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameWorkspace?: (workspaceId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
   showSessionless?: boolean;
   onToggleShowSessionless?: () => void;
-  // The queue is the one arrangement in this popover the daemon owns: App reads
-  // it out of the settings map and writes it back through sendSetSetting, so the
-  // sidebar takes the resolved value and the writer rather than the key.
   queueModeEnabled?: boolean;
   onToggleQueueMode?: () => void;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
@@ -197,21 +172,11 @@ interface SidebarProps {
   onWorkspaceDragEnter?: (workspace: SidebarWorkspace) => void;
   onWorkspaceDragLeave?: (workspace: SidebarWorkspace) => void;
   onWorkspaceDragDrop?: (workspace: SidebarWorkspace) => void;
-  // Drop the dragged leaf onto the "New workspace" zone at the foot of the list to
-  // split it into a brand-new workspace. Wired in App to
-  // sendWorkspaceMoveLeafToNewWorkspace.
   onNewWorkspaceDrop?: () => void;
-  // Begin / end a leaf drag started by pressing a session row in the sidebar.
-  // onSessionDragStart arms the same App-level leaf drag the in-view pane header
-  // uses (leafId = the session's layout pane id), so the existing workspace-group
-  // and "New workspace" drop targets handle the actual move/split. onSessionDragEnd
-  // tears the drag down. Wired in App to handleLeafDragStart / handleLeafDragEnd.
   onSessionDragStart?: (workspaceId: string, endpointId: string | undefined, paneId: string) => void;
   onSessionDragEnd?: () => void;
-  // Reorder a workspace by dropping its header onto an insertion seam. The
-  // neighbour ids describe the seam: prevWorkspaceId ends up directly above the
-  // moved workspace, nextWorkspaceId directly below. Either may be undefined when
-  // dropping at the very top or bottom. Wired in App to sendSetWorkspaceRank.
+  // prevWorkspaceId ends up directly above the moved workspace, nextWorkspaceId
+  // directly below; either may be undefined at the very top or bottom.
   onWorkspaceReorder?: (args: {
     workspaceId: string;
     prevWorkspaceId?: string;
@@ -227,8 +192,6 @@ interface SidebarProps {
   onCloseSession: (id: string) => void;
   onReloadSession: (id: string) => void;
   onGoToDashboard: () => void;
-  // Whether home is the view on screen. Drives the home row's selected state so
-  // it reads like any other row you can be sitting on.
   homeActive?: boolean;
   onToggleCollapse: () => void;
 }
@@ -246,12 +209,9 @@ export interface SidebarHeaderAction {
 
 export interface DockItem {
   id: string;
-  /** Terse chip label, e.g. "diff". */
   label: string;
-  /** Rendered key tokens, e.g. "⌘⇧G". Empty when the shortcut is unbound. */
   keys: string;
   active?: boolean;
-  /** When set, the chip is an actionable button; otherwise an informational hint. */
   onClick?: () => void;
 }
 
@@ -421,17 +381,11 @@ export function Sidebar({
   homeActive = false,
   onToggleCollapse,
 }: SidebarProps) {
-  // Each arrangement has one notion of what wants the user, and the mode selects
-  // it: the daemon's turn_owed while the queue is on (it honours settle and the
-  // exclusions), the state predicate while it is off.
   const sessionWantsAttention = (session: LocalSession) => (
     queue ? Boolean(session.turnOwed) : isAttentionSessionState(session.state)
   );
 
   const [mutedExpandedLocal, setMutedExpandedLocal] = useState(false);
-  // Local, not lifted: unlike muted, nothing outside the sidebar needs to know
-  // whether the snoozed section is open, and it collapses again on its own as
-  // rows wake out of it.
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
@@ -458,8 +412,6 @@ export function Sidebar({
     const rect = event.currentTarget.getBoundingClientRect();
     setRenameTarget({ kind, id, name, anchor: { top: rect.bottom + 4, left: rect.left } });
   };
-  // Takes the fields it reads rather than a whole LocalSession, so the queue
-  // rows — which carry a narrower session view — can open the same menu.
   const openSessionActions = (
     session: { id: string; label: string; chiefOfStaff?: boolean },
     event: ReactMouseEvent,
@@ -480,9 +432,7 @@ export function Sidebar({
   };
 
   // The chief holds its anchored slot whatever its workspace is, so a workspace
-  // that survives in the tree — pinned, or muted — must not draw it a second
-  // time. This is the one session the bands claim from a workspace they
-  // otherwise leave alone.
+  // that survives in the tree must not draw it a second time.
   const withoutChiefRow = (workspace: SidebarWorkspace): SidebarWorkspace => {
     if (!queue || !workspace.sessions.some((session) => session.chiefOfStaff)) {
       return workspace;
@@ -496,11 +446,7 @@ export function Sidebar({
 
   const isWorkspaceVisible = (workspace: SidebarWorkspace) => workspace.pinned || !isSessionless(workspace) || showSessionless;
   // Queue mode renders every ordinary agent as a flat row in a band, so drawing
-  // its workspace group as well would show the same agent twice and make it look
-  // like a row moved when only one of the two copies did. What is left in the
-  // tree is what the bands deliberately exclude: pinned workspaces, and — when
-  // the toggle asks for them — tile-only ones, which have no agent and so no row
-  // anywhere else.
+  // its workspace group too would show the same agent twice.
   const isTreeWorkspace = (workspace: SidebarWorkspace) => (
     !queue || workspace.pinned || isSessionless(workspace)
   );
@@ -535,30 +481,14 @@ export function Sidebar({
     visibleVisualIndexByWorkspaceId.get(id) ?? visualIndexByWorkspaceId.get(id) ?? -1
   );
 
-  // --- Workspace reorder (header drag onto an insertion seam) ---
-  // A press on a workspace header arms a reorder once the pointer crosses a small
-  // threshold; a sub-threshold release stays a plain selection click. Only
-  // unmuted, visible, same-endpoint workspaces participate — muted workspaces live
-  // in their own section and keep a separate order space. The body of a group is a
-  // no-op: dropping there snaps to the nearest seam, so workspaces never merge.
   const REORDER_THRESHOLD = 6;
-  // The set of workspaces a drag may reorder within: the dragged workspace's
-  // endpoint, in visible visual order. Empty when no drag is active.
   const [reorderDrag, setReorderDrag] = useState<{ workspaceId: string; endpointId?: string } | null>(null);
-  // True while the cursor is over the "New workspace" drop-zone during a leaf drag,
-  // so the zone shows its active/hover styling. Reset on leave and on drop.
   const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
-  // Floating ghost label following the cursor while dragging a session row out of
-  // the sidebar (null when no session drag is active), plus the session id of the
-  // dragged row so it can render dimmed. The drop itself is handled by the same
-  // workspace-group / "New workspace" targets the in-view pane drag uses.
   const [sessionDragGhost, setSessionDragGhost] = useState<{ x: number; y: number; label: string } | null>(null);
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
   const sessionDragRef = useRef<{ pointerId: number; startX: number; startY: number; armed: boolean } | null>(null);
   const suppressNextSessionClickRef = useRef(false);
-  // The insertion slot (0..N) the cursor is currently nearest. null = none yet.
   const [reorderSeamIndex, setReorderSeamIndex] = useState<number | null>(null);
-  // Per-interaction refs so listeners read fresh values without re-binding.
   const reorderDragRef = useRef<{
     workspaceId: string;
     endpointId?: string;
@@ -569,8 +499,6 @@ export function Sidebar({
     sourceEl: HTMLElement;
   } | null>(null);
   const reorderSeamIndexRef = useRef<number | null>(null);
-  // Set true the moment a drag arms so the click that follows pointerup selects
-  // nothing (a sub-threshold press leaves this false and still selects).
   const suppressNextHeaderClickRef = useRef(false);
 
   const reorderParticipants = (endpointId?: string): SidebarWorkspace[] => (
@@ -582,9 +510,6 @@ export function Sidebar({
     setReorderSeamIndex(index);
   }, []);
 
-  // Pick the insertion seam whose vertical centre is closest to the cursor. The
-  // group body resolves to the nearer of its two bounding seams (same math), so a
-  // drop is always a reorder, never a merge.
   const nearestSeamIndex = useCallback((clientY: number): number | null => {
     const list = document.querySelector('.session-list');
     if (!list) {
@@ -615,8 +540,6 @@ export function Sidebar({
     updateReorderSeam(null);
   }, [updateReorderSeam]);
 
-  // Translate the dropped seam slot into the neighbour ids the daemon expects.
-  // Dropping back into the moved workspace's own slot is a no-op.
   const commitReorder = useCallback((
     workspaceId: string,
     endpointId: string | undefined,
@@ -632,7 +555,7 @@ export function Sidebar({
     if (fromIndex < 0) {
       return;
     }
-    // Removing the moved row shifts later rows up by one, so slots fromIndex and
+    // Removing the moved row shifts later rows up by one, so fromIndex and
     // fromIndex+1 both land it back where it started.
     if (seamIndex === fromIndex || seamIndex === fromIndex + 1) {
       return;
@@ -648,8 +571,6 @@ export function Sidebar({
     workspace: SidebarWorkspace,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
-    // Only a primary-button press on the header chrome itself arms a reorder. The
-    // rename/mute buttons stop propagation, so this never fires from them.
     if (event.button !== 0 || !onWorkspaceReorder) {
       return;
     }
@@ -724,9 +645,6 @@ export function Sidebar({
     window.addEventListener('pointercancel', onCancel);
   }, [onWorkspaceReorder, nearestSeamIndex, updateReorderSeam, endReorderDrag, commitReorder]);
 
-  // The participating set for the live drag (same endpoint as the dragged ws),
-  // indexed so each rendered workspace knows which seam slot precedes it. The
-  // trailing seam slot equals the participant count.
   const reorderActiveParticipants = reorderDrag
     ? reorderParticipants(reorderDrag.endpointId)
     : [];
@@ -742,8 +660,6 @@ export function Sidebar({
       data-testid={`workspace-reorder-seam-${index}`}
       data-seam-index={index}
       aria-hidden="true"
-      // Hovering a seam directly highlights it; the pointermove handler still
-      // snaps to the nearest seam when the cursor is over a group body.
       onPointerEnter={() => {
         if (reorderDragRef.current?.armed) {
           updateReorderSeam(index);
@@ -755,8 +671,6 @@ export function Sidebar({
   );
 
   const handleHeaderClickCapture = useCallback((event: ReactMouseEvent) => {
-    // Swallow the click that fires right after an armed drag's pointerup so the
-    // release does not also select the workspace.
     if (suppressNextHeaderClickRef.current) {
       suppressNextHeaderClickRef.current = false;
       event.preventDefault();
@@ -764,16 +678,10 @@ export function Sidebar({
     }
   }, []);
 
-  // Tear down a live reorder if the component unmounts mid-drag.
   useEffect(() => endReorderDrag, [endReorderDrag]);
 
-  // A press on a session row arms a leaf drag once the pointer crosses the
-  // threshold; a sub-threshold release stays a plain selection click. Unlike the
-  // workspace reorder, this takes NO pointer capture: the workspace-group and
-  // "New workspace" drop targets rely on their own pointer handlers firing as the
-  // cursor moves over them, exactly like the in-view pane drag. So this gesture
-  // only arms the App-level leaf drag and floats a ghost; the existing targets do
-  // the move. Requires a layout pane id (sessions without one aren't in a pane).
+  // Unlike the workspace reorder, this takes NO pointer capture: the drop targets
+  // rely on their own pointer handlers firing as the cursor moves over them.
   const SESSION_DRAG_THRESHOLD = 6;
   const handleSessionPointerDown = useCallback((
     workspace: SidebarWorkspace,
@@ -782,13 +690,10 @@ export function Sidebar({
     label: string,
     event: ReactPointerEvent<HTMLDivElement>,
   ) => {
-    // Child buttons (the ••• actions) stop propagation, so this only fires from a
-    // primary-button press on the row chrome itself.
     if (event.button !== 0 || !onSessionDragStart) {
       return;
     }
-    // A fresh press always starts un-suppressed, so a drag that ended over another
-    // element (leaving the flag set) can't swallow this row's next real click.
+    // A fresh press always starts un-suppressed, so a drag that ended elsewhere can't swallow this row's next click.
     suppressNextSessionClickRef.current = false;
     sessionDragRef.current = {
       pointerId: event.pointerId,
@@ -826,8 +731,6 @@ export function Sidebar({
       sessionDragRef.current = null;
       setSessionDragGhost(null);
       setDraggingSessionId(null);
-      // Only tear down the App-level drag if we actually started one — a
-      // sub-threshold press never armed it.
       if (armed) {
         onSessionDragEnd?.();
       }
@@ -850,8 +753,6 @@ export function Sidebar({
     window.addEventListener('pointercancel', onCancel);
   }, [onSessionDragStart, onSessionDragEnd]);
 
-  // Swallow the click that fires right after an armed session drag's pointerup so
-  // the release does not also select the session.
   const handleSessionClickCapture = useCallback((event: ReactMouseEvent) => {
     if (suppressNextSessionClickRef.current) {
       suppressNextSessionClickRef.current = false;
@@ -970,8 +871,7 @@ export function Sidebar({
             </button>
             {settingsOpen && (
               <div className="sidebar-settings-popover" role="dialog" aria-label="Sidebar settings">
-                {/* First, because it is the only choice here that changes what the
-                    sidebar contains rather than how the tree below is drawn. */}
+                {/* First, because it is the only choice here that changes what the sidebar contains. */}
                 <button
                   type="button"
                   className="sidebar-settings-switch-row sidebar-settings-switch-row--lead"
@@ -1028,8 +928,7 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Above Home, because it outranks it: Home is where you go when nothing
-          is owed, and this only exists when something is. */}
+      {/* Above Home, because it outranks it: this only exists when something is owed. */}
       {onOpenNotifications && (
         <CriticalNotificationStrip
           count={criticalNotifications?.count ?? 0}
@@ -1038,9 +937,7 @@ export function Sidebar({
         />
       )}
 
-      {/* Home sits above everything, the chief's slot included: it is the one
-          row that is not an agent, and it is where the queue leaves you once
-          nothing is owed. */}
+      {/* Home sits above everything, the chief's slot included: it is the one row that is not an agent. */}
       <button
         type="button"
         className={`sidebar-home-row ${homeActive ? 'selected' : ''}`}
@@ -1283,8 +1180,7 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Above muted, below everything else: *not yet* is nearer to your
-          attention than *not ever*. */}
+      {/* Above muted: *not yet* is nearer to your attention than *not ever*. */}
       {queue && onWakeTurn && (
         <QueueSnoozedSection
           rows={queue.snoozed}

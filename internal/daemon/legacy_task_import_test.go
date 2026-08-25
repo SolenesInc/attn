@@ -23,10 +23,6 @@ func legacyRow(kind, subject, meta string) store.LegacyTaskRecord {
 	}
 }
 
-// translateAndWrite is what the handover does with each legacy row, minus the
-// transaction that owns it: the store's own tests cover the transaction, these
-// cover the translation. Keeping them apart is what lets the per-kind inputs be
-// checked without a fixture in the retired table.
 func translateAndWrite(t *testing.T, d *Daemon, rows ...store.LegacyTaskRecord) {
 	t.Helper()
 	for _, rec := range rows {
@@ -36,9 +32,6 @@ func translateAndWrite(t *testing.T, d *Daemon, rows ...store.LegacyTaskRecord) 
 	}
 }
 
-// The upgrade must not lose owed background work, and it must not lose the
-// inputs that work depends on — a summarize whose transcript path is dropped
-// runs against a session row a teardown already deleted.
 func TestImportCarriesEachKindsInputsOntoItsPayload(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
@@ -57,8 +50,6 @@ func TestImportCarriesEachKindsInputsOntoItsPayload(t *testing.T) {
 	if err != nil || summarize == nil {
 		t.Fatalf("imported summarize job: %v (%+v)", err, summarize)
 	}
-	// The legacy id is preserved: a pre-upgrade failure notification records it as
-	// its SourceID and the panel's Retry deep-links through it.
 	if summarize.ID != "summarize_session:s-1" {
 		t.Fatalf("import minted a new id (%s), breaking existing notification links", summarize.ID)
 	}
@@ -102,9 +93,6 @@ func TestImportCarriesEachKindsInputsOntoItsPayload(t *testing.T) {
 	}
 }
 
-// A row whose meta cannot be read is still imported. Dropping it would silently
-// discard owed work; importing it leaves a record the panel shows and the handler
-// reports as missing its inputs.
 func TestImportKeepsARowWithUnreadableMeta(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	translateAndWrite(t, d, legacyRow(notebookSummarizeSessionKind, "s-broken", `{not json`))

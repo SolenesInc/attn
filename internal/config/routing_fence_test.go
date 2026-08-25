@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// scopeRouting sets every routing variable for one subtest. An empty value
-// clears the variable, so each case states the whole environment it means.
 func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
 	t.Helper()
 	t.Setenv("ATTN_PROFILE", profile)
@@ -18,8 +16,8 @@ func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
 			os.Unsetenv(name)
 		}
 	}
-	// ATTN_DATA_DIR must always be set under go test (see the backstop in
-	// config.go); cases that mean "no override" still need a scratch dir.
+	// ATTN_DATA_DIR must always be set under go test (backstop in config.go), so
+	// cases that mean "no override" still need a scratch dir.
 	if overrides["ATTN_DATA_DIR"] == "" {
 		t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	}
@@ -27,8 +25,6 @@ func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
 }
 
 func TestValidateProfileRouting_NoProfileIsAlwaysLegal(t *testing.T) {
-	// The one shape every test suite and harness depends on: an explicit data
-	// dir with no profile.
 	scopeRouting(t, "", nil)
 	if err := ValidateProfileRouting(); err != nil {
 		t.Fatalf("ATTN_DATA_DIR without ATTN_PROFILE must stay legal, got: %v", err)
@@ -36,8 +32,8 @@ func TestValidateProfileRouting_NoProfileIsAlwaysLegal(t *testing.T) {
 }
 
 func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
-	// The 2026-08-17 incident: an attn agent session's production routing env
-	// inherited into `make install PROFILE=fb2lists`.
+	// The 2026-08-17 incident: an attn agent session's production routing env inherited
+	// into `make install PROFILE=fb2lists`.
 	prod := DataDirForProfile("")
 	scopeRouting(t, "fb2lists", map[string]string{
 		"ATTN_DATA_DIR":    prod,
@@ -64,8 +60,6 @@ func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 			t.Errorf("error must name %q; got:\n%s", want, message)
 		}
 	}
-	// Every variable that disagreed is named, and the printed fix clears all
-	// of them — an agent reading this error can act on it in one step.
 	for _, name := range routingOverrideEnv {
 		if !strings.Contains(message, name) {
 			t.Errorf("error must name the disagreeing variable %s; got:\n%s", name, message)
@@ -77,8 +71,6 @@ func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 }
 
 func TestValidateProfileRouting_ProfileOwnPathsAgree(t *testing.T) {
-	// A caller that sets the overrides *to the profile's own values* (the
-	// real-app harness does this) is not a contradiction.
 	dir := DataDirForProfile("agent7")
 	scopeRouting(t, "agent7", map[string]string{
 		"ATTN_DATA_DIR":    dir,
@@ -130,8 +122,6 @@ func TestValidateProfileRouting_WSPortDisagreement(t *testing.T) {
 	}
 }
 
-// A divergent path can also come from the profile's own config.json, and no
-// amount of `env -u` fixes a file — so that message must point at the file.
 func TestFormatRoutingConflict_ConfigSourcedValueNamesTheFile(t *testing.T) {
 	configFile := "/Users/x/.attn-agent7/config.json"
 	err := formatRoutingConflict("agent7", "/Users/x/.attn-agent7", "22944", []routingConflict{
@@ -150,8 +140,6 @@ func TestFormatRoutingConflict_ConfigSourcedValueNamesTheFile(t *testing.T) {
 }
 
 func TestValidateProfileRouting_SymlinkedDataDirAgrees(t *testing.T) {
-	// The fence compares canonically: the same directory reached through a
-	// symlink is the same world, and refusing it would be a false positive.
 	real := filepath.Join(t.TempDir(), "world")
 	if err := os.MkdirAll(real, 0o755); err != nil {
 		t.Fatal(err)
@@ -162,9 +150,6 @@ func TestValidateProfileRouting_SymlinkedDataDirAgrees(t *testing.T) {
 	}
 
 	scopeRouting(t, "agent7", map[string]string{"ATTN_DATA_DIR": link})
-	// Stand the profile's canonical dir on the same inode by comparing against
-	// what the fence expects: only the symlink shape is under test here, so
-	// assert the comparator directly.
 	agree, err := routingValuesAgree(link, real, true)
 	if err != nil {
 		t.Fatal(err)

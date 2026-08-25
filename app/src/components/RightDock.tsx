@@ -9,14 +9,8 @@ export interface DockPanelDefinition {
   width: string;
   tone?: DockPanelTone;
   className?: string;
-  /**
-   * The panel holds a place in the dock but paints somewhere else. The dock
-   * still reserves its width, so the panels beside it sit where they should,
-   * and lays out an empty slot at the rectangle the panel would have filled —
-   * which is how a surface rendered outside the dock finds where to be. The
-   * garden does this: see GardenFrame. The ref is attached to that slot, and
-   * `children` is not rendered.
-   */
+  /** Slot the dock lays out and reserves width for while the panel paints elsewhere;
+   * `children` is not rendered. See GardenFrame. */
   detached?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }

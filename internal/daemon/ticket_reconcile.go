@@ -18,45 +18,31 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Orphaned-ticket reconciliation (docs/plans/2026-07-01-orphaned-ticket-
-// reconciliation.md). Invariant: no non-terminal ticket without a live owning
-// session. The classifier annotates; it never moves the column.
+// Design: docs/plans/2026-07-01-orphaned-ticket-reconciliation.md.
 
 const (
-	// ticketReconcileCommentPrefix marks every reconciliation comment; the
-	// sweep's claim-crash repair keys on it.
+	// The sweep's claim-crash repair keys on this prefix.
 	ticketReconcileCommentPrefix = "🩺 Reconciliation"
 
 	defaultTicketReconcileModel = "haiku"
-	// Runaway backstop, not the primary control. Measured: ~$0.07 over ~2 haiku
-	// turns, so 4 turns / $0.20 leaves comfortable margin.
+	// Measured: ~$0.07 over ~2 haiku turns, so 4 turns / $0.20 leaves margin.
 	defaultTicketReconcileMaxTurns     = 4
 	defaultTicketReconcileMaxBudgetUSD = "0.20"
 	defaultTicketReconcileTimeout      = 5 * time.Minute
 
-	// Both ends of the echoed classifier output matter: head holds stderr, tail
-	// holds the trailing `--output-format json` result event carrying the error.
 	ticketReconcileFailureDetailHead = 300
 	ticketReconcileFailureDetailTail = 700
 
-	// reconcileKind is the durable-queue job kind; unique key is the ticket id,
-	// so every trigger for one ticket coalesces onto a single record.
 	reconcileKind = "reconcile"
 
-	// ticketReconcileConcurrency is the handler's per-kind MaxConcurrent: a
-	// workspace teardown can kill several delegated sessions at once.
 	ticketReconcileConcurrency = 2
 
-	// The grace period must exceed the classifier timeout — repair must never
-	// fire on a run still in flight.
+	// Must exceed the classifier timeout: repair must never fire on a run still in flight.
 	defaultTicketReconcileSweepInterval = 5 * time.Minute
 	defaultTicketReconcileGrace         = 15 * time.Minute
 	ticketReconcileSweepClaimCap        = 3
 )
 
-// ticketReconcileVerdictSchema is enforced via --json-schema. "could not
-// determine" is deliberately NOT an assessment: machinery failure is the
-// rule-7 failure comment, kept distinguishable from a model verdict.
 const ticketReconcileVerdictSchema = `{
 	"type": "object",
 	"properties": {
@@ -78,21 +64,19 @@ const ticketReconcileVerdictSchema = `{
 	"additionalProperties": false
 }`
 
-// ticketReconcileInputs is captured synchronously at the seam: the session row
-// may be deleted moments later, so the async runner must never re-read it.
+// Captured synchronously at the seam: the session row may be deleted moments later, so
+// the async runner must never re-read it.
 type ticketReconcileInputs struct {
 	TicketID       string
 	Title          string
 	Brief          string
-	StatusAtClaim  store.TicketStatus // drop rule: a status change during the run drops the verdict
+	StatusAtClaim  store.TicketStatus
 	SessionID      string
 	Agent          string
 	TranscriptPath string
-	CloseContext   string // human framing: how the session ended, for prompt + comment
+	CloseContext   string
 }
 
-// reconcileInputsFromJob decodes the enqueue-time inputs; a missing or garbled
-// payload (including an empty ticket id) is terminal — retrying never fixes it.
 func reconcileInputsFromJob(job *jobs.Job) (ticketReconcileInputs, error) {
 	var in ticketReconcileInputs
 	if err := job.DecodePayload(&in); err != nil {
@@ -104,7 +88,6 @@ func reconcileInputsFromJob(job *jobs.Job) (ticketReconcileInputs, error) {
 	return in, nil
 }
 
-// ticketReconcileVerdict is the classifier's structured output.
 type ticketReconcileVerdict struct {
 	Assessment string `json:"assessment"`
 	Confidence string `json:"confidence"`
@@ -176,9 +159,8 @@ func ticketReconcileGrace() time.Duration {
 	return defaultTicketReconcileGrace
 }
 
-// reconcileTicketsOnSessionEnd is the single ticket seam for a dying session,
-// fed the pre-clobber runtime state. Called from both handlePTYExit and
-// dropSessionRecord — a user close fires both, and the set-if-unset claim dedupes.
+// Called from both handlePTYExit and dropSessionRecord — a user close fires both, and
+// the set-if-unset claim dedupes.
 func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	if d.store == nil {
 		return
@@ -195,8 +177,6 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	session := d.store.Get(sessionID)
 	runner := d.jobQueueRef()
 
-	// Only a spontaneous mid-flight death earns the Crashed stamp, and the
-	// durable half of that signal lives on the still-present session row.
 	intentionalClose := d.sessionCloseWasIntentional(sessionID)
 
 	for _, ticket := range tickets {
@@ -211,7 +191,7 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 			statusAtClaim = store.TicketStatusCrashed
 		}
 		if runner == nil || runner.Disabled() {
-			continue // crash stamp applied above; the sweep backstops the reconcile
+			continue
 		}
 		claimed, err := d.store.ClaimTicketReconciliation(ticket.ID, time.Now())
 		if err != nil {
@@ -219,12 +199,12 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 			continue
 		}
 		if !claimed {
-			continue // the other seam-fire or the sweep owns this death's verdict
+			continue
 		}
 
 		agentID := ticket.LastAgentID
 		cwd := ticket.Cwd
-		anchor := time.Now() // death-time: the transcript was written moments ago
+		anchor := time.Now()
 		if session != nil {
 			agentID = string(session.Agent)
 			cwd = session.Directory
@@ -249,8 +229,6 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	}
 }
 
-// reconcileCloseContext frames how the session ended, for the prompt and the
-// verdict comment; it gates nothing.
 func (d *Daemon) reconcileCloseContext(sessionID, state string, column store.TicketStatus) string {
 	how := "ended at rest"
 	if isMidFlightCrashState(state) {
@@ -266,10 +244,8 @@ func (d *Daemon) reconcileCloseContext(sessionID, state string, column store.Tic
 	return fmt.Sprintf("%s (%s, last runtime state %s) while the ticket was %s", source, how, state, column)
 }
 
-// sessionCloseWasIntentional reports an attn/user-initiated close vs a
-// spontaneous exit. Either source suffices: the in-memory forced-stop mark, or
-// the durable mark on the session row (survives the mark's 30s TTL and a
-// daemon restart, so the startup reap still sees the close for what it was).
+// Either source suffices: the durable mark on the session row survives the in-memory
+// mark's 30s TTL and a daemon restart.
 func (d *Daemon) sessionCloseWasIntentional(sessionID string) bool {
 	if d.hasForcedStopMark(sessionID) {
 		return true
@@ -277,8 +253,7 @@ func (d *Daemon) sessionCloseWasIntentional(sessionID string) bool {
 	return d.store != nil && d.store.SessionCloseIntentional(sessionID)
 }
 
-// hasForcedStopMark peeks (never consumes — stop-time classification
-// suppression owns the consume) at the mark terminateSession sets before Kill.
+// Peeks, never consumes: stop-time classification suppression owns the consume.
 func (d *Daemon) hasForcedStopMark(sessionID string) bool {
 	d.forcedStopMu.Lock()
 	defer d.forcedStopMu.Unlock()
@@ -286,10 +261,6 @@ func (d *Daemon) hasForcedStopMark(sessionID string) bool {
 	return ok && time.Since(markedAt) <= forcedStopSuppressTTL
 }
 
-// resolveReconcileTranscript locates the dead session's transcript, preferring
-// the ticket's mirrored resume id (the session row's copy dies with the row),
-// falling back to the finder's cwd + time-anchor guess. "" means rule 7:
-// comment, don't vanish.
 func (d *Daemon) resolveReconcileTranscript(agentID, sessionID, cwd string, anchor time.Time, assignee string) string {
 	driver := agentdriver.Get(agentID)
 	if driver == nil {
@@ -307,12 +278,8 @@ func (d *Daemon) resolveReconcileTranscript(agentID, sessionID, cwd string, anch
 	return strings.TrimSpace(tf.FindTranscript(sessionID, cwd, anchor))
 }
 
-// reconcileJobHandler runs the headless classifier from enqueue-time inputs.
-// Returns nil whenever a conclusion was reached — a classifier error becomes a
-// posted failure note. The only retryable error is failing to post the comment.
 func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any, retErr error) {
 	if d.ticketReconcileDone != nil {
-		// Test hook: fires on any terminal outcome.
 		defer d.ticketReconcileDone(jobSubject(job))
 	}
 	in, err := reconcileInputsFromJob(job)
@@ -321,10 +288,8 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 		d.logf("ticket reconcile %s: %v", jobSubject(job), err)
 		return nil, nil
 	}
-	// The reconciler is the last writer on a dead session's ticket, so the
-	// replant into the garden waits for it — a replant mid-classification would
-	// move the status and make the verdict drop itself. Skipped on a retryable
-	// error, which leaves the ticket where the retry expects it.
+	// The replant into the garden waits for this: a replant mid-classification would move
+	// the status and make the verdict drop itself. Skipped on a retryable error.
 	defer func() {
 		if retErr == nil {
 			d.replantStrandedTicketByID(in.TicketID)
@@ -332,7 +297,6 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	}()
 	execFn := d.ticketReconcileExec
 	if execFn == nil {
-		// Test daemons without a wired classifier; production always wires it in New().
 		d.logf("ticket reconcile %s: classifier not configured; skipping", in.TicketID)
 		return nil, nil
 	}
@@ -365,12 +329,9 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 		}
 	}
 	if failReason != "" {
-		// The comment can be dropped or fail to post; the log is the durable copy.
 		d.logf("ticket reconcile %s: %s", in.TicketID, failReason)
 	}
 
-	// Drop rule: a status change since the claim means someone acted — the
-	// verdict describes a state that no longer exists, drop silently.
 	ticket, err := d.store.GetTicket(in.TicketID)
 	if err != nil || ticket == nil {
 		d.logf("ticket reconcile %s: ticket gone before verdict landed", in.TicketID)
@@ -383,23 +344,17 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	}
 
 	comment := renderTicketReconcileComment(in, verdict, failReason)
-	// Annotate-only cross-check: never mutates the verdict, never fails the
-	// reconcile — any problem degrades to no annotation.
 	if lines := d.reconcileGroundTruth(ctx, verdict, ticket.Cwd); len(lines) > 0 {
 		comment += "\n" + strings.Join(lines, "\n")
 	}
 	if _, err := d.store.AddTicketComment(in.TicketID, store.TicketAuthorAttn, comment, time.Now()); err != nil {
-		// The only retryable path: the verdict must land.
 		return nil, fmt.Errorf("post reconcile verdict comment: %w", err)
 	}
-	// attn is an authoring identity, never an observer.
 	d.notifyTicketObservers(in.TicketID)
 	d.publishTicketFact(FactTicketCommented, in.TicketID)
 	return nil, nil
 }
 
-// truncateMiddleString keeps the first head and last tail bytes of s, marking
-// the cut — both ends of a failed run's output matter.
 func truncateMiddleString(s string, head, tail int) string {
 	if len(s) <= head+tail {
 		return s
@@ -407,8 +362,6 @@ func truncateMiddleString(s string, head, tail int) string {
 	return s[:head] + " …(truncated) " + s[len(s)-tail:]
 }
 
-// renderTicketReconcileComment renders the durable verdict or rule-7 failure
-// note; everything starts with ticketReconcileCommentPrefix.
 func renderTicketReconcileComment(in ticketReconcileInputs, verdict *ticketReconcileVerdict, failReason string) string {
 	header := fmt.Sprintf("session %s (%s) — %s.", in.SessionID, in.Agent, in.CloseContext)
 	if verdict == nil {
@@ -428,9 +381,8 @@ func renderTicketReconcileComment(in ticketReconcileInputs, verdict *ticketRecon
 	return strings.Join(lines, "\n")
 }
 
-// execTicketReconcileClassifier always spawns Claude Code headless regardless
-// of the judged agent's CLI — the one CLI with enforceable turn/dollar caps and
-// schema-enforced output.
+// Always Claude Code headless regardless of the judged agent's CLI — the one CLI with
+// enforceable turn/dollar caps and schema-enforced output.
 func (d *Daemon) execTicketReconcileClassifier(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error) {
 	slice, err := transcript.ExtractConversationSlice(in.TranscriptPath, transcript.DefaultSliceOptions())
 	if err != nil {
@@ -499,9 +451,6 @@ Report via structured output:
 		in.TicketID, in.Title, in.Brief, in.StatusAtClaim, in.CloseContext, slice.Render())
 }
 
-// runTicketReconcileSweep backstops what the seam cannot cover: pre-feature
-// orphans and a daemon death mid-seam (claim landed, enqueue lost). No boot
-// pass — startup recovery routes dead-worker sessions through the seam itself.
 func (d *Daemon) runTicketReconcileSweep() {
 	ticker := time.NewTicker(ticketReconcileSweepInterval())
 	defer ticker.Stop()
@@ -521,7 +470,7 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	}
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
-		return // no durable runner to enqueue onto; nothing the sweep can do
+		return
 	}
 	tickets, err := d.store.ListTickets(store.TicketListFilter{})
 	if err != nil {
@@ -534,7 +483,6 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			continue
 		}
 		assignee := strings.TrimSpace(ticket.Assignee)
-		// Only session-bound tickets have an owning session to be orphaned by.
 		if assignee == "" || assignee == store.TicketAuthorYou {
 			continue
 		}
@@ -546,8 +494,6 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			d.clearOrphanFirstSeen(ticket.ID)
 			continue
 		}
-		// The durable job record is the "already triggered" ledger: a job in ANY
-		// state means the queue owns this ticket from here.
 		if existing, err := runner.GetByKey(reconcileKind, ticket.ID); err != nil {
 			d.logf("ticket reconcile sweep: lookup job for %s: %v", ticket.ID, err)
 			continue
@@ -560,7 +506,7 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			continue
 		}
 		if claims >= ticketReconcileSweepClaimCap {
-			continue // next pass picks it up
+			continue
 		}
 		claims++
 		d.clearOrphanFirstSeen(ticket.ID)
@@ -568,10 +514,9 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			d.logf("ticket reconcile sweep: claim %s: %v", ticket.ID, err)
 		}
 
-		// The session row may or may not still exist; use the freshest source.
 		agentID := ticket.LastAgentID
 		cwd := ticket.Cwd
-		anchor := ticket.CreatedAt // delegation ≈ spawn; widens the codex window safely
+		anchor := ticket.CreatedAt
 		if session := d.store.Get(assignee); session != nil {
 			agentID = string(session.Agent)
 			cwd = session.Directory
@@ -597,10 +542,8 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	}
 }
 
-// reconcileSessionLive: no store row => dead; row + backend runtime => the
-// liveness probe decides; row + NO backend runtime => LIVE (conservative:
-// CLI-registered and remote sessions never have a daemon PTY, and
-// exited-in-place already ran the seam at exit).
+// A row with NO backend runtime reads as LIVE, conservatively: CLI-registered and remote
+// sessions never have a daemon PTY.
 func (d *Daemon) reconcileSessionLive(sessionID string) bool {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false

@@ -15,9 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// automationReviewWithdrawnMessage is the user-facing wording for a
-// withdrawal cancellation, kept separate from store.AutomationCancelReasonReviewWithdrawn
-// (the machine-readable cancel_reason) since the two serve different readers.
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
 
 var errAutomationReviewWithdrawn = errors.New(automationReviewWithdrawnMessage)
@@ -93,9 +90,6 @@ func pullRequestAutomationInput(host, owner, repository string, snapshot *github
 	}
 }
 
-// observeGitHubReviewRequests consumes one host's already-refreshed PR snapshot.
-// It does not poll GitHub itself: a candidate edge or changed head performs the
-// focused PR GET needed to pin the immutable review input.
 func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, observedAt time.Time) {
 	definitions, err := d.store.ListAutomationDefinitions()
 	if err != nil {
@@ -203,11 +197,6 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 				d.logf("automation GitHub observation claim %s: %v", candidate.SubjectKey, err)
 				continue
 			}
-			// A run now exists for this definition (freshly claimed, or the
-			// idempotent dedup of an already-claimed one) whether or not
-			// delivery below succeeds; broadcast so a WS client watching this
-			// definition's runs sees it appear without waiting on the
-			// delivery outcome.
 			d.broadcastAutomationsChanged(definition.ID)
 			d.automationMu.Lock()
 			current, loadErr := d.store.GetAutomationRun(run.ID)
@@ -235,9 +224,7 @@ func (d *Daemon) reconcileAutomationReviewRequests(definitionID, host string, su
 func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
-	// Finish any cancellation made durable by an earlier observation before a
-	// fresh provider snapshot can reactivate the edge. This closes the daemon-exit
-	// window between recording withdrawal and stopping a partially launched PTY.
+	// Finish an earlier observation's durable cancellation before a fresh snapshot can reactivate the edge: closes the daemon-exit window between recording a withdrawal and stopping the partially launched PTY.
 	if err := d.cancelWithdrawnAutomationRuns(definitionID, host); err != nil {
 		return nil, err
 	}
@@ -271,14 +258,9 @@ func (d *Daemon) cancelWithdrawnAutomationRun(run *store.AutomationRun) error {
 	if ticketErr != nil {
 		return ticketErr
 	}
-	// Continuation cycles reuse the delivered origin's session. Withdrawal fails
-	// that occurrence, but must not tear down a reviewer already handed off to the
-	// ordinary ticket/session lifecycle.
+	// Continuation cycles reuse the delivered origin's session: a withdrawal must not tear down a reviewer already handed to the ordinary session lifecycle.
 	if ticket != nil && ticket.AutomationRunID == run.ID {
 		if d.hasAutomationSession(run.SessionID) {
-			// Keep the durable run, ticket, workspace, pane, and worktree as evidence,
-			// but stop and forget the unrequested runtime. A later initial-cycle
-			// re-request may safely recreate the same reserved session ID.
 			if err := d.terminateSessionChecked(run.SessionID, syscall.SIGTERM); err != nil {
 				return fmt.Errorf("stop withdrawn automation reviewer: %w", err)
 			}

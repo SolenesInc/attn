@@ -56,20 +56,6 @@ func parseBrowseInput(input string) (directory string, prefix string, homePath s
 	return filepath.Clean(directory), strings.ToLower(expanded[lastSlash+1:]), homePath, nil
 }
 
-// listDirectoryEntries lists one directory. Directories always come back; a
-// non-empty extensions filter (dotless, lowercased — see normalizeExtensions)
-// adds the regular files carrying those extensions, which is what turns the
-// session picker's directory browser into the markdown opener's path mode.
-// Symlinks and other irregular entries are dropped for files, matching
-// fs_index: only a regular file is openable.
-//
-// .git is never listed, the same rule fs_index applies (skippedDirName), so a
-// dot-directory holding real documents stays reachable both ways while git's
-// object database is noise in neither.
-//
-// Directories sort before files so a listing reads as "where you can go, then
-// what you can open"; within each group the existing rule holds — entries whose
-// name starts with the typed prefix first, then alphabetical.
 func listDirectoryEntries(dirToQuery string, prefix string, extensions []string) ([]protocol.DirectoryEntry, error) {
 	entries, err := os.ReadDir(dirToQuery)
 	if err != nil {
@@ -161,9 +147,7 @@ func inspectPickerPath(input string) (*protocol.PathInspection, error) {
 }
 
 func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseDirectoryMessage) {
-	// Directory names leak only the shape of the tree, which this command has
-	// always been willing to hand any local client. File names are the user's
-	// documents, so the moment a request asks for them it needs the same gate
+	// File names are the user's documents, so a request asking for them needs the same gate
 	// every fs_* command applies to an arbitrary root (see resolveFsRoot).
 	if len(msg.Extensions) > 0 && !client.isTrustedAppClient() {
 		d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{

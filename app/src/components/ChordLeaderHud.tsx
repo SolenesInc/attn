@@ -1,7 +1,3 @@
-// app/src/components/ChordLeaderHud.tsx
-// A small heads-up indicator shown while a leader key is armed and attn is
-// waiting for the follow key (e.g. after ⌘K). Presentation only — it never
-// listens for keys; it just subscribes to the shared chord state.
 
 import { useSyncExternalStore } from 'react';
 import { subscribeChord, getChordSnapshot } from '../shortcuts/chordState';

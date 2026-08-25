@@ -1,4 +1,3 @@
-// app/src/shortcuts/useShortcut.ts
 import { useEffect, useRef } from 'react';
 import { SHORTCUTS, ShortcutId, matchesShortcut, isChord } from './registry';
 import { resolvedShortcutEntries } from './resolver';
@@ -8,7 +7,6 @@ import { matchChordLeader } from './chordDispatch';
 type Handler = () => void;
 const NATIVE_SHORTCUT_EVENT = 'attn:native-shortcut';
 
-// Global registry of active handlers
 const handlers = new Map<ShortcutId, Set<Handler>>();
 
 export function triggerShortcut(id: ShortcutId): boolean {
@@ -28,16 +26,13 @@ export function hasHandler(id: ShortcutId): boolean {
   return !!set && set.size > 0;
 }
 
-// While the shortcut editor is capturing a keystroke, the global dispatcher
-// must stand down so recording a combo (even an always-enabled one like ⌘Q)
-// never fires its action. Registration order can't be relied on, so the
-// dispatcher checks this flag directly.
+// While the shortcut editor is capturing a keystroke the global dispatcher must stand down, so
+// recording a combo never fires its action. Registration order can't be relied on.
 let captureSuspended = false;
 export function setShortcutCaptureSuspended(suspended: boolean): void {
   captureSuspended = suspended;
 }
 
-// Single global listener (installed once)
 let listenerInstalled = false;
 
 function installGlobalListener() {
@@ -47,9 +42,8 @@ function installGlobalListener() {
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (captureSuspended) return;
 
-    // A pending leader owns the next keystroke entirely: fire its chord, refresh
-    // a re-press, or cancel — but always consume so it can't fall through to a
-    // single combo or leak into the terminal PTY.
+    // A pending leader owns the next keystroke entirely: always consume, so it can't fall through
+    // to a single combo or leak into the terminal PTY.
     const pendingThen = resolvePendingThen(e);
     if (pendingThen.kind !== 'none') {
       e.preventDefault();
@@ -60,8 +54,6 @@ function installGlobalListener() {
 
     const editableTarget = isNonTerminalEditableTarget(e.target);
     const terminalTarget = isTerminalTarget(e.target);
-    // Iterate resolved bindings (defaults merged with user overrides) so rebinds
-    // and unbinds take effect without reinstalling this listener.
     for (const [id, def] of resolvedShortcutEntries()) {
       if (id === 'terminal.close' && !terminalTarget) {
         continue;
@@ -79,18 +71,15 @@ function installGlobalListener() {
             return;
           }
           e.preventDefault();
-          e.stopPropagation(); // Prevent event from reaching the terminal.
+          e.stopPropagation();
           triggerShortcut(id);
           return;
         }
       }
     }
 
-    // No single combo matched — arm a chord if this keystroke is a bound leader.
-    // A bound leader is always consumed (never leaks to the PTY) even when no
-    // follow action currently has a handler; it just arms nothing in that case.
-    // Skip in non-terminal editable targets so a leader can't swallow a
-    // keystroke meant for an input/textarea.
+    // A bound leader is always consumed even with no handler, except in non-terminal editable
+    // targets, where it would swallow a keystroke meant for an input.
     if (!editableTarget) {
       const chord = matchChordLeader(e);
       if (chord) {
@@ -128,10 +117,6 @@ function isNonTerminalEditableTarget(target: EventTarget | null): boolean {
   return target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null;
 }
 
-/**
- * Register a handler for a keyboard shortcut.
- * Multiple components can register for the same shortcut.
- */
 export function useShortcut(id: ShortcutId, handler: Handler, enabled = true): void {
   const handlerRef = useRef(handler);
   handlerRef.current = handler;

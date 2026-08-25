@@ -1,6 +1,5 @@
-// Editor-facing metadata for every shortcut: label, category, and governance.
-// Key combos live in registry.ts. The `Record<ShortcutId, ...>` shape keeps this
-// map exhaustive — a registry entry without metadata fails to compile.
+// Editor-facing metadata for every shortcut; key combos live in registry.ts. The
+// `Record<ShortcutId, ...>` shape keeps this map exhaustive.
 
 import { ShortcutId } from './registry';
 
@@ -13,17 +12,10 @@ export interface ShortcutMeta {
   protected?: boolean;
   /** Terse dock-chip text; falls back to `label`, so any shortcut is dock-eligible. */
   dockLabel?: string;
-  /**
-   * The handler only exists while a terminal workspace is on screen. An
-   * availability fact, not a focus claim; set only on ids actually gated that
-   * way, never inferred from the `terminal.` prefix.
-   */
+  /** An availability fact, not a focus claim; never inferred from the `terminal.` prefix. */
   requiresTerminal?: boolean;
-  /**
-   * A native menu item in `app_menu` (src-tauri/src/lib.rs) delivers the
-   * keystroke because AppKit consumes it before the WebView. The editor shows
-   * the key as fixed: a rebind here would be recorded and never fire.
-   */
+  /** A native menu item in `app_menu` (src-tauri/src/lib.rs) delivers the keystroke
+   * because AppKit consumes it first, so a rebind here would never fire. */
   nativeDelivery?: boolean;
 }
 
@@ -35,7 +27,6 @@ export const SHORTCUT_CATEGORY_LABELS: Record<ShortcutCategory, string> = {
   app: 'App',
 };
 
-/** Render order for categories in the editor. */
 export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
   'sessions',
   'panes',
@@ -45,7 +36,6 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
 ];
 
 export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
-  // Workspaces & Sessions
   'session.new': { label: 'New session in this workspace', category: 'sessions' },
   'session.newHorizontal': { label: 'New session, split sideways', category: 'sessions', dockLabel: 'session h' },
   'session.newWorkspace': { label: 'New workspace', category: 'sessions' },
@@ -69,7 +59,6 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'workspace.select8': { label: 'Jump to workspace 8', category: 'sessions' },
   'workspace.select9': { label: 'Jump to workspace 9', category: 'sessions' },
 
-  // Panes & Terminals
   'terminal.open': { label: 'Focus utility terminal', category: 'panes', requiresTerminal: true },
   'terminal.collapse': { label: 'Collapse utility terminal', category: 'panes' },
   'terminal.splitVertical': { label: 'Split pane down', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
@@ -83,15 +72,12 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'terminal.focusDown': { label: 'Move focus down', category: 'panes', requiresTerminal: true },
   'terminal.find': { label: 'Find in terminal', category: 'panes', requiresTerminal: true },
 
-  // Markdown & Annotations
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },
   'terminal.sendAnnotations': { label: 'Send terminal annotations to session', category: 'markdown', dockLabel: 'send marks', requiresTerminal: true },
 
-  // Review & Git
   'dock.attention': { label: 'PRs drawer', category: 'review', dockLabel: 'PRs' },
   'session.refreshPRs': { label: 'Refresh PRs', category: 'review' },
 
-  // App
   'ui.actionMenu': { label: 'Action menu', category: 'app' },
   'ui.openSettings': { label: 'Settings', category: 'app', protected: true },
   'ui.showShortcuts': { label: 'Keyboard shortcuts', category: 'app', protected: true },
@@ -101,8 +87,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'file.open': { label: 'Open a markdown file', category: 'app' },
   'notebook.openTile': { label: 'Open Editor tile', category: 'app' },
   'notebook.openFullscreen': { label: 'Open Notebook fullscreen', category: 'app' },
-  // The id outlives the surface it was named for: it keys the user's saved
-  // rebindings, and the garden replaced the board behind it.
+  // The id outlives the surface it was named for: it keys the user's saved rebindings.
   'board.open': { label: 'Open the garden', category: 'app' },
   'app.quit': { label: 'Quit attn', category: 'app', protected: true },
 };
@@ -111,12 +96,10 @@ export function isProtectedShortcut(id: ShortcutId): boolean {
   return SHORTCUT_META[id].protected === true;
 }
 
-/** Whether the key is owned by a native menu item and so cannot be rebound here. */
 export function isNativeDeliveryShortcut(id: ShortcutId): boolean {
   return SHORTCUT_META[id].nativeDelivery === true;
 }
 
-/** Terse text shown on a dock chip; falls back to the full editor label. */
 export function dockShortcutLabel(id: ShortcutId): string {
   return SHORTCUT_META[id].dockLabel ?? SHORTCUT_META[id].label;
 }

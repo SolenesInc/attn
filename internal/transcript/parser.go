@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// readJSONLLines iterates JSONL lines without bufio.Scanner token limits.
-// It returns an error only on underlying I/O errors.
+// bufio.Scanner's token size limit would truncate long transcript lines.
 func readJSONLLines(r io.Reader, fn func(line []byte)) error {
 	br := bufio.NewReader(r)
 	for {
@@ -32,20 +31,18 @@ func readJSONLLines(r io.Reader, fn func(line []byte)) error {
 	}
 }
 
-// contentBlock represents a single content block in the message
 type contentBlock struct {
 	Type string `json:"type"`
-	Text string `json:"text"` // For "text" type blocks
+	Text string `json:"text"`
 }
 
-// transcriptEntry represents a single entry in the JSONL transcript
-// Claude Code uses content as an array of content blocks, not a string
+// Claude Code writes message.content as an array of content blocks, not a string.
 type transcriptEntry struct {
 	Type    string `json:"type"`
 	UUID    string `json:"uuid"`
 	Message struct {
 		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"` // Can be string or array
+		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
 
@@ -114,8 +111,6 @@ type AssistantTurn struct {
 	UUID      string
 }
 
-// ExtractLastAssistantMessage reads a JSONL transcript and returns
-// the last N characters of the last assistant message.
 func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -132,7 +127,6 @@ func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
 		return "", err
 	}
 
-	// Truncate to last maxChars
 	if len(lastAssistantContent) > maxChars {
 		lastAssistantContent = lastAssistantContent[len(lastAssistantContent)-maxChars:]
 	}
@@ -140,18 +134,10 @@ func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
 	return lastAssistantContent, nil
 }
 
-// ExtractLastAssistantMessageAfterLastUser reads a JSONL transcript and returns
-// the last assistant message only if it appears after the latest user message.
-// This prevents returning a stale prior-turn assistant message when a new turn
-// has started but the assistant response has not been flushed yet.
 func ExtractLastAssistantMessageAfterLastUser(path string, maxChars int) (string, error) {
 	return ExtractLastAssistantMessageAfterLastUserSince(path, maxChars, time.Time{})
 }
 
-// ExtractLastAssistantMessageAfterLastUserSince reads a JSONL transcript and returns
-// the last assistant message only if it appears after the latest user message.
-// If minAssistantTimestamp is non-zero, assistant messages older than that are
-// ignored (treated as stale).
 func ExtractLastAssistantMessageAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (string, error) {
 	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, maxChars, minAssistantTimestamp)
 	if err != nil {
@@ -160,8 +146,6 @@ func ExtractLastAssistantMessageAfterLastUserSince(path string, maxChars int, mi
 	return turn.Content, nil
 }
 
-// ExtractLastAssistantTurnAfterLastUserSince reads a JSONL transcript and returns
-// metadata for the last assistant message after the latest user message.
 func ExtractLastAssistantTurnAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (AssistantTurn, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -194,7 +178,6 @@ func ExtractLastAssistantTurnAfterLastUserSince(path string, maxChars int, minAs
 		return AssistantTurn{}, err
 	}
 
-	// Latest user has no subsequent assistant yet.
 	if lastUserSeq > 0 && lastAssistantSeq <= lastUserSeq {
 		return AssistantTurn{}, nil
 	}
@@ -241,11 +224,9 @@ type CopilotToolLifecycle struct {
 	ToolName   string
 }
 
-// ExtractAssistantContent extracts assistant content from Claude Code, Codex, or Copilot JSONL lines.
 func ExtractAssistantContent(line []byte) string {
 	var entry transcriptEntry
 	if err := json.Unmarshal(line, &entry); err == nil {
-		// Check if this is an assistant message (either by type or message.role)
 		isAssistant := entry.Type == "assistant" || entry.Message.Role == "assistant"
 		if isAssistant {
 			content := extractTextContent(entry.Message.Content)
@@ -292,8 +273,6 @@ func ExtractAssistantContent(line []byte) string {
 	return ""
 }
 
-// ExtractCopilotToolLifecycle extracts Copilot tool lifecycle events from JSONL lines.
-// It returns start/complete events with the associated toolCallId and toolName (for starts).
 func ExtractCopilotToolLifecycle(line []byte) (CopilotToolLifecycle, bool) {
 	var evt struct {
 		Type string `json:"type"`
@@ -326,65 +305,30 @@ func ExtractCopilotToolLifecycle(line []byte) (CopilotToolLifecycle, bool) {
 	}
 }
 
-// Turn aborts.
-//
-// No agent reports a turn the user halted. Measured on claude 2.1.220 with all
-// 31 of its hook events wired to a logger, on codex 0.146.0 with attn's own
-// trusted-hash hook overrides, and on copilot 1.0.77: ESC mid-turn produces no
-// Stop, no StopFailure, no Notification — nothing, for as long as you care to
-// wait. All three write the abort to their transcript in the same second, which
-// is the only place it can be read from.
-//
-// Nor can the title heartbeat stand in for the transcript. Measured on claude
-// 2.1.220: halting a turn paints `✳ <task description>` 60ms later and then
-// nothing for as long as you watch; a 60-second foreground `sleep` paints
-// `✳ <task description>` partway through and then nothing for the remaining 64
-// seconds. A halted turn and a blocking tool call are the same frames in the same
-// order, so no silence threshold separates them — which is why the stale window
-// is sized to the longest tool call rather than to the halt it cannot see.
+// No agent reports a turn the user halted: measured on claude 2.1.220 (all 31 hook events),
+// codex 0.146.0 and copilot 1.0.77, ESC writes the abort only to the transcript.
 const (
-	// The two markers claude writes. Matched exactly rather than by prefix: a
-	// user is free to type the text.
+	// Matched exactly: a user is free to type the text.
 	claudeInterruptMarker           = "[Request interrupted by user]"
 	claudeInterruptMarkerForToolUse = "[Request interrupted by user for tool use]"
-	// The reason copilot gives when the user halts, as against the other ways it
-	// abandons a turn.
-	copilotUserAbortReason = "user_initiated"
-	// The one codex reason that is a user halt. The enum in the 0.146.0 binary
-	// also carries `replaced`, `review_ended`, and `budget_limited`, none of which
-	// are: `replaced` means another turn took over and the session is working
-	// again a moment later.
+	copilotUserAbortReason          = "user_initiated"
+	// The 0.146.0 enum also carries `replaced`, `review_ended`, and `budget_limited`,
+	// none of which are halts: after `replaced` the session works again a moment later.
 	codexUserAbortReason = "interrupted"
 )
 
-// TurnAbort describes a transcript line that ended a turn before it finished.
 type TurnAbort struct {
-	// Reason is what the agent called it, for the diagnosis.
 	Reason string
 
-	// UserHalt: the user did this. Only a user halt settles a session. The other
-	// ways a turn can be abandoned are the harness's own business, and some of
-	// them are followed immediately by another turn.
+	// Only a user halt settles a session; the other abandonments are the harness's
+	// business and some are followed by another turn.
 	UserHalt bool
 
-	// At is the line's own timestamp, zero when the line carries none. It is what
-	// separates a halt that just happened from one being re-read out of history —
-	// which the watcher does routinely, because it rewinds into the file at
-	// discovery and starts over at zero when a transcript is rewritten.
 	At time.Time
 }
 
-// ClaudeTurnAborted reports whether a Claude transcript line records the user
-// halting the turn.
-//
-// Two shapes, because claude writes two. `interruptedMessageId` is a dedicated
-// field naming the API message ESC cancelled, and nothing else produces it — so
-// it is believed on its own, and a release that reworded the marker would still
-// be caught. Halting during a tool-use prompt writes the marker with no such
-// field, so the marker is honored too, but only in the exact shape claude emits
-// it: a lone text block, in an entry carrying none of the fields that mark a
-// prompt the user submitted. A user who types or pastes the marker gets string
-// content and a promptSource, and must not settle their own session.
+// `interruptedMessageId` is believed on its own; the tool-use marker is honored solely in the
+// exact shape claude emits it, so a user who types it cannot settle their own session.
 func ClaudeTurnAborted(line []byte) (TurnAbort, bool) {
 	var entry struct {
 		Type                 string          `json:"type"`
@@ -425,8 +369,6 @@ func ClaudeTurnAborted(line []byte) (TurnAbort, bool) {
 	return abort, true
 }
 
-// claudeInterruptMarkerBlock matches the content shape claude writes for an
-// interrupt: an array holding exactly one text block that is exactly a marker.
 // The array is required — a marker the user typed arrives as a plain string.
 func claudeInterruptMarkerBlock(raw json.RawMessage) (string, bool) {
 	trimmed := bytes.TrimSpace(raw)
@@ -448,12 +390,6 @@ func claudeInterruptMarkerBlock(raw json.RawMessage) (string, bool) {
 	}
 }
 
-// CodexTurnAborted reports whether a Codex transcript line is a turn_aborted
-// event.
-//
-// Only `interrupted` is reported as a halt. The event itself means the turn ended
-// early, but codex also emits it when one turn replaces another — where the
-// session is working again immediately, and settling it would be wrong.
 func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 	var envelope struct {
 		Type      string          `json:"type"`
@@ -481,12 +417,8 @@ func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 	}, true
 }
 
-// CopilotTurnAborted reports whether a Copilot transcript line is an abort.
-//
-// Copilot writes a bare top-level `abort` event and — unlike its normal path —
-// no `assistant.turn_end`, so every abort has to be seen whether or not the user
-// caused it: the watcher's own turn bracket would otherwise stay open for the
-// rest of the session, pinning it working. Only `user_initiated` is a halt.
+// Copilot writes a bare top-level `abort` event and no `assistant.turn_end`, so every abort
+// must be seen, or the watcher's turn bracket stays open and pins the session working.
 func CopilotTurnAborted(line []byte) (TurnAbort, bool) {
 	var entry struct {
 		Type      string `json:"type"`
@@ -521,21 +453,16 @@ func parseTranscriptTime(raw string) time.Time {
 	return ts
 }
 
-// extractTextContent extracts text from the content field which can be:
-// - A string (simple format)
-// - An array of content blocks (Claude Code format)
 func extractTextContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}
 
-	// Try as string first (simple format)
 	var strContent string
 	if err := json.Unmarshal(raw, &strContent); err == nil && strContent != "" {
 		return strContent
 	}
 
-	// Try as array of content blocks (Claude Code format)
 	var blocks []contentBlock
 	if err := json.Unmarshal(raw, &blocks); err == nil {
 		var texts []string

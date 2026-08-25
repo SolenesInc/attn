@@ -42,12 +42,7 @@ The area-map format is being implemented.
 `
 )
 
-// installTestCompactQueue replaces the daemon's default disabled runner with an
-// enabled one over a temp root, registers the real compact_context executor (so
-// the executor's load/threshold/validate/commit-under-CommitGuard logic runs for
-// real), and starts the worker. The fake compaction execution is injected via
-// d.workspaceContextCompactionExecution so no real LLM is spawned. A fast poll
-// interval avoids real-time waits.
+// d.workspaceContextCompactionExecution is what keeps a real LLM out of it.
 func installTestCompactQueue(t *testing.T, d *Daemon) {
 	t.Helper()
 	runner := jobs.New(jobs.Options{
@@ -176,10 +171,6 @@ Other.
 	}
 }
 
-// TestWorkspaceContextCompactionAppliesAndLeavesExistingCheckoutsStale exercises
-// the shared execute+validate+apply path (inline) end to end: the canonical is
-// compacted, both checkouts are left untouched (clean stays stale, modified keeps
-// its local edit), a backup is written, and rollback restores the source.
 func TestWorkspaceContextCompactionAppliesAndLeavesExistingCheckoutsStale(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-clean", "workspace-1")
@@ -276,8 +267,6 @@ func TestWorkspaceContextCompactionAppliesAndLeavesExistingCheckoutsStale(t *tes
 	}
 }
 
-// TestManualWorkspaceContextCompactionCancelsPendingRun proves the manual command
-// drops a pending debounced runner task and returns a result synchronously.
 func TestManualWorkspaceContextCompactionCancelsPendingRun(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
@@ -290,7 +279,6 @@ func TestManualWorkspaceContextCompactionCancelsPendingRun(t *testing.T) {
 	if _, _, err := d.store.UpdateWorkspaceContext("workspace-1", keeperSource, "session-1", 0); err != nil {
 		t.Fatalf("seed context: %v", err)
 	}
-	// Enqueue a far-future debounced task that must be cancelled by the manual run.
 	if _, err := d.jobQueue.Enqueue(compactContextKind, jobs.EnqueueOptions{
 		UniqueKey: "workspace-1", Delay: time.Hour,
 	}); err != nil {
@@ -308,17 +296,11 @@ func TestManualWorkspaceContextCompactionCancelsPendingRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get pending: %v", err)
 	}
-	// Cancel does not delete the record, but the manual run committed revision 2;
-	// the pending record stays queued for the far-future debounce and must not have
-	// run (it would conflict on the stale revision). The deterministic seam here is
-	// that the manual command returned a committed result synchronously.
 	if pending != nil && pending.State == jobs.StateRunning {
 		t.Fatalf("pending task still running after manual cancel: %+v", pending)
 	}
 }
 
-// TestWorkspaceContextCompactionRejectsStaleRevision proves the revision-guarded
-// apply rejects a candidate built from a now-stale source revision.
 func TestWorkspaceContextCompactionRejectsStaleRevision(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
@@ -355,9 +337,6 @@ func TestWorkspaceContextCompactionRejectsStaleRevision(t *testing.T) {
 	}
 }
 
-// TestCompactContextTimeoutAndCancellationProtectContext proves the runner-owned
-// timeout and a runner.Cancel both abort a stuck compaction without writing the
-// context.
 func TestCompactContextTimeoutAndCancellationProtectContext(t *testing.T) {
 	for name, stop := range map[string]func(*testing.T, *Daemon){
 		"timeout": func(*testing.T, *Daemon) {},
@@ -394,8 +373,6 @@ func TestCompactContextTimeoutAndCancellationProtectContext(t *testing.T) {
 				}
 				<-started
 				stop(t, d)
-				// Past the run timeout on the bubble clock: the timeout case needs it to
-				// elapse, the cancellation case has already aborted and only settles.
 				time.Sleep(2 * d.keeperCompactTimeout)
 				synctest.Wait()
 				current, err := d.store.GetWorkspaceContext("workspace-1")
@@ -417,9 +394,6 @@ func TestCompactContextTimeoutAndCancellationProtectContext(t *testing.T) {
 	}
 }
 
-// TestCompactContextCancellationWaitsForAdmittedCommit proves the CommitGuard
-// fence: a Cancel that arrives after the executor has entered its commit waits
-// for the durable write to finish untorn.
 func TestCompactContextCancellationWaitsForAdmittedCommit(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -449,8 +423,6 @@ func TestCompactContextCancellationWaitsForAdmittedCommit(t *testing.T) {
 			d.jobQueue.Cancel(cancelID)
 			close(cancelDone)
 		}()
-		// The bubble settles with the commit still held, so the cancel is parked on the
-		// fence — not merely slower than a tolerance window.
 		synctest.Wait()
 		select {
 		case <-cancelDone:
@@ -469,10 +441,6 @@ func TestCompactContextCancellationWaitsForAdmittedCommit(t *testing.T) {
 	})
 }
 
-// TestWorkspaceDeletionCancelsCompactionBeforeRemovingContext proves the
-// cancel-then-remove ordering: dissociateSessionFromWorkspace cancels the
-// in-flight compaction (blocking until it exits) before removing the workspace
-// row, so no torn compaction can write a deleted workspace's context.
 func TestWorkspaceDeletionCancelsCompactionBeforeRemovingContext(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
@@ -504,9 +472,6 @@ func TestWorkspaceDeletionCancelsCompactionBeforeRemovingContext(t *testing.T) {
 	}
 }
 
-// TestWorkspaceContextCompactionEnqueuesOnThresholdViaTrigger proves the
-// context-write trigger enqueues a coalesced compaction once the doc crosses the
-// size threshold, and that the runner runs it to a committed revision.
 func TestWorkspaceContextCompactionEnqueuesOnThresholdViaTrigger(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -538,7 +503,6 @@ func TestWorkspaceContextCompactionEnqueuesOnThresholdViaTrigger(t *testing.T) {
 			t.Fatalf("publish context: changed=%v err=%v", changed, err)
 		}
 
-		// The debounce is a real delay the runner honors; run it out on the bubble clock.
 		time.Sleep(2 * d.keeperCompactDebounce)
 		synctest.Wait()
 		select {
@@ -559,15 +523,11 @@ func TestWorkspaceContextCompactionEnqueuesOnThresholdViaTrigger(t *testing.T) {
 	})
 }
 
-// TestWorkspaceContextCompactionInlineFallbackWhenQueueDisabled proves that with
-// a disabled runner (no notebook root) the trigger compacts inline/synchronously
-// so compaction still happens.
 func TestWorkspaceContextCompactionInlineFallbackWhenQueueDisabled(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
 	d.store.SetSetting(SettingKeeperCompact, `{"agent":"codex","model":"gpt-test"}`)
 	d.keeperCompactThreshold = 1
-	// NewForTesting installs a disabled runner; keep it.
 	if !d.jobQueue.Disabled() {
 		t.Fatal("expected disabled runner in test")
 	}
@@ -580,7 +540,6 @@ func TestWorkspaceContextCompactionInlineFallbackWhenQueueDisabled(t *testing.T)
 	if err != nil {
 		t.Fatalf("get canonical: %v", err)
 	}
-	// The trigger runs the inline fallback synchronously.
 	d.enqueueWorkspaceContextCompaction(canonical)
 
 	current, err := d.store.GetWorkspaceContext("workspace-1")
@@ -592,16 +551,12 @@ func TestWorkspaceContextCompactionInlineFallbackWhenQueueDisabled(t *testing.T)
 	}
 }
 
-// TestWorkspaceContextCompactionReChecksThresholdAfterDebounce proves the run-time
-// size re-check: a doc edited below the threshold during the debounce window is a
-// no-op success (no LLM pass, no revision bump).
 func TestWorkspaceContextCompactionReChecksThresholdAfterDebounce(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
 		setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
 		d.store.SetSetting(SettingKeeperCompact, `{"agent":"codex","model":"gpt-test"}`)
-		// Threshold far above the seeded doc size so the run-time re-check no-ops.
 		d.keeperCompactThreshold = 1 << 20
 		executed := false
 		d.workspaceContextCompactionExecution = func(
@@ -614,8 +569,6 @@ func TestWorkspaceContextCompactionReChecksThresholdAfterDebounce(t *testing.T) 
 		if _, _, err := d.store.UpdateWorkspaceContext("workspace-1", keeperSource, "session-1", 0); err != nil {
 			t.Fatalf("seed context: %v", err)
 		}
-		// Enqueue directly (the trigger would gate it, but a pre-debounce enqueue may
-		// have outlived a shrink); the executor must re-check and no-op.
 		if _, err := d.jobQueue.Enqueue(compactContextKind, jobs.EnqueueOptions{UniqueKey: "workspace-1"}); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
@@ -633,18 +586,12 @@ func TestWorkspaceContextCompactionReChecksThresholdAfterDebounce(t *testing.T) 
 	})
 }
 
-// TestWorkspaceTeardownDoesNotPanicBeforeTheJobQueueExists proves the runtime
-// teardown sites tolerate a nil jobQueue. Production New() leaves
-// jobQueue nil until startJobQueue() runs late in Start(), but the
-// websocket server already accepts connections by then, so an UnregisterWorkspace
-// / session-close / move-out arriving in that window reaches these sites with a
-// nil runner. An unconditional d.jobQueue.Cancel(...) would nil-deref on the
-// first line of Runner.Cancel (it reads r.disabled) and crash the daemon.
+// jobQueue stays nil until startJobQueue() runs late in Start(), while the websocket
+// server already accepts connections, so teardown in that window sees a nil runner.
 func TestWorkspaceTeardownDoesNotPanicBeforeTheJobQueueExists(t *testing.T) {
 	t.Run("dissociateSessionFromWorkspace", func(t *testing.T) {
 		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 		setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
-		// Mimic production New(): the runner is not constructed yet.
 		d.jobQueue = nil
 
 		d.dissociateSessionFromWorkspace("session-1")
@@ -669,7 +616,6 @@ func TestWorkspaceTeardownDoesNotPanicBeforeTheJobQueueExists(t *testing.T) {
 	t.Run("unregisterWorkspaceIfEmpty", func(t *testing.T) {
 		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 		setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
-		// The session must be gone for the workspace to be considered empty.
 		d.workspaces.dissociateSession("session-1")
 		d.store.Remove("session-1")
 		d.jobQueue = nil
@@ -682,12 +628,6 @@ func TestWorkspaceTeardownDoesNotPanicBeforeTheJobQueueExists(t *testing.T) {
 	})
 }
 
-// TestManualWorkspaceContextCompactionAppliesTimeout proves the manual command
-// path (compactWorkspaceContextForSession -> runWorkspaceContextCompactionInline)
-// bounds the agent run with the configured per-run timeout. The original code
-// funneled every run through a WithTimeout wrapper; the inline manual path must
-// keep that bound so a hung/runaway agent cannot block the synchronous IPC
-// response indefinitely.
 func TestManualWorkspaceContextCompactionAppliesTimeout(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -703,8 +643,6 @@ func TestManualWorkspaceContextCompactionAppliesTimeout(t *testing.T) {
 		) (keeperCompactExecution, error) {
 			_, hasDeadline := ctx.Deadline()
 			gotDeadline <- hasDeadline
-			// A runaway agent: block until the context aborts. With a deadline the
-			// manual command returns promptly; without one it would hang here forever.
 			<-ctx.Done()
 			return keeperCompactExecution{}, ctx.Err()
 		}
@@ -728,8 +666,6 @@ func TestManualWorkspaceContextCompactionAppliesTimeout(t *testing.T) {
 			t.Fatal("manual compaction executor was not invoked")
 		}
 
-		// Past the configured per-run timeout: without a deadline on the executor's
-		// context the runaway agent would still be blocked here.
 		time.Sleep(2 * d.keeperCompactTimeout)
 		synctest.Wait()
 		select {
@@ -743,10 +679,6 @@ func TestManualWorkspaceContextCompactionAppliesTimeout(t *testing.T) {
 	})
 }
 
-// TestMigrateKeeperCompactSettingKey covers the one-time rename of the persisted
-// "workspace_context_janitor" setting to SettingKeeperCompact: a configured
-// legacy value is carried forward, the legacy row is dropped, and the migration
-// is idempotent — a re-run never clobbers a value the user set under the new key.
 func TestMigrateKeeperCompactSettingKey(t *testing.T) {
 	t.Run("copies legacy value forward and drops the legacy row", func(t *testing.T) {
 		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -772,7 +704,6 @@ func TestMigrateKeeperCompactSettingKey(t *testing.T) {
 
 		d.migrateKeeperCompactSettingKey()
 
-		// User reconfigures under the new key, and (defensively) a stale legacy row reappears.
 		const userValue = `{"agent":"claude","model":"new"}`
 		d.store.SetSetting(SettingKeeperCompact, userValue)
 		d.store.SetSetting(legacyKeeperCompactSettingKey, `{"agent":"codex","model":"old"}`)

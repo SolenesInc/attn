@@ -160,9 +160,6 @@ func (s *Store) HasWorkspaceLayout(workspaceID string) bool {
 	return exists == 1
 }
 
-// ListWorkspaceLayoutPanes returns the persisted pane records for a workspace
-// without exposing the layout tree. This is a prep seam for moving layout
-// leaves from runtime-owned panes to session-owned panes.
 func (s *Store) ListWorkspaceLayoutPanes(workspaceID string) []workspacelayout.Pane {
 	snapshot := s.GetWorkspaceLayout(workspaceID)
 	if snapshot == nil || len(snapshot.Panes) == 0 {
@@ -201,8 +198,6 @@ func (s *Store) FindWorkspaceLayoutPaneBySessionID(sessionID string) (workspaceI
 	return rowWorkspaceID, rowPaneID, true
 }
 
-// WorkspaceLayoutIDs returns the ids of every persisted workspace layout. The
-// markdown content service uses this to re-establish file watches on startup.
 func (s *Store) WorkspaceLayoutIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -14,9 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// presentTestRepo creates a tiny real git repo with one commit, so present.Pin
-// (invoked inside the handler) resolves real SHAs rather than failing on a
-// nonexistent ref or repo.
 func presentTestRepo(t *testing.T) (dir, sha string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -39,8 +36,6 @@ func presentTestRepo(t *testing.T) (dir, sha string) {
 	return dir, sha
 }
 
-// presentManifestYAML builds a minimal valid manifest YAML pointing at repoDir,
-// with base and head both HEAD (a same-SHA round is fine for these tests).
 func presentManifestYAML(title, repoDir string) string {
 	return fmt.Sprintf("version: 1\nkind: changes\ntitle: %q\nframe:\n  repo: %q\n  base: HEAD\n  head: HEAD\n", title, repoDir)
 }
@@ -86,8 +81,6 @@ func TestHandlePresentOpen_HappyPath(t *testing.T) {
 		t.Errorf("stored presentation = %+v, want session-1 / My Change", stored)
 	}
 
-	// A second open against the same presentation_id adds round 2, not a new
-	// presentation.
 	resp2 := callPresentOpen(t, d, &protocol.PresentOpenMessage{
 		Cmd:             protocol.CmdPresentOpen,
 		SourceSessionID: "session-1",
@@ -140,9 +133,6 @@ func TestHandbackPresentationRoundNudgesEligibleBareSession(t *testing.T) {
 	}
 }
 
-// presentAnnotatedTestRepo creates a one-commit repo with a.txt containing
-// known lines, so tests can author manifests with anchor/line annotations
-// against predictable content.
 func presentAnnotatedTestRepo(t *testing.T) (dir, sha string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -212,7 +202,6 @@ func TestHandlePresentOpen_AmbiguousAnchorWarns(t *testing.T) {
 	run("add", "a.txt")
 	run("commit", "-m", "init")
 
-	// "TODO" matches both line 1 and line 3.
 	manifestYAML := fmt.Sprintf(
 		"version: 1\nkind: changes\ntitle: %q\nframe:\n  repo: %q\n  base: HEAD\n  head: HEAD\nfiles:\n  - path: a.txt\n    annotations:\n      - anchor: \"TODO\"\n        note: which one\n",
 		"Ambiguous Anchor", repoDir,
@@ -301,8 +290,6 @@ func TestHandleGetPresentationRound_AnnotationResolutionFailureLeavesRoundLoadin
 		t.Fatalf("setup present open response = %+v, want ok", opened)
 	}
 
-	// Remove the repo so re-resolving annotations at round-fetch time fails;
-	// the round must still load with annotations simply absent.
 	if err := os.RemoveAll(repoDir); err != nil {
 		t.Fatalf("remove repo dir: %v", err)
 	}
@@ -423,7 +410,6 @@ func TestHandlePresentSubmitRound_ValidationRejects(t *testing.T) {
 		})
 	}
 
-	// The round was never actually submitted by any of the rejected attempts.
 	round, err := d.store.GetPresentationRound(opened.PresentOpenResult.PresentationID, 0)
 	if err != nil {
 		t.Fatalf("GetPresentationRound: %v", err)
@@ -586,7 +572,6 @@ func TestHandlePresentClose_Success(t *testing.T) {
 		t.Fatalf("presentation status = %q, want closed", pres.Status)
 	}
 
-	// No round submission happened — the round is still a draft.
 	round, err := d.store.GetPresentationRound(opened.PresentOpenResult.PresentationID, 0)
 	if err != nil {
 		t.Fatalf("GetPresentationRound: %v", err)
@@ -649,12 +634,6 @@ func callPresentFeedback(t *testing.T, d *Daemon, msg *protocol.PresentFeedbackM
 	return resp
 }
 
-// TestHandlePresentFeedback_CarriesVerdictAndPresentationStatus covers the
-// fields `attn present --wait` polls on: a submitted round's feedback result
-// must carry the verdict and the presentation's status, and a presentation
-// closed without review must report presentation_status "closed" with
-// submitted still false — the signal `waitForPresentFeedback` uses to stop
-// polling for a review that will never come.
 func TestHandlePresentFeedback_CarriesVerdictAndPresentationStatus(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	repoDir, _ := presentTestRepo(t)
@@ -718,11 +697,6 @@ func TestHandlePresentFeedback_CarriesVerdictAndPresentationStatus(t *testing.T)
 	}
 }
 
-// TestHandlePresentFeedback_ClosedWithoutSubmission covers the Close path: the
-// reviewer can dismiss a presentation without ever reviewing the round, and
-// the feedback result must surface presentation_status "closed" with
-// submitted false so a polling `--wait` caller can stop rather than block
-// forever on a handback that will never arrive.
 func TestHandlePresentFeedback_ClosedWithoutSubmission(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	repoDir, _ := presentTestRepo(t)
@@ -793,10 +767,6 @@ func TestHandleGetPresentationRound_CarriesRepoHeadSHA(t *testing.T) {
 	}
 }
 
-// presentStatsTestRepo creates a base commit with a.txt and img.png (a fake
-// binary blob), then a head commit that grows a.txt, adds b.txt, and
-// modifies img.png — so tests can assert numstat-derived additions/deletions
-// per file, including the binary-file omission case.
 func presentStatsTestRepo(t *testing.T) (dir, baseSHA, headSHA string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -905,8 +875,6 @@ func TestHandleGetPresentationRound_CarriesChangedFiles(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	repoDir, baseSHA, headSHA := presentStatsTestRepo(t)
 
-	// Manifest only names a.txt and img.png — b.txt changed in the round but
-	// is not in the tour, so it should still show up in changed_files.
 	manifestYAML := fmt.Sprintf(
 		"version: 1\nkind: changes\ntitle: %q\nframe:\n  repo: %q\n  base: %q\n  head: %q\nfiles:\n  - path: a.txt\n  - path: img.png\n",
 		"Changed Files", repoDir, baseSHA, headSHA,
@@ -971,9 +939,6 @@ func TestHandleGetPresentationRound_ChangedFilesNilOnBogusSHA(t *testing.T) {
 		t.Fatalf("setup present open response = %+v, want ok", opened)
 	}
 
-	// Remove the repo out from under the pinned round so its `git diff`
-	// fails, without disturbing the round's ability to load otherwise (the
-	// manifest and comments come from the store, not the repo on disk).
 	if err := os.RemoveAll(repoDir); err != nil {
 		t.Fatalf("remove repo dir: %v", err)
 	}

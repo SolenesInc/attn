@@ -8,17 +8,9 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// sink prevents the compiler from optimizing away encodePtyOutputMessage's
-// result across benchmark iterations.
+// sink keeps the compiler from optimizing the encode away across iterations.
 var sink outboundMessage
 
-// benchEncodePtyOutput quantifies the per-chunk, per-client cost of
-// encodePtyOutputMessage — the hottest datapath in attn, run once per output
-// chunk for every attached client. legacyClient selects between the two
-// capability branches: without protocol.CapabilityBinaryPtyOutput the chunk
-// is base64-encoded and marshaled into the fat protocol.WebSocketEvent
-// (alloc-heavy, roadmap ws-3); with it, protocol.EncodePtyOutputFrame is used
-// instead (lean baseline).
 func benchEncodePtyOutput(b *testing.B, chunk []byte, legacyClient bool) {
 	client := &wsClient{}
 	if legacyClient {

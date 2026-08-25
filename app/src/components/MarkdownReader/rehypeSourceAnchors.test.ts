@@ -216,8 +216,6 @@ describe("rehypeSourceAnchors", () => {
       "- item", //       raw line 9
     ].join("\n");
 
-    // Simulate the caller stripping the YAML frontmatter block (lines 1-4)
-    // before parsing, and passing the number of removed lines as the offset.
     const rawLines = raw.split("\n");
     const closingFenceIndex = rawLines.indexOf("---", 1);
     const strippedLineCount = closingFenceIndex + 1; // 4
@@ -233,7 +231,6 @@ describe("rehypeSourceAnchors", () => {
       { tag: "li", id: "b3-list-item", line: 9, lineEnd: 9 },
     ]);
 
-    // Sanity: the stamped lines point at the expected raw-file text.
     expect(rawLines[6 - 1]).toBe("# Heading");
     expect(rawLines[8 - 1]).toBe("Body text.");
     expect(rawLines[9 - 1]).toBe("- item");
@@ -285,9 +282,6 @@ describe("rehypeSourceAnchors", () => {
   });
 
   it("skips position-less nodes entirely and does not shift later block ids", () => {
-    // Simulates a plugin-generated node (no source position) inserted between
-    // two real blocks: it must get NO data attributes (not even a block id),
-    // and the following block's id must be identical to a tree without it.
     const paragraph = (line: number): Element => ({
       type: "element",
       tagName: "p",
@@ -303,7 +297,6 @@ describe("rehypeSourceAnchors", () => {
       tagName: "div",
       properties: {},
       children: [],
-      // no position
     };
     const tree: Root = {
       type: "root",

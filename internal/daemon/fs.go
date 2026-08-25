@@ -13,27 +13,17 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// maxAssetMessageBytes bounds the entire marshaled fs_read_asset_result JSON
-// message — the unit that actually hits the WebSocket transport, which has no
-// other outbound cap. The raw read cap below is DERIVED from it, so the bound
-// on the wire is the contract and the file-size cap follows.
+// Bounds the whole marshaled fs_read_asset_result message — the unit that hits the
+// WebSocket, which has no other outbound cap. The raw read cap below derives from it.
 const maxAssetMessageBytes = 8 << 20
 
-// assetEnvelopeSlack sizes the PREFLIGHT file-size cap only: a fast reject
-// before reading or encoding a file that's obviously too large. It is not the
-// wire bound — assetMessageFits below computes that exactly per request,
-// including arbitrarily long paths.
 const assetEnvelopeSlack = 4 << 10
 
-// maxAssetBytes bounds a single fs_read_asset read so base64(content) plus the
-// envelope always fits maxAssetMessageBytes (base64 of n bytes is 4*ceil(n/3)).
+// base64 of n bytes is 4*ceil(n/3).
 const maxAssetBytes = (maxAssetMessageBytes - assetEnvelopeSlack) / 4 * 3
 
-// assetMimeTypes is the explicit allowlist of image extensions fs_read_asset will
-// serve. This IS the contract, not a convenience lookup: unlike mime.TypeByExtension
-// it deliberately excludes everything non-image, since this surface exists only to
-// render ![alt](path) images in the notebook editor without widening Tauri's fs
-// permissions.
+// The contract, not a convenience lookup: unlike mime.TypeByExtension it excludes
+// everything non-image, so this surface cannot widen Tauri's fs permissions.
 var assetMimeTypes = map[string]string{
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
@@ -46,15 +36,8 @@ var assetMimeTypes = map[string]string{
 	".ico":  "image/x-icon",
 }
 
-// resolveFsRoot resolves the raw root a fs_* command asked to operate under:
-// empty/blank means "the notebook root" (today's behavior, unchanged, and
-// available to ANY client). A non-empty value is an arbitrary filesystem root
-// request, so it is gated on client being the authenticated attn app itself
-// (see isTrustedAppClient) before it is even validated — without this, any
-// accepted local WebSocket client could use fs_* {root} to read or overwrite
-// files anywhere in the user's home. Once past that gate, the value must be a
-// normalized-clean absolute path outside the attn data dir, same rule as
-// notebook.root, worded for the fs surface.
+// A non-empty root is gated on the authenticated attn app before it is even validated —
+// otherwise any local WebSocket client could read or overwrite any file in the user's home.
 func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return d.notebookRoot()
@@ -69,14 +52,7 @@ func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	return resolved, nil
 }
 
-// fsStoreFor returns the daemon's generic filesystem Store for rawRoot,
-// resolving it first (see resolveFsRoot). Stores are cached per resolved root
-// so writes to the same root serialize through one in-process writer. The
-// notebook root always gets the shared external-edit watcher
-// (ensureNotebookWatcher); other roots only get a live watcher once a client
-// holds them open via fs_watch (see fs_watch.go). Returns the resolved root
-// alongside the store so callers can key broadcasts and notebook-coupling
-// decisions on it without re-resolving.
+// Cached per resolved root so writes to one root serialize through a single in-process writer.
 func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, string, error) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err != nil {
@@ -98,14 +74,8 @@ func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, str
 	return store, root, nil
 }
 
-// broadcastFsChanged announces a filesystem change under root. For the
-// notebook root this goes to every websocket client, matching legacy
-// notebook_changed fan-out. For any other root — reachable only through an
-// explicit fs_watch, which resolveFsRoot gates on the trusted app client —
-// the absolute root path and changed paths are sensitive, so the event is
-// sent only to clients currently holding an fs_watch ref on that root; a
-// connected client that never subscribed sees nothing. origin is
-// agent|ui|external, the same vocabulary as notebook_changed.
+// A non-notebook root's absolute path and changed paths are sensitive, so the event goes
+// only to clients holding an fs_watch ref on it.
 func (d *Daemon) broadcastFsChanged(root, origin string, paths ...string) {
 	msg := protocol.FsChangedMessage{
 		Event:  protocol.EventFsChanged,
@@ -120,8 +90,6 @@ func (d *Daemon) broadcastFsChanged(root, origin string, paths ...string) {
 	d.sendFsChangedToWatchers(root, msg)
 }
 
-// sendFsListWSResult lists one directory's immediate children and replies with an
-// fs_list_result event correlated by requestID.
 func (d *Daemon) sendFsListWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var entries []protocol.FsEntry
 	store, _, err := d.fsStoreFor(client, rawRoot)
@@ -143,8 +111,6 @@ func (d *Daemon) sendFsListWSResult(client *wsClient, requestID, path, rawRoot s
 	d.sendToClient(client, msg)
 }
 
-// sendFsReadWSResult reads one file and replies with an fs_read_result event
-// correlated by requestID.
 func (d *Daemon) sendFsReadWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var result *protocol.FsReadResult
 	store, _, err := d.fsStoreFor(client, rawRoot)
@@ -167,9 +133,6 @@ func (d *Daemon) sendFsReadWSResult(client *wsClient, requestID, path, rawRoot s
 	d.sendToClient(client, msg)
 }
 
-// sendFsReadAssetWSResult reads one image file's bytes as base64 and replies with
-// an fs_read_asset_result event correlated by requestID. Only extensions in
-// assetMimeTypes are served; the extension is rejected before the file is read.
 func (d *Daemon) sendFsReadAssetWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var result *protocol.FsReadAssetResult
 	mimeType, err := assetMimeTypeFor(path)
@@ -206,8 +169,6 @@ func (d *Daemon) sendFsReadAssetWSResult(client *wsClient, requestID, path, rawR
 	d.sendToClient(client, msg)
 }
 
-// assetMimeTypeFor returns the mime type for path's extension, or an error if the
-// extension is not in the image allowlist.
 func assetMimeTypeFor(path string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeType, ok := assetMimeTypes[ext]
@@ -217,13 +178,8 @@ func assetMimeTypeFor(path string) (string, error) {
 	return mimeType, nil
 }
 
-// assetMessageFits reports whether the complete fs_read_asset_result message for
-// this request would marshal within maxAssetMessageBytes once rawLen content
-// bytes are base64-encoded into it. The size is exact, not an estimate: base64
-// output never needs JSON escaping, so the full message length is the marshaled
-// empty-payload envelope plus EncodedLen(rawLen). This — not the preflight file
-// cap — is the authoritative transport bound, and it accounts for the real
-// (arbitrarily long) path.
+// Exact, not an estimate: base64 output never needs JSON escaping, so the length is the
+// empty-payload envelope plus EncodedLen(rawLen).
 func assetMessageFits(requestID, path, mimeType string, rawLen int) (bool, error) {
 	probe := protocol.FsReadAssetResultMessage{
 		Event:     protocol.EventFsReadAssetResult,
@@ -238,20 +194,11 @@ func assetMessageFits(requestID, path, mimeType string, rawLen int) (bool, error
 	return len(envelope)+base64.StdEncoding.EncodedLen(rawLen) <= maxAssetMessageBytes, nil
 }
 
-// sendFsWriteWSResult performs a hash-CAS write and replies with an
-// fs_write_result event correlated by requestID. A conflict (the file changed on
-// disk since the editor loaded it) is a successful result carrying conflict=true
-// for the UI to reconcile, not an error. On a successful write it records the
-// path as a self-write (so the shared watcher does not echo it as external) and
-// broadcasts fs_changed(origin=ui).
+// A conflict is a successful result carrying conflict=true, not an error.
 func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content, baseHash, rawRoot string) {
 	var result *protocol.FsWriteResult
 	store, root, err := d.fsStoreFor(client, rawRoot)
 	if err == nil {
-		// Normalize the path to the canonical form fs_list/fs_changed key on, so the
-		// echoed result.path and the broadcast match it (not the raw leading-slash
-		// input). A path that fails to normalize still reaches Write, which returns
-		// the precise error.
 		changed := path
 		if rel, cerr := fsdoc.CleanPath(path); cerr == nil {
 			changed = rel
@@ -268,14 +215,9 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 			} else {
 				result.Hash = protocol.Ptr(hash)
 				if d.isNotebookRoot(root) {
-					// Content-aware self-write so the shared watcher does not surface this
-					// UI edit as an external one. The notebook watcher now runs a generic
-					// cleaner (fsdoc.CleanPath, see ensureNotebookWatcher), so this also
-					// suppresses a non-.md write from echoing back as external.
+					// Content-aware self-write so the shared watcher does not surface this UI edit as an external one.
 					d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
 				} else if w := d.fsWatcherFor(root); w != nil {
-					// Same suppression for a generic editor root under an active fs_watch:
-					// without it, a UI fs_write would echo back as its own external edit.
 					w.NoteSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
 				}
 				d.broadcastFsChanged(root, originUI, changed)
@@ -367,11 +309,8 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 	d.sendToClient(client, msg)
 }
 
-// sendFsExistsWSResult reports whether a path exists under the root and replies
-// with an fs_exists_result event correlated by requestID. It does not read the
-// file — the frontend uses it to flag an in-notebook link whose target note is
-// missing. A path that fails to validate (escapes the root, dotfile) is an error
-// the frontend treats as "unknown, leave the link unflagged", not as "missing".
+// A path that fails to validate is an error the frontend treats as "unknown, leave the
+// link unflagged", not as "missing".
 func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var result *protocol.FsExistsResult
 	store, _, err := d.fsStoreFor(client, rawRoot)
@@ -393,15 +332,11 @@ func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot
 	d.sendToClient(client, msg)
 }
 
-// isNotebookRoot reports whether root is the currently resolved notebook root
-// (best-effort: a notebookRoot() error is treated as "not the notebook root",
-// so a foreign fs root never accidentally couples to notebook broadcasts).
 func (d *Daemon) isNotebookRoot(root string) bool {
 	notebookRoot, err := d.notebookRoot()
 	return err == nil && root == notebookRoot
 }
 
-// fsEntriesToProtocol converts store entries to their protocol shape.
 func fsEntriesToProtocol(entries []fsdoc.Entry) []protocol.FsEntry {
 	out := make([]protocol.FsEntry, len(entries))
 	for i, e := range entries {

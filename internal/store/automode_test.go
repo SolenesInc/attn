@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// userHardDeny drops the shipped entries every read resolves in, leaving what a
-// promotion actually put there.
 func userHardDeny(resolved []string) []string {
 	return automode.StripShippedHardDeny(config.WSPort(), resolved)
 }
@@ -58,14 +56,11 @@ func TestAutoModeEnvironmentRoundTrips(t *testing.T) {
 	if read.Environment[1] != "never touch prod" {
 		t.Errorf("environment[1] = %q", read.Environment[1])
 	}
-	// Editing prose must not disturb the models a promote set.
 	if len(read.ClassifierModels) != 1 || read.ClassifierModels[0] != automode.DefaultClassifierModel {
 		t.Errorf("classifier models drifted to %v", read.ClassifierModels)
 	}
 }
 
-// The whole point of the split: recording a proposal changes nothing a session
-// launches with.
 func TestAutoModeProposalDoesNotChangeTheConfig(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -240,9 +235,6 @@ func TestAutoModeDenialsReadNewestFirst(t *testing.T) {
 	}
 }
 
-// The row cap is a tripwire, so this is the only place anyone sees it work: a
-// session looping past it keeps the newest AutoModeDenialRows and says how many
-// it dropped.
 func TestAutoModeDenialsTrimToTheRowCap(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -277,8 +269,6 @@ func TestAutoModeDenialsTrimToTheRowCap(t *testing.T) {
 	}
 }
 
-// Migration 109 is what every one of these tests runs against; this asserts it
-// by name so a renumbering that skips it fails here rather than in production.
 func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	s := New()
 	for _, table := range []string{"automode_config", "automode_proposals", "automode_denials"} {
@@ -297,9 +287,6 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
-// Migration 114 turns the single model a machine had promoted into its layer's
-// one-entry list. A machine that promoted one and then upgrades must launch on
-// exactly the model it picked, not on the shipped default.
 func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -308,8 +295,6 @@ func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Put automode_config back the way a store before 114 had it, holding the
-	// model a human promoted.
 	for _, stmt := range []string{
 		`ALTER TABLE automode_config DROP COLUMN classifier_models`,
 		`ALTER TABLE automode_config DROP COLUMN escalation_models`,
@@ -324,8 +309,6 @@ func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 		}
 	}
 
-	// Sanity: the planted schema really is the old one, so a pass here would
-	// mean the test proves nothing.
 	if _, err := s.GetAutoModeConfig(); err == nil {
 		t.Fatal("the planted schema already has the lists; this test would pass without the migration")
 	}
@@ -344,8 +327,6 @@ func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	if len(cfg.ClassifierModels) != 1 || cfg.ClassifierModels[0] != "vendor/picked" {
 		t.Errorf("classifier models = %v, want the promoted model carried over", cfg.ClassifierModels)
 	}
-	// The layer that never picked one resolves to the shipped default, exactly
-	// as an empty string did.
 	if len(cfg.EscalationModels) != 1 || cfg.EscalationModels[0] != automode.DefaultEscalationModel {
 		t.Errorf("escalation models = %v, want the shipped default", cfg.EscalationModels)
 	}
@@ -383,8 +364,6 @@ func TestAutoModeShippedHardDeniesSurviveAPromotedRow(t *testing.T) {
 	if got := userHardDeny(cfg.HardDeny); len(got) != 1 || got[0] != "ssh prod*" {
 		t.Errorf("stored hard deny = %v, want only the promoted pattern", got)
 	}
-	// Resolved at read means resolved at read: the row a write left behind must
-	// not have frozen today's shipped list into it.
 	var stored string
 	if err := s.db.QueryRow(`SELECT hard_deny FROM automode_config WHERE id = 1`).Scan(&stored); err != nil {
 		t.Fatalf("read row: %v", err)
@@ -415,8 +394,6 @@ func TestAutoModeProposalDedupesAnIdenticalPendingOne(t *testing.T) {
 	if len(pending) != 1 {
 		t.Errorf("pending = %v, want one row", pending)
 	}
-	// A resolved proposal is not a duplicate: the same ask after a discard is a
-	// new ask.
 	if _, err := s.DiscardAutoModeProposal(first.ID, now); err != nil {
 		t.Fatalf("discard: %v", err)
 	}
@@ -429,8 +406,6 @@ func TestAutoModeProposalDedupesAnIdenticalPendingOne(t *testing.T) {
 	}
 }
 
-// The review list says who asked, so it must not tell a human that session-a
-// asked for something session-b asked for.
 func TestAutoModeProposalKeepsEachAskerSeparate(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -449,8 +424,6 @@ func TestAutoModeProposalKeepsEachAskerSeparate(t *testing.T) {
 		t.Errorf("second proposal credits %q, want session-b", second.ProposedBy)
 	}
 
-	// One promotion answers every asker, so nobody is left asking for what the
-	// config already says.
 	if _, _, err := s.PromoteAutoModeProposal(first.ID, now); err != nil {
 		t.Fatalf("promote: %v", err)
 	}
@@ -470,8 +443,6 @@ func TestAutoModeProposalKeepsEachAskerSeparate(t *testing.T) {
 	}
 }
 
-// The dedupe is a real constraint, not an agreement between callers that happen
-// to hold the same lock: two askers racing on the same change land one row.
 func TestAutoModeProposalRaceLandsOneRow(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -502,7 +473,6 @@ func TestAutoModeProposalRaceLandsOneRow(t *testing.T) {
 	if len(pending) != 1 {
 		t.Errorf("pending = %v, want one row", pending)
 	}
-	// The database is what says so, whoever is asking.
 	if _, err := s.db.Exec(`
 		INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
 		VALUES (?, '', ?, ?, ?, ?)`,
@@ -535,7 +505,6 @@ func TestAutoModeProposalCapNamesTheLimitAndTheAsk(t *testing.T) {
 			t.Errorf("cap error %q does not name %q", err, want)
 		}
 	}
-	// The cap is per proposer, and resolving one frees a slot.
 	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "curl https://example.com/last*", "session-b", now); err != nil {
 		t.Errorf("another proposer was capped too: %v", err)
 	}
@@ -556,9 +525,6 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
-
-// The app's direct-edit path. Everything here is what a human typing into the
-// settings section reaches; nothing an agent can call touches it.
 
 func TestAutoModePatternAddAndRemoveRoundTrip(t *testing.T) {
 	s := New()
@@ -595,15 +561,11 @@ func TestAutoModePatternAddAndRemoveRoundTrip(t *testing.T) {
 	if len(cfg.Allow) != 0 || len(userHardDeny(cfg.HardDeny)) != 0 {
 		t.Fatalf("removal left something behind: allow=%v hard_deny=%v", cfg.Allow, cfg.HardDeny)
 	}
-	// A read still resolves the shipped denies in, which a removal must not
-	// have been able to shorten.
 	if len(cfg.HardDeny) != len(automode.ShippedHardDeny(config.WSPort())) {
 		t.Fatalf("resolved hard deny = %v, want exactly the shipped denies", cfg.HardDeny)
 	}
 }
 
-// The invariant the whole hard-deny design rests on: an edit that reads the
-// resolved list and writes it back must not persist what the read added.
 func TestAutoModePatternEditNeverStoresAShippedHardDeny(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -643,13 +605,9 @@ func TestAutoModeAddRefusesABroadAllowAndAnEmptyDeny(t *testing.T) {
 	if err == nil {
 		t.Fatal("a broad allow was accepted")
 	}
-	// The direct editor refuses it with the message the proposal path has
-	// always used, so the two paths cannot drift apart.
 	if !strings.Contains(err.Error(), "must name something") {
 		t.Fatalf("broad allow refusal = %v", err)
 	}
-	// A broad hard deny refuses everything, which is safe; only an empty one is
-	// rejected.
 	if _, err := s.AddAutoModePattern(automode.ListHardDeny, "*", now); err != nil {
 		t.Fatalf("a broad hard deny was refused: %v", err)
 	}
@@ -658,8 +616,6 @@ func TestAutoModeAddRefusesABroadAllowAndAnEmptyDeny(t *testing.T) {
 	}
 }
 
-// Silence would read as a removal or an add that worked. Both misses name what
-// the caller asked for.
 func TestAutoModePatternEditNamesADuplicateAndAMiss(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -681,7 +637,6 @@ func TestAutoModePatternEditNamesADuplicateAndAMiss(t *testing.T) {
 	}
 }
 
-// The two write paths land in the same list and neither erases the other.
 func TestAutoModeDirectEditAndPromotionShareTheList(t *testing.T) {
 	s := New()
 	now := time.Now()
@@ -700,7 +655,6 @@ func TestAutoModeDirectEditAndPromotionShareTheList(t *testing.T) {
 	if len(cfg.Allow) != 2 || cfg.Allow[0] != "git status*" || cfg.Allow[1] != "git push origin*" {
 		t.Fatalf("allow after promotion = %v", cfg.Allow)
 	}
-	// And the hand-added one is still removable afterwards.
 	cfg, err = s.RemoveAutoModePattern(automode.ListAllow, "git status*", now)
 	if err != nil {
 		t.Fatalf("remove after promotion: %v", err)

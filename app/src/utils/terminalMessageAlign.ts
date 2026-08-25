@@ -1,11 +1,4 @@
-// Aligning an agent's message markdown to the terminal rows currently showing it.
-//
-// Painted rows are re-derived from the live buffer and never stored, so a width
-// reflow costs nothing. Both sides reduce to word tokens carrying provenance —
-// markdown offsets on one, row/column on the other — so the TUI's rendering
-// transforms drop out by construction.
-//
-// The measurements behind every threshold here are in
+// Measurements behind every threshold here:
 // docs/decisions/2026-08-02-terminal-annotations-anchor-to-the-transcript.md.
 
 // One word of the markdown; offsets are UTF-16 code units into the ORIGINAL.
@@ -16,18 +9,14 @@ export interface SrcToken {
   end: number;
 }
 
-// One word of a rendered row. `row` is a BUFFER row: viewport rows shift under
-// scroll and must never be stored. `col`/`endCol` are code-unit indices, equal
-// to cell columns only without wide characters, which skews a wash's horizontal
-// bounds but never which rows resolve.
+// `row` is a BUFFER row: viewport rows shift under scroll and must never be stored.
+// `col`/`endCol` are code units, equal to cell columns only without wide characters.
 export interface GridToken {
   norm: string;
   aliases: string[];
   row: number;
   col: number;
   endCol: number;
-  // The first prose token after an assistant marker. This breaks an otherwise
-  // exact tie when the user's prompt quotes the response it requests.
   assistantLead: boolean;
   explicitUser: boolean;
 }
@@ -37,7 +26,6 @@ interface MatchToken {
   aliases: readonly string[];
 }
 
-// Markdown syntax and TUI chrome, stripped from both sides before comparison.
 const CUT_CHARS = new Set([
   ...'*_`~#|>',
   ...'┌─┬┐│├┼┤└┴┘━┃┏┓┗┛',
@@ -50,7 +38,6 @@ function isSpace(ch: string): boolean {
   return /\s/.test(ch);
 }
 
-// A word that is pure syntax or chrome normalizes to '' and drops out.
 function normalizeWord(word: string): string {
   let out = '';
   for (const ch of word) {
@@ -72,13 +59,6 @@ function decodeTarget(value: string): string {
   }
 }
 
-// Renderer-independent identities for a path or URL. Codex commonly turns an
-// absolute Markdown destination into a shorter visible repository path. At
-// least the final directory and filename must survive: a basename alone is too
-// weak to split alignment or satisfy containment when repositories commonly
-// repeat names such as index.ts. These are candidates, not proof — uniqueness,
-// monotonicity, row confidence, and the containment gate still decide whether a
-// match is usable.
 function targetAliases(value: string): string[] {
   let target = decodeTarget(value).replace(TRAILING_PATH_NOISE_RE, '');
   if (!target.includes('/') && !/^[a-z][a-z0-9+.-]*:/i.test(target)) return [];
@@ -146,7 +126,6 @@ export function tokenizeMarkdown(markdown: string): SrcToken[] {
   return out;
 }
 
-// `rowBase` is the buffer row of `rows[0]`, so tokens carry absolute rows.
 export function tokenizeRows(
   rows: readonly string[],
   rowBase = 0,
@@ -191,16 +170,13 @@ export function tokenizeRows(
   return out;
 }
 
-// --- pairing ---------------------------------------------------------------
 
 export interface TokenPair {
   srcIdx: number;
   gridIdx: number;
 }
 
-// Look-ahead after a mismatch: a dropped glyph, not a different passage.
 const RESYNC_WINDOW = 4;
-// How many tokens of the message to score a candidate seed against.
 const SEED_LOOKAHEAD = 8;
 function resync(
   src: readonly SrcToken[],
@@ -238,10 +214,6 @@ function positionsByKey(tokens: readonly MatchToken[]): Map<string, number[]> {
   return out;
 }
 
-// Unique identities on both sides are hard anchors. Their longest monotone
-// chain divides the message into independent alignment islands, so an arbitrary
-// renderer substitution (a Markdown link becoming a path, for example) leaves
-// a sparse hole rather than cutting off everything after it.
 function monotoneAnchors(src: readonly SrcToken[], grid: readonly GridToken[]): TokenPair[] {
   const srcPositions = positionsByKey(src);
   const gridPositions = positionsByKey(grid);
@@ -265,9 +237,8 @@ function monotoneAnchors(src: readonly SrcToken[], grid: readonly GridToken[]): 
   );
   if (candidates.length === 0) return [];
 
-  // Fenwick maximum over grid positions: query(gridIdx) sees only positions
-  // strictly before gridIdx. Updates are delayed for one source-index batch so
-  // a chain cannot use two alternative identities of the same source token.
+  // Updates are delayed for one source-index batch so a chain cannot use two
+  // alternative identities of the same source token.
   const fenwick = Array.from(
     { length: grid.length + 1 },
     () => ({ score: 0, candidate: -1 }),
@@ -311,9 +282,6 @@ function monotoneAnchors(src: readonly SrcToken[], grid: readonly GridToken[]): 
   return chain.reverse();
 }
 
-// Finds where the message sits in the grid using words unique on BOTH sides:
-// each pins one (src, grid) pair, and the true position is the offset most
-// agree on. Seeding on opening words fails when the head has scrolled away.
 function findSeed(src: readonly SrcToken[], grid: readonly GridToken[]): { si: number; gi: number } | null {
   const srcPositions = positionsByKey(src);
   const gridPositions = positionsByKey(grid);
@@ -339,16 +307,14 @@ function findSeed(src: readonly SrcToken[], grid: readonly GridToken[]): { si: n
         bestOffset = offset;
       }
     }
-    // The EXACT consensus offset, not merely near it: an echo of the message
-    // above it pins anchors off the true diagonal, and admitting those hands the
-    // seed to the echo. Drift is what `resync` is for.
+    // The EXACT consensus offset: admitting anchors merely near it hands the
+    // seed to an echo of the message above.
     const onDiagonal = anchors
       .filter((anchor) => anchor.gi - anchor.si === bestOffset)
       .sort((a, b) => a.si - b.si);
     if (onDiagonal.length > 0) return onDiagonal[0];
   }
 
-  // No word unique on both sides: fall back to the opening words.
   let gi = -1;
   let bestScore = 0;
   let bestAssistantLead = false;
@@ -409,11 +375,8 @@ function greedySegment(
   return pairs;
 }
 
-// Pairs the two token streams by walking both directions in lockstep from the
-// seed. Monotone by construction, so a bad seed shows up as a low match ratio
-// rather than a wrong span. Greedy O(n+m), not an LCS: repeated words can pair
-// wrongly, which is safe only because `quotesAnchor` re-reads the live rows
-// before anything is painted.
+// Greedy O(n+m), not an LCS: repeated words can pair wrongly, which is safe
+// only because `quotesAnchor` re-reads the live rows before anything paints.
 export function pairTokens(src: readonly SrcToken[], grid: readonly GridToken[]): TokenPair[] {
   if (src.length === 0 || grid.length === 0) return [];
   const anchors = monotoneAnchors(src, grid);
@@ -435,7 +398,6 @@ export function pairTokens(src: readonly SrcToken[], grid: readonly GridToken[])
 
   const gapBudget = Math.max(RESYNC_WINDOW, Math.ceil(src.length * 0.5));
 
-  // Backward from the seed: the message may start before the seed word.
   const before: TokenPair[] = [];
   let si = seed.si;
   let gi = seed.gi;
@@ -461,7 +423,6 @@ export function pairTokens(src: readonly SrcToken[], grid: readonly GridToken[])
   }
   before.reverse();
 
-  // Forward from just after the seed.
   const after: TokenPair[] = [];
   si = seed.si + 1;
   gi = seed.gi + 1;
@@ -484,9 +445,7 @@ export function pairTokens(src: readonly SrcToken[], grid: readonly GridToken[])
   return [...before, ...after];
 }
 
-// --- alignment -------------------------------------------------------------
 
-// One word of the message, located on a row.
 export interface PlacedWord {
   start: number;
   end: number;
@@ -499,12 +458,10 @@ export interface RowAlignment {
   row: number;
   words: PlacedWord[];
   explicitUser: boolean;
-  // Rows below CONFIDENT_ROW are ignored when bounding and resolving.
   matched: number;
   total: number;
 }
 
-// Alignment share for a row to count; neighbouring user turns chance-match.
 export const CONFIDENT_ROW = 0.6;
 
 export function rowConfidence(row: RowAlignment): number {
@@ -513,9 +470,7 @@ export function rowConfidence(row: RowAlignment): number {
 
 export interface MessageAlignment {
   markdown: string;
-  // Keyed by BUFFER row, for rows that resolved at least one word.
   rows: Map<number, RowAlignment>;
-  // Bounds from confident rows only; -1 when the message did not resolve.
   firstRow: number;
   lastRow: number;
   inversions: number;
@@ -587,16 +542,13 @@ export function alignMessage(
   };
 }
 
-// --- forward: markdown offsets → rows ---------------------------------------
 
-// One row's worth of a wash, in buffer-row/code-unit-column space.
 export interface RowRange {
   row: number;
   startCol: number;
   endCol: number;
 }
 
-// Which rows show the markdown range `[start, end)`, and where on each.
 export function rowsForOffsets(
   alignment: MessageAlignment,
   start: number,
@@ -618,16 +570,12 @@ export function rowsForOffsets(
   return out.sort((a, b) => a.row - b.row);
 }
 
-// --- reverse: rows → markdown offsets ---------------------------------------
 
 export interface AnchoredSpan {
   start: number;
   end: number;
 }
 
-// The markdown range a selected grid region corresponds to; whatever it returns
-// is quoted back to the agent verbatim, so it refuses rather than guesses when
-// the selection covers no confidently-aligned words.
 export function offsetsForSelection(
   alignment: MessageAlignment,
   selection: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -640,8 +588,6 @@ export function offsetsForSelection(
     const lowCol = row === selection.startRow ? selection.startCol : 0;
     const highCol = row === selection.endRow ? selection.endCol : Number.POSITIVE_INFINITY;
     for (const word of entry.words) {
-      // Any overlap selects the whole word: anchors are word-granular, and a
-      // half-word anchor could not be quoted.
       if (word.endCol <= lowCol || word.col >= highCol) continue;
       if (word.start < start) start = word.start;
       if (word.end > end) end = word.end;
@@ -651,12 +597,9 @@ export function offsetsForSelection(
   return { start, end };
 }
 
-// --- the containment gate ---------------------------------------------------
 
-// Whether the text now at the rows about to be painted still quotes the anchor.
 // Deliberately does NOT consult the aligner, so a mistaken alignment can only
-// make a wash disappear for a frame. Containment holds in either direction: a
-// reflow moves words between rows, so the resolved rows can cover more or less.
+// make a wash disappear for a frame.
 export function quotesAnchor(anchoredText: string, paintedText: string): boolean {
   const want = tokenizeMarkdown(anchoredText);
   if (want.length === 0) return false;

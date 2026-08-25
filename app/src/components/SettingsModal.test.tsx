@@ -397,8 +397,6 @@ describe('SettingsModal', () => {
     expect(screen.getByText(/does not register a second tailnet device/i)).toBeInTheDocument();
   });
 
-  // The queue switch moved to the sidebar's display popover, where the rest of
-  // the sidebar arrangement lives. Settings must not offer a second one.
   it('does not carry an agent-queue toggle', async () => {
     const onSetSetting = vi.fn();
     const props = (queueMode: string) => ({
@@ -675,8 +673,6 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByTestId('settings-nav-keeper'));
     expect(screen.queryByRole('option', { name: 'Snipe' })).not.toBeInTheDocument();
 
-    // Picking an agent carries its recommended model, so the pair is whole and
-    // applies at once.
     fireEvent.change(await screen.findByTestId('settings-context-keeper-agent'), {
       target: { value: 'codex' },
     });
@@ -688,8 +684,6 @@ describe('SettingsModal', () => {
     );
     expect(await screen.findByTestId('settings-context-keeper-saved')).toBeInTheDocument();
 
-    // 'custom' is the one half-entered state: it blanks the model and writes
-    // nothing until the free-form input says what the model is.
     onSetSetting.mockClear();
     fireEvent.change(screen.getByTestId('settings-context-keeper-model'), {
       target: { value: 'custom' },
@@ -936,8 +930,6 @@ describe('SettingsModal notebook folder', () => {
     fireEvent.blur(input);
     expect(onSetSetting).toHaveBeenCalledWith('notebook.root', '/Users/me/elsewhere');
 
-    // Clearing the override commits an empty value, which the daemon resolves
-    // back to the per-profile default.
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.blur(input);
     expect(onSetSetting).toHaveBeenCalledWith('notebook.root', '');
@@ -988,7 +980,6 @@ describe('SettingsModal keeper', () => {
     const onSetSetting = renderModal({});
     fireEvent.click(screen.getByTestId('settings-nav-keeper'));
 
-    // Unset notebook.tasks_enabled reads as ON, so the action offers to disable.
     const toggle = await screen.findByTestId('settings-keeper-tasks-toggle');
     expect(toggle).toHaveTextContent('Disable');
     fireEvent.click(toggle);
@@ -1075,19 +1066,15 @@ describe('SettingsModal keeper', () => {
     const onSetSetting = renderModal({});
     fireEvent.click(screen.getByTestId('settings-nav-keeper'));
 
-    // Session summaries default to Claude Haiku; narration to Claude Sonnet.
     expect(await screen.findByTestId('settings-keeper-summarize-agent')).toHaveValue('claude');
     expect(screen.getByTestId('settings-keeper-summarize-model')).toHaveValue('haiku');
     expect(screen.getByTestId('settings-keeper-narrate-model')).toHaveValue('sonnet');
 
-    // Switching the summarize agent re-seeds the model to that agent's recommended.
     fireEvent.change(screen.getByTestId('settings-keeper-summarize-agent'), {
       target: { value: 'codex' },
     });
     expect(screen.getByTestId('settings-keeper-summarize-model')).toHaveValue('gpt-5.4-mini');
 
-    // No Save button to press — the override is already written, and the mark
-    // beside the duty is how the user knows it landed.
     expect(onSetSetting).toHaveBeenCalledWith(
       'notebook.summarize_session',
       '{"agent":"codex","model":"gpt-5.4-mini"}',
@@ -1116,7 +1103,6 @@ describe('SettingsModal keeper', () => {
     });
     fireEvent.click(screen.getByTestId('settings-nav-keeper'));
 
-    // The saved override is shown, and "Use default" is enabled because one exists.
     expect(await screen.findByTestId('settings-keeper-narrate-model')).toHaveValue('opus');
     const useDefault = screen.getByTestId('settings-keeper-narrate-clear');
     expect(useDefault).toHaveTextContent('Use default');
@@ -1189,7 +1175,6 @@ describe('SettingsModal chief settings', () => {
     const onSetSetting = renderModal({});
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
-    // claude and codex each get a row; copilot does not (its launch ignores --model).
     const claudeInput = await screen.findByTestId('settings-chief-model-claude');
     expect(screen.getByTestId('settings-chief-model-codex')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-chief-model-copilot')).toBeNull();
@@ -1241,8 +1226,6 @@ describe('SettingsModal chief settings', () => {
   });
 
   it('keeps an agent visible when only its chief-effort override is saved', async () => {
-    // codex is unavailable but has a saved effort override, so it should still show
-    // (mirrors the chief-model re-inclusion rule).
     renderModal({ codex_available: 'false', chief_effort_codex: 'low' });
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
@@ -1253,7 +1236,6 @@ describe('SettingsModal chief settings', () => {
     const onSetSetting = renderModal({});
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
-    // claude and codex each get a row; copilot does not (its launch ignores --model).
     const claudeInput = await screen.findByTestId('settings-default-model-claude');
     expect(screen.getByTestId('settings-default-model-codex')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-default-model-copilot')).toBeNull();
@@ -1305,8 +1287,6 @@ describe('SettingsModal chief settings', () => {
   });
 
   it('keeps an agent visible when only its default-effort override is saved', async () => {
-    // codex is unavailable but has a saved effort override, so it should still show
-    // (mirrors the chief-effort re-inclusion rule).
     renderModal({ codex_available: 'false', default_effort_codex: 'low' });
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
@@ -1363,7 +1343,6 @@ describe('SettingsModal chief settings', () => {
     fireEvent.click(screen.getByTestId('settings-nav-agents'));
 
     expect(await screen.findByTestId('settings-default-context-cap-claude')).toHaveValue(800000);
-    // Blank means uncapped (the agent's own behavior), not the built-in default.
     expect(screen.getByTestId('settings-default-context-cap-codex')).toHaveValue(null);
   });
 
@@ -1563,12 +1542,8 @@ describe('SettingsModal automation handle', () => {
     expect(getSettingsAutomationHandle()?.getState().activeSection).toBe('agents');
   });
 
-  // Regression test: SettingsModal re-registers a fresh handle on every render
-  // (its registration effect depends on selectedSection), so a handle
-  // reference captured *before* calling selectSection closes over the
-  // pre-selection state. A caller (like the bridge's settings_select_section
-  // case) must re-read through getSettingsAutomationHandle() after the
-  // section switch settles, not reuse the handle it already had.
+  // SettingsModal re-registers a fresh handle every render, so one captured before
+  // selectSection is stale; re-read getSettingsAutomationHandle() after the switch.
   it('a handle captured before selectSection reports stale state; re-reading the module getter reports fresh state', async () => {
     renderModal();
     await screen.findByText('Mobile Web Client');
@@ -1592,13 +1567,6 @@ describe('SettingsModal automation handle', () => {
     );
   });
 
-  /**
-   * The modal mounts before the daemon's settings broadcast arrives, so the
-   * auto-settle drafts initialise from the built-in 30/15 defaults. If they are
-   * not resynced when the real settings land, a saved policy is displayed wrong
-   * and — because both fields commit on blur — writing that stale display back
-   * silently replaces the user's policy with the defaults.
-   */
   it('hydrates the auto-settle fields when settings arrive after mount', async () => {
     const onSetSetting = vi.fn();
     const props = {
@@ -1625,13 +1593,11 @@ describe('SettingsModal automation handle', () => {
       onSetTheme: vi.fn(),
     };
 
-    // Mounted with nothing from the daemon yet.
     const { rerender } = render(<SettingsModal {...props} settings={{}} />);
     fireEvent.click(screen.getByTestId('settings-nav-hygiene'));
     const arm = await screen.findByTestId('settings-auto-settle-arm');
     expect((arm as HTMLInputElement).value).toBe('30');
 
-    // The broadcast lands, carrying a policy the user already saved.
     rerender(
       <SettingsModal
         {...props}
@@ -1647,7 +1613,6 @@ describe('SettingsModal automation handle', () => {
       (screen.getByTestId('settings-auto-settle-countdown') as HTMLInputElement).value
     ).toBe('20');
 
-    // And blurring an untouched field must not write anything back.
     fireEvent.blur(screen.getByTestId('settings-auto-settle-arm'));
     expect(onSetSetting).not.toHaveBeenCalled();
   });

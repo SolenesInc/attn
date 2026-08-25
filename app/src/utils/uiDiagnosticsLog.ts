@@ -1,13 +1,7 @@
-// Bounded, disk-backed diagnostics for failures that affect the whole app
-// shell. Terminal rendering has its own richer stream; this file answers the
-// layer above it: did React render, did the DOM stay visible, did the event loop
-// stall, or did a native browser child WebView remain over the app?
 import { isTauri } from '@tauri-apps/api/core';
 
 const DEBUG_DIR = 'debug';
 const FILE = `${DEBUG_DIR}/ui-diagnostics.jsonl`;
-// Kept as an app-local path so the UI can name the exact durable artifact
-// without guessing an installation-specific macOS container directory.
 export const UI_DIAGNOSTICS_FILE = `$APPLOCALDATA/${FILE}`;
 const appLocalDataBundleId = import.meta.env.VITE_ATTN_BUILD_BUNDLE_ID || 'com.attn.manager';
 export const UI_DIAGNOSTICS_FILE_DISPLAY = `~/Library/Application Support/${appLocalDataBundleId}/${FILE}`;
@@ -50,9 +44,7 @@ function byteLength(value: string): number {
 
 async function append(line: string): Promise<void> {
   if (!isTauri()) return;
-  // Some unit tests mock `isTauri()` so browser-host calls take their native
-  // branch without installing Tauri's real invoke bridge. Avoid noisy failed
-  // filesystem calls in that partial environment.
+  // Unit tests mock `isTauri()` without installing Tauri's real invoke bridge.
   const tauriInternals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
   if (typeof tauriInternals?.invoke !== 'function') return;
   try {

@@ -1,7 +1,3 @@
-/**
- * Selection → pending-annotation mapping. `evaluateSelection` is pure over its
- * inputs so tests can drive it with synthetic ranges, not mouse geometry.
- */
 
 import { createAnchor, domPointToOffset } from '../anchoring';
 import type { AnchorRecord, BlockText } from '../anchoring';
@@ -56,11 +52,6 @@ function owningBlockElement(node: Node): Element | null {
   return elementOf(node)?.closest('[data-block-id]') ?? null;
 }
 
-/**
- * Validate a selection and map it to an anchor, or null when it is collapsed,
- * escapes the reader root, hits excepted chrome, or cannot be anchored.
- * Cross-block selections clamp to the FIRST block (v1 single-block anchoring).
- */
 export function evaluateSelection(
   root: HTMLElement,
   selection: SelectionLike | null,

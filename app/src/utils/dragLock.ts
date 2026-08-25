@@ -1,10 +1,5 @@
-// Locks text selection across the whole document for the duration of a pointer
-// drag. WebKit (the engine Tauri uses on macOS) does not honor preventDefault on
-// pointerdown for selection purposes, so a divider/header drag still paints a
-// text selection across whatever it passes over. Disabling user-select on <body>
-// and swallowing `selectstart` is the reliable cross-engine fix.
-//
-// Returns a release() that restores the prior state. Call it on pointerup.
+// WebKit does not honor preventDefault on pointerdown for selection purposes, so a drag
+// still paints a text selection; disabling user-select on <body> is the reliable fix.
 type BodyStyle = CSSStyleDeclaration & { webkitUserSelect?: string };
 
 export function lockTextSelection(cursor?: string): () => void {

@@ -114,9 +114,6 @@ func readCorpusGolden(t *testing.T, fixture string) string {
 	return string(golden)
 }
 
-// normalizeCorpusViewport collapses the viewport's trailing empty rows to a
-// single final newline so goldens carry no blank lines at EOF; the fixed grid
-// implies the empty rows.
 func normalizeCorpusViewport(text string) string {
 	trimmed := strings.TrimRight(text, "\n")
 	if trimmed == "" {

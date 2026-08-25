@@ -19,15 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn seed` is the garden's agent surface. It is deliberately the shortest
-// path in the CLI: planting must cost one line and return the id, because
-// anything worth handing off, parking, or attributing gets planted, and a
-// capture that costs ceremony does not happen.
-//
-// Scope comes from the daemon, not from flags: the garden is one space, and the
-// session id in the environment is enough for it to infer the plot a dispatched
-// session was aimed at.
-
 func runSeed() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeSeedHelp(os.Stdout)
@@ -224,8 +215,6 @@ func seedClient() *client.Client {
 
 const seedPrimeText = hooks.GardenGuidance
 
-// seedPrimeTailFromReady renders the live tail selected by the exact flag-free
-// ready answer the daemon returned.
 func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	var tail strings.Builder
 	switch {
@@ -261,7 +250,6 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	return tail.String() + "\n"
 }
 
-// seedPrimeFromReady renders the standing launch guidance plus the live tail.
 func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
 	return seedPrimeText + "\n\n" + seedPrimeTailFromReady(ready)
 }
@@ -283,9 +271,6 @@ func seedFail(verb string, err error) {
 	os.Exit(1)
 }
 
-// seedFlags are what every seed command may take. The session is resolved
-// best-effort: a headless caller with no session is a real case, and only the
-// commands that need a scope refuse it.
 type seedFlags struct {
 	fs             *flag.FlagSet
 	session        *string
@@ -348,8 +333,6 @@ func newSeedFlags(verb string) *seedFlags {
 	}
 }
 
-// noteKind reads --handoff. The plain log entry is the default, so a note
-// written the way it always was stays one.
 func (f *seedFlags) noteKind() string {
 	if *f.handoff {
 		return garden.NoteKindHandoff
@@ -357,8 +340,6 @@ func (f *seedFlags) noteKind() string {
 	return ""
 }
 
-// text reads -m, taking stdin when it is "-", so a long body or note can be
-// piped instead of quoted into a shell.
 func (f *seedFlags) text(verb string) string {
 	if *f.message != "-" {
 		return *f.message
@@ -370,9 +351,8 @@ func (f *seedFlags) text(verb string) string {
 	return string(raw)
 }
 
-// parse reads flags interleaved with positionals, the way the rest of the CLI
-// does: Go's parser stops at the first positional, so a --json written after the
-// title would otherwise be swallowed.
+// parse reads flags interleaved with positionals: Go's parser stops at the first
+// positional, so a --json written after the title would otherwise be swallowed.
 func (f *seedFlags) parse(verb string, args []string) []string {
 	var positionals []string
 	rest := args
@@ -408,8 +388,6 @@ func (f *seedFlags) wasSet(name string) bool {
 	return set
 }
 
-// staleWindowSeconds reads --window, refusing a value that is not a duration.
-// 0 means "the daemon's default", which the result echoes back.
 func (f *seedFlags) staleWindowSeconds() int {
 	raw := strings.TrimSpace(*f.window)
 	if raw == "" {
@@ -437,8 +415,6 @@ func parseWindow(raw string) (time.Duration, error) {
 	return window, nil
 }
 
-// formatWindow renders a window the way it is said: whole days as Nd,
-// anything else as Go's own duration string.
 func formatWindow(window time.Duration) string {
 	if window >= 24*time.Hour && window%(24*time.Hour) == 0 {
 		return fmt.Sprintf("%dd", window/(24*time.Hour))
@@ -463,7 +439,6 @@ func runSeedPlant(args []string) {
 		writeJSON(result.Seed)
 		return
 	}
-	// The id alone on stdout is the point: an agent plants and then uses it.
 	fmt.Println(result.Seed.ID)
 }
 
@@ -484,8 +459,6 @@ func runSeedList(args []string) {
 		return
 	}
 	if *f.stale {
-		// The rule is half the answer: a stale seed is a question for your
-		// judgment, and the reader has to know what was asked to judge it.
 		fmt.Printf("open seeds whose log has not moved for %s — no note, no move, no edge. This is a query, not a reaper: tend, note or park what still matters.\n\n",
 			staleWindowLabel(result.StaleWindowSeconds))
 	}
@@ -511,8 +484,6 @@ func runSeedList(args []string) {
 	}
 }
 
-// staleWindowLabel says the window the daemon actually applied, which is the
-// default unless --window moved it.
 func staleWindowLabel(seconds *int) string {
 	if seconds == nil || *seconds <= 0 {
 		return formatWindow(garden.DefaultStaleWindow)
@@ -520,8 +491,6 @@ func staleWindowLabel(seconds *int) string {
 	return formatWindow(time.Duration(*seconds) * time.Second)
 }
 
-// plotProgressSuffix is how a plot wears its progress in a listing: the counts
-// that say whether the plot is draining, and where it is stuck.
 func plotProgressSuffix(seed protocol.Seed) string {
 	if seed.PlotProgress == nil {
 		return ""
@@ -567,8 +536,6 @@ func runSeedPlot(args []string) {
 	w.Flush()
 }
 
-// readPlotPayload takes the payload from a file, or from stdin when there is no
-// path — the shape an agent writes a plot in.
 func readPlotPayload(path string) []byte {
 	if path == "" || path == "-" {
 		payload, err := io.ReadAll(os.Stdin)
@@ -584,15 +551,11 @@ func readPlotPayload(path string) []byte {
 	return payload
 }
 
-// seedRow is one printed line: the seed and how deep it sits under its plot.
 type seedRow struct {
 	seed  protocol.Seed
 	depth int
 }
 
-// seedRows orders a listing. --flat keeps the daemon's order; the default hands
-// the hierarchy to the garden package, so the CLI and app cannot disagree
-// about what nests under what.
 func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
 	rows := make([]seedRow, 0, len(seeds))
 	if flat {
@@ -613,8 +576,6 @@ func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
 	return rows
 }
 
-// shortStamp renders a wire timestamp for a terminal column; an unparseable one
-// is printed as it arrived rather than swallowed.
 func shortStamp(stamp string) string {
 	t, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {
@@ -679,9 +640,6 @@ func runSeedSetResume(args []string) {
 	fprintSeed(os.Stdout, result.Seed)
 }
 
-// fprintArtifacts renders the current set as a small block above the log, not
-// as entries in it: what a seed points at now is a state, and reading it out of
-// a timeline of attaches and detaches is work nobody should have to do.
 func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifactReference) {
 	fmt.Fprintln(w, "artifacts:")
 	for _, artifact := range artifacts {
@@ -702,9 +660,6 @@ func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifactReference) {
 	}
 }
 
-// fprintSeedShow renders one seed for a reader. The handoff comes before the
-// seed, not after it: it was written to whoever is reading this, and a
-// continuity note under the body is a note nobody reads.
 func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	fprintHandoff(w, result.Handoff)
 	fprintSeed(w, result.Seed, result.Watching)
@@ -716,10 +671,6 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 		fmt.Fprintln(w)
 		fprintArtifacts(w, result.Artifacts)
 	}
-	// The handoff is already above; repeating it in the log would print the
-	// same paragraph twice on one screen. What was withheld is counted against
-	// the window the daemon read, not against what is printed here, so dropping
-	// it does not turn one shown note into one hidden note.
 	entries := withoutNote(result.Notes, result.Handoff)
 	if len(entries) > 0 {
 		fmt.Fprintln(w)
@@ -727,8 +678,6 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	}
 }
 
-// fprintHandoff renders the freshest handoff as its own block. Nothing prints
-// when there is none — a seed nobody handed over says nothing about handoffs.
 func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 	if handoff == nil {
 		return
@@ -741,8 +690,6 @@ func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 	fmt.Fprintln(w)
 }
 
-// withoutNote drops one note from a log by id, so a note rendered elsewhere on
-// the same screen is not printed twice.
 func withoutNote(notes []protocol.SeedNote, drop *protocol.SeedNote) []protocol.SeedNote {
 	if drop == nil {
 		return notes
@@ -756,9 +703,6 @@ func withoutNote(notes []protocol.SeedNote, drop *protocol.SeedNote) []protocol.
 	return out
 }
 
-// fprintRelations renders both directions of a seed's edges. The other seed's
-// state is on the line because "blocked-by s-7k3f9m" is only actionable when the
-// reader can see whether that blocker is still open.
 func fprintRelations(out io.Writer, relations []protocol.SeedRelation) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, relation := range relations {
@@ -767,9 +711,6 @@ func fprintRelations(out io.Writer, relations []protocol.SeedRelation) {
 	w.Flush()
 }
 
-// runSeedLink relates two seeds, reading `link <a> blocks <b>` as it is said out
-// loud. The daemon owns what may be linked, so a refusal here is only about the
-// shape of the command.
 func runSeedLink(unlink bool, args []string) {
 	verb := "link"
 	if unlink {
@@ -799,9 +740,6 @@ func runSeedLink(unlink bool, args []string) {
 	}
 }
 
-// runSeedReady is the flag-free question: what can I tend now. Scope comes from
-// the daemon, which knows the session, so an agent asks without naming its own
-// context.
 func runSeedReady(args []string) {
 	f := newSeedFlags("ready")
 	if positionals := f.parse("ready", args); len(positionals) != 0 {
@@ -869,15 +807,11 @@ func freshestHandoffs(notes []protocol.SeedNote) map[string]protocol.SeedNote {
 	return freshest
 }
 
-// firstLine keeps a handoff to one row of a listing; show renders the whole one.
 func firstLine(body string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(body), "\n")
 	return line
 }
 
-// readyScopeName says what the answer covered, so an empty answer is never read
-// as an empty garden. The plot scope is inferred, never a fence: --all steps
-// back out to the garden from anywhere.
 func readyScopeName(result *protocol.SeedReadyResult) string {
 	if result.Scope == "plot" {
 		return fmt.Sprintf("in the plot under %s", result.ScopeID)
@@ -927,9 +861,6 @@ func orDash(value string) string {
 	return value
 }
 
-// runSeedTransition drives the five lifecycle verbs. They share everything but
-// their name: the daemon holds the state machine, so the CLI's job is to say
-// which move and hand over who is asking.
 func runSeedTransition(verb string, args []string) {
 	f := newSeedFlags(verb)
 	positionals := f.parse(verb, args)
@@ -942,17 +873,12 @@ func runSeedTransition(verb string, args []string) {
 		seedFail(verb, err)
 	}
 	if *f.json {
-		// The whole result, not just the seed: a tend carries the handoff, and a
-		// --json caller that only ever saw the seed would never be primed.
 		writeJSON(result)
 		return
 	}
 	fprintTransition(os.Stdout, result)
 }
 
-// fprintTransition renders what a move did, and then the handoff when the move
-// was the pickup. The claim is confirmed first — the tender needs to know it
-// landed — and the note it primes with follows on the same screen.
 func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult) {
 	fmt.Fprintln(w, transitionLine(result.Seed))
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
@@ -964,13 +890,10 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult) {
 	}
 }
 
-// closedSeedStatus is the two statuses that stop holding anything back.
 func closedSeedStatus(status string) bool {
 	return status == "harvested" || status == "withered"
 }
 
-// openPlotSeeds is how many of a plot's children are still open; zero for a
-// seed with no plot.
 func openPlotSeeds(seed protocol.Seed) int {
 	p := seed.PlotProgress
 	if p == nil {
@@ -983,8 +906,6 @@ func openPlotSeeds(seed protocol.Seed) int {
 	return open
 }
 
-// transitionLine is the one line a move prints: what the seed is now, and who
-// holds it if anybody does. An agent reads it to confirm the claim landed.
 func transitionLine(seed protocol.Seed) string {
 	line := fmt.Sprintf("%s is %s", seed.ID, seed.Status)
 	if tender := crew.HolderName(seed.TenderMember, seed.TenderSession); tender != "" {
@@ -1047,10 +968,6 @@ func runSeedWatch(verb string, args []string) {
 	}
 }
 
-// runSeedArtifact writes one attach or detach. The reference is assembled from
-// the flag the caller used, so the kind is chosen by what they pointed at
-// rather than typed twice — and the daemon is handed a typed shape, never a
-// string to read meaning out of.
 func runSeedArtifact(verb string, args []string) {
 	f := newSeedFlags(verb)
 	positionals := f.parse(verb, args)
@@ -1065,8 +982,6 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	// The body is optional here alone: the daemon renders one from the reference
-	// when the caller had nothing to add, so the log reads as prose either way.
 	result, err := seedClient().SeedNote(
 		f.sessionID(), positionals[0], f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
 	if err != nil {
@@ -1076,10 +991,6 @@ func runSeedArtifact(verb string, args []string) {
 		writeJSON(result.Note)
 		return
 	}
-	// The answer names the document that moved: with a -m the body is the
-	// caller's own words, which on their own never say which document they were
-	// about. Without one the daemon already rendered that same sentence as the
-	// body, so it is printed once either way.
 	moved := garden.DefaultNoteBody(kind, garden.ArtifactReference{
 		Kind:               artifact.Kind,
 		NotebookDocumentID: protocol.Deref(artifact.NotebookDocumentID),
@@ -1093,8 +1004,6 @@ func runSeedArtifact(verb string, args []string) {
 	}
 }
 
-// artifact reads the one reference flag the caller passed. Exactly one, because
-// a call naming two documents does not say which one it means.
 func (f *seedFlags) artifact() (*protocol.SeedArtifactReference, error) {
 	path := strings.TrimSpace(*f.path)
 	repo := strings.TrimSpace(*f.repo)
@@ -1116,8 +1025,6 @@ func (f *seedFlags) artifact() (*protocol.SeedArtifactReference, error) {
 	}
 	switch {
 	case path != "":
-		// A repository beside a path is what tells the same relative path in two
-		// worktrees apart; without one the path stands alone.
 		ref := &protocol.SeedArtifactReference{Kind: garden.ArtifactMarkdownFile, Path: protocol.Ptr(path)}
 		if repo != "" {
 			ref.Repository = protocol.Ptr(repo)
@@ -1151,8 +1058,6 @@ func runSeedNotes(args []string) {
 	fprintNotes(os.Stdout, result.Notes, positionals[0], result.Total-len(result.Notes))
 }
 
-// fprintNotes renders a log newest first, and says what it did not print. A
-// silently short log reads as a complete one.
 func fprintNotes(w io.Writer, notes []protocol.SeedNote, seedID string, withheld int) {
 	for i, note := range notes {
 		if i > 0 {
@@ -1167,8 +1072,6 @@ func fprintNotes(w io.Writer, notes []protocol.SeedNote, seedID string, withheld
 	}
 }
 
-// noteKindSuffix labels a log entry that is not a plain note, so a handoff
-// read in the log is recognisable as one written to a successor.
 func noteKindSuffix(kind string) string {
 	if kind == "" || kind == garden.NoteKindNote {
 		return ""
@@ -1176,9 +1079,6 @@ func noteKindSuffix(kind string) string {
 	return "  " + kind
 }
 
-// runSeedExport is the review bridge: it renders a seed to a markdown file so
-// the annotation surface — which addresses files by workspace path — works on a
-// seed today. Slice 6 removes the file by rendering the seed itself.
 func runSeedExport(args []string) {
 	f := newSeedFlags("export")
 	positionals := f.parse("export", args)
@@ -1217,9 +1117,6 @@ func runSeedExport(args []string) {
 	fmt.Printf("wrote %s from %s — edit the seed, not the file\n", absolute, result.Seed.ID)
 }
 
-// gardenSeedFromWire carries a wire seed back into the domain type, which is
-// where rendering and hierarchy live — so the CLI and a future in-app renderer
-// cannot disagree about what a plot looks like or what nests under it.
 func gardenSeedFromWire(seed protocol.Seed) garden.Seed {
 	out := garden.Seed{
 		ID: seed.ID, Title: seed.Title, Body: seed.Body, Status: seed.Status,

@@ -12,16 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 )
 
-// `attn enrollment` is the operator surface for the one relationship a daemon
-// has with another daemon: whose home-level state it holds. It reads and writes
-// the two files in the profile data dir directly rather than going through the
-// daemon's IPC protocol — deliberately, on both counts. The record has to be
-// readable and writable when the daemon is not running (a home enrolls a remote
-// right after installing the binary, before starting it), and the daemon re-reads
-// the file on every ask, so a change here takes effect without a restart.
-//
-// A home enrolls its outposts over ssh by running `enrollment enroll` there, so
-// the refusal wording an outpost produces is what lands in the home's log.
+// Reads and writes the data dir's two files directly, not over IPC: the record must work with the daemon stopped.
 func runEnrollment() {
 	if len(os.Args) < 3 {
 		runEnrollmentStatus(nil)
@@ -108,9 +99,6 @@ func runEnrollmentStatus(args []string) {
 	writeEnrollmentStatus(os.Stdout, status)
 }
 
-// writeEnrollmentStatus shows the relationship and then the fence's own answer,
-// so the refusal an outpost gives to a garden or crew command is readable
-// before anyone runs one.
 func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 	fmt.Fprintf(w, "daemon:     %s\n", status.DaemonID)
 	fmt.Fprintf(w, "enrollment: %s\n", status.Describe())
@@ -135,8 +123,6 @@ func runEnrollmentEnroll(args []string) {
 	result, err := enrollment.Enroll(enrollmentDataRoot(), strings.TrimSpace(*home))
 	var foreign *enrollment.ForeignHomeError
 	if errors.As(err, &foreign) {
-		// A refusal is a result, not a crash: the home reads it back over ssh and
-		// shows the wording to whoever asked for the sync.
 		emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
 		os.Exit(enrollmentRefusedExitCode)
 	}
@@ -163,14 +149,10 @@ func runEnrollmentLeave(args []string) {
 	emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
 }
 
-// enrollmentRefusedExitCode is the exit code a re-home refusal ends with. The
-// hub reads it over ssh to tell "this remote belongs to another home" apart from
-// "this remote could not answer" — see internal/hub/bootstrap.go.
+// Separates "belongs to another home" from "could not answer" for the hub's ssh call — see internal/hub/bootstrap.go.
 const enrollmentRefusedExitCode = 3
 
-// emitEnrollmentResult always puts a refusal's wording on stderr, JSON or not:
-// the hub's ssh call keeps stderr as the message it shows the user, and stdout
-// as the machine-readable half.
+// A refusal's wording always goes to stderr, JSON or not: the hub's ssh call shows stderr and parses stdout.
 func emitEnrollmentResult(out, errOut io.Writer, result enrollment.Result, asJSON bool) {
 	if result.Status == "refused" {
 		fmt.Fprintln(errOut, result.Message)

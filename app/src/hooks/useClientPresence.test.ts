@@ -28,9 +28,6 @@ describe('useClientPresence', () => {
     expect(sent).toEqual([{ visible: true, dashboardVisible: true }]);
   });
 
-  // The daemon expires a report it has not heard repeated, so a window that
-  // goes quiet has to keep saying it is there or generation stops for a user
-  // who is still reading.
   it('keeps heartbeating while nothing changes', () => {
     renderHook(() => useClientPresence(send, { dashboardVisible: true, connected: true }));
     sent.length = 0;
@@ -68,8 +65,7 @@ describe('useClientPresence', () => {
     expect(sent).toEqual([{ visible: true, dashboardVisible: false }]);
   });
 
-  // Zero would claim the user just typed. A window that has seen no input has
-  // nothing to say about idleness, and the daemon reads the absence that way.
+  // Zero would claim the user just typed; the daemon reads the absence instead.
   it('omits idle time until it has seen input', () => {
     renderHook(() => useClientPresence(send, { dashboardVisible: false, connected: true }));
     expect(sent[0]).not.toHaveProperty('idleSeconds');
@@ -83,9 +79,6 @@ describe('useClientPresence', () => {
     expect(sent[sent.length - 1]?.idleSeconds).toBeGreaterThanOrEqual(0);
   });
 
-  // Every keystroke says the same thing, so a burst must not become a burst of
-  // messages — but a stretch of silence followed by input has to be reported
-  // without waiting out the heartbeat.
   it('collapses a burst of input into a single report', () => {
     renderHook(() => useClientPresence(send, { dashboardVisible: false, connected: true }));
     sent.length = 0;

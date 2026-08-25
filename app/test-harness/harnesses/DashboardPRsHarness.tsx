@@ -1,8 +1,4 @@
-/**
- * Dashboard PRs Panel Harness
- *
- * Renders the Dashboard PR list in isolation with mocked daemon props.
- */
+// Renders the Dashboard PR list in isolation with mocked daemon props.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dashboard } from '../../src/components/Dashboard';
 import { DaemonProvider } from '../../src/contexts/DaemonContext';

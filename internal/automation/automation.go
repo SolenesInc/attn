@@ -32,21 +32,11 @@ type DefinitionSpec struct {
 type TriggerSpec struct {
 	Type         string               `yaml:"type" json:"type"`
 	Repositories RepositoryFilterSpec `yaml:"repositories,omitempty" json:"repositories,omitempty"`
-	// Schedule is a pointer so that encoding/json's omitempty actually omits it
-	// for non-scheduled triggers: a zero-value ScheduleSpec struct is never
-	// "empty" to json.Marshal, so a value field would put a spurious
-	// "schedule":{...} key in every manual/github_review_requested
-	// definition's canonical JSON and bump UpsertAutomationDefinition's
-	// revision on every byte-identical re-apply.
-	Schedule *ScheduleSpec `yaml:"schedule,omitempty" json:"schedule,omitempty"`
-	// Continuity and CatchUp are valid only on a scheduled trigger — manual is
-	// always implied fresh, github_review_requested is always implied
-	// per_subject+latest (see ValidateDefinition and ResolvedTriggerPolicy).
-	// Continuity defaults to "fresh" when omitted on scheduled; values
-	// fresh|singleton. CatchUp has no default — scheduled requires it
-	// explicitly; values skip|latest.
-	Continuity string `yaml:"continuity,omitempty" json:"continuity,omitempty"`
-	CatchUp    string `yaml:"catch_up,omitempty" json:"catch_up,omitempty"`
+	// A pointer so omitempty actually omits it: a value field would add a spurious
+	// "schedule":{} to canonical JSON and bump the revision on a byte-identical re-apply.
+	Schedule   *ScheduleSpec `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+	Continuity string        `yaml:"continuity,omitempty" json:"continuity,omitempty"`
+	CatchUp    string        `yaml:"catch_up,omitempty" json:"catch_up,omitempty"`
 }
 type ScheduleSpec struct {
 	Cron     string `yaml:"cron,omitempty" json:"cron,omitempty"`
@@ -83,30 +73,15 @@ type Snapshot struct {
 	Prompt             string          `json:"prompt"`
 	Launch             EffectiveLaunch `json:"launch"`
 	Location           LocationSpec    `json:"location"`
-	// Continuity and CatchUp are resolved at Effective() time from the
-	// trigger's implied or configured policy (see ResolvedTriggerPolicy) —
-	// delivery code reads them from here, in one place, regardless of
-	// trigger type.
-	Continuity string `json:"continuity"`
-	CatchUp    string `json:"catch_up,omitempty"`
+	Continuity         string          `json:"continuity"`
+	CatchUp            string          `json:"catch_up,omitempty"`
 }
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// errEnabledManagedOutsideSpec is returned by ParseDefinitionYAML when the
-// document carries a top-level `enabled` key. `enabled` has exactly one
-// authority — the automation_definitions.enabled column — so a spec that
-// tries to set it is rejected outright rather than silently ignored.
+// `enabled` has exactly one authority, the automation_definitions.enabled column.
 var errEnabledManagedOutsideSpec = errors.New("enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'")
 
-// errPolicyRemoved is returned by ParseDefinitionYAML when the document
-// carries a top-level `policy` key. The v1 policy block (continuity/
-// catch_up/overlap) is gone: scheduled triggers take continuity and catch_up
-// directly (trigger.continuity/trigger.catch_up); manual and
-// github_review_requested no longer configure them at all (see
-// ValidateDefinition, ResolvedTriggerPolicy). Probed the same way as
-// errEnabledManagedOutsideSpec so the error is directed rather than a
-// confusing KnownFields "field policy not found" decode failure.
 var errPolicyRemoved = errors.New("policy has been removed; scheduled triggers take continuity and catch_up directly")
 
 func ParseDefinitionYAML(data []byte) (DefinitionSpec, []byte, error) {
@@ -133,25 +108,12 @@ func ParseDefinitionYAML(data []byte) (DefinitionSpec, []byte, error) {
 	return spec, canonical, err
 }
 
-// MarshalDefinitionYAML renders spec back to valid, re-appliable YAML — every
-// field of DefinitionSpec and its nested structs already carries a `yaml:`
-// tag, so this is a direct yaml.v3 marshal. It is the fallback used to
-// reconstruct definition_yaml for rows written before migration 75 added
-// spec_yaml (empty spec_yaml column): the result loses whatever comments the
-// original author's YAML carried, but ParseDefinitionYAML(MarshalDefinitionYAML(spec))
-// round-trips to an equal spec, so it stays a legal input to
-// validateAutomationSpec / automationApply.
 func MarshalDefinitionYAML(spec DefinitionSpec) ([]byte, error) {
 	return yaml.Marshal(spec)
 }
 
-// StarterDefinition is the placeholder spec automation_definition_get returns
-// for id: "" (new-definition case). It is deliberately not a valid,
-// appliable definition as-is — Location.Path is a placeholder, not a real
-// directory, so it fails canonicalizeDirectory in ValidateDefinition until
-// the user edits it — but every field is filled in so the editor opens on a
-// complete, self-explanatory document rather than an empty buffer the user
-// has to build field-by-field from documentation.
+// Deliberately not appliable as-is — Location.Path fails canonicalizeDirectory until the
+// user edits it — but every field is filled so the editor opens on a complete document.
 var StarterDefinition = DefinitionSpec{
 	APIVersion: APIVersion,
 	ID:         "my-automation",
@@ -162,10 +124,6 @@ var StarterDefinition = DefinitionSpec{
 	Location:   LocationSpec{Type: "directory", Path: "/path/to/repository"},
 }
 
-// StarterTemplateYAML renders StarterDefinition through the same
-// MarshalDefinitionYAML path every legacy-row fallback uses, so the starter
-// template can never drift into a shape validateAutomationSpec would reject
-// for reasons other than the intentional placeholder path.
 func StarterTemplateYAML() ([]byte, error) {
 	return MarshalDefinitionYAML(StarterDefinition)
 }
@@ -292,14 +250,6 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	return nil
 }
 
-// ResolvedTriggerPolicy returns the continuity and catch_up values that
-// govern spec's delivery, whether or not the trigger configures them
-// explicitly: manual is always fresh (no catch_up), github_review_requested
-// is always per_subject+latest, and scheduled uses whatever
-// ValidateDefinition resolved onto the trigger (continuity defaulted to
-// fresh if omitted; catch_up is mandatory there). Shared by Effective() and
-// any caller (e.g. the WS definition summary) that needs the same resolved
-// values without re-deriving delivery's Snapshot.
 func ResolvedTriggerPolicy(spec DefinitionSpec) (string, string) {
 	switch spec.Trigger.Type {
 	case "github_review_requested":
@@ -531,35 +481,23 @@ func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
 	return Snapshot{APIVersion: APIVersion, DefinitionRevision: revision, Prompt: spec.Prompt, Launch: launch, Location: spec.Location, Continuity: continuity, CatchUp: catchUp}, nil
 }
 
-// ContinuationContract is the subset of a Snapshot that governs whether a
-// continuity binding (ticket/session/worktree) is safe to reuse across
-// occurrences: the reviewer-facing prompt, launch configuration, and
-// location. It deliberately excludes Continuity/CatchUp (a policy change
-// doesn't invalidate an in-flight thread) and any per-occurrence input such as
-// GitHub HeadSHA. Delivery validates the PR identity separately, while a new
-// head is exactly what the per-subject thread is allowed to continue onto.
+// Excludes Continuity/CatchUp (a policy change does not invalidate an in-flight thread)
+// and per-occurrence input such as HeadSHA.
 type ContinuationContract struct {
 	Prompt   string
 	Launch   EffectiveLaunch
 	Location LocationSpec
 }
 
-// NewContinuationContract builds a ContinuationContract from its comparison
-// fields directly, for callers (e.g. a WorkRequest) that don't hold a full
-// Snapshot.
 func NewContinuationContract(prompt string, launch EffectiveLaunch, location LocationSpec) ContinuationContract {
 	return ContinuationContract{Prompt: prompt, Launch: launch, Location: location}
 }
 
-// ContinuationContract extracts the Snapshot's continuation contract.
 func (s Snapshot) ContinuationContract() ContinuationContract {
 	return NewContinuationContract(s.Prompt, s.Launch, s.Location)
 }
 
-// Equal reports whether two contracts would be treated as identical by
-// validateAutomationContinuation. Location has a non-comparable map field
-// (RepositorySources.Overrides), so it is compared via JSON marshal rather
-// than struct equality.
+// Location holds a map, so it is compared via JSON, not struct equality.
 func (c ContinuationContract) Equal(other ContinuationContract) bool {
 	if c.Prompt != other.Prompt || c.Launch != other.Launch {
 		return false

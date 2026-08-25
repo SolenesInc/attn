@@ -58,11 +58,8 @@ describe('TerminalBlockStore', () => {
 
   it('does not merge two commands when a command-end is lost but the next prompt-start survives', () => {
     const store = new TerminalBlockStore();
-    // make install
     store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 });
     store.applyMarker({ kind: 'pre-exec', cmdline: 'make install' }, { row: 1, col: 0 });
-    // <-- make install's command-end (OSC 133;D) was lost (dropped chunk)
-    // echo 1 (its prompt-start survived)
     store.applyMarker({ kind: 'prompt-start' }, { row: 40, col: 0 });
     store.applyMarker({ kind: 'pre-exec', cmdline: 'echo 1' }, { row: 41, col: 0 });
     store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 43, col: 0 });
@@ -71,20 +68,16 @@ describe('TerminalBlockStore', () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[0].command).toBe('make install');
     expect(blocks[0].promptRow).toBe(0);
-    expect(blocks[0].endRow).toBe(40); // closed at the recovered prompt row
+    expect(blocks[0].endRow).toBe(40);
     expect(blocks[1].command).toBe('echo 1');
     expect(blocks[1].promptRow).toBe(40);
     expect(blocks[1].endRow).toBe(43);
   });
 
   it('does not merge when both the command-end AND the next prompt-start are lost', () => {
-    // The make-install-then-echo-1 bug: fish emits `OSC 133;D` + `OSC 133;A`
-    // back-to-back at a new prompt, so a single dropped chunk loses both. Only
-    // echo 1's input-start/pre-exec/command-end survive.
     const store = new TerminalBlockStore();
     store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 });
     store.applyMarker({ kind: 'pre-exec', cmdline: 'make install' }, { row: 1, col: 0 });
-    // <-- D (make install) + A (echo 1) both lost
     store.applyMarker({ kind: 'input-start' }, { row: 41, col: 2 });
     store.applyMarker({ kind: 'pre-exec', cmdline: 'echo 1' }, { row: 42, col: 0 });
     store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 44, col: 0 });
@@ -93,7 +86,7 @@ describe('TerminalBlockStore', () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[0].command).toBe('make install');
     expect(blocks[0].promptRow).toBe(0);
-    expect(blocks[0].endRow).toBe(41); // closed when the orphan input-start arrived
+    expect(blocks[0].endRow).toBe(41);
     expect(blocks[1].command).toBe('echo 1');
     expect(blocks[1].promptRow).toBe(41);
     expect(blocks[1].endRow).toBe(44);
@@ -119,18 +112,15 @@ describe('blockViewportSpan', () => {
   });
 
   it('maps a fully visible block to viewport rows', () => {
-    // Buffer rows 3..7 (endRow exclusive) with the viewport starting at buffer row 0.
     expect(blockViewportSpan(block(3, 8), 0, 24)).toEqual({
       startRow: 3, endRow: 7, visible: true, spansViewport: false,
     });
   });
 
   it('reports an over-tall block as spanning the viewport (the make-in-a-small-pane case)', () => {
-    // 204-row block, 27-row viewport scrolled to its bottom: top is far off-screen.
     expect(blockViewportSpan(block(3, 207), 183, 27)).toEqual({
       startRow: -180, endRow: 23, visible: true, spansViewport: false,
     });
-    // Scrolled into the middle: both edges off-screen → spans the whole viewport.
     expect(blockViewportSpan(block(3, 207), 100, 27)).toEqual({
       startRow: -97, endRow: 106, visible: true, spansViewport: true,
     });
@@ -172,9 +162,6 @@ describe('extractBlock', () => {
   });
 });
 
-// Builds a completed block at explicit rows with a chosen anchor line, so a
-// store can be populated with blocks whose stored rows are deliberately stale
-// relative to a given access buffer (the mixed pre/post-reflow case).
 function blockAt(
   store: TerminalBlockStore,
   cmd: string,
@@ -195,14 +182,13 @@ describe('reanchorDelta scan window', () => {
     const baseRows = ['prompt> make', 'building'];
     blockAt(store, 'make', 0, 1, 2, (row) => baseRows[row] ?? '');
     const block = store.blocks()[0];
-    // Anchor 'prompt> make' now lives 200 rows later in the live buffer.
     const moved = [
       ...Array.from({ length: 200 }, (_, i) => `older-${i}`),
       'prompt> make',
       'building',
     ];
     expect(reanchorDelta(block, access(moved), 512)).toBe(200);
-    expect(reanchorDelta(block, access(moved))).toBeNull(); // default 64-row window
+    expect(reanchorDelta(block, access(moved))).toBeNull();
   });
 });
 
@@ -212,7 +198,6 @@ describe('TerminalBlockStore.reanchorOnResize', () => {
     const liveRows = ['prompt> a', 'out-a', 'prompt> b', 'out-b'];
     blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
     blockAt(store, 'b', 2, 3, 4, (row) => liveRows[row] ?? '');
-    // Resize promoted 2 rows out of scrollback: the same content sits +2 rows down.
     const shifted = ['x', 'y', ...liveRows];
     expect(store.reanchorOnResize(access(shifted))).toBe('ok');
     const [a, b] = store.blocks();
@@ -229,7 +214,6 @@ describe('TerminalBlockStore.reanchorOnResize', () => {
     const liveRows = ['prompt> keep', 'out-keep', 'prompt> gone', 'out-gone'];
     blockAt(store, 'keep', 0, 1, 2, (row) => liveRows[row] ?? '');
     blockAt(store, 'gone', 2, 3, 4, (row) => liveRows[row] ?? '');
-    // Only the first block's anchor survives the reflow.
     const after = ['prompt> keep', 'out-keep'];
     expect(store.reanchorOnResize(access(after))).toBe('ok');
     expect(store.blocks()).toHaveLength(1);
@@ -269,16 +253,13 @@ describe('TerminalBlockStore.reanchorOnResize', () => {
   });
 
   it('matches anchors whose rows are clipped to a narrower width (width-tolerant prefix)', () => {
-    // rowText() returns at most the current pane width, so a full-width
-    // 64-char anchor can only be compared on the overlapping prefix — without
-    // this, any width mismatch between capture and lookup drops every block.
+    // rowText() returns at most the current pane width, so a full-width anchor can only be compared on the overlapping prefix.
     const store = new TerminalBlockStore();
     const wide = [
       'prompt> seq 1 200; echo RESIZE_TOKEN_LONG_ENOUGH_TO_EXCEED_NARROW_WIDTH',
       'output line',
     ];
     blockAt(store, 'seq', 0, 1, 2, (row) => wide[row] ?? '');
-    // Same rows, clipped to a 30-column pane.
     const clipped = wide.map((line) => line.slice(0, 30));
     expect(store.reanchorOnResize(access(clipped))).toBe('ok');
     expect(store.blocks()).toHaveLength(1);
@@ -289,8 +270,6 @@ describe('TerminalBlockStore.reanchorOnResize', () => {
     const store = new TerminalBlockStore();
     const rows = ['prompt> unique-command-here', 'out'];
     blockAt(store, 'unique', 0, 1, 2, (row) => rows[row] ?? '');
-    // A 3-column pane: 3-char overlap is below the minimum — refuse, don't
-    // false-match the block onto any row starting with "pro".
     const tiny = ['pro', 'out'.slice(0, 3)];
     expect(store.reanchorOnResize(access(tiny))).toBe('all-stale');
     expect(store.blocks()).toHaveLength(0);
@@ -316,10 +295,8 @@ describe('TerminalBlockStore.blockAtAnchored', () => {
     const liveRows = ['prompt> a', 'out-a', 'tail'];
     blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
     const shifted = ['x', 'y', 'prompt> a', 'out-a', 'tail'];
-    // Block spans live buffer rows 2..3 (endRow 4 exclusive) after the +2 shift.
     expect(store.blockAtAnchored(2, access(shifted))?.command).toBe('a');
     expect(store.blockAtAnchored(3, access(shifted))?.command).toBe('a');
-    // Stale stored rows 0..1 must NOT match against the shifted buffer.
     expect(store.blockAtAnchored(0, access(shifted))).toBeNull();
   });
 
@@ -340,15 +317,12 @@ describe('blockViewportSpanAnchored', () => {
     blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
     const block = store.blocks()[0];
     const shifted = ['x', 'y', 'prompt> a', 'out-a'];
-    // Live block now at rows 2..3; viewport starts at live row 2.
     expect(blockViewportSpanAnchored(block, access(shifted), 2, 24)).toEqual({
       startRow: 0, endRow: 1, visible: true, spansViewport: false,
     });
   });
 
   it('returns null (not a wrong box) when the anchor is gone — the "completely off" regression', () => {
-    // Live-evidence shape: a tall `make` block stored with endRow far beyond the
-    // post-reflow buffer. With its anchor gone, the overlay must draw nothing.
     const store = new TerminalBlockStore();
     const liveRows = ['prompt> make', 'building'];
     blockAt(store, 'make', 0, 3, 720, (row) => liveRows[row] ?? '');
@@ -360,7 +334,6 @@ describe('blockViewportSpanAnchored', () => {
 });
 
 describe('TerminalBlockStore.seed', () => {
-  // The restore buffer the worker's SCREEN-space rows index into.
   const RESTORED = ['prompt> make test', 'building', 'ok', '', 'prompt> ls', 'a  b'];
   const rowTextAt = (row: number) => RESTORED[row] ?? '';
 
@@ -379,7 +352,6 @@ describe('TerminalBlockStore.seed', () => {
     expect(block.endRow).toBe(3);
     expect(block.command).toBe('make test');
     expect(block.exitCode).toBe(0);
-    // anchorRow is the input row; anchorText comes from the restored buffer.
     expect(block.anchorRow).toBe(0);
     expect(block.anchorText).toBe('prompt> make test');
     expect(block.inputStart).toEqual({ row: 0, col: 8 });
@@ -403,9 +375,7 @@ describe('TerminalBlockStore.seed', () => {
       [{ id: 9, pending: true, promptRow: 4, inputRow: 4, inputCol: 8, outputStartRow: 5, command: 'ls' }],
       rowTextAt,
     );
-    // Nothing completed yet — the block is still open.
     expect(store.blocks()).toHaveLength(0);
-    // The live D marker that arrives after restore closes it, keeping its id.
     store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 6, col: 0 }, rowTextAt);
     const blocks = store.blocks();
     expect(blocks).toHaveLength(1);
@@ -423,7 +393,6 @@ describe('TerminalBlockStore.seed', () => {
       ],
       rowTextAt,
     );
-    // A fresh live block allocates the next id above the max seeded (7).
     store.applyMarker({ kind: 'prompt-start' }, { row: 4, col: 0 }, rowTextAt);
     store.applyMarker({ kind: 'pre-exec', cmdline: 'c' }, { row: 5, col: 0 }, rowTextAt);
     store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 6, col: 0 }, rowTextAt);

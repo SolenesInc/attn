@@ -270,10 +270,8 @@ func (p *pluginConnection) request(ctx context.Context, method string, params in
 	return p.jsonrpcPeer.request(ctx, "plugin", method, params, result)
 }
 
-// setHealth records a health observation and reports whether it moved. The
-// check timestamp is not part of that answer: it advances every poll and no
-// client renders it, so gating on it would publish a fact 5,760 times a day per
-// plugin with nothing to say.
+// The check timestamp is deliberately not part of the moved answer: it advances
+// every poll, so gating on it would publish 5,760 empty facts a day per plugin.
 func (p *pluginConnection) setHealth(status, message string, at time.Time) bool {
 	p.healthMu.Lock()
 	defer p.healthMu.Unlock()
@@ -308,9 +306,6 @@ func readSocketFrame(reader *bufio.Reader) ([]byte, error) {
 	}
 }
 
-// maxInitialSocketFrameBytes bounds one request on the unix socket. Every
-// command's arguments travel inside this frame, JSON-escaped, so a command that
-// carries free text has to leave room under it.
 const maxInitialSocketFrameBytes = 64 * 1024
 
 func readInitialSocketFrame(reader *bufio.Reader, maxBytes int) ([]byte, error) {
@@ -466,14 +461,10 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 		return
 	}
 	defer func() {
-		// Mark this connection gone before making the plugin name available to a
-		// replacement connection. That ordering lets the replacement's
-		// NoteConnected cancel the disconnect grace instead of an old defer
-		// arming the timer after the new connection is already healthy.
+		// NoteDisconnected must run before unregister frees the name, or a replacement's
+		// NoteConnected cannot cancel the grace and this defer arms it under a healthy peer.
 		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
 		registry.unregister(plugin)
-		// Its runs outlive it. Until a driver speaks for them again, nothing
-		// moves their state.
 		d.armPluginDriverSilenceWatch(plugin.name)
 		plugin.closePending(io.EOF)
 		d.publishSettingsFact(FactPluginDisconnected, plugin.name)
@@ -518,10 +509,8 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 		return
 	}
 
-	// attn.classify_stop replies asynchronously (the classifier LLM call must
-	// not run on this synchronous read-loop goroutine — see
-	// handlePluginClassifyStop), so it is intercepted here instead of going
-	// through the handled/err auto-reply contract below.
+	// Intercepted rather than run through the auto-reply contract below: the
+	// classifier LLM call must not block this synchronous read-loop goroutine.
 	if msg.Method == "attn.classify_stop" {
 		d.handlePluginClassifyStop(plugin, msg)
 		return
@@ -591,12 +580,8 @@ func (d *Daemon) checkPluginHealth(plugin *pluginConnection) {
 	d.reportPluginHealth(plugin, now, "healthy", result.Message)
 }
 
-// reportPluginHealth records a poll's verdict and publishes only the ones that
-// moved. A steady plugin is silent: no fact, no durable bus row, no plugins
-// catalog rebuild (which re-scans both plugin directories from disk), and no log
-// line, while attn is idle. Crash and recovery still surface — they arrive as
-// supervisor phase transitions and connect/disconnect facts, not as a poll
-// verdict.
+// Publish only verdicts that moved: each fact rebuilds the plugins catalog off
+// disk, so a steady plugin must stay silent while attn is idle.
 func (d *Daemon) reportPluginHealth(plugin *pluginConnection, at time.Time, status, message string) {
 	if !plugin.setHealth(status, message, at) {
 		return

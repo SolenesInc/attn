@@ -1,12 +1,3 @@
-/**
- * Flat YAML frontmatter extraction for the metadata card.
- *
- * The reader parses the FULL document with remark-frontmatter, so remark
- * positions already refer to raw-file lines (anchor lineOffset stays 0).
- * This module only extracts the values the card renders: string / number /
- * boolean scalars and flat string arrays (`[a, b]` or dash lists). Nested
- * objects and multi-line scalars are skipped — PR2 scope, per spec §6.
- */
 
 export interface FrontmatterEntry {
   key: string;
@@ -15,11 +6,6 @@ export interface FrontmatterEntry {
 
 export interface ExtractedFrontmatter {
   entries: FrontmatterEntry[];
-  /**
-   * Number of raw-file lines the frontmatter block occupies, delimiters
-   * included. This is the `lineOffset` a caller would pass to
-   * rehypeSourceAnchors IF it stripped the block before parsing.
-   */
   lineCount: number;
 }
 
@@ -43,20 +29,12 @@ function parseInlineArray(value: string): string[] | null {
   return inner.split(',').map((item) => unquote(item.trim())).filter((item) => item.length > 0);
 }
 
-// Fence rules must match micromark-extension-frontmatter (what
-// remark-frontmatter uses to swallow the block from the rendered tree):
-// `---` at column 1, optionally followed by whitespace only. No indentation,
-// and no YAML `...` document-end closer — micromark rejects those, so if we
-// accepted them the card AND the raw YAML-as-prose would both render.
+// Must match micromark-extension-frontmatter, which remark-frontmatter uses to
+// swallow the block: accepting anything it rejects renders the card AND the raw YAML.
 const FENCE = /^---[ \t]*$/;
 
-/**
- * Returns the flat entries of a leading `---` YAML frontmatter block, or no
- * entries when the document has none (or the block never closes).
- */
 export function extractFrontmatter(content: string): ExtractedFrontmatter {
-  // Normalize CRLF once so fence/key matching never has to reason about \r
-  // (JS `.` and `$` both stop at a carriage return).
+  // Normalize CRLF once: JS `.` and `$` both stop at a carriage return.
   const lines = content.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
   if (!FENCE.test(lines[0] ?? '')) {
     return NONE;
@@ -76,8 +54,7 @@ export function extractFrontmatter(content: string): ExtractedFrontmatter {
   let pendingListKey: string | null = null;
   let pendingList: string[] = [];
   const flushPendingList = () => {
-    // A pending key with no dash items was a nested object or empty value —
-    // out of card scope, dropped.
+    // A pending key with no dash items was a nested object or empty value.
     if (pendingListKey !== null && pendingList.length > 0) {
       entries.push({ key: pendingListKey, value: pendingList });
     }
@@ -104,7 +81,6 @@ export function extractFrontmatter(content: string): ExtractedFrontmatter {
     const key = keyed[1];
     const rawValue = keyed[2].trim();
     if (!rawValue) {
-      // Either a dash list follows, or a nested object (skipped on flush).
       pendingListKey = key;
       pendingList = [];
       continue;

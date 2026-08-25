@@ -1,4 +1,3 @@
-// internal/git/git_test.go
 package git
 
 import (
@@ -10,7 +9,6 @@ import (
 
 func TestGetBranchInfo_MainRepo(t *testing.T) {
 	t.Parallel()
-	// Create temp git repo
 	dir := t.TempDir()
 	runGit(t, dir, "init")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
@@ -32,8 +30,6 @@ func TestGetBranchInfo_MainRepo(t *testing.T) {
 
 func TestGetBranchInfo_Worktree(t *testing.T) {
 	t.Parallel()
-	// Create temp git repo with worktree - use single tmpDir with subdirs
-	// to avoid flakiness when running tests in parallel
 	tmpDir := t.TempDir()
 	mainDir := filepath.Join(tmpDir, "main")
 	if err := os.MkdirAll(mainDir, 0755); err != nil {
@@ -83,7 +79,6 @@ func TestGetBranchInfo_DetachedHead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}
-	// Should return short SHA
 	if len(info.Branch) < 7 {
 		t.Errorf("expected short SHA for detached HEAD, got %s", info.Branch)
 	}

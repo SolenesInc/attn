@@ -2,8 +2,6 @@ package pty
 
 import "unicode/utf8"
 
-// findSafeBoundary returns the largest prefix that can be safely emitted.
-// It avoids splitting incomplete UTF-8 runes and incomplete ANSI escape sequences.
 func findSafeBoundary(data []byte) int {
 	n := len(data)
 	if n == 0 {
@@ -12,7 +10,6 @@ func findSafeBoundary(data []byte) int {
 
 	boundary := n
 
-	// Protect incomplete UTF-8 rune at end.
 	start := n - 4
 	if start < 0 {
 		start = 0
@@ -26,7 +23,6 @@ func findSafeBoundary(data []byte) int {
 		}
 	}
 
-	// Protect incomplete ANSI escape sequence at end.
 	ansiBoundary := findIncompleteEscapeStart(data[:boundary])
 	if ansiBoundary >= 0 && ansiBoundary < boundary {
 		boundary = ansiBoundary
@@ -62,7 +58,6 @@ func findIncompleteEscapeStart(data []byte) int {
 	return -1
 }
 
-// isCompleteEscape returns true when bytes starting at ESC contain a full sequence.
 func isCompleteEscape(seq []byte) bool {
 	if len(seq) == 0 || seq[0] != 0x1b {
 		return true
@@ -73,7 +68,7 @@ func isCompleteEscape(seq []byte) bool {
 
 	next := seq[1]
 	switch next {
-	case '[': // CSI
+	case '[':
 		for i := 2; i < len(seq); i++ {
 			b := seq[i]
 			if b >= 0x40 && b <= 0x7e {
@@ -99,7 +94,6 @@ func isCompleteEscape(seq []byte) bool {
 		}
 		return false
 	default:
-		// 2-byte escape or charset sequence (e.g. ESC ( B)
 		if next >= 0x20 && next <= 0x2f {
 			if len(seq) < 3 {
 				return false

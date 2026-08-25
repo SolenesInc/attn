@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/probetui/vtvocab"
 )
 
-// fixture mirrors the agent-mirror capture tool's analysis.json shape:
-// real VT vocabulary recorded from a live agent, split at the
-// startup+idle / resize+teardown boundary.
 type fixture struct {
 	BoundaryOffset int64         `json:"boundaryOffset"`
 	Phase1         vtvocab.Stats `json:"phase1"`
@@ -30,12 +27,6 @@ func loadFixture(t *testing.T, path string) fixture {
 	return f
 }
 
-// pin ties one VT feature to two independent checks: does the probe emit
-// it (or correctly withhold it), and does the recorded real-agent fixture
-// exhibit the same behavior somewhere in its capture. A failure on either
-// side names the feature, so drift (probe regression, or the mirror going
-// stale against an agent update) is diagnosable without re-deriving which
-// assertion caught it.
 type pin struct {
 	name    string
 	probe   func(t *testing.T, combined vtvocab.Stats)

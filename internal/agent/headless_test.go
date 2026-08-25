@@ -65,8 +65,6 @@ func TestCodexRunHeadlessTaskScopesToolsAndConfiguration(t *testing.T) {
 			t.Fatalf("Codex args missing %q:\n%s", want, got)
 		}
 	}
-	// The constrained-MCP read-only sandbox and read_context/replace_context pin
-	// must be gone: native mode gives Codex its own file tools.
 	for _, forbidden := range []string{
 		"read-only",
 		"features.shell_tool=false",
@@ -131,7 +129,6 @@ func TestCodexRunHeadlessTaskScopesSingleToolNameAndCapturesLastMessage(t *testi
 func TestCodexRunHeadlessTaskCapturesFinalTextFromLastMessageFile(t *testing.T) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "agent")
-	// Parse our own argv to find --output-last-message <path> and write to it.
 	script := "#!/bin/sh\n" +
 		"next=0\n" +
 		"for a in \"$@\"; do\n" +
@@ -191,8 +188,7 @@ func TestParseClaudeFinalText(t *testing.T) {
 }
 
 func TestParseClaudeResultMeta(t *testing.T) {
-	// Shapes match the empirically-captured --json-schema envelope (2.1.198):
-	// result event carries structured_output + total_cost_usd + num_turns.
+	// Shapes match the empirically captured --json-schema envelope (2.1.198).
 	t.Run("single result object", func(t *testing.T) {
 		meta := parseClaudeResultMeta([]byte(`{"type":"result","result":"{\"verdict\":\"ok\"}","structured_output":{"verdict":"ok"},"total_cost_usd":0.0053,"num_turns":2}`))
 		if string(meta.StructuredOutput) != `{"verdict":"ok"}` {
@@ -222,7 +218,6 @@ func TestClaudeRunHeadlessTaskScopesSingleToolName(t *testing.T) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "agent")
 	logPath := filepath.Join(dir, "args.log")
-	// Record argv AND emit a Claude result object so text capture is exercised.
 	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellSingleQuote(logPath) +
 		"\nprintf '{\"type\":\"result\",\"result\":\"done\"}\\n'\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
@@ -285,9 +280,8 @@ func TestClaudeRunHeadlessTaskExcludesNonManagedSettingsWithoutExplicitAuthentic
 		"--print",
 		"--setting-sources",
 		"--no-session-persistence",
-		// Hermetic MCP: --strict-mcp-config with NO --mcp-config loads zero MCP
-		// servers. --setting-sources "" alone does not stop the user's claude.ai
-		// account connectors from attaching (the 2026-07-02 classifier failure).
+		// --strict-mcp-config with NO --mcp-config loads zero MCP servers; --setting-sources ""
+		// alone does not stop claude.ai connectors (the 2026-07-02 classifier failure).
 		"--strict-mcp-config",
 		"--disable-slash-commands",
 		"--no-chrome",
@@ -305,7 +299,6 @@ func TestClaudeRunHeadlessTaskExcludesNonManagedSettingsWithoutExplicitAuthentic
 	if !strings.Contains(got, "--setting-sources\n\n--strict-mcp-config") {
 		t.Fatalf("Claude args did not pass an empty setting source list:\n%s", got)
 	}
-	// The constrained-MCP config and tool pin must be gone in native mode.
 	for _, forbidden := range []string{
 		"--mcp-config",
 		"--tools",
@@ -417,8 +410,6 @@ func TestRunHeadlessCommandClassifiesFailureWithoutLeakingOutput(t *testing.T) {
 	if strings.Contains(err.Error(), "workspace context secret") {
 		t.Fatalf("error leaked child output: %v", err)
 	}
-	// The raw cause is preserved out-of-band for callers that opt in,
-	// stderr-first (that is where the fatal error lives).
 	if want := "stderr: real stderr cause\nstdout: authentication_failed workspace context secret"; result.FailureOutput != want {
 		t.Fatalf("failure output = %q, want %q", result.FailureOutput, want)
 	}
@@ -427,8 +418,6 @@ func TestRunHeadlessCommandClassifiesFailureWithoutLeakingOutput(t *testing.T) {
 func TestRunHeadlessCommandBoundsFailureOutputTail(t *testing.T) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "agent")
-	// 8 KiB of noise ending in the fatal line: the preserved tail must keep the
-	// end and mark the cut.
 	script := "#!/bin/sh\nawk 'BEGIN { for (i = 0; i < 512; i++) printf \"noise-%d \", i; print \"fatal: the real cause\" }' >&2\nexit 1\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake agent: %v", err)
@@ -469,11 +458,6 @@ func TestClaudeHeadlessTaskAvailabilitySupportsManagedAuthentication(t *testing.
 	}
 }
 
-// TestCodexHeadlessArgsWidensWritableRootsAdditively proves the notebook narrate pass's
-// ExtraWritableRoots map to `--add-dir <root>` entries (so the workspace-write
-// sandbox also permits writes under the notebook root), placed AFTER the base
-// sandbox args and BEFORE the prompt, without disturbing the feature locks. The
-// keeper compaction duty's empty ExtraWritableRoots must add no --add-dir (regression guard).
 func TestCodexHeadlessArgsWidensWritableRootsAdditively(t *testing.T) {
 	t.Run("narration widens", func(t *testing.T) {
 		args := codexHeadlessArgs(HeadlessTaskRequest{
@@ -481,16 +465,13 @@ func TestCodexHeadlessArgsWidensWritableRootsAdditively(t *testing.T) {
 			Prompt:             "narrate",
 			ExtraWritableRoots: []string{"/notebook/root", "  ", "/notebook/raw"},
 		}, 0)
-		// Both writable roots map to --add-dir, plus the base sandbox + feature locks + prompt.
 		assertContainsAll(t, "codex narrate args", args,
 			"--add-dir\x00/notebook/root", "--add-dir\x00/notebook/raw",
 			"workspace-write", "features.apps=false", "narrate")
 		joined := strings.Join(args, "\x00")
-		// The blank entry is skipped.
 		if strings.Count(joined, "--add-dir") != 2 {
 			t.Fatalf("expected exactly 2 --add-dir entries, got:\n%v", args)
 		}
-		// --add-dir must precede the feature locks and the prompt.
 		addDirIdx := strings.Index(joined, "--add-dir")
 		lockIdx := strings.Index(joined, "features.apps=false")
 		promptIdx := strings.LastIndex(joined, "narrate")
@@ -505,10 +486,6 @@ func TestCodexHeadlessArgsWidensWritableRootsAdditively(t *testing.T) {
 	})
 }
 
-// TestClaudeHeadlessArgsIgnoreWritableRoots proves Claude never gains an --add-dir
-// (or any sandbox-widening flag) from ExtraWritableRoots: dontAsk is not
-// filesystem-sandboxed, so the field is a no-op for Claude. The allow-list and the
-// model/prompt are unchanged whether or not the roots are present.
 func TestClaudeHeadlessArgsIgnoreWritableRoots(t *testing.T) {
 	withRoots := claudeHeadlessArgs(HeadlessTaskRequest{
 		Model:              "claude-test",

@@ -8,32 +8,27 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// ClientRegistry stores GitHub clients per host.
 type ClientRegistry struct {
 	mu      sync.RWMutex
 	clients map[string]*Client
 }
 
-// NewClientRegistry creates an empty registry.
 func NewClientRegistry() *ClientRegistry {
 	return &ClientRegistry{clients: make(map[string]*Client)}
 }
 
-// Register stores a client for the given host.
 func (r *ClientRegistry) Register(host string, client *Client) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.clients[host] = client
 }
 
-// Remove removes a client for the given host.
 func (r *ClientRegistry) Remove(host string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.clients, host)
 }
 
-// Get returns the client for the host.
 func (r *ClientRegistry) Get(host string) (*Client, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -41,7 +36,6 @@ func (r *ClientRegistry) Get(host string) (*Client, bool) {
 	return client, ok
 }
 
-// Hosts returns all registered hosts.
 func (r *ClientRegistry) Hosts() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -56,7 +50,6 @@ func (r *ClientRegistry) Hosts() []string {
 	return hosts
 }
 
-// FetchAllPRs aggregates PRs from all registered hosts.
 func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 	clients := r.snapshotClients()
 	if len(clients) == 0 {
@@ -78,7 +71,6 @@ func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 	return allPRs, errOut
 }
 
-// IsAnyHostRateLimited returns true if any host is rate limited for the resource.
 func (r *ClientRegistry) IsAnyHostRateLimited(resource string) bool {
 	clients := r.snapshotClients()
 	for _, client := range clients {
@@ -89,7 +81,6 @@ func (r *ClientRegistry) IsAnyHostRateLimited(resource string) bool {
 	return false
 }
 
-// GetRateLimitedHosts returns the hosts that are rate limited for the resource.
 func (r *ClientRegistry) GetRateLimitedHosts(resource string) []string {
 	clients := r.snapshotClients()
 	var hosts []string
@@ -102,8 +93,7 @@ func (r *ClientRegistry) GetRateLimitedHosts(resource string) []string {
 	return hosts
 }
 
-// NewClientForHost creates a GitHub API client for a specific host using the provided token.
-// This requires explicit tokens to avoid cross-contamination between hosts.
+// NewClientForHost takes an explicit token: a shared one cross-contaminates hosts.
 func NewClientForHost(host, apiURL, token string) (*Client, error) {
 	if apiURL == "" {
 		apiURL = mapHostToAPIURL(host)

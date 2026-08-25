@@ -18,17 +18,10 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// markdownTileIDPrefix prefixes every markdown tile id. The full id is derived
-// from the file path (see markdownTileIDForPath), so each open file gets its
-// own tile and multiple markdown tiles can coexist in one workspace.
 const markdownTileIDPrefix = "tile-markdown-"
 
 const seedTileIDPrefix = "tile-seed-"
 
-// markdownTileIDForPath derives the stable tile id for a markdown file:
-// the prefix plus the first 16 hex chars of sha256 over the absolute path.
-// Reopening the same path lands on the same id, which is what makes
-// open-markdown reuse an existing tile instead of stacking duplicates.
 func markdownTileIDForPath(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	return markdownTileIDPrefix + hex.EncodeToString(sum[:8])
@@ -38,24 +31,16 @@ func seedTileIDForID(seedID string) string {
 	return seedTileIDPrefix + seedID
 }
 
-// markdownPollInterval is how often the content watcher restats open markdown
-// files to detect on-disk changes. Sub-second keeps live reload feeling instant
-// without the complexity of per-file OS watches (which editors' atomic saves
-// routinely break).
+// Polling, not per-file OS watches: editors' atomic saves routinely break those.
 const markdownPollInterval = 750 * time.Millisecond
 
-// markdownHashPollInterval catches same-size rewrites whose modification time
-// is preserved without continuously rereading unchanged files.
+// Catches same-size rewrites that preserve the modification time.
 const markdownHashPollInterval = 5 * time.Second
 
-// maxMarkdownBytes caps how large a markdown file the daemon will read into a
-// tile. encoding/json can expand a byte to six bytes; keeping the raw preview
-// at 1 MiB leaves room beneath the remote relay's 8 MiB message limit.
+// encoding/json can expand a byte to six, so 1 MiB of raw preview leaves room
+// beneath the remote relay's 8 MiB message limit.
 const maxMarkdownBytes = 1 << 20
 
-// tileContentSig fingerprints a file between polls. The content hash catches
-// same-size rewrites even when an editor restores the previous modification
-// time or the filesystem timestamp granularity is coarse.
 type tileContentSig struct {
 	mod           int64
 	size          int64
@@ -71,8 +56,6 @@ type markdownTileRef struct {
 	path        string
 }
 
-// setSelectedSession records the session the UI is currently showing. `attn
-// open` with no explicit session targets this session's workspace.
 func (d *Daemon) setSelectedSession(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -87,8 +70,6 @@ func (d *Daemon) setSelectedSession(sessionID string) {
 		d.selectedWorkspaceID = ""
 	}
 	d.selectedSessionMu.Unlock()
-	// Pause the now-active session's countdown and resume the one we left, so the
-	// active session never auto-fires while the user is in it.
 	if oldID != sessionID {
 		d.updateNudgeSelection(oldID, sessionID)
 	}
@@ -116,7 +97,6 @@ func (d *Daemon) currentlySelectedWorkspace() string {
 	return d.selectedWorkspaceID
 }
 
-// tileFilePath resolves a tile's persisted params into a kind + file path.
 func (d *Daemon) tileFilePath(workspaceID, tileID string) (kind, path string, found bool) {
 	if d.store == nil {
 		return "", "", false
@@ -138,9 +118,6 @@ func (d *Daemon) tileStillPointsTo(workspaceID, tileID, kind, path string) bool 
 	return found && currentKind == kind && currentPath == path
 }
 
-// readMarkdownFile reads a markdown file for a tile, returning a friendly error
-// (rather than failing) when the file is missing, a directory, or oversized so
-// the tile can render a clear state instead of going blank.
 func readMarkdownFile(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("no file is associated with this tile")
@@ -356,8 +333,7 @@ func (d *Daemon) pruneTileContentSubscriptionsForWorkspace(workspaceID string) {
 	d.pruneTileContentSubscriptionsForLayout(workspaceID, &snapshot.Layout)
 }
 
-// broadcastTileContent pushes live reloads only to clients that requested this
-// tile. File bodies must not fan out to unrelated web or relay clients.
+// File bodies must not fan out to unrelated web or relay clients.
 func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content string, readErr error) {
 	if !d.tileStillPointsTo(workspaceID, tileID, kind, path) {
 		return
@@ -378,9 +354,6 @@ func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content s
 	})
 }
 
-// broadcastTileContentNow reads and broadcasts a single tile's content
-// immediately, so freshly opened tiles show their file without waiting for the
-// next poll tick.
 func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
 	kind, path, found := d.tileFilePath(workspaceID, tileID)
 	if !found || kind != string(workspacelayout.TileKindMarkdown) {
@@ -390,8 +363,6 @@ func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
 	d.broadcastTileContent(workspaceID, tileID, kind, path, content, readErr)
 }
 
-// handleWorkspaceTileContentGet replies to a client's pull request for a
-// tile's current content (used on first render).
 func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.WorkspaceTileContentGetMessage) {
 	kind, _, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
 	if !found {
@@ -437,27 +408,18 @@ func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.W
 	d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, "tile changed while content was loading; retry")
 }
 
-// openMarkdownTile docks (or reuses) the markdown tile for a file in the
-// workspace that owns sessionID, binding the tile to that session. Shared by
-// the `attn open` unix-socket path and the websocket cmd+click path. When the
-// file is already open in the workspace the existing tile keeps its position
-// and is rebound to the requesting session instead of being re-docked.
 func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
 	}
-	// The tile id contract is sha256(absolute path): reject relative paths
-	// (they would resolve against the daemon's cwd) and Clean so spellings
-	// like /a/./b.md, /a//b.md, and /a/x/../b.md all land on one tile.
+	// The tile id is sha256 of the absolute path: reject relative paths (they would
+	// resolve against the daemon's cwd) and Clean so /a/./b.md and /a//b.md agree.
 	if !filepath.IsAbs(path) {
 		return "", "", fmt.Errorf("path must be absolute: %s", path)
 	}
 	path = filepath.Clean(path)
-	// Refuse to dock a tile for a file that is gone, and forget it: a stale
-	// recent-files entry then costs one failed open rather than a permanent
-	// slot in the opener. This is the only place recents are pruned — the
-	// opener never stats its list on summon.
+	// This is the only place recents are pruned — the opener never stats its list.
 	if _, statErr := os.Stat(path); statErr != nil {
 		d.store.DeleteFileActivity(path)
 		return "", "", fmt.Errorf("file not found: %s", path)
@@ -470,9 +432,8 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		return "", "", fmt.Errorf("no workspace found for session %s", sessionID)
 	}
 
-	// Serialize check-then-dock: concurrent opens of different files share
-	// last-write-wins layout snapshots, so an unserialized second dock would
-	// silently drop the first tile.
+	// Serialize check-then-dock: layout snapshots are last-write-wins, so a second
+	// unserialized dock silently drops the first tile.
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 
@@ -482,8 +443,7 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		alreadyOpen = workspacelayout.HasTile(snapshot.Layout, tileID)
 		if !alreadyOpen {
 			// Layouts persisted before per-path tile ids used the fixed id
-			// "tile-markdown". Match legacy tiles by kind+path so reopening
-			// their file reuses them instead of docking a duplicate.
+			// "tile-markdown"; match those by kind+path.
 			for _, leaf := range workspacelayout.TileLeaves(snapshot.Layout) {
 				if leaf.TileKind == string(workspacelayout.TileKindMarkdown) && leaf.TileParams == path {
 					tileID = leaf.TileID
@@ -501,16 +461,10 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		return "", "", err
 	}
 	d.broadcastTileContentNow(workspaceID, tileID)
-	// Every route into a markdown tile — ⌘+click, `attn open`, the opener
-	// itself — passes through here, so recents need no client bookkeeping and
-	// no origin flag.
 	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, sessionID)
 	return workspaceID, tileID, nil
 }
 
-// openSeedTile docks the seed beside the placement session. Its session
-// binding follows the seed's current tender so annotation submit reaches the
-// person doing the work; an untended seed falls back to the placement session.
 func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, tileID string, err error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", "", err
@@ -545,8 +499,6 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	return workspaceID, tileID, nil
 }
 
-// rebindTileSession points an existing tile's session binding at sessionID,
-// persisting and broadcasting the layout when the binding actually changes.
 func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error {
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
 	if snapshot == nil {
@@ -567,9 +519,6 @@ func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error 
 	return nil
 }
 
-// handleOpenMarkdown docks (or reuses) a markdown tile for a file. Sent by
-// the `attn open` CLI over the unix socket. With no session it targets the
-// currently selected session's workspace.
 func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMessage) {
 	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
 	if sessionID == "" {
@@ -598,8 +547,6 @@ func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
 	d.sendOK(conn)
 }
 
-// openSentFilesEnabled gates auto-opening files an agent hands the user.
-// Default ON; only an explicit "false" disables.
 func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
@@ -611,13 +558,8 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	return parseBooleanSetting(raw)
 }
 
-// handleOpenSentFiles opens the files an agent handed the user (SendUserFile,
-// forwarded by the catch-all PostToolUse hook). Only types attn can show
-// today are routed — markdown, into the same per-path tiles as `attn open` —
-// and anything else is dropped with a daemon log line and no user-visible
-// noise. The whole command answers OK regardless: the hook must never see an
-// error it could surface into the agent's transcript, and a path that fails
-// to open is a nicety lost, not a fault.
+// Answers OK regardless: the hook must never see an error it could surface into
+// the agent's transcript.
 func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesMessage) {
 	if !d.openSentFilesEnabled() {
 		d.sendOK(conn)
@@ -644,10 +586,6 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 	d.sendOK(conn)
 }
 
-// handleOpenMarkdownWS is the websocket flavor of open_markdown, used by the
-// frontend when the user cmd+clicks a markdown path in a session terminal.
-// The clicked pane's session id rides in the message and becomes the tile's
-// session binding.
 func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdownMessage) {
 	result := protocol.OpenMarkdownResultMessage{
 		Event:   protocol.EventOpenMarkdownResult,
@@ -698,9 +636,6 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 	d.sendToClient(client, result)
 }
 
-// runMarkdownContentWatcher polls open markdown files for changes and broadcasts
-// fresh content. It re-derives the watch set from the store every tick, so it
-// needs no hooks into layout mutations and self-heals across restarts.
 func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 	ticker := time.NewTicker(markdownPollInterval)
 	defer ticker.Stop()
@@ -714,9 +649,6 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 	}
 }
 
-// pollMarkdownOnce runs a single watch pass: rebuild the set of open markdown
-// tiles from the store, drop ones that disappeared, and broadcast content for
-// any whose file changed since last seen.
 func (d *Daemon) pollMarkdownOnce() {
 	for _, ref := range d.collectChangedMarkdownTiles() {
 		content, readErr := readMarkdownFile(ref.path)
@@ -724,11 +656,6 @@ func (d *Daemon) pollMarkdownOnce() {
 	}
 }
 
-// collectChangedMarkdownTiles derives the current set of open markdown tiles
-// from the store and returns those whose file changed (or is newly opened) since
-// the previous call, updating the seen fingerprints. Tiles that disappeared are
-// pruned. Split out from pollMarkdownOnce so the live-reload change detection is
-// testable without the websocket fan-out.
 func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 	if d.store == nil {
 		return nil

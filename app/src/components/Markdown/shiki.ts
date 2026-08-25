@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react';
 
-// Shiki is loaded lazily so a code block paints immediately as plain text and
-// hydrates highlights async; the dynamic import also keeps shiki out of the
-// main bundle. The `shiki` shorthand bundle manages its own highlighter
-// singleton and loads languages/themes on demand.
 let shikiModule: Promise<typeof import('shiki') | null> | null = null;
 function loadShiki() {
   shikiModule ??= import('shiki').catch((error) => {
@@ -20,13 +16,8 @@ export interface Highlighted {
   html: string;
 }
 
-/**
- * Shiki markup for one code block, or null while there is none to show.
- *
- * `enabled` is how a streaming surface opts out. Highlighting text that is
- * still arriving runs shiki once per delta and throws every result but the
- * last away, so the caller passes false until the text can no longer change.
- */
+// `enabled` is how a streaming surface opts out: highlighting text that is still
+// arriving runs shiki once per delta and throws away every result but the last.
 export function useShikiHighlight(
   code: string,
   language: string | undefined,
@@ -49,16 +40,11 @@ export function useShikiHighlight(
           defaultColor: false,
           structure: 'inline',
         });
-        // Shiki's inline structure renders line breaks as <br> ELEMENTS, so the
-        // hydrated DOM contains no '\n' text. <pre> renders a newline text node
-        // identically, and MarkdownReader's anchoring requires DOM text-node
-        // parity with extractBlockTexts (see anchoring/domRange.ts), so restore
-        // them. Code content is HTML-escaped by shiki, so a literal `<br` in
-        // code can't match.
+        // Shiki renders line breaks as <br> elements, leaving no '\n' text;
+        // MarkdownReader's anchoring needs text-node parity, so restore them.
         const html = raw.replace(/<br\s*\/?>/g, '\n');
         if (!cancelled) setHighlighted({ code, language, html });
       } catch {
-        // Unknown language: keep plain text, same chrome.
         if (!cancelled) setHighlighted(null);
       }
     });
@@ -67,9 +53,6 @@ export function useShikiHighlight(
     };
   }, [code, language, enabled]);
 
-  // Only markup generated from the CURRENT inputs: a block re-rendered in place
-  // with new code must not keep the previous version's highlight on screen
-  // while the re-highlight is in flight.
   return highlighted && highlighted.code === code && highlighted.language === language
     ? highlighted
     : null;

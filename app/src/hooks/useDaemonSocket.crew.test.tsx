@@ -51,9 +51,6 @@ function member(id: string, bindingSession?: string) {
   };
 }
 
-// The sidebar draws the crew from the push alone — there is no fetch behind it —
-// so a dropped roster means every member disappears from the sidebar with
-// nothing anywhere saying why.
 describe('useDaemonSocket crew', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -126,9 +123,7 @@ describe('useDaemonSocket crew', () => {
     ]);
   });
 
-  // An outpost holds no crew, and a daemon older than the app sends none at all.
-  // Both read as an empty roster rather than leaving the sidebar showing the
-  // crew of a previous connection.
+  // An outpost holds no crew, and a daemon older than the app sends none: both read as an empty roster.
   it('reads a crew-less daemon as an empty roster', async () => {
     const { onCrewUpdate } = await renderWithCrew();
 
@@ -159,8 +154,6 @@ describe('useDaemonSocket crew', () => {
     await expect(woken!).resolves.toEqual({ sessionId: 'sess-keel', alreadyAwake: false });
   });
 
-  // A member already awake is not woken twice; the answer names the live day,
-  // which is the same thing to focus.
   it('resolves an already-awake member with its running day', async () => {
     const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
 
@@ -183,8 +176,6 @@ describe('useDaemonSocket crew', () => {
     await expect(woken!).resolves.toEqual({ sessionId: 'sess-keel', alreadyAwake: true });
   });
 
-  // A refusal — an outpost, a directory that moved — has to reach the user. A
-  // click that silently does nothing is the failure mode this rules out.
   it('rejects a refused wake with what the daemon said', async () => {
     const { ws, result } = await renderWithCrew([member('keel')]);
 

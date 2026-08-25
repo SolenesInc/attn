@@ -2,39 +2,14 @@ package jobs
 
 import "sync"
 
-// CommitGuard is the handler-owned commit-fence latch. It is the load-bearing
-// primitive that makes Cancel safe: it draws the line between work the runner may
-// cancel mid-flight and a durable write the runner must never tear.
-//
-// Contract:
-//
-//   - The handler does its cancellable work (LLM call, file reads) honoring
-//     ctx.Done() up to the moment it is about to perform its single durable write.
-//   - Immediately before that write it calls Enter(). From that point the runner's
-//     Cancel will NOT cancel the run's context — it instead waits for the
-//     goroutine to exit. So the handler can complete its atomic write and persist
-//     a coherent result even though a Cancel arrived.
-//   - After the write the handler calls Leave() (always via defer once Enter
-//     returned true).
-//
-// Enter reports whether the commit may proceed. If a Cancel already fired before
-// the handler reached Enter, Enter returns false: the run was cancelled cleanly
-// before committing, so the handler must skip the write. This is the (a) branch
-// of the contract ("cancel a not-yet-committing run cleanly"); a true return is
-// the (b) branch ("an already-committing run finishes its write untorn").
-//
-// The runner drives the coordination via tryFence; a handler only ever touches
-// Enter/Leave.
+// Enter immediately before the single durable write and Leave by defer after; between them
+// Cancel waits instead of cancelling. Enter returning false means the run was already fenced.
 type CommitGuard struct {
 	mu         sync.Mutex
-	cancelled  bool // a Cancel fired before commit; the handler must not write
-	committing bool // the handler is inside its durable write
+	cancelled  bool
+	committing bool
 }
 
-// Enter is called by the handler immediately before its durable write. It
-// returns true if the handler may proceed with the write (and MUST then call
-// Leave when done), or false if a cancellation already fenced the run before it
-// reached commit (the handler must abandon the write).
 func (g *CommitGuard) Enter() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -45,19 +20,14 @@ func (g *CommitGuard) Enter() bool {
 	return true
 }
 
-// Leave is called by the handler after its durable write completes. It is only
-// valid to call after Enter returned true.
 func (g *CommitGuard) Leave() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.committing = false
 }
 
-// tryFence is called by the runner's Cancel under the latch. If the run has not
-// yet entered its commit, it marks the run cancelled (so a later Enter returns
-// false) and reports true — meaning "you may cancel the context now". If the run
-// is already committing, it reports false — meaning "do not cancel; wait for the
-// goroutine to exit so the durable write is not torn".
+// Called by the runner Cancel: true means the context may be cancelled, false
+// means a committing run the caller must wait for.
 func (g *CommitGuard) tryFence() (mayCancel bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

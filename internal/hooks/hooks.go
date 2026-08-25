@@ -7,27 +7,20 @@ import (
 	"strings"
 )
 
-// HookEntry is a single hook configuration
 type HookEntry struct {
 	Matcher string `json:"matcher"`
 	Hooks   []Hook `json:"hooks"`
 }
 
-// Hook is an individual hook action
 type Hook struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
 }
 
-// SettingsConfig represents Claude Code settings with hooks
 type SettingsConfig struct {
 	Hooks map[string][]HookEntry `json:"hooks"`
-	// Env carries launch knobs that must beat the user's own configuration.
-	// Claude Code copies every settings file's `env` block onto its own
-	// process environment at startup, overwriting what the parent exported, so
-	// a knob attn only sets in the spawn environment loses to the same key in
-	// ~/.claude/settings.json. This file is passed with --settings, whose scope
-	// is applied last of the non-managed scopes, so what lands here wins.
+	// Claude Code copies every settings file's `env` block over the parent's environment, so a
+	// knob only in the spawn environment loses; this file is passed with --settings and wins.
 	Env map[string]string `json:"env,omitempty"`
 }
 
@@ -40,13 +33,9 @@ type sessionStartHookOutput struct {
 	HookSpecificOutput sessionStartHookSpecificOutput `json:"hookSpecificOutput"`
 }
 
-// delegationBoundary is the standing vocabulary and routing rule every launched
-// agent needs even if it never opens the skill. Injected verbatim into both
-// Tier-1 blocks so the rule reaches an agent that skips the skill.
+// Injected verbatim into both Tier-1 blocks, so the routing rule reaches an agent that never opens the skill.
 const delegationBoundary = "A subagent is always a native runtime subagent that reports to the calling agent, including in phrases such as \"delegate subagents\" or \"dispatch subagents\". `attn delegate` creates a visible agent session the user can inspect, converse with, and steer directly. An explicit user request selects attn delegation; otherwise, use native subagents. Load the attn skill's delegation reference before creating an attn delegation."
 
-// WorkspaceContextGuidance teaches an agent how to use this session's checkout
-// without embedding the shared context itself.
 func WorkspaceContextGuidance(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -63,10 +52,6 @@ func WorkspaceContextGuidance(path string) string {
 - Use only this session's checkout. Do not pass --session unless the user explicitly asks you to operate on another session.`, strconv.Quote(path), delegationBoundary)
 }
 
-// WorkflowTriggerGuidance teaches an agent when it is allowed to author and run
-// a durable multi-agent workflow. Running one fans out many workflow agents and can
-// burn a large amount of tokens, so it is strictly opt-in: the agent watches its
-// OWN user messages for the trigger keywords and otherwise never reaches for one.
 func WorkflowTriggerGuidance() string {
 	return `You can author and run durable, resumable multi-agent **workflows** through the ` + "`attn workflow`" + ` CLI (load the attn skill's workflow reference for the authoring contract before writing one). A workflow orchestrates many headless workflow agents deterministically.
 
@@ -78,11 +63,8 @@ Running a workflow starts multiple workflow agents and can consume a large amoun
 If neither keyword is present, do NOT run a workflow: use ordinary tools, or briefly note that a workflow could help and ask whether to run one (mention they can opt in with "attn workflow"). The opt-in must be in the user's own words — never infer it from a task that would merely benefit from one.`
 }
 
-// GardenGuidance is the standing garden contract for home-daemon launches.
 const GardenGuidance = "attn keeps work as seeds in the garden. A seed is one unit of work: a short id like `s-7k3f9m`, a title, a markdown body, a state. A plot is a seed with children: its body is the execution plan, and the children are parallel unless a `blocks` edge orders them. Any seed can be a plot. Seed packets are templates for plots; if you are told to use packets, or the task calls for one, the attn skill says how they work.\n\nTrack work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.\n\nA delegated session reports to one seed: either the seed planted for its brief or the seed targeted by `attn delegate --plot`. `attn seed ready` without flags shows that seed's plot. When the session delegates more work, `attn delegate` plants the new seed under its reporting seed; the child delegate reports to the new seed's log. Every other garden verb uses the seed id you provide.\n\nThe loop:\n\n    attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it\n                                     inside your plot when you report to one. A plot itself is never ready; only its children can be\n    attn seed ready --all            the same across the whole garden; use it to look past your plot\n    attn seed show <id>              body, state, tender, edges, children, freshest handoff\n    attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name\n    attn seed note <id> -m \"…\"       what happened and what you learned, tending it or not; --handoff addresses the next tender\n                                     --ring tells watchers to look\n    attn seed harvest <id> -m \"…\"    done; the reason is required and fits in 400 characters, the long version goes in a note\n    attn seed wither <id> [-m \"…\"]   abandoned, nobody will pick it up\n    attn seed park <id>              put down, claim released; tend it again to resume\n    attn seed replant <id>           a harvested or withered seed back to planted\n    attn seed plant \"<title>\" -m \"…\" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id\n\n`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses the move and names the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.\n\nPlans:\n\n    attn seed plot -f <file.json>    a whole plot in one move; - reads stdin. The file is\n                                     {\"title\": …, \"body\": …, \"children\": [{\"title\": …, \"body\": …, \"blocks\": [\"<sibling-slug>\"]}]}\n                                     A slug is the sibling's title lowercased; anything not an ASCII letter or digit becomes one dash. `attn seed guide` has a full example\n    attn seed link <a> blocks <b>    b waits until a closes; unlink removes the edge\n    attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time\n    attn seed link <a> discovered-from <b>    a was discovered while working on b; the link records that origin but never orders or blocks anything\n    attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list\n    attn seed edit <id> -m \"…\"       replace the body; say what changed in a note\n\nKeeping up:\n\nWhen attn sends an update notification, run the suggested command to read it. Reading acknowledges the update and maintains awareness; it does not authorize or require acting on the update. Only act or interrupt the user when attention is genuinely needed.\n\n    attn seed notes <id>             the whole log, newest first\n    attn seed watch <id>             ring this session when the seed or anything in its plot moves; unwatch stops it\n    attn seed attach <id> --path <file.md> | --notebook <doc-id> | --url <url>    point the seed at a document where it already lives; detach removes the pointer\n    attn seed export <id> [--out <path>]    the seed and its log as one markdown file\n    attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it\n\nDelegating:\n\n    attn delegate --brief \"…\" --model <m>   starts a visible agent session the user can inspect and steer, not a native subagent, and plants a seed bound to it\n                                              the brief is the seed's body; the delegate is its tender; the report lands on the seed's log\n        --plot <seed>                       dispatch at an existing seed instead of planting one; the delegate becomes its tender and reports to it\n        --brief-file <path>                 the brief from a file; --effort <level> sets reasoning where the agent supports it\n        --new-workspace | --workspace <id> | --cwd <path>    where it runs; --worktree <branch> gives it its own checkout\n    attn agent msg <seed-id> \"…\"            reaches whoever tends it now; an untended seed refuses by name\n    attn seed show <id>                     the delegate's report, once it lands; no need to watch the session\n\n`attn seed --help` has every flag. `attn seed guide` has how to write a body worth handing to somebody else."
 
-// AgentInstructions composes the workspace-context and workflow instruction
-// blocks for a non-chief launch.
 func AgentInstructions(workspaceContextPath string, injectWorkflow bool) string {
 	blocks := make([]string, 0, 2)
 	if guidance := WorkspaceContextGuidance(workspaceContextPath); guidance != "" {
@@ -94,21 +76,14 @@ func AgentInstructions(workspaceContextPath string, injectWorkflow bool) string 
 	return strings.Join(blocks, "\n\n")
 }
 
-// Launch is everything attn injects into an agent's system prompt at launch. A
-// chief-of-staff session (NotebookRoot set) gets chief guidance in place of the
-// workspace-context guidance. Garden is set only by a home daemon.
 type Launch struct {
 	NotebookRoot         string
 	WorkspaceContextPath string
 	InjectWorkflow       bool
 	Garden               bool
-	// Crew is the composed priming of the member this session was woken as,
-	// built by the daemon from the member's own home. Empty for every session
-	// that is nobody, which is most of them.
-	Crew string
+	Crew                 string
 }
 
-// Instructions composes the blocks, joined by a blank line.
 func (l Launch) Instructions() string {
 	blocks := make([]string, 0, 4)
 	if chief := ChiefGuidance(l.NotebookRoot); chief != "" {
@@ -119,16 +94,12 @@ func (l Launch) Instructions() string {
 	if l.Garden {
 		blocks = append(blocks, GardenGuidance)
 	}
-	// Last, because it is the most specific thing this session is: whoever else
-	// reads this prompt is an agent in a workspace, and this one is a person
-	// with a name, a home, and a day.
 	if crew := strings.TrimSpace(l.Crew); crew != "" {
 		blocks = append(blocks, crew)
 	}
 	return strings.Join(blocks, "\n\n")
 }
 
-// SessionStartOutput wraps non-empty context blocks as SessionStart hook JSON.
 func SessionStartOutput(contexts ...string) string {
 	blocks := make([]string, 0, len(contexts))
 	for _, context := range contexts {
@@ -149,18 +120,10 @@ func SessionStartOutput(contexts ...string) string {
 	return string(data)
 }
 
-// WorkspaceContextSessionStartOutput returns hook output used when an agent
-// could not receive workspace context guidance at launch. It carries the
-// workspace-context guidance the launch path injects for a non-chief agent, so
-// the SessionStart fallback stays consistent with the launch injection.
 func WorkspaceContextSessionStartOutput(path string) string {
 	return SessionStartOutput(WorkspaceContextGuidance(path))
 }
 
-// ChiefGuidance is the system prompt block injected into a chief-of-staff agent.
-// It covers the chief's role (coordinator, not doer), the Notebook as its durable
-// home and delegation rules. root is the resolved notebook root (empty disables).
-// Waiting on a delegate uses the same guidance for every runtime.
 func ChiefGuidance(root string) string {
 	root = strings.TrimSpace(root)
 	if root == "" {
@@ -182,9 +145,6 @@ func ChiefGuidance(root string) string {
 - You remain profile-wide. You may still consult a specific workspace's shared context when you step into it, but that is opt-in — the notebook is your primary surface.`, root, seedWaitingGuidance, wakeBoundary, delegationBoundary)
 }
 
-// Generate generates settings configuration with hooks for a session. env, when
-// non-empty, becomes the file's `env` block — see SettingsConfig.Env for why a
-// launch knob has to travel here rather than only in the spawn environment.
 func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) string {
 	wrapper := strings.TrimSpace(wrapperPath)
 	if wrapper == "" {
@@ -231,7 +191,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 			},
 			"PreToolUse": {
 				{
-					// PreToolUse fires BEFORE tool executes - set waiting_input when Claude asks a question
 					Matcher: "AskUserQuestion",
 					Hooks: []Hook{
 						{
@@ -241,12 +200,8 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			// Notification is the harness announcing that it is blocked on the
-			// user: notification_type is "permission_prompt" ~6s after a
-			// permission request, and "idle_prompt" exactly 60s after a turn
-			// settles with the user not having replied. Too slow to lead a
-			// transition, which is why it is recorded as evidence rather than
-			// setting state.
+			// "permission_prompt" fires ~6s after a permission request and "idle_prompt" exactly 60s
+			// after an unanswered turn settles — too slow to lead a transition, so it is evidence only.
 			"Notification": {
 				{
 					Matcher: "*",
@@ -258,10 +213,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			// StopFailure replaces Stop when the turn ends on an API error. It is
-			// the only report that a session died on a rate limit, an expired
-			// login, or an unpaid bill — every other signal makes that look
-			// identical to an agent that finished and went quiet.
 			"StopFailure": {
 				{
 					Matcher: "*",
@@ -273,10 +224,7 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			// Compaction is work that nothing else reports: it opens no turn and
-			// no tool call, and the title frames it paints have gaps wide enough
-			// to read as a finished turn. The two hooks carry identical payloads,
-			// so the edge is named on the command line rather than read from one.
+			// The two compaction hooks carry identical payloads, so the edge is named on the command line.
 			"PreCompact": {
 				{
 					Matcher: "*",
@@ -301,7 +249,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 			},
 			"PermissionRequest": {
 				{
-					// PermissionRequest fires when Claude needs user approval for a tool
 					Matcher: "*",
 					Hooks: []Hook{
 						{
@@ -322,7 +269,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 				{
-					// PostToolUse fires AFTER user responds - set back to working
 					Matcher: "AskUserQuestion",
 					Hooks: []Hook{
 						{
@@ -332,9 +278,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 				{
-					// Any tool completing means Claude is working again (resets
-					// pending_approval). The same payload names any markdown the
-					// call wrote, which _hook-tool-use records in the same spawn.
 					Matcher: "*",
 					Hooks: []Hook{
 						{
@@ -358,7 +301,6 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-// GenerateUnregisterCommand generates the command to unregister a session
 func GenerateUnregisterCommand(sessionID, socketPath string) string {
 	return fmt.Sprintf(`echo '{"cmd":"unregister","id":"%s"}' | nc -U %s`, sessionID, socketPath)
 }

@@ -12,12 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// automationDefinitionYAML resolves def's definition_yaml by rendering
-// automation.MarshalDefinitionYAML from spec_json — spec_yaml storage is
-// gone (see MarshalDefinitionYAML's doc comment), so this is the only path;
-// every read (the editor's Save-then-reopen, `attn automation show`) gets
-// its YAML re-derived from the canonical spec, comments and formatting
-// choices not preserved.
 func automationDefinitionYAML(def store.AutomationDefinition) (string, error) {
 	var spec automation.DefinitionSpec
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
@@ -30,16 +24,6 @@ func automationDefinitionYAML(def store.AutomationDefinition) (string, error) {
 	return string(rendered), nil
 }
 
-// This file is the one action layer shared by both transports (the
-// unix-socket/CLI dispatch in automations.go and the WS handlers in
-// ws_automations.go): one function per command, each taking its typed
-// request message and returning the complete typed result message with
-// Success/Error set. All result-shape construction — building summaries,
-// deciding what to omit — lives here, not duplicated per transport.
-
-// automationRunSummaryListCap bounds automation_runs_get: a defensive cap
-// against an unbounded WS payload for a long-lived definition, not a
-// UI-driven pagination contract.
 const automationRunSummaryListCap = 100
 
 func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefinitionsGetMessage) protocol.AutomationDefinitionsResultMessage {
@@ -69,11 +53,6 @@ func (d *Daemon) actionAutomationDefinitionsGet(msg *protocol.AutomationDefiniti
 	return result
 }
 
-// actionAutomationDefinitionGet backs the editor's load path: definition_id
-// "" returns the starter template at revision 0 (no definition — the
-// new-definition case, D7 in the design), so create and edit share one
-// frontend code path. A non-empty id resolves definition_yaml via
-// automationDefinitionYAML's spec-JSON rendering.
 func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitionGetMessage) protocol.AutomationDefinitionResultMessage {
 	result := protocol.AutomationDefinitionResultMessage{
 		Event:     protocol.EventAutomationDefinitionResult,
@@ -153,15 +132,8 @@ func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessag
 	return result
 }
 
-// actionAutomationApply is the one apply path for both transports, unified on
-// automationApplyWithGuards. The socket/CLI path never sets
-// expected_id/expected_revision (both nil after JSON decode, since cmd/attn
-// omits them), so automationApplyWithGuards enforces neither check and
-// behaves exactly like the old unguarded last-writer-wins automationApply.
-// The WS editor's Save always sends both (possibly zero-valued for a create),
-// so its guards apply as before — see automationApplyWithGuards's doc
-// comment for why enforcement is keyed on pointer presence rather than on the
-// zero value itself.
+// actionAutomationApply is the one apply path for both transports. The socket/CLI path
+// omits expected_id/expected_revision, so no guard is enforced; the WS editor sends both.
 func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.AutomationApplyMessage) protocol.AutomationApplyResultMessage {
 	result := protocol.AutomationApplyResultMessage{
 		Event:     protocol.EventAutomationApplyResult,
@@ -232,10 +204,6 @@ func (d *Daemon) actionAutomationCleanup(ctx context.Context, msg *protocol.Auto
 	return result
 }
 
-// actionAutomationRun handles run-now for both transports: pr_url and
-// input_json are mutually exclusive, and a manual-trigger rejection (e.g. a
-// provider-driven definition) surfaces as success=false with the error text,
-// not a transport-level failure.
 func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.AutomationRunMessage) protocol.AutomationRunResultMessage {
 	result := protocol.AutomationRunResultMessage{
 		Event:     protocol.EventAutomationRunResult,
@@ -264,14 +232,6 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 	return result
 }
 
-// buildAutomationDefinitionSummary extracts the compact wire fields from a
-// definition's SpecJSON. An unmarshal failure (should not happen for a
-// definition that passed automationApply's validation, but is not assumed)
-// degrades to an id/name/enabled-only summary rather than dropping the
-// definition from the list. lastRun is embedded when the caller has it handy
-// (definitions_get provides one query's worth for every definition); mutation
-// results (apply/set_enabled) pass nil rather than pay for a per-definition
-// lookup — the frontend's automations_changed-driven refetch fills it in.
 func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition, lastRun *store.AutomationRunWithOccurrenceKey) protocol.AutomationDefinitionSummary {
 	summary := protocol.AutomationDefinitionSummary{
 		ID:        def.ID,

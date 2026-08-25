@@ -13,8 +13,6 @@ const (
 	AppReconcileVersionChange = "version_changed"
 )
 
-// AppReconcileRequest is one durable reason an app must rebuild its derived
-// collections before it receives another fact.
 type AppReconcileRequest struct {
 	ID                int64
 	AppName           string
@@ -28,8 +26,6 @@ type AppReconcileRequest struct {
 	CreatedAt         time.Time
 }
 
-// AppReconcileClaim is the immutable boundary one reconcile attempt may
-// complete. Requests written after ThroughRequestID remain owed.
 type AppReconcileClaim struct {
 	Requests         []AppReconcileRequest
 	ThroughRequestID int64
@@ -41,7 +37,6 @@ type reconcileQueryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-// AppReconcilePending returns every request above the app's completed boundary.
 func (s *Store) AppReconcilePending(name string) (AppReconcileClaim, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -51,9 +46,6 @@ func (s *Store) AppReconcilePending(name string) (AppReconcileClaim, error) {
 	return appReconcilePendingThrough(s.db, name, 0)
 }
 
-// AppReconcilePendingThrough returns the still-owed prefix ending at requestID.
-// It is how a failed/interrupted attempt retries the exact claim it started,
-// leaving a trigger that arrived later for the next invocation.
 func (s *Store) AppReconcilePendingThrough(name string, requestID int64) (AppReconcileClaim, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -105,8 +97,6 @@ func appReconcilePendingThrough(q reconcileQueryer, name string, throughRequestI
 	return claim, rows.Err()
 }
 
-// RequestAppReconcileGap records a retention gap. Retrying the same pre-drain
-// hook is idempotent; a different cursor or surviving window is a new trigger.
 func (s *Store) RequestAppReconcileGap(name string, cursor, earliest int64, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -139,8 +129,6 @@ func (s *Store) RequestAppReconcileGap(name string, cursor, earliest int64, now 
 	return n > 0, tx.Commit()
 }
 
-// CompleteAppReconcile advances the completed request boundary and the app's
-// bus cursor together. A trigger written after the claim stays pending.
 func (s *Store) CompleteAppReconcile(name string, throughRequestID, throughSeq int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,11 +146,8 @@ func (s *Store) CompleteAppReconcile(name string, throughRequestID, throughSeq i
 	return tx.Commit()
 }
 
-// CompleteAppReconcileInvocation settles a successful running attempt and
-// crosses its durable request/cursor fence in one transaction. A crash can
-// therefore leave either the whole attempt owed or the whole attempt complete,
-// never an ok row whose request still retries or a completed request startup
-// later labels interrupted.
+// One transaction, so a crash leaves the whole attempt owed or the whole attempt
+// complete, never half of each.
 func (s *Store) CompleteAppReconcileInvocation(name string, invocationID, throughRequestID, throughSeq int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -276,15 +261,8 @@ func appendAppReconcileRequest(tx *sql.Tx, name, reason string, versionID, throu
 	return err
 }
 
-// appConsumerCursorWith reports the app's fact-delivery position, and whether
-// facts reach it at all. Every app carries a consumer row — the enabled bit lives
-// nowhere else — so a view-or-command-only app is recognised by the sentinel
-// filter it was registered with rather than by the row's absence.
-//
-// Such an app derives nothing from facts, so a version move invalidates no
-// derived state and owes no rebuild. Recording one anyway would refuse the app's
-// commands until a reconcile ran, and the pre-drain that runs on every poll tick
-// would disable a view-only app for not declaring a handler it has no use for.
+// A view-or-command-only app still carries a consumer row, recognised by its sentinel
+// filter: recording a rebuild for one refuses its commands until a reconcile runs.
 func appConsumerCursorWith(q reconcileQueryer, name string) (int64, bool, error) {
 	var (
 		cursor int64

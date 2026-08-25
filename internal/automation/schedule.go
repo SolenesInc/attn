@@ -11,22 +11,15 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// scheduleValidationSample anchors the "does this cron expression ever fire"
-// check to a fixed instant, so validation is deterministic and independent of
-// when it runs.
 var scheduleValidationSample = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// CompiledSchedule is a parsed, validated ScheduleSpec ready to compute due
-// instants.
 type CompiledSchedule struct {
 	cron     cron.Schedule
 	location *time.Location
 }
 
-// CompileSchedule parses and validates a ScheduleSpec. schedule.cron must parse
-// as a standard cron expression (no embedded TZ=/CRON_TZ= prefix, which would
-// silently compete with schedule.time_zone) and have a real next occurrence;
-// schedule.time_zone must be a loadable IANA name.
+// The cron expression must carry no embedded TZ=/CRON_TZ= prefix — it would
+// silently compete with schedule.time_zone.
 func CompileSchedule(spec ScheduleSpec) (CompiledSchedule, error) {
 	cronExpr := strings.TrimSpace(spec.Cron)
 	if cronExpr == "" {
@@ -53,11 +46,8 @@ func CompileSchedule(spec ScheduleSpec) (CompiledSchedule, error) {
 	return CompiledSchedule{cron: sched, location: loc}, nil
 }
 
-// DueInstants returns the schedule's intended instants strictly after cursor and
-// at-or-before now, in order, iterating cron.Next at most limit times. ok is
-// false when the cap was hit before reaching now — the caller's replay-storm
-// guard, so a large backlog (e.g. a very old cursor) cannot fire an unbounded
-// burst of catch-up occurrences in a single pass.
+// ok is false when the cap was hit before reaching now — the replay-storm guard
+// that keeps a very old cursor from firing an unbounded catch-up burst.
 func (s CompiledSchedule) DueInstants(cursor, now time.Time, limit int) (instants []time.Time, ok bool) {
 	at := cursor.In(s.location)
 	for i := 0; i < limit; i++ {
@@ -71,17 +61,12 @@ func (s CompiledSchedule) DueInstants(cursor, now time.Time, limit int) (instant
 	return instants, false
 }
 
-// ScheduledOccurrenceKey derives a scheduled occurrence's idempotency key from
-// its intended instant, normalized to UTC so the key is independent of the
-// schedule's configured time zone (and so an ambiguous local wall-clock time,
-// e.g. during a fall-back DST transition, still maps to a distinct key per
-// underlying instant).
+// Normalized to UTC so an ambiguous local wall-clock time (a fall-back DST
+// transition) still maps to a distinct key per instant.
 func ScheduledOccurrenceKey(intended time.Time) string {
 	return "scheduled:" + intended.UTC().Format(time.RFC3339)
 }
 
-// ScheduledInput is the structured occurrence input recorded for a scheduled
-// automation run.
 type ScheduledInput struct {
 	Provider   string `json:"provider"`
 	IntendedAt string `json:"intended_at"`

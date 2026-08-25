@@ -8,34 +8,17 @@ import (
 	"strings"
 )
 
-// Tickets retired with the garden era. Every `attn ticket` verb that used to
-// write is now a signpost: it names where the capability went and exits
-// nonzero, so an agent running on stale guidance self-corrects from the error
-// instead of silently losing the report it thought it filed.
-//
-// The signposts stay indefinitely (docs/plans/2026-08-14-garden-era-epic.md).
-// Their audience is agents whose memories and skills still say `attn ticket`,
-// and a few inert lines of code cost nothing against a lost status report.
-//
-// `show` and `list` are the deliberate exception and are not routed here: a
-// done ticket has no garden equivalent to point at, so it stays readable
-// forever rather than answering with a signpost aimed at nothing.
+// Tickets retired with the garden era: every `attn ticket` write verb is now a
+// signpost that exits nonzero. `show` and `list` are the deliberate exception.
 
-// ticketSignpost is one retired verb and the garden that replaced it.
 type ticketSignpost struct {
-	// Lead says what the verb used to do, in the caller's terms.
-	Lead string
-	// Moves are the garden commands that do it now, as label/command pairs.
+	Lead  string
 	Moves [][2]string
-	// Note is an optional closing line for a verb whose replacement is not a
-	// one-to-one swap.
-	Note string
+	Note  string
 }
 
-// ticketSignposts maps every retired `attn ticket` write verb onto the garden.
-// A verb missing from this table would fall through to the router's unknown-command
-// path, so the table is the list: `TestEveryTicketWriteVerbSignposts` walks the
-// router's own cases against it.
+// A verb missing from this table falls through to the router's unknown-command
+// path; TestEveryTicketWriteVerbSignposts walks the router's cases against it.
 var ticketSignposts = map[string]ticketSignpost{
 	"status": {
 		Lead: "reporting your work state",
@@ -112,17 +95,12 @@ var ticketSignposts = map[string]ticketSignpost{
 	},
 }
 
-// signpostTicketVerb prints the signpost for a retired verb and exits nonzero.
-// Exit 2 is the router's own usage-error code: the caller asked for something
-// that is not there any more, and the answer says what is.
+// Exit 2 is the router's own usage-error code.
 func signpostTicketVerb(verb string) {
 	fprintTicketSignpost(os.Stderr, verb)
 	os.Exit(2)
 }
 
-// fprintTicketSignpost renders one signpost. It never returns a "not retired"
-// answer for an unknown verb — the router only reaches here for verbs the table
-// covers, and a missing entry is a defect the test catches, not a runtime case.
 func fprintTicketSignpost(w io.Writer, verb string) {
 	post, ok := ticketSignposts[verb]
 	if !ok {
@@ -145,8 +123,6 @@ func fprintTicketSignpost(w io.Writer, verb string) {
 	fmt.Fprint(w, "\nDone tickets stay readable: `attn ticket show <id>` and `attn ticket list`.\n")
 }
 
-// ticketSignpostVerbs lists the retired verbs in a stable order, for the help
-// text that has to name all of them.
 func ticketSignpostVerbs() []string {
 	verbs := make([]string, 0, len(ticketSignposts))
 	for verb := range ticketSignposts {
@@ -156,7 +132,6 @@ func ticketSignpostVerbs() []string {
 	return verbs
 }
 
-// ticketSignpostVerbList is the retired verbs as one comma-separated line.
 func ticketSignpostVerbList() string {
 	return strings.Join(ticketSignpostVerbs(), ", ")
 }

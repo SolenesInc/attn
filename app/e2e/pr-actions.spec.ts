@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 test.describe('PR Actions', () => {
   test('approve PR via UI', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add PR to mock GitHub BEFORE starting daemon
+    // PRs must be added before the daemon starts: it polls once on startup.
     mockGitHub.addPR({
       repo: 'test/repo',
       number: 42,
@@ -10,31 +10,25 @@ test.describe('PR Actions', () => {
       role: 'reviewer',
     });
 
-    // 2. Now start daemon (it will poll and get our PR)
     const daemonInfo = await startDaemonWithPRs();
     console.log('Daemon started with WS at', daemonInfo.wsUrl);
 
-    // 3. Wait for page to load and connect to daemon
     await page.goto('/');
 
-    // Wait for PR card to appear
     const prCard = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Test PR' });
     await expect(prCard).toBeVisible();
 
-    // 4. Hover on row first to trigger CSS hover state, then click the approve button
+    // The row's action buttons only exist under the CSS hover state.
     await prCard.hover();
     const approveButton = prCard.locator('[data-testid="approve-button"]');
     await approveButton.click();
 
-    // 5. Wait for approval to complete
     await page.waitForTimeout(1000);
 
-    // 6. Assert mock server received the approve request
     expect(mockGitHub.hasApproveRequest('test/repo', 42)).toBe(true);
   });
 
   test('merge PR via UI', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add PR to mock GitHub
     mockGitHub.addPR({
       repo: 'test/repo',
       number: 43,
@@ -42,36 +36,28 @@ test.describe('PR Actions', () => {
       role: 'author',
     });
 
-    // 2. Start daemon
     const daemonInfo = await startDaemonWithPRs();
     console.log('Daemon started with WS at', daemonInfo.wsUrl);
 
-    // 3. Wait for page to load
     await page.goto('/');
 
-    // Wait for PR card to appear
     const prCard = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Merge Test PR' });
     await expect(prCard).toBeVisible();
 
-    // 4. Hover on row first to trigger CSS hover state, then click the merge button
     await prCard.hover();
     const mergeButton = prCard.locator('[data-testid="merge-button"]');
     await mergeButton.click();
 
-    // 5. Handle merge confirmation modal
     const confirmButton = page.locator('.modal-btn-primary', { hasText: 'Merge' });
     await expect(confirmButton).toBeVisible();
     await confirmButton.click();
 
-    // 6. Wait for merge to complete
     await page.waitForTimeout(1000);
 
-    // 7. Assert mock server received the merge request
     expect(mockGitHub.hasMergeRequest('test/repo', 43)).toBe(true);
   });
 
   test('mute PR via UI', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add PR to mock GitHub
     mockGitHub.addPR({
       repo: 'test/repo',
       number: 44,
@@ -79,27 +65,21 @@ test.describe('PR Actions', () => {
       role: 'reviewer',
     });
 
-    // 2. Start daemon
     await startDaemonWithPRs();
 
-    // 3. Wait for page to load
     await page.goto('/');
 
-    // Wait for PR card to appear
     const prCard = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Mute Test PR' });
     await expect(prCard).toBeVisible();
 
-    // 4. Hover on row first to trigger CSS hover state, then click the mute button
     await prCard.hover();
     const muteButton = prCard.locator('[data-testid="mute-button"]');
     await muteButton.click();
 
-    // 5. PR card should disappear from the list
     await expect(prCard).not.toBeVisible();
   });
 
   test('multiple PRs from same repo', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add multiple PRs to the same repo
     mockGitHub.addPR({
       repo: 'test/repo',
       number: 50,
@@ -113,40 +93,31 @@ test.describe('PR Actions', () => {
       role: 'author',
     });
 
-    // 2. Start daemon
     await startDaemonWithPRs();
 
-    // 3. Wait for page to load
     await page.goto('/');
 
-    // Wait for PR cards to appear
     await page.waitForSelector('[data-testid="pr-card"]', { timeout: 15000 });
 
-    // 4. Verify both PRs are visible
     const firstPR = page.locator('[data-testid="pr-card"]').filter({ hasText: 'First PR' });
     const secondPR = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Second PR' });
 
     await expect(firstPR).toBeVisible();
     await expect(secondPR).toBeVisible();
 
-    // 5. Hover on row first, then approve the first PR
     await firstPR.hover();
     const approveButton = firstPR.locator('[data-testid="approve-button"]');
     await approveButton.click();
 
-    // 6. Wait for approval to complete
     await page.waitForTimeout(1000);
 
-    // 7. Verify the second PR is still visible
     await expect(secondPR).toBeVisible();
 
-    // 8. Verify mock server received only the approve request for PR 50
     expect(mockGitHub.hasApproveRequest('test/repo', 50)).toBe(true);
     expect(mockGitHub.hasApproveRequest('test/repo', 51)).toBe(false);
   });
 
   test('mute repo via UI hides all PRs from that repo', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add multiple PRs to the same repo
     mockGitHub.addPR({
       repo: 'test/mute-repo',
       number: 60,
@@ -159,7 +130,6 @@ test.describe('PR Actions', () => {
       title: 'Another PR to be muted',
       role: 'author',
     });
-    // Add a PR from a different repo that should NOT be muted
     mockGitHub.addPR({
       repo: 'test/other-repo',
       number: 70,
@@ -167,16 +137,12 @@ test.describe('PR Actions', () => {
       role: 'reviewer',
     });
 
-    // 2. Start daemon
     await startDaemonWithPRs();
 
-    // 3. Wait for page to load
     await page.goto('/');
 
-    // Wait for PR cards to appear
     await page.waitForSelector('[data-testid="pr-card"]', { timeout: 15000 });
 
-    // 4. Verify all PRs are visible initially
     const pr60 = page.locator('[data-testid="pr-card"]').filter({ hasText: 'PR to be muted via repo' });
     const pr61 = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Another PR to be muted' });
     const pr70 = page.locator('[data-testid="pr-card"]').filter({ hasText: 'PR from other repo' });
@@ -185,22 +151,17 @@ test.describe('PR Actions', () => {
     await expect(pr61).toBeVisible();
     await expect(pr70).toBeVisible();
 
-    // 5. Click the repo mute button for test/mute-repo
-    // The mute button is in the repo header
     const repoHeader = page.locator('.repo-header').filter({ hasText: 'mute-repo' });
     const muteRepoButton = repoHeader.locator('.repo-mute-btn');
     await muteRepoButton.click();
 
-    // 6. Both PRs from test/mute-repo should disappear
     await expect(pr60).not.toBeVisible();
     await expect(pr61).not.toBeVisible();
 
-    // 7. PR from test/other-repo should still be visible
     await expect(pr70).toBeVisible();
   });
 
   test('undo mute PR restores the PR', async ({ page, mockGitHub, startDaemonWithPRs }) => {
-    // 1. Setup: add PR to mock GitHub
     mockGitHub.addPR({
       repo: 'test/repo',
       number: 80,
@@ -208,33 +169,25 @@ test.describe('PR Actions', () => {
       role: 'reviewer',
     });
 
-    // 2. Start daemon
     await startDaemonWithPRs();
 
-    // 3. Wait for page to load
     await page.goto('/');
 
-    // Wait for PR card to appear
     const prCard = page.locator('[data-testid="pr-card"]').filter({ hasText: 'Undo Test PR' });
     await expect(prCard).toBeVisible();
 
-    // 4. Hover on row first to trigger CSS hover state, then click the mute button
     await prCard.hover();
     const muteButton = prCard.locator('[data-testid="mute-button"]');
     await muteButton.click();
 
-    // 5. PR card should disappear
     await expect(prCard).not.toBeVisible();
 
-    // 6. Undo toast should appear
     const undoToast = page.locator('.undo-toast');
     await expect(undoToast).toBeVisible();
 
-    // 7. Click the undo button
     const undoButton = undoToast.locator('.toast-undo-btn');
     await undoButton.click();
 
-    // 8. PR card should reappear
     await expect(prCard).toBeVisible();
   });
 });

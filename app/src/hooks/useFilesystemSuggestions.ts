@@ -24,11 +24,6 @@ export interface UseFilesystemSuggestionsOptions {
   homePath?: string;
   onHomePathChange?: (nextHomePath: string) => void;
   enabled?: boolean;
-  /**
-   * Dotless extensions (e.g. ['md']). Omitted, the listing is directories only —
-   * the session picker's behavior. Supplied, matching files join the listing,
-   * which is what the markdown opener's path mode needs.
-   */
   extensions?: string[];
 }
 

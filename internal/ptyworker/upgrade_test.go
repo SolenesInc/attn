@@ -7,15 +7,11 @@ import (
 	"testing"
 )
 
-// The handoff JSON is the whole contract for an adopted session's config: Run
-// overwrites cfg with what the file carried and argv re-supplies only the three
-// adopt fields. A new Config field that does not survive that round trip hands
-// adopted sessions a zero where spawned ones get a value, and nothing else in
-// the system would notice.
+// The handoff JSON is the whole contract for an adopted session's config: a Config
+// field that misses the round trip silently hands adopted sessions a zero.
 func TestHandoffCarriesEveryConfigField(t *testing.T) {
-	// Set by argv on the adopt half, so the file's copy is deliberately ignored.
 	suppliedByArgv := map[string]bool{
-		"Logf":            true, // a func; json:"-" and re-derived from the flags
+		"Logf":            true,
 		"AdoptHandoff":    true,
 		"AdoptPtmxFD":     true,
 		"AdoptListenerFD": true,
@@ -57,8 +53,6 @@ func TestHandoffCarriesEveryConfigField(t *testing.T) {
 	}
 }
 
-// fillNonZero writes a recognizable non-zero value into v, walking structs so a
-// nested config field is populated rather than skipped.
 func fillNonZero(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.String:
@@ -108,9 +102,8 @@ func fillNonZero(v reflect.Value) bool {
 }
 
 func TestHandoffPathsLiveBesideTheRegistryNotInIt(t *testing.T) {
-	// Recover and ReapDataDir glob registry/*.json and parse every hit as a
-	// registry entry, so a handoff written there is read as a malformed entry
-	// and deleted mid-swap.
+	// Recover and ReapDataDir glob registry/*.json, so a handoff written there is
+	// read as a malformed entry and deleted mid-swap.
 	registry := filepath.Join("/data", "workers", "inst", "registry", "sess.json")
 	jsonPath, dumpPath := HandoffPaths(registry, "sess")
 	wantDir := filepath.Join("/data", "workers", "inst", "handoff")

@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// migration82View is the participant rule as migration 82 defined it, restored
-// so the fixture below is a faithful pre-99 database rather than a new one with
-// some columns removed.
+// The participant rule as migration 82 defined it: a faithful pre-99 fixture,
+// not the current rule.
 const migration82View = `
 	DROP VIEW IF EXISTS ticket_participants;
 	CREATE VIEW ticket_participants (ticket_id, identity) AS
@@ -40,11 +39,6 @@ func participantSet(t *testing.T, s *Store, ticketID string) map[string]bool {
 	return set
 }
 
-// A database written before migration 99 carries the chief's delegations as
-// personal subscriptions on whichever session held the role at the time, so the
-// board keeps nudging that session long after the role moved on. The migration
-// carries every row it can and removes only those subscriptions, on both shapes
-// of delegation: a ticket the chief minted, and a backlog ticket it adopted.
 func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-99.db")
 	db, err := OpenDB(dbPath)
@@ -105,10 +99,6 @@ func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) 
 		}
 	}
 
-	// Everything that was not the acting chief's own attachment is carried: the
-	// assignees, an unrelated watcher, the person who filed the adopted ticket,
-	// and the role's cursor, which is what stops the next chief being handed
-	// history the previous one already read.
 	minted := participantSet(t, migrated, "minted")
 	if !minted["agent-1"] || !minted["watcher"] {
 		t.Errorf("minted participants = %v, want the assignee and the watcher carried", minted)
@@ -117,8 +107,6 @@ func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) 
 	if !adopted["agent-2"] || !adopted["author-x"] {
 		t.Errorf("adopted participants = %v, want the assignee and the original author carried", adopted)
 	}
-	// A subscription the chief made by hand is a different act at a different
-	// time, so the sweep leaves it alone even on a ticket the chief delegated.
 	watching, err := migrated.IsTicketSubscribed("chief-a", "watched")
 	if err != nil || !watching {
 		t.Errorf("hand-made subscription survived = %v (err %v), want it carried", watching, err)
@@ -129,9 +117,6 @@ func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) 
 	}
 }
 
-// The rule the migration encodes, stated on live writes: a delegation the chief
-// role performs attaches the role, and a ticket someone else filed keeps its
-// author attached even after the chief adopts it for a delegation.
 func TestRoleActedEventsAttachTheRoleAndLeaveOtherAuthorsAlone(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -169,8 +154,6 @@ func TestRoleActedEventsAttachTheRoleAndLeaveOtherAuthorsAlone(t *testing.T) {
 	}
 }
 
-// An ordinary session that delegates a ticket the chief role happens to own is
-// not acting as the role, so it stays personally attached exactly as before.
 func TestNonRoleDelegatorKeepsItsOwnAttachment(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

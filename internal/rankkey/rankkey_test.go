@@ -5,12 +5,8 @@ import (
 	"testing"
 )
 
-// less reports the strict byte (lexicographic) ordering used by rank keys.
 func less(a, b string) bool { return a < b }
 
-// noTrailingMinDigit asserts the package invariant: a real key never ends in the
-// minimum digit. Generated keys that violated this could compare equal-by-value
-// to a shorter key, breaking byte-order == numeric-order.
 func noTrailingMinDigit(t *testing.T, k string) {
 	t.Helper()
 	if k == "" {
@@ -75,8 +71,6 @@ func TestBetweenErrorsOnEmptyInterval(t *testing.T) {
 	}
 }
 
-// TestBetweenRepeatedInsertSamePairLeft inserts 100 times always taking the new
-// key as the next upper bound (descending), the worst case for the left edge.
 func TestBetweenRepeatedInsertSamePairLeft(t *testing.T) {
 	lo, hi := "a", "b"
 	prev := hi
@@ -93,8 +87,6 @@ func TestBetweenRepeatedInsertSamePairLeft(t *testing.T) {
 	}
 }
 
-// TestBetweenRepeatedInsertSamePairRight is the mirror: always take the new key
-// as the next lower bound (ascending toward hi).
 func TestBetweenRepeatedInsertSamePairRight(t *testing.T) {
 	lo, hi := "a", "b"
 	prev := lo
@@ -111,12 +103,7 @@ func TestBetweenRepeatedInsertSamePairRight(t *testing.T) {
 	}
 }
 
-// TestBetweenRepeatedInsertMidpoint keeps splitting the interval in half by
-// inserting between a fixed low and the most-recent key, then between that key
-// and a fixed high, growing a sorted set and re-checking total order each time.
 func TestBetweenRepeatedInsertMidpoint(t *testing.T) {
-	// Maintain a sorted slice; repeatedly insert between a random-ish adjacent
-	// pair (here: always the middle pair) and assert strict total order.
 	keys := []string{"a", "z"}
 	for i := 0; i < 100; i++ {
 		mid := len(keys) / 2
@@ -125,7 +112,6 @@ func TestBetweenRepeatedInsertMidpoint(t *testing.T) {
 			t.Fatalf("iter %d Between(%q,%q): %v", i, keys[mid-1], keys[mid], err)
 		}
 		noTrailingMinDigit(t, k)
-		// Splice k in at position mid.
 		keys = append(keys, "")
 		copy(keys[mid+1:], keys[mid:])
 		keys[mid] = k
@@ -157,8 +143,6 @@ func TestSeedMonotonicAndCanonical(t *testing.T) {
 	}
 }
 
-// TestBetweenWorksOnAdjacentSeedOutputs verifies the real use case: after a
-// Seed, you can always insert between any adjacent pair (and between repeatedly).
 func TestBetweenWorksOnAdjacentSeedOutputs(t *testing.T) {
 	for _, n := range []int{2, 3, 5, 10, 36, 100} {
 		keys := Seed(n)
@@ -173,7 +157,6 @@ func TestBetweenWorksOnAdjacentSeedOutputs(t *testing.T) {
 			}
 			noTrailingMinDigit(t, k)
 		}
-		// Also insert below the first and above the last.
 		first, err := Between("", keys[0])
 		if err != nil || !less(first, keys[0]) {
 			t.Fatalf("Seed(%d): Between(MIN, %q)=%q err=%v", n, keys[0], first, err)
@@ -186,7 +169,7 @@ func TestBetweenWorksOnAdjacentSeedOutputs(t *testing.T) {
 }
 
 func TestAfterMonotonic(t *testing.T) {
-	prev := After("") // first key
+	prev := After("")
 	noTrailingMinDigit(t, prev)
 	for i := 0; i < 100; i++ {
 		k := After(prev)
@@ -203,7 +186,6 @@ func TestAfterFirstKey(t *testing.T) {
 	if k == "" {
 		t.Fatalf("After(\"\") returned empty")
 	}
-	// Must leave room both below (Between MIN) and above (After).
 	if below, err := Between("", k); err != nil || !less(below, k) {
 		t.Fatalf("no room below first key %q: %q err=%v", k, below, err)
 	}
@@ -212,18 +194,12 @@ func TestAfterFirstKey(t *testing.T) {
 	}
 }
 
-// TestBruteForceBetweenAllShortPairs exhaustively checks Between over all pairs
-// of short keys plus the MIN/MAX sentinels, the strongest correctness evidence.
 func TestBruteForceBetweenAllShortPairs(t *testing.T) {
-	// Build a corpus of short, canonical keys (no trailing min digit) of length
-	// 1 and 2 over a reduced alphabet to keep the run fast but representative.
 	alpha := []byte{digits[0], digits[1], digits[base/2], digits[base-1]}
 	var corpus []string
-	corpus = append(corpus, "") // sentinel
+	corpus = append(corpus, "")
 	for _, c0 := range alpha {
 		if c0 == digits[0] {
-			// length-1 key cannot be the min digit alone and remain canonical only
-			// if it isn't trailing-min; "0" itself ends in min digit -> skip.
 			continue
 		}
 		corpus = append(corpus, string(c0))
@@ -231,7 +207,7 @@ func TestBruteForceBetweenAllShortPairs(t *testing.T) {
 	for _, c0 := range alpha {
 		for _, c1 := range alpha {
 			if c1 == digits[0] {
-				continue // trailing min digit not allowed
+				continue
 			}
 			corpus = append(corpus, string([]byte{c0, c1}))
 		}
@@ -261,16 +237,10 @@ func TestBruteForceBetweenAllShortPairs(t *testing.T) {
 	}
 }
 
-// TestBetweenRandomInsertsStayStrictlyOrdered maintains a sorted set and, many
-// times, inserts a key between a randomly chosen adjacent pair (including the
-// MIN/MAX edges). After every insert the whole set must remain strictly sorted
-// and canonical. This mirrors a long sequence of real reorders.
 func TestBetweenRandomInsertsStayStrictlyOrdered(t *testing.T) {
 	rng := newLCG(0x9e3779b9)
-	keys := []string{After("")} // start with a single seeded key
+	keys := []string{After("")}
 	for i := 0; i < 2000; i++ {
-		// Pick an insertion gap: index g in [0, len(keys)] where g==0 inserts at
-		// the top (MIN..keys[0]) and g==len inserts at the bottom (keys[last]..MAX).
 		g := int(rng() % uint32(len(keys)+1))
 		lo, hi := "", ""
 		if g > 0 {
@@ -294,8 +264,6 @@ func TestBetweenRandomInsertsStayStrictlyOrdered(t *testing.T) {
 	}
 }
 
-// newLCG returns a tiny deterministic pseudo-random source so the stress test is
-// reproducible without importing math/rand.
 func newLCG(seed uint32) func() uint32 {
 	state := seed
 	return func() uint32 {

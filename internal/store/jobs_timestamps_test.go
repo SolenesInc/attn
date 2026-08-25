@@ -6,22 +6,9 @@ import (
 	"time"
 )
 
-// scheduled_at, created_at and updated_at are TEXT columns, so every comparison
-// the queue makes on them — claiming (`scheduled_at <= now`), listing
-// (`ORDER BY updated_at DESC`), retention (`updated_at < cutoff`) — is a text
-// comparison, and the stored encoding is the whole definition of "before". Rows
-// a second apart cannot tell a working encoding from a broken one: what has to
-// be right is what happens inside one second, which is where a burst of enqueues
-// and a whole-second schedule both land.
-//
-// Every fixture here therefore uses sub-second offsets whose
-// trailing-zero-stripped encodings sort in an order that is not their own,
-// including the whole second itself — under RFC3339Nano "…:00Z" sorts above
-// every stamp in its own second, because 'Z' is 0x5A and '.' and the digits are
-// below it.
+// These stamps are TEXT columns, so encoding defines "before": under RFC3339Nano
+// "…:00Z" sorts ABOVE every stamp in its own second ('Z' is 0x5A, above '.' and digits).
 
-// raggedJobOffsets are ids in chronological order with the sub-second offsets
-// that separate them, all inside one second.
 var raggedJobOffsets = []struct {
 	id     string
 	offset time.Duration
@@ -50,8 +37,6 @@ func chronologicalJobIDs() []string {
 	return out
 }
 
-// storeWithRaggedJobs writes the four jobs, each scheduled, created and updated
-// at its own instant inside one second.
 func storeWithRaggedJobs(t *testing.T) *Store {
 	t.Helper()
 	s := New()
@@ -63,11 +48,6 @@ func storeWithRaggedJobs(t *testing.T) *Store {
 	return s
 }
 
-// The claim boundary. A job scheduled on a whole second is the ordinary case —
-// it is what a whole-second clock and a hand-written schedule both produce — and
-// under the old encoding it sorted above every stamp inside that second, so
-// `scheduled_at <= now` refused it until the next second ticked over. A second
-// of wobble on every such job, reported nowhere.
 func TestAJobScheduledOnAWholeSecondIsClaimableAtThatSecond(t *testing.T) {
 	s := New()
 	at := jobBase()
@@ -87,10 +67,6 @@ func TestAJobScheduledOnAWholeSecondIsClaimableAtThatSecond(t *testing.T) {
 	}
 }
 
-// Claiming order is what decides which job runs first when more are eligible
-// than the sweep will take, and the tie-break within one priority is
-// scheduled_at. Four jobs enqueued inside one second must come back in the order
-// they were scheduled for, not in the order their text happens to sort.
 func TestEligibleJobsComeBackInScheduledOrderWithinASecond(t *testing.T) {
 	s := storeWithRaggedJobs(t)
 
@@ -103,8 +79,6 @@ func TestEligibleJobsComeBackInScheduledOrderWithinASecond(t *testing.T) {
 	}
 }
 
-// ListJobs is the queue's inspection surface (`attn jobs`), and it promises
-// newest-updated first.
 func TestListJobsIsNewestUpdatedFirstWithinASecond(t *testing.T) {
 	s := storeWithRaggedJobs(t)
 
@@ -117,10 +91,6 @@ func TestListJobsIsNewestUpdatedFirstWithinASecond(t *testing.T) {
 	}
 }
 
-// Retention deletes done rows updated before a cutoff. With the cutoff inside a
-// second, the rows updated before it must go and the ones updated after it must
-// stay — under the old encoding the row updated exactly on the second survived a
-// cutoff later than it, because its text sorted above the cutoff's.
 func TestTrimDoneJobsDeletesByTimeWithinASecond(t *testing.T) {
 	s := New()
 	for _, r := range raggedJobOffsets {
@@ -147,8 +117,6 @@ func TestTrimDoneJobsDeletesByTimeWithinASecond(t *testing.T) {
 	}
 }
 
-// The notifications feed stores its stamps in the same encoding and lists by
-// created_at, so a burst of failures inside one second is where its order breaks.
 func TestNotificationsListNewestFirstWithinASecond(t *testing.T) {
 	s := New()
 	for _, r := range raggedJobOffsets {
@@ -171,10 +139,6 @@ func TestNotificationsListNewestFirstWithinASecond(t *testing.T) {
 	}
 }
 
-// Migration 94 rewrites what earlier versions stored. Its input is the encoding
-// they wrote, so the test writes that encoding rather than describing it: the
-// stamps go in the way an older store would have written them, the migration
-// runs, and the claim and the order that were wrong come back right.
 func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -193,11 +157,8 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 		}
 	}
 
-	// Roll the stamps back to the encoding migration 94 exists to replace, and
-	// plant one value it cannot read, which it must leave alone rather than turn
-	// into year 1. read_at stays '' on every notification: an unread row's
-	// sentinel is not a stamp that failed to parse, and the migration must leave
-	// it as it is too.
+	// The planted unreadable value must be left alone rather than turned into year
+	// 1, and read_at stays '' — an unread sentinel must survive too.
 	for _, r := range raggedJobOffsets {
 		old := jobBase().Add(r.offset).Format(time.RFC3339Nano)
 		if _, err := s.db.Exec(
@@ -231,8 +192,6 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 	}
 	assertMigration94Applied(t, s)
 
-	// Re-running finds nothing left to do and changes nothing: the rewrite is a
-	// decode and re-encode, so an already-converted stamp yields itself.
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 94`); err != nil {
 		t.Fatalf("unrecord migration 94 again: %v", err)
 	}
@@ -242,9 +201,6 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 	assertMigration94Applied(t, s)
 }
 
-// assertMigration94Applied is the post-migration state: the whole-second job is
-// claimable at its own second, both feeds order by time, the stamp that does not
-// decode is untouched, and an unread notification is still unread.
 func assertMigration94Applied(t *testing.T, s *Store) {
 	t.Helper()
 	got, err := s.EligibleJobs(jobBase(), 10)

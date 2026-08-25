@@ -5,11 +5,6 @@ import (
 	"testing"
 )
 
-// TestStripScannerOwnedResponses verifies the gap filter keeps exactly the
-// query responses the scan-based responder does NOT emit (kitty CSI ? u, DECRQM
-// reports, and anything unrecognized) while dropping the classes the scanner
-// already answers (CPR, DA, OSC 10/11/12). This is what lets the worker forward
-// only the gap in snapshot mode without double-answering a scanner-owned query.
 func TestStripScannerOwnedResponses(t *testing.T) {
 	cases := []struct {
 		name string
@@ -48,7 +43,6 @@ func TestStripScannerOwnedResponses(t *testing.T) {
 		},
 		{
 			name: "mixed stream keeps only the gap (codex bootstrap trio)",
-			// CPR + DA1 (scanner-owned) interleaved with kitty (gap).
 			in:   "\x1b[24;80R\x1b[?0u\x1b[?62;22c",
 			want: "\x1b[?0u",
 		},

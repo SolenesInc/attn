@@ -7,9 +7,7 @@ import (
 )
 
 // The payloads below are trimmed from real PostToolUse hook output: Claude Code
-// 2.x and codex-cli 0.145.0, captured by pointing each agent's catch-all
-// PostToolUse hook at a file and asking it to edit one document and create
-// another.
+// 2.x and codex-cli 0.145.0.
 func TestMarkdownEdits(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -43,10 +41,8 @@ func TestMarkdownEdits(t *testing.T) {
 			want:      []string{"/repo/notes.md", "/repo/extra.md"},
 		},
 		{
-			name:     "codex rename is recorded at its destination",
-			toolName: "apply_patch",
-			// The source path no longer exists once the patch applies, so
-			// remembering it would hand the opener a dead entry.
+			name:      "codex rename is recorded at its destination",
+			toolName:  "apply_patch",
 			toolInput: `{"command":"*** Begin Patch\n*** Update File: /repo/old.md\n*** Move to: /repo/new.md\n@@\n-a\n+b\n*** End Patch"}`,
 			want:      []string{"/repo/new.md"},
 		},

@@ -1,11 +1,5 @@
-/**
- * Stable, fast content hash used to detect when a file's diff content has
- * changed (e.g. "changed since viewed").
- *
- * This is intentionally a cheap non-cryptographic hash (djb2-style): it only
- * needs to be consistent and collision-resistant enough to notice that two
- * versions of the same file differ.
- */
+/** Stable, cheap non-cryptographic content hash (djb2-style) used to detect that a
+ * file's diff content changed. */
 export function hashContent(content: string): string {
   let hash = 0;
   for (let i = 0; i < content.length; i++) {

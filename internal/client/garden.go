@@ -6,12 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The garden's client surface. Planting costs one call because the daemon
-// already knows who is asking: the session id is enough to stamp the workspace,
-// so an agent never has to name its own context.
-
-// SeedPlant plants one seed. partOf, when set, plants it under that crown —
-// born part of the plot.
 func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, member, resumeID, resumeCwd, resumeAgent string) (*protocol.SeedPlantResult, error) {
 	msg := protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: title}
 	if sessionID != "" {
@@ -44,8 +38,6 @@ func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, membe
 	return resp.SeedPlantResult, nil
 }
 
-// SeedSetResume atomically sets or clears the fallback identity used when a
-// seed has no dispatch record.
 func (c *Client) SeedSetResume(seedID, resumeID, cwd, agent string, clear bool) (*protocol.SeedSetResumeResult, error) {
 	msg := protocol.SeedSetResumeMessage{Cmd: protocol.CmdSeedSetResume, SeedID: seedID}
 	if clear {
@@ -65,9 +57,6 @@ func (c *Client) SeedSetResume(seedID, resumeID, cwd, agent string, clear bool) 
 	return resp.SeedSetResumeResult, nil
 }
 
-// SeedList reads the garden, newest first. stale narrows to the open seeds
-// whose log has not moved for the window; staleWindowSeconds 0 takes the
-// daemon's default.
 func (c *Client) SeedList(sessionID string, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
 	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList}
 	if sessionID != "" {
@@ -89,7 +78,6 @@ func (c *Client) SeedList(sessionID string, stale bool, staleWindowSeconds int) 
 	return resp.SeedListResult, nil
 }
 
-// SeedShow reads one seed and the newest entries on its log.
 func (c *Client) SeedShow(sessionID, seedID string) (*protocol.SeedShowResult, error) {
 	msg := protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID}
 	if sessionID != "" {
@@ -105,8 +93,6 @@ func (c *Client) SeedShow(sessionID, seedID string) (*protocol.SeedShowResult, e
 	return resp.SeedShowResult, nil
 }
 
-// SeedEdit replaces one seed's markdown body without moving its lifecycle or
-// claim. An empty body is deliberate and clears the document.
 func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error) {
 	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body})
 	if err != nil {
@@ -118,9 +104,6 @@ func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error)
 	return resp.SeedEditResult, nil
 }
 
-// SeedTransition moves a seed through its life. The daemon decides whether the
-// move is legal from the state the seed is in and refuses by name; nothing here
-// pre-judges it, so the CLI and the app cannot disagree about the rules.
 func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, force bool) (*protocol.SeedTransitionResult, error) {
 	msg := protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: verb}
 	if sessionID != "" {
@@ -145,8 +128,6 @@ func (c *Client) SeedTransition(sessionID, seedID, verb, reason, member string, 
 	return resp.SeedTransitionResult, nil
 }
 
-// SeedNote appends one entry to a seed's log. An empty kind is the plain
-// entry; `handoff` writes it to whoever tends the seed next.
 func (c *Client) SeedNote(sessionID, seedID, body, member, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
 	msg := protocol.SeedNoteMessage{Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body, Artifact: artifact}
 	if sessionID != "" {
@@ -171,9 +152,6 @@ func (c *Client) SeedNote(sessionID, seedID, body, member, kind string, ring boo
 	return resp.SeedNoteResult, nil
 }
 
-// SeedLink adds one edge between two seeds, or removes it when unlink is set.
-// The daemon decides what may be linked — an edge onto a seed that is not
-// planted, a second crown, a cycle — so the CLI and the app cannot disagree.
 func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol.SeedLinkResult, error) {
 	msg := protocol.SeedLinkMessage{
 		Cmd: protocol.CmdSeedLink, SeedID: seedID, Kind: kind, ToSeedID: toSeedID,
@@ -191,9 +169,6 @@ func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol
 	return resp.SeedLinkResult, nil
 }
 
-// SeedReady asks what can be tended now. Both arguments are overrides: with
-// neither, the daemon answers for the whole garden — or the caller's plot,
-// when the session was dispatched at a crown.
 func (c *Client) SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
 	msg := protocol.SeedReadyMessage{Cmd: protocol.CmdSeedReady}
 	if sessionID != "" {
@@ -215,8 +190,6 @@ func (c *Client) SeedReady(sessionID, plot string, all bool) (*protocol.SeedRead
 	return resp.SeedReadyResult, nil
 }
 
-// SeedNotes reads a seed's whole log, newest first. limit 0 takes the
-// daemon's bound.
 func (c *Client) SeedNotes(sessionID, seedID string, limit int) (*protocol.SeedNotesResult, error) {
 	msg := protocol.SeedNotesMessage{Cmd: protocol.CmdSeedNotes, SeedID: seedID}
 	if sessionID != "" {
@@ -235,7 +208,6 @@ func (c *Client) SeedNotes(sessionID, seedID string, limit int) (*protocol.SeedN
 	return resp.SeedNotesResult, nil
 }
 
-// SeedWatch makes one session's explicit watch exactly as requested.
 func (c *Client) SeedWatch(sessionID, seedID string, unwatch bool) (*protocol.SeedWatchResult, error) {
 	msg := protocol.SeedWatchMessage{
 		Cmd: protocol.CmdSeedWatch, SourceSessionID: sessionID, SeedID: seedID,
@@ -253,9 +225,6 @@ func (c *Client) SeedWatch(sessionID, seedID string, unwatch bool) (*protocol.Se
 	return resp.SeedWatchResult, nil
 }
 
-// SeedPlot plants a whole plot in one move: the crown and its children with
-// their sequencing edges. The daemon validates everything before writing
-// anything.
 func (c *Client) SeedPlot(sessionID, member string, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
 	spec.Cmd = protocol.CmdSeedPlot
 	if sessionID != "" {

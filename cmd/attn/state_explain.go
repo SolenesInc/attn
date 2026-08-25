@@ -13,14 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn state explain <id>` answers "why is this session that color?".
-//
-// The daemon logs the transitions it accepts, which makes a stuck color
-// invisible: a stuck session is one where nothing is being accepted. The daemon
-// keeps a capped ring of every state observation and what became of it, and this
-// command prints it — including the observations that were vetoed before the
-// store door or discarded by it, which is where a stuck color's explanation
-// actually lives.
+// `attn state explain <id>` answers "why is this session that color?" by printing
+// the daemon's capped ring of state observations, including the ones vetoed before the store door or discarded by it.
 
 type stateExplainArgs struct {
 	target string
@@ -99,9 +93,6 @@ func printStateExplain(w io.Writer, result *protocol.StateExplainResult) {
 		return
 	}
 
-	// A full ring means the oldest observations have already been evicted, so the
-	// trace is a tail and not the whole story. Saying so beats silently showing a
-	// partial history as if it were complete.
 	if result.Capacity > 0 && len(result.Observations) >= result.Capacity {
 		fmt.Fprintf(w, "\n(showing the most recent %d observations; older ones were evicted)\n", result.Capacity)
 	}
@@ -120,8 +111,6 @@ func printStateExplain(w io.Writer, result *protocol.StateExplainResult) {
 	}
 }
 
-// renderOutcome appends a repeat count so a collapsed level source reads as one
-// row that kept saying the same thing, not as a single stale observation.
 func renderOutcome(obs protocol.StateExplainEntry) string {
 	if obs.Repeats != nil && *obs.Repeats > 0 {
 		return fmt.Sprintf("%s ×%d", obs.Outcome, *obs.Repeats+1)
@@ -129,8 +118,6 @@ func renderOutcome(obs protocol.StateExplainEntry) string {
 	return obs.Outcome
 }
 
-// stateExplainWhy is the human column: the rejection reason if there is one,
-// then the source's own detail, then the commit rule it travelled under.
 func stateExplainWhy(obs protocol.StateExplainEntry) string {
 	parts := make([]string, 0, 3)
 	if reason := derefTrimmed(obs.Reason); reason != "" {
@@ -159,9 +146,6 @@ func orPlaceholder(value string) string {
 	return value
 }
 
-// formatStateExplainTime shows wall-clock time to the millisecond. The trace is
-// read while staring at a session, so the date is noise and sub-second ordering
-// is the whole point.
 func formatStateExplainTime(value string) string {
 	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(value))
 	if err != nil {

@@ -9,10 +9,6 @@ dbg('main.tsx: imports resolved');
 installVerbatimTextEntryGuard(document);
 installUiDiagnostics();
 
-// The Present window is a separate Tauri window (opened via
-// open_presentation_window) that loads this same bundle with
-// ?window=present&presentation=<id>. It renders a slim, self-contained root
-// instead of the main App shell.
 const isPresentWindow = new URLSearchParams(window.location.search).get('window') === 'present';
 
 async function boot() {

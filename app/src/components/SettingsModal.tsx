@@ -1,4 +1,3 @@
-// app/src/components/SettingsModal.tsx
 import { Fragment, useState, useCallback, useEffect, useMemo } from 'react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -86,29 +85,22 @@ interface SettingsModalProps {
   onSetSetting: (key: string, value: string) => void;
   themePreference: ThemePreference;
   onSetTheme: (theme: ThemePreference) => void;
-  /** App-wide font scale (uiScale setting). Optional so tests without font-size
-      concerns can omit the whole group; App.tsx always provides them. */
   uiScale?: number;
   onIncreaseUIScale?: () => void;
   onDecreaseUIScale?: () => void;
   onResetUIScale?: () => void;
-  /** Garden font scale override; null = match app. */
   gardenScale?: number | null;
   effectiveGardenScale?: number;
   onIncreaseGardenScale?: () => void;
   onDecreaseGardenScale?: () => void;
   onMatchAppGardenScale?: () => void;
-  /** Durable task-runner list for the Background Tasks section. Optional so tests
-      that don't exercise that section can omit them; App.tsx always provides them. */
   listTasks?: () => Promise<Task[]>;
   retryTask?: (taskId: string) => Promise<Task | null>;
   taskChangeSignal?: number;
 }
 
 // Section ids are the deep-link and automation vocabulary, so they outlive the
-// labels above them: `general` still names the appearance section it was
-// narrowed to. `review` is gone — its single model override moved in beside the
-// other model overrides — and settingsAutomation.ts moves with this union.
+// labels above them; settingsAutomation.ts moves with this union.
 type SettingsSectionID =
   | 'general'
   | 'workspace'
@@ -137,9 +129,6 @@ function formatByteCount(raw: string | undefined): string {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
-// Reasoning-effort levels the chief_effort_<agent> and default_effort_<agent>
-// settings accept, per agent. Blank (agent default) is added separately as the
-// select's first option.
 const CHIEF_EFFORT_LEVELS: Partial<Record<SessionAgent, string[]>> = {
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['minimal', 'low', 'medium', 'high', 'xhigh'],
@@ -170,10 +159,6 @@ const emptyKeeperDrafts: Record<KeeperDutyKey, KeeperDraft> = {
   compact: { agent: '', model: '' },
 };
 
-// initialKeeperDraft seeds a row's editable draft from the saved config. A
-// default-configured duty with no override pre-selects its built-in default agent (or
-// the first eligible one) plus that agent's recommended model, so the row shows what
-// "unset" resolves to; an opt-in duty with no override starts blank (Disabled).
 function initialKeeperDraft(
   duty: KeeperDutyDescriptor,
   saved: KeeperConfig | null,
@@ -233,9 +218,6 @@ export function SettingsModal({
     sendAutoModePatternAdd,
     sendAutoModePatternRemove,
   } = useDaemonApi();
-  // Read here rather than inside the section: the nav badge needs the pending
-  // count before the section mounts, and one read serves both. Gated on the
-  // modal being open, so a closed panel holds nothing.
   const autoModePolicy = useAutoModePolicy({
     enabled: isOpen,
     getState: sendAutoModeGet,
@@ -244,18 +226,13 @@ export function SettingsModal({
     addPattern: sendAutoModePatternAdd,
     removePattern: sendAutoModePatternRemove,
   });
-  // Auto-save is the house rule here, so every commit raises a quiet mark
-  // beside its field: a blur that wrote something has to look different from a
-  // blur that did nothing.
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
-  // One draft (agent + model) per keeper duty, edited locally and committed per-row.
   const [keeperDrafts, setKeeperDrafts] = useState<Record<KeeperDutyKey, KeeperDraft>>(
     emptyKeeperDrafts,
   );
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
   const [settingsSearch, setSettingsSearch] = useState('');
-  // The two list panels keep their own form, error and in-flight row.
   const endpointPanel = useEndpointPanel();
   const pluginPanel = usePluginPanel(onListPlugins);
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
@@ -264,10 +241,7 @@ export function SettingsModal({
     [agentAvailability],
   );
 
-  // Sync with settings when modal opens
   const actualProjectsDir = settings.projects_directory || '';
-  // notebook.root is the user override (blank => default); notebook.root.effective is
-  // the daemon-resolved absolute folder the notebook actually lives in right now.
   const actualNotebookRoot = settings['notebook.root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
   const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
@@ -299,9 +273,6 @@ export function SettingsModal({
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
-  // The saved (persisted) config for every keeper duty, keyed by duty. A null entry
-  // means the setting is blank (built-in model for default-configured duties,
-  // disabled for opt-in duties).
   const actualKeeperConfigs = useMemo(() => {
     const configs = {} as Record<KeeperDutyKey, KeeperConfig | null>;
     for (const duty of KEEPER_DUTIES) {
@@ -309,8 +280,6 @@ export function SettingsModal({
     }
     return configs;
   }, [settings]);
-  // The keeper master switch is daemon-normalized to its effective value (default ON),
-  // so a missing key reads as enabled rather than off.
   const keeperTasksEnabled = (settings['notebook.tasks_enabled'] ?? 'true') !== 'false';
   const keeperDutyEnabled = useMemo(() => {
     const enabled = {} as Record<KeeperDutyKey, boolean>;
@@ -329,10 +298,6 @@ export function SettingsModal({
     () => orderedAgentList.filter((agent) => ['codex', 'claude', 'copilot'].includes(agent)),
     [orderedAgentList],
   );
-  // Agents whose chief launch honors a --model/--effort override (claude, codex).
-  // Installed agents only, plus any agent that already has a saved model OR effort
-  // override so its row stays visible even if it became unavailable — mirrors
-  // keeperAgents re-inclusion.
   const chiefOverrideAgentList = useMemo(() => {
     const list = orderedAgentList.filter((agent) => (
       ['codex', 'claude'].includes(agent) && isAgentAvailable(agentAvailability, agent)
@@ -361,9 +326,6 @@ export function SettingsModal({
     }
     return out;
   }, [settings, chiefOverrideAgentList]);
-  // Agents whose launch honors a --model/--effort default (claude, codex),
-  // applied to EVERY launch of that agent rather than only chief launches.
-  // Same installed-or-configured visibility rule as chiefOverrideAgentList.
   const defaultOverrideAgentList = useMemo(() => {
     const list = orderedAgentList.filter((agent) => (
       ['codex', 'claude'].includes(agent) && isAgentAvailable(agentAvailability, agent)
@@ -399,9 +361,6 @@ export function SettingsModal({
     }
     return out;
   }, [settings, defaultOverrideAgentList]);
-  // Agents eligible to run any keeper duty: installed, headless-task capable, and one
-  // of claude/codex. Any agent already configured on a duty is kept in the list even
-  // if it has since become unavailable, so its row still shows the saved selection.
   const keeperAgents = useMemo(() => {
     const eligible = orderedAgentList.filter((agent) => (
       ['codex', 'claude'].includes(agent)
@@ -437,16 +396,10 @@ export function SettingsModal({
       ? 'Sessions run inside the daemon process and stop if the daemon restarts.'
       : 'Backend mode is not currently reported by the daemon.';
 
-  // Every free-text and per-agent field on this page applies on blur or on
-  // change, so each one owns a draft that seeds from the daemon's value while
-  // the modal is open and writes back once the edit is whole. `draftDeps` is
-  // the three things all of them need.
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
     ...draftDeps, actual: actualProjectsDir, settingKey: 'projects_directory',
   });
-  // Blank commits as an empty override, which the daemon resolves back to the
-  // per-profile default (~/attn-notebook).
   const notebookRootDraft = useSettingDraft({
     ...draftDeps, actual: actualNotebookRoot, settingKey: 'notebook.root',
   });
@@ -456,19 +409,14 @@ export function SettingsModal({
   const reviewerModelDraft = useSettingDraft({
     ...draftDeps, actual: actualReviewerModel, settingKey: 'reviewer_model',
   });
-  // Context-window caps (tokens): the chief session and headless runs auto-compact
-  // at these thresholds instead of the model's full window. The daemon normalizes
-  // both to concrete effective values, so a blank fallback is only a safety net.
   const chiefContextCapDraft = useSettingDraft({
     ...draftDeps, actual: actualChiefContextCap, settingKey: 'chief_context_window_cap', trim: true,
   });
   const headlessContextCapDraft = useSettingDraft({
     ...draftDeps, actual: actualHeadlessContextCap, settingKey: 'headless_context_window_cap', trim: true,
   });
-  // Auto-settle windows, in seconds. The modal mounts before the daemon's
-  // settings broadcast arrives, so these two start on the built-in defaults;
-  // without the reseed a saved 60/20 policy would still read as 30/15, and the
-  // commit-on-blur would then write those defaults back over it.
+  // Seconds. The modal mounts before the daemon's settings broadcast, so without the
+  // reseed commit-on-blur writes the built-in defaults over a saved policy.
   const autoSettleArmDraft = useSettingDraft({
     ...draftDeps, actual: actualAutoSettleArm, settingKey: AUTO_SETTLE_ARM_SETTING, trim: true,
   });
@@ -480,9 +428,6 @@ export function SettingsModal({
     actual: actualAgentExecutables,
     settingKey: (agent) => `${agent}_executable`,
   });
-  // Per-agent chief-of-staff overrides (chief_model_<agent>, chief_effort_<agent>).
-  // Blank model => the agent default. The effort is a <select>, so it applies on
-  // change and borrows the model field's saved mark — they share one row.
   const chiefModelDrafts = useAgentSettingDrafts({
     ...draftDeps,
     actual: actualChiefModels,
@@ -495,7 +440,6 @@ export function SettingsModal({
     settingKey: (agent) => `chief_effort_${agent}`,
     flashKey: (agent) => `chief_model_${agent}`,
   });
-  // The same pair applied to EVERY launch of that agent, chief or not.
   const defaultModelDrafts = useAgentSettingDrafts({
     ...draftDeps,
     actual: actualDefaultModels,
@@ -509,8 +453,7 @@ export function SettingsModal({
     flashKey: (agent) => `default_model_${agent}`,
   });
   // Per-agent context-window cap; a chief launch still takes the chief cap above.
-  // Blank => uncapped (the agent's own compaction behavior), unlike the chief and
-  // headless caps whose blank means the built-in default.
+  // Blank => uncapped, unlike the chief and headless caps whose blank means the default.
   const defaultContextCapDrafts = useAgentSettingDrafts({
     ...draftDeps,
     actual: actualDefaultContextCaps,
@@ -547,10 +490,8 @@ export function SettingsModal({
     return () => window.clearInterval(intervalID);
   }, [isOpen, selectedSection, modelCaptureEnabled, modelCaptureInterval, sendGetSettings]);
 
-  // Publish a read/select handle for the UI automation bridge (testing only).
-  // Registered for the component's whole lifetime (not just while open) so the
-  // bridge can always read `open: false` through it rather than falling back
-  // to the module's inactive-state default.
+  // UI automation bridge handle (testing only). Registered for the whole
+  // lifetime so the bridge can read `open: false` through it.
   useEffect(() => {
     setSettingsAutomationHandle({
       getState: () => ({
@@ -587,8 +528,6 @@ export function SettingsModal({
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
 
-  // Default ON: the daemon always broadcasts the effective value, so the
-  // fallback only covers a read before the first settings push.
   const openSentFilesEnabled = (settings[OPEN_SENT_FILES_ENABLED_SETTING] || 'true') === 'true';
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
@@ -651,21 +590,12 @@ export function SettingsModal({
     savedFlash.flash(KEEPER_DUTY_BY_KEY[dutyKey].settingKey);
   }, [onSetSetting, savedFlash]);
 
-  // Switching a duty's agent resets its model to that agent's recommended default
-  // (the first preset); choosing the empty "Disabled" agent (opt-in duties only)
-  // clears the model so Save stays disabled.
   const handleKeeperAgentChange = useCallback((dutyKey: KeeperDutyKey, agent: SessionAgent | '') => {
     const model = agent ? defaultKeeperDutyModel(dutyKey, agent) : '';
     setKeeperDrafts((prev) => ({ ...prev, [dutyKey]: { agent, model } }));
-    // Both halves are whole here — the agent brings its own recommended model —
-    // so there is nothing half-entered to protect the user from.
     commitKeeperDuty(dutyKey, agent, model);
   }, [commitKeeperDuty]);
 
-  // The model <select> emits a preset value or the 'custom' sentinel. A preset is
-  // whole and applies at once; 'custom' blanks the model so the free-form input
-  // takes over, and that is the one keeper edit with nothing to write yet — it
-  // waits for the input's blur.
   const handleKeeperModelSelection = useCallback((dutyKey: KeeperDutyKey, model: string) => {
     const next = model === 'custom' ? '' : model;
     setKeeperDrafts((prev) => ({ ...prev, [dutyKey]: { ...prev[dutyKey], model: next } }));
@@ -684,9 +614,6 @@ export function SettingsModal({
     commitKeeperDuty(dutyKey, draft.agent, draft.model);
   }, [commitKeeperDuty, keeperDrafts]);
 
-  // Clearing writes a blank override. For an opt-in duty that disables it; for a
-  // default-configured duty it reverts to the built-in tier default. Either way the
-  // draft re-seeds to its unset starting point.
   const clearKeeperDuty = useCallback((dutyKey: KeeperDutyKey) => {
     const duty = KEEPER_DUTY_BY_KEY[dutyKey];
     onSetSetting(duty.settingKey, '');
@@ -731,7 +658,6 @@ export function SettingsModal({
       onUpdateEndpoint(endpoint.id, { enabled: endpoint.enabled === false }).then(() => undefined));
   }, [endpointPanel, onUpdateEndpoint]);
 
-  // Off then on: the daemon re-bootstraps the remote on the way back up.
   const handleRebootstrapEndpoint = useCallback(async (endpoint: DaemonEndpoint) => {
     if (endpoint.enabled === false) return;
     await endpointPanel.run(endpoint.id, 'Failed to re-bootstrap endpoint', async () => {
@@ -805,9 +731,6 @@ export function SettingsModal({
     });
   }, [onUninstallPlugin, pluginPanel, refreshPlugins]);
 
-  // Commits on blur rather than behind a Save button. Priority is a dispatch
-  // order, so a half-typed one applies nothing worse than a different order,
-  // and a blur is the first moment the number is whole.
   const commitPluginPriority = useCallback(async (name: string, current: number) => {
     const raw = pluginPanel.priorityDraft(name).trim();
     if (raw === String(current)) return;
@@ -831,9 +754,6 @@ export function SettingsModal({
   const hasProjectsDirChange = projectsDirDraft.value !== actualProjectsDir;
   const hasReviewModelChange = reviewerModelDraft.value !== actualReviewerModel;
 
-  // Grouped by what the user is trying to do, not by the subsystem the code
-  // talks to. Auto mode used to sit under Background Tasks because both landed
-  // in the same week of work; it belongs with the agents whose reach it decides.
   const settingsNavGroups = useMemo<SettingsNavGroup[]>(() => [
     {
       label: 'attn',
@@ -1075,9 +995,6 @@ export function SettingsModal({
     }
   };
 
-  // Appearance: how attn looks, and nothing else. Where the user's things live
-  // moved to renderWorkspaceSettings, and when a turn leaves the queue moved to
-  // the attention-queue section beside the muted lists.
   const renderAppearanceSettings = () => (
     <>
       <section className="settings-block">
@@ -1210,8 +1127,6 @@ export function SettingsModal({
     </>
   );
 
-  // One question: where the user's things live, and what attn does with a file
-  // an agent hands them.
   const renderWorkspaceSettings = () => (
     <>
       <section className="settings-block">

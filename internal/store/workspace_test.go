@@ -70,7 +70,6 @@ func TestUpdateWorkspaceTitle(t *testing.T) {
 	if got == nil || got.Title != "Renamed" {
 		t.Fatalf("workspace title after rename = %+v, want Renamed", got)
 	}
-	// Other columns must be left intact.
 	if got.Directory != "/tmp/project" {
 		t.Fatalf("directory changed during rename = %q", got.Directory)
 	}
@@ -91,7 +90,6 @@ func TestSetWorkspaceRank(t *testing.T) {
 	if got == nil || got.Rank != "m" {
 		t.Fatalf("workspace rank after update = %+v, want m", got)
 	}
-	// Other columns must be left intact.
 	if got.Title != "Project" || got.Directory != "/tmp/project" {
 		t.Fatalf("non-rank columns changed during rank update = %+v", got)
 	}
@@ -104,8 +102,6 @@ func TestListWorkspacesOrderedByRank(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Insert out of rank order; created_at advances in insert order, so a stable
-	// ORDER BY created_at would yield c, a, b. ORDER BY rank must yield a, b, c.
 	s.AddWorkspace(&protocol.Workspace{ID: "ws-c", Title: "C", Directory: "/tmp/c", Rank: "c"})
 	s.AddWorkspace(&protocol.Workspace{ID: "ws-a", Title: "A", Directory: "/tmp/a", Rank: "a"})
 	s.AddWorkspace(&protocol.Workspace{ID: "ws-b", Title: "B", Directory: "/tmp/b", Rank: "b"})

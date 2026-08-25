@@ -1,13 +1,3 @@
-/**
- * SelectionToolbar — the interaction contract:
- * - positioning modes (center-above / top-right) and scroll-out close (E5);
- * - Delete / promoted labels / Cancel buttons (E6, E7 wiring);
- * - Alt+1..Alt+9 picker labels (E8);
- * - the full type-to-comment guard set, one assertion per guard (E9);
- * - keyboard suppression while the picker is open (E16);
- * - outside-pointerdown dismiss.
- */
-
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { SelectionToolbar, type SelectionToolbarProps } from './SelectionToolbar';

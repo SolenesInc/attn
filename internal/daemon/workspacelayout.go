@@ -31,9 +31,6 @@ func (d *Daemon) ensureWorkspaceLayout(workspaceID string) (*workspacelayout.Wor
 	return &normalized, nil
 }
 
-// workspaceLayoutHasTiles reports whether a workspace's stored layout still
-// holds at least one docked tile. It decides whether a workspace outlives its
-// last session: a tile the user left behind keeps the workspace alive.
 func (d *Daemon) workspaceLayoutHasTiles(workspaceID string) bool {
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
 	if snapshot == nil {
@@ -225,10 +222,8 @@ func (d *Daemon) broadcastWorkspaceLayoutUpdated(workspaceID string) {
 	d.broadcastWorkspaceLayoutSnapshotUpdated(snapshot)
 }
 
-// broadcastWorkspaceLayoutSnapshotUpdated publishes a layout change. The layout
-// travels in the payload rather than being re-read at projection time: callers
-// hand in a snapshot they just computed, including the deliberately empty one a
-// workspace gets when its last pane closes, which a re-read cannot reproduce.
+// The layout travels in the payload rather than being re-read at projection time: a
+// re-read cannot reproduce the deliberately empty layout a workspace with no panes gets.
 func (d *Daemon) broadcastWorkspaceLayoutSnapshotUpdated(snapshot *protocol.WorkspaceLayout) {
 	if snapshot == nil {
 		return
@@ -248,9 +243,6 @@ func (d *Daemon) projectWorkspaceLayoutChanged(ev bus.Event) {
 	})
 }
 
-// broadcastWorkspaceLayout re-publishes a workspace's current layout — what a
-// newly registered session needs to see. Nothing changed, so the projection
-// reads the layout itself.
 func (d *Daemon) broadcastWorkspaceLayout(workspaceID string) {
 	if _, err := d.protocolWorkspaceLayout(workspaceID); err != nil {
 		d.logf("workspace layout snapshot failed for workspace %s: %v", workspaceID, err)
@@ -444,13 +436,8 @@ func (d *Daemon) handleWorkspaceLayoutSetSplitRatio(client *wsClient, msg *proto
 	d.sendWorkspaceLayoutSplitActionResult(client, msg.WorkspaceID, splitID, msg.RequestID, nil)
 }
 
-// defaultTileFraction is the share of the split a freshly docked tile takes
-// when the client doesn't specify one. Roughly a third keeps the tile readable
-// without crowding the terminals.
 const defaultTileFraction = 0.32
 
-// dockEdgeToSplit translates a dock edge into a split direction and whether the
-// tile sits before (children[0]) the anchor.
 func dockEdgeToSplit(edge protocol.WorkspaceLayoutDockEdge) (workspacelayout.Direction, bool) {
 	switch edge {
 	case protocol.WorkspaceLayoutDockEdgeLeft:
@@ -459,7 +446,7 @@ func dockEdgeToSplit(edge protocol.WorkspaceLayoutDockEdge) (workspacelayout.Dir
 		return workspacelayout.DirectionHorizontal, true
 	case protocol.WorkspaceLayoutDockEdgeBottom:
 		return workspacelayout.DirectionHorizontal, false
-	default: // right
+	default:
 		return workspacelayout.DirectionVertical, false
 	}
 }
@@ -475,12 +462,7 @@ func (d *Daemon) handleWorkspaceLayoutDockTile(client *wsClient, msg *protocol.W
 	d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutDockTile, msg.WorkspaceID, msg.TileID, err)
 }
 
-// dockTile docks (or moves) a tile into a workspace layout and persists it.
-// It is shared by the websocket dock command and the `attn open` unix command.
-// anchorPaneID may be empty — it falls back to the active leaf, then the first
-// pane or tile. tileParams is opaque layout data (the markdown file path, for
-// markdown). tileSessionID binds the tile to the session it was opened from;
-// empty preserves any existing binding.
+// An empty tileSessionID preserves any existing binding.
 func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
@@ -495,7 +477,6 @@ func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParam
 	if workspacelayout.HasPane(snapshot.Layout, tileID) {
 		return fmt.Errorf("pane already exists: %s", tileID)
 	}
-	// Fall back to the active pane when the caller doesn't name an anchor.
 	if anchorPaneID == "" {
 		anchorPaneID = snapshot.ActivePaneID
 	}
@@ -563,20 +544,15 @@ func (d *Daemon) handleWorkspaceLayoutUndockTile(client *wsClient, msg *protocol
 	snapshot.Layout = layout
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	if workspacelayout.LayoutEmpty(normalized.Layout) {
-		// The tile was the workspace's last leaf — the case of a sessionless
-		// workspace that only existed to hold it. Mirror close-pane: drop the layout
-		// row rather than storing a leafless one, because every layout command goes
-		// through ensureWorkspaceLayout, which rejects a leafless layout. Storing it
-		// and broadcasting through the normal path would leave a workspace nothing
-		// can act on: the sidebar row survives with a close button that can never
-		// work again.
+		// Drop the layout row rather than storing a leafless one: ensureWorkspaceLayout rejects
+		// it, so the sidebar row would survive with a close button that never works.
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 		d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutUndockTile, msg.WorkspaceID, tileID, nil)
 		if d.unregisterWorkspaceIfEmpty(msg.WorkspaceID) {
 			return
 		}
-		// It survives (pinned, or sessions remain), so publish the empty layout
-		// instead of leaving clients replaying the undocked tile.
+		// It survives, so publish the empty layout instead of leaving clients
+		// replaying the undocked tile.
 		emptyLayout, err := protocolWorkspaceLayout(normalized)
 		if err != nil {
 			d.logf("workspace empty layout update failed for workspace %s: %v", msg.WorkspaceID, err)
@@ -631,13 +607,9 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 		)
 		return
 	}
-	// Session retarget (markdown tiles' Send target): when tile_session_id is
-	// present, rebind the tile's session binding via the same primitive the
-	// open-markdown reuse path uses (persists + broadcasts the layout).
 	if retarget := strings.TrimSpace(protocol.Deref(msg.TileSessionID)); retarget != "" {
-		// Never persist a binding to a session the daemon does not know: a
-		// racing client (target closed between render and click) would
-		// otherwise write a dangling id into the layout.
+		// Never persist a binding to a session the daemon does not know: a racing
+		// client would write a dangling id into the layout.
 		if d.store.Get(retarget) == nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, fmt.Errorf("session not found: %s", retarget))
 			return
@@ -646,28 +618,18 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, err)
 			return
 		}
-		// Markdown tile params are immutable (assigned once at dock time), so
-		// a retarget-only update stops here; the client sends the current
-		// params unchanged alongside the retarget.
 		if tileKind == string(workspacelayout.TileKindMarkdown) {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, nil)
 			return
 		}
-		// Non-markdown kinds fall through to the params-update path below,
-		// which saves a whole normalized snapshot — re-fetch it so the save
-		// does not clobber the binding rebindTileSession just persisted (the
-		// snapshot above was captured BEFORE the rebind).
+		// The params-update path below saves a whole normalized snapshot, so
+		// re-fetch it or the save clobbers the binding just persisted.
 		if snapshot, err = d.ensureWorkspaceLayout(msg.WorkspaceID); err != nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, err)
 			return
 		}
 	}
 
-	// Only tiles whose content is client-retargetable accept param updates.
-	// Browser tiles carry a validated URL; notebook tiles carry an opaque file
-	// path the Notebook surface resolves itself, so it passes through as-is.
-	// Markdown tiles are assigned once at dock time and never updated here
-	// (their session binding is, via tile_session_id above).
 	switch tileKind {
 	case string(workspacelayout.TileKindBrowser):
 		tileParams, err = validateBrowserURL(tileParams)
@@ -683,7 +645,6 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			return
 		}
 	case string(workspacelayout.TileKindNotebook):
-		// tileParams is the open file's path — opaque here, already trimmed.
 	default:
 		d.sendWorkspaceLayoutTileActionResultWithRequest(
 			client,
@@ -727,15 +688,8 @@ func (d *Daemon) handleWorkspaceLayoutMoveLeafToWorkspace(client *wsClient, msg 
 	d.sendWorkspaceLayoutMoveToWorkspaceResult(client, msg.SourceWorkspaceID, msg.TargetWorkspaceID, msg.LeafID, finalLeafID, err)
 }
 
-// handleWorkspaceLayoutMoveLeafToNewWorkspace splits a leaf out of its source
-// workspace into a brand-new one. It registers the new workspace through the
-// normal registration path (so PR1's rank seeding appends it to the bottom of
-// the sidebar) and inherits the source's directory, then reuses
-// moveLeafToWorkspace verbatim so the leaf relocation, session-ownership
-// transfer, and source-empty teardown all behave exactly like a move to an
-// existing workspace. The workspace_registered broadcast goes out BEFORE the
-// layout move so clients learn the new workspace exists before its first
-// workspace_layout_updated references it.
+// The workspace_registered broadcast goes out BEFORE the layout move so clients learn the
+// workspace exists before its first workspace_layout_updated references it.
 func (d *Daemon) handleWorkspaceLayoutMoveLeafToNewWorkspace(client *wsClient, msg *protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage) {
 	sourceWorkspaceID := strings.TrimSpace(msg.SourceWorkspaceID)
 	leafID := strings.TrimSpace(msg.LeafID)
@@ -759,9 +713,6 @@ func (d *Daemon) handleWorkspaceLayoutMoveLeafToNewWorkspace(client *wsClient, m
 
 	newWorkspaceID := uuid.NewString()
 	title := d.newWorkspaceTitleForMovedLeaf(sourceWorkspaceID, leafID, source.Title)
-	// Reuse the normal registration path so rank is auto-seeded above the
-	// current maximum (rankkey.After) and the new workspace appends to the
-	// sidebar. The new workspace inherits the source's directory.
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
 		ID:        newWorkspaceID,
@@ -771,17 +722,11 @@ func (d *Daemon) handleWorkspaceLayoutMoveLeafToNewWorkspace(client *wsClient, m
 
 	finalLeafID, err := d.moveLeafToWorkspace(sourceWorkspaceID, newWorkspaceID, leafID, protocol.Deref(msg.AnchorID), protocol.Deref(msg.Edge), msg.Ratio)
 	if err != nil {
-		// The move failed after the workspace was registered. Tear the empty
-		// new workspace back down so a failed drag leaves no orphan behind.
 		d.unregisterWorkspaceIfEmpty(newWorkspaceID)
 	}
 	d.sendWorkspaceLayoutMoveToNewWorkspaceResult(client, sourceWorkspaceID, newWorkspaceID, leafID, finalLeafID, err)
 }
 
-// newWorkspaceTitleForMovedLeaf picks a sensible default title for a workspace
-// split out from a dragged leaf: the moved pane/session's own title when it has
-// one, else the source workspace title. Mirrors how the rest of the layout code
-// derives pane titles, so the new workspace reads naturally in the sidebar.
 func (d *Daemon) newWorkspaceTitleForMovedLeaf(sourceWorkspaceID, leafID, fallbackTitle string) string {
 	if snapshot := d.store.GetWorkspaceLayout(sourceWorkspaceID); snapshot != nil {
 		for _, pane := range snapshot.Panes {
@@ -817,14 +762,8 @@ func (d *Daemon) sendWorkspaceLayoutMoveToNewWorkspaceResult(client *wsClient, s
 	d.sendToClient(client, result)
 }
 
-// handleSetWorkspaceRank reorders a workspace in the sidebar. The frontend sends
-// the drop position as neighbour ids — prev_workspace_id ends up ABOVE the moved
-// workspace, next_workspace_id BELOW it — and the daemon computes the fractional
-// key between their current ranks. An empty/omitted neighbour id resolves to "",
-// which rankkey.Between reads as the MIN (top) / MAX (bottom) open bound, so a
-// move to the very top or bottom needs no special case. Exactly one row is
-// written, then the refreshed snapshot (carrying the new rank) is broadcast so
-// every client re-sorts. Mirrors the move_leaf_to_workspace result pattern.
+// prev_workspace_id ends up ABOVE the moved workspace and next_workspace_id
+// BELOW it; the daemon computes the fractional key between their ranks.
 func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorkspaceRankMessage) {
 	workspaceID := strings.TrimSpace(msg.WorkspaceID)
 	prevID := strings.TrimSpace(protocol.Deref(msg.PrevWorkspaceID))
@@ -843,7 +782,7 @@ func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorks
 	}
 
 	// An empty neighbour id (move to top/bottom) resolves to "" — the MIN/MAX
-	// sentinel rankkey.Between expects — so no extra branching is needed.
+	// sentinel rankkey.Between expects.
 	prevRank := d.workspaces.rankOf(prevID)
 	nextRank := d.workspaces.rankOf(nextID)
 	rank, err := rankkey.Between(prevRank, nextRank)
@@ -861,12 +800,6 @@ func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorks
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdSetWorkspaceRank, workspaceID, nil, nil)
 }
 
-// moveLeaf relocates an existing leaf (terminal pane or docked tile) within a
-// workspace layout and persists it. An empty anchorID docks the leaf against the
-// whole workspace (the root). edge picks the split direction and side; ratio is
-// the moved leaf's fraction of the new split, defaulting to an equal split. The
-// move is rejected (returns an error the client ignores) when it can't happen —
-// a self-drop, an unknown leaf, or the only leaf in the workspace.
 func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
@@ -1013,10 +946,8 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 		return "", err
 	}
 
-	// Broadcast layout changes before changing session ownership. The frontend
-	// filters visible sessions through workspace layouts, so the opposite order
-	// creates a transient state where the moved session belongs to the target
-	// workspace but the target layout snapshot does not include it yet.
+	// Broadcast layout changes before changing session ownership: the frontend filters
+	// visible sessions through layouts, so the opposite order hides the moved session.
 	d.broadcastWorkspaceLayoutUpdated(targetWorkspaceID)
 	if !sourceEmpty {
 		d.broadcastWorkspaceLayoutUpdated(sourceWorkspaceID)
@@ -1039,10 +970,6 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 	return move.FinalLeafID, nil
 }
 
-// unregisterWorkspaceIfEmpty tears down a workspace that holds nothing after a
-// leaf left it — moved away, or undocked. A workspace with sessions, a pin, or a
-// retained tile survives and only has its rollup rebroadcast. Reports whether the
-// workspace was removed, so callers can tell the two outcomes apart.
 func (d *Daemon) unregisterWorkspaceIfEmpty(workspaceID string) bool {
 	if d.workspaces == nil {
 		return false
@@ -1056,8 +983,6 @@ func (d *Daemon) unregisterWorkspaceIfEmpty(workspaceID string) bool {
 	if !removed {
 		return false
 	}
-	// Layout teardown (last visible pane/tile removed): tear down and write the
-	// removal-boundary retrospective.
 	d.tearDownRemovedWorkspace(snapshot)
 	return true
 }
@@ -1079,12 +1004,6 @@ func (d *Daemon) handleWorkspaceLayoutAddSessionPane(client *wsClient, msg *prot
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutAddSessionPane, msg.WorkspaceID, paneID, err)
 }
 
-// addWorkspaceSessionPane adds (or adopts) a layout pane for a session. It is the
-// single mechanism behind both the explicit workspace_layout_add_session_pane
-// command and the spawn-time pane guarantee (ensureWorkspaceSessionPane), so a
-// session can never exist in a workspace without a pane the app can render.
-// Idempotent per session: if the session already owns a pane, that pane is
-// returned unchanged.
 func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, error) {
 	snapshot, err := d.currentOrEmptyWorkspaceLayout(msg.WorkspaceID)
 	if err != nil {
@@ -1169,11 +1088,6 @@ func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSession
 	return protocol.Ptr(paneID), nil
 }
 
-// ensureWorkspaceSessionPane guarantees a workspace layout pane exists for a
-// freshly spawned session. Clients that pre-create a pane (the app's optimistic
-// UI, delegate, ticket resume) hit the adopt path; bare spawn_session callers
-// (wsctl, scripts) get a pane with default placement so the session always
-// renders in the app.
 func (d *Daemon) ensureWorkspaceSessionPane(workspaceID, sessionID, title string) (string, error) {
 	msg := &protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
@@ -1222,10 +1136,8 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	layoutEmpty := workspacelayout.LayoutEmpty(normalized.Layout)
 
-	// Commit the pane removal before terminating and unregistering the session.
-	// Session teardown broadcasts immediately and may also decide whether the
-	// workspace survives; every observer of those events must therefore see the
-	// pane-free layout rather than a stale agent leaf.
+	// Commit the pane removal before terminating the session: teardown broadcasts
+	// immediately, and every observer of those events must see the pane-free layout.
 	if layoutEmpty {
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 	} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
@@ -1243,8 +1155,8 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutClosePane, msg.WorkspaceID, protocol.Ptr(msg.PaneID), nil)
 
 	if layoutEmpty {
-		// A context-bearing workspace can survive with no layout. Publish that
-		// empty state so clients cannot retain and replay the removed pane.
+		// Publish the empty layout so clients cannot retain and replay the
+		// removed pane.
 		if d.store.GetWorkspace(msg.WorkspaceID) != nil {
 			emptyLayout, err := protocolWorkspaceLayout(normalized)
 			if err != nil {

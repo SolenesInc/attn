@@ -7,20 +7,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Resolve is a first-match-wins clause list, so its order is the design and not
-// an implementation detail: every clause below is reachable only because the ones
-// above it declined. Reordering two of them silently changes what colors appear
-// on a real session, and no single-evidence case notices — a case that stages one
-// clause's evidence passes wherever that clause sits.
-//
-// So these are conflicts. Each stages evidence two clauses both answer and names
-// which one is entitled to. Read top to bottom, they are the trust order.
 func TestClauseOrder(t *testing.T) {
 	policy := testPolicy()
 
 	for _, tc := range []struct {
-		// why explains the trade, since a conflict is exactly where the reason a
-		// clause exists stops being obvious from the clause itself.
 		why        string
 		evidence   Evidence
 		wantState  protocol.SessionState
@@ -68,12 +58,6 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonApprovalOpen,
 		},
 		{
-			// A parked wakeup used to be read as a state and sat above the
-			// classifier, so a turn that ended by asking the user something was
-			// reported as `scheduled` and never opened a turn. A registered
-			// wakeup is not an answer to whether the agent needs a person — it
-			// is as true of an agent mid-turn as of one waiting on a reply — so
-			// it only gets to name the outcome where nothing was asked.
 			why: "a question the classifier read out of the transcript outranks a " +
 				"parked wakeup: the wakeup will resume the session, but not with " +
 				"the answer the turn stopped for",
@@ -100,10 +84,6 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonQuestionOpen,
 		},
 		{
-			// The verdict answered the exact question the confirmation only
-			// gestures at: the agent sits at its prompt during a background wait
-			// and after a finished turn alike, so the notification adds nothing,
-			// while the judge read the turn's own account of which one this is.
 			why: "a parked verdict outranks the prompt-idle confirmation: the " +
 				"judge read the yield, the flat timer read a clock",
 			evidence: Evidence{
@@ -117,14 +97,8 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonBackgroundParked,
 		},
 		{
-			// This clause used to run the other way, on the reasoning that the
-			// background task would un-park the turn without anyone doing anything.
-			// Two things retired that. It was not what the code delivered — the
-			// belief had no way to persist, so it expired into `unknown` ninety
-			// seconds later rather than holding the session working. And it was not
-			// what happened: on 2026-07-27 three sessions produced ten of those
-			// unknowns, and in every one the confirmation was right and the user,
-			// not the task, resumed the turn.
+			// Measured 2026-07-27: three sessions produced ten `unknown`s this way, and in every one
+			// the user, not the background task, resumed the turn.
 			why: "the harness saying the agent is parked at its prompt outranks an " +
 				"outstanding background task: the task is a guess about whether " +
 				"anyone is waited on, and this is the harness answering it directly",

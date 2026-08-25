@@ -15,34 +15,18 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Entry is one frozen benchmark case: a real transcript window plus the state
-// the daemon actually reported for that session at capture time.
-//
-// State is captured rather than inferred. Reconstructing historical state from a
-// transcript would be a guess, and the whole point of the state field is that it
-// is ground truth the model must respect.
 type Entry struct {
 	ID          string `json:"id"`
 	CapturedAt  string `json:"captured_at"`
 	Agent       string `json:"agent"`
 	State       string `json:"state"`
 	StateReason string `json:"state_reason,omitempty"`
-	// Previous is the line a prior activity run produced, when the corpus has
-	// one for this session. Empty on the first capture, which is itself a case
-	// worth benchmarking.
-	Previous string `json:"previous,omitempty"`
-	// Window is the rendered delta. Stored rendered rather than as raw events so
-	// a corpus entry stays a stable benchmark input even if clip budgets change;
-	// re-run `corpus` to pick up new budgets.
-	Window string `json:"window"`
-	Events int    `json:"events"`
-	Chars  int    `json:"chars"`
-	// Truncated carries the window's own report, so a case that hit a tripwire
-	// is visible in the corpus rather than silently short.
-	Truncated string `json:"truncated,omitempty"`
-	// Cursor is where this window ended, so the next capture for this session
-	// reads a genuine delta instead of the whole transcript.
-	Cursor string `json:"cursor"`
+	Previous    string `json:"previous,omitempty"`
+	Window      string `json:"window"`
+	Events      int    `json:"events"`
+	Chars       int    `json:"chars"`
+	Truncated   string `json:"truncated,omitempty"`
+	Cursor      string `json:"cursor"`
 }
 
 func runCorpus(args []string) error {
@@ -70,8 +54,6 @@ func runCorpus(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Cursors are kept separately from the corpus so a session that has only
-	// been seeded does not leave a junk entry behind.
 	cursors, err := loadCursors(*dir)
 	if err != nil {
 		return err
@@ -89,11 +71,8 @@ func runCorpus(args []string) error {
 		}
 		cursor, seen := cursors[session.ID]
 		if !seen {
-			// Cold start: seed at head and capture nothing. Reading from byte 0
-			// would produce a capped whole-transcript read, which is not the
-			// input this feature ever sees in production — the daemon seeds at
-			// head too and waits for real movement. Rare states accumulate by
-			// running `corpus` repeatedly, which is the intended workflow.
+			// Cold start: seed at head and capture nothing. Reading from byte 0 yields a
+			// capped whole-transcript read, an input production never sees.
 			head, err := activity.SeedCursor(path)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "skip %s: %v\n", session.ID, err)
@@ -105,9 +84,8 @@ func runCorpus(args []string) error {
 		}
 		window, err := activity.Read(path, string(session.Agent), cursor)
 		if err != nil {
-			// A mismatched cursor means the transcript was rewritten (Claude
-			// compaction does this). Re-seed at head and skip this pass, exactly
-			// as the daemon will.
+			// A mismatched cursor means the transcript was rewritten (Claude compaction does
+			// this): re-seed at head, exactly as the daemon will.
 			head, seedErr := activity.SeedCursor(path)
 			if seedErr != nil {
 				fmt.Fprintf(os.Stderr, "skip %s: %v\n", session.ID, err)
@@ -156,9 +134,6 @@ func runCorpus(args []string) error {
 	return nil
 }
 
-// printStateCoverage reports the corpus's shape, because a corpus that is 95%
-// `working` benchmarks one case well and everything else not at all. Rare states
-// accumulate by running `corpus` over time.
 func printStateCoverage(corpus []Entry) {
 	byState := map[string]int{}
 	withoutProse := 0
@@ -182,9 +157,6 @@ func printStateCoverage(corpus []Entry) {
 	}
 }
 
-// transcriptPathFor locates a session's transcript. Claude transcripts are keyed
-// by session id; the other agents are discovered by cwd and start time, which
-// this harness does not track, so they are resolved by id only.
 func transcriptPathFor(sessionID, agent string) string {
 	if strings.EqualFold(agent, "claude") {
 		return transcript.FindClaudeTranscript(sessionID)

@@ -38,7 +38,6 @@ describe('MarkdownOpener', () => {
   it('lists recents on an empty query, not the whole index', async () => {
     renderOpener();
     await waitFor(() => expect(rows()).toHaveLength(2));
-    // Recents are labeled relative to the fuzzy root when they live under it.
     expect(rows()[0]).toContain('docs/plan.md');
     expect(rows()[1]).toContain('/other/journal.md');
   });
@@ -50,8 +49,8 @@ describe('MarkdownOpener', () => {
     }));
     renderOpener({ loadIndex });
 
-    // The palette is usable while the enumeration is still running: a cold
-    // index must never delay Cmd+P.
+    // The palette is usable while the enumeration is still running: a cold index
+    // must never delay Cmd+P.
     await waitFor(() => expect(rows()).toHaveLength(2));
     resolveIndex({ files: ['docs/design.md'], truncated: false });
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'design' } });
@@ -64,7 +63,6 @@ describe('MarkdownOpener', () => {
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'd' } });
     await waitFor(() => expect(rows().length).toBeGreaterThan(1));
-    // One list: a remembered file and an index-only file both appear.
     const text = rows().join('|');
     expect(text).toContain('docs/plan.md');
     expect(text).toContain('docs/design.md');
@@ -101,10 +99,8 @@ describe('MarkdownOpener', () => {
 
       type('~/notes/');
       await waitFor(() => expect(rows()).toHaveLength(2));
-      // Directories are marked with a trailing slash; files are not.
       expect(rows()[0]).toContain('archive/');
       expect(rows()[1]).toContain('ideas.md');
-      // Markdown-only, so the daemon's listing carries the same filter as the index.
       await waitFor(() => expect(browseDirectory).toHaveBeenCalledWith('~/notes/', undefined, ['md']));
     });
 
@@ -128,8 +124,6 @@ describe('MarkdownOpener', () => {
       await waitFor(() => expect(rows()[0]).toContain('archive/'));
       fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
 
-      // The palette stays open on the deeper directory rather than picking it,
-      // and keeps the ~-shortened spelling the user was reading.
       expect(onPick).not.toHaveBeenCalled();
       expect(screen.getByRole('combobox')).toHaveValue('~/notes/archive/');
     });

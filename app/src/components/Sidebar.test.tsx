@@ -296,7 +296,6 @@ describe('Sidebar', () => {
       />
     );
 
-    // Hidden until a leaf drag is active.
     expect(screen.queryByTestId('new-workspace-dropzone')).not.toBeInTheDocument();
 
     rerender(
@@ -337,8 +336,7 @@ describe('Sidebar', () => {
     const row = screen.getByTestId('sidebar-session-s1');
     expect(screen.queryByTestId('session-drag-ghost')).not.toBeInTheDocument();
 
-    // Press, then cross the activation threshold to arm the drag. The leaf id is
-    // the session's layout pane id, not the session id.
+    // The leaf id is the session's layout pane id, not the session id.
     fireEvent.pointerDown(row, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     expect(onSessionDragStart).not.toHaveBeenCalled();
 
@@ -397,19 +395,15 @@ describe('Sidebar', () => {
     const sourceGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/a');
     const header = sourceGroup.querySelector('.workspace-group-header') as HTMLElement;
 
-    // No seams until a drag arms.
     expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
 
-    // Press, then cross the activation threshold to arm the reorder.
     fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
 
-    // Seams now exist: one before each of the three workspaces plus a trailing one.
     const seam2 = screen.getByTestId('workspace-reorder-seam-2');
     expect(seam2).toBeInTheDocument();
     expect(screen.getByTestId('workspace-reorder-seam-3')).toBeInTheDocument();
 
-    // Drop A onto the seam between B (index 1) and C (index 2).
     fireEvent.pointerEnter(seam2);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
 
@@ -418,7 +412,6 @@ describe('Sidebar', () => {
       prevWorkspaceId: 'workspace-/repo/b',
       nextWorkspaceId: 'workspace-/repo/c',
     });
-    // The arming drag suppresses the trailing selection click.
     expect(onSelectWorkspace).not.toHaveBeenCalled();
   });
 
@@ -550,7 +543,6 @@ describe('Sidebar', () => {
     expect(sessionlessGroup.querySelector('.workspace-neutral-indicator')).toBeTruthy();
     expect(sessionlessGroup.querySelector('.state-indicator')).toBeFalsy();
 
-    // A real session workspace still shows its state dot.
     const sessionGroup = screen.getByTestId('sidebar-workspace-workspace-/repo/a');
     expect(sessionGroup.querySelector('.state-indicator')).toBeTruthy();
     expect(sessionGroup.querySelector('.workspace-neutral-indicator')).toBeFalsy();
@@ -591,7 +583,6 @@ describe('Sidebar', () => {
     fireEvent.click(toggle);
     expect(onToggleQueueMode).toHaveBeenCalledTimes(1);
 
-    // The switch tracks the value App hands back, not a local guess about it.
     rerender(
       <Sidebar
         {...baseProps}
@@ -650,13 +641,11 @@ describe('Sidebar', () => {
       />
     );
 
-    // Actionable item is a button and fires its handler.
     const attention = screen.getByRole('button', { name: /attention/ });
     expect(attention).toBeInTheDocument();
     fireEvent.click(attention);
     expect(onAttention).toHaveBeenCalledTimes(1);
 
-    // Informational items render their keys + label.
     expect(screen.getByText('zoom')).toBeInTheDocument();
     expect(screen.getByText('zoom').closest('.shortcut-hint')).toHaveAttribute('data-active', 'true');
     expect(screen.getByText('sidebar')).toBeInTheDocument();
@@ -867,9 +856,8 @@ describe('Sidebar home row', () => {
     expect(screen.getByTestId('sidebar-home')).toBeInTheDocument();
   });
 
-  // The old header hardcoded ⌘G, which had already gone stale when grid view
-  // took that chord and home moved to ⌘⇧H. Read the hint from the registry so
-  // it cannot drift again — or disagree with a rebind.
+  // The old header hardcoded ⌘G, which went stale when grid view took that chord. Read the hint
+  // from the registry so it cannot drift again, or disagree with a rebind.
   it('shows the shortcut home is actually bound to, not a hardcoded one', () => {
     render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
 

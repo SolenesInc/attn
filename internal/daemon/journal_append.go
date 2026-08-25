@@ -10,12 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleJournalAppend serializes an append to the notebook's dated daily journal
-// (journal/<date>.md) through the daemon's single cached notebook.Store per root
-// (see notebookStoreFor), so an agent's journal write can never race the keeper's
-// own writes to the same file the way a direct file edit does. date defaults to
-// today in the daemon's local timezone; a malformed date is rejected by the store
-// itself rather than re-validated here.
+// Appends through the per-root cached notebook.Store, so the write cannot race
+// the keeper's own writes the way a direct file edit does.
 func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendMessage) {
 	entry := strings.TrimSpace(msg.Entry)
 	if entry == "" {
@@ -39,10 +35,8 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 		d.sendError(conn, "journal append: "+err.Error())
 		return
 	}
-	// Mirror the daemon's other agent-originated notebook append
-	// (AppendInbox in sendNotebookToChiefWSResult): a content-aware self-write so
-	// the watcher does not re-announce this write as an external edit, then a
-	// broadcast so an open notebook view refreshes.
+	// Content-aware self-write: the watcher must not re-announce this as an
+	// external edit.
 	d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: rel, Hash: hash})
 	d.broadcastNotebookChanged(originAgent, rel)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{

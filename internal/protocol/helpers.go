@@ -8,13 +8,8 @@ import (
 )
 
 // Timestamp is a string representation of time in RFC3339Nano format.
-// Used in generated types for JSON serialization, with helper methods
-// for conversion to/from time.Time.
 type Timestamp string
 
-// Time parses the timestamp string into time.Time.
-// Returns zero time if the string is empty or invalid.
-// Accepts both RFC3339 and RFC3339Nano formats.
 func (t Timestamp) Time() time.Time {
 	if t == "" {
 		return time.Time{}
@@ -30,17 +25,14 @@ func (t Timestamp) Time() time.Time {
 	return parsed
 }
 
-// IsZero returns true if the timestamp is empty or represents zero time.
 func (t Timestamp) IsZero() bool {
 	return t == "" || t.Time().IsZero()
 }
 
-// String returns the string representation.
 func (t Timestamp) String() string {
 	return string(t)
 }
 
-// NewTimestamp creates a Timestamp from time.Time.
 func NewTimestamp(t time.Time) Timestamp {
 	if t.IsZero() {
 		return ""
@@ -48,19 +40,14 @@ func NewTimestamp(t time.Time) Timestamp {
 	return Timestamp(t.Format(time.RFC3339Nano))
 }
 
-// Now returns the current time as a Timestamp.
 func TimestampNow() Timestamp {
 	return NewTimestamp(time.Now())
 }
 
-// Pointer helper functions for working with optional fields.
-
-// Ptr returns a pointer to the given value.
 func Ptr[T any](v T) *T {
 	return &v
 }
 
-// Deref returns the value pointed to, or the zero value if nil.
 func Deref[T any](p *T) T {
 	if p == nil {
 		var zero T
@@ -69,7 +56,6 @@ func Deref[T any](p *T) T {
 	return *p
 }
 
-// DerefOr returns the value pointed to, or the default if nil.
 func DerefOr[T any](p *T, def T) T {
 	if p == nil {
 		return def
@@ -90,8 +76,6 @@ func normalizeSessionAgentValue(agent string) SessionAgent {
 	}
 }
 
-// NormalizeSessionAgent returns a valid stored session agent.
-// Invalid/empty values fall back to fallback (or codex if fallback is invalid).
 func NormalizeSessionAgent(agent, fallback SessionAgent) SessionAgent {
 	if normalized := normalizeSessionAgentValue(string(agent)); normalized != "" {
 		return normalized
@@ -102,13 +86,10 @@ func NormalizeSessionAgent(agent, fallback SessionAgent) SessionAgent {
 	return SessionAgentCodex
 }
 
-// NormalizeSessionAgentString normalizes string input to a valid session agent.
 func NormalizeSessionAgentString(agent, fallback string) SessionAgent {
 	return NormalizeSessionAgent(SessionAgent(agent), SessionAgent(fallback))
 }
 
-// NormalizeSpawnAgent returns a valid spawn agent value.
-// Accepts "shell" in addition to session agents.
 func NormalizeSpawnAgent(agent, fallback string) string {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case string(SessionAgentClaude):
@@ -134,9 +115,6 @@ func NormalizeSpawnAgent(agent, fallback string) string {
 
 	return string(SessionAgentCodex)
 }
-
-// Slice conversion helpers for Response types.
-// Store returns pointer slices, but generated Response expects value slices.
 
 func SessionsToValues(sessions []*Session) []Session {
 	if sessions == nil {
@@ -229,9 +207,6 @@ func WorkspaceLayoutsToValues(layouts []*WorkspaceLayout) []WorkspaceLayout {
 	return result
 }
 
-// ParsePRID parses a PR id in either old or new format.
-// Old: "owner/repo#123" (defaults to github.com)
-// New: "host:owner/repo#123"
 func ParsePRID(id string) (host, repo string, number int, err error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -268,7 +243,6 @@ func ParsePRID(id string) (host, repo string, number int, err error) {
 	return host, repo, parsedNum, nil
 }
 
-// FormatPRID formats a PR id in the new format.
 func FormatPRID(host, repo string, number int) string {
 	if host == "" {
 		host = "github.com"

@@ -22,13 +22,11 @@ describe('scoreFile', () => {
   });
 
   it('matches a subsequence that spans path segments', () => {
-    // k(nowledge)/(in)d(e)x — a scattered subsequence still matches.
     expect(scoreFile(entry('knowledge/index.md'), 'kidx')).toBeGreaterThan(0);
   });
 
   it('disqualifies a query that is not a subsequence', () => {
     expect(scoreFile(entry('knowledge/index.md'), 'zzz')).toBe(0);
-    // Right characters, wrong order: 'x' never precedes 'i' in "index".
     expect(scoreFile(entry('index.md'), 'xidn')).toBe(0);
   });
 
@@ -41,7 +39,6 @@ describe('scoreFile', () => {
   it('matches against the title, not just the path', () => {
     const e = entry('journal/2026-06-21.md', { title: 'Shipping the tile finder' });
     expect(scoreFile(e, 'shipping')).toBeGreaterThan(0);
-    // The query appears in neither the path nor the title.
     expect(scoreFile(e, 'database')).toBe(0);
   });
 });
@@ -63,7 +60,6 @@ describe('rankFiles', () => {
   it('lists everything for an empty query, most-recently-updated first', () => {
     const ranked = rankFiles(files, '');
     expect(ranked).toHaveLength(4);
-    // tiles.md (06-21) is the newest; notes.md has no updated → sorts last.
     expect(ranked[0].path).toBe('knowledge/areas/tiles.md');
     expect(ranked[ranked.length - 1].path).toBe('notes.md');
   });
@@ -75,8 +71,6 @@ describe('rankFiles', () => {
   });
 
   it('preserves the caller\'s own entry type through ranking', () => {
-    // The generic keeps extra fields (here a Notebook note's size) visible to the
-    // caller instead of narrowing rows to FileCandidate.
     const sized = [{ path: 'notes.md', size: 12 }];
     expect(rankFiles(sized, 'notes')[0].size).toBe(12);
   });

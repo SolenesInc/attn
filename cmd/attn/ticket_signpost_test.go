@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// A signpost is only useful if it names the verb the caller reached for and the
-// garden command that replaced it. An entry missing either is a dead end for the
-// agent that hit it.
 func TestTicketSignpostsNameTheVerbAndItsGardenReplacement(t *testing.T) {
 	for _, verb := range ticketSignpostVerbs() {
 		var out bytes.Buffer
@@ -27,10 +24,6 @@ func TestTicketSignpostsNameTheVerbAndItsGardenReplacement(t *testing.T) {
 	}
 }
 
-// The router and the signpost table have to agree: a write verb the router sends
-// here with no entry would print a bare fallback, and a table entry the router
-// never routes is a signpost nobody can reach. Both halves are read from the
-// source so a verb added or moved later cannot go unnoticed.
 func TestEveryTicketWriteVerbSignposts(t *testing.T) {
 	source, err := os.ReadFile("main.go")
 	if err != nil {
@@ -50,8 +43,8 @@ func TestEveryTicketWriteVerbSignposts(t *testing.T) {
 			t.Errorf("ticketSignposts covers %q but runTicket never routes it to a signpost", verb)
 		}
 	}
-	// The two read verbs must not be in the table: a done ticket has no garden
-	// equivalent, so they keep serving the archived store forever.
+	// The two read verbs must not be in the table: they keep serving the archived
+	// store forever.
 	for _, read := range []string{"list", "show"} {
 		if _, ok := ticketSignposts[read]; ok {
 			t.Errorf("%q is a read verb and must not signpost", read)
@@ -59,9 +52,6 @@ func TestEveryTicketWriteVerbSignposts(t *testing.T) {
 	}
 }
 
-// ticketRouterSignpostCases reads the verbs from the router's own
-// signpostTicketVerb case, so the test is driven by the live switch rather than
-// a second hand-kept list.
 func ticketRouterSignpostCases(t *testing.T, source string) []string {
 	t.Helper()
 	body, ok := functionBody(source, "func runTicket() {")
@@ -89,8 +79,6 @@ func ticketRouterSignpostCases(t *testing.T, source string) []string {
 	return nil
 }
 
-// functionBody returns the source between a function's opening line and the
-// closing brace in column zero that ends it.
 func functionBody(source, signature string) (string, bool) {
 	start := strings.Index(source, signature)
 	if start < 0 {
@@ -113,8 +101,6 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-// The help an agent reads before running anything has to say the same thing the
-// signposts do, or it teaches the retired surface one more time.
 func TestTicketHelpNamesTheReadVerbsAndTheRetiredOnes(t *testing.T) {
 	var out bytes.Buffer
 	writeTicketHelp(&out)
@@ -132,9 +118,6 @@ func TestTicketHelpNamesTheReadVerbsAndTheRetiredOnes(t *testing.T) {
 	}
 }
 
-// --ticket and --confirm are the delegation half of the retirement: a caller on
-// stale guidance gets told where the capability went, not "flag provided but not
-// defined" and not a delegation that silently ignored the flag.
 func TestDelegateRefusesRetiredTicketFlags(t *testing.T) {
 	t.Setenv("ATTN_SESSION_ID", "sess-1")
 	for _, tc := range []struct {

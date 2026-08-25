@@ -328,10 +328,6 @@ describe("call signatures", () => {
   });
 });
 
-// The invariant behind the envelope: nothing that resolves outside the
-// working directory may run without the classifier having judged it. This
-// walks generated paths rather than a list, because the interesting failures
-// are the ones nobody thought to write down.
 describe("property: a path outside the working directory never runs statically", () => {
   const segments = ["..", ".", "src", "work", "repo", "repository", "a b", ".git", ".env", "~", "", "-", "nested"];
 

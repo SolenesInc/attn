@@ -1,6 +1,5 @@
-// The shared label set (`src/annotations/quickLabels.ts`), adapted to what the
-// Markdown reader needs. A document mark stores `quickLabelId` and the tip it
-// was made with, never the label's text baked into the comment.
+// The shared label set (`src/annotations/quickLabels.ts`), adapted for the Markdown
+// reader: a mark stores `quickLabelId`, never the label's text baked into the comment.
 
 import { labelById, type QuickLabel } from '../../../annotations/quickLabels';
 

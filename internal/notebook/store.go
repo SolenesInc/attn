@@ -15,15 +15,12 @@ import (
 	"time"
 )
 
-// Store is the filesystem-canonical notebook for one root directory. Every
-// write serializes under mu and applies atomically; reads do not take the lock.
+// Writes serialize under mu and apply atomically; reads do not take the lock.
 type Store struct {
 	root string
 	mu   sync.Mutex
 }
 
-// NewStore returns a Store rooted at the given absolute directory, which need
-// not exist yet (EnsureScaffold creates it).
 func NewStore(root string) *Store {
 	// Clean the root: a trailing slash would break abs's HasPrefix containment test.
 	if root != "" {
@@ -32,13 +29,8 @@ func NewStore(root string) *Store {
 	return &Store{root: root}
 }
 
-// Root returns the absolute notebook root directory.
 func (s *Store) Root() string { return s.root }
 
-// EnsureScaffold idempotently creates the root, reserved directories, and
-// reserved files, never clobbering an existing file. It returns only the paths
-// it actually wrote — even alongside a mid-scaffold error — so callers record
-// exactly those as self-writes.
 func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -52,7 +44,7 @@ func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
 	for _, dir := range scaffoldDirs() {
 		abs := filepath.Join(s.root, filepath.FromSlash(dir))
 		if err := s.checkWithinResolvedRoot(abs); err != nil {
-			return nil, err // refuse to create through a symlinked subdir
+			return nil, err
 		}
 		if err := os.MkdirAll(abs, 0o755); err != nil {
 			return nil, err
@@ -64,7 +56,7 @@ func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
 			return createdPaths, err
 		}
 		if _, statErr := os.Stat(abs); statErr == nil {
-			continue // never clobber an existing file
+			continue
 		} else if !os.IsNotExist(statErr) {
 			return createdPaths, statErr
 		}
@@ -76,8 +68,6 @@ func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
 	return createdPaths, nil
 }
 
-// Read returns the raw bytes of a note and their content hash. A missing note
-// yields a *NotFoundError.
 func (s *Store) Read(p string) (content []byte, hash string, err error) {
 	abs, err := s.abs(p)
 	if err != nil {
@@ -93,9 +83,6 @@ func (s *Store) Read(p string) (content []byte, hash string, err error) {
 	return content, Hash(content), nil
 }
 
-// Write creates or edits a note. Empty baseHash = create-only (Conflict if the
-// file exists); non-empty = hash-CAS edit, returning a Conflict with the
-// current hash when the on-disk hash no longer matches.
 func (s *Store) Write(p string, content []byte, baseHash string) (newHash string, conflict *Conflict, err error) {
 	abs, err := s.abs(p)
 	if err != nil {
@@ -104,8 +91,6 @@ func (s *Store) Write(p string, content []byte, baseHash string) (newHash string
 	if int64(len(content)) > MaxFileSize {
 		return "", nil, fmt.Errorf("notebook: content for %q exceeds %d bytes", p, MaxFileSize)
 	}
-	// No type validation: the `type` vocabulary is open, so the store stays a
-	// permissive writer; guidance, not the store, asks authors for a type.
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,8 +120,6 @@ func (s *Store) Write(p string, content []byte, baseHash string) (newHash string
 
 var journalDateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// AppendJournal appends an entry to journal/<date>.md, creating it with
-// type:journal frontmatter on first write. dateISO must be YYYY-MM-DD.
 func (s *Store) AppendJournal(dateISO, entry string) (relPath string, hash string, err error) {
 	if !journalDateRE.MatchString(dateISO) {
 		return "", "", fmt.Errorf("notebook: invalid journal date %q (want YYYY-MM-DD)", dateISO)
@@ -149,10 +132,6 @@ func (s *Store) AppendJournal(dateISO, entry string) (relPath string, hash strin
 	return rel, hash, err
 }
 
-// AppendJournalEntryOnce appends entry to journal/<date>.md unless dedupeMarker
-// is already present (then written=false, no error). The marker must be a stable
-// string embedded in entry: the journal file itself is the dedup ledger, so
-// idempotency survives a daemon restart with no separate bookkeeping.
 func (s *Store) AppendJournalEntryOnce(dateISO, dedupeMarker, entry string) (relPath string, written bool, hash string, err error) {
 	if !journalDateRE.MatchString(dateISO) {
 		return "", false, "", fmt.Errorf("notebook: invalid journal date %q (want YYYY-MM-DD)", dateISO)
@@ -168,19 +147,15 @@ func (s *Store) AppendJournalEntryOnce(dateISO, dedupeMarker, entry string) (rel
 	return rel, written, hash, err
 }
 
-// newJournalDoc returns the factory for a fresh dated journal note.
 func newJournalDoc(dateISO string) func() Document {
 	return func() Document {
 		return Document{
-			// The H1 is the title (Document.Title reads it); no frontmatter title:.
 			Frontmatter: map[string]any{"type": TypeJournal},
 			Body:        "# " + dateISO + "\n",
 		}
 	}
 }
 
-// AppendInbox appends an entry to the reserved chief inbox note (inbox.md),
-// creating it on first write; appends serialize and never conflict.
 func (s *Store) AppendInbox(entry string) (relPath string, hash string, err error) {
 	if strings.TrimSpace(entry) == "" {
 		return "", "", fmt.Errorf("notebook: empty inbox entry")
@@ -191,14 +166,11 @@ func (s *Store) AppendInbox(entry string) (relPath string, hash string, err erro
 	return FileInbox, hash, err
 }
 
-// appendToNote appends entry to rel, creating it from newDoc() when absent.
-// The read-modify-write runs under the store lock, so appends never conflict.
 func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash string, err error) {
 	_, hash, err = s.appendToNoteOnce(rel, "", entry, newDoc)
 	return hash, err
 }
 
-// appendToNoteOnce is appendToNote with optional idempotency via dedupeMarker.
 // The read-check-write is one critical section under the store lock, so two
 // callers racing the same marker can never both write.
 func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() Document) (written bool, hash string, err error) {
@@ -215,7 +187,7 @@ func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() 
 		return false, "", statErr
 	}
 	if dedupeMarker != "" && statErr == nil && bytes.Contains(existing, []byte(dedupeMarker)) {
-		return false, Hash(existing), nil // already recorded; hash lets callers still suppress
+		return false, Hash(existing), nil
 	}
 	var doc Document
 	if statErr == nil {
@@ -234,32 +206,27 @@ func (s *Store) appendToNoteOnce(rel, dedupeMarker, entry string, newDoc func() 
 	return true, Hash(out), nil
 }
 
-// listFrontmatterScanLimit bounds the leading bytes List reads per file — it
-// must never load a whole (possibly oversized, externally-written) body.
-const listFrontmatterScanLimit = 64 << 10 // 64 KiB
+// Bounds the leading bytes List reads per file: it must never load a whole
+// (possibly oversized, externally-written) body.
+const listFrontmatterScanLimit = 64 << 10
 
-// List returns the notes under the root, sorted by path; prefix scopes a
-// subtree. Dotfiles/dotdirs and non-.md files are skipped; an uninitialized
-// root yields an empty list, not an error.
 func (s *Store) List(prefix string) ([]Entry, error) {
-	// Prefix matches on path-segment boundaries, never partial names.
 	want := strings.Trim(strings.TrimSpace(prefix), "/")
 	var entries []Entry
 	walkErr := filepath.WalkDir(s.root, func(p string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				if p == s.root {
-					return fs.SkipAll // root not created yet => empty list
+					return fs.SkipAll
 				}
-				// Subtree vanished mid-walk (root is externally syncable);
-				// treat as empty rather than failing the whole List.
+				// Subtree vanished mid-walk (the root is externally syncable); treat as empty.
 				return nil
 			}
 			return err
 		}
 		if dirent.IsDir() {
 			if p != s.root && strings.HasPrefix(dirent.Name(), ".") {
-				return fs.SkipDir // skip .attn/ and any dotdir subtree
+				return fs.SkipDir
 			}
 			return nil
 		}
@@ -310,9 +277,6 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 	return entries, nil
 }
 
-// Backlinks returns the notes linking to target (anchors ignored, self
-// excluded), sorted by path; a target absent on disk still surfaces its
-// linkers. Full scan per call — acceptable while the Notebook stays small.
 func (s *Store) Backlinks(target string) ([]Entry, error) {
 	want, err := CleanPath(target)
 	if err != nil {
@@ -325,16 +289,15 @@ func (s *Store) Backlinks(target string) ([]Entry, error) {
 	var out []Entry
 	for _, e := range entries {
 		if e.Path == want {
-			continue // a note linking to itself is not a backlink
+			continue
 		}
 		if e.Size > MaxFileSize {
-			// Bigger than attn ever writes = oversized externally-synced file;
-			// skip rather than pull its whole body into memory per navigation.
+			// Oversized = externally-synced file; skip rather than pull its whole body in.
 			continue
 		}
 		content, _, rerr := s.Read(e.Path)
 		if rerr != nil {
-			continue // skip a note that vanished or is unreadable mid-scan
+			continue
 		}
 		if bodyLinksTo(ParsePermissive(content).Body, want) {
 			out = append(out, e)
@@ -343,8 +306,6 @@ func (s *Store) Backlinks(target string) ([]Entry, error) {
 	return out, nil
 }
 
-// bodyLinksTo reports whether body contains a root-absolute markdown link whose
-// target (ignoring any #anchor) resolves to want (a clean notebook-relative path).
 func bodyLinksTo(body, want string) bool {
 	for _, link := range Links(body) {
 		p := link
@@ -353,7 +314,7 @@ func bodyLinksTo(body, want string) bool {
 		}
 		cleaned, err := CleanPath(p)
 		if err != nil {
-			continue // an anchor-only or malformed target cannot be a backlink
+			continue
 		}
 		if cleaned == want {
 			return true
@@ -362,8 +323,6 @@ func bodyLinksTo(body, want string) bool {
 	return false
 }
 
-// abs resolves a notebook path to an absolute filesystem path, rejecting both
-// lexical ("..") and symlink escapes from the root.
 func (s *Store) abs(p string) (string, error) {
 	rel, err := CleanPath(p)
 	if err != nil {
@@ -379,21 +338,17 @@ func (s *Store) abs(p string) (string, error) {
 	return abs, nil
 }
 
-// checkWithinResolvedRoot rejects symlink escape (which the lexical guard in
-// abs cannot catch) via EnsureWithinResolvedRoot.
 func (s *Store) checkWithinResolvedRoot(abs string) error {
 	return EnsureWithinResolvedRoot(s.root, abs)
 }
 
-// EnsureWithinResolvedRoot requires abs's deepest existing ancestor to resolve
-// within the resolved root: a symlinked ancestor pointing outside is rejected,
-// a legitimately symlinked root is allowed. abs must already be lexically
-// contained. Residual TOCTOU accepted for a single-user local app.
+// abs must already be lexically contained. Residual TOCTOU accepted for a
+// single-user local app.
 func EnsureWithinResolvedRoot(root, abs string) error {
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // root not created yet; nothing to traverse through
+			return nil
 		}
 		return err
 	}
@@ -417,7 +372,6 @@ func EnsureWithinResolvedRoot(root, abs string) error {
 	}
 }
 
-// readPrefix reads up to limit leading bytes of a file.
 func readPrefix(path string, limit int64) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -427,9 +381,8 @@ func readPrefix(path string, limit int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, limit))
 }
 
-// writeAtomic writes via temp file + rename. The temp name is dot-prefixed so
-// it lands outside CleanPath's trackable set — a watcher must not treat the
-// transient swap file's events as a change to a real path.
+// The temp name is dot-prefixed so a watcher never treats the transient swap
+// file as a change to a real path.
 func writeAtomic(absPath string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err

@@ -1,7 +1,3 @@
-// app/src/contexts/KeybindingsContext.tsx
-// Bridges persisted shortcut overrides (one JSON settings blob) to the
-// imperative resolver used by dispatch/formatting, and exposes mutations to the
-// shortcut editor. Lives inside SettingsProvider (it reads/writes via settings).
 
 import {
   createContext,
@@ -38,12 +34,9 @@ interface KeybindingsContextValue {
   isProtected: (id: ShortcutId) => boolean;
   isCustomized: (id: ShortcutId) => boolean;
   findConflict: (binding: Binding, excludeId: ShortcutId) => ShortcutId | null;
-  /** Apply one or more override changes in a single persisted write (atomic). */
   applyOverrides: (changes: Partial<Record<ShortcutId, OverrideChange>>) => void;
   isInDock: (id: ShortcutId) => boolean;
-  /** Add (append) or remove a shortcut from the dock membership list. */
   setInDock: (id: ShortcutId, inDock: boolean) => void;
-  /** Move a dock item one slot earlier (-1) or later (+1); no-op at the ends. */
   moveDockItem: (id: ShortcutId, direction: -1 | 1) => void;
   setDockCollapsed: (collapsed: boolean) => void;
   restoreDefaults: () => void;
@@ -66,7 +59,6 @@ export function KeybindingsProvider({ children }: { children: ReactNode }) {
   // own writes don't clobber newer local state.
   const lastSyncedRef = useRef<string>(serializeKeybindingsConfig(config));
 
-  // Adopt external changes (other windows, fresh load).
   useEffect(() => {
     const parsed = parseKeybindingsConfig(raw);
     const serialized = serializeKeybindingsConfig(parsed);
@@ -89,7 +81,6 @@ export function KeybindingsProvider({ children }: { children: ReactNode }) {
   const applyOverrides = useCallback((changes: Partial<Record<ShortcutId, OverrideChange>>) => {
     const overrides = { ...configRef.current.overrides };
     for (const [id, change] of Object.entries(changes) as Array<[ShortcutId, OverrideChange]>) {
-      // Never leave a protected shortcut unbound.
       if (change === null && isProtectedShortcut(id)) continue;
       if (change === undefined) {
         delete overrides[id];

@@ -1,10 +1,5 @@
-/**
- * The document a MarkdownReader renders.
- *
- * `uri` is opaque identity for client-side draft correlation. Typed fields are
- * the authority whenever the daemon acts; neither side recovers a path or seed
- * id by parsing the URI.
- */
+/** The document a MarkdownReader renders. `uri` is opaque identity; typed fields
+ * are the authority, and neither side parses a path or seed id out of the URI. */
 export interface FileMarkdownDocumentSource {
   kind: 'file';
   uri: string;

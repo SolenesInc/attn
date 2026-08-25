@@ -109,11 +109,7 @@ func TestAddEndpointNormalizesProfileCase(t *testing.T) {
 }
 
 func TestAddEndpointMapsDefaultProfileToEmpty(t *testing.T) {
-	// "default" is the human label for the empty profile, but downstream
-	// hub helpers (remoteBinaryName, ATTN_PROFILE export, data-dir scripts)
-	// would treat it as a named profile and build attn-default / ~/.attn-default
-	// on the remote while WSPortForProfile still returns 9849, colliding with
-	// any real default-profile daemon already on that port.
+	// "default" is the human label for the empty profile, but hub helpers would build attn-default / ~/.attn-default on the remote while WSPortForProfile still returns 9849, colliding with any real default-profile daemon.
 	s := New()
 	for _, input := range []string{"default", "DEFAULT", "  default  "} {
 		t.Run(input, func(t *testing.T) {
@@ -192,10 +188,7 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "legacy.db")
 
-	// Simulate a legacy DB created before migration 34 by opening, dropping the
-	// profile column from baseSchema is not possible in SQLite; instead, reset
-	// the schema_migrations row for 34 and the profile column, mimicking an
-	// upgrade from a pre-34 release.
+	// SQLite cannot drop the profile column, so reset the schema_migrations row for 34 and the column instead, mimicking an upgrade from a pre-34 release.
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -218,7 +211,6 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// Mark all migrations up to 33 as applied so only 34 runs.
 	for v := 1; v <= 33; v++ {
 		if _, err := db.Exec(
 			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`,
@@ -231,7 +223,6 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	// Reopen via OpenDB which runs migrations.
 	db2, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)

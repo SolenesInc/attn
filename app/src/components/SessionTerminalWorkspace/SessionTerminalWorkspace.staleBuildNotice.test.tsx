@@ -4,8 +4,6 @@ import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
 
-// The terminal surface pulls in the Ghostty WASM model; stub it so the import
-// graph stays light in jsdom (this spec only cares about the notice).
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
@@ -57,8 +55,6 @@ describe('SessionTerminalWorkspace stale terminal build notice', () => {
     renderPane(true);
     const notice = screen.getByTestId('terminal-stale-build-notice');
     expect(notice.textContent).toContain('older terminal');
-    // The action itself lives in the sidebar's ••• menu, so the notice's whole
-    // job is naming it.
     expect(notice.textContent).toContain('Reload');
   });
 

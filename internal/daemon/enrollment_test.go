@@ -13,9 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// newEnrolledDaemon returns a daemon whose data dir has a daemon id and, when
-// homeDaemonID is non-empty, an enrollment record naming that other daemon as
-// its home.
 func newEnrolledDaemon(t *testing.T, homeDaemonID string) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

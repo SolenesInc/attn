@@ -1,6 +1,3 @@
-// app/src/components/WhatsNewModal.tsx
-// One-time announcement of the workspace UX. Shown once per release via
-// useWhatsNew(); "View all shortcuts" hands off to the cheatsheet.
 
 import FocusTrap from 'focus-trap-react';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -18,7 +15,6 @@ interface Highlight {
   title: string;
   body: string;
   combos: string[][];
-  // The biggest behavior change — rendered as a callout so it's hard to miss.
   flagged?: boolean;
 }
 

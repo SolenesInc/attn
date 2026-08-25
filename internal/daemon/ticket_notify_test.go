@@ -16,10 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// delegateForNotify runs a real delegation with the given agent and returns the
-// chief + agent session ids plus an accessor for the inputs typed into a session's
-// PTY. The doorbell lands here; the brief goes via the spawn prompt file (not
-// Input), so any recorded input after delegation is a nudge.
 func delegateForNotify(t *testing.T, d *Daemon, agent string) (chiefID, agentID string, inputs func(string) []string) {
 	t.Helper()
 	backend := &fakeSpawnBackend{}
@@ -63,11 +59,6 @@ func setSessionAgent(t *testing.T, d *Daemon, sessionID string, agent protocol.S
 	d.store.Add(s)
 }
 
-// delegateMany sets up ONE chief of staff and delegates an agent per brief from it,
-// modeling a chief that fanned work out to a batch of siblings. It returns the chief
-// id, the spawned agent ids (brief order), and an accessor for inputs typed into a
-// session's PTY. Like delegateForNotify, the brief is delivered via the spawn prompt
-// file — never Input — so any recorded input is a nudge.
 func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chiefID string, agentIDs []string, inputs func(string) []string) {
 	t.Helper()
 	backend := &fakeSpawnBackend{}
@@ -84,7 +75,6 @@ func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chie
 	}
 	consumeDelegatedPrompt(t, backend)
 	for i, brief := range briefs {
-		// Distinct labels: same-workspace siblings can't share an auto-derived name.
 		result, err := d.delegate(&protocol.DelegateMessage{
 			Cmd:             protocol.CmdDelegate,
 			SourceSessionID: chiefID,
@@ -115,8 +105,6 @@ func wasNudged(inputs []string) bool {
 	return false
 }
 
-// Every runtime receives the same nudge for an eligible delegated leaf: active
-// (green), launching (new), and unknown states all arm the visible countdown.
 func TestNotifyNudgesEligibleLeavesAcrossRuntimes(t *testing.T) {
 	states := []struct {
 		name  string
@@ -146,13 +134,6 @@ func TestNotifyNudgesEligibleLeavesAcrossRuntimes(t *testing.T) {
 	}
 }
 
-// Full slice-6 roundtrip: a real chief producer (the human commenting on the
-// agent's bound ticket via handleTicketComment) drives notifyTicketObservers,
-// which nudges the codex agent through the same shared delivery policy as every
-// other runtime.
-// The agent then runs `attn ticket inbox`, consumes the chief's event, and a
-// second inbox is empty because the cursor advanced — proving it consumed, not
-// peeked. No real codex binary or PTY: the fake spawn backend captures the doorbell.
 func TestCodexNudgeRoundtrip(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -161,18 +142,13 @@ func TestCodexNudgeRoundtrip(t *testing.T) {
 	ticketID := boundTicketID(t, d, agentID)
 	d.store.UpdateState(agentID, protocol.StateIdle)
 
-	// Drive a REAL chief→agent producer: the human comments on the codex agent's
-	// ticket, authored as "you" — an event the agent did not author, so it is unread.
 	commentOnTicket(t, d, ticketID, "please take a look at the failing test")
 
-	// 1) The idle codex agent was nudged by the chief's comment on its ticket (after
-	// the countdown the comment armed fires).
 	fireNudgeNow(t, d, agentID)
 	if !wasNudged(inputs(agentID)) {
 		t.Fatal("idle codex agent was not nudged on chief ticket comment")
 	}
 
-	// 2) Consume side: the agent's inbox carries the chief's comment on its ticket.
 	bundles := callTicketInbox(t, d, agentID)
 	if len(bundles) == 0 {
 		t.Fatal("codex inbox returned no bundles after nudge")
@@ -187,14 +163,11 @@ func TestCodexNudgeRoundtrip(t *testing.T) {
 		t.Fatalf("inbox missing chief event on ticket %s: %+v", ticketID, bundles)
 	}
 
-	// 3) Cursor advanced: a second consume is empty (consumed, not peeked).
 	if again := callTicketInbox(t, d, agentID); len(again) != 0 {
 		t.Fatalf("second inbox not empty, cursor did not advance: %+v", again)
 	}
 }
 
-// Approval prompts are the sole deferral state. Once the prompt clears, unread
-// activity is rechecked and armed even when the agent returns to active/green.
 func TestNotifyDefersPendingApprovalThenFlushesOnWorking(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -216,9 +189,6 @@ func TestNotifyDefersPendingApprovalThenFlushesOnWorking(t *testing.T) {
 			state:     protocol.StateWorking,
 			cause:     resolverObservation{},
 		})
-		// The countdown the cleared approval arms, run at its production length
-		// rather than hand-fired: what the user gets is a doorbell one window
-		// after the prompt clears, and that is what is asserted.
 		settledNudgeDeadline(t, d, agentID)
 		time.Sleep(defaultNudgeCountdownWindow)
 		synctest.Wait()
@@ -228,11 +198,6 @@ func TestNotifyDefersPendingApprovalThenFlushesOnWorking(t *testing.T) {
 	})
 }
 
-// A chief that fans work out to siblings must not cross-wire their doorbells: when
-// one delegate reports a status change, only that ticket's participants (the agent
-// and the chief) are notified — the OTHER delegates are neither assignee nor author
-// on it, so the event never routes to them. This locks the store-level isolation
-// that makes "agent A is nudged about ticket C" impossible by construction.
 func TestDelegatedSiblingsNotNudgedByEachOther(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, agents, inputs := delegateMany(t, d, "codex", "Task A", "Task B", "Task C")
@@ -241,7 +206,6 @@ func TestDelegatedSiblingsNotNudgedByEachOther(t *testing.T) {
 		d.store.UpdateState(id, protocol.StateIdle)
 	}
 
-	// Delegate C reports done — an event on ticket C only.
 	callSetTicketStatus(t, d, c, string(protocol.DispatchWorkStateCompleted), "done")
 
 	if wasNudged(inputs(a)) {
@@ -252,22 +216,12 @@ func TestDelegatedSiblingsNotNudgedByEachOther(t *testing.T) {
 	}
 }
 
-// The real symptom behind "everyone gets nudged": a delegated agent already has its
-// brief (delivered via the spawn prompt), but the chief-authored `created` event
-// stays unread on the agent's OWN ticket because nothing advances its cursor at
-// delegation. So the moment the agent goes idle, the went-idle flush doorbells it
-// about a brief it already holds. Batch delegation makes the siblings settle around
-// the same time, which reads as "C finishing nudged the whole batch" — but each is
-// only ever self-nudging about its own ticket. The fix marks the brief consumed for
-// the assignee at creation, so nothing is unread and no doorbell fires.
 func TestDelegatedAgentNotNudgedByOwnDeliveredBrief(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, agents, inputs := delegateMany(t, d, "codex", "Task A")
 	a := agents[0]
 	d.store.UpdateState(a, protocol.StateIdle)
 
-	// The agent settles after its initial run; the went-idle path re-runs the notify
-	// decision for it. With the brief consumed at delegation, there is nothing unread.
 	d.notifyUnreadTicketSession(a, time.Now())
 
 	if wasNudged(inputs(a)) {
@@ -275,10 +229,6 @@ func TestDelegatedAgentNotNudgedByOwnDeliveredBrief(t *testing.T) {
 	}
 }
 
-// commentOnTicket gives the delegated agent an unread event: the chief/human
-// comments on the agent's bound ticket (authored as "you", store.TicketAuthorYou),
-// an event the agent did not author. This is the real chief→agent steer path
-// (handleTicketComment), the same one TestCodexNudgeRoundtrip drives.
 func commentOnTicket(t *testing.T, d *Daemon, ticketID, comment string) {
 	t.Helper()
 	if resp := callTicketComment(t, d, store.TicketAuthorYou, ticketID, comment); !resp.Ok {
@@ -286,8 +236,6 @@ func commentOnTicket(t *testing.T, d *Daemon, ticketID, comment string) {
 	}
 }
 
-// The shared policy also covers chiefs. A report from a delegated agent wakes an
-// active chief regardless of whether the chief runs Codex or Claude.
 func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 	for _, runtime := range []protocol.SessionAgent{protocol.SessionAgentCodex, protocol.SessionAgentClaude} {
 		t.Run(string(runtime), func(t *testing.T) {
@@ -297,11 +245,9 @@ func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 				chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 				setSessionAgent(t, d, chiefID, runtime)
 				d.store.UpdateState(chiefID, protocol.StateWorking)
-				d.setSelectedSession(agentID) // preserve the focused-session anti-splice pause
+				d.setSelectedSession(agentID)
 
 				callSetTicketStatus(t, d, agentID, string(protocol.DispatchWorkStateReadyForReview), "done, please review")
-				// The chief's own countdown, run out at whatever length the policy
-				// picked for it instead of hand-fired.
 				time.Sleep(time.Until(settledNudgeDeadline(t, d, chiefID)) + time.Second)
 				synctest.Wait()
 				if !wasNudged(inputs(chiefID)) {
@@ -315,15 +261,8 @@ func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 	}
 }
 
-// Chief ticket awareness belongs to the role, not the session that happened to
-// delegate. A consumes one report, the role transfers to B, and the next report
-// reaches only B. The role cursor means B receives exactly the post-transfer
-// unread event: nothing A consumed is replayed and nothing new is skipped.
-//
-// The windows run out for real here rather than being parked and hand-fired,
-// which is what makes A's silence mean something: every countdown the daemon
-// could have armed for A fires well inside the sleep, so zero nudges is A having
-// no attachment left, not a timer that had not come due yet.
+// The windows run out for real here rather than being parked and hand-fired, which is
+// what makes A's silence mean something.
 func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -341,7 +280,6 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 		d.store.UpdateState(chiefA, protocol.StateIdle)
 		d.store.UpdateState(agentID, protocol.StateIdle)
 
-		// A consumes the first agent report, advancing the durable role cursor.
 		callSetTicketStatus(t, d, agentID, string(protocol.DispatchWorkStateNeedsInput), "need a decision")
 		first := callTicketInbox(t, d, chiefA)
 		if len(first) != 1 || len(first[0].Events) != 1 ||
@@ -350,8 +288,6 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 		}
 		nudgesA := nudgeCount(inputs(chiefA))
 
-		// Transfer the singleton profile role. No cursor copy occurs; only delivery is
-		// retargeted and A's stale role nudge state is cleared.
 		if err := d.store.SetProfileRole(profileRoleChiefOfStaff, chiefB); err != nil {
 			t.Fatalf("transfer chief role: %v", err)
 		}
@@ -361,7 +297,6 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 		if deadline := currentNudgeDeadline(d, chiefA); !deadline.IsZero() {
 			t.Fatalf("retired chief still has a countdown armed for %s", deadline)
 		}
-		// Past the longest window any participant of this ticket could have been given.
 		time.Sleep(2 * d.ticketBundleWindow())
 		synctest.Wait()
 		if !wasNudged(inputs(chiefB)) {
@@ -385,9 +320,6 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 	})
 }
 
-// A chief can still participate personally through the ordinary explicit
-// subscription path. When personal and durable-role scopes overlap, delivery is
-// deduplicated while both cursors advance.
 func TestChiefRoleAndExplicitSubscriptionDeliverOnce(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	chiefID, agentID, _ := delegateForNotify(t, d, "codex")
@@ -406,8 +338,6 @@ func TestChiefRoleAndExplicitSubscriptionDeliverOnce(t *testing.T) {
 	}
 }
 
-// A direct `ticket inbox --watch` caller drains the same queue and clears the
-// shared countdown before the doorbell fires.
 func TestTicketWatchDrainClearsSharedCountdown(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -637,7 +567,6 @@ func TestWatchLeaseCoversReportedSlowPollingInterval(t *testing.T) {
 	}
 }
 
-// nudgeCount counts how many doorbells (ticketNudgePrompt inputs) a session got.
 func nudgeCount(inputs []string) int {
 	n := 0
 	for _, in := range inputs {

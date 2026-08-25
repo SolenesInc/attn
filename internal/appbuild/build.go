@@ -12,69 +12,32 @@ import (
 	"strings"
 )
 
-// Build is the apply pipeline up to (but not including) the database: parse,
-// codegen, typecheck, bundle, hash, place the artifact.
-//
-// The ordering is the guarantee. Everything that can be refused is refused
-// before anything leaves a temporary directory, and the only write outside the
-// app's own source tree is the final rename of a fully-built artifact into the
-// content-addressed store. A tsc or bundle failure therefore leaves no version
-// row, no pointer move, and no artifact directory — not because a cleanup path
-// runs, but because none of it had happened yet.
-//
-// Nothing here evaluates app code. `tsc --noEmit` reads source and bun's bundler
-// resolves and concatenates modules; neither runs a module's top level. That is
-// the rule the whole stage is built to keep: an app whose entrypoint throws on
-// import still applies, and finds out at dispatch time.
-
-// Options is one build.
 type Options struct {
-	// Dir is the app's source directory — the one holding attn-app.toml.
-	Dir string
-	// StoreDir is the artifact root, `<data-dir>/apps`. Built artifacts land in
-	// StoreDir/<name>/<hash>/ and the shared TypeScript lives beside them.
+	Dir      string
 	StoreDir string
-	// Log receives progress lines. Optional.
-	Log func(string)
+	Log      func(string)
 }
 
-// Result is what a successful build produced. It is everything the commit needs
-// and nothing it has to recompute.
 type Result struct {
-	Manifest    Manifest
-	Declaration string
-	// ContentHash identifies the version: the declaration and every artifact
-	// together. See versionHash.
-	ContentHash  string
-	ArtifactPath string
-	// ArtifactWritten is false when the store already held this exact content —
-	// a byte-identical re-apply, which reuses both the artifact and, at commit,
-	// the version row.
+	Manifest        Manifest
+	Declaration     string
+	ContentHash     string
+	ArtifactPath    string
 	ArtifactWritten bool
 	BundleBytes     int64
-	// ViewBytes is the size of each built view's artifact, in declaration order.
-	// A5 sets no bundle size cap — nothing measured yet would justify a number —
-	// so what apply owes the author instead is the number itself, per artifact.
-	ViewBytes []ViewSize
+	ViewBytes       []ViewSize
 }
 
-// ViewSize is one built view's artifact and how big it came out.
 type ViewSize struct {
 	Name  string
 	Path  string
 	Bytes int64
 }
 
-// ArtifactName is the file every built app's handlers are bundled into.
 const ArtifactName = "bundle.js"
 
-// viewsDirName is where a version's view bundles live, beside its handler
-// bundle: one file per declared view, named by the view.
 const viewsDirName = "views"
 
-// ShortHash renders a version hash for a human-facing line. The full hash is
-// always available in a command's --json output; a sentence carrying 64
-// characters is a sentence nobody reads.
 func ShortHash(hash string) string {
 	if len(hash) <= 12 {
 		return hash
@@ -82,27 +45,18 @@ func ShortHash(hash string) string {
 	return hash[:12]
 }
 
-// ArtifactDir is where a version's artifact lives, derived from the app name and
-// the version hash rather than stored, so the CLI that builds it and the daemon
-// that commits it cannot disagree about the location.
 func ArtifactDir(storeDir, name, hash string) string {
 	return filepath.Join(storeDir, name, hash)
 }
 
-// ArtifactPath is the built handler bundle for one version.
 func ArtifactPath(storeDir, name, hash string) string {
 	return filepath.Join(ArtifactDir(storeDir, name, hash), ArtifactName)
 }
 
-// ViewArtifactPath is the built module for one of a version's views. Derived
-// from the app, the version and the view name for the same reason ArtifactPath
-// is: the builder, the daemon and whatever serves it later cannot disagree about
-// where a view's bytes are.
 func ViewArtifactPath(storeDir, name, hash, view string) string {
 	return filepath.Join(ArtifactDir(storeDir, name, hash), viewsDirName, view+".js")
 }
 
-// Build runs the pipeline.
 func Build(ctx context.Context, opts Options) (Result, error) {
 	dir, err := filepath.Abs(opts.Dir)
 	if err != nil {
@@ -123,8 +77,6 @@ func Build(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	// The SDK is materialized before the typecheck because it is what the
-	// typecheck resolves the specifier to.
 	if _, err := EnsureSDK(opts.StoreDir, dir, opts.Log); err != nil {
 		return Result{}, err
 	}
@@ -134,10 +86,8 @@ func Build(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	// Staging lives inside the store, not in the system temp directory: the last
-	// step is a rename into the store and a rename across filesystems fails —
-	// /tmp is a different volume often enough on Linux (tmpfs) that this would be
-	// a defect nobody sees on a Mac.
+	// Staging lives inside the store: the last step is a rename into it, and a
+	// cross-filesystem rename fails — /tmp is a different volume often on Linux.
 	stagingRoot := filepath.Join(opts.StoreDir, ".staging")
 	if err := os.MkdirAll(stagingRoot, 0o755); err != nil {
 		return Result{}, fmt.Errorf("creating the app build staging directory %s: %w", stagingRoot, err)
@@ -199,9 +149,6 @@ func Build(ctx context.Context, opts Options) (Result, error) {
 	}, nil
 }
 
-// WriteGenerated rewrites the file codegen owns. It runs before the typecheck
-// because it is what the typecheck checks against, and it writes into the app's
-// own tree because the author's editor has to see the same errors apply does.
 func WriteGenerated(dir string, m Manifest) error {
 	files := map[string]string{
 		GeneratedFile: GenerateTypes(m),
@@ -211,9 +158,8 @@ func WriteGenerated(dir string, m Manifest) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
 		}
-		// Rewriting an unchanged file would touch its mtime, and `attn app dev`
-		// watches this directory: codegen would wake the watcher that triggered
-		// it, forever.
+		// Rewriting an unchanged file touches its mtime, and `attn app dev` watches
+		// this directory: codegen would wake the watcher that triggered it, forever.
 		if existing, err := os.ReadFile(path); err == nil && string(existing) == content {
 			continue
 		}
@@ -224,16 +170,6 @@ func WriteGenerated(dir string, m Manifest) error {
 	return nil
 }
 
-// typecheck is what enforces manifest↔code sync, and it runs on attn's terms
-// rather than the app's: the compiler, the flags and the file list all come from
-// here.
-//
-// An app-provided tsconfig.json is deliberately not used. It is the author's
-// editor configuration, and a check that honored it could be switched off by the
-// thing being checked — an `include` that misses src/generated.ts would leave
-// apply reporting a clean typecheck of an app whose handlers do not match its
-// manifest. The app's own tsconfig still exists in the scaffold, carrying these
-// same flags, so the editor and apply agree.
 func typecheck(ctx context.Context, tools Toolchain, dir string, m Manifest) error {
 	args := []string{
 		"--noEmit",
@@ -243,16 +179,10 @@ func typecheck(ctx context.Context, tools Toolchain, dir string, m Manifest) err
 		"--moduleResolution", "bundler",
 		"--skipLibCheck",
 		"--pretty", "false",
-		// TSX compiles to an import of the SDK's jsx-runtime rather than React's,
-		// which is what makes React a specifier an app cannot write: there is no
-		// `react` in an app's node_modules and nothing declares it.
 		"--jsx", "react-jsx",
 		"--jsxImportSource", SDKModule,
 		filepath.FromSlash(m.Entrypoint),
 	}
-	// Every view is checked too. A view is code an author writes against the SDK,
-	// and a view that only ever met the bundler would reach a tile with type
-	// errors the compiler was standing right there to name.
 	for _, v := range m.Views {
 		args = append(args, filepath.FromSlash(v.Entrypoint))
 	}
@@ -266,14 +196,9 @@ func typecheck(ctx context.Context, tools Toolchain, dir string, m Manifest) err
 	if text == "" {
 		return fmt.Errorf("typechecking app %q failed with no output (%v)", m.Name, err)
 	}
-	// The compiler's own text, verbatim: it already carries file, line and column,
-	// and rewording it would cost the reader the one thing they need.
 	return fmt.Errorf("app %q does not typecheck against its manifest:\n%s", m.Name, text)
 }
 
-// viewEntrypoints is what the typecheck line names beside the app's own
-// entrypoint, so a compiler error in a view is not a surprise about a file the
-// build never said it was reading.
 func viewEntrypoints(m Manifest) []string {
 	out := make([]string, 0, len(m.Views))
 	for _, v := range m.Views {
@@ -282,10 +207,6 @@ func viewEntrypoints(m Manifest) []string {
 	return out
 }
 
-// bundleApp runs bun's bundler. `--target bun` is the runtime apps execute in
-// (slice 5's sidecar); external is empty because an app's dependencies belong in
-// its artifact — a version has to be the whole of what runs, or a rollback is
-// not a rollback.
 func bundleApp(ctx context.Context, tools Toolchain, dir string, m Manifest, outfile string) error {
 	cmd := exec.CommandContext(ctx, tools.Bun, "build",
 		filepath.FromSlash(m.Entrypoint),
@@ -301,34 +222,13 @@ func bundleApp(ctx context.Context, tools Toolchain, dir string, m Manifest, out
 	return nil
 }
 
-// ViewArtifact is one built view: the name it was declared under and the module
-// bytes that name resolves to.
 type ViewArtifact struct {
 	Name    string
 	Content []byte
 }
 
-// bundleView builds one view for the browser.
-//
-// Two differences from the handler bundle, and nothing else. The target is the
-// browser, because this artifact is imported by attn's frontend rather than run
-// in the sidecar. And the SDK specifiers are external: they are supplied by the
-// host at mount time from the frontend's own modules, which is what makes an
-// app's component and attn's UI share one React — bundling a copy in here would
-// give the view a second React and a hook dispatcher that is not the one
-// rendering it. Everything else an app imports is bundled in, unchanged from the
-// handler build: a version has to be the whole of what runs.
-//
-// `--production` is what selects the JSX runtime, and it is not optional.
-// Measured: without it bun emits `import { jsxDEV } from
-// "@victorarias/attn-app/jsx-dev-runtime"` regardless of the app tsconfig's
-// `"jsx": "react-jsx"` and regardless of a NODE_ENV define — and React's
-// production build exports `jsxDEV` as `undefined`, so such a view would link
-// cleanly against attn's frontend and then throw on its first element. The dev
-// runtime is still marked external, because whether bun reaches for it is bun's
-// decision and a build that resolves it into a second React would be worse.
-//
-// The bytes are a side effect, not the reason: `--production` also minifies.
+// `--production` is NOT optional. Measured: without it bun emits jsxDEV imports
+// whatever tsconfig says, and React's production build exports jsxDEV undefined.
 func bundleView(ctx context.Context, tools Toolchain, dir string, m Manifest, v View, outfile string) error {
 	args := []string{"build", filepath.FromSlash(v.Entrypoint), "--target", "browser", "--format", "esm", "--production"}
 	for _, specifier := range SDKSpecifiers() {
@@ -344,20 +244,8 @@ func bundleView(ctx context.Context, tools Toolchain, dir string, m Manifest, v 
 	return nil
 }
 
-// versionHash is the version's identity: the frozen declaration and every
-// artifact the version holds, hashed together.
-//
-// Hashing the handler bundle alone would be wrong in two ways that are easy to
-// miss. The generated types are erased at build time, so a manifest edit that
-// changes what the app declares — a new collection, a changed description — can
-// leave that bundle byte-identical; the version row would then be reused and its
-// frozen declaration would describe the *previous* manifest. And a view is built
-// from its own entrypoint, so editing only a view leaves both the declaration
-// and the handler bundle untouched: without the views in here, saving a
-// component would reuse a version row whose artifacts had moved under it.
-//
-// Views are hashed by name as well as content, in name order, so the digest does
-// not depend on declaration order and two views cannot swap names unnoticed.
+// The handler bundle alone would be wrong twice: a manifest edit can leave it
+// byte-identical, and editing only a view moves neither it nor the declaration.
 func versionHash(declaration string, bundle []byte, views []ViewArtifact) string {
 	h := sha256.New()
 	h.Write([]byte(declaration))
@@ -374,25 +262,10 @@ func versionHash(declaration string, bundle []byte, views []ViewArtifact) string
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// VersionHash recomputes a built version's identity from its inputs. The daemon
-// uses it to check that the artifacts it is about to record are the ones the
-// hash claims, so a commit never points a version row at content that does not
-// match its own name.
-//
-// An app with no views hashes exactly as it did before views existed: the loop
-// writes nothing, so re-applying an app built by an older attn lands on the row
-// it already had.
 func VersionHash(declaration string, bundle []byte, views []ViewArtifact) string {
 	return versionHash(declaration, bundle, views)
 }
 
-// ReadViewArtifacts reads the built modules of the named views out of a
-// version's directory in the store.
-//
-// It is how the daemon assembles the inputs to VersionHash: the declaration
-// names the views, and a version whose directory is missing one of them is a
-// version whose hash cannot be checked — so a missing artifact is an error
-// naming the view and the path, not a silently shorter list.
 func ReadViewArtifacts(storeDir, name, hash string, views []string) ([]ViewArtifact, error) {
 	out := make([]ViewArtifact, 0, len(views))
 	for _, view := range views {
@@ -406,13 +279,6 @@ func ReadViewArtifacts(storeDir, name, hash string, views []string) ([]ViewArtif
 	return out, nil
 }
 
-// placeArtifact moves a staged build into the content-addressed store, and
-// reports whether it had to.
-//
-// Stage-then-rename: the artifact appears at its final path complete or not at
-// all. Content addressing does the rest — an existing directory under this hash
-// already holds this exact content, so a byte-identical re-apply keeps what is
-// there rather than rewriting a file some running version may be reading.
 func placeArtifact(storeDir, name, hash, staging string) (string, bool, error) {
 	target := ArtifactDir(storeDir, name, hash)
 	final := filepath.Join(target, ArtifactName)
@@ -423,7 +289,7 @@ func placeArtifact(storeDir, name, hash, staging string) (string, bool, error) {
 		return "", false, fmt.Errorf("creating the app artifact store %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.Rename(staging, target); err != nil {
-		// Another apply of the same content won the race. Its directory holds the
+		// Another apply of the same content won the race; its directory holds the
 		// same bytes by construction, so the loser has nothing to do.
 		if _, statErr := os.Stat(final); statErr == nil {
 			return final, false, nil

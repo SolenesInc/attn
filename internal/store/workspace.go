@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// AddWorkspace inserts or updates a workspace row. The Status field is NOT
-// persisted — it's a runtime rollup recomputed from member sessions every time
-// the daemon (re)builds the in-memory registry.
 func (s *Store) AddWorkspace(ws *protocol.Workspace) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -19,9 +16,8 @@ func (s *Store) AddWorkspace(ws *protocol.Workspace) {
 		return
 	}
 	createdAt := time.Now().UTC().Format(sortableTimeFormat)
-	// rank is set on INSERT only. On re-register (ON CONFLICT) the stored rank is
-	// the durable authority for ordering and must survive — like title, it is not
-	// re-derived from the incoming struct so a user reorder sticks.
+	// rank is written on INSERT only: on re-register the stored rank is the durable
+	// ordering authority and must survive, like title.
 	if _, err := s.db.Exec(`
 		INSERT INTO workspaces (id, title, directory, muted, pinned, created_at, rank)
 		VALUES (?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?)
@@ -34,8 +30,7 @@ func (s *Store) AddWorkspace(ws *protocol.Workspace) {
 	}
 }
 
-// RemoveWorkspace deletes a workspace row. Member sessions are NOT cascaded
-// here — the daemon is responsible for closing them with the right signal
+// Member sessions are NOT cascaded: the daemon closes them with the right signal
 // before calling this.
 func (s *Store) RemoveWorkspace(id string) {
 	s.mu.Lock()
@@ -54,8 +49,6 @@ func (s *Store) RemoveWorkspace(id string) {
 	}
 }
 
-// GetWorkspace returns a workspace by id, or nil if not found. Status is left
-// unset — callers fill it in from the runtime rollup.
 func (s *Store) GetWorkspace(id string) *protocol.Workspace {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -75,9 +68,6 @@ func (s *Store) GetWorkspace(id string) *protocol.Workspace {
 	return &ws
 }
 
-// ListWorkspaces returns every persisted workspace. Used at daemon start to
-// rebuild the in-memory registry. Status is left unset — recomputed by the
-// caller after associations are wired up.
 func (s *Store) ListWorkspaces() []*protocol.Workspace {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -104,8 +94,6 @@ func (s *Store) ListWorkspaces() []*protocol.Workspace {
 	return out
 }
 
-// ToggleWorkspaceMute toggles a workspace's muted state. Session mute state is
-// not part of the app-facing model; muting is owned by the workspace.
 func (s *Store) ToggleWorkspaceMute(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -119,9 +107,6 @@ func (s *Store) ToggleWorkspaceMute(id string) {
 	}
 }
 
-// SetWorkspaceMuted writes an explicit workspace mute state. Callers that need
-// idempotent behavior (for example, making a chief delegation visible) should
-// use this instead of toggling an unknown current value.
 func (s *Store) SetWorkspaceMuted(id string, muted bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,7 +128,6 @@ func (s *Store) SetWorkspaceMuted(id string, muted bool) error {
 	return nil
 }
 
-// SetWorkspacePinned writes an explicit workspace pinned state.
 func (s *Store) SetWorkspacePinned(id string, pinned bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -165,9 +149,6 @@ func (s *Store) SetWorkspacePinned(id string, pinned bool) error {
 	return nil
 }
 
-// UpdateWorkspaceTitle sets a workspace's title. The stored title is the durable
-// authority for the name: the register path preserves a non-empty stored title
-// instead of re-deriving it from a session label, so a user rename sticks.
 func (s *Store) UpdateWorkspaceTitle(id, title string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -181,9 +162,6 @@ func (s *Store) UpdateWorkspaceTitle(id, title string) {
 	}
 }
 
-// UpdateWorkspaceRank sets a workspace's rank key. Rank is the durable authority
-// for sidebar order; the daemon computes the key (rankkey.Between/After) and the
-// store persists exactly one row per reorder.
 func (s *Store) UpdateWorkspaceRank(id, rank string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -197,10 +175,6 @@ func (s *Store) UpdateWorkspaceRank(id, rank string) {
 	}
 }
 
-// AssignSessionWorkspace updates the workspace_id column on a session. A live
-// persisted session must always have an owning workspace; callers that are
-// unregistering a session should delete the session row instead of clearing
-// this field.
 func (s *Store) AssignSessionWorkspace(sessionID, workspaceID string) {
 	if workspaceID == "" {
 		log.Printf("[store] AssignSessionWorkspace: refusing empty workspace for session %s", sessionID)
@@ -216,9 +190,6 @@ func (s *Store) AssignSessionWorkspace(sessionID, workspaceID string) {
 	}
 }
 
-// SessionsInWorkspace returns the IDs of sessions currently associated with
-// the given workspace. Used to seed the in-memory association map at daemon
-// start, and to cascade-close sessions when a workspace is unregistered.
 func (s *Store) SessionsInWorkspace(workspaceID string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

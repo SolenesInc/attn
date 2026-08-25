@@ -1,37 +1,4 @@
-// app/src/components/GardenPanel.tsx
-//
-// The garden, walked. The panel is a stack of places rather than a list that
-// swaps: the root is the garden, and every seed you open is a place of its own
-// with the same shape — title, document, what is under it, what happened to it.
-// Drilling pushes a place, escape pops one, and each place keeps its own scroll
-// offset, so climbing out puts the reader back exactly where they were.
-//
-// The trail is the way back and nothing else: it names the places behind you,
-// never the one you are in. The place you are in is the big title at the top of
-// the page — until you scroll past it, at which point the trail picks it up.
-//
-// One model, two renderers. The trail is the model. The dock draws only the
-// place you are in (`layout="stack"`); fullscreen draws as many levels beside
-// the document as its width holds (`layout="columns"`), which is the same walk
-// with more of it on screen. Both read the same trail and the same scroll
-// memory, so moving between the two sizes keeps your depth and your place
-// instead of restarting the walk.
-//
-// Search rules the panel from one line of type, and two rules hold it together
-// (see docs/plans/2026-08-20-garden-search.md):
-//   browsing is a tree, searching is a list. Text or a tender flattens the
-//   scope's whole subtree into one ranked result list, because a search that
-//   only looked one level down would be a lie — while a bare `is:` value only
-//   re-lenses the level the reader is standing on;
-//   the query is the only filter state. The closed toggle and the scope hints
-//   write tokens into it rather than keeping flags beside it.
-// Picking an answer ends the question: the query clears and the walk lands
-// where that seed actually lives, so a result is a way into the tree rather
-// than a place of its own.
-//
-// Data is the pushed garden snapshot; navigating never fetches. A seed's log and
-// artifacts are read on arrival and re-read on every push, so the page paints
-// instantly and its ledger stays live without polling.
+// See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenScrollMemory, useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';
@@ -66,31 +33,16 @@ interface GardenPanelProps {
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
   onResumeSeed?: (seedId: string) => void;
-  /** Answers whether an artifact's path is really on disk. */
   checkArtifactPath?: (path: string) => Promise<boolean>;
-  /** The list/board switch. Owned by the frame: both views show the same one,
-   *  in the same place, so switching moves nothing. */
   viewToggle?: React.ReactNode;
-  /** Which frame the garden is being read in, for the header control's direction. */
   frame?: 'dock' | 'full';
-  /** Promote to the window, or hand it back to the dock. Absent hides the
-   *  control — the panel still renders anywhere it did before. */
   onToggleFrame?: () => void;
-  /** The bottom of the Escape ladder, below climbing: called when there is no
-   *  place left to climb out of. */
   onEscapeFloor?: () => void;
 }
 
-// How much of the walk the panel draws is decided by how much room it has, not
-// by who rendered it. Below the first threshold there is no space for a list
-// beside a readable document, so the walk stacks one place at a time; above it
-// the walk sits beside what you are reading, and a second list joins at the
-// next. The panel growing across a threshold IS the promotion from the dock to
-// the window — see GardenFrame.
 const COLUMNS_MIN = 1160;
 const THIRD_COLUMN_MIN = 1460;
 
-// The frame control: two corners pulling apart, or back together.
 function FrameGlyph({ direction }: { direction: 'out' | 'in' }) {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -123,9 +75,6 @@ function formatTimestamp(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-// An attach or a detach is bookkeeping: the artifact section above IS its
-// outcome, so the log reads as what people said, and the churn folds away
-// behind a counted disclosure.
 function isSpoken(note: SeedDocumentNote): boolean {
   return note.kind !== 'attach' && note.kind !== 'detach';
 }
@@ -143,8 +92,6 @@ function statusClass(status: string): string {
   }
 }
 
-// A closed seed is one nobody will pick up again. Parking is a pause, not an
-// answer, so a dormant seed is still open work.
 function isClosed(seed: Seed): boolean {
   return seed.status === 'harvested' || seed.status === 'withered';
 }
@@ -153,8 +100,6 @@ function crownOf(seed: Seed): string {
   return (seed.edges ?? []).find((edge) => edge.kind === 'part-of')?.to ?? '';
 }
 
-// The daemon sends plot_progress for a seed that is a plot, and only for one. An
-// empty plot is still a plot: it has to be able to say how to fill it.
 function isPlot(seed: Seed): boolean {
   return Boolean(seed.plot_progress);
 }
@@ -173,12 +118,9 @@ interface GardenIndex {
   children: Map<string, Seed[]>;
   inbound: Map<string, Relation[]>;
   blockers: Map<string, number>;
-  /** Crowns and loose seeds — everything that is not part of something else. */
   roots: Seed[];
 }
 
-// The whole pushed garden, read once. Edges are stored on the seed they point
-// from, so the reverse direction is only knowable by walking every seed.
 function indexGarden(seeds: Seed[]): GardenIndex {
   const index: GardenIndex = {
     byID: new Map(),
@@ -190,8 +132,6 @@ function indexGarden(seeds: Seed[]): GardenIndex {
   for (const seed of seeds) index.byID.set(seed.id, seed);
   for (const seed of seeds) {
     const crown = crownOf(seed);
-    // A child whose crown missed the push (the cap dropped it) is a root here:
-    // filing it under a crown nobody can walk into would hide it everywhere.
     if (crown && index.byID.has(crown)) {
       index.children.set(crown, [...(index.children.get(crown) ?? []), seed]);
     } else {
@@ -215,10 +155,6 @@ function indexGarden(seeds: Seed[]): GardenIndex {
   return index;
 }
 
-// What this seed is tied to, minus what the page already shows: its children are
-// the plot section, so `has part` is dropped. `part of` stays even though the
-// trail usually says it — crossing a blocks edge lands the reader on a seed
-// whose trail names the plot they came from, not the one it belongs to.
 function relationsOf(index: GardenIndex, id: string): Relation[] {
   const rows: Relation[] = [];
   for (const edge of index.byID.get(id)?.edges ?? []) {
@@ -231,9 +167,6 @@ function relationsOf(index: GardenIndex, id: string): Relation[] {
   return rows.concat((index.inbound.get(id) ?? []).filter((relation) => relation.label !== 'has part'));
 }
 
-// A crown's plot and every plot under it. A search from inside a plot covers all
-// of it — matching only direct children would answer "not here" about a seed
-// that is very much here.
 function subtreeOf(index: GardenIndex, rootId: string): Set<string> {
   const wanted = new Set<string>();
   const queue = [rootId];
@@ -247,9 +180,6 @@ function subtreeOf(index: GardenIndex, rootId: string): Set<string> {
   return wanted;
 }
 
-// Where a seed actually lives, root first. Opening an answer walks there, so the
-// trail after a search says what it would have said had the reader found the
-// seed by hand.
 function pathTo(index: GardenIndex, id: string): string[] {
   const path: string[] = [];
   const guard = new Set<string>();
@@ -263,10 +193,6 @@ function pathTo(index: GardenIndex, id: string): string[] {
   return path;
 }
 
-// Only exceptions get words. Most open seeds are planted and unblocked; giving
-// each of them a badge turns a scannable list into a wall, so the pip carries
-// the resting state and the column stays empty until something is true about a
-// seed that a reader would act on.
 function signalOf(seed: Seed, blockers: number): { text: string; tone: string } | null {
   if (blockers > 0) return { text: `blocked by ${blockers}`, tone: 'blocked' };
   if (seed.status === 'growing') return { text: 'growing', tone: 'active' };
@@ -287,8 +213,6 @@ function progressWords(seed: Seed): string {
   return parts.join(' · ');
 }
 
-// Marked runs of a match, rendered in place. Highlighting is color and weight
-// rather than a filled box: a row of boxes reads as decoration at list density.
 function Marked({ text, ranges }: { text: string; ranges: Range[] }) {
   if (ranges.length === 0) return <>{text}</>;
   return (
@@ -308,20 +232,13 @@ interface RowProps {
   seed: Seed;
   blockers: number;
   onOpen: (id: string) => void;
-  /** The row this column was walked through, if any. */
   selected?: boolean;
-  /** The row the arrows are on, while a search is what is on screen. */
   active?: boolean;
   match?: SeedMatch;
-  /** Which plot an answer came out of. Only a flat result list needs it. */
   home?: Seed;
-  /** This row is an answer in the search field's listbox, not a place to walk. */
   option?: boolean;
 }
 
-// One line per seed. The right side is empty for a plain open seed and fills in
-// only when there is something to say; the id appears under the pointer or
-// focus, in a slot that is always reserved, so revealing it never moves a row.
 function SeedRow({ seed, blockers, onOpen, selected, active, match, home, option }: RowProps) {
   const progress = seed.plot_progress;
   const signal = signalOf(seed, blockers);
@@ -370,17 +287,10 @@ interface ListProps {
   selectedId?: string;
   activeId?: string;
   matchByID?: Map<string, SeedMatch>;
-  /**
-   * Name each row's plot, except the one the reader is already standing in.
-   * A flat result list needs it; a level list does not — and inside a plot,
-   * where most answers come from that plot, repeating its name on every row is
-   * a wall of the one fact the reader already has.
-   */
   homes?: boolean;
   hereId?: string | null;
   emptyMessage?: React.ReactNode;
   listId?: string;
-  /** This list is the search field's listbox. A level of the walk is not. */
   options?: boolean;
 }
 
@@ -405,8 +315,6 @@ function SeedList({ seeds, index, onOpen, selectedId, activeId, matchByID, homes
   );
 }
 
-// The log's bookkeeping, counted rather than listed. Attaching eight files
-// wrote eight entries nobody reads; what they produced is the artifact section.
 function BookkeepingDisclosure({ notes }: { notes: SeedDocumentNote[] }) {
   const [shown, setShown] = useState(false);
   return (
@@ -439,10 +347,6 @@ function BookkeepingDisclosure({ notes }: { notes: SeedDocumentNote[] }) {
   );
 }
 
-// One list level of the walk, in the columns renderer. It owns its scroll
-// offset the same way a place does in the stack: the level path is the key, so
-// switching siblings inside a column never moves it, and climbing back into a
-// column you have already read puts you where you were.
 function ColumnList({
   levelKey,
   seeds,
@@ -459,8 +363,6 @@ function ColumnList({
   onOpen: (id: string) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  // Restore after the rows are laid out: a shorter list clamps the offset to
-  // nothing, so this cannot happen before the rows exist.
   useLayoutEffect(() => {
     const el = ref.current;
     if (el) el.scrollTop = memory.current.get(`col:${levelKey}`) ?? 0;
@@ -486,9 +388,6 @@ function ColumnList({
   );
 }
 
-// A plot's drain state, as proportion rather than arithmetic. The counts beside
-// it carry the numbers; this carries how far along it is at a glance, which is
-// the question a forty-five child plot is actually asked.
 function ProgressBar({ seed }: { seed: Seed }) {
   const p = seed.plot_progress;
   if (!p || p.total === 0) return null;
@@ -526,22 +425,10 @@ export function GardenPanel({
   onToggleFrame,
   onEscapeFloor,
 }: GardenPanelProps) {
-  // The places walked into, root last. Empty is the garden itself.
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
-  // The one filter state. Closed seeds stay out of it until a token asks for
-  // them: the garden grows without bound and most of what it holds is done.
   const [query, setQuery] = useState('');
-  // Where the search looks, when that is no longer where the reader stands.
-  // Widening out of a plot is a property of the query, not a move — the trail
-  // stays, so you can widen, look, and go back to what you were doing. Stored
-  // as the plot it was asked for, so walking somewhere else drops it by
-  // construction rather than by an effect that fires a frame late.
   const [wideIn, setWideIn] = useState<string | null>(null);
-  // Where the arrows are, and which question they are walking. A new question
-  // starts at its own best answer; keeping the answer's identity beside the
-  // index is what stops one frame of the new results being drawn with the old
-  // row highlighted.
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
   const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -553,16 +440,8 @@ export function GardenPanel({
 
   const index = useMemo(() => indexGarden(seeds), [seeds]);
 
-  // Opening the trail is about the trail you are looking at. Moving gives you a
-  // different one, so it folds again rather than staying open behind your back.
   useEffect(() => setTrailOpen(false), [trail.length]);
 
-  // The panel sizes itself to its own box, not to the window: it is read in a
-  // dock slot, in the window, and — while the two exchange places — at every
-  // width in between. A callback ref rather than an effect, because the element
-  // it has to observe is replaced when the renderer changes, and because the
-  // measurement has to land in the same commit as the render that caused it or
-  // the first paint is drawn at the wrong width.
   const measurePanel = useCallback((node: HTMLDivElement) => {
     setPanelWidth(node.clientWidth);
     const observer = new ResizeObserver(([entry]) => setPanelWidth(entry.contentRect.width));
@@ -571,9 +450,6 @@ export function GardenPanel({
   }, []);
   const layout = panelWidth >= COLUMNS_MIN ? 'columns' : 'stack';
 
-  // A crown can leave the garden while the reader stands inside its plot. Trim
-  // the trail to what still exists rather than stranding them in a place that
-  // is gone.
   const livingTrail = useMemo(() => {
     const alive: string[] = [];
     for (const id of trail) {
@@ -590,32 +466,17 @@ export function GardenPanel({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const pageKeyRef = useRef(pageKey);
-  // Where the reader was on every place they have been. Losing this is losing
-  // their place, which is the whole complaint this panel is answering. Shared
-  // with the other size of this panel, for the same reason the trail is.
   const scrollMemory = useRef<Map<string, number>>(gardenScrollMemory);
-  // How we arrived, and which row we came out of — the two facts the arrival
-  // needs to feel like a movement rather than a swap.
   const arrival = useRef<{ direction: 'in' | 'out'; fromRow: string }>({ direction: 'in', fromRow: '' });
 
   const parsed = useMemo(() => parseQuery(query), [query]);
-  // Two questions, not one. `filtering` is whether the query says anything at
-  // all, and it drives the field's own state. `searching` is whether the query
-  // is a search: text or a tender flattens the scope's whole subtree, while a
-  // bare `is:` value only re-lenses the seeds already on screen.
   const filtering = parsed.active;
   const searching = parsed.searches;
-  // Widening holds only while a search is running, and only in the plot it was
-  // asked for: clearing the query or walking somewhere else puts the scope back
-  // where the reader is, without anything having to notice and undo it.
   const wide = searching && wideIn !== null && wideIn === plotId;
-  // What the arrows are walking. Two queries in two plots are two questions
-  // even when the text is the same.
   const question = `${plotId ?? ''} ${query}`;
   const activeIndex = walk.of === question ? walk.index : 0;
-  // The searchable garden, lowercased once per snapshot. Doing this per
-  // keystroke is what makes client-side search feel slow; see the receipts in
-  // gardenSearch.bench.ts.
+  // Lowercased once per snapshot: doing it per keystroke is what makes
+  // client-side search feel slow; receipts in gardenSearch.bench.ts.
   const entries = useMemo(
     () => buildIndex(seeds, { tenderOf, blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0 }),
     [seeds, index],
@@ -626,9 +487,6 @@ export function GardenPanel({
     return map;
   }, [entries]);
 
-  // The lens the query names, applied to one level of the walk. The same
-  // predicate the search uses, so `is:closed` means one thing in this panel and
-  // not two.
   const lens = useCallback(
     (rows: Seed[]) =>
       rows.filter((seed) => {
@@ -638,8 +496,6 @@ export function GardenPanel({
     [entryByID, parsed],
   );
 
-  // What a query searches: the plot's whole subtree, or the whole garden at the
-  // root. Both are flat — searching is a list.
   const plotPool = useMemo(() => {
     if (!plotId) return entries;
     const wanted = subtreeOf(index, plotId);
@@ -652,15 +508,10 @@ export function GardenPanel({
     for (const match of results) map.set(match.seed.id, match);
     return map;
   }, [results]);
-  // The two answers the panel owes a reader looking at fewer rows than they
-  // expected: what a wider scope would find, and what the closed lens hides.
-  // Both are counted, never implied.
   const gardenWide = useMemo(
     () => (searching && plotId && !wide ? searchGarden(entries, parsed).length : 0),
     [searching, plotId, wide, entries, parsed],
   );
-  // While widened, the count the reader needs is the other one: how much of
-  // this answer is in the plot they are standing in.
   const inPlot = useMemo(
     () => (searching && wide ? searchGarden(plotPool, parsed).length : 0),
     [searching, wide, plotPool, parsed],
@@ -691,10 +542,6 @@ export function GardenPanel({
     });
   }, [rememberScroll, setTrail]);
 
-  // Clicking in a column selects at that level: the trail is truncated to the
-  // column you clicked in and your row becomes its new end. Drilling deeper and
-  // switching siblings are the same gesture, which is what makes a column a
-  // column rather than a list that happens to sit beside another one.
   const selectAtLevel = useCallback((level: number, id: string) => {
     setTrail((prev) => {
       arrival.current = { direction: prev.length > level ? 'out' : 'in', fromRow: '' };
@@ -702,9 +549,6 @@ export function GardenPanel({
     });
   }, [setTrail]);
 
-  // Picking an answer ends the question. The walk lands where the seed actually
-  // lives, so the trail after a search reads the same as it would have read had
-  // the reader found it by hand.
   const openResult = useCallback((id: string) => {
     rememberScroll();
     arrival.current = { direction: 'in', fromRow: '' };
@@ -727,30 +571,17 @@ export function GardenPanel({
     setWideIn((cur) => (cur === null ? plotId : null));
     focusSearch();
   }, [focusSearch, plotId]);
-  // The closed lens is a token in the query, so the way in and the way out are
-  // one call.
   const toggleClosedLens = useCallback(() => {
     setQuery((cur) => toggleToken(cur, 'is:any'));
     focusSearch();
   }, [focusSearch]);
 
-  // Escape goes down exactly one level: it clears the query, else climbs the
-  // trail, else hands the garden down a frame. The stack is LIFO and each rung
-  // pushes when its own condition turns on, so most of the time the ordering
-  // comes for free — you type before you can clear, you walk in before you can
-  // climb. Source order is what decides when two rungs arm in the SAME commit,
-  // which is what reopening the garden onto a trail it already had does: the
-  // floor is registered first so the climb lands above it.
-  //
-  // React runs child effects before parent ones, so the floor has to be
-  // registered HERE rather than in GardenFrame: pushed from the frame it would
-  // land above the climb and swallow it.
+  // Source order decides the Escape ladder, and HERE rather than in GardenFrame,
+  // since React runs child effects before parent ones.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);
   useEscapeStack(climbOne, isOpen && livingTrail.length > 0);
   useEscapeStack(() => setQuery(''), isOpen && query !== '');
 
-  // Read the seed's log and artifact set on arrival, and again on every push:
-  // notes and edges change the garden without changing the seed's revision.
   const hereId = here?.id ?? '';
   useEffect(() => {
     if (!isOpen || !hereId || !fetchSeedDocument) {
@@ -772,9 +603,6 @@ export function GardenPanel({
     };
   }, [hereId, fetchSeedDocument, isOpen, seeds]);
 
-  // Arrow keys walk the rows of whichever place is open; enter opens the row
-  // under focus (the button does that itself), left climbs. Focus is real DOM
-  // focus so the ring is the browser's and screen readers follow it.
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;
     if (event.key === 'ArrowLeft') {
@@ -796,16 +624,10 @@ export function GardenPanel({
     rows[next].scrollIntoView({ block: 'nearest' });
   }, [climbOne, livingTrail.length]);
 
-  // In columns the arrows mean what they look like: up and down walk the column
-  // under focus, right goes into the row you are on, left comes back out. Enter
-  // is the button's own click, so it needs no handler here.
   const onColumnsKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const keys = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'];
     if (!keys.includes(event.key)) return;
     const active = document.activeElement as HTMLElement | null;
-    // With nothing focused yet, the arrows walk the level the reader is
-    // standing in — the deepest column — rather than doing nothing until
-    // something is clicked.
     const walked = columnsRef.current?.querySelectorAll<HTMLElement>('[data-column]');
     const column =
       active?.closest<HTMLElement>('[data-column]') ?? (walked?.length ? walked[walked.length - 1] : null);
@@ -837,11 +659,6 @@ export function GardenPanel({
   const resultSeeds = useMemo(() => results.map((match) => match.seed), [results]);
   const activeSeed = resultSeeds.length > 0 ? resultSeeds[Math.min(activeIndex, resultSeeds.length - 1)] : undefined;
 
-  // The answers are walked from the search field itself — the reader never has
-  // to leave it to pick one. With no answers to walk, the field is not holding
-  // anything, so the arrows go where they would have gone anyway: into the
-  // walk. Otherwise the keyboard is stranded in the field the moment a question
-  // ends — which is exactly when picking an answer clears it.
   const onSearchKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       if (resultSeeds.length === 0) {
@@ -867,11 +684,6 @@ export function GardenPanel({
     }
   };
 
-  // The panel's whole keyboard, on the panel itself — it already carries the
-  // role, and every row it walks is a descendant of it. `/` and ⌘F return to
-  // the field from anywhere; `/` is only a shortcut where it is not a
-  // character, so a note composer keeps it, and anything else typed into a
-  // field belongs to that field.
   const onPanelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
@@ -886,9 +698,6 @@ export function GardenPanel({
     else onPageKeyDown(event);
   };
 
-  // Restore the reader's place, then hand focus back to the row they left. The
-  // focus is deliberately scroll-free: the scroll offset above already put the
-  // row where it was, and letting the browser scroll to it would undo that.
   useLayoutEffect(() => {
     pageKeyRef.current = pageKey;
     const el = viewportRef.current;
@@ -906,9 +715,6 @@ export function GardenPanel({
     el.focus({ preventScroll: true });
   }, [pageKey]);
 
-  // One handler for both jobs the scroll does: hold the reader's place, and
-  // hand the current title to the trail once the page has scrolled past it.
-  // The state only ever changes on the crossing, so a scroll costs no renders.
   const onViewportScroll = useCallback(() => {
     const el = viewportRef.current;
     if (!el) return;
@@ -921,15 +727,8 @@ export function GardenPanel({
   if (!isOpen) return null;
 
   const children = here ? index.children.get(here.id) ?? [] : [];
-  // What the closed toggle would bring in, at the level the reader stands on.
   const levelSeeds = here ? children : index.roots;
   const closedHere = levelSeeds.reduce((n, seed) => (isClosed(seed) ? n + 1 : n), 0);
-  // One closed control, in one place, in both renderers. Its count is what
-  // pressing it does — how many rows it brings in, or how many it would take
-  // away — and it stands down when the query names a lens of its own, because
-  // then the query is already the statement and a toggle beside it would only
-  // argue with it. It stays on screen while it is on, so the way in is also the
-  // way out.
   const closedOn = parsed.is.includes('any');
   const otherLens = parsed.is.some((value) => value !== 'any');
   const closedCount = !searching
@@ -939,9 +738,6 @@ export function GardenPanel({
       : hiddenClosed;
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
-  // The pushed snapshot paints the page; the fetched document adds the log and
-  // the artifact set when it lands. Guard on identity so a stale answer for the
-  // place behind never renders under the place in front.
   const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
   const artifacts = seedDoc?.artifacts ?? [];
   const notes = seedDoc?.notes ?? [];
@@ -950,9 +746,6 @@ export function GardenPanel({
   const spoken = notes.filter(isSpoken);
   const bookkeeping = notes.length - spoken.length;
   const relations = here ? relationsOf(index, here.id) : [];
-  // The walk as list levels. Level 0 is the garden; level k is what is under
-  // the seed selected at level k-1. The stack renderer draws the last one; the
-  // columns renderer draws as many as fit beside the reader.
   const levels: { key: string; seeds: Seed[]; selectedId: string }[] = [
     { key: 'root', seeds: lens(index.roots), selectedId: livingTrail[0] ?? '' },
   ];
@@ -966,29 +759,14 @@ export function GardenPanel({
       selectedId: livingTrail[depth + 1] ?? '',
     });
   }
-  // Width decides how many levels are on screen, not depth. The reader is the
-  // point, so it keeps 560px before a column is allowed to exist and each column
-  // costs 300 — which is why a five-deep walk looks like a two-deep one at the
-  // same window size, and why widening the window shows you more of where you
-  // came from instead of rearranging where you are.
   const maxColumns = panelWidth >= THIRD_COLUMN_MIN ? 3 : 2;
   const visibleLevels = levels.slice(Math.max(0, levels.length - maxColumns));
   const firstVisibleLevel = levels.length - visibleLevels.length;
 
-  // What the trail carries is what the columns cannot. A visible column already
-  // says which of its rows you picked, so repeating those steps in the trail
-  // would state the same thing twice; the trail's steps start above the leftmost
-  // column and stop before the place you are in. That is why the trail grows one
-  // step per level of depth the window could not hold, and stays empty until it
-  // has something to say. A search replaces the columns, so the trail goes back
-  // to carrying the whole way in.
   const trailAncestors =
     layout === 'columns' && !searching
       ? livingTrail.slice(0, Math.min(firstVisibleLevel, livingTrail.length - 1))
       : livingTrail.slice(0, -1);
-  // Past three steps the trail costs more room than it returns, so the middle
-  // folds. Garden and the two steps nearest you are the ones a reader actually
-  // aims at; the rest are one click away and never gone.
   const foldTrail = !trailOpen && trailAncestors.length > 3;
   const shownAncestors = foldTrail ? trailAncestors.slice(-2) : trailAncestors;
   const foldedCount = trailAncestors.length - shownAncestors.length;
@@ -1047,9 +825,6 @@ export function GardenPanel({
       </nav>
       {viewToggle}
       {closedToggle && (
-        // The way in and the way out are the same button. It writes `is:any`
-        // into the query rather than keeping a flag beside it, so the line of
-        // type stays the only filter state there is.
         <button
           type="button"
           className="garden-chrome__scope"
@@ -1079,9 +854,6 @@ export function GardenPanel({
     </div>
   );
 
-  // Search and filters are one line and one state. The field is a line of type,
-  // not a box: at list density a bordered control reads as chrome before it
-  // reads as an invitation.
   const searchLine = (
     <div className={`garden-search${filtering ? ' is-active' : ''}`}>
       <span className="garden-search__glyph" aria-hidden="true">/</span>
@@ -1144,8 +916,6 @@ export function GardenPanel({
     </div>
   );
 
-  // A no-results state names the query and offers only the moves that would
-  // actually find something.
   const nothingFound = (
     <div className="garden-nothing">
       <p className="garden-nothing__line">
@@ -1191,9 +961,6 @@ export function GardenPanel({
     </div>
   );
 
-  // The answer, as one flat ranked list. It replaces the walk's lists rather
-  // than sitting beside them: browsing is a tree, searching is a list, and two
-  // of them on screen at once would be two answers to one question.
   const resultsNode = resultSeeds.length === 0 ? nothingFound : (
     <SeedList
       seeds={resultSeeds}
@@ -1208,9 +975,6 @@ export function GardenPanel({
     />
   );
 
-  // The seed itself. In columns its plot is already the column to the left, so
-  // the reader does not repeat it — the same document either way, never the
-  // same list twice.
   const readerNode = here ? (
     <>
       <div className="garden-head" ref={headerRef}>
@@ -1260,8 +1024,6 @@ export function GardenPanel({
         <section className="garden-section">
           <h3>Plot</h3>
           {lens(children).length === 0 && closedHere > 0 ? (
-            // A blank list over a plot that holds finished work reads as lost
-            // work, so it says where the finished work went.
             <p className="garden-empty">
               Nothing open here. {closedHere} closed {closedHere === 1 ? 'seed is' : 'seeds are'} behind the
               closed toggle above.
@@ -1343,9 +1105,6 @@ export function GardenPanel({
     </p>
   );
 
-  // ── Columns. The garden starts as one list and grows into Miller as you walk
-  // into it: three empty panes would be a dead first frame, and at the root
-  // there is nothing to put beside the list anyway.
   if (layout === 'columns') {
     const panes = searching ? 1 + (here ? 1 : 0) : visibleLevels.length + (here ? 1 : 0);
     return (
@@ -1391,7 +1150,6 @@ export function GardenPanel({
     );
   }
 
-  // ── Stack. One place at a time, which is all the dock has room for.
   return (
     <div ref={measurePanel} className="garden-panel" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
       {trailNav}

@@ -153,11 +153,6 @@ func TestReconcileGroundTruthLines(t *testing.T) {
 	})
 }
 
-// The end-to-end wiring test: a verdict mentioning a PR that the store
-// already knows is merged gets a Ground-truth check line appended to the
-// posted reconciliation comment, without touching the verdict fields
-// themselves (status still doesn't move; What's left / Evidence text is
-// unchanged).
 func TestReconcileGroundTruthAnnotatesMergedPR(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -226,7 +221,6 @@ func TestReconcileGroundTruthAnnotatesMergedPR(t *testing.T) {
 	}
 }
 
-// A verdict referencing a PR that is still open produces no annotation.
 func TestReconcileGroundTruthSilentWhenPROpen(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -280,10 +274,7 @@ func TestReconcileGroundTruthSilentWhenPROpen(t *testing.T) {
 	}
 }
 
-// runGroundTruthReconcile drives the executor for a fresh daemon whose ticket
-// cwd is a temp git repo with a github.com origin, using a verdict whose
-// What's left is the given text, and returns the single posted reconcile
-// comment. Callers arm d.ticketReconcilePRFetch (or seed tracked PRs) first.
+// Callers arm d.ticketReconcilePRFetch (or seed tracked PRs) first.
 func runGroundTruthReconcile(t *testing.T, d *Daemon, ticketID, whatsLeft string) string {
 	t.Helper()
 
@@ -332,10 +323,8 @@ func runGroundTruthReconcile(t *testing.T, d *Daemon, ticketID, whatsLeft string
 	return comments[0]
 }
 
-// A referenced PR absent from the tracked open set gets one targeted lookup;
-// merged=true produces the annotation. This is the production shape of the
-// original bug: merged PRs vanish from the is:open poller sweep, so absence +
-// lookup is the only path that fires against live data.
+// Merged PRs vanish from the is:open poller sweep, so absence + targeted lookup
+// is the only path that fires against live data.
 func TestReconcileGroundTruthLooksUpUntrackedMergedRef(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -356,7 +345,6 @@ func TestReconcileGroundTruthLooksUpUntrackedMergedRef(t *testing.T) {
 	}
 }
 
-// closed-but-not-merged also annotates, as "closed".
 func TestReconcileGroundTruthLooksUpUntrackedClosedRef(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
@@ -369,8 +357,6 @@ func TestReconcileGroundTruthLooksUpUntrackedClosedRef(t *testing.T) {
 	}
 }
 
-// A lookup error degrades to silence — the annotation only fires on positive
-// knowledge.
 func TestReconcileGroundTruthUntrackedFetchErrorSilent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
@@ -383,7 +369,6 @@ func TestReconcileGroundTruthUntrackedFetchErrorSilent(t *testing.T) {
 	}
 }
 
-// A still-open lookup result is silent.
 func TestReconcileGroundTruthUntrackedOpenSilent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
@@ -396,8 +381,6 @@ func TestReconcileGroundTruthUntrackedOpenSilent(t *testing.T) {
 	}
 }
 
-// No fetch seam and no registered GitHub client: the lookup leg is skipped
-// entirely and the comment posts without annotations.
 func TestReconcileGroundTruthUntrackedNoClientSilent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -407,7 +390,6 @@ func TestReconcileGroundTruthUntrackedNoClientSilent(t *testing.T) {
 	}
 }
 
-// The lookup leg is capped at groundTruthMaxLookups calls per reconcile.
 func TestGroundTruthUntrackedLinesCapsLookups(t *testing.T) {
 	calls := 0
 	fetch := func(repo string, number int) (string, bool, string, error) {
@@ -428,7 +410,6 @@ func TestGroundTruthUntrackedLinesCapsLookups(t *testing.T) {
 	}
 }
 
-// Tracked refs never consume lookups: the deterministic leg owns them.
 func TestGroundTruthUntrackedLinesSkipsTrackedRefs(t *testing.T) {
 	calls := 0
 	fetch := func(repo string, number int) (string, bool, string, error) {
@@ -446,7 +427,6 @@ func TestGroundTruthUntrackedLinesSkipsTrackedRefs(t *testing.T) {
 	}
 }
 
-// An expired context stops the lookup leg immediately.
 func TestGroundTruthUntrackedLinesRespectsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

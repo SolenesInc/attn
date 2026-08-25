@@ -12,20 +12,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// pluginFixturePeer is the plugin side of the daemon socket, as the end-to-end
-// driver fixture speaks it.
-//
-// attn is a full-duplex JSON-RPC peer: it sends driver.session_closed the
-// instant a session's PTY exits, which can land while one of the plugin's own
-// reports is still waiting for its response — the daemon answers a report on
-// its read loop after broadcasting the state change, so any pause between
-// those two steps lets a close overtake the answer. Every message therefore
-// arrives at one reader that routes by shape: a message carrying a method is a
-// request to handle, a message carrying only an id is the response someone is
-// waiting for. The shipped SDK (sdk/plugin) dispatches the same way. A peer
-// that assumed its response came next would instead lose whichever message
-// attn sent first, and because the ordering is a scheduling race it would lose
-// it rarely — which is what this fixture used to do.
+// attn is a full-duplex JSON-RPC peer, so one reader routes by shape — a method is
+// a request, a bare id a response. A peer assuming its response came next loses one.
 type pluginFixturePeer struct {
 	t       *testing.T
 	conn    net.Conn
@@ -33,17 +21,12 @@ type pluginFixturePeer struct {
 	nextID  int
 }
 
-// newPluginFixturePeer takes over reading conn. Nothing else may read from it:
-// the peer is the only place that knows which messages are responses it is
-// waiting for and which are requests to answer.
+// Takes over reading conn; nothing else may read from it.
 func newPluginFixturePeer(t *testing.T, conn net.Conn) *pluginFixturePeer {
-	// Id 1 is the hello the fixture writes before handing the socket over, so
-	// generated ids start after it.
+	// Id 1 is the hello the fixture writes before handing the socket over.
 	return &pluginFixturePeer{t: t, conn: conn, decoder: json.NewDecoder(conn), nextID: 1}
 }
 
-// call sends a request and returns its response, answering every request attn
-// sends while that response is outstanding.
 func (p *pluginFixturePeer) call(method string, params interface{}) jsonRPCMessage {
 	p.t.Helper()
 	payload, err := json.Marshal(params)
@@ -63,8 +46,6 @@ func (p *pluginFixturePeer) call(method string, params interface{}) jsonRPCMessa
 	return p.awaitResponse(id)
 }
 
-// callOK is call for the requests whose only interesting outcome is that attn
-// accepted them.
 func (p *pluginFixturePeer) callOK(method string, params interface{}) {
 	p.t.Helper()
 	if response := p.call(method, params); response.Error != nil {
@@ -72,7 +53,6 @@ func (p *pluginFixturePeer) callOK(method string, params interface{}) {
 	}
 }
 
-// awaitResponse returns the response to a request already on the wire.
 func (p *pluginFixturePeer) awaitResponse(id string) jsonRPCMessage {
 	p.t.Helper()
 	for {
@@ -91,7 +71,6 @@ func (p *pluginFixturePeer) awaitResponse(id string) jsonRPCMessage {
 	}
 }
 
-// serve answers attn's requests until it closes the connection.
 func (p *pluginFixturePeer) serve() {
 	for {
 		message, err := p.read()
@@ -120,14 +99,10 @@ func (p *pluginFixturePeer) handle(request jsonRPCMessage) {
 	case "driver.spawn", "driver.resume":
 		p.launch(request)
 	default:
-		// Answering instead of ignoring: an unanswered request holds the daemon's
-		// caller for its full 30s timeout and says nothing about why.
 		_ = p.write(jsonRPCFailure(request.ID, jsonRPCMethodNotFound, fmt.Sprintf("unknown method %q", request.Method)))
 	}
 }
 
-// launch answers a launch request the way a driver plugin does: argv first, so
-// attn can spawn the PTY, then the reports that move the session.
 func (p *pluginFixturePeer) launch(request jsonRPCMessage) {
 	p.t.Helper()
 	var params pluginDriverSpawnParams
@@ -194,12 +169,8 @@ func (p *pluginFixturePeer) write(message jsonRPCMessage) error {
 	return json.NewEncoder(p.conn).Encode(message)
 }
 
-// TestPluginFixturePeerAnswersRequestArrivingBeforeItsResponse pins the
-// ordering the end-to-end fixture used to fail on. Under CI load the daemon
-// wrote driver.session_closed before answering the report the fixture was
-// waiting for; the fixture treated that as fatal, died, and the daemon's close
-// notification came back EOF. Here the same order is scripted rather than
-// raced, so the peer's duplex handling is proven on every run.
+// The ordering the end-to-end fixture used to fail on: under CI load the daemon
+// wrote driver.session_closed before answering the report the fixture awaited.
 func TestPluginFixturePeerAnswersRequestArrivingBeforeItsResponse(t *testing.T) {
 	closeLog := filepath.Join(t.TempDir(), "driver-close.jsonl")
 	t.Setenv("ATTN_DRIVER_FIXTURE_CLOSE_LOG", closeLog)
@@ -231,9 +202,6 @@ func TestPluginFixturePeerAnswersRequestArrivingBeforeItsResponse(t *testing.T) 
 	}
 }
 
-// scriptCloseBeforeReportResponse plays the daemon: read the peer's report,
-// send driver.session_closed before answering it, and answer only once the
-// close is acknowledged.
 func scriptCloseBeforeReportResponse(conn net.Conn) error {
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)

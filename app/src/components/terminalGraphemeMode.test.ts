@@ -7,9 +7,8 @@ import {
   type GraphemeModeTerminal,
 } from './terminalGraphemeMode';
 
-// DECSET 2027 — the bytes we expect written to the model to enable clustering.
 const ENABLE_2027 = new TextEncoder().encode('\x1b[?2027h');
-const RIS = new TextEncoder().encode('\x1bc'); // ESC c, full reset
+const RIS = new TextEncoder().encode('\x1bc');
 const FAMILY = new TextEncoder().encode('\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}');
 
 // A terminal that records every write (copied, since writes are buffer views).
@@ -31,7 +30,7 @@ const concat = (...arrs: Uint8Array[]) => {
 
 describe('enableGraphemeClustering', () => {
   it('writes DECSET 2027 unconditionally', () => {
-    const term = recordingTerminal(true); // already on — still writes
+    const term = recordingTerminal(true);
     enableGraphemeClustering(term);
     expect(term.writes).toEqual([bytes(ENABLE_2027)]);
   });
@@ -59,10 +58,6 @@ describe('writeReassertingClustering', () => {
     expect(carry).toBe(false);
   });
 
-  // The regression the reviewer asked for: a RIS followed by a clustered emoji
-  // in ONE chunk. Clustering must be re-enabled BETWEEN the reset and the emoji
-  // bytes — if the emoji reached the model first it would parse into split cells
-  // before any re-enable. We assert the exact write order at the model boundary.
   it('re-enables clustering between a RIS and emoji in the same chunk', () => {
     const term = recordingTerminal();
     const carry = writeReassertingClustering(term, concat(RIS, FAMILY), false);
@@ -73,7 +68,6 @@ describe('writeReassertingClustering', () => {
   it('handles several RIS in one chunk, re-enabling after each', () => {
     const term = recordingTerminal();
     writeReassertingClustering(term, concat(RIS, FAMILY, RIS, FAMILY), false);
-    // The model receives, in order: reset, enable, family, reset, enable, family.
     expect(term.writes.flat()).toEqual(bytes(concat(RIS, ENABLE_2027, FAMILY, RIS, ENABLE_2027, FAMILY)));
     // Exactly one re-enable per reset (0x3f is the '?' of ESC[?2027h).
     const enables = term.writes.filter((w) => w.length === ENABLE_2027.length && w[2] === 0x3f);
@@ -82,11 +76,9 @@ describe('writeReassertingClustering', () => {
 
   it('reports a lone trailing ESC and completes a boundary-straddling RIS next call', () => {
     const term = recordingTerminal();
-    // Chunk 1 ends on a lone ESC (the start of a RIS split across the boundary).
     const carry = writeReassertingClustering(term, Uint8Array.from([0x41, 0x1b]), false);
     expect(carry).toBe(true);
     term.writes.length = 0;
-    // Chunk 2 opens with 'c', completing the RIS, then an emoji.
     const carry2 = writeReassertingClustering(term, concat(Uint8Array.from([0x63]), FAMILY), carry);
     expect(term.writes).toEqual([[0x63], bytes(ENABLE_2027), bytes(FAMILY)]);
     expect(carry2).toBe(false);
@@ -97,7 +89,6 @@ describe('writeReassertingClustering', () => {
     const carry = writeReassertingClustering(term, Uint8Array.from([0x1b]), false);
     expect(carry).toBe(true);
     term.writes.length = 0;
-    // Next chunk is a CSI ("[m…"), not a RIS — no re-enable injected.
     const carry2 = writeReassertingClustering(term, Uint8Array.from([0x5b, 0x6d]), carry);
     expect(term.writes).toEqual([[0x5b, 0x6d]]);
     expect(carry2).toBe(false);

@@ -19,10 +19,6 @@ func callAgentPeek(t *testing.T, d *Daemon, target string) protocol.Response {
 	})
 }
 
-// Peek assembles everything from what the daemon already holds: the store
-// snapshot (state, todos, workspace), the transcript file, and nothing else
-// when no screen snapshot is available — a backend that cannot serve one
-// degrades to an absent screen, never an error.
 func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
@@ -66,8 +62,6 @@ func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
 	}
 }
 
-// The address book prints 8-char short ids, so peek must resolve a unique
-// prefix — and refuse an ambiguous one by name rather than guessing.
 func TestHandleAgentPeekResolvesPrefixesAndNamesFailures(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	addCharacterizationSession(t, d, "aaa-first", protocol.SessionAgentClaude, protocol.SessionStateIdle)

@@ -1,34 +1,19 @@
-// Fuzzy file-path scoring for palette finders. A pure, headless-testable model of
-// the ActionMenu scorer, widened from substring terms to a Cmd+P-style subsequence
-// match over a file's path and title — so "kbidx" finds "knowledge/index.md".
-// No React, no daemon: feed it a candidate list + a query.
 
-// The minimum a file needs to be rankable. Deliberately narrower than any one
-// caller's type: NotebookEntry (and any future file-index shape) satisfies it
-// structurally, so the scorer stays independent of what the files mean.
 export interface FileCandidate {
   path: string;
   title?: string;
-  // ISO timestamp, used only to break score ties (most recent first).
   updated?: string;
 }
 
-// The last path segment (filename) of a path. Pure string op; index paths are
-// always forward-slashed (daemon-normalized), so no platform handling.
+// Index paths are always forward-slashed (daemon-normalized), so no platform handling.
 export function finderBasename(path: string): string {
   const slash = path.lastIndexOf('/');
   return slash === -1 ? path : path.slice(slash + 1);
 }
 
-// Characters that begin a "word" in a path, so a match right after one is a
-// stronger signal (the start of a folder/file name, a word inside a kebab/snake
-// name, or after a dot).
 const WORD_BOUNDARY = /[/\-_. ]/;
 
-// Score how well `query` subsequence-matches `text` (both already lowercased).
-// 0 means `query` is not a subsequence of `text` at all. A higher score rewards
-// contiguous runs and matches at word boundaries, so "index" ranks the basename
-// over a scattered match deep in a path.
+// Both arguments must already be lowercased. 0 means `query` is not a subsequence
 function subsequenceScore(text: string, query: string): number {
   if (query === '') return 1;
   let score = 0;
@@ -44,16 +29,16 @@ function subsequenceScore(text: string, query: string): number {
         break;
       }
     }
-    if (found === -1) return 0; // not a subsequence — disqualify
+    if (found === -1) return 0;
     score += 1;
     if (found === prevMatch + 1) {
       run += 1;
-      score += run * 2; // reward a contiguous run, growing with its length
+      score += run * 2;
     } else {
       run = 0;
     }
     if (found === 0 || WORD_BOUNDARY.test(text[found - 1])) {
-      score += 3; // match begins a word/segment
+      score += 3;
     }
     prevMatch = found;
     from = found + 1;
@@ -61,9 +46,6 @@ function subsequenceScore(text: string, query: string): number {
   return score;
 }
 
-// Score one candidate against a query: the best of its path and its title, with
-// the basename weighted a touch higher (finders are filename-first). Returns 0
-// when neither the path nor the title contains the query as a subsequence.
 export function scoreFile(entry: FileCandidate, query: string): number {
   const q = query.toLowerCase().trim();
   if (q === '') return 1;
@@ -73,24 +55,16 @@ export function scoreFile(entry: FileCandidate, query: string): number {
   const pathScore = subsequenceScore(path, q);
   const baseScore = subsequenceScore(base, q);
   const titleScore = subsequenceScore(title, q);
-  // The basename match (when it exists) is the most intentional, so give it the
-  // strongest weight; fall back to the broader path/title matches otherwise.
   return Math.max(pathScore, baseScore * 1.5, titleScore * 0.9);
 }
 
-// Order two candidates when their scores tie: most-recently-updated first (the
-// live files you're likely reaching for), then by path for a stable, predictable
-// list.
 function tieBreak(a: FileCandidate, b: FileCandidate): number {
   const au = a.updated ?? '';
   const bu = b.updated ?? '';
-  if (au !== bu) return au < bu ? 1 : -1; // updated desc (ISO strings sort lexically)
+  if (au !== bu) return au < bu ? 1 : -1;
   return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 }
 
-// Rank a file index for `query`: drop non-matches, sort best-first (ties broken
-// by recency then path), and cap at `limit` so a huge tree can't flood the list.
-// An empty query lists everything (recency-ordered), capped the same way.
 export function rankFiles<T extends FileCandidate>(
   files: T[],
   query: string,

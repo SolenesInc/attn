@@ -10,27 +10,14 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// sqlJobStore satisfies the jobs.Store seam.
 var _ jobs.Store = (*sqlJobStore)(nil)
 
-// sqlJobStore adapts the profile SQLite store to the jobs.Store seam so the
-// durable job queue persists in ~/.attn[-profile]/attn.db. It lives in the daemon
-// (which imports both internal/jobs and internal/store) so neither of those
-// packages depends on the other.
-//
-// The single-instance lock is a file lock in the daemon's own data root, beside
-// the attn.pid that already marks one daemon per root — one queue per daemon.
-// config.ValidateDaemonIsolation refuses to start a daemon whose data root is not
-// the profile data dir unless its database is separately isolated, so a root of
-// its own always means a store of its own.
 type sqlJobStore struct {
 	store   *store.Store
 	lockDir string
 	log     jobs.LogFunc
 }
 
-// newSQLJobStore builds the adapter over the daemon's store, locking under the
-// daemon's data root.
 func (d *Daemon) newSQLJobStore() *sqlJobStore {
 	lockDir := d.dataRoot
 	if lockDir == "" {
@@ -39,11 +26,6 @@ func (d *Daemon) newSQLJobStore() *sqlJobStore {
 	return &sqlJobStore{store: d.store, lockDir: lockDir, log: d.logf}
 }
 
-// jobSubject names the entity a background job acts on — the workspace, session,
-// or ticket id its handler operates against. Every one of the daemon's kinds
-// coalesces per subject, so the coalescing key IS the subject, and this is the
-// one place that equivalence is written down: a handler asks for the subject and
-// does not need to know it is reading a queue key.
 func jobSubject(job *jobs.Job) string {
 	if job == nil {
 		return ""
@@ -109,9 +91,6 @@ func recordsToJobs(recs []store.JobRecord) []*jobs.Job {
 	return out
 }
 
-// jobToRecord maps a queue job to its store row. Payload and Result are carried
-// as opaque JSON text; the store never interprets them. CommitGuard is per-run
-// and never persisted.
 func jobToRecord(j *jobs.Job) store.JobRecord {
 	return store.JobRecord{
 		ID:          j.ID,
@@ -150,8 +129,6 @@ func recordToJob(rec store.JobRecord) *jobs.Job {
 	}
 }
 
-// rawJSON turns a stored column into a payload, treating blank as absent so a
-// job that carries nothing round-trips as nil rather than as an empty document.
 func rawJSON(s string) json.RawMessage {
 	if strings.TrimSpace(s) == "" {
 		return nil

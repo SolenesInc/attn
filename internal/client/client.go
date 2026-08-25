@@ -16,31 +16,19 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// DefaultSocketPath returns the default socket path
 func DefaultSocketPath() string {
 	return config.SocketPath()
 }
 
-// Client communicates with the daemon
 type Client struct {
 	socketPath string
 }
 
-// automationResult is the minimal shape every per-action automations result
-// message shares (event/success/error) — enough to decide success/failure
-// generically in sendAutomation before the caller decodes the full typed
-// result (which also carries this shape) a second time for its payload.
 type automationResult struct {
 	Success bool    `json:"success"`
 	Error   *string `json:"error,omitempty"`
 }
 
-// sendAutomation sends msg over a fresh unix-socket connection and decodes
-// the raw response into out, a pointer to one of the typed
-// protocol.Automation*ResultMessage structs — every automations command
-// (socket/CLI and WS) now returns its own typed result directly, not a
-// generic wrapper with a `data` payload. A success=false result becomes a Go
-// error carrying the daemon's error text, exactly as before.
 func (c *Client) sendAutomation(msg any, out any) error {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
@@ -72,11 +60,8 @@ func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMes
 	return &result, nil
 }
 
-// AutomationValidate runs the same validateAutomationSpec seam automation
-// apply persists through, without persisting anything — see
-// Daemon.validateAutomationSpec's doc comment for why the two share one
-// function. A non-nil error is the validation failure message itself, not a
-// transport error.
+// AutomationValidate runs the same seam apply persists through, without
+// persisting. A non-nil error IS the validation message, not a transport error.
 func (c *Client) AutomationValidate(raw string) error {
 	var result protocol.AutomationValidateResultMessage
 	return c.sendAutomation(protocol.AutomationValidateMessage{Cmd: protocol.CmdAutomationValidate, DefinitionYaml: raw}, &result)
@@ -122,8 +107,6 @@ func (c *Client) AutomationRuns(id string) (*protocol.AutomationRunsResultMessag
 	return &result, nil
 }
 
-// AutomationSetEnabled toggles a definition's enabled flag over the same
-// automation_set_enabled command the WS panel's toggle uses.
 func (c *Client) AutomationSetEnabled(id string, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
 	var result protocol.AutomationSetEnabledResultMessage
 	if err := c.sendAutomation(protocol.AutomationSetEnabledMessage{Cmd: protocol.CmdAutomationSetEnabled, DefinitionID: id, Enabled: enabled}, &result); err != nil {
@@ -150,7 +133,6 @@ type ListResult struct {
 	Workspaces []protocol.Workspace `json:"workspaces"`
 }
 
-// New creates a new client
 func New(socketPath string) *Client {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath()
@@ -158,7 +140,6 @@ func New(socketPath string) *Client {
 	return &Client{socketPath: socketPath}
 }
 
-// send sends a message and receives a response
 func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
@@ -166,12 +147,10 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 	defer conn.Close()
 
-	// Send message
 	if err := json.NewEncoder(conn).Encode(msg); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
 
-	// Receive response
 	var resp protocol.Response
 	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
 		return nil, fmt.Errorf("receive response: %w", err)
@@ -188,10 +167,6 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	return &resp, nil
 }
 
-// DaemonError is a refused command. It carries the daemon's message text
-// unchanged — that is what a human or an agent reads — plus the code beside it,
-// so a caller can branch on the answer without matching English. Code is empty
-// for the failures nobody has to branch on.
 type DaemonError struct {
 	Code     string
 	Message  string
@@ -200,9 +175,6 @@ type DaemonError struct {
 
 func (e *DaemonError) Error() string { return fmt.Sprintf("daemon error: %s", e.Message) }
 
-// ErrorCode reports the code a refusal carried, or "" for anything else. It is
-// what a retry loop asks: protocol.ErrorCodeConflict means read again and
-// retry, and everything else means stop.
 func ErrorCode(err error) string {
 	var daemonErr *DaemonError
 	if errors.As(err, &daemonErr) {
@@ -211,21 +183,16 @@ func ErrorCode(err error) string {
 	return ""
 }
 
-// Register registers a new session
 func (c *Client) Register(id, label, dir string) error {
 	return c.RegisterWithAgent(id, label, dir, "")
 }
 
-// RegisterWithAgent registers a new session with an explicit agent.
-// agent should be "claude", "codex", or "copilot"; empty preserves daemon default behavior.
 func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
 	return c.RegisterAsMember(id, label, dir, agent, "")
 }
 
-// RegisterAsMember is RegisterWithAgent with a crew member binding: the daemon
-// resolves the name against the registry and stamps the binding, or refuses
-// the whole registration — the caller must treat that as launch-fatal, because
-// a member launch that runs unbound is an identity silently dropped.
+// RegisterAsMember refuses the whole registration when the member cannot be bound;
+// callers must treat that as launch-fatal, or an identity is silently dropped.
 func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	msg := protocol.RegisterMessage{
 		Cmd:         protocol.CmdRegister,
@@ -245,7 +212,6 @@ func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	return err
 }
 
-// Unregister removes a session
 func (c *Client) Unregister(id string) error {
 	msg := protocol.UnregisterMessage{
 		Cmd: protocol.CmdUnregister,
@@ -255,18 +221,14 @@ func (c *Client) Unregister(id string) error {
 	return err
 }
 
-// UpdateState updates a session's state
 func (c *Client) UpdateState(id, state string) error {
 	return c.UpdateStateFromHook(id, state, "")
 }
 
-// UpdateStateFromHook is UpdateState plus the agent's resolved permission mode,
-// which only a hook payload knows. An empty mode is simply not reported.
 func (c *Client) UpdateStateFromHook(id, state, permissionMode string) error {
 	return c.UpdateStateFromHookEvidence(id, state, permissionMode, "", "")
 }
 
-// UpdateStateFromHookEvidence reports state with its producing hook fact.
 func (c *Client) UpdateStateFromHookEvidence(id, state, permissionMode, hookEvent, prompt string) error {
 	msg := protocol.StateMessage{
 		Cmd:   protocol.CmdState,
@@ -286,8 +248,6 @@ func (c *Client) UpdateStateFromHookEvidence(id, state, permissionMode, hookEven
 	return err
 }
 
-// RecordNotification reports the agent's own notification event (Claude's
-// Notification hook) as state evidence.
 func (c *Client) RecordNotification(id, notificationType, message string) error {
 	msg := protocol.HookNotificationMessage{
 		Cmd:              protocol.CmdHookNotification,
@@ -301,8 +261,6 @@ func (c *Client) RecordNotification(id, notificationType, message string) error 
 	return err
 }
 
-// RecordStopFailure reports that a turn ended on an API error (Claude's
-// StopFailure hook) rather than on an answer.
 func (c *Client) RecordStopFailure(id, errorType, message string) error {
 	msg := protocol.HookStopFailureMessage{
 		Cmd:       protocol.CmdHookStopFailure,
@@ -316,8 +274,6 @@ func (c *Client) RecordStopFailure(id, errorType, message string) error {
 	return err
 }
 
-// RecordCompaction reports that the agent started or finished rewriting its own
-// context (Claude's PreCompact/PostCompact hooks).
 func (c *Client) RecordCompaction(id string, active bool, trigger string) error {
 	msg := protocol.HookCompactionMessage{
 		Cmd:    protocol.CmdHookCompaction,
@@ -331,9 +287,6 @@ func (c *Client) RecordCompaction(id string, active bool, trigger string) error 
 	return err
 }
 
-// ObserveAgentConversation reports the provider-owned conversation named by a
-// SessionStart hook. The daemon decides whether it is an initial binding, a
-// repeated observation, or a successor conversation.
 func (c *Client) ObserveAgentConversation(id, nativeID, transcriptPath string) error {
 	msg := protocol.SetSessionResumeIDMessage{
 		Cmd:             protocol.CmdSetSessionResumeID,
@@ -347,8 +300,6 @@ func (c *Client) ObserveAgentConversation(id, nativeID, transcriptPath string) e
 	return err
 }
 
-// SessionInstructions asks one bounded question of another session's native
-// conversation. The daemon owns transcript lookup and model execution.
 func (c *Client) SessionInstructions(targetSessionID, question string) (*protocol.SessionInstructionsResult, error) {
 	resp, err := c.send(protocol.SessionInstructionsMessage{
 		Cmd:             protocol.CmdSessionInstructions,
@@ -364,9 +315,6 @@ func (c *Client) SessionInstructions(targetSessionID, question string) (*protoco
 	return resp.SessionInstructionsResult, nil
 }
 
-// SessionTranscript reads one provider-neutral, redacted transcript page
-// strictly after the opaque cursor. Repeating with NextCursor is lossless and
-// idempotent across daemon restarts while the native transcript is unchanged.
 func (c *Client) SessionTranscript(targetSessionID, afterCursor string) (*protocol.SessionTranscriptResult, error) {
 	msg := protocol.SessionTranscriptMessage{
 		Cmd:             protocol.CmdSessionTranscript,
@@ -385,9 +333,6 @@ func (c *Client) SessionTranscript(targetSessionID, afterCursor string) (*protoc
 	return resp.SessionTranscriptResult, nil
 }
 
-// StateExplain replays the daemon's per-session ring of state observations. It
-// is a read-only diagnostic: it reports what each source claimed and what
-// happened to the claim, and changes nothing.
 func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainResult, error) {
 	resp, err := c.send(protocol.StateExplainMessage{
 		Cmd:             protocol.CmdStateExplain,
@@ -402,9 +347,6 @@ func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainRes
 	return resp.StateExplainResult, nil
 }
 
-// AgentPeek reads another session's daemon-held snapshot — state, todos, last
-// assistant message, rendered screen. Passive: the observed session is never
-// touched. The target may be a full session id or a unique prefix.
 func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, error) {
 	resp, err := c.send(protocol.AgentPeekMessage{
 		Cmd:             protocol.CmdAgentPeek,
@@ -419,9 +361,6 @@ func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, e
 	return resp.AgentPeekResult, nil
 }
 
-// AgentMsg sends a session or durable crew member a message. The daemon
-// resolves the address, persists the words, and delivers them — waking an
-// asleep member first — so the result always says what became of them.
 func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.AgentMsgResult, error) {
 	msg := protocol.AgentMsgMessage{
 		Cmd:             protocol.CmdAgentMsg,
@@ -429,9 +368,6 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 		SourceSessionID: sourceSessionID,
 		Content:         content,
 	}
-	// A seed id has a shape nothing else in this argument has, so the caller
-	// fills the typed field the daemon acts on rather than handing it a string
-	// to read meaning out of.
 	if garden.ValidateID(target) == nil {
 		msg.TargetSessionID = ""
 		msg.TargetSeedID = protocol.Ptr(target)
@@ -446,17 +382,11 @@ func (c *Client) AgentMsg(target, sourceSessionID, content string) (*protocol.Ag
 	return resp.AgentMsgResult, nil
 }
 
-// SendStop sends a stop signal with transcript path for classification
-// StopFacts carries what the Stop hook observed about whether the turn actually
-// finished. The daemon decides what it means; see nonTerminalStopState there. A
-// caller with nothing to report (a hookless agent's process exit) passes the zero
-// value, which reads as a terminal stop.
+// StopFacts is what the Stop hook observed about whether the turn finished; the
+// daemon decides what it means. The zero value reads as a terminal stop.
 type StopFacts struct {
-	// BackgroundTaskStatuses is one status string per background task the agent
-	// reported, verbatim from the harness.
 	BackgroundTaskStatuses []string
-	// PendingSessionCrons counts the scheduled wakeups still pending.
-	PendingSessionCrons int
+	PendingSessionCrons    int
 }
 
 func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
@@ -471,7 +401,6 @@ func (c *Client) SendStop(id, transcriptPath string, facts StopFacts) error {
 	return err
 }
 
-// UpdateTodos updates a session's todo list
 func (c *Client) UpdateTodos(id string, todos []string) error {
 	msg := protocol.TodosMessage{
 		Cmd:   protocol.CmdTodos,
@@ -482,8 +411,6 @@ func (c *Client) UpdateTodos(id string, todos []string) error {
 	return err
 }
 
-// RecordFilesEdited reports markdown files an agent just wrote, so the ⌘P
-// opener can surface them without the user having opened them first.
 func (c *Client) RecordFilesEdited(id string, paths []string) error {
 	msg := protocol.FilesEditedMessage{
 		Cmd:   protocol.CmdFilesEdited,
@@ -515,8 +442,6 @@ type DelegateOptions struct {
 	AllowWorktreeReuse bool
 }
 
-// StartDelegation durably accepts a delegation and returns before slow worktree
-// preparation. The operation can be polled by either request or operation id.
 func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOptions) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(opts.RequestID)
 	if requestID == "" {
@@ -607,8 +532,6 @@ func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, err
 	return resp.DelegationOperation, nil
 }
 
-// Delegate preserves the original blocking API for in-process callers while
-// using the durable accepted operation underneath.
 func (c *Client) Delegate(sourceSessionID, brief string, opts DelegateOptions) (*protocol.DelegateResult, error) {
 	op, err := c.StartDelegation(sourceSessionID, brief, opts)
 	if err != nil {
@@ -630,12 +553,6 @@ func (c *Client) Delegate(sourceSessionID, brief string, opts DelegateOptions) (
 	return op.Result, nil
 }
 
-// SetTicketStatus reports a work state and moves a ticket to the matching
-// column, echoing the resolved id and status back. With an empty ticketID,
-// the daemon resolves the calling session's own bound ticket (the agent
-// self-reporting form). With a non-empty ticketID, it moves that ticket
-// directly instead — any session may move any ticket this way, no ownership
-// gate.
 func (c *Client) SetTicketStatus(sourceSessionID, workState, comment, ticketID string) (*protocol.TicketStatusResult, error) {
 	msg := protocol.SetTicketStatusMessage{
 		Cmd:             protocol.CmdSetTicketStatus,
@@ -658,8 +575,6 @@ func (c *Client) SetTicketStatus(sourceSessionID, workState, comment, ticketID s
 	return resp.TicketStatusResult, nil
 }
 
-// AttachTicket copies one or more files into a ticket's canonical
-// Notebook directory and returns its durable receipt.
 func (c *Client) AttachTicket(sourceSessionID string, files []protocol.TicketAttachFile, ticketID, state, comment string) (*protocol.TicketAttachResult, error) {
 	msg := protocol.TicketAttachMessage{Cmd: protocol.CmdTicketAttach, SourceSessionID: sourceSessionID, Files: files}
 	if value := strings.TrimSpace(ticketID); value != "" {
@@ -682,9 +597,6 @@ func (c *Client) AttachTicket(sourceSessionID string, files []protocol.TicketAtt
 	return resp.TicketAttachResult, nil
 }
 
-// CreateTicket mints a standalone backlog ticket — unbound, starting in todo. The
-// daemon derives the slug from the title (or pins an explicit id), records the
-// calling session as the author, and echoes the resolved id, status, and title back.
 func (c *Client) CreateTicket(sourceSessionID, title, description, id string) (*protocol.TicketCreateResult, error) {
 	msg := protocol.TicketCreateMessage{
 		Cmd:             protocol.CmdTicketCreate,
@@ -707,10 +619,6 @@ func (c *Client) CreateTicket(sourceSessionID, title, description, id string) (*
 	return resp.TicketCreateResult, nil
 }
 
-// CommentTicket posts a one-shot comment from the calling session onto any ticket
-// by id — not just the one bound to the session. The daemon authors the comment as
-// the session and notifies the ticket's participants, but commenting does not
-// subscribe the caller to the ticket's future activity. Echoes the ticket id back.
 func (c *Client) CommentTicket(sourceSessionID, ticketID, comment string) (*protocol.TicketCommentResult, error) {
 	resp, err := c.send(protocol.TicketCommentMessage{
 		Cmd:             protocol.CmdTicketComment,
@@ -727,10 +635,6 @@ func (c *Client) CommentTicket(sourceSessionID, ticketID, comment string) (*prot
 	return resp.TicketCommentResult, nil
 }
 
-// PresentOpen opens a new presentation (presentationID == "") or a new round on
-// an existing one (presentationID set) from a raw manifest YAML. The daemon is
-// the sole authority for parsing and pinning it — this call sends the manifest
-// bytes verbatim, never a locally-parsed shape.
 func (c *Client) PresentOpen(sourceSessionID, manifestYAML, presentationID string) (*protocol.PresentOpenResult, error) {
 	msg := protocol.PresentOpenMessage{
 		Cmd:             protocol.CmdPresentOpen,
@@ -750,8 +654,6 @@ func (c *Client) PresentOpen(sourceSessionID, manifestYAML, presentationID strin
 	return resp.PresentOpenResult, nil
 }
 
-// PresentFeedback reads a round's reviewer feedback back as markdown. seq <= 0
-// means the latest round.
 func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.PresentFeedbackResult, error) {
 	msg := protocol.PresentFeedbackMessage{
 		Cmd:            protocol.CmdPresentFeedback,
@@ -770,18 +672,12 @@ func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.Pres
 	return resp.PresentFeedbackResult, nil
 }
 
-// TicketInbox reads and consumes the calling session's unread ticket events,
-// bundled by ticket. Reading advances the session's per-ticket cursors, so a
-// second call returns only what landed since. The result also carries
-// last_user_activity_at, the daemon's most recent observed user-presence
-// signal, so a watching agent can decide whether to push or hold.
+// TicketInbox CONSUMES unread events: reading advances the per-ticket cursors, so a
+// second call returns only what landed since.
 func (c *Client) TicketInbox(sourceSessionID string) (*protocol.TicketInboxResult, error) {
 	return c.ticketInbox(sourceSessionID, protocol.TicketInboxModeExplicit, 0)
 }
 
-// TicketInboxWatch is the polling form used by `ticket inbox --watch`. Every poll
-// immediately drains unread activity; the watch lease prevents a simultaneous
-// countdown from doorbelling the same activity.
 func (c *Client) TicketInboxWatch(sourceSessionID string, interval time.Duration) (*protocol.TicketInboxResult, error) {
 	return c.ticketInbox(sourceSessionID, protocol.TicketInboxModeWatch, interval)
 }
@@ -805,11 +701,6 @@ func (c *Client) ticketInbox(sourceSessionID string, mode protocol.TicketInboxMo
 	return resp.TicketInboxResult, nil
 }
 
-// TicketList reads the board — every non-archived ticket, newest first, optionally
-// filtered by status (or including archived). It is a global read, not scoped to the
-// caller: sourceSessionID is passed for command-shape uniformity but the daemon does
-// not use it. status == "" matches any status. Rows carry the description but not the
-// activity thread (bare rows, like the app's board feed).
 func (c *Client) TicketList(sourceSessionID, status string, includeArchived bool) ([]protocol.Ticket, error) {
 	msg := protocol.TicketListMessage{Cmd: protocol.CmdTicketList}
 	if sourceSessionID != "" {
@@ -831,11 +722,6 @@ func (c *Client) TicketList(sourceSessionID, status string, includeArchived bool
 	return resp.TicketListResult.Tickets, nil
 }
 
-// ShowTicket reads one ticket's full record — metadata, description, and the
-// complete activity thread (full bodies) plus current artifacts. It is a non-consuming
-// read (unlike TicketInbox, it never advances the calling session's unread
-// cursor) and, like TicketList, a global read: sourceSessionID is passed for
-// command-shape uniformity but the daemon does not use it.
 func (c *Client) ShowTicket(sourceSessionID, ticketID string) (*protocol.Ticket, error) {
 	msg := protocol.TicketShowMessage{Cmd: protocol.CmdTicketShow, TicketID: ticketID}
 	if sourceSessionID != "" {
@@ -851,10 +737,6 @@ func (c *Client) ShowTicket(sourceSessionID, ticketID string) (*protocol.Ticket,
 	return &resp.TicketShowResult.Ticket, nil
 }
 
-// SubscribeTicket opts the calling session into a ticket's notifications. The
-// session becomes a participant (nudged about activity, the ticket delivered in its
-// inbox) without advancing its cursor, so its first inbox after this delivers the
-// ticket's history. The ticket must exist; re-subscribing is idempotent.
 func (c *Client) SubscribeTicket(sourceSessionID, ticketID string) (*protocol.TicketSubscribeResult, error) {
 	resp, err := c.send(protocol.TicketSubscribeMessage{
 		Cmd:             protocol.CmdTicketSubscribe,
@@ -870,9 +752,6 @@ func (c *Client) SubscribeTicket(sourceSessionID, ticketID string) (*protocol.Ti
 	return resp.TicketSubscribeResult, nil
 }
 
-// UnsubscribeTicket opts the calling session back out of a ticket's notifications.
-// It is idempotent — opting out when not subscribed succeeds — and does not require
-// the ticket to still exist.
 func (c *Client) UnsubscribeTicket(sourceSessionID, ticketID string) (*protocol.TicketUnsubscribeResult, error) {
 	resp, err := c.send(protocol.TicketUnsubscribeMessage{
 		Cmd:             protocol.CmdTicketUnsubscribe,
@@ -888,9 +767,6 @@ func (c *Client) UnsubscribeTicket(sourceSessionID, ticketID string) (*protocol.
 	return resp.TicketUnsubscribeResult, nil
 }
 
-// TakeTicket claims a ticket for the calling session. Taking a ticket already
-// assigned to someone else requires confirm=true; without it the daemon refuses
-// so an agent cannot silently take over another's active work.
 func (c *Client) TakeTicket(sourceSessionID, ticketID string, confirm bool) (*protocol.TicketTakeResult, error) {
 	msg := protocol.TicketTakeMessage{
 		Cmd:             protocol.CmdTicketTake,
@@ -971,9 +847,6 @@ func (c *Client) workspaceContextMaintenanceResult(msg interface{}) (*protocol.W
 	return resp.WorkspaceContextMaintenanceResult, nil
 }
 
-// NotebookGuide pulls the canonical notebook operating guidance. When sessionID
-// is non-empty, the result's SessionIsChief reflects whether that session holds
-// the chief-of-staff role (used by the launch path to choose guidance).
 func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error) {
 	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
 	if sessionID != "" {
@@ -989,12 +862,8 @@ func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult,
 	return resp.NotebookGuide, nil
 }
 
-// AppendJournal appends entry to the notebook's dated daily journal
-// (journal/<date>.md) through the daemon's serialized notebook.Store writer —
-// the contention-safe alternative to an agent editing the journal file directly,
-// which races the daemon's own keeper writes. date defaults (daemon-side) to
-// today when empty; sourceSessionID is optional and unused, present only for
-// command-shape uniformity with the ticket verbs.
+// AppendJournal goes through the daemon's serialized notebook.Store writer: editing
+// journal/<date>.md directly races the keeper's own writes. Empty date means today.
 func (c *Client) AppendJournal(sourceSessionID, date, entry string) (*protocol.JournalAppendResult, error) {
 	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
 	if sourceSessionID != "" {
@@ -1013,9 +882,6 @@ func (c *Client) AppendJournal(sourceSessionID, date, entry string) (*protocol.J
 	return resp.JournalAppendResult, nil
 }
 
-// ActivityStatus reports the presence tier the daemon has reduced its clients
-// to, whether the feature is on, why it cannot run if it cannot, and every
-// session's current activity line.
 func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {
 	resp, err := c.send(protocol.ActivityStatusMessage{Cmd: protocol.CmdActivityStatus})
 	if err != nil {
@@ -1027,7 +893,6 @@ func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {
 	return resp.ActivityStatusResult, nil
 }
 
-// ClearSessionActivity forgets one session's activity line and its read cursor.
 func (c *Client) ClearSessionActivity(sessionID string) error {
 	_, err := c.send(protocol.ClearSessionActivityMessage{
 		Cmd: protocol.CmdClearSessionActivity,
@@ -1052,7 +917,6 @@ func (c *Client) queryResponse(filter string) (*protocol.Response, error) {
 	return resp, nil
 }
 
-// Query returns sessions matching the filter.
 func (c *Client) Query(filter string) ([]protocol.Session, error) {
 	resp, err := c.queryResponse(filter)
 	if err != nil {
@@ -1061,7 +925,6 @@ func (c *Client) Query(filter string) ([]protocol.Session, error) {
 	return resp.Sessions, nil
 }
 
-// List returns the decorated sessions and workspace snapshots used by `attn list`.
 func (c *Client) List(filter string) (*ListResult, error) {
 	resp, err := c.queryResponse(filter)
 	if err != nil {
@@ -1081,7 +944,6 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	}, nil
 }
 
-// Heartbeat sends a heartbeat for a session
 func (c *Client) Heartbeat(id string) error {
 	msg := protocol.HeartbeatMessage{
 		Cmd: protocol.CmdHeartbeat,
@@ -1091,7 +953,6 @@ func (c *Client) Heartbeat(id string) error {
 	return err
 }
 
-// ToggleWorkspaceMute toggles a workspace's muted state.
 func (c *Client) ToggleWorkspaceMute(workspaceID string) error {
 	msg := protocol.MuteWorkspaceMessage{
 		Cmd:         protocol.CmdMuteWorkspace,
@@ -1101,9 +962,6 @@ func (c *Client) ToggleWorkspaceMute(workspaceID string) error {
 	return err
 }
 
-// OpenMarkdown docks a live-reloading markdown tile for the given absolute file
-// path. An empty sessionID lets the daemon target the currently selected
-// session's workspace.
 func (c *Client) OpenMarkdown(path, sessionID string) error {
 	msg := protocol.OpenMarkdownMessage{
 		Cmd:  protocol.CmdOpenMarkdown,
@@ -1116,8 +974,6 @@ func (c *Client) OpenMarkdown(path, sessionID string) error {
 	return err
 }
 
-// OpenSeed docks a seed reader tile beside the requested session. An empty
-// sessionID lets the daemon use the currently selected session.
 func (c *Client) OpenSeed(seedID, sessionID string) error {
 	msg := protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seedID}
 	if sessionID != "" {
@@ -1127,9 +983,6 @@ func (c *Client) OpenSeed(seedID, sessionID string) error {
 	return err
 }
 
-// OpenSentFiles forwards the files an agent handed the user (SendUserFile)
-// so the daemon can open the ones attn can show. The daemon owns the gate
-// and the type routing; unroutable paths are dropped silently.
 func (c *Client) OpenSentFiles(sessionID string, paths []string) error {
 	msg := protocol.OpenSentFilesMessage{
 		Cmd:   protocol.CmdOpenSentFiles,
@@ -1142,7 +995,6 @@ func (c *Client) OpenSentFiles(sessionID string, paths []string) error {
 	return err
 }
 
-// OpenBrowser docks or retargets the in-app browser tile.
 func (c *Client) OpenBrowser(url, sessionID string) error {
 	msg := protocol.OpenBrowserMessage{
 		Cmd: protocol.CmdOpenBrowser,
@@ -1155,15 +1007,10 @@ func (c *Client) OpenBrowser(url, sessionID string) error {
 	return err
 }
 
-// BrowserControl asks the in-app browser to perform an action and
-// returns its textual result. Screenshot results are base64-encoded PNG bytes.
 func (c *Client) BrowserControl(action, selector, text, sessionID string) (string, error) {
 	return c.BrowserCommand(action, "", selector, text, sessionID)
 }
 
-// BrowserCommand sends a structured browser automation request. params is a
-// JSON object encoded as a string so the protocol can evolve without exposing
-// an unauthenticated WebDriver server.
 func (c *Client) BrowserCommand(action, params, selector, text, sessionID string) (string, error) {
 	msg := protocol.BrowserControlMessage{
 		Cmd:    protocol.CmdBrowserControl,
@@ -1188,7 +1035,6 @@ func (c *Client) BrowserCommand(action, params, selector, text, sessionID string
 	return protocol.Deref(resp.Data), nil
 }
 
-// QueryPRs returns PRs matching the filter
 func (c *Client) QueryPRs(filter string) ([]protocol.PR, error) {
 	var filterPtr *string
 	if filter != "" {
@@ -1205,7 +1051,6 @@ func (c *Client) QueryPRs(filter string) ([]protocol.PR, error) {
 	return resp.Prs, nil
 }
 
-// ToggleMutePR toggles a PR's muted state
 func (c *Client) ToggleMutePR(id string) error {
 	msg := protocol.MutePRMessage{
 		Cmd: protocol.CmdMutePR,
@@ -1215,7 +1060,6 @@ func (c *Client) ToggleMutePR(id string) error {
 	return err
 }
 
-// ToggleMuteRepo toggles a repo's muted state
 func (c *Client) ToggleMuteRepo(repo string) error {
 	msg := map[string]string{
 		"cmd":  protocol.CmdMuteRepo,
@@ -1225,7 +1069,6 @@ func (c *Client) ToggleMuteRepo(repo string) error {
 	return err
 }
 
-// SetRepoCollapsed sets a repo's collapsed state
 func (c *Client) SetRepoCollapsed(repo string, collapsed bool) error {
 	msg := map[string]interface{}{
 		"cmd":       protocol.CmdCollapseRepo,
@@ -1236,7 +1079,6 @@ func (c *Client) SetRepoCollapsed(repo string, collapsed bool) error {
 	return err
 }
 
-// QueryRepos returns all repo states
 func (c *Client) QueryRepos() ([]protocol.RepoState, error) {
 	msg := map[string]string{
 		"cmd": protocol.CmdQueryRepos,
@@ -1248,7 +1090,6 @@ func (c *Client) QueryRepos() ([]protocol.RepoState, error) {
 	return resp.Repos, nil
 }
 
-// QueryAuthors returns all author states
 func (c *Client) QueryAuthors() ([]protocol.AuthorState, error) {
 	msg := map[string]string{
 		"cmd": protocol.CmdQueryAuthors,
@@ -1260,7 +1101,6 @@ func (c *Client) QueryAuthors() ([]protocol.AuthorState, error) {
 	return resp.Authors, nil
 }
 
-// FetchPRDetails requests the daemon to fetch PR details for a PR ID
 func (c *Client) FetchPRDetails(id string) ([]protocol.PR, error) {
 	msg := protocol.FetchPRDetailsMessage{
 		Cmd: protocol.CmdFetchPRDetails,
@@ -1273,7 +1113,6 @@ func (c *Client) FetchPRDetails(id string) ([]protocol.PR, error) {
 	return resp.Prs, nil
 }
 
-// IsRunning checks if the daemon is running
 func (c *Client) IsRunning() bool {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
@@ -1283,10 +1122,6 @@ func (c *Client) IsRunning() bool {
 	return true
 }
 
-// sendWorkflow sends a workflow command and decodes the daemon's
-// WorkflowActionResultMessage reply (the shared reply shape the workflow socket
-// handlers write — protocol.Response has no workflow field, so the workflow
-// transport uses its own envelope). It is the workflow analogue of send().
 func (c *Client) sendWorkflow(msg interface{}) (*protocol.WorkflowActionResultMessage, error) {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {
@@ -1314,8 +1149,6 @@ func (c *Client) sendWorkflow(msg interface{}) (*protocol.WorkflowActionResultMe
 	return &result, nil
 }
 
-// WorkflowRunUpsert persists (creates or updates) a workflow run row and returns
-// the daemon's hydrated view of it.
 func (c *Client) WorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.WorkflowRun, error) {
 	if run == nil {
 		return nil, errors.New("workflow run upsert: run is nil")
@@ -1330,8 +1163,6 @@ func (c *Client) WorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.Workflo
 	return result.Run, nil
 }
 
-// WorkflowCallUpsert persists a single agent call (ON CONFLICT(run_id, ordinal)
-// updates in place) and returns the daemon's hydrated view of the owning run.
 func (c *Client) WorkflowCallUpsert(runID string, call *protocol.WorkflowAgentCall) (*protocol.WorkflowRun, error) {
 	if call == nil {
 		return nil, errors.New("workflow call upsert: call is nil")
@@ -1347,8 +1178,6 @@ func (c *Client) WorkflowCallUpsert(runID string, call *protocol.WorkflowAgentCa
 	return result.Run, nil
 }
 
-// WorkflowRunGet returns the hydrated run (run header + journaled agent calls),
-// or (nil, nil) when the run is absent.
 func (c *Client) WorkflowRunGet(runID string) (*protocol.WorkflowRun, error) {
 	result, err := c.sendWorkflow(protocol.WorkflowRunGetMessage{
 		Cmd:   protocol.CmdWorkflowRunGet,
@@ -1360,8 +1189,6 @@ func (c *Client) WorkflowRunGet(runID string) (*protocol.WorkflowRun, error) {
 	return result.Run, nil
 }
 
-// WorkflowRunList returns the runs for a session (empty sessionID lists all),
-// newest-first. Agent calls are intentionally omitted from list entries.
 func (c *Client) WorkflowRunList(sessionID string) ([]protocol.WorkflowRun, error) {
 	msg := protocol.WorkflowRunListMessage{
 		Cmd: protocol.CmdWorkflowRunList,
@@ -1376,7 +1203,6 @@ func (c *Client) WorkflowRunList(sessionID string) ([]protocol.WorkflowRun, erro
 	return result.Runs, nil
 }
 
-// WorkflowRunCancel marks a run canceled and returns its hydrated view.
 func (c *Client) WorkflowRunCancel(runID string) (*protocol.WorkflowRun, error) {
 	result, err := c.sendWorkflow(protocol.WorkflowRunCancelMessage{
 		Cmd:   protocol.CmdWorkflowRunCancel,
@@ -1388,10 +1214,6 @@ func (c *Client) WorkflowRunCancel(runID string) (*protocol.WorkflowRun, error) 
 	return result.Run, nil
 }
 
-// explainConnectError wraps a dial failure with profile context and — if
-// the *other* profile's daemon happens to be running — a concrete hint
-// on how to reach it. This is the single foot-gun everyone hits when
-// first adopting ATTN_PROFILE, so we pay it down here.
 func explainConnectError(sockPath string, cause error) error {
 	profile := config.ProfileLabel()
 	base := fmt.Sprintf("connect to daemon at %s (profile=%s): %v",
@@ -1402,12 +1224,10 @@ func explainConnectError(sockPath string, cause error) error {
 	return errors.New(base)
 }
 
-// crossProfileHint returns a one-line suggestion when the *other* profile's
-// daemon appears to be running. Returns "" when no such hint is useful.
+// crossProfileHint is "" unless the OTHER profile's daemon appears to be running.
 func crossProfileHint() string {
 	current := config.Profile()
 	if current == "" {
-		// Currently default → probe dev.
 		otherSock := config.SocketPathForProfile("dev")
 		if socketLive(otherSock) {
 			return fmt.Sprintf("hint: a dev daemon is listening at %s — run `eval \"$(attn profile-env dev)\"` to switch this shell",
@@ -1415,7 +1235,6 @@ func crossProfileHint() string {
 		}
 		return ""
 	}
-	// Currently non-default → probe default.
 	otherSock := config.SocketPathForProfile("")
 	if socketLive(otherSock) {
 		return fmt.Sprintf("hint: the default daemon is listening at %s — run `eval \"$(attn profile-env --unset)\"` to switch this shell",

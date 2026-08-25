@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Presentation represents a "Present" review session anchored to a session
-// (and optionally a ticket) in a specific repo.
 type Presentation struct {
 	ID                   string
 	SessionID            string
@@ -23,7 +21,6 @@ type Presentation struct {
 	LatestRoundSubmitted bool
 }
 
-// PresentationRound represents one round (a diff manifest) within a presentation.
 type PresentationRound struct {
 	ID             string
 	PresentationID string
@@ -33,12 +30,9 @@ type PresentationRound struct {
 	HeadSHA        string
 	CreatedAt      string
 	SubmittedAt    *string
-	// Verdict is nil for a draft (unsubmitted) round, and "approved" or
-	// "feedback" once submitted — set atomically with SubmittedAt.
-	Verdict *string
+	Verdict        *string
 }
 
-// PresentationComment represents a single inline comment left on a round.
 type PresentationComment struct {
 	ID        string
 	RoundID   string
@@ -51,7 +45,6 @@ type PresentationComment struct {
 	CreatedAt string
 }
 
-// CreatePresentation creates a new presentation for a session.
 func (s *Store) CreatePresentation(sessionID string, ticketID *string, title, kind, repoPath string, now time.Time) (*Presentation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -79,8 +72,6 @@ func (s *Store) CreatePresentation(sessionID string, ticketID *string, title, ki
 	return p, nil
 }
 
-// CreatePresentationRound creates a new round for a presentation. The seq is
-// assigned as MAX(seq)+1 for that presentation (1 for the first round).
 func (s *Store) CreatePresentationRound(presentationID, manifestYAML, baseSHA, headSHA string, now time.Time) (*PresentationRound, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,10 +111,7 @@ func (s *Store) CreatePresentationRound(presentationID, manifestYAML, baseSHA, h
 		return nil, fmt.Errorf("failed to create presentation round: %w", err)
 	}
 
-	// A new round is a new ask for review: reopen a presentation that was
-	// previously approved or closed, or its chip never surfaces to the
-	// reviewer again (presentationNeedsNotice in App.tsx gates on status ==
-	// "open").
+	// A new round must reopen an approved or closed presentation, or its chip never surfaces again (App.tsx gates on status open).
 	if _, err := tx.Exec(`
 		UPDATE presentations SET status = 'open' WHERE id = ? AND status != 'open'
 	`, presentationID); err != nil {
@@ -137,7 +125,6 @@ func (s *Store) CreatePresentationRound(presentationID, manifestYAML, baseSHA, h
 	return round, nil
 }
 
-// GetPresentation returns a presentation by ID, enriched with latest-round info.
 func (s *Store) GetPresentation(id string) (*Presentation, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -194,8 +181,6 @@ func (s *Store) enrichLatestRound(p *Presentation) error {
 	return nil
 }
 
-// ListPresentations returns all presentations, newest first, enriched with
-// latest-round info.
 func (s *Store) ListPresentations() ([]*Presentation, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -235,8 +220,6 @@ func (s *Store) ListPresentations() ([]*Presentation, error) {
 	return result, nil
 }
 
-// GetPresentationRound returns a round for a presentation. seq<=0 means the
-// latest round.
 func (s *Store) GetPresentationRound(presentationID string, seq int) (*PresentationRound, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -278,9 +261,6 @@ func (s *Store) GetPresentationRound(presentationID string, seq int) (*Presentat
 	return &r, nil
 }
 
-// GetPresentationRoundByID returns a round by its own id, for callers that
-// only have the round id (e.g. a present_submit_round WS command, which names
-// only the round) and need to resolve which presentation it belongs to.
 func (s *Store) GetPresentationRoundByID(roundID string) (*PresentationRound, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -309,17 +289,8 @@ func (s *Store) GetPresentationRoundByID(roundID string) (*PresentationRound, er
 	return &r, nil
 }
 
-// validPresentationVerdicts are the only values SubmitPresentationRound
-// accepts. "approved" additionally flips the owning presentation's status to
-// "approved" in the same transaction; "feedback" leaves it "open" (the author
-// is expected to open round N+1).
 var validPresentationVerdicts = map[string]bool{"approved": true, "feedback": true}
 
-// SubmitPresentationRound records comments for a round, marks it submitted
-// with the given verdict, and — when verdict is "approved" — flips the
-// presentation's status to "approved" in the same transaction. It errors if
-// the round doesn't exist, is already submitted, or verdict is not one of
-// "approved"/"feedback".
 func (s *Store) SubmitPresentationRound(roundID string, verdict string, comments []PresentationComment, now time.Time) error {
 	if !validPresentationVerdicts[verdict] {
 		return fmt.Errorf("invalid verdict %q: must be \"approved\" or \"feedback\"", verdict)
@@ -386,10 +357,6 @@ func (s *Store) SubmitPresentationRound(roundID string, verdict string, comments
 	return nil
 }
 
-// ClosePresentation dismisses a presentation without a review: it flips
-// status from "open" to "closed", with no round submission and no handback.
-// It errors if the presentation is not currently "open" (already closed or
-// already approved).
 func (s *Store) ClosePresentation(id string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -422,8 +389,6 @@ func (s *Store) ClosePresentation(id string, now time.Time) error {
 	return nil
 }
 
-// ListPresentationComments returns all comments for a round, ordered by
-// filepath, line_start, created_at.
 func (s *Store) ListPresentationComments(roundID string) ([]*PresentationComment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

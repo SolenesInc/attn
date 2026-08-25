@@ -15,10 +15,6 @@ interface RepoInfo {
 interface RepoOptionsProps {
   repoInfo: RepoInfo;
   selectedPath?: string;
-  // Where this repo's last session went, remembered by LocationPicker. Only
-  // 'main_repo' changes anything here: it opens the chooser on the main repo
-  // row so Enter reuses the checkout. Absent, or 'new_worktree', keeps the
-  // create form focused.
   preferredDestination?: 'new_worktree' | 'main_repo';
   onSelectedPathChange: (path: string) => void;
   onSelectMainRepo: () => void;
@@ -85,16 +81,6 @@ type ForceableError = Error & {
   forceable?: boolean;
 };
 
-// Creating a worktree is the overwhelmingly common reason to open this step, so
-// the create form is always expanded, pre-named, and focused first — a new
-// worktree off the latest origin/<default> costs a single Enter.
-//
-// Two things move that first focus onto the destination list instead. Arriving
-// with a specific worktree already selected only happens when the typed path
-// resolved to that worktree, which is an explicit "open this one" and must keep
-// Enter meaning "open", not "create". And a repo whose last session ran in the
-// main checkout (`preferredDestination`) opens on that row, because a repo is
-// habitually branched or habitually not.
 type FocusZone = 'create' | 'destinations';
 
 export const RepoOptions: React.FC<RepoOptionsProps> = ({
@@ -143,11 +129,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   );
   const committedDestinationIndex = selectedDestinationIndex >= 0 ? selectedDestinationIndex : 0;
   const selectedDestination = destinationItems[committedDestinationIndex];
-  // Names that would make `git worktree add` fail, so a generated name rarely
-  // produces a create the daemon has to reject. This is necessarily incomplete
-  // — `RepoInfo` has no visibility into a local branch with no worktree — so
-  // `attemptCreateWorktree` below also rerolls and retries on the specific
-  // "branch already exists" failure as a backstop.
   const takenBranchNames = useMemo(
     () => [repoInfo.currentBranch, ...repoInfo.worktrees.map((worktree) => worktree.branch)],
     [repoInfo],
@@ -157,15 +138,8 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     committedDestinationIndex > 0 || preferredDestination === 'main_repo' ? 'destinations' : 'create',
   );
   const [focusIndex, setFocusIndex] = useState(committedDestinationIndex);
-  // `generatedName` is the last value the generator produced. The field is
-  // generator-owned only while it still matches, which is what licenses the
-  // auto-reroll on a branch collision.
   const [generatedName, setGeneratedName] = useState(() => generateWorktreeName(takenBranchNames));
   const [newWorktreeName, setNewWorktreeName] = useState(generatedName);
-  // Default to origin/<defaultBranch> so a new worktree starts fresh from the
-  // latest upstream main (fetched first daemon-side), not from whatever local
-  // branch the selected destination happens to be sitting on — which can be
-  // arbitrarily stale. Users can still opt into "current" via the radio/Tab.
   const [startingBranch, setStartingBranch] = useState<'current' | 'default'>('default');
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const [deleteFailure, setDeleteFailure] = useState<DeleteFailure | null>(null);
@@ -173,8 +147,8 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const isBusy = creatingWorktree || deletingPath !== null;
 
-  // Sub-state Escape handling via the stack so LIFO order is preserved.
-  // pendingDeletePath is pushed above LocationPicker's handler.
+  // Sub-state Escape goes through the stack so LIFO holds: pendingDeletePath is
+  // pushed above LocationPicker's handler.
   const cancelPendingDelete = useCallback(() => {
     setPendingDeletePath(null);
     setDeleteFailure(null);
@@ -250,17 +224,8 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     setNewWorktreeName(next);
   }, [takenBranchNames]);
 
-  // `takenBranchNames` can only carry what `RepoInfo` knows about — the current
-  // branch and branches with an attached worktree — so a generated name can
-  // still collide with an ordinary local branch that has no worktree, or one
-  // another client created in the meantime. Rather than surface that raw git
-  // failure, reroll and retry automatically: the user asked for "a" fresh
-  // worktree, not that specific generated name.
-  //
-  // This only holds while the name is still the generator's. A name the user
-  // typed is a deliberate choice, and silently building an unrelated worktree
-  // instead of reporting the collision would discard it — so a user-owned name
-  // surfaces the failure unchanged.
+  // `takenBranchNames` carries only what `RepoInfo` knows, so a generated name can still
+  // collide with a worktree-less local branch. Reroll only a name the generator made.
   const MAX_CREATE_ATTEMPTS = 5;
   const attemptCreateWorktree = useCallback(
     (
@@ -410,7 +375,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     }
 
     // The create form owns a text input, so bare letters must keep reaching it.
-    // Only the keys listed here are intercepted while this zone has focus.
     if (focusZone === 'create') {
       e.stopPropagation();
       if (e.key === 'Enter') {

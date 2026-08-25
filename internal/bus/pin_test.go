@@ -7,19 +7,9 @@ import (
 	"time"
 )
 
-// Retention never trims past an enabled consumer's cursor, so a consumer that
-// stops consuming grows the log for as long as it lasts. These drive the
-// tripwire that turns that from something you have to go and look for into
-// something the system says.
-//
-// The clock is pinned (statusNow), because every claim here is about an age.
-
-// pinStore seeds a log and one consumer whose cursor sits below head, with its
-// oldest unread event `unread` old.
 func pinStore(t *testing.T, name string, enabled bool, unread time.Duration) *memStore {
 	t.Helper()
 	s := newMemStore()
-	// Two events already read, then three the consumer has not reached.
 	for i := 0; i < 2; i++ {
 		if _, err := s.Append(Event{Name: "session.state.changed", Subject: "s1"}, statusNow.Add(-48*time.Hour)); err != nil {
 			t.Fatalf("append read: %v", err)
@@ -52,8 +42,6 @@ func consumerStatus(t *testing.T, s Status, name string) ConsumerStatus {
 	return ConsumerStatus{}
 }
 
-// A consumer a little behind is the system working, and saying so every time is
-// what would make the finding meaningless. Nothing is reported below the line.
 func TestPinUnderTheTripwireIsSilent(t *testing.T) {
 	s := pinStore(t, "notifier", true, 20*time.Minute)
 	b := pinBus(t, s, time.Hour)
@@ -81,8 +69,6 @@ func TestPinUnderTheTripwireIsSilent(t *testing.T) {
 	}
 }
 
-// Past the line the finding names what is held, how long, and the limit it
-// crossed — everything needed to act on it without reading the code.
 func TestPinPastTheTripwireNamesTheHoldAndTheLimit(t *testing.T) {
 	s := pinStore(t, "notifier", true, 3*time.Hour)
 	b := pinBus(t, s, time.Hour)
@@ -112,8 +98,6 @@ func TestPinPastTheTripwireNamesTheHoldAndTheLimit(t *testing.T) {
 	}
 }
 
-// Both surfaces read one predicate, so the page a user opens to check the alarm
-// cannot disagree with the alarm about who is at fault.
 func TestPinAlarmsMatchesTheSnapshot(t *testing.T) {
 	s := pinStore(t, "app:ticketwatch", true, 6*time.Hour)
 	b := pinBus(t, s, time.Hour)
@@ -137,14 +121,11 @@ func TestPinAlarmsMatchesTheSnapshot(t *testing.T) {
 	if pins[0].Threshold != time.Hour {
 		t.Errorf("threshold = %s, want the tripwire it crossed", pins[0].Threshold)
 	}
-	// The finding renders identically wherever it is said.
 	if h, ok := findHealth(status, HealthRetentionPinned, "app:ticketwatch"); !ok || h.Message != PinMessage(pins[0]) {
 		t.Errorf("health message and PinMessage disagree:\n %q\n %q", h.Message, PinMessage(pins[0]))
 	}
 }
 
-// A disabled ordinary consumer does not hold retention open — the kill switch
-// is the way out of exactly this condition, so it must not keep reporting it.
 func TestDisabledConsumerNeverAlarms(t *testing.T) {
 	s := pinStore(t, "notifier", false, 30*24*time.Hour)
 	b := pinBus(t, s, time.Hour)
@@ -165,8 +146,6 @@ func TestDisabledConsumerNeverAlarms(t *testing.T) {
 	}
 }
 
-// Only the consumer at the floor holds the log. One further along is behind, and
-// that is a different finding — reporting it here would blame the wrong one.
 func TestOnlyTheFloorHolderAlarms(t *testing.T) {
 	s := pinStore(t, "behind", true, 6*time.Hour)
 	if err := s.SaveConsumer(Consumer{Name: "further-behind", Cursor: 0, Enabled: true}, statusNow.Add(-6*time.Hour)); err != nil {
@@ -183,8 +162,6 @@ func TestOnlyTheFloorHolderAlarms(t *testing.T) {
 	}
 }
 
-// A caught-up consumer is the floor and is holding nothing. Its lag is zero, so
-// there is no oldest unread event and no age to be past.
 func TestCaughtUpConsumerNeverAlarms(t *testing.T) {
 	s := newMemStore()
 	if _, err := s.Append(Event{Name: "ticket.updated", Subject: "t"}, statusNow.Add(-90*24*time.Hour)); err != nil {
@@ -204,8 +181,6 @@ func TestCaughtUpConsumerNeverAlarms(t *testing.T) {
 	}
 }
 
-// The escape hatch: a negative age turns the finding off everywhere, so a
-// surface cannot keep marking a consumer the alarm has been told to ignore.
 func TestNegativePinAlarmAgeTurnsTheFindingOff(t *testing.T) {
 	s := pinStore(t, "notifier", true, 30*24*time.Hour)
 	b := pinBus(t, s, -1)
@@ -229,8 +204,6 @@ func TestNegativePinAlarmAgeTurnsTheFindingOff(t *testing.T) {
 	}
 }
 
-// Weighing a backlog is what the alarm's harm number is, so it has to be the
-// backlog and not the log.
 func TestPendingBytesWeighsOnlyTheBacklog(t *testing.T) {
 	s := pinStore(t, "notifier", true, 3*time.Hour)
 	whole, err := s.PendingBytes(0)
@@ -246,10 +219,6 @@ func TestPendingBytesWeighsOnlyTheBacklog(t *testing.T) {
 	}
 }
 
-// The tripwire is resolved here, not in whichever process wants it, so the
-// daemon that raises the alarm and the CLI that reads the same database cannot
-// disagree about where the line is. A knob nobody can read back is a limit
-// nobody can see, so every answer it gives is said out loud.
 func TestPinAlarmAgeFromEnv(t *testing.T) {
 	for _, tc := range []struct {
 		raw  string
@@ -263,8 +232,6 @@ func TestPinAlarmAgeFromEnv(t *testing.T) {
 		// would quietly restore the default the user just turned off.
 		{raw: "0", want: -1, says: "the retention-pin alarm is off"},
 		{raw: "-5m", want: -1, says: "the retention-pin alarm is off"},
-		// Garbage falls back loudly. Silently ignoring it would leave the user
-		// believing a tripwire they set is in force.
 		{raw: "soon", want: DefaultPinAlarmAge, says: "is not a duration"},
 	} {
 		t.Run(fmt.Sprintf("%q", tc.raw), func(t *testing.T) {
@@ -294,8 +261,6 @@ func TestPinAlarmAgeFromEnv(t *testing.T) {
 	}
 }
 
-// A bus built with the resolved value keeps it, including the off switch — the
-// path every caller actually takes.
 func TestNewCarriesAResolvedPinAlarmAge(t *testing.T) {
 	t.Setenv(PinAlarmAgeEnv, "0")
 	b := New(Options{PinAlarmAge: PinAlarmAgeFromEnv(nil)})
@@ -304,8 +269,6 @@ func TestNewCarriesAResolvedPinAlarmAge(t *testing.T) {
 	}
 }
 
-// The tripwire is printed so a reader can check the value they set against the
-// one in force. Rounding it away defeats that; rounding the observed age does not.
 func TestTheMessageNamesTheTripwireExactly(t *testing.T) {
 	for _, tc := range []struct {
 		threshold time.Duration
@@ -323,11 +286,6 @@ func TestTheMessageNamesTheTripwireExactly(t *testing.T) {
 	}
 }
 
-// The other window an operator can move, and the one with no other way to be
-// seen: thirty days is longer than any run anyone watches, so a trim against a
-// database younger than that removes nothing whatever the cursor floor says.
-// Without this knob, "resumes below the oldest surviving fact" is a state the
-// product can only reach in a unit test.
 func TestRetentionFromEnv(t *testing.T) {
 	for _, tc := range []struct {
 		raw  string
@@ -337,9 +295,6 @@ func TestRetentionFromEnv(t *testing.T) {
 		{raw: "", want: DefaultRetention},
 		{raw: "1s", want: time.Second, says: "retention window set to 1s"},
 		{raw: "5m", want: 5 * time.Minute, says: "retention window set to 5m"},
-		// Retention is a window, not a finding, so there is nothing for zero or a
-		// negative to mean. Both fall back loudly rather than turning trim into a
-		// pass that deletes everything below the floor.
 		{raw: "0", want: DefaultRetention, says: "is not a positive window"},
 		{raw: "-5m", want: DefaultRetention, says: "is not a positive window"},
 		{raw: "soon", want: DefaultRetention, says: "is not a duration"},
@@ -367,10 +322,6 @@ func TestRetentionFromEnv(t *testing.T) {
 	}
 }
 
-// What the knob is for. The window is what decides whether a trim can remove
-// anything at all, and at the shipped default a fresh log is untouchable — which
-// is the whole reason a consumer resuming below `earliest` had no way to be
-// produced outside a unit test.
 func TestAMovedRetentionWindowIsWhatLetsATrimRemoveAnything(t *testing.T) {
 	seed := func(t *testing.T, b *Bus, s Store) {
 		t.Helper()
@@ -379,7 +330,6 @@ func TestAMovedRetentionWindowIsWhatLetsATrimRemoveAnything(t *testing.T) {
 				t.Fatalf("Publish(%s): %v", name, err)
 			}
 		}
-		// A consumer at head, so the cursor floor is not what decides this.
 		_, head, err := s.Bounds()
 		if err != nil {
 			t.Fatalf("Bounds: %v", err)

@@ -36,9 +36,8 @@ func TestNPMRegistryEnvHonoursTheOverride(t *testing.T) {
 	}
 }
 
-// The seam that matters: a machine exporting a registry attn has no credentials
-// for must not break an apply. This is the shape of the real failure — a
-// corporate mirror answering 401 for every public package.
+// The seam that matters: a machine exporting a registry attn has no credentials for must
+// not break an apply — a corporate mirror answering 401 for every public package.
 func TestToolchainInstallIgnoresAnUnreachableInheritedRegistry(t *testing.T) {
 	t.Setenv("NPM_CONFIG_REGISTRY", "https://npm-registry.invalid/")
 

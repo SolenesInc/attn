@@ -14,41 +14,17 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Listing the conversations attn has already recorded, so one can be picked up
-// again in a new session.
-//
-// This is a display-only read, and deliberately shallow. The resume itself never
-// comes back here: it hands the file's path to the host, which forks it through
-// pi's own SessionManager and therefore takes pi's session-format migrations for
-// free. If pi changes its format tomorrow, the worst this can do is show a row
-// with a blank label — the conversation still resumes.
-//
-// Nothing here writes. A file listed is a file some session is still appending
-// to, possibly right now, which is why `live` is on the row.
-
 const (
-	// pastConversationsLimit caps a listing. A row's size is bounded by its own
-	// fields rather than estimated: the preview is clipped to 200 runes below,
-	// and the rest is a path, a cwd and three numbers — call it 450 bytes at the
-	// worst, so 500 rows is ~225 KB in one message, against a WebSocket client
-	// buffer of 256 messages. It is also far more rows than a picker can usefully
-	// show. A user with more conversations than this gets the newest ones and is
-	// told there are more.
+	// Measured: a row is ~450 bytes, so 500 rows is ~225 KB in one message.
 	pastConversationsLimit = 500
 
-	// pastConversationHeadBytes is how far into a session file the header scan
-	// reads. Receipt (2026-08-09, pi 0.83.0, a real session file on this
-	// machine): a session writes its header, a model_change and a
-	// thinking_level_change before the first user message — 4 lines, 637 bytes
-	// to the end of that message. 256 KB is a tripwire, not a budget: it exists
-	// so a corrupt or enormous single line cannot make a picker hang.
+	// Receipt (2026-08-09, pi 0.83.0, a real session file): 4 lines, 637 bytes
+	// precede the first user message. 256 KB is a tripwire.
 	pastConversationHeadBytes = 256 << 10
 
-	// pastConversationPreviewRunes clips the label. A picker row shows one line.
 	pastConversationPreviewRunes = 200
 )
 
-// pastConversationFile is one candidate, before its head has been read.
 type pastConversationFile struct {
 	sessionID string
 	path      string
@@ -56,11 +32,6 @@ type pastConversationFile struct {
 	bytes     int
 }
 
-// listPastConversations returns the recorded conversations, newest first, and
-// whether the list was clipped.
-//
-// The two-pass shape is the point: every file is stat'ed (cheap) so the sort is
-// honest, and only the ones that survive the cap are opened and parsed.
 func (d *Daemon) listPastConversations() ([]protocol.PastConversation, bool) {
 	return d.listPastConversationsIn(filepath.Join(config.DataDir(), "hosts", "state"))
 }
@@ -93,14 +64,9 @@ func (d *Daemon) listPastConversationsIn(root string) ([]protocol.PastConversati
 	return conversations, truncated
 }
 
-// collectPastConversationFiles finds every session file under the host state
-// root. The layout is one directory per attn session, so the directory name is
-// the session id and a session that forked has several files in it.
 func collectPastConversationFiles(root string) []pastConversationFile {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		// No conversation has ever run here. An empty list is the right answer,
-		// not an error the picker has to explain.
 		return nil
 	}
 	var files []pastConversationFile
@@ -134,12 +100,6 @@ func collectPastConversationFiles(root string) []pastConversationFile {
 
 func isRegular(info fs.FileInfo) bool { return info.Mode().IsRegular() }
 
-// readPastConversationHead pulls the two things a row is labelled with: the
-// directory the conversation ran in, and the first thing the user said in it.
-//
-// Everything it cannot find comes back empty. A conversation whose file was
-// written by a pi version this daemon cannot parse is still resumable — pi reads
-// it — so a parse failure here must degrade the label, never drop the row.
 func readPastConversationHead(path string) (cwd string, preview string) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -184,7 +144,6 @@ func readPastConversationHead(path string) (cwd string, preview string) {
 	return cwd, ""
 }
 
-// clipPreview flattens a message to one line and cuts it to a label's length.
 func clipPreview(text string) string {
 	text = strings.Join(strings.Fields(text), " ")
 	runes := []rune(text)
@@ -194,10 +153,6 @@ func clipPreview(text string) string {
 	return string(runes[:pastConversationPreviewRunes]) + "..."
 }
 
-// handleListPastConversations answers the list_past_conversations command.
-//
-// It answers on the asking client alone: a picker is one window's question, and
-// nothing about the answer changes what any other window is showing.
 func (d *Daemon) handleListPastConversations(client *wsClient, msg *protocol.ListPastConversationsMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {

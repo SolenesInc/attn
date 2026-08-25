@@ -1,13 +1,7 @@
 import type { ReviewComment } from '../types/generated';
 
-/**
- * Helpers for the review-comment line convention shared by the diff panel and
- * the diff viewer.
- *
- * Protocol convention: a comment anchors at `line_start`; a NEGATIVE `line_end`
- * encodes the original/deleted side. The anchored range is
- * `line_start`..`abs(line_end)`.
- */
+// Protocol convention: a comment anchors at `line_start`; a NEGATIVE `line_end` encodes
+// the original/deleted side. The anchored range is `line_start`..`abs(line_end)`.
 
 /** Format a 1-based inclusive line range as `L<start>` or `L<start>-L<end>`. */
 export function buildLineRef(start: number, end: number): string {

@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { bumpFsChangeSignal, fsChangeSignalKey } from './fsChangeSignals';
 
-// Pure-logic coverage for the per-root fs_changed routing that feeds every
-// notebook surface's changeSignal (see makeNotebookSurfaceDaemon in App.tsx).
-// App.tsx has no dedicated render-level test suite for this wiring (see
-// utils/presentationNotices.test.ts for the same pattern applied to another
-// piece of App.tsx state), so this exercises the extracted key/reducer
-// functions directly rather than standing up a full App render + mocked
-// WebSocket.
+// App.tsx has no render-level suite for this wiring, so the extracted
+// key/reducer functions are exercised directly.
 
 const NOTEBOOK_ROOT = '/Users/victor/attn-notebook';
 const ROOT_A = '/Users/victor/code/repo-a';
@@ -33,7 +28,6 @@ describe('bumpFsChangeSignal (per-root fs_changed routing)', () => {
   it('an event for root A never bumps a tile keyed to root B', () => {
     let signals: Record<string, number> = {};
     signals = bumpFsChangeSignal(signals, ROOT_A, NOTEBOOK_ROOT);
-    // Root B's key was never touched — a tile bound to it reads the default (0).
     expect(signals[ROOT_B]).toBeUndefined();
     expect(signals[ROOT_A]).toBe(1);
   });

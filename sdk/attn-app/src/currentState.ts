@@ -1,10 +1,5 @@
-// attn's current state, as an app view reads it.
-//
-// These shapes are hand-copied from the wire's generated types: this package is
-// published as declarations an app typechecks against with no npm, so it cannot
-// import the frontend's generated.ts. app/src/appSdk.currentStateDrift.test.mjs
-// is what keeps the copy honest — it fails by name when a field here and the
-// same field on the wire stop agreeing.
+// Hand-copied from the wire's generated types: this package ships as declarations, so it
+// cannot import generated.ts. app/src/appSdk.currentStateDrift.test.mjs fails on drift.
 
 export interface PullRequestProvenance {
   readonly repository: string
@@ -22,7 +17,6 @@ export interface AutomationProvenance {
   readonly pull_request?: PullRequestProvenance
 }
 
-/** One agent session in attn's current state. */
 export interface Session {
   readonly activity?: string
   readonly activity_at?: string
@@ -49,17 +43,11 @@ export interface Session {
   readonly nudge_fires_at?: string
   readonly parent_session_id?: string
   readonly pinned_at?: string
-  /** The seed this session reports to, when it was dispatched onto one. */
   readonly seed_id?: string
   readonly state: "idle" | "launching" | "pending_approval" | "recoverable" | "scheduled" | "unknown" | "waiting_input" | "working"
   readonly state_reason?: string
   readonly state_since: string
   readonly state_updated_at: string
-  /**
-   * True when this session's pty-worker was built against a different
-   * libghostty-vt than the daemon, which happens when the app updates under a
-   * running session. The app offers a reload; nothing else needs to act on it.
-   */
   readonly terminal_build_stale?: boolean
   readonly ticket_unread?: boolean
   readonly todos?: readonly string[]
@@ -167,8 +155,6 @@ export interface AuthorState {
   readonly muted: boolean
 }
 
-// The app's own surfaces read the garden now; this row is kept for apps and is
-// shaped by internal/daemon/current_state.go, not by the app wire.
 export interface TicketRow {
   readonly assignee: string
   readonly automation?: AutomationProvenance
@@ -250,7 +236,6 @@ export interface AppViewInfo {
   readonly title: string
 }
 
-/** The app projection Initial State uses for mounting views. */
 export interface AppRegistryEntry {
   readonly content_hash?: string
   readonly description?: string
@@ -260,9 +245,7 @@ export interface AppRegistryEntry {
   readonly views: readonly AppViewInfo[]
 }
 
-/** The state-bearing domains shared with attn's Initial State projection. */
 export interface CurrentStateSnapshot {
-  /** Bus head captured before the projection was assembled. */
   readonly asOfSeq: number
   readonly sessions: readonly Session[]
   readonly endpoints: readonly EndpointInfo[]

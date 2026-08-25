@@ -1,13 +1,4 @@
-// Command agent-mirror spawns a child process under a PTY, records its
-// output stream with timing, answers a minimal set of terminal queries so
-// TUIs don't hang waiting for a real terminal, resizes the PTY partway
-// through, and produces an analysis of the VT sequences observed before and
-// after the resize.
-//
-// Dev-only tool to re-capture real agent vocabulary fixtures for
-// internal/probetui (internal/probetui/testdata/agent-vocab-*.json); not
-// shipped. Analysis uses internal/probetui/vtvocab, the same analyzer the
-// probe's mirror tests run against captured fixtures.
+// Dev-only: re-captures internal/probetui/testdata/agent-vocab-*.json; not shipped.
 package main
 
 import (
@@ -100,14 +91,13 @@ func run() error {
 	start := time.Now()
 
 	var (
-		mu           sync.Mutex // guards rawFile/timelineFile writes and bytesWritten/boundary bookkeeping
+		mu           sync.Mutex
 		bytesWritten int64
 		boundary     int64 = -1
 	)
 	var currentPhase atomic.Int32
 	currentPhase.Store(1)
 
-	// currentRows tracks the PTY row count in effect, for CPR replies.
 	var currentRows atomic.Int32
 	currentRows.Store(int32(*rows))
 
@@ -155,7 +145,6 @@ func run() error {
 
 	time.Sleep(*phase2Dur)
 
-	// Terminate the child: SIGTERM, then SIGKILL after 3s if still alive.
 	waitDone := make(chan struct{})
 	go func() {
 		cmd.Wait()
@@ -179,7 +168,6 @@ func run() error {
 	rawFile.Sync()
 	timelineFile.Sync()
 
-	// Re-read raw.bin for post-hoc VT analysis, as specified.
 	rawData, err := os.ReadFile(rawPath)
 	if err != nil {
 		return fmt.Errorf("re-read raw.bin: %w", err)
@@ -231,8 +219,6 @@ func buildEnv() []string {
 	return out
 }
 
-// --- live query responder -------------------------------------------------
-
 var (
 	reDA1       = regexp.MustCompile(`\x1b\[0?c`)
 	reCPR       = regexp.MustCompile(`\x1b\[6n`)
@@ -249,11 +235,8 @@ func newQueryResponder(ptmx *os.File, rows *atomic.Int32) *queryResponder {
 	return &queryResponder{ptmx: ptmx, rows: rows}
 }
 
-// handle scans a chunk of PTY output for terminal queries the child may have
-// issued and writes minimal replies back into the PTY (i.e. to the child's
-// stdin), so TUIs waiting on a real terminal's response don't hang. This is
-// a best-effort, per-chunk byte scan; queries split across chunk boundaries
-// are not reassembled.
+// Best-effort per-chunk byte scan; queries split across chunk boundaries are not
+// reassembled.
 func (q *queryResponder) handle(chunk []byte) {
 	q.mu.Lock()
 	defer q.mu.Unlock()

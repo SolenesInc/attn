@@ -147,9 +147,6 @@ func TestWorkerBackend_SpawnAttachInputResizeRemove(t *testing.T) {
 	t.Fatalf("timed out waiting for worker output; got=%q", out.String())
 
 gotOutput:
-	// Read-only snapshot round-trips through MethodScreenSnapshot -> callScreenSnapshot and
-	// returns the current rendered screen, which must contain the marker we just
-	// printed. No subscriber is involved.
 	snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("ScreenSnapshot() error: %v", err)
@@ -173,13 +170,8 @@ gotOutput:
 		t.Fatalf("snapshot geometry = %dx%d, want non-zero", snap.Screen.Cols, snap.Screen.Rows)
 	}
 
-	// SetTheme round-trips over the worker RPC surface and takes effect on the
-	// live session. Verify via a script that reads the OSC11 reply off its own
-	// stdin explicitly (bash's `read` gets whatever bytes were written to the
-	// master regardless of the login shell's tty echo/raw-mode settings —
-	// relying on the attached output stream to show the reply would depend on
-	// that, and fish, this environment's default login shell, disables kernel
-	// echo for its own line editing).
+	// Read the OSC11 reply off the script's own stdin: fish, the default login
+	// shell here, disables kernel echo, so the attached stream never shows it.
 	if err := backend.SetTheme(context.Background(), sessionID, pty.TerminalTheme{Background: "#ff00ff"}); err != nil {
 		t.Fatalf("SetTheme() error: %v", err)
 	}
@@ -232,12 +224,6 @@ gotThemeReply:
 	}
 }
 
-// TestWorkerBackend_SnapshotViaReplayReadsScrollbackReadOnly exercises the
-// fallback that lets observers (grid tiles) seed a session whose worker can't
-// render a screen on demand — e.g. an older worker that survived a daemon
-// upgrade and rejects the snapshot RPC. The daemon then derives the visible
-// frame from the worker's buffered output, fetched via a read-only attach that
-// must not leave a subscriber behind.
 func TestWorkerBackend_SnapshotReadsScreenReadOnly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping worker integration test in short mode")
@@ -281,9 +267,6 @@ func TestWorkerBackend_SnapshotReadsScreenReadOnly(t *testing.T) {
 		t.Fatalf("Input() error: %v", err)
 	}
 
-	// Snapshot must fetch the rendered screen without a subscriber, so we can
-	// poll it repeatedly until the marker lands; if each call leaked a
-	// subscriber the worker would accumulate dead ones.
 	var info pty.ScreenSnapshotInfo
 	deadline := time.Now().Add(8 * time.Second)
 	for {
@@ -307,8 +290,6 @@ func TestWorkerBackend_SnapshotReadsScreenReadOnly(t *testing.T) {
 		t.Fatal("expected a viewport snapshot")
 	}
 
-	// The session must stay fully usable after the read-only snapshots: a real
-	// attach still streams live output, proving no transient subscriber lingered.
 	_, stream, err := backend.Attach(context.Background(), sessionID, "after-replay-sub")
 	if err != nil {
 		t.Fatalf("Attach() after snapshotViaReplay error: %v", err)

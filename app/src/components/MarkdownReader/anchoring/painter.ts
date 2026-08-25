@@ -1,15 +1,5 @@
-/**
- * Paint layer — turns resolved DOM Ranges into visible highlights.
- *
- * Preferred: the CSS Custom Highlight API, which mutates no DOM, so DOM-owned
- * state such as an open <details> survives a paint (styling is in
- * MarkdownReader.css under `::highlight(attn-md-*)`). MarkPainter is the
- * fallback for engines without it: it wraps covered text-node segments in
- * `<span class="md-mark">` and unpaint restores the text-node shape. A range
- * passing THROUGH inline chrome must never be wrapped, so its walker rejects
- * chrome subtrees. Painters are per-reader-root, and `clearAll()` must run
- * before repaint on every content change — stale Ranges hold detached nodes.
- */
+/** Paint layer: resolved DOM Ranges into visible highlights. `clearAll()` must
+ * run before repaint on every content change; stale Ranges hold detached nodes. */
 
 export type HighlightKind = 'comment' | 'deletion' | 'focus';
 
@@ -25,7 +15,6 @@ export interface HighlightPainter {
 const HIGHLIGHT_NAMES: Record<HighlightKind, string> = {
   comment: 'attn-md-comment',
   deletion: 'attn-md-deletion',
-  // Separate entry so the transient sidebar glow stacks over comment/deletion.
   focus: 'attn-md-focus',
 };
 
@@ -39,11 +28,8 @@ export function createHighlightPainter(root: HTMLElement): HighlightPainter {
   return supportsCustomHighlights() ? new CustomHighlightPainter() : new MarkPainter(root);
 }
 
-/**
- * CSS.highlights is per-DOCUMENT while painters are per-reader-root, so each
- * mutation rebuilds the shared entries from the UNION of live painters — one
- * tile clearing must never wipe another tile's highlights.
- */
+/** CSS.highlights is per-DOCUMENT while painters are per-reader-root: every
+ * mutation rebuilds the shared entries from the union of live painters. */
 const livePainters = new Set<CustomHighlightPainter>();
 
 /** Test hook: drop painters leaked by previous tests from the shared union. */
@@ -66,7 +52,6 @@ function rebuildSharedRegistry(): void {
   }
 }
 
-/** CSS Custom Highlight API painter; Highlight objects are cheap Range bags. */
 export class CustomHighlightPainter implements HighlightPainter {
   readonly mode = 'custom-highlight' as const;
   private readonly entries = new Map<string, { range: Range; kind: HighlightKind }>();
@@ -103,11 +88,6 @@ export class CustomHighlightPainter implements HighlightPainter {
 
 const MARK_ATTR = 'data-md-mark';
 
-/**
- * DOM-mutating fallback: `range.surroundContents` cannot span element
- * boundaries, so boundary text nodes are `splitText` at the edges and every
- * covered text node is wrapped in a mark span.
- */
 export class MarkPainter implements HighlightPainter {
   readonly mode = 'mark' as const;
 
@@ -118,8 +98,7 @@ export class MarkPainter implements HighlightPainter {
       this.clear(id);
       return;
     }
-    // Wrap NEW spans before dropping stale ones: clearing first would
-    // normalize() text nodes together and invalidate the caller's Range.
+    // Wrap NEW spans before dropping stale ones: clearing first would normalize() text nodes together and invalidate the caller's Range.
     const doc = this.root.ownerDocument;
     const fresh = new Set<Element>();
     for (const textNode of splitAndCollectRangeTextNodes(range)) {
@@ -167,10 +146,6 @@ function unwrap(el: Element): void {
   parent.normalize();
 }
 
-/**
- * Split the boundary text nodes at the range edges and return every text node
- * fully covered afterwards. Mutates the DOM but never reorders or removes.
- */
 function splitAndCollectRangeTextNodes(range: Range): Text[] {
   let startNode = range.startContainer;
   let startOffset = range.startOffset;
@@ -191,10 +166,8 @@ function splitAndCollectRangeTextNodes(range: Range): Text[] {
     startOffset = 0;
   }
 
-  // Walk under the common ancestor ELEMENT: a TreeWalker never emits its own
-  // root, so a text-node ancestor (single-node range) widens to its parent.
-  // Chrome subtrees are REJECTed — a range may pass through inline chrome, and
-  // chrome text has no counterpart in anchor text-space.
+  // Walk under the common ancestor ELEMENT: a TreeWalker never emits its own root.
+  // Chrome subtrees are REJECTed: chrome text has no counterpart in anchor text-space.
   const ancestor = range.commonAncestorContainer;
   const rootNode = ancestor.nodeType === Node.ELEMENT_NODE ? ancestor : ancestor.parentNode;
   if (!rootNode) {

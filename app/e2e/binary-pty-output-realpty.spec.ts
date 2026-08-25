@@ -3,13 +3,8 @@ import { E2E_CLIENT_TOKEN } from './profileEnv';
 
 const realPtyEnabled = process.env.VITE_FORCE_REAL_PTY === '1';
 
-/**
- * Live PTY output from the local daemon must arrive as binary websocket
- * frames (binary_pty_output capability), not base64-in-JSON pty_output
- * events. Rendering alone can't catch a silent fallback to JSON — both
- * paths paint the same bytes — so this spec also asserts the transport
- * actually used via the pty perf snapshot.
- */
+// Rendering alone cannot catch a silent fallback from binary frames to
+// base64-in-JSON, so the transport used is asserted from the pty perf snapshot.
 test.describe('Binary PTY output transport', () => {
   test('shell output arrives via binary frames and renders', async ({ page, daemon }) => {
     test.skip(!realPtyEnabled, 'Requires real PTY');
@@ -35,8 +30,6 @@ test.describe('Binary PTY output transport', () => {
       directory: '/tmp',
     });
 
-    // Mirror the app's spawn flow: identify (client_hello), register the
-    // owning workspace, then spawn the session runtime into it.
     const spawnResult = await page.evaluate(
       ({ wsUrl, id, clientToken }) =>
         new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
@@ -69,10 +62,6 @@ test.describe('Binary PTY output transport', () => {
             resolve(data);
           };
           ws.onopen = () => {
-            // The daemon rejects every command from clients that have not
-            // identified themselves (see speaksWorkspaceProtocol), and spawn
-            // requires a registered owning workspace. The per-client message
-            // pump is FIFO, so these can be sent back-to-back.
             ws.send(JSON.stringify({
               cmd: 'client_hello',
               client_kind: 'e2e-test',
@@ -105,15 +94,11 @@ test.describe('Binary PTY output transport', () => {
     await page.locator(`[data-testid="session-${sessionId}"]`).click();
     await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-    // Wait for live PTY output (shell prompt) to flow to the pane.
     await page.waitForFunction((id) => {
       const events = (window as any).__TEST_PTY_EVENTS as Array<{ event: string; id?: string }> | undefined;
       return Boolean(events?.some((evt) => evt.event === 'data' && evt.id === id));
     }, sessionId, { timeout: 15000 });
 
-    // The transport assertion: live output for a local session came down as
-    // binary frames (recorded with source 'binary'), and none of it as the
-    // base64 JSON event.
     const transport = await page.evaluate((id) => {
       const dump = (window as any).__ATTN_PTY_PERF_DUMP?.();
       if (!dump) return null;

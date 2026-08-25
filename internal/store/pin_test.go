@@ -35,8 +35,6 @@ func TestSetSessionPinnedReportsAMissingSession(t *testing.T) {
 	}
 }
 
-// The pin is the band's sort key, so re-pinning must move the row to the end
-// rather than restore it to where it used to sit.
 func TestRepinningTakesTheNewInstant(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateIdle)
@@ -52,9 +50,6 @@ func TestRepinningTakesTheNewInstant(t *testing.T) {
 	}
 }
 
-// Pinning filters at read rather than settling, so the turn stamps go on
-// accruing underneath it. This is what makes releasing a pin surface whatever
-// was outstanding at its true age instead of restarting it from nothing.
 func TestPinningLeavesTheTurnStampsAlone(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
@@ -74,10 +69,6 @@ func TestPinningLeavesTheTurnStampsAlone(t *testing.T) {
 	}
 }
 
-// A respawn re-adds the session record, and that record carries no pin: the
-// column is absent from the upsert precisely so the pin survives. Both store
-// branches have to agree, or a memory-backed test passes while production
-// silently drops the pin (or the reverse).
 func TestRespawnKeepsThePin(t *testing.T) {
 	for _, branch := range []struct {
 		name  string
@@ -94,8 +85,6 @@ func TestRespawnKeepsThePin(t *testing.T) {
 				t.Fatal("pin reported no change")
 			}
 
-			// The spawn pipeline's record for an existing session: fresh fields, no
-			// pin, same id.
 			addTurnSession(t, s, "s1", protocol.SessionStateLaunching)
 
 			if got := protocol.Deref(s.Get("s1").PinnedAt); got != at.Format(time.RFC3339Nano) {
@@ -105,8 +94,6 @@ func TestRespawnKeepsThePin(t *testing.T) {
 	}
 }
 
-// The satellite link is spawn-time provenance and does ride the upsert, so a
-// record that carries one writes it and a read gives it back.
 func TestParentSessionIDRoundTrips(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "agent", protocol.SessionStateIdle)
@@ -130,8 +117,6 @@ func TestParentSessionIDRoundTrips(t *testing.T) {
 	if got := protocol.Deref(s.Get("shell").ParentSessionID); got != "agent" {
 		t.Fatalf("parent_session_id = %q, want %q", got, "agent")
 	}
-	// And it survives the list read too, which is the path the daemon broadcasts
-	// from.
 	for _, session := range s.List("") {
 		if session.ID == "shell" && protocol.Deref(session.ParentSessionID) != "agent" {
 			t.Fatalf("parent_session_id = %q from List, want %q", protocol.Deref(session.ParentSessionID), "agent")

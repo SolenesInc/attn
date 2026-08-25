@@ -5,12 +5,6 @@ import (
 	"time"
 )
 
-// Messages one agent sends another. A row is the ledger entry: it is written
-// before any delivery is attempted, so a message that cannot land right now is
-// queued rather than dropped, and `delivered_at` is what separates the two.
-
-// AgentMessage is one durable delivery to a session. SenderSessionID is empty
-// for a daemon-authored user request; DeliveredAt is empty while it is queued.
 type AgentMessage struct {
 	ID              string
 	SenderSessionID string
@@ -20,17 +14,12 @@ type AgentMessage struct {
 	DeliveredAt     string
 }
 
-// AgentMessageGuardCounts is everything the inbound guard needs to decide,
-// read in one pass. The store counts; the guard rules — so the thresholds live
-// with the policy and this stays a query.
 type AgentMessageGuardCounts struct {
-	DuplicateFromSender  bool // same sender, same target, same text, inside the dedupe window
-	FromSenderInWindow   int  // messages this sender sent this target inside the rate window
-	UndeliveredForTarget int  // this target's whole queued backlog, from every sender
+	DuplicateFromSender  bool
+	FromSenderInWindow   int
+	UndeliveredForTarget int
 }
 
-// EnqueueAgentMessage records a message as queued. Delivery is a separate step
-// that stamps DeliveredAt.
 func (s *Store) EnqueueAgentMessage(msg AgentMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,9 +34,8 @@ func (s *Store) EnqueueAgentMessage(msg AgentMessage) error {
 	return nil
 }
 
-// DeleteQueuedAgentMessage rolls back a delivery whose target could not be
-// launched. It deletes only an undelivered row: once a target took the message,
-// a late cleanup must not erase its receipt.
+// Rolls back a delivery whose target could not be launched. Only an undelivered row:
+// once a target took the message, a late cleanup must not erase its receipt.
 func (s *Store) DeleteQueuedAgentMessage(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -61,8 +49,6 @@ func (s *Store) DeleteQueuedAgentMessage(id string) error {
 	return nil
 }
 
-// UndeliveredAgentMessages returns the target's queued messages, oldest first —
-// the order the drain delivers them in.
 func (s *Store) UndeliveredAgentMessages(targetSessionID string) ([]AgentMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,7 +75,6 @@ func (s *Store) UndeliveredAgentMessages(targetSessionID string) ([]AgentMessage
 	return messages, rows.Err()
 }
 
-// AgentMessageQueued reports whether one message still needs delivery.
 func (s *Store) AgentMessageQueued(id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -105,8 +90,6 @@ func (s *Store) AgentMessageQueued(id string) (bool, error) {
 	return queued, nil
 }
 
-// TargetsWithQueuedAgentMessages names every session that still owes a
-// delivery. Read once at daemon startup: the rows outlive the process.
 func (s *Store) TargetsWithQueuedAgentMessages() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -145,7 +128,6 @@ func (s *Store) MarkAgentMessageDelivered(id string, at time.Time) error {
 	return nil
 }
 
-// AgentMessageGuardCounts reads the three counts the inbound guard weighs.
 func (s *Store) AgentMessageGuardCounts(sender, target, content string, dedupeSince, rateSince time.Time) (AgentMessageGuardCounts, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

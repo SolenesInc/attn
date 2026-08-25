@@ -139,15 +139,8 @@ async function expectTerminalInputCount(
     .toBe(count);
 }
 
-/**
- * The vertical centre of the grid's bottom row, in page coordinates.
- *
- * The rendered grid is `rows * cellHeight`, which almost never equals the
- * container's height, so the container carries a leftover strip below the last
- * row whose size shifts with anything that changes pane height — a permanent
- * pane header, for one. Deriving the row from the canvas and the model's row
- * count keeps a click on the last line a click on the last line.
- */
+// Derived from the canvas and the model's row count: `rows * cellHeight` almost
+// never fills the container, and the leftover strip shifts with pane height.
 async function lastRowCenterY(
   page: import('@playwright/test').Page,
   terminal: import('@playwright/test').Locator,
@@ -182,7 +175,6 @@ async function openTerminalSession(
     )
     .not.toBeNull();
   // A measured pane does not mean the session's startup output has arrived.
-  // Let the mock banner land before the caller clears the screen.
   await waitForMockPtyBanner(page, sessionId);
   return terminal;
 }
@@ -219,9 +211,6 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('cmd+click opens the hidden uri of an OSC 8 hyperlink label', async ({ page, daemon }) => {
-    // Claude Code emits label-style hyperlinks (e.g. "Learn more") whose
-    // visible text has nothing to do with the target — only the OSC 8 uri
-    // hidden behind the label can resolve it.
     await installOpenerProbe(page);
     const terminal = await openTerminalSession(page, daemon, 's-osc8-link');
     const uri = 'https://example.com/hidden';
@@ -266,8 +255,6 @@ test.describe('Ghostty terminal interactions', () => {
       )
       .toContain('src/main.go:12:3');
 
-    // Hover starts async path validation (through the fs shim); the link
-    // cursor appears once the candidate resolves and the accelerator is held.
     await terminal.hover({ position: { x: 55, y: 8 } });
     await page.keyboard.down('Meta');
     await expect(terminal).toHaveCSS('cursor', 'pointer');
@@ -284,8 +271,6 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('cmd+click opens a path embedded in an agent tool-call line', async ({ page, daemon }) => {
-    // Regression: Claude Code prints `⏺ Read(/abs/path · lines 1-2)` — the
-    // hover fragment is `Read(/abs/path` and the path starts mid-fragment.
     await installFileLinkProbe(page, ['/tmp/test/terminal-links/src/main.go']);
     const terminal = await openTerminalSession(page, daemon, 's-file-link-tool');
     await writeTerminalOutput(
@@ -300,7 +285,6 @@ test.describe('Ghostty terminal interactions', () => {
       )
       .toContain('Read(/tmp/test/terminal-links/src/main.go');
 
-    // Hover inside the path portion (col ~14 at the e2e cell width).
     await terminal.hover({ position: { x: 120, y: 8 } });
     await page.keyboard.down('Meta');
     await expect(terminal).toHaveCSS('cursor', 'pointer');
@@ -317,8 +301,6 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('cmd+click opens a path that soft-wraps across rows', async ({ page, daemon }) => {
-    // A long absolute path wraps across visual rows; hovering the SECOND row
-    // must detect the whole path (logical-line join) and open it.
     const wrappedPath = `/tmp/test/terminal-links/${'deeply-nested-segment/'.repeat(12)}wrapped-target.go`;
     await installFileLinkProbe(page, [wrappedPath]);
     const terminal = await openTerminalSession(page, daemon, 's-file-link-wrap');
@@ -334,8 +316,6 @@ test.describe('Ghostty terminal interactions', () => {
     expect(size).not.toBeNull();
     expect(wrappedPath.length).toBeGreaterThan(size!.cols);
 
-    // The canvas is sized exactly cols*cellWidth x rows*cellHeight, so cell
-    // centers are derivable from its bounding box.
     const canvas = terminal.locator('canvas');
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
@@ -359,10 +339,6 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('cmd press re-detects a hover invalidated by a mid-hover refit', async ({ page, daemon }) => {
-    // Regression: a pane fit between the last pointer move and pressing Cmd
-    // bumps the hover generation, which discards the hover's async path
-    // resolution. The pointer has not moved, so nothing re-detected the link,
-    // and Cmd over a real link kept the text cursor until the mouse moved.
     await installFileLinkProbe(page, ['/tmp/test/terminal-links/src/main.go']);
     const terminal = await openTerminalSession(page, daemon, 's-file-link-refit');
     await writeTerminalOutput(page, 's-file-link-refit', '[2J[Hsrc/main.go:12:3 compiled');
@@ -373,11 +349,8 @@ test.describe('Ghostty terminal interactions', () => {
       )
       .toContain('src/main.go:12:3');
 
-    // Hover without the modifier so the link resolves for this generation.
     await terminal.hover({ position: { x: 55, y: 8 } });
 
-    // A height-only viewport shrink refits the pane (same cols, fewer rows):
-    // the fit bumps the hover generation while row 0 and the pointer stay put.
     const sizeBefore = await page.evaluate(
       (id) => window.__TEST_GET_SESSION_PANE_SIZE?.(id) ?? null,
       's-file-link-refit',
@@ -395,7 +368,6 @@ test.describe('Ghostty terminal interactions', () => {
       )
       .not.toEqual(sizeBefore);
 
-    // Pressing Cmd with the pointer unmoved must re-detect the link under it.
     await page.keyboard.down('Meta');
     await expect(terminal).toHaveCSS('cursor', 'pointer');
     await terminal.click({ position: { x: 55, y: 8 } });
@@ -431,9 +403,6 @@ test.describe('Ghostty terminal interactions', () => {
     }, 's-file-link-stream');
     expect(renderCountBefore).not.toBeNull();
 
-    // An agent TUI repaints constantly (spinner frames, status line). The
-    // pointer does not move while unrelated writes land on another row; the
-    // hovered link must stay resolved and clickable.
     for (let i = 0; i < 5; i += 1) {
       await writeTerminalOutput(
         page,
@@ -448,15 +417,14 @@ test.describe('Ghostty terminal interactions', () => {
       return snapshots.find((snapshot) => snapshot.sessionId === sessionId)?.renderCount ?? null;
     }, 's-file-link-stream');
     expect(renderCountAfter).not.toBeNull();
-    // Revalidation runs inside the output paint. It must not add another paint
-    // per packet on top of the terminal's animation-frame-coalesced renderer.
+    // Revalidation runs inside the output paint: it must not add a paint per packet
+    // on top of the animation-frame-coalesced renderer.
     expect(renderCountAfter! - renderCountBefore!).toBeLessThanOrEqual(6);
 
     await expect(terminal).toHaveCSS('cursor', 'pointer');
 
-    // Dispatch at the stationary pointer coordinates. locator.click() moves the
-    // synthetic mouse before pressing, which used to hide this regression by
-    // refreshing the stale hover cache immediately before mousedown.
+    // Dispatch at the stationary pointer coordinates: locator.click() moves the
+    // mouse first, refreshing the stale hover cache and hiding this regression.
     await dispatchStationaryCmdClick(terminal, { x: 55, y: 8 });
     await page.keyboard.up('Meta');
 
@@ -468,9 +436,6 @@ test.describe('Ghostty terminal interactions', () => {
       )
       .toContain('/tmp/test/terminal-links/src/main.go');
 
-    // Revalidation must still reject a genuinely stale target. Replace the
-    // hovered row without moving the pointer, then prove the old path neither
-    // advertises nor opens.
     await writeTerminalOutput(page, 's-file-link-stream', '[1;1H[2Kplain text');
     await expect
       .poll(
@@ -503,7 +468,6 @@ test.describe('Ghostty terminal interactions', () => {
 
     await terminal.hover({ position: { x: 55, y: 8 } });
     await page.keyboard.down('Meta');
-    // Give async validation time to (not) resolve, then confirm no link cursor.
     await page.waitForTimeout(400);
     await expect(terminal).toHaveCSS('cursor', 'text');
     await terminal.click({ position: { x: 55, y: 8 } });
@@ -802,10 +766,6 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('copies a selection even when the mouse is released outside the terminal', async ({ page, context, daemon }) => {
-    // Regression: a selection drag that ends over a sibling overlay (e.g. a split
-    // divider above the pane edge) used to retarget the mouseup away from the
-    // terminal, leaving the selection stuck and never copying it. The drag is now
-    // tracked on the document, so releasing outside the terminal still finalizes.
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const terminal = await openTerminalSession(page, daemon, 's-release-outside');
     const text = 'release-outside-target';
@@ -820,10 +780,6 @@ test.describe('Ghostty terminal interactions', () => {
 
     const bounds = await terminal.boundingBox();
     expect(bounds).not.toBeNull();
-    // Select the text rightward, then jump straight out of the terminal (a single
-    // mousemove, so no intermediate cell shrinks the selection) and release over a
-    // non-terminal element — the way a release on a split divider above the pane
-    // edge retargets the mouseup away from the terminal.
     const selectionEndX = bounds!.x + bounds!.width / 2;
     await page.mouse.move(bounds!.x + 2, bounds!.y + 8);
     await page.mouse.down();
@@ -851,11 +807,6 @@ test.describe('Ghostty terminal interactions', () => {
 
     const terminalBounds = await terminal.boundingBox();
     expect(terminalBounds).not.toBeNull();
-    // Aim at the middle of the grid's last row, measured off the canvas rather
-    // than off the container. A whole number of rows rarely fills the container
-    // exactly, so the leftover strip below the grid is dead space of a height
-    // nothing here controls — any fixed offset from the container's bottom edge
-    // is a bet on that leftover staying small.
     const rowY = await lastRowCenterY(page, terminal, 's-selection-scroll');
     await page.mouse.move(terminalBounds!.x + 2, rowY);
     await page.mouse.down();

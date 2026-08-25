@@ -88,7 +88,6 @@ import {
   type TerminalKeyEvent,
 } from './keyEncoder';
 
-/** Attribute bits on GhosttyCell.flags. */
 export const CellFlags = {
   BOLD: 1,
   ITALIC: 2,
@@ -100,11 +99,6 @@ export const CellFlags = {
   FAINT: 128,
 } as const;
 
-/**
- * One rendered cell. Colors are always resolved: a cell without an explicit
- * color carries the terminal's default, so a renderer never has to know which
- * of the two it got.
- */
 export interface GhosttyCell {
   codepoint: number;
   fg_r: number;
@@ -114,10 +108,9 @@ export interface GhosttyCell {
   bg_g: number;
   bg_b: number;
   flags: number;
-  /** Layout width in cells: 1 normal, 2 wide, 0 for a wide char's spacer. */
+  // 1 normal, 2 wide, 0 for a wide char's spacer.
   width: number;
   hyperlink_id: number;
-  /** Combining codepoints beyond the base one; 0 for a plain cell. */
   grapheme_len: number;
 }
 
@@ -151,25 +144,15 @@ export interface GhosttyTerminalConfig {
   palette?: number[];
 }
 
-/**
- * The scrollback half of a snapshot restore, decoded a page at a time so the
- * first paint does not wait on it.
- */
 export interface SnapshotHistoryDecoder {
-  /** Scrollback rows the snapshot declares, before any page is applied. */
   readonly declaredRows: number;
-  /**
-   * Prepend one page, returning the rows it added — zero when the page no
-   * longer fits the live terminal — or null once there are none left.
-   */
+  // Rows added by the page, 0 when it no longer fits, null when none are left.
   decodeNextPage(): number | null;
-  /** Give up on the rest. The terminal keeps what was already prepended. */
   close(): void;
 }
 
 const HYPERLINK_URI_CAP = 2048;
-// Codepoints in one grapheme cluster. Unicode's longest legitimate clusters are
-// well under this; anything longer is truncated rather than grown for.
+// Codepoints per cluster; longer clusters are truncated, not grown for.
 const GRAPHEME_CAP = 64;
 const SCRATCH_CAP = 1024;
 
@@ -185,16 +168,8 @@ function newCell(): GhosttyCell {
   };
 }
 
-/**
- * The browser-side terminal model: a libghostty-vt terminal plus the render
- * state a renderer reads each frame.
- *
- * Viewport reads go through the render state, which is the API built for a
- * render loop. Scrollback reads go through grid references, which upstream
- * warns are not render-loop material — measured at 0.72ms for a full 200x50
- * scrolled-back viewport, against 0.53ms for the same volume through the
- * render state. That is inside a frame, and only a scrolled-back pane pays it.
- */
+// Scrollback reads use grid references: measured 0.72ms for a full 200x50
+// scrolled-back viewport, against 0.53ms through the render state.
 export class GhosttyTerminal {
   private readonly e: GhosttyExports;
   private handle: number;
@@ -205,8 +180,6 @@ export class GhosttyTerminal {
   private _cols: number;
   private _rows: number;
 
-  // Scratch wasm memory, allocated once and reused. Every out-parameter the
-  // C API writes lands in one of these.
   private readonly pScratch: number;
   private readonly pPoint: number;
   private readonly pRef: number;
@@ -222,18 +195,14 @@ export class GhosttyTerminal {
   private rowPool: GhosttyCell[] = [];
   private rowDirty = new Uint8Array(0);
   private dirty = DIRTY_FALSE;
-  // Whether a write or resize has landed since the render state was synced.
   private stale = true;
 
   private responses: string[] = [];
 
-  // Kept so a decoded handle comes up configured like the one it replaces.
   private readonly config: GhosttyTerminalConfig;
   private writePtyFn = 0;
   private historyDecoder: SnapshotHistoryDecoder | null = null;
 
-  // A DataView is far more expensive to allocate than any wasm call it wraps,
-  // so it is cached and only rebuilt when memory growth detaches the buffer.
   private view: DataView;
   private viewBuffer: ArrayBuffer;
 
@@ -275,10 +244,8 @@ export class GhosttyTerminal {
     this.config = config;
     this.applyConfig(config);
 
-    // Query responses (DSR, DA, DECRQM) come back through this callback rather
-    // than a poll, so hasResponse/readResponse drain a JS queue. The table entry
-    // is never reclaimed, so it is installed once and re-pointed at whatever
-    // handle this object currently owns.
+    // The function-table entry is never reclaimed: install it once and re-point
+    // it at whatever handle this object owns.
     this.writePtyFn = installCallback(exports.__indirect_function_table, (_t, _u, ptr, len) => {
       if (len <= 0) return;
       this.responses.push(this.decoder.decode(new Uint8Array(this.e.memory.buffer, ptr, len)));
@@ -300,20 +267,14 @@ export class GhosttyTerminal {
   get cols(): number { return this._cols; }
   get rows(): number { return this._rows; }
 
-  /**
-   * Point the row iterator at the current render state and return it.
-   *
-   * ROW_ITERATOR populates a pre-allocated iterator rather than handing one
-   * back, so the handle has to be in the out slot before the call — passing an
-   * empty slot silently iterates nothing useful.
-   */
+  // ROW_ITERATOR populates a pre-allocated iterator: the handle must be in the
+  // out slot first, or the call silently iterates nothing.
   private rowIterator(): number {
     this.dv().setUint32(this.pScratch, this.iterator, true);
     this.e.ghostty_render_state_get(this.state, RENDER_DATA_ROW_ITERATOR, this.pScratch);
     return this.iterator;
   }
 
-  /** Same contract as rowIterator(), for the current row's cells. */
   private rowCells(it: number): number {
     this.dv().setUint32(this.pScratch, this.cells, true);
     this.e.ghostty_render_state_row_get(it, ROW_DATA_CELLS, this.pScratch);
@@ -388,18 +349,8 @@ export class GhosttyTerminal {
     this.stale = true;
   }
 
-  /**
-   * Replace this terminal's state with the one a snapshot holds.
-   *
-   * Only the libghostty handle is swapped. The render state, the scratch
-   * buffers, the cell pool, and every reference a renderer holds survive, so a
-   * restore does not rebuild the pane around it.
-   *
-   * The renderable prefix lands before this returns; the returned history is
-   * the part that scales with scrollback and belongs after the first paint.
-   * Finish or close it — until then the decoder borrows both the snapshot bytes
-   * and this terminal.
-   */
+  // Finish or close the returned decoder: until then it borrows both the
+  // snapshot bytes and this terminal.
   adoptSnapshot(snapshot: Uint8Array): SnapshotHistoryDecoder {
     const e = this.e;
     this.historyDecoder?.close();
@@ -430,8 +381,6 @@ export class GhosttyTerminal {
     this.handle = handle;
     e.ghostty_terminal_set(handle, TERMINAL_OPT_WRITE_PTY, this.writePtyFn);
     this.applyConfig(this.config);
-    // Anything the old handle queued answered a query nobody is waiting on any
-    // more, and a decode of its own puts nothing on the pty.
     this.responses.length = 0;
 
     e.ghostty_terminal_get(handle, TERMINAL_DATA_COLS, this.pScratch);
@@ -497,19 +446,8 @@ export class GhosttyTerminal {
     this.cellPool.length = 0;
   }
 
-  /**
-   * Bring the render state up to date with the terminal, if a write or resize
-   * has landed since the last time.
-   *
-   * Every render-state read goes through this. The alternative — making the
-   * caller sync — reads the cursor and the viewport as of the previous frame,
-   * which is how command blocks came to record stale rows: the app reads the
-   * cursor immediately after writing the bytes that moved it.
-   *
-   * Syncing mid-frame is safe for the renderer: the dirty state lives in the
-   * terminal until markClean() clears it, so a read between frames re-reports
-   * the same dirt rather than taking a repaint the renderer never made.
-   */
+  // Every render-state read goes through this; one that skips it sees the
+  // cursor and viewport as of the previous frame.
   private sync(): void {
     if (!this.stale) return;
     this.stale = false;
@@ -527,9 +465,6 @@ export class GhosttyTerminal {
     }
   }
 
-  /**
-   * Sync and report everything that changed since the last markClean().
-   */
   update(): number {
     this.sync();
     return this.dirty;
@@ -553,10 +488,7 @@ export class GhosttyTerminal {
     this.dirty = DIRTY_FALSE;
   }
 
-  /**
-   * Every viewport cell, row-major. The array is a reused pool: consume it
-   * before the next getViewport() call.
-   */
+  // Returns a reused pool: consume it before the next getViewport() call.
   getViewport(): GhosttyCell[] {
     this.sync();
     const pool = this.cellPool;
@@ -569,21 +501,11 @@ export class GhosttyTerminal {
       base += this._cols;
       y += 1;
     }
-    // Rows the iterator did not reach (a shrunk viewport mid-frame) must not
-    // show the previous frame's content.
     for (; base < pool.length; base += 1) this.blank(pool[base], defaults);
     return pool;
   }
 
-  /**
-   * One active-area row, read without decoding the rows around it. Advancing
-   * the row iterator is far cheaper than reading a row, so a caller after a
-   * single line pays for one — hover detection joins up to six lines per
-   * pointer position, against a viewport tens of rows deep.
-   *
-   * The array is a reused pool of its own: consume it before the next
-   * getActiveLine() call. getViewport()'s pool is untouched.
-   */
+  // Returns a reused pool of its own: consume it before the next call.
   getActiveLine(y: number): GhosttyCell[] | null {
     if (y < 0 || y >= this._rows) return null;
     this.sync();
@@ -597,11 +519,6 @@ export class GhosttyTerminal {
     return this.rowPool;
   }
 
-  /**
-   * A copy of one active-area row. Unlike getViewport() this syncs the render
-   * state first and hands back cells the caller owns, for readers outside a
-   * render loop that just want a row's content.
-   */
   getLine(y: number): GhosttyCell[] | null {
     if (y < 0 || y >= this._rows) return null;
     const start = y * this._cols;
@@ -626,8 +543,6 @@ export class GhosttyTerminal {
     const len = Math.min(this.dv().getUint32(this.pScratch + 4, true), this._cols);
     const cells = this.rowCells(it);
 
-    // Row-level flags let whole rows skip the per-cell style and grapheme
-    // queries, which is the common case for terminal output.
     e.ghostty_render_state_row_get(it, ROW_DATA_RAW, this.pScratch);
     const rawRow = this.dv().getBigUint64(this.pScratch, true);
     const hasGraphemes = this.rowFlag(rawRow, ROW_RAW_DATA_GRAPHEME);
@@ -696,11 +611,7 @@ export class GhosttyTerminal {
     return { fg, bg: { r: bgBytes[0], g: bgBytes[1], b: bgBytes[2] } };
   }
 
-  /**
-   * The resolved 256-color palette, for decoding scrollback style slots. Read
-   * once per getScrollbackLine call; the returned view aliases wasm memory and
-   * is only valid until the next allocation-growing call.
-   */
+  // The returned view aliases wasm memory: invalid after any growing call.
   private renderPalette(): Uint8Array | null {
     this.sync();
     this.dv().setUint32(this.pColors, COLORS_SIZE, true);
@@ -708,7 +619,6 @@ export class GhosttyTerminal {
     return new Uint8Array(this.e.memory.buffer, this.pColors + COLORS_OFF_PALETTE, 256 * 3);
   }
 
-  /** Fill a cell's fg/bg from its style struct's color slots (see abi.ts). */
   private applyStyleColors(cell: GhosttyCell, defaults: { fg: RGB; bg: RGB }, palette: Uint8Array | null): void {
     const dv = this.dv();
     const resolve = (kindOff: number, valueOff: number, def: RGB): RGB => {
@@ -773,9 +683,8 @@ export class GhosttyTerminal {
     return this.dv().getUint32(this.pScratch, true) === SCREEN_TYPE_ALTERNATE;
   }
 
-  // The ABI writes one byte here (`bool *`) into a scratch buffer every other
-  // read shares, so a wider read returns the leftovers of the previous call —
-  // rowWrapsIntoNext()'s row handle, which made an untracked pane claim the wheel.
+  // The ABI writes one byte (`bool *`) into a shared scratch buffer: a wider
+  // read returns the previous call's leftovers.
   hasMouseTracking(): boolean {
     this.e.ghostty_terminal_get(this.handle, TERMINAL_DATA_MOUSE_TRACKING, this.pScratch);
     return this.dv().getUint8(this.pScratch) !== MOUSE_TRACKING_NONE;
@@ -819,10 +728,6 @@ export class GhosttyTerminal {
     return this.responses.shift() ?? null;
   }
 
-  /**
-   * Point a grid reference at (x, y), returning false when the position does
-   * not resolve. `tag` picks the coordinate space: active area or history.
-   */
   private ref(tag: number, x: number, y: number): boolean {
     const dv = this.dv();
     dv.setUint32(this.pPoint + POINT_OFF_TAG, tag, true);
@@ -832,7 +737,6 @@ export class GhosttyTerminal {
     return this.e.ghostty_terminal_grid_ref(this.handle, this.pPoint, this.pRef) === GHOSTTY_SUCCESS;
   }
 
-  /** Cells of a scrollback row, oldest row at offset 0. */
   getScrollbackLine(offset: number): GhosttyCell[] | null {
     if (offset < 0 || offset >= this.getScrollbackLength()) return null;
     const defaults = this.defaultColors();
@@ -865,12 +769,7 @@ export class GhosttyTerminal {
     return line;
   }
 
-  /**
-   * Whether an active-area row soft-wraps into the row below it.
-   *
-   * This is ghostty's own direction, and the opposite of the question callers
-   * usually ask ("does this row continue the one above?") — hence the name.
-   */
+  // Wraps into the row below, the opposite of "continues the row above".
   rowWrapsIntoNext(row: number): boolean {
     if (!this.ref(POINT_TAG_ACTIVE, 0, row)) return false;
     if (this.e.ghostty_grid_ref_row(this.pRef, this.pScratch) !== GHOSTTY_SUCCESS) return false;
@@ -891,13 +790,11 @@ export class GhosttyTerminal {
     return String.fromCodePoint(...points);
   }
 
-  /** The full grapheme cluster at an active-area cell, or a space if empty. */
   getGraphemeString(row: number, col: number): string {
     if (!this.ref(POINT_TAG_ACTIVE, col, row)) return ' ';
     return this.graphemeStringFromRef();
   }
 
-  /** The full grapheme cluster at a scrollback cell, or a space if empty. */
   getScrollbackGraphemeString(offset: number, col: number): string {
     if (!this.ref(POINT_TAG_HISTORY, col, offset)) return ' ';
     return this.graphemeStringFromRef();
@@ -912,13 +809,11 @@ export class GhosttyTerminal {
     return this.decoder.decode(new Uint8Array(this.e.memory.buffer, this.pUri, len));
   }
 
-  /** OSC 8 URI of an active-area cell, or null when it carries no hyperlink. */
   getHyperlinkUri(row: number, col: number): string | null {
     if (!this.ref(POINT_TAG_ACTIVE, col, row)) return null;
     return this.hyperlinkUriFromRef();
   }
 
-  /** OSC 8 URI of a scrollback cell, oldest row at offset 0. */
   getScrollbackHyperlinkUri(offset: number, col: number): string | null {
     if (!this.ref(POINT_TAG_HISTORY, col, offset)) return null;
     return this.hyperlinkUriFromRef();

@@ -1,11 +1,3 @@
-// Package testinv catalogs states a package's tests must reach at least once
-// per unfiltered run, and fails the run when one stops being reached — a
-// condition (not a location) that quietly stops occurring is invisible to line
-// coverage. Register marks in package-level vars in _test.go files with
-// Sometimes, route TestMain through Run, call Reached where the state occurs.
-// Scope is one package, one process. Marks live only in test files or test
-// doubles; filtered runs (-run, -skip, -short, -list) are reported, not
-// enforced. ATTN_TESTINV_VERBOSE=1 lists the whole inventory (pair with -v).
 package testinv
 
 import (
@@ -21,8 +13,6 @@ import (
 	"testing"
 )
 
-// Mark is one cataloged state: get it from Sometimes, call Reached where the
-// state occurs.
 type Mark struct {
 	what string
 	site string
@@ -38,10 +28,8 @@ func (m *Mark) Reached() {
 	m.hit.Store(true)
 }
 
-// WasReached reports whether the state has happened yet.
 func (m *Mark) WasReached() bool { return m != nil && m.hit.Load() }
 
-// String is the mark's description.
 func (m *Mark) String() string {
 	if m == nil {
 		return "<nil mark>"
@@ -49,12 +37,10 @@ func (m *Mark) String() string {
 	return m.what
 }
 
-// catalog is one package's inventory; a type so the registry's rules can be
-// tested without registering into the binary doing the testing.
 type catalog struct {
 	mu      sync.Mutex
 	entries []*Mark
-	byWhat  map[string]string // description -> registration site
+	byWhat  map[string]string
 }
 
 func newCatalog() *catalog { return &catalog{byWhat: map[string]string{}} }
@@ -62,8 +48,7 @@ func newCatalog() *catalog { return &catalog{byWhat: map[string]string{}} }
 var defaultCatalog = newCatalog()
 
 // Sometimes registers a state this package's tests must reach at least once per
-// unfiltered run. Call it from a package-level var in a _test.go file —
-// registration must precede TestMain. A duplicate description panics.
+// unfiltered run. Call it from a package-level var: registration must precede TestMain.
 func Sometimes(what string) *Mark { return defaultCatalog.add(what, callerSite(2)) }
 
 func (c *catalog) add(what, site string) *Mark {
@@ -83,9 +68,6 @@ func (c *catalog) add(what, site string) *Mark {
 	return m
 }
 
-// Run substitutes for m.Run inside TestMain (it does not replace TestMain): it
-// runs the tests, then turns a passing run into a failing one when a cataloged
-// state was never reached.
 func Run(m *testing.M) int {
 	code := m.Run()
 
@@ -100,7 +82,6 @@ func Run(m *testing.M) int {
 	return code
 }
 
-// state is one inventory entry as review sees it.
 type state struct {
 	what    string
 	site    string
@@ -118,8 +99,6 @@ func (c *catalog) snapshot() []state {
 	return out
 }
 
-// review renders the inventory report and says whether the run should fail.
-// skipped is the reason enforcement does not apply, or "".
 func review(states []state, skipped string, testsPassed, verbose bool) (report string, incomplete bool) {
 	if len(states) == 0 {
 		return "", false
@@ -210,7 +189,6 @@ func testFlag(name string) string {
 	return f.Value.String()
 }
 
-// callerSite is the package-relative file:line the mark was registered from.
 func callerSite(skip int) string {
 	_, file, line, ok := runtime.Caller(skip)
 	if !ok {

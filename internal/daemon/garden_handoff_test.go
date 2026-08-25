@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handoff writes a note addressed to whoever tends the seed next.
 func handoff(t *testing.T, d *Daemon, session, seedID, body, member string) protocol.SeedNote {
 	t.Helper()
 	msg := protocol.SeedNoteMessage{
@@ -30,9 +29,6 @@ func handoff(t *testing.T, d *Daemon, session, seedID, body, member string) prot
 	return resp.SeedNoteResult.Note
 }
 
-// The slice's acceptance, with two real sessions: session A tends a seed, files
-// a handoff and ends; session B picks the seed up and the handoff is in the
-// answer to its claim, before it has done anything.
 func TestGarden_AHandoffReachesTheNextTender(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-b")
@@ -48,7 +44,6 @@ func TestGarden_AHandoffReachesTheNextTender(t *testing.T) {
 		t.Fatalf("the note was stored as %q, want a handoff", left.Kind)
 	}
 
-	// Session A ends. The seed keeps A's name on it, and nothing settles it.
 	d.store.Remove("sess-a")
 
 	resp := transition(t, d, "sess-b", seed.ID, garden.VerbTend, "", "alder")
@@ -66,16 +61,12 @@ func TestGarden_AHandoffReachesTheNextTender(t *testing.T) {
 		t.Fatalf("the handoff does not name who wrote it: %+v", got)
 	}
 
-	// And the same note is what `show` puts in front of a reader.
 	shown := show(t, d, seed.ID)
 	if shown.Handoff == nil || shown.Handoff.ID != left.ID {
 		t.Fatalf("show surfaced %+v, want the handoff", shown.Handoff)
 	}
 }
 
-// A handoff outlives the log window. It is the case a scan of `show`'s newest
-// few notes would miss, and the one that matters most: a busy seed is exactly
-// where a successor needs the note that was written to them.
 func TestGarden_TheFreshestHandoffSurvivesABusyLog(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "busy"})
@@ -93,8 +84,6 @@ func TestGarden_TheFreshestHandoffSurvivesABusyLog(t *testing.T) {
 	if shown.Handoff.ID != newest.ID {
 		t.Fatalf("show surfaced %q, want the freshest handoff %q", shown.Handoff.ID, newest.ID)
 	}
-	// The window itself is unchanged: `show` still renders the newest few notes
-	// and still counts the whole log.
 	if len(shown.Notes) != garden.ShowNotes {
 		t.Fatalf("show rendered %d notes, want the usual %d", len(shown.Notes), garden.ShowNotes)
 	}
@@ -103,8 +92,6 @@ func TestGarden_TheFreshestHandoffSurvivesABusyLog(t *testing.T) {
 	}
 }
 
-// Tending is the pickup, so it is the only move whose answer primes. The other
-// four settle a seed; nobody is picking it up and a handoff there is noise.
 func TestGarden_OnlyTendCarriesTheHandoff(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "settled"})
@@ -128,8 +115,6 @@ func TestGarden_OnlyTendCarriesTheHandoff(t *testing.T) {
 	}
 }
 
-// A seed nobody handed over says nothing about handoffs, and a note written the
-// way `attn seed note` always wrote one is still a plain log entry.
 func TestGarden_NoHandoffIsNoHandoff(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "quiet"})
@@ -167,9 +152,6 @@ func TestGarden_AnUnknownNoteKindIsRefusedByName(t *testing.T) {
 	}
 }
 
-// A handoff is a note: it rides `garden.noted` like every other log entry, so
-// the panel re-push a note already produced covers it and no new fact exists to
-// leave unprojected.
 func TestGarden_AHandoffPublishesTheNoteFact(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "facts"})

@@ -26,7 +26,6 @@ func TestLinearThreeAgents(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("journal has %d entries, want 3", len(entries))
 	}
-	// Each linear call gets a distinct structural ordinal (distinct call sites).
 	seen := map[string]bool{}
 	for _, e := range entries {
 		if seen[e.Ordinal] {
@@ -54,15 +53,12 @@ func TestWatchdogKillsInfiniteLoop(t *testing.T) {
 	if !strings.Contains(res.Err.Error(), "watchdog") {
 		t.Errorf("interrupt error %q should mention the watchdog", res.Err.Error())
 	}
-	// Must be killed promptly — well under a generous ceiling, proving it is not a hang.
 	if elapsed > 3*time.Second {
 		t.Errorf("watchdog took %v, expected near the 150ms timeout", elapsed)
 	}
 }
 
 func TestWatchdogKillsBusyLoopAfterAwait(t *testing.T) {
-	// A busy loop reached only after an await still gets killed (the watchdog arms
-	// around each resolve() re-entry, not just the initial run).
 	eng := newTestEngine(func(c *Config) { c.WatchdogTimeout = 150 * time.Millisecond })
 	script := `
 		await agent("warmup");
@@ -91,7 +87,6 @@ func TestContextCancelInterrupts(t *testing.T) {
 }
 
 func TestAgentLifetimeCapTrips(t *testing.T) {
-	// while(true){ await agent() } trips the lifetime cap and rejects.
 	eng := newTestEngine(func(c *Config) {
 		c.AgentLifetimeCap = 5
 		c.WatchdogTimeout = 5 * time.Second
@@ -110,7 +105,6 @@ func TestAgentLifetimeCapTrips(t *testing.T) {
 	if !strings.Contains(res.Err.Error(), "lifetime cap") {
 		t.Errorf("error %q should mention the lifetime cap", res.Err.Error())
 	}
-	// The cap is on LIVE calls; exactly the cap many should have run live.
 	if res.LiveCalls != 5 {
 		t.Errorf("LiveCalls = %d, want 5 (the cap)", res.LiveCalls)
 	}

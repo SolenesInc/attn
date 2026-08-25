@@ -20,7 +20,6 @@ func TestOpensTurn(t *testing.T) {
 		{protocol.SessionStateWorking, false},
 		{protocol.SessionStateScheduled, false},
 		{protocol.SessionStateRecoverable, false},
-		// A finished run is the user's to read, so idle opens a turn too.
 		{protocol.SessionStateIdle, true},
 	}
 
@@ -31,9 +30,6 @@ func TestOpensTurn(t *testing.T) {
 	}
 }
 
-// Snoozing says "not now", and the set below is everything that overrides it.
-// It is deliberately narrow: every ordinary way an agent asks for the user is a
-// thing the user was deferring when they pressed snooze.
 func TestBreaksSnooze(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -46,7 +42,6 @@ func TestBreaksSnooze(t *testing.T) {
 		{"unknown breaks through whatever the reason", protocol.SessionStateUnknown, "", true},
 		{"the agent's process is gone", protocol.SessionStateIdle, string(sessionstate.ReasonProcessExited), true},
 
-		// The deferral holds through every ordinary way an agent stops.
 		{"a run that merely ended", protocol.SessionStateIdle, string(sessionstate.ReasonClassifierVerdict), false},
 		{"a session sitting at its prompt", protocol.SessionStateIdle, string(sessionstate.ReasonAtPrompt), false},
 		{"a question", protocol.SessionStateWaitingInput, string(sessionstate.ReasonQuestionOpen), false},
@@ -55,8 +50,6 @@ func TestBreaksSnooze(t *testing.T) {
 		{"scheduled", protocol.SessionStateScheduled, string(sessionstate.ReasonCronPending), false},
 		{"recoverable, which the daemon revives unattended", protocol.SessionStateRecoverable, "", false},
 
-		// process_exited is idle's alone. The pairing is what keeps a dead agent
-		// from being confused with one that simply finished.
 		{"a waiting session carrying the exited reason", protocol.SessionStateWaitingInput, string(sessionstate.ReasonProcessExited), false},
 	}
 
@@ -115,8 +108,6 @@ func TestOwedExclusions(t *testing.T) {
 			if Owed(tt.in) {
 				t.Errorf("Owed = true for an excluded session; want false")
 			}
-			// The same session without the exclusion is owed, so the test is
-			// pinning the exclusion rather than an unstamped input.
 			bare := Input{OpenedAt: tt.in.OpenedAt}
 			if !Owed(bare) {
 				t.Fatalf("Owed = false without the exclusion; the case proves nothing")
@@ -125,8 +116,6 @@ func TestOwedExclusions(t *testing.T) {
 	}
 }
 
-// A shell is registered idle at birth and left there, so the exclusion is the
-// only thing keeping every terminal pane out of the queue forever.
 func TestOwedExcludesIdleShell(t *testing.T) {
 	opened := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
 	if Owed(Input{OpenedAt: opened, IsShell: true}) {

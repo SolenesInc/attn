@@ -7,19 +7,9 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 )
 
-// The daemon's periodic duties — the notebook tick, the scheduled-automation
-// observation, the crew lifecycle — used to be ticker goroutines whose next
-// fire lived only in memory. They are cron entries on the job queue now, so
-// startJobQueue is what arms them: if this breaks, nothing ticks and nothing
-// says so.
 func TestStartJobQueueArmsThePeriodicTicks(t *testing.T) {
 	d := newBubbleDaemon(t)
 	notebookRoot := t.TempDir()
-	// Arming is synchronous inside startJobQueue, so a missing entry here is never
-	// an early read: either the runner never started or the store refused the
-	// write. Both used to be logged into a test daemon's nil logger and dropped,
-	// which is how this failing under full-suite load survived a triage as a race.
-	// CronEntry carries the reason now, so the fatal below prints it.
 	synctest.Test(t, func(t *testing.T) {
 		d.store.SetSetting(SettingNotebookRoot, notebookRoot)
 		d.startJobQueue()
@@ -40,7 +30,6 @@ func TestStartJobQueueArmsThePeriodicTicks(t *testing.T) {
 			}
 		}
 
-		// The panel lists work the daemon owes, so the heartbeats must not be in it.
 		list, err := runner.List()
 		if err != nil {
 			t.Fatalf("list: %v", err)

@@ -281,10 +281,6 @@ func TestRedactTextCoversCredentialForms(t *testing.T) {
 	}
 }
 
-// Thinking is the agent's own reasoning, and it is the densest statement of what
-// a session is currently trying to do — roughly twice the volume of assistant
-// prose in a real transcript. It is emitted as its own kind so a consumer can
-// tell it apart from text the user was actually shown.
 func TestReadEventPageExtractsThinking(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"assistant","message":{"content":[{"type":"thinking","thinking":"The migration is failing because token=super-secret-value is stale."},{"type":"text","text":"Fixing the migration."},{"type":"tool_use","id":"t1","name":"Edit","input":{"file":"m.sql"}}]}}`,
@@ -298,8 +294,6 @@ func TestReadEventPageExtractsThinking(t *testing.T) {
 	for _, e := range page.Events {
 		kinds = append(kinds, e.Kind)
 	}
-	// Assistant prose leads the record; thinking and the tool call follow in
-	// block order. A whitespace-only thinking block emits nothing.
 	want := []string{EventKindAssistant, EventKindThinking, EventKindToolCall}
 	if strings.Join(kinds, ",") != strings.Join(want, ",") {
 		t.Fatalf("kinds = %v, want %v", kinds, want)
@@ -311,16 +305,13 @@ func TestReadEventPageExtractsThinking(t *testing.T) {
 	if !strings.Contains(thinking.Text, "migration is failing") {
 		t.Errorf("thinking text lost: %q", thinking.Text)
 	}
-	// Thinking is unfiltered agent reasoning and leaves the machine for a model,
-	// so it must go through the same redaction as every other event kind.
 	if strings.Contains(thinking.Text, "super-secret-value") {
 		t.Errorf("thinking was not redacted: %q", thinking.Text)
 	}
 }
 
 // Codex carries readable reasoning only in agent_reasoning; its sibling
-// "reasoning" response_item holds encrypted_content and an empty summary, and is
-// absent from some rollouts entirely.
+// "reasoning" response_item holds encrypted_content and an empty summary.
 func TestReadEventPageExtractsCodexAgentReasoning(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Preparing workspace and researching CVEs**"}}`,
@@ -341,9 +332,6 @@ func TestReadEventPageExtractsCodexAgentReasoning(t *testing.T) {
 	}
 }
 
-// A cold-start consumer wants the transcript's future, not its past. Reading
-// from byte 0 and discarding costs a full scan of a file that reaches tens of
-// megabytes and produces nothing the caller asked for.
 func TestHeadCursorSkipsEverythingAlreadyWritten(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}`,
@@ -372,8 +360,6 @@ func TestHeadCursorSkipsEverythingAlreadyWritten(t *testing.T) {
 	}
 }
 
-// A partially written final record must stay unread until its writer appends
-// the newline — the same rule ReadEventPage follows.
 func TestHeadCursorLeavesAPartialRecordUnread(t *testing.T) {
 	path := writeEventTranscript(t, `{"type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}`)
 	partial := `{"type":"assistant","message":{"content":[{"type":"text","text":"half`

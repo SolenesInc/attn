@@ -6,8 +6,6 @@ import type { PaneRuntimeEventRouter } from './SessionTerminalWorkspace/paneRunt
 import { type TerminalWorkspaceState } from '../types/workspace';
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../contexts/NotebookSurfaceContext';
 
-// A docked tile (markdown, below) reads effectiveNotebookRoot unconditionally
-// via useNotebookSurfaceContext — real usage is always under App's provider.
 const testSurfaceValue: NotebookSurfaceContextValue = {
   makeDaemon: () => ({
     listDir: vi.fn(),
@@ -63,7 +61,6 @@ const mockEventRouter: PaneRuntimeEventRouter = {
   registerBinding: vi.fn(() => () => {}),
 };
 
-// Zoom mode lives in App, so a standalone render needs a host to hold it.
 function ZoomHost({ workspace, activePaneId }: { workspace: TerminalWorkspaceState; activePaneId: string }) {
   const [zoomActive, setZoomActive] = useState(false);
   return (
@@ -167,10 +164,8 @@ vi.mock('./GhosttyTerminal', () => ({
   }),
 }));
 
-// Shortcuts are recorded rather than dispatched, so a test can invoke one by
-// id. Both entry points carry it — the barrel for modules that import it, and
-// the direct path the workspace itself uses. The bodies are duplicated because
-// vi.mock factories are hoisted above any shared helper.
+// Shortcuts are recorded rather than dispatched, so a test can invoke one by id.
+// The bodies are duplicated because vi.mock factories are hoisted above any shared helper.
 vi.mock('../shortcuts', () => ({
   useShortcut: vi.fn((id: string, handler: () => void, enabled?: boolean) => {
     if (enabled) {
@@ -233,8 +228,6 @@ describe('SessionTerminalWorkspace', () => {
 
   it('focuses the agent pane exactly once on active session render — no retries', () => {
     vi.useFakeTimers();
-    // Focus fails — but focusActivePane should not retry; retries belong to the
-    // init/ready path (focusPaneIfCurrentlyActive) which runs from Terminal callbacks.
     mockTerminalFocus.mockReset().mockReturnValue(false);
 
     render(
@@ -257,7 +250,6 @@ describe('SessionTerminalWorkspace', () => {
     expect(mockTerminalFocus).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(200);
-    // Still exactly 1 — no retry chains started
     expect(mockTerminalFocus).toHaveBeenCalledTimes(1);
   });
 
@@ -287,9 +279,8 @@ describe('SessionTerminalWorkspace', () => {
     expect(screen.getByTestId(`pane-virtualized-${SESSION_PANE_ID}`)).toBeTruthy();
   });
 
-  // An inactive session's wrapper is display:none, so its panes' GPU drawing
-  // buffers show nothing and can go back. A pane behind a modal is still on
-  // screen, which is why `enabled` must not drive this.
+  // An inactive session's wrapper is display:none, so its panes' GPU drawing buffers can
+  // go back. A pane behind a modal is still on screen, so `enabled` must not drive this.
   it('releases pane drawing buffers while the session is inactive and takes them back on reveal', () => {
     const releasedCalls = () => mockTerminalSetSurfaceReleased.mock.calls.map(([released]) => released);
     const { rerender } = render(
@@ -384,7 +375,6 @@ describe('SessionTerminalWorkspace', () => {
     );
     expect(screen.getByTestId('mock-terminal')).toBeTruthy();
 
-    // Falls out of the warm set -> terminal unmounts (frees WASM model + WebGL).
     act(() => {
       rerender(
         <SessionTerminalWorkspace
@@ -398,7 +388,6 @@ describe('SessionTerminalWorkspace', () => {
     expect(screen.queryByTestId('mock-terminal')).toBeNull();
     expect(screen.getByTestId(`pane-virtualized-${SESSION_PANE_ID}`)).toBeTruthy();
 
-    // Returns to view -> terminal remounts (rehydrates from daemon replay).
     act(() => {
       rerender(
         <SessionTerminalWorkspace
@@ -864,9 +853,6 @@ describe('SessionTerminalWorkspace', () => {
       />
     );
 
-    // A leaf drag only locks selection once the pointer crosses the activation
-    // threshold — a press alone stays a click (see leafDrag.ts). Press, then move
-    // past the threshold to activate.
     fireEvent.pointerDown(container.querySelector('.workspace-dock-tile-header') as HTMLElement, { button: 0, clientX: 750, clientY: 250 });
     expect(document.body.style.userSelect).toBe('');
     fireEvent.pointerMove(window, { clientX: 760, clientY: 280 });
@@ -912,7 +898,6 @@ describe('SessionTerminalWorkspace', () => {
       left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
     });
 
-    // Press and release on the tile header with no movement: a click, not a drag.
     const header = container.querySelector('.workspace-dock-tile-header') as HTMLElement;
     fireEvent.pointerDown(header, { button: 0, clientX: 750, clientY: 8 });
     fireEvent.pointerUp(window, { clientX: 750, clientY: 8 });
@@ -1285,11 +1270,8 @@ describe('SessionTerminalWorkspace', () => {
   });
 
   it('retries the reveal refit (at both late ticks) while the pane still overflows its container', () => {
-    // Reproduces the reveal-time bug: the window shrank while this pane was
-    // hidden, so on reveal its grid is taller/wider than the container. Unlike
-    // the suspicious-size case, this pane's cols/rows are unremarkable — only
-    // overflowsContainer() reports the problem — so the late retries must
-    // consult it, not just isSuspiciousTerminalSize.
+    // Grid larger than the container while cols/rows stay unremarkable: only
+    // overflowsContainer() reports it, so the late retries must consult it.
     vi.useFakeTimers();
     mockTerminalFit.mockReset();
     mockTerminalOverflowsContainer.mockReset().mockReturnValue(true);

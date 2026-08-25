@@ -9,15 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The document store end to end over a real unix socket, through the same
-// internal/client every other caller uses.
-//
-// Every other test in this package calls a handler with a net.Pipe on both ends,
-// which proves the handler and proves nothing about the seam. This one is the
-// only place where the wire encoding, the client's own read loop and its
-// application of the window rule are exercised together — and A4's SDK sits
-// directly on that read loop, so it stops being untested before anything is
-// built on it.
 func TestDocumentsOverARealSocket(t *testing.T) {
 	useFreeWSPort(t)
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
@@ -54,14 +45,9 @@ func TestDocumentsOverARealSocket(t *testing.T) {
 		t.Fatalf("query answered as of seq %d; two writes have landed", read.AsOfSeq)
 	}
 
-	// A fresh subscription: the first window carries every body, and a write
-	// made while it is open carries only the body that changed. The write is
-	// made from inside the callback so it lands while the read loop is running,
-	// which is the only way to observe a delivery that is not the first.
+	// Written from inside the callback so it lands while the read loop is running.
 	var windows []client.DocWindow
-	// The daemon delivers the second window the moment the write commits, which
-	// can be before the writer's own RPC response arrives — so the seq travels
-	// over a channel rather than a variable the subscribe loop would race.
+	// The seq travels over a channel rather than a variable the loop would race.
 	putSeq := make(chan int, 1)
 	err = c.DocSubscribe(q, nil, func(w client.DocWindow) bool {
 		windows = append(windows, w)
@@ -95,9 +81,6 @@ func TestDocumentsOverARealSocket(t *testing.T) {
 		t.Fatalf("the live window is as of seq %d, below the write it reflects at %d", live.AsOfSeq, seq)
 	}
 
-	// Resume. Between the two subscriptions a document is removed and another is
-	// edited, so the resumed window must carry exactly one body — and the client
-	// must be able to render the two it kept.
 	held := live.Documents
 	if _, err := c.DocDelete(testDocNS, testDocColl, "a", nil); err != nil {
 		t.Fatalf("delete: %v", err)
@@ -127,8 +110,6 @@ func TestDocumentsOverARealSocket(t *testing.T) {
 				t.Fatalf("b applied as %s", doc.Body)
 			}
 		case "c":
-			// Never re-sent; this body came out of the client's own cache,
-			// which is the whole point of resuming by content.
 			if doc.Body != `{"status":"pending"}` {
 				t.Fatalf("c applied as %s", doc.Body)
 			}
@@ -137,10 +118,6 @@ func TestDocumentsOverARealSocket(t *testing.T) {
 		}
 	}
 
-	// Teardown. Removing the collection ends the live query with the code a UI
-	// host branches on, and the client reports it as an error rather than as a
-	// clean end — a watcher that exits 0 here is a watcher that stopped watching
-	// without saying so.
 	ended := make(chan error, 1)
 	opened := make(chan struct{})
 	go func() {

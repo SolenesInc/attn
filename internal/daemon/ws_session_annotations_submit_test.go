@@ -27,10 +27,8 @@ func sendAnnotationSubmit(t *testing.T, d *Daemon, sessionID, text string) proto
 	return res
 }
 
-// The whole point of routing the send through the daemon: the payload is typed
-// as one bracketed-paste block and the Enter that submits it arrives as a
-// SEPARATE PTY write. Folded into the first write it would be pasted text, and
-// the feedback would sit in the composer forever.
+// The Enter that submits arrives as a SEPARATE PTY write: folded into the bracketed-paste
+// block it would be pasted text, and the feedback would sit in the composer forever.
 func TestSessionAnnotationsSubmitDelivers(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -51,10 +49,6 @@ func TestSessionAnnotationsSubmitDelivers(t *testing.T) {
 	}
 }
 
-// pending_approval is an annotatable state — an approval prompt is exactly when
-// a user wants to push back — but it is also where the submitting Enter would
-// ANSWER that prompt. Nothing is typed, and the client is told why so it can
-// keep the marks for a retry.
 func TestSessionAnnotationsSubmitSkipsPendingApproval(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -93,8 +87,6 @@ func TestSessionAnnotationsSubmitUnknownSession(t *testing.T) {
 	}
 }
 
-// An empty payload would submit a bare Enter into the session — a turn made of
-// nothing. Refused with a named reason rather than delivered.
 func TestSessionAnnotationsSubmitRejectsEmptyText(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -115,8 +107,6 @@ func TestSessionAnnotationsSubmitRejectsEmptyText(t *testing.T) {
 	}
 }
 
-// A PTY write that fails is reported as an error, never as a delivery: the
-// client clears the user's marks on `delivered` and on nothing else.
 func TestSessionAnnotationsSubmitDeliveryFailure(t *testing.T) {
 	d := newSubmitDaemon(t)
 	d.ptyBackend = &failingInputBackend{fakeSpawnBackend: &fakeSpawnBackend{}}

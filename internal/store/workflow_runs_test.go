@@ -6,16 +6,9 @@ import (
 
 func strptr(s string) *string { return &s }
 
-// TestWorkflowRunCRUD exercises migration 51 plus the full workflow journal CRUD:
-// run upsert/get round-trip, update-on-conflict for runs and calls, the composite
-// UNIQUE(run_id, ordinal) upsert, id-ASC list ordering, the optional session
-// filter, created_at DESC list ordering, manual child-delete cascade, and nullable
-// round-trips. No insertTestSession: session_id/workspace_id are unenforced columns.
 func TestWorkflowRunCRUD(t *testing.T) {
 	s := New()
 
-	// Migration smoke: tables must exist after New(), and the DB must be at the
-	// latest schema version (the workflow-tables migration is part of that chain).
 	var maxVersion int
 	if err := s.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
@@ -24,7 +17,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("schema version = %d, want %d", maxVersion, latestSchemaVersion())
 	}
 
-	// 1. Insert a fully-populated run.
 	run := &WorkflowRunRow{
 		RunID:       "run-1",
 		ScriptPath:  "/scripts/review.js",
@@ -66,7 +58,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("CompletedAt = %v, want nil", got.CompletedAt)
 	}
 
-	// 2. Update-on-conflict: same run_id, changed status/phase/completed_at.
 	run.Status = "completed"
 	run.Phase = strptr("done")
 	run.CompletedAt = strptr("2026-06-14T10:05:00Z")
@@ -85,7 +76,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("update not applied: status=%q completedAt=%v", got.Status, got.CompletedAt)
 	}
 
-	// 3. Agent calls: two distinct ordinals, then re-upsert ordinal "0".
 	call0 := &WorkflowAgentCallRow{
 		RunID:      "run-1",
 		Ordinal:    "0",
@@ -99,7 +89,7 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		Ordinal:    "1",
 		PromptHash: strptr("ph1"),
 		SchemaHash: strptr("none"),
-		ResultJSON: nil, // nullable round-trip
+		ResultJSON: nil,
 		Status:     "errored",
 		Error:      strptr("boom"),
 	}
@@ -110,7 +100,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("UpsertWorkflowAgentCall call1: %v", err)
 	}
 
-	// Re-upsert ordinal "0" with a changed status/result — overwrite, not duplicate.
 	call0.Status = "skipped"
 	call0.ResultJSON = strptr(`"first-EDITED"`)
 	if err := s.UpsertWorkflowAgentCall(call0); err != nil {
@@ -124,14 +113,12 @@ func TestWorkflowRunCRUD(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("call count = %d, want 2 (composite-key overwrite, not duplicate)", len(calls))
 	}
-	// id ASC: ordinal "0" was inserted first, so it stays first even after re-upsert.
 	if calls[0].Ordinal != "0" || calls[1].Ordinal != "1" {
 		t.Fatalf("ordering = [%q,%q], want [0,1] (id ASC)", calls[0].Ordinal, calls[1].Ordinal)
 	}
 	if calls[0].Status != "skipped" || calls[0].ResultJSON == nil || *calls[0].ResultJSON != `"first-EDITED"` {
 		t.Fatalf("ordinal 0 not overwritten: status=%q result=%v", calls[0].Status, calls[0].ResultJSON)
 	}
-	// Nullable round-trip: call1's ResultJSON was nil — must read back nil, not &"".
 	if calls[1].ResultJSON != nil {
 		t.Fatalf("ordinal 1 ResultJSON = %v, want nil", calls[1].ResultJSON)
 	}
@@ -139,15 +126,13 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("ordinal 1 Error = %v, want boom", calls[1].Error)
 	}
 
-	// 4. Session filter + created_at DESC ordering. Add a second run, newer, with a
-	// different session.
 	run2 := &WorkflowRunRow{
 		RunID:      "run-2",
 		ScriptPath: "/scripts/other.js",
 		ScriptHash: "def456",
 		SessionID:  strptr("sess-B"),
 		Status:     "running",
-		CreatedAt:  "2026-06-14T11:00:00Z", // newer than run-1
+		CreatedAt:  "2026-06-14T11:00:00Z",
 		UpdatedAt:  "2026-06-14T11:00:00Z",
 	}
 	if err := s.UpsertWorkflowRun(run2); err != nil {
@@ -170,7 +155,6 @@ func TestWorkflowRunCRUD(t *testing.T) {
 		t.Fatalf("session filter = %v, want only run-1", filtered)
 	}
 
-	// 5. Delete cascade (manual child delete).
 	if err := s.DeleteWorkflowRun("run-1"); err != nil {
 		t.Fatalf("DeleteWorkflowRun: %v", err)
 	}
@@ -182,15 +166,11 @@ func TestWorkflowRunCRUD(t *testing.T) {
 	if len(orphans) != 0 {
 		t.Fatalf("child calls survived delete = %d, want 0 (manual cascade)", len(orphans))
 	}
-	// run-2 untouched.
 	if survivor, _ := s.GetWorkflowRun("run-2"); survivor == nil {
 		t.Fatal("run-2 deleted by run-1 delete")
 	}
 }
 
-// TestWorkflowMigrationIdempotentOnReopen proves migration 51 is idempotent: a
-// second OpenDB over the same on-disk DB re-runs migrateDB without error and leaves
-// the schema intact.
 func TestWorkflowMigrationIdempotentOnReopen(t *testing.T) {
 	dbPath := t.TempDir() + "/attn.db"
 
@@ -213,7 +193,6 @@ func TestWorkflowMigrationIdempotentOnReopen(t *testing.T) {
 		t.Fatalf("close db1: %v", err)
 	}
 
-	// Reopen: migrateDB runs again; CREATE TABLE/INDEX IF NOT EXISTS must be no-ops.
 	db2, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB (reopen): %v", err)

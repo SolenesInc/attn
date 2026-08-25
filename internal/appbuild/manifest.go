@@ -1,19 +1,3 @@
-// Package appbuild is the apply pipeline: everything that turns an app
-// directory into a built artifact, and nothing that touches the database.
-//
-// The rule the whole package is arranged around: **apply never evaluates app
-// code.** The manifest is data, codegen is string templating, the typecheck and
-// the bundle are subprocesses that read source and never run it. Every refusal
-// therefore happens with nothing executed and nothing changed — the version flip
-// the daemon performs afterwards is the first and only state change an apply
-// makes.
-//
-// The database half lives in internal/store (CommitAppVersion) and the fact and
-// the IPC surface in internal/daemon; an app's identity — its name rule, its bus
-// consumer, its document namespace — lives in internal/apps and is imported here
-// rather than restated, so a manifest cannot disagree with the registry about
-// what an app is called.
-//
 // See docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
 package appbuild
 
@@ -31,21 +15,13 @@ import (
 )
 
 const (
-	// APIVersion is the app contract this daemon speaks. A manifest declaring a
-	// higher number is refused: it asks for behavior this build does not have,
-	// and half-loading it would give the app a runtime that silently ignores
-	// what it declared.
 	APIVersion = 1
 
-	// ManifestName is the file `attn app apply <path>` looks for.
 	ManifestName = "attn-app.toml"
 )
 
-// Manifest is `attn-app.toml`, parsed.
-//
-// The JSON tags are not decoration: the marshalled form is the declaration
-// snapshot frozen into the version row, so what an app declared at apply time
-// survives editing the file afterwards.
+// Manifest is `attn-app.toml`, parsed. The JSON tags are load-bearing: the
+// marshalled form is the declaration snapshot frozen into the version row.
 type Manifest struct {
 	Name        string       `toml:"name" json:"name"`
 	Description string       `toml:"description" json:"description,omitempty"`
@@ -58,78 +34,39 @@ type Manifest struct {
 	Commands    []Command    `toml:"commands" json:"commands,omitempty"`
 }
 
-// Command is one `[[commands]]` block: something a view can ask this app to do.
-//
-// A subscription is attn waking the app; a command is a person acting through
-// one of its views. Both end in the same place — a key of the generated
-// `Handlers` type, dispatched into the shared runtime — which is why a command
-// is a declaration here rather than a second mechanism.
 type Command struct {
-	Name string `toml:"name" json:"name"`
-	// Description is what the command does, for a reader of `attn app status`.
-	// Optional: attn renders no UI from it, so an app is not made to write prose
-	// for a button it draws itself.
+	Name        string `toml:"name" json:"name"`
 	Description string `toml:"description" json:"description,omitempty"`
 }
 
-// Subscribe is one `[[subscribe]]` block: the event patterns that wake this app.
 type Subscribe struct {
 	Events []string `toml:"events" json:"events"`
 }
 
-// Collection is one `[[collections]]` block. Fields are the queryable ones, all
-// string-typed in this API version — the manifest has no syntax for a declared
-// type yet, and inventing one before an app needs to sort numerically would be a
-// contract written against a guess.
 type Collection struct {
 	Name   string   `toml:"name" json:"name"`
 	Fields []string `toml:"fields" json:"fields,omitempty"`
 }
 
-// View is one `[[views]]` block: a named component this app offers attn to
-// render, and the title the UI puts on it.
-//
-// A view is what the app declares; a tile is a place in a workspace layout.
-// Keeping the two words apart is what makes a second mount surface an addition
-// rather than a rework — a later kind changes the accepted set below and the
-// component that mounts it, and nothing between here and the artifact moves.
 type View struct {
-	Name string `toml:"name" json:"name"`
-	// Kind is where attn is willing to put this view. Optional in app api 1 and
-	// resolved to ViewKindTile before the declaration is frozen, so a default
-	// that changes later cannot rewrite what an old version meant.
+	Name       string      `toml:"name" json:"name"`
 	Kind       string      `toml:"kind" json:"kind"`
 	Title      string      `toml:"title" json:"title"`
 	Entrypoint string      `toml:"entrypoint" json:"entrypoint"`
 	Params     *ViewParams `toml:"params" json:"params,omitempty"`
 }
 
-// ViewParams is the optional `params = { … }` declaration: it makes the dock UI
-// ask for one line of text before placing the view, and that string is what
-// makes two tiles of one view show different things.
-//
-// The string is opaque to attn — no schema, no types — exactly as a markdown
-// tile's file path is opaque to the layout. An app that needs richer input
-// renders it inside its own view.
 type ViewParams struct {
 	Label       string `toml:"label" json:"label"`
 	Placeholder string `toml:"placeholder" json:"placeholder,omitempty"`
 }
 
-// ViewKindTile is the only mount surface this attn builds. Panels and windows
-// are designed for and unbuilt; a manifest naming one is refused by name rather
-// than installed as a view nothing can render.
 const ViewKindTile = "tile"
 
-// viewKinds is what `kind` may say, and what a refusal lists.
 var viewKinds = []string{ViewKindTile}
 
-// knownTables is what a manifest may declare, named in the error an unknown
-// table produces. Future stages add entries here as they add the runtime that
-// honors them — C1 `[[hooks]]`, B2 `[[workflows]]`.
 var knownTables = []string{"subscribe", "collections", "views", "commands"}
 
-// LoadManifest reads and validates the manifest in dir.
 func LoadManifest(dir string) (Manifest, error) {
 	path := filepath.Join(dir, ManifestName)
 	data, err := os.ReadFile(path)
@@ -149,9 +86,6 @@ func LoadManifest(dir string) (Manifest, error) {
 	return m, nil
 }
 
-// ParseManifest decodes and validates manifest text. It is separate from
-// LoadManifest so every rule that does not need the filesystem can be tested as
-// one, and so the api-version gate refuses before anything else is inspected.
 func ParseManifest(text string) (Manifest, error) {
 	var m Manifest
 	md, err := toml.Decode(text, &m)
@@ -166,15 +100,11 @@ func ParseManifest(text string) (Manifest, error) {
 	m.Description = strings.TrimSpace(m.Description)
 	m.Entrypoint = strings.TrimSpace(m.Entrypoint)
 
-	// The api gate runs before the rest: a manifest from a newer attn may use
-	// syntax this build reads as an error, and "unknown table [tiles]" is a
-	// worse answer than "this app wants app api 2, this attn speaks 1".
+	// The api gate runs before the rest: newer syntax reads as an error here, and
+	// "unknown table [tiles]" is a worse answer than "this app wants app api 2".
 	if err := m.checkAPIVersion(); err != nil {
 		return Manifest{}, err
 	}
-	// The name rule is internal/apps', not a copy of it: the same string is the
-	// registry key, the bus consumer and the document namespace, and a parser
-	// with its own opinion is how those three drift apart.
 	if err := apps.ValidateName(m.Name); err != nil {
 		return Manifest{}, err
 	}
@@ -202,13 +132,6 @@ func ParseManifest(text string) (Manifest, error) {
 	return m, nil
 }
 
-// refuseUnknownKeys turns TOML this build does not understand into an error that
-// names the table and what is supported.
-//
-// Silently ignoring a declaration is the failure mode this exists to prevent: an
-// app that declares `[[tiles]]` against a daemon with no tile runtime would
-// install, run its handlers, and never render — half-loaded, with nothing saying
-// so. The manifest is a contract, and a contract with an unread clause is not one.
 func refuseUnknownKeys(md toml.MetaData) error {
 	undecoded := md.Undecoded()
 	if len(undecoded) == 0 {
@@ -255,12 +178,8 @@ func (m Manifest) checkAPIVersion() error {
 	return nil
 }
 
-// checkSubscriptions validates the event patterns and refuses a duplicate.
-//
-// A duplicate matters beyond tidiness: every pattern becomes one key of the
-// generated `Handlers` type, and two blocks naming the same pattern would
-// silently collapse into one handler slot — a subscription the author believes
-// they declared twice and can only bind once.
+// checkSubscriptions validates the event patterns and refuses a duplicate: every pattern is
+// one key of the generated `Handlers` type, so two blocks would collapse into one slot.
 func (m Manifest) checkSubscriptions() error {
 	seen := map[string]bool{}
 	for _, block := range m.Subscribe {
@@ -278,16 +197,6 @@ func (m Manifest) checkSubscriptions() error {
 	return nil
 }
 
-// checkSomethingRuns refuses an app nothing would ever reach.
-//
-// A subscription is one way in and a view is the other: a view renders when
-// somebody docks it, so an app that is all view and no handler is a whole app —
-// a tile that only reads the document store is the shape this exists to allow.
-// What is still refused is a manifest declaring neither, which would install as
-// a version that can never execute and never render.
-//
-// A command is not a third way in. It is invoked from a view of the same app,
-// so commands with no view are handlers nothing can reach.
 func (m Manifest) checkSomethingRuns() error {
 	if len(m.EventPatterns()) > 0 || len(m.Views) > 0 {
 		return nil
@@ -298,10 +207,6 @@ func (m Manifest) checkSomethingRuns() error {
 	return fmt.Errorf("declares neither a subscription nor a view, so nothing would ever run it; add a [[subscribe]] block with events = [\"session.state.changed\"] (patterns end in .* to match a family), or a [[views]] block naming a component to render")
 }
 
-// validateEventPattern accepts what internal/bus can match: an exact dotted fact
-// name, or a family prefix ending in `.*`. A bare `*` is refused — an app that
-// wakes for every fact in the system is almost always a typo, and the cost of
-// being wrong is a handler running on every state change attn makes.
 func validateEventPattern(pattern string) error {
 	switch {
 	case pattern == "":
@@ -324,12 +229,6 @@ func validateEventPattern(pattern string) error {
 	return nil
 }
 
-// checkViews validates every `[[views]]` block and resolves each one's kind.
-//
-// Resolving here rather than at render time is what makes the frozen
-// declaration honest: it records the kind this attn understood the view to
-// have, so a default that changes in a later api version cannot rewrite what an
-// old version meant.
 func (m *Manifest) checkViews() error {
 	seen := map[string]bool{}
 	for i := range m.Views {
@@ -373,12 +272,6 @@ func (m *Manifest) checkViews() error {
 	return nil
 }
 
-// checkCommands validates every `[[commands]]` block.
-//
-// A duplicate is refused for the reason a duplicate subscription is: each name
-// becomes one key of the generated `Handlers` type, and two blocks naming the
-// same command would collapse into one slot an author believes they declared
-// twice.
 func (m *Manifest) checkCommands() error {
 	seen := map[string]bool{}
 	for i := range m.Commands {
@@ -396,15 +289,6 @@ func (m *Manifest) checkCommands() error {
 	return nil
 }
 
-// checkCollections validates each declaration against the document store's own
-// rules, under the namespace the app will actually write to, so a name the store
-// would refuse at write time is refused here instead — at apply, with the
-// manifest in hand.
-//
-// This function does not create the collections. The daemon does, in
-// declareAppCollections, once the version is committed and the app is pointed at
-// it — creating storage for a build that may still fail typecheck would be a
-// state change validation is not allowed to make.
 func (m Manifest) checkCollections() error {
 	seen := map[string]bool{}
 	for _, c := range m.Collections {
@@ -430,9 +314,6 @@ func (m Manifest) checkCollections() error {
 	return nil
 }
 
-// checkEntrypoint is the one rule that needs the directory: every entrypoint the
-// manifest names — the app's own and one per view — has to be there, inside the
-// app, and a file.
 func (m Manifest) checkEntrypoint(dir string) error {
 	if err := checkEntrypointFile(dir, m.Entrypoint, "entrypoint"); err != nil {
 		return err
@@ -464,9 +345,6 @@ func checkEntrypointFile(dir, entrypoint, what string) error {
 	return nil
 }
 
-// EventPatterns is every pattern the app subscribes to, in declaration order —
-// the keys of the generated `Handlers` type, and the bus filter the runtime
-// registers.
 func (m Manifest) EventPatterns() []string {
 	var out []string
 	for _, block := range m.Subscribe {
@@ -477,7 +355,6 @@ func (m Manifest) EventPatterns() []string {
 	return out
 }
 
-// ViewNames is every declared view, in declaration order — one artifact each.
 func (m Manifest) ViewNames() []string {
 	out := make([]string, 0, len(m.Views))
 	for _, v := range m.Views {
@@ -486,7 +363,6 @@ func (m Manifest) ViewNames() []string {
 	return out
 }
 
-// CommandNames is every declared command, in declaration order.
 func (m Manifest) CommandNames() []string {
 	out := make([]string, 0, len(m.Commands))
 	for _, c := range m.Commands {
@@ -495,13 +371,8 @@ func (m Manifest) CommandNames() []string {
 	return out
 }
 
-// DeclaredCommands reads the command names back out of a frozen declaration.
-//
-// The serving version's declaration is the contract, exactly as it is for
-// views: after a rollback, what an app answers is what the version now serving
-// declared, not what the manifest on disk says today. Every name is validated
-// rather than trusted — the declaration arrived over the wire, and the name
-// becomes a dispatch key.
+// DeclaredCommands reads the command names back out of a frozen declaration — the serving
+// version's contract. Every name is validated: it arrived over the wire and becomes a key.
 func DeclaredCommands(declaration string) ([]string, error) {
 	var snapshot struct {
 		Commands []Command `json:"commands"`
@@ -519,14 +390,8 @@ func DeclaredCommands(declaration string) ([]string, error) {
 	return out, nil
 }
 
-// DeclaredViews reads the views back out of a frozen declaration. The daemon
-// uses it to know what a version offers before it has a manifest — the
-// declaration is the only description of a version it ever holds.
-//
-// Every name is validated here rather than trusted: the declaration arrived over
-// the wire, and a view name becomes a path segment of the bundle URL and a
-// segment of the `app:<app>/<view>` tile kind. This is the trust boundary for
-// both.
+// DeclaredViews reads the views back out of a frozen declaration. Trust boundary: a view
+// name becomes a path segment of the bundle URL and of the `app:<app>/<view>` tile kind.
 func DeclaredViews(declaration string) ([]View, error) {
 	var snapshot struct {
 		Views []View `json:"views"`
@@ -542,8 +407,6 @@ func DeclaredViews(declaration string) ([]View, error) {
 	return snapshot.Views, nil
 }
 
-// DeclaredViewNames is DeclaredViews reduced to the names — which artifacts a
-// version is made of.
 func DeclaredViewNames(declaration string) ([]string, error) {
 	views, err := DeclaredViews(declaration)
 	if err != nil {
@@ -556,8 +419,6 @@ func DeclaredViewNames(declaration string) ([]string, error) {
 	return out, nil
 }
 
-// Declaration is the frozen snapshot stored on the version row: what this
-// manifest said at apply time, readable after the file has moved on.
 func (m Manifest) Declaration() (string, error) {
 	data, err := json.Marshal(m)
 	if err != nil {

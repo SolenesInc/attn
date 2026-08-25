@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// FollowRecord is one complete source record and the provider-neutral events
-// decoded from it. Raw stays available because live state classification reads
-// provider-specific evidence that is intentionally not part of Event.
 type FollowRecord struct {
 	Raw     []byte
 	Events  []Event
@@ -19,18 +16,13 @@ type FollowRecord struct {
 	Context *ContextObservation
 }
 
-// FollowBatch is the append-only delta since the follower's previous read.
 type FollowBatch struct {
 	Records []FollowRecord
 	Events  []Event
 	Usage   []TokenUsage
-	// Context is the newest occupancy reading in this batch, or nil when no
-	// record carried one. Only the newest matters: every reading is absolute.
 	Context *ContextObservation
 }
 
-// Follower reads each complete transcript record once while preserving the
-// canonical event cursor and provider echo-deduplication semantics.
 type Follower struct {
 	path             string
 	agent            string
@@ -41,9 +33,6 @@ type Follower struct {
 	usage            *UsageExtractor
 }
 
-// NewFollower starts at startOffset. A non-zero offset may point into a record;
-// the incomplete prefix is consumed as provider noise, matching the watcher's
-// existing bounded-bootstrap behavior.
 func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -84,9 +73,8 @@ func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 	}, nil
 }
 
-// NewFollowerAfterCursor resumes after the last complete record read by a
-// prior Follower. Unlike a bare byte offset, cursor also binds the checkpoint
-// to the transcript's first record, so rotation or replacement fails loudly.
+// The cursor binds the checkpoint to the transcript's first record, so rotation
+// or replacement fails loudly.
 func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
 	cursor = strings.TrimSpace(cursor)
 	if cursor == "" {
@@ -125,8 +113,6 @@ func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
 	return NewFollower(path, agent, offset)
 }
 
-// Cursor returns the durable checkpoint after the last complete record read.
-// A partially written final record is not included.
 func (f *Follower) Cursor() string {
 	if f == nil || f.fingerprint == "" {
 		return ""
@@ -134,8 +120,6 @@ func (f *Follower) Cursor() string {
 	return encodeEventCursor(f.fingerprint, f.offset, 0)
 }
 
-// Read returns complete records appended since the previous call. A partial
-// final record is left unread until its newline arrives.
 func (f *Follower) Read() (FollowBatch, error) {
 	file, err := os.Open(f.path)
 	if err != nil {

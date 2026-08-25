@@ -4,9 +4,6 @@ export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
 export type TerminalDockEdge = 'left' | 'right' | 'top' | 'bottom';
 
-// TileKind is the surface a docked tile renders. The layout layer persists it
-// as an opaque token; individual kinds can still have daemon and native-host
-// behavior. Kept open-ended for forward compatibility with newer tile hosts.
 export type TileKind = 'markdown' | 'seed' | 'browser' | (string & {});
 
 export interface TerminalPaneLeaf {
@@ -14,37 +11,22 @@ export interface TerminalPaneLeaf {
   paneId: string;
 }
 
-// A docked tile is a first-class layout leaf alongside terminal panes: it
-// takes real space and resizes through the same split machinery. Unlike the
-// slide-in overlays (diff/review/git-status), it lives in the daemon-owned
-// layout tree and persists across restart and clients.
 export interface TileLeaf {
   type: 'tile';
   tileId: string;
   tileKind: TileKind;
-  // Opaque per-tile data persisted with the layout by the daemon. For markdown
-  // tiles this is the absolute path of the file the tile renders; for seed
-  // tiles it is the typed seed id. Empty when the daemon persisted no params.
   tileParams?: string;
-  // Session the tile was opened from (markdown tiles bind to the session whose
-  // terminal the file was cmd+clicked in). Absent when the tile has no binding.
   tileSessionId?: string;
 }
 
 export type TerminalLeaf = TerminalPaneLeaf | TileLeaf;
 
-// Daemon-served rendered content for a docked tile (the markdown file's text).
-// Delivered as the reply to workspace_tile_content_get and re-pushed on every
-// on-disk change (live reload). Absent from the store until the first reply.
 export interface TileContentState {
   path: string;
   content: string;
   error?: string;
 }
 
-// tileContentKey keys tile content by workspace + tile: tile ids are derived
-// from content (markdown tiles hash the file path), so the same id can appear
-// in more than one workspace.
 export function tileContentKey(workspaceId: string, tileId: string): string {
   return `${workspaceId}::${tileId}`;
 }
@@ -72,9 +54,6 @@ export function collectLayoutLeaves(node: TerminalLayoutNode | null): TerminalLe
   ];
 }
 
-// leafSlotId is the stable key a leaf occupies in bounds/path maps. Terminal
-// panes key by paneId; tiles key by tileId. The two id spaces are disjoint by
-// construction (distinct daemon prefixes).
 export function leafSlotId(node: TerminalLeaf): string {
   return node.type === 'pane' ? node.paneId : node.tileId;
 }
@@ -119,8 +98,6 @@ export function createDefaultWorkspaceState(): TerminalWorkspaceState {
   };
 }
 
-// findTileByKind returns the first docked tile of the given kind, or null.
-// Used to drive UI toggles ("is markdown docked in this workspace?").
 export function findTileByKind(node: TerminalLayoutNode | null, kind: TileKind): TileLeaf | null {
   if (!node) {
     return null;
@@ -144,9 +121,6 @@ export function hasPane(node: TerminalLayoutNode, paneId: string): boolean {
   return hasPane(node.children[0], paneId) || hasPane(node.children[1], paneId);
 }
 
-// hasLeaf is hasPane widened to the whole focus model: any leaf slot, terminal
-// pane or docked tile. Callers that must resolve to a session-bearing pane
-// (daemon active pane, close-pane focus fallback) keep using hasPane.
 export function hasLeaf(node: TerminalLayoutNode, leafId: string): boolean {
   if (node.type !== 'split') {
     return leafSlotId(node) === leafId;
@@ -185,10 +159,6 @@ interface LeafBounds {
   kind: LeafKind;
 }
 
-// collectLeafBounds records the normalized rect of every leaf (pane and tile),
-// keyed by its slot id, descending through splits with their ratios. Tiles are
-// recorded so the workspace can position them; the kind lets callers that only
-// care about terminals (navigation) filter tiles out.
 function collectLeafBounds(
   node: TerminalLayoutNode,
   bounds: PaneBounds,
@@ -216,8 +186,6 @@ function collectLeafBounds(
   collectLeafBounds(node.children[1], paneBounds(bounds.left, splitY, bounds.right, bounds.bottom), result);
 }
 
-// getNormalizedPaneBounds returns the normalized rect of every leaf slot
-// (terminal panes and docked tiles), keyed by slot id.
 export function getNormalizedPaneBounds(node: TerminalLayoutNode): Map<string, NormalizedPaneBounds> {
   const rects = new Map<string, LeafBounds>();
   collectLeafBounds(node, paneBounds(0, 0, 1, 1), rects);
@@ -230,16 +198,12 @@ export interface SplitDivider {
   splitId: string;
   direction: TerminalSplitDirection;
   ratio: number;
-  // Normalized (0..1) bounds of the split's container, used to convert a
-  // pointer position into a ratio while dragging.
   left: number;
   top: number;
   right: number;
   bottom: number;
 }
 
-// getSplitDividers returns one entry per split node, describing the draggable
-// divider between its two children in normalized coordinates.
 export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {
   const dividers: SplitDivider[] = [];
   const walk = (current: TerminalLayoutNode, left: number, top: number, right: number, bottom: number): void => {
@@ -262,9 +226,6 @@ export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {
   return dividers;
 }
 
-// applyRatioOverrides returns a copy of the tree with the given split ratios
-// replaced. Used for live (optimistic) divider dragging before the daemon
-// echoes the persisted ratio back.
 export function applyRatioOverrides(node: TerminalLayoutNode, overrides: Map<string, number>): TerminalLayoutNode {
   if (overrides.size === 0 || node.type !== 'split') {
     return node;
@@ -280,8 +241,6 @@ export function applyRatioOverrides(node: TerminalLayoutNode, overrides: Map<str
   };
 }
 
-// collectSplitRatios maps each split id to its current ratio. Used to reconcile
-// local drag overrides against the authoritative daemon layout.
 export function collectSplitRatios(node: TerminalLayoutNode): Map<string, number> {
   const ratios = new Map<string, number>();
   const walk = (current: TerminalLayoutNode): void => {
@@ -300,9 +259,6 @@ function overlapSize(aStart: number, aEnd: number, bStart: number, bEnd: number)
   return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
 }
 
-// findLeafInDirection moves focus between any two leaf slots — terminal panes
-// and docked tiles alike. This is the workspace's focus navigation: a docked
-// markdown tile is a focus target like any pane.
 export function findLeafInDirection(
   node: TerminalLayoutNode,
   fromLeafId: string,
@@ -311,9 +267,6 @@ export function findLeafInDirection(
   return findInDirection(node, fromLeafId, direction, null);
 }
 
-// findPaneInDirection is the pane-only variant, for callers that must resolve
-// to a session-bearing terminal (e.g. picking the next active pane after a
-// close) rather than to whatever leaf sits next to it.
 export function findPaneInDirection(
   node: TerminalLayoutNode,
   fromPaneId: string,
@@ -460,23 +413,13 @@ export function tileIdsFromLayoutJSON(layoutJSON: string, kind?: TileKind): stri
     .map((tile) => tile.tileId);
 }
 
-// A notebook tile's parsed tileParams: `root` is set only for a tile pinned to
-// an arbitrary filesystem root (editor-over-arbitrary-roots); its absence
-// means the tile renders the notebook-storage root, same as before this
-// shape existed. `path` is the tile's currently open file, relative to
-// whichever root applies.
 export interface NotebookTileParams {
   root?: string;
   path?: string;
 }
 
-// parseNotebookTileParams decodes a persisted notebook tile's tileParams.
-// Two encodings coexist on purpose: pre-arbitrary-roots tiles persisted a bare
-// path string (no JSON envelope), and every tile still round-trips through
-// that legacy shape when it has no root — see serializeNotebookTileParams.
-// A JSON-looking string that fails to parse is treated as a (verbatim, if
-// unusual) legacy path rather than dropped, so a malformed persisted value
-// degrades to "reopen this path" instead of "lose the tile's file".
+// Pre-arbitrary-roots tiles persisted a bare path string, and rootless tiles still
+// round-trip through it, so a JSON-looking string that fails to parse is a legacy path.
 export function parseNotebookTileParams(raw: string | undefined | null): NotebookTileParams {
   if (!raw) {
     return {};
@@ -499,10 +442,8 @@ export function parseNotebookTileParams(raw: string | undefined | null): Noteboo
   return { path: raw };
 }
 
-// serializeNotebookTileParams is the inverse of parseNotebookTileParams. A
-// rootless tile (the common case today) keeps persisting the legacy bare-path
-// format so its params stay readable by, and round-trip through, code that
-// still expects the pre-arbitrary-roots shape.
+// A rootless tile keeps persisting the legacy bare-path format so its params stay readable
+// by code that still expects the pre-arbitrary-roots shape.
 export function serializeNotebookTileParams(params: NotebookTileParams): string {
   if (params.root) {
     return JSON.stringify(params.path ? { root: params.root, path: params.path } : { root: params.root });
@@ -510,13 +451,6 @@ export function serializeNotebookTileParams(params: NotebookTileParams): string 
   return params.path || '';
 }
 
-// resolveEditorTileRoot picks the root a freshly-docked ⌘⌥N editor tile should
-// open at: the active workspace's directory, so the tile browses the tree the
-// user is actually working in rather than forcing a jump to notebook storage.
-// Returns undefined (rootless — notebook-rooted) when the directory is unset
-// or already equals the notebook root: those tiles keep the always-on
-// notebook watcher and notebook-only affordances (backlinks, etc.) instead of
-// being pinned to a redundant explicit root.
 export function resolveEditorTileRoot(
   workspaceDirectory: string | undefined,
   effectiveNotebookRoot: string,
@@ -528,12 +462,8 @@ export function resolveEditorTileRoot(
   return trimmed;
 }
 
-// Resolve the workspace record for a bare active-workspace id, for callers
-// that need to trust the record's locality (localWorkspaceDirectory). The
-// active-workspace selection carries no endpoint identity, so when the same
-// id names both a local and a remote twin we cannot know which one is
-// actually active — fail closed (undefined) rather than adopt the local
-// twin's directory for a workspace that may be the remote one.
+// The active-workspace selection carries no endpoint identity, so when one id names both
+// a local and a remote twin this fails closed rather than adopting the local one.
 export function soleWorkspaceForId<T extends { id: string }>(
   workspaces: ReadonlyArray<T>,
   workspaceId: string,
@@ -542,27 +472,8 @@ export function soleWorkspaceForId<T extends { id: string }>(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-// localWorkspaceDirectory gates a workspace's directory to the local
-// filesystem, defaulting to locked (undefined) until locality is positively
-// proven — not the other way around. None of the sendFs* calls (sendFsIndex,
-// sendFsList, etc.) are endpoint-aware; they always execute against the
-// locally-connected daemon, so handing a remote directory to them can read or
-// write the wrong machine's files.
-//
-// The workspace record itself now carries the endpoint marker: a hub daemon
-// stamps EndpointID on every workspace it mirrors from a remote endpoint at
-// ingest (internal/hub/manager.go replaceRemoteWorkspaces/upsertRemoteWorkspace),
-// and never trusts a remote-supplied value when doing so. That makes locality
-// a property of the workspace record itself rather than something inferred
-// from live sessions, so a retained sessionless workspace (attn keeps
-// pinned/tile-only workspaces after their last session ends) gets its
-// directory back instead of staying locked for lack of session evidence.
-//
-// Returns directory only when the workspace exists and its endpoint_id is
-// absent/empty (local). Callers doing an id-based lookup across a workspace
-// list that may contain duplicate-id remote twins should resolve the record
-// with soleWorkspaceForId first (see App.tsx handleOpenNotebookTile) — this
-// function trusts whatever workspace record it's handed.
+// Defaults to locked until locality is proven: no sendFs* call is endpoint-aware, so a
+// remote directory handed to one reads or writes the wrong machine's files.
 export function localWorkspaceDirectory(
   workspace: { directory?: string | null; endpoint_id?: string | null } | undefined,
 ): string | undefined {

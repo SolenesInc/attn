@@ -2,14 +2,8 @@ import './SettlingIndicator.css';
 import { CountdownFill } from './CountdownFill';
 import { CountdownCancelHint } from './CountdownCancelHint';
 
-/**
- * The auto-settle countdown. The daemon owns the timer and broadcasts only
- * `auto_settle_fires_at`, present exactly while it runs; its absence ends the
- * animation. `auto_settle_held` means frozen with no deadline, drawn as a full
- * still bar — the daemon sends a whole new deadline once the user goes quiet.
- * It drains right-to-left in violet against the nudge bar's left-to-right sky
- * blue, so rows showing both never read as one event.
- */
+// The daemon owns the timer and broadcasts `auto_settle_fires_at` exactly while it
+// runs; its absence ends the animation. `auto_settle_held` is frozen with no deadline.
 
 export function HeaderSettlingIndicator({
   firesAt,
@@ -51,17 +45,8 @@ export function HeaderSettlingIndicator({
   );
 }
 
-/**
- * The armed variant: the user has already answered this session's next
- * auto-settle, so nothing is counting and there is nothing to animate. Drawn in
- * the countdown's own slot and its own violet — same subject, opposite outcome —
- * with a still mark where the countdown pulses, because the one thing this chip
- * has to say is that no clock is running.
- *
- * It carries the key that undoes it for the same reason the countdown carries
- * the key that stops it: a standing answer outlives the thing it answered, so
- * the way back out has to be on the thing announcing it.
- */
+// The armed variant: the user has already answered this session's next auto-settle,
+// so nothing is counting. It carries the key that undoes the standing answer.
 export function HeaderSettleKeptChip({ onDisarm }: { onDisarm?: () => void }) {
   return (
     <button

@@ -9,9 +9,6 @@ import {
   tokenizeMarkdown,
 } from './terminalMessageAlign';
 
-// Renders markdown the way an agent TUI does: a marker glyph on the first row,
-// a two-space hanging indent on continuations, soft-wrapped at `cols`. Grids are
-// generated rather than hand-typed so that a reflow test actually reflows.
 function render(markdown: string, cols: number, marker = '⏺ '): string[] {
   const indent = ' '.repeat(marker.length);
   const rows: string[] = [];
@@ -60,9 +57,6 @@ const LINKED_ROWS = [
   '  The conclusion after those rendered links must remain independently annotatable.',
 ];
 
-// A URL link, which Codex renders as the label followed by the target in
-// parentheses — two visible words where the Markdown holds one. Trimmed from a
-// real turn whose numbered list stopped being annotatable at exactly this point.
 const URL_MESSAGE = [
   'My recommendation:',
   '',
@@ -79,8 +73,6 @@ const URL_ROWS = [
   '     routing already uses an explicit feed ID.',
 ];
 
-// The message with its head scrolled off, under a user turn whose tail repeats
-// the words immediately preceding the visible head.
 const DECOY_ABOVE = [
   '❯ can you please rewrite that onto the next visual',
   ...render(MESSAGE, 62).slice(1),
@@ -96,7 +88,6 @@ function textAt(rows: readonly string[], rowBase: number, ranges: { row: number;
   return ranges.map((range) => rows[range.row - rowBase].slice(range.startCol, range.endCol)).join('\n');
 }
 
-// Word-space form: markdown and grid text differ by exactly what is stripped.
 function normalizedWords(text: string): string {
   return tokenizeMarkdown(text).map((token) => token.norm).join(' ');
 }
@@ -121,7 +112,6 @@ describe('rowsForOffsets', () => {
     const wideRanges = rowsForOffsets(alignMessage(MESSAGE, wide), start, end);
     const narrowRanges = rowsForOffsets(alignMessage(MESSAGE, narrow), start, end);
 
-    // The reflow has to have actually moved the anchor, or this proves nothing.
     expect(narrow.length).toBeGreaterThan(wide.length);
     expect(narrowRanges.map((r) => r.row)).not.toEqual(wideRanges.map((r) => r.row));
 
@@ -149,11 +139,6 @@ describe('rowsForOffsets', () => {
   });
 
   it('does not let a neighbouring user turn widen the span by chance', () => {
-    // The case that produces a wrong span in practice: the head of the message
-    // has scrolled off, so the aligner still has unmatched source tokens when it
-    // walks upwards — and the row immediately above ends with the very words
-    // that precede the visible head, so the walk flows straight into it. Four of
-    // that row's nine words match: real agreement, but well under the floor.
     const alignment = alignMessage(MESSAGE, DECOY_ABOVE);
 
     expect(alignment.rows.get(0)?.matched).toBe(4);
@@ -166,8 +151,6 @@ describe('rowsForOffsets', () => {
     const alignment = alignMessage(MESSAGE, DECOY_ABOVE);
     const { start, end } = anchorOffsets(MESSAGE, 'onto the next visual');
 
-    // Those words are only on the user's row now. Resolving them there would
-    // paint a wash over the user's own text and attribute it to the agent.
     expect(rowsForOffsets(alignment, start, end).map((r) => r.row)).not.toContain(0);
   });
 
@@ -260,9 +243,6 @@ describe('rowsForOffsets', () => {
   });
 
   it('seeds on the message even when the row above echoes its opening words', () => {
-    // An echo pins alignment anchors a few positions off the true diagonal.
-    // Seeding on one of those strands the walk on the echo, and the message
-    // resolves nowhere at all.
     const full = render(MESSAGE, 62);
     const rows = [
       '❯ hmm can you redo that A soft line wrap explanation please thanks',
@@ -330,7 +310,6 @@ describe('offsetsForSelection', () => {
       endCol: startCol + 'visual'.length - 2,
     });
 
-    // A half-word anchor could not be quoted back, so the word is taken whole.
     expect(MESSAGE.slice(span!.start, span!.end)).toBe('visual');
   });
 

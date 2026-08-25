@@ -1,33 +1,15 @@
 import type { NormalizedPaneBounds } from '../../types/workspace';
 import { computeDockTarget, computeContainerSides, type DockTarget } from './dockTarget';
 
-// startLeafDrag owns the pointerdown → pointermove → pointerup gesture for moving
-// a leaf. It snapshots drop targets from the container once (the layout is static
-// during a drag), drives a live preview, and reports the final drop. Side effects
-// (selection lock, React state, the actual move command) are injected as handlers
-// so the gesture is testable with synthetic pointer events.
-
-// The pointer must travel this far from the press point before the gesture counts
-// as a drag. A plain click (press + release in place, or a tiny jitter) stays
-// below the threshold and resolves as a no-op — no activation, no preview, no
-// drop. Without this, clicking a pane header (which sits in the workspace's top
-// perimeter band) computes a drop target at the press position and relocates the
-// leaf into a 50% container split.
+// Without a threshold, clicking a pane header — which sits in the workspace's top
+// perimeter band — computes a drop target at the press position and splits the container.
 const DRAG_ACTIVATION_PX = 4;
 
 export interface LeafDragHandlers {
-  // Fires once, when the pointer first crosses the activation threshold. Visual
-  // drag side effects (selection lock, dragging styles, parent overlay) belong
-  // here so a plain click leaves no trace.
   onActivate: () => void;
-  // Live dock preview as the pointer moves (null = no valid target right now).
   onPreview: (target: DockTarget | null) => void;
-  // Ghost label position follows the pointer.
   onGhostMove: (clientX: number, clientY: number) => void;
-  // The gesture resolved over a target: relocate leafId there.
   onDrop: (leafId: string, target: DockTarget) => void;
-  // Always runs when the gesture ends (drop, cancel, click, or blur): release
-  // locks and clear transient state.
   onCleanup: () => void;
 }
 
@@ -36,9 +18,6 @@ export interface LeafDropSnapshot {
   paneBounds: Map<string, NormalizedPaneBounds>;
 }
 
-// startLeafDrag registers window listeners for one drag and returns a teardown
-// fn (also invoked internally on drop/cancel). The dragged leaf is excluded from
-// the drop targets, so hovering it previews nothing — a self-drop no-op.
 export function startLeafDrag(
   leafId: string,
   clientX: number,
@@ -68,8 +47,6 @@ export function startLeafDrag(
   const pastThreshold = (x: number, y: number): boolean =>
     Math.hypot(x - clientX, y - clientY) >= DRAG_ACTIVATION_PX;
 
-  // The gesture stays pending until the pointer moves past the threshold; only
-  // then does it activate and start previewing/dropping.
   let activated = false;
 
   const onMove = (ev: PointerEvent) => {
@@ -91,9 +68,8 @@ export function startLeafDrag(
     handlers.onCleanup();
   };
   const onUp = (ev: PointerEvent) => {
-    // Resolve a drop only if the gesture became a drag — either it already
-    // activated, or the pointer ended up past the threshold (a fast drag whose
-    // move events were coalesced). A press-and-release in place stays a click.
+    // Resolve a drop only if the gesture became a drag; a fast drag's moves may have been
+    // coalesced, and a press-and-release in place stays a click.
     const isDrag = activated || pastThreshold(ev.clientX, ev.clientY);
     const finalTarget = isDrag ? computeTarget(ev.clientX, ev.clientY) : null;
     teardown();

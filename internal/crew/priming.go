@@ -8,30 +8,12 @@ import (
 	"unicode/utf8"
 )
 
-// A woken member's launch priming: what a member is, the letter its predecessor
-// left, and how a day is closed. Composed here so the text lives beside the id
-// rule it teaches; the daemon reads the files and hands them over.
-//
-// It opens and closes on being a member and keeps the machinery in the middle,
-// because that middle is the part a member could infer and the rest is the part
-// nothing else in the session says.
-//
-// Without injected guidance a member does not know its own verbs — reading a
-// charter confers nothing, and a session woken as trellis that was never told
-// how a handoff is filed cannot file one.
-
-// HandoffsDirName is where a member's letters live under its home.
 const HandoffsDirName = "handoffs"
 
-// HandoffLimit is what one launch may inline of the predecessor's letter. The
-// charter is not inlined at all: the member is told to read it. Measured
-// 2026-08-14 over the simulation's real homes, the largest of 23 filed handoffs
-// is 6,601 bytes, so the limit sits well past that and only a letter nothing
-// like a real one is ever cut — and the cut says where the whole text is.
+// HandoffLimit is what one launch may inline of the predecessor's letter. Measured
+// 2026-08-14, the largest of 23 filed handoffs is 6,601 bytes, so only an unreal letter cuts.
 const HandoffLimit = 16000
 
-// Priming is one wake's material: the member's record, the prose read off its
-// home, and the names of the older letters it may drill into.
 type Priming struct {
 	Member        string
 	HomeDir       string
@@ -39,27 +21,18 @@ type Priming struct {
 	CWD           string
 	AwarenessDirs []string
 
-	// Charter is CHARTER.md's text; empty when the member has none yet, which
-	// makes this the member's first day.
-	Charter string
-	// Handoff is the freshest letter's text and HandoffName its file name.
-	Handoff     string
-	HandoffName string
-	// OlderHandoffs names every earlier letter, freshest first. Names only:
-	// depth on demand replaces forgetting, and a wake that loaded them all
-	// would be the ceremony the primitive exists to remove.
+	Charter       string
+	Handoff       string
+	HandoffName   string
 	OlderHandoffs []string
 }
 
-// SortHandoffNames orders letters freshest first. The file names are UTC
-// timestamps, so lexicographic order is chronological — the same rule the
-// freshest-note read uses.
+// SortHandoffNames orders letters freshest first: the file names are UTC
+// timestamps, so lexicographic order is chronological.
 func SortHandoffNames(names []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(names)))
 }
 
-// Block is the system-prompt text injected at a member's wake. Empty Member
-// yields nothing: an unbound session is primed with no crew block at all.
 func (p Priming) Block() string {
 	if strings.TrimSpace(p.Member) == "" {
 		return ""
@@ -120,9 +93,8 @@ Write it for a person, not for a log. Someone wakes as %[2]s after you and gets 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// cut bounds an inlined file, saying where the rest is rather than ending
-// mid-sentence with no way back. Markdown carries any Unicode, so the cut lands
-// on a rune boundary.
+// cut bounds an inlined file and says where the rest is. Markdown carries any
+// Unicode, so the cut lands on a rune boundary.
 func cut(text string, limit int, path string) string {
 	if len(text) <= limit {
 		return text

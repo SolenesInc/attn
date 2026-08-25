@@ -2,11 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { TerminalGrid, type GridTileSpec } from './TerminalGrid';
 import { EMPTY_STATS, type GridRenderer, type TileFrame, type TileModel } from './GridRenderer';
 
-// Minimal fakes: the terminal grid takes its renderer + ghostty + container as
-// injected deps, so we can exercise all of its logic without WebGL or the WASM
-// VT engine. Only the handful of model methods the terminal grid actually calls are
-// implemented.
-
 interface FakeCell {
   codepoint: number;
   width: number;
@@ -143,27 +138,20 @@ describe('TerminalGrid', () => {
     grid.syncTiles([tileSpec('a'), tileSpec('b')]);
     const [modelA, modelB] = created;
 
-    grid.syncTiles([tileSpec('a')]); // drop b
+    grid.syncTiles([tileSpec('a')]);
 
-    expect(created).toHaveLength(2); // no new model created for the kept tile
+    expect(created).toHaveLength(2);
     expect(modelA.freed).toBe(false);
     expect(modelB.freed).toBe(true);
     expect(grid.hasTile('b')).toBe(false);
   });
 
   it('forces a render when a tile is removed even if the grid shape is unchanged', () => {
-    // Regression: the rAF loop is render-on-demand (it paints only when a model
-    // is dirty or an animation is live). Fake models never report dirty, so this
-    // isolates the membership path: removing a tile while the resolved shape stays
-    // 2×2 must still trigger a render, or the removed tile's stale frame lingers
-    // until the next dirtying event ("only every other hide actually hides").
     const { grid, renderer } = makeTerminalGrid();
     const spec = (id: string) => tileSpec(id);
     grid.syncTiles(['a', 'b', 'c', 'd'].map(spec));
     grid.setLayout(2, 2);
 
-    // Settle the mount/layout reflow so the renderer is idle, then confirm an idle
-    // tick draws nothing (the render-on-demand baseline this bug violated).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const internal = grid as any;
     internal.reflowStart = -1;
@@ -172,7 +160,6 @@ describe('TerminalGrid', () => {
     internal.tick();
     expect(renderer.frames.length).toBe(before);
 
-    // Remove one tile; the resolved shape is still 2×2, so setLayout no-ops.
     grid.syncTiles(['a', 'b', 'c'].map(spec));
     grid.setLayout(2, 2);
     internal.tick();
@@ -293,8 +280,6 @@ describe('TerminalGrid', () => {
 
     expect(model.writes).toHaveLength(1);
     expect(Array.from(model.writes[0])).toEqual([104, 105]);
-    // Observer must consume responses (so the engine doesn't buffer) but never
-    // send them anywhere — the real pane answers terminal queries.
     expect(model.responses).toEqual([]);
 
     expect(() => grid.writeBytes('unknown', new Uint8Array([1]))).not.toThrow();
@@ -325,7 +310,7 @@ describe('TerminalGrid', () => {
     expect(grid.isZoomed()).toBe(true);
     expect(grid.zoomedId()).toBe('a');
 
-    grid.syncTiles([tileSpec('b')]); // remove the zoomed tile
+    grid.syncTiles([tileSpec('b')]);
     expect(grid.zoomedId()).toBeNull();
     expect(grid.isZoomed()).toBe(false);
   });
@@ -352,18 +337,16 @@ describe('TerminalGrid', () => {
   });
 
   it('resolves the resting tile + rect under a pointer, on demand without a render loop', () => {
-    const { grid } = makeTerminalGrid(); // container 800×600, cell 8×16, models 80×24
+    const { grid } = makeTerminalGrid();
     grid.syncTiles([tileSpec('a')]);
     grid.setLayout(1, 1);
 
-    // A single 80×24 tile fits 800×600 at scale 1.25 → 800×480, centred vertically
-    // (y inset (600-480)/2 = 60). Centre of the grid hits it.
+    // 800×600 container, 80×24 cells of 8×16: scale 1.25, letterboxed y inset 60.
     const hit = grid.tileAt(400, 300);
     expect(hit?.id).toBe('a');
     expect(hit?.rect).toMatchObject({ x: 0, w: 800, h: 480 });
     expect(hit?.rect.y).toBeCloseTo(60);
 
-    // Above the letterboxed tile (y < 60) is empty space.
     expect(grid.tileAt(400, 30)).toBeNull();
   });
 
@@ -385,10 +368,10 @@ describe('TerminalGrid seeding + sequence dedup', () => {
     grid.syncTiles([tileSpec('a')]);
     const model = created[0];
 
-    grid.writeBytes('a', bytes(1), 5); // first seq sets the watermark
-    grid.writeBytes('a', bytes(2), 3); // stale: already painted, dropped
-    grid.writeBytes('a', bytes(3), 6); // advances past watermark, applied
-    grid.writeBytes('a', bytes(4)); // seq-less: cannot be proven stale, applied
+    grid.writeBytes('a', bytes(1), 5);
+    grid.writeBytes('a', bytes(2), 3);
+    grid.writeBytes('a', bytes(3), 6);
+    grid.writeBytes('a', bytes(4));
 
     expect(written(model)).toEqual([[1], [3], [4]]);
   });
@@ -399,13 +382,12 @@ describe('TerminalGrid seeding + sequence dedup', () => {
     const model = created[0];
 
     grid.beginSeeding('a');
-    grid.writeBytes('a', bytes(9), 8); // will be <= seed watermark -> dropped
-    grid.writeBytes('a', bytes(11), 11); // newer than the snapshot -> kept
-    expect(model.writes).toHaveLength(0); // nothing painted until the seed lands
+    grid.writeBytes('a', bytes(9), 8);
+    grid.writeBytes('a', bytes(11), 11);
+    expect(model.writes).toHaveLength(0);
 
     grid.seedTile('a', bytes(100, 101), 10, 80, 24);
 
-    // Snapshot paints first; only the buffered chunk past seq 10 follows.
     expect(written(model)).toEqual([[100, 101], [11]]);
   });
 
@@ -442,7 +424,6 @@ describe('TerminalGrid seeding + sequence dedup', () => {
     grid.syncTiles([tileSpec('a')]);
     const model = created[0];
 
-    // Tiles default to live; a stray seed must not clobber live content.
     grid.seedTile('a', bytes(1), 5);
     expect(model.writes).toHaveLength(0);
   });
@@ -455,8 +436,8 @@ describe('TerminalGrid seeding + sequence dedup', () => {
     grid.resizeTile('a', 100, 30);
     expect([model.cols, model.rows]).toEqual([100, 30]);
 
-    grid.resizeTile('a', 100, 30); // unchanged
-    grid.resizeTile('a', 0, 0); // invalid
+    grid.resizeTile('a', 100, 30);
+    grid.resizeTile('a', 0, 0);
     expect(model.resizes).toHaveLength(1);
   });
 });

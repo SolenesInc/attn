@@ -38,7 +38,6 @@ func TestEnsureScaffold(t *testing.T) {
 		}
 	}
 
-	// Idempotent: a second run creates nothing and never clobbers.
 	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("EDITED"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -57,10 +56,6 @@ func TestEnsureScaffold(t *testing.T) {
 
 func TestEnsureScaffoldReturnsPartialWritesOnFailure(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "nb")
-	// Pre-create the full dir layout so EnsureScaffold's MkdirAll calls are no-ops,
-	// then make knowledge/archive/ read-only so the knowledge/archive/index.md
-	// write (the LAST reserved file) fails while every earlier reserved file
-	// (in writable dirs) succeeds.
 	for _, d := range []string{"journal", "knowledge/projects", "knowledge/areas", "knowledge/resources", "knowledge/archive"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			t.Fatal(err)
@@ -77,10 +72,6 @@ func TestEnsureScaffoldReturnsPartialWritesOnFailure(t *testing.T) {
 	if err == nil {
 		t.Skip("write into read-only knowledge/archive/ unexpectedly succeeded (likely running as root)")
 	}
-	// The files written before the failure must be returned so the caller can
-	// account for attn's own partial writes (and not later mis-surface them as
-	// external edits), rather than discarding them with the error. Only the final
-	// reserved file (knowledge/archive/index.md) fails.
 	wantPartial := []string{
 		"index.md", "log.md", "knowledge/index.md",
 		"knowledge/projects/index.md", "knowledge/areas/index.md",
@@ -110,7 +101,6 @@ func TestWriteCreateAndConflict(t *testing.T) {
 		t.Fatalf("create hash = %q, want %q", hash, Hash(content))
 	}
 
-	// Create-only against an existing file is a conflict, not an overwrite.
 	_, conflict, err = s.Write("knowledge/areas/foo.md", []byte("other"), "")
 	if err != nil {
 		t.Fatalf("create-conflict err: %v", err)
@@ -132,7 +122,6 @@ func TestWriteCASEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Stale base hash => conflict, no write.
 	v2 := []byte("---\ntype: note\n---\nv2\n")
 	_, conflict, err := s.Write("knowledge/areas/foo.md", v2, "deadbeef")
 	if err != nil {
@@ -142,7 +131,6 @@ func TestWriteCASEdit(t *testing.T) {
 		t.Fatalf("stale-base write = conflict %#v, want current hash %q", conflict, h1)
 	}
 
-	// Matching base hash => applies.
 	h2, conflict, err := s.Write("knowledge/areas/foo.md", v2, h1)
 	if err != nil || conflict != nil {
 		t.Fatalf("CAS edit: err=%v conflict=%v", err, conflict)
@@ -182,9 +170,6 @@ func TestAppendJournal(t *testing.T) {
 	}
 }
 
-// AppendJournalEntryOnce writes a marked entry once and suppresses any repeat that
-// carries the same marker, while still admitting other entries — the file itself
-// is the dedup ledger, so this holds across a fresh Store (i.e. a daemon restart).
 func TestAppendJournalEntryOnce(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
@@ -197,13 +182,10 @@ func TestAppendJournalEntryOnce(t *testing.T) {
 		t.Fatalf("first append: written=%v err=%v", written, err)
 	}
 
-	// Same marker again is a no-op, even through a brand-new Store on the same root
-	// (the in-memory writer is gone, but the marker persists in the file).
 	if _, written, _, err := NewStore(root).AppendJournalEntryOnce("2026-06-14", marker, entry); err != nil || written {
 		t.Fatalf("duplicate append: written=%v err=%v (want written=false)", written, err)
 	}
 
-	// A different marker still appends.
 	const marker2 = "<!-- attn:dispatch:xyz -->"
 	if _, written, _, err := s.AppendJournalEntryOnce("2026-06-14", marker2, "## 10:00 — Other (failed)\n\nBroke.\n\n"+marker2); err != nil || !written {
 		t.Fatalf("distinct append: written=%v err=%v", written, err)
@@ -223,11 +205,6 @@ func TestAppendJournalEntryOnce(t *testing.T) {
 	}
 }
 
-// The dedup is a whole-file substring scan, so it is collision-safe ONLY because the
-// marker carries a closing " -->" delimiter: "<!-- attn:dispatch:dsp-1 -->" is not a
-// substring of "<!-- attn:dispatch:dsp-10 -->". This pins that property — a marker
-// format change that dropped the delimiter would silently treat dsp-1 as already
-// journaled once dsp-10 was written first, losing the entry.
 func TestAppendJournalEntryOnceMarkerPrefixDoesNotCollide(t *testing.T) {
 	s := NewStore(t.TempDir())
 	const m10 = "<!-- attn:dispatch:dsp-10 -->"
@@ -236,16 +213,12 @@ func TestAppendJournalEntryOnceMarkerPrefixDoesNotCollide(t *testing.T) {
 	if _, written, _, err := s.AppendJournalEntryOnce("2026-06-14", m10, "## dsp-10\n\nten.\n\n"+m10); err != nil || !written {
 		t.Fatalf("append dsp-10: written=%v err=%v", written, err)
 	}
-	// dsp-1's marker is a prefix-ish of dsp-10's text but must NOT be seen as present.
 	if _, written, _, err := s.AppendJournalEntryOnce("2026-06-14", m1, "## dsp-1\n\none.\n\n"+m1); err != nil || !written {
 		t.Fatalf("append dsp-1 after dsp-10: written=%v err=%v (delimiter collision?)", written, err)
 	}
 }
 
-// The "exactly once under concurrency" invariant is the whole reason appendToNoteOnce
-// does its read-check-write under one lock. Race N goroutines on the same marker and
-// assert exactly one wins (written==true once) and the marker lands once. Run under
-// `go test -race ./internal/notebook` to also catch a lock regression.
+// Run under `go test -race ./internal/notebook` to also catch a regression in appendToNoteOnce's single lock.
 func TestAppendJournalEntryOnceConcurrent(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
@@ -269,7 +242,7 @@ func TestAppendJournalEntryOnceConcurrent(t *testing.T) {
 	if wins != 1 {
 		t.Fatalf("concurrent writers that reported written=true: %d, want 1", wins)
 	}
-	rel, _, _, _ := s.AppendJournalEntryOnce("2026-06-14", marker, entry) // no-op, returns the path
+	rel, _, _, _ := s.AppendJournalEntryOnce("2026-06-14", marker, entry)
 	content, _, _ := s.Read(rel)
 	if got := strings.Count(string(content), marker); got != 1 {
 		t.Fatalf("marker appears %d times after %d concurrent writers, want 1", got, n)
@@ -292,7 +265,6 @@ func TestAppendInbox(t *testing.T) {
 
 	content, _, _ := s.Read(FileInbox)
 	doc := ParsePermissive(content)
-	// The seed header plus both appended messages accumulate in order.
 	if !strings.Contains(doc.Body, "Chief inbox") ||
 		!strings.Contains(doc.Body, "first message") || !strings.Contains(doc.Body, "second message") {
 		t.Fatalf("inbox body missing header/entries:\n%s", doc.Body)
@@ -306,9 +278,6 @@ func TestAppendInbox(t *testing.T) {
 	}
 }
 
-// A symlinked directory inside the root that points outside must not let
-// reads/writes escape the root (the notebook lives in the user's home and is
-// externally writable, so a planted symlink is realistic).
 func TestStoreRejectsSymlinkEscape(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "nb")
@@ -339,8 +308,6 @@ func TestStoreRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
-// A legitimately symlinked root (user points ~/attn-notebook at a synced folder)
-// must still work — the guard resolves the root too.
 func TestStoreAllowsSymlinkedRoot(t *testing.T) {
 	base := t.TempDir()
 	real := filepath.Join(base, "real")
@@ -360,7 +327,6 @@ func TestStoreAllowsSymlinkedRoot(t *testing.T) {
 	}
 }
 
-// The prefix scopes a subtree on path-segment boundaries, not raw substring.
 func TestListPrefixIsPathSegmentBoundary(t *testing.T) {
 	s := NewStore(t.TempDir())
 	body := []byte("---\ntype: note\n---\nx\n")
@@ -391,11 +357,9 @@ func TestListPrefixIsPathSegmentBoundary(t *testing.T) {
 	}
 }
 
-// List extracts frontmatter from a large file without loading the whole body,
-// and still reports the full size.
 func TestListReadsFrontmatterFromLargeFile(t *testing.T) {
 	s := NewStore(t.TempDir())
-	big := "---\ntype: note\n---\n# Big\n" + strings.Repeat("x\n", 100<<10) // ~200 KiB body
+	big := "---\ntype: note\n---\n# Big\n" + strings.Repeat("x\n", 100<<10)
 	if _, _, err := s.Write("knowledge/areas/big.md", []byte(big), ""); err != nil {
 		t.Fatal(err)
 	}
@@ -411,8 +375,6 @@ func TestListReadsFrontmatterFromLargeFile(t *testing.T) {
 	}
 }
 
-// AppendJournal must not corrupt frontmatter an external tool wrote (comments,
-// key order, ambiguous scalars all survive the next attn append).
 func TestAppendJournalPreservesExistingFrontmatter(t *testing.T) {
 	s := NewStore(t.TempDir())
 	existing := "---\ntype: journal\n# external note\nobsidian_id: 007\nzeta: z\ntitle: jrnl\n---\n# entries\n\nfirst\n"
@@ -434,7 +396,6 @@ func TestAppendJournalPreservesExistingFrontmatter(t *testing.T) {
 func TestList(t *testing.T) {
 	s := NewStore(t.TempDir())
 
-	// Uninitialized root => empty list, not an error.
 	entries, err := s.List("")
 	if err != nil {
 		t.Fatalf("List uninitialized: %v", err)
@@ -449,7 +410,6 @@ func TestList(t *testing.T) {
 	if _, _, err := s.Write("knowledge/areas/foo.md", []byte("---\ntype: note\nsummary: a decision\n---\n# Foo\n\nbody\n"), ""); err != nil {
 		t.Fatal(err)
 	}
-	// Machine state under .attn/ must never be surfaced.
 	if err := os.MkdirAll(filepath.Join(s.Root(), ".attn", "raw"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +436,6 @@ func TestList(t *testing.T) {
 		t.Fatalf("List entry metadata = %+v", foo)
 	}
 
-	// Prefix filters to a subtree.
 	mem, err := s.List("/knowledge/areas")
 	if err != nil {
 		t.Fatal(err)
@@ -497,16 +456,10 @@ func TestBacklinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// target is the note we want backlinks for.
 	mustWrite(t, s, "knowledge/areas/target.md", "---\ntype: note\n---\n# Target\n\nthe decision\n")
-	// linker references target with a trailing #anchor — the anchor must be
-	// ignored when matching.
 	mustWrite(t, s, "knowledge/areas/linker.md", "---\ntype: note\n---\n# Linker\n\nsee [the call](/knowledge/areas/target.md#why) for context\n")
-	// journal references target with a plain root-absolute link.
 	mustWrite(t, s, "journal/2026-06-13.md", "---\ntype: journal\n---\nfollowed [target](/knowledge/areas/target.md) today\n")
-	// unrelated links elsewhere and must not appear.
 	mustWrite(t, s, "knowledge/resources/unrelated.md", "---\ntype: note\n---\nlinks [elsewhere](/knowledge/areas/other.md) only\n")
-	// self-link: target links to itself and must be excluded from its own backlinks.
 	mustWrite(t, s, "knowledge/areas/target.md", "---\ntype: note\n---\n# Target\n\nthe decision; see [self](/knowledge/areas/target.md)\n")
 
 	got, err := s.Backlinks("/knowledge/areas/target.md")
@@ -517,19 +470,16 @@ func TestBacklinks(t *testing.T) {
 	for i, e := range got {
 		gotPaths[i] = e.Path
 	}
-	want := []string{"journal/2026-06-13.md", "knowledge/areas/linker.md"} // sorted by path
+	want := []string{"journal/2026-06-13.md", "knowledge/areas/linker.md"}
 	if !reflect.DeepEqual(gotPaths, want) {
 		t.Fatalf("Backlinks paths = %v, want %v", gotPaths, want)
 	}
-	// Metadata (title) should ride along so the UI can render a label.
 	for _, e := range got {
 		if e.Path == "knowledge/areas/linker.md" && e.Title != "Linker" {
 			t.Fatalf("backlink entry lost metadata: %+v", e)
 		}
 	}
 
-	// Dangling-link discovery: a target that does not exist still surfaces its
-	// linkers, so the UI can show what points at a not-yet-created note.
 	dangling, err := s.Backlinks("/knowledge/areas/other.md")
 	if err != nil {
 		t.Fatalf("Backlinks(dangling): %v", err)
@@ -538,7 +488,6 @@ func TestBacklinks(t *testing.T) {
 		t.Fatalf("dangling Backlinks = %v, want [knowledge/resources/unrelated.md]", dangling)
 	}
 
-	// A note nobody links to has no backlinks.
 	none, err := s.Backlinks("/journal/2026-06-13.md")
 	if err != nil {
 		t.Fatalf("Backlinks(none): %v", err)
@@ -555,12 +504,8 @@ func TestBacklinksSkipsOversizedExternalFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A normal note that links to the target is a real backlink.
 	mustWrite(t, s, "knowledge/areas/linker.md", "---\ntype: note\n---\nsee [the call](/knowledge/areas/target.md) here\n")
 
-	// An oversized file (larger than attn ever writes) is synced in externally,
-	// bypassing Write's MaxFileSize guard. It also links to the target, but
-	// Backlinks must not pull its whole body into memory — so it is skipped.
 	big := append([]byte("---\ntype: note\n---\nlinks [target](/knowledge/areas/target.md)\n"), make([]byte, MaxFileSize+1)...)
 	bigPath := filepath.Join(dir, "knowledge", "areas", "oversized.md")
 	if err := os.WriteFile(bigPath, big, 0o644); err != nil {
@@ -583,10 +528,7 @@ func TestBacklinksSkipsOversizedExternalFiles(t *testing.T) {
 
 func mustWrite(t *testing.T, s *Store, relPath, content string) {
 	t.Helper()
-	// A create-only write (empty baseHash) against an existing path returns a
-	// non-nil Conflict with a nil error, not an error — so retrying on err alone
-	// silently no-ops the rewrite. Retry as a hash-CAS edit using the conflict's
-	// current hash so a test can intentionally overwrite a note.
+	// A create-only write against an existing path returns a non-nil Conflict with a nil error, so retrying on err alone silently no-ops.
 	_, conflict, err := s.Write(relPath, []byte(content), "")
 	if err != nil {
 		t.Fatalf("write %s: %v", relPath, err)
@@ -598,9 +540,6 @@ func mustWrite(t *testing.T, s *Store, relPath, content string) {
 	}
 }
 
-// A root configured with a trailing slash must not break containment for an
-// ordinary relative path. Before NewStore cleaned the root, abs compared against
-// "<root>//" and rejected "index.md" as escaping the notebook root.
 func TestNewStoreNormalizesTrailingSlashRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "nb")
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -622,10 +561,6 @@ func TestNewStoreNormalizesTrailingSlashRoot(t *testing.T) {
 	}
 }
 
-// The notebook root is externally syncable, so a note entry can be a symlink
-// pointing outside the root. List must not read and expose such a file's
-// frontmatter (title/summary) over the websocket; it should skip it while still
-// listing the legitimate in-root notes.
 func TestListSkipsSymlinkResolvingOutsideRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "nb")
 	s := NewStore(root)

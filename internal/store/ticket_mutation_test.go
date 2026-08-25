@@ -56,9 +56,6 @@ func TestTicketMutationConsumesTargetUnreadBeforeMutating(t *testing.T) {
 	}
 }
 
-// attn's own bookkeeping is delivered, not charged for: an agent whose ticket
-// carries only attn-authored unread events writes on the first attempt and gets
-// those events back beside the result.
 func TestTicketMutationAppliesThroughAttnAuthoredCatchUp(t *testing.T) {
 	s := New()
 	defer s.Close()
@@ -96,8 +93,6 @@ func TestTicketMutationAppliesThroughAttnAuthoredCatchUp(t *testing.T) {
 	}
 }
 
-// A peer's word in the same unread batch still costs the write: the agent must
-// read it before it may report over it.
 func TestTicketMutationBlocksWhenAttnCatchUpCarriesAPeerEvent(t *testing.T) {
 	s := New()
 	defer s.Close()

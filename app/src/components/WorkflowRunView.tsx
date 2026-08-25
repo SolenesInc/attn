@@ -66,10 +66,8 @@ function titleForRun(run: WorkflowRun): string {
 }
 
 export function WorkflowRunView({ run, onClose }: WorkflowRunViewProps) {
-  // Self-driven clock so an in-flight call's elapsed time ticks up between
-  // daemon broadcasts. Gated strictly on a running run and cleaned up on
-  // unmount/status-change so it never leaks a timer past completion. Declared
-  // before the null guard to keep hook order stable.
+  // Self-driven clock so an in-flight call's elapsed time ticks between broadcasts.
+  // Declared before the null guard to keep hook order stable.
   const runStatus = run?.status ?? null;
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {

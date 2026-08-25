@@ -1,11 +1,3 @@
-// app/src/hooks/usePresentReviewedMarks.ts
-// Per-(presentation, round) "reviewed" marks for the Present reader, jaunt
-// style. Persisted in localStorage so a mark survives a window reload but
-// stays scoped to the exact round it was made against — a NEW round id
-// starts with a fresh, empty key. That is the intended mid-round-vs-new-round
-// semantic: reviewing round 1 doesn't pre-mark anything in round 2, since the
-// diff content underneath a path can have changed entirely. Marks are not
-// cleared on submit here — submit-time semantics belong to a later slice.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -37,7 +29,6 @@ function writeMarks(key: string, marks: Set<string>): void {
 export interface PresentReviewedMarksControls {
   reviewed: ReadonlySet<string>;
   toggleReviewed(path: string): void;
-  /** Idempotent — used by the J-advance auto-mark-on-leave behavior. */
   markReviewed(path: string): void;
 }
 
@@ -49,15 +40,10 @@ export function usePresentReviewedMarks(
   const key = presentationId && roundId ? storageKey(presentationId, roundId) : null;
   const [reviewed, setReviewed] = useState<Set<string>>(new Set());
 
-  // filePaths is a fresh array identity most renders; only its content should
-  // drive the pruning effect below.
   const filePathsKey = filePaths.join('\0');
   const filePathsRef = useRef(filePaths);
   filePathsRef.current = filePaths;
 
-  // Load on mount / whenever the (presentation, round) identity changes, then
-  // prune any path no longer in the current manifest and write the pruned
-  // set back so the persisted key never drifts from the live file list.
   useEffect(() => {
     if (!key) {
       setReviewed(new Set());
@@ -68,7 +54,7 @@ export function usePresentReviewedMarks(
     const pruned = new Set(Array.from(loaded).filter((p) => validPaths.has(p)));
     if (pruned.size !== loaded.size) writeMarks(key, pruned);
     setReviewed(pruned);
-    // filePathsKey (not filePaths) is the real dependency — see above.
+    // filePathsKey (not filePaths) is the real dependency: filePaths is a fresh array
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, filePathsKey]);
 

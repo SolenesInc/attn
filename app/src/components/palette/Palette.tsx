@@ -1,19 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import './Palette.css';
 
-// The shared ⌘P-style overlay shell: a dimmed backdrop, a single text input, and
-// a keyboard-driven listbox. It owns the interaction contract — focus on mount,
-// Arrow/Enter/Escape, highlight clamping, scroll-into-view, backdrop dismissal,
-// and the combobox/listbox ARIA wiring — and knows nothing about what the rows
-// mean. Callers own the query (so they can rewrite it, e.g. to descend into a
-// directory), the ranking, and how a row renders.
-//
-// Every element carries both a stable `palette-*` class (styled once, in
-// Palette.css) and a `<variant>-*` class, so each caller keeps a hook for its own
-// positioning or visual tweaks — and, for the Notebook finder, the class names its
-// existing e2e and packaged-app scenarios already select on.
 export interface PaletteProps<T> {
-  // Class/id namespace for this instance, e.g. "notebook-finder".
   variant: string;
   ariaLabel: string;
   placeholder: string;
@@ -22,13 +10,9 @@ export interface PaletteProps<T> {
   items: T[];
   itemKey: (item: T) => string;
   renderItem: (item: T) => ReactNode;
-  // Shown in place of the list when items is empty — the caller decides whether
-  // that means "still loading" or "nothing matched".
   emptyLabel: string;
   onPick: (item: T) => void;
   onClose: () => void;
-  // Escape hatch for keys the shell does not own (Tab-completion, for instance).
-  // Return true to signal the key was handled and stop the shell's own handling.
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => boolean;
 }
 
@@ -50,22 +34,16 @@ export function Palette<T>({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  // Clamp the highlight into range (the list shrinks as you type, or as the
-  // underlying index refreshes) so Enter never picks a phantom row.
   const activeIndex = items.length === 0 ? -1 : Math.min(selected, items.length - 1);
 
-  // Take focus on mount so typing lands here immediately, not in whatever was
-  // focused behind the overlay.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Reset the highlight to the top whenever the query changes (best match first).
   useEffect(() => {
     setSelected(0);
   }, [query]);
 
-  // Keep the highlighted row visible as arrow-key navigation moves it.
   useEffect(() => {
     if (activeIndex < 0) return;
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -79,8 +57,7 @@ export function Palette<T>({
     if (onKeyDown?.(event)) return;
     switch (event.key) {
       case 'Escape':
-        // Stop here: closing the palette must not also bubble to a
-        // workspace-level Escape handler (e.g. closing a pane).
+        // Closing the palette must not also bubble to a workspace-level Escape handler.
         event.preventDefault();
         event.stopPropagation();
         onClose();
@@ -109,7 +86,6 @@ export function Palette<T>({
       className={`palette ${variant}`}
       role="dialog"
       aria-label={ariaLabel}
-      // A click on the dim backdrop (outside the box) dismisses the palette.
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div className={`palette-box ${variant}-box`}>
@@ -140,8 +116,7 @@ export function Palette<T>({
                 aria-selected={index === activeIndex}
                 className={`palette-option ${variant}-option${index === activeIndex ? ' is-selected' : ''}`}
                 onMouseEnter={() => setSelected(index)}
-                // mousedown (not click), preventDefault: pick without first yanking
-                // focus out of the input (which would flicker before the close).
+                // mousedown + preventDefault: pick without yanking focus out of the input.
                 onMouseDown={(event) => { event.preventDefault(); pick(item); }}
               >
                 {renderItem(item)}

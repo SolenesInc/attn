@@ -42,8 +42,7 @@ function markdownTitle(markdown: string): string | null {
 export function deriveTileTitle(
   tile: TileLeaf,
   content?: TileContentState,
-  // Resolves an app view's declared title. Passed in rather than read from the
-  // store here: this module is pure and is called from tests that hold no store.
+  // Passed in rather than read from the store: this module stays pure.
   appViewTitle?: (app: string, view: string) => string | undefined,
 ): string {
   if (tile.tileKind === 'browser' && tile.tileParams) {
@@ -57,16 +56,11 @@ export function deriveTileTitle(
     const fromContent = markdownTitle(content.content);
     if (fromContent) return fromContent;
   }
-  // A notebook tile self-serves its content, so there's no `content` to title from:
-  // show the open file's name, or a plain label before anything is opened. Params
-  // may be the legacy bare-path string or the {root, path} JSON envelope a
-  // root-bound tile persists — parse either way to reach the open path.
+  // Params may be the legacy bare-path string or the {root, path} JSON envelope.
   if (tile.tileKind === 'notebook') {
     const { path } = parseNotebookTileParams(tile.tileParams);
     return path ? tilePathBasename(path) : 'Editor';
   }
-  // An app's view titles itself from what the app declared, not from its params:
-  // the params are the app's to interpret and may be anything at all.
   const appView = parseAppViewTileKind(tile.tileKind);
   if (appView) {
     return appViewTitle?.(appView.app, appView.view) ?? `${appView.app}/${appView.view}`;

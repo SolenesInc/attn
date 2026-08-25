@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// materializeEnv is a store with the shared toolchain linked in plus an empty app
-// directory — the two halves EnsureSDK writes into.
 func materializeEnv(t *testing.T) (store, appDir string) {
 	t.Helper()
 	requireToolchain(t)
@@ -28,8 +26,6 @@ func materializeEnv(t *testing.T) (store, appDir string) {
 	return store, appDir
 }
 
-// The materialized package is types only. Shipping JavaScript would let a stored
-// version freeze a copy of the SDK it is supposed to run against live.
 func TestEnsureSDKMaterializesATypesOnlyPackage(t *testing.T) {
 	store, appDir := materializeEnv(t)
 
@@ -59,8 +55,6 @@ func TestEnsureSDKMaterializesATypesOnlyPackage(t *testing.T) {
 	}
 }
 
-// The specifier has to resolve from the app with no install, which is one
-// symlink out of the app and one out of the package to React's declarations.
 func TestEnsureSDKLinksTheSpecifierAndReactsTypes(t *testing.T) {
 	store, appDir := materializeEnv(t)
 
@@ -77,16 +71,12 @@ func TestEnsureSDKLinksTheSpecifierAndReactsTypes(t *testing.T) {
 	if target != pkg {
 		t.Fatalf("%s points at %s, want %s", SDKLinkPath, target, pkg)
 	}
-	// The SDK's declarations re-export React's, so `react` has to resolve from
-	// inside the package or nothing an app writes in TSX typechecks.
 	reactTypes := filepath.Join(pkg, "node_modules", "@types", "react", "index.d.ts")
 	if _, err := os.Stat(reactTypes); err != nil {
 		t.Fatalf("React's declarations do not resolve from the materialized package: %v", err)
 	}
 }
 
-// An app directory is the author's: it can be moved, copied from another machine,
-// or left holding a link to an SDK version this attn no longer carries.
 func TestEnsureSDKRepointsAStaleLink(t *testing.T) {
 	store, appDir := materializeEnv(t)
 	link := filepath.Join(appDir, filepath.FromSlash(SDKLinkPath))
@@ -111,8 +101,6 @@ func TestEnsureSDKRepointsAStaleLink(t *testing.T) {
 	}
 }
 
-// A real directory under that name is somebody's own install. Apply says so and
-// stops rather than deleting it.
 func TestEnsureSDKRefusesToReplaceARealDirectory(t *testing.T) {
 	store, appDir := materializeEnv(t)
 	link := filepath.Join(appDir, filepath.FromSlash(SDKLinkPath))
@@ -133,8 +121,6 @@ func TestEnsureSDKRefusesToReplaceARealDirectory(t *testing.T) {
 	}
 }
 
-// A4's ambient declaration is user state — every app applied since A4 has one —
-// and left beside a real package it declares the same module twice.
 func TestEnsureSDKRetiresA4sAmbientDeclaration(t *testing.T) {
 	store, appDir := materializeEnv(t)
 	legacy := filepath.Join(appDir, filepath.FromSlash(LegacySDKFile))
@@ -158,8 +144,6 @@ func TestEnsureSDKRetiresA4sAmbientDeclaration(t *testing.T) {
 	}
 }
 
-// The header is the whole test of ownership. A file under that name attn did not
-// write is somebody's, and a build must not delete it to make itself tidy.
 func TestEnsureSDKKeepsAnAmbientDeclarationAttnDidNotWrite(t *testing.T) {
 	store, appDir := materializeEnv(t)
 	legacy := filepath.Join(appDir, filepath.FromSlash(LegacySDKFile))
@@ -183,8 +167,6 @@ func TestEnsureSDKKeepsAnAmbientDeclarationAttnDidNotWrite(t *testing.T) {
 	}
 }
 
-// The SDK's source is hand-written TypeScript now, so anything it restates about
-// the daemon can rot silently. These are the restatements.
 func TestSDKDeclarationsMatchTheDaemonsContract(t *testing.T) {
 	index := SDKFiles()["index.d.ts"]
 	if index == "" {
@@ -209,11 +191,6 @@ func TestSDKDeclarationsMatchTheDaemonsContract(t *testing.T) {
 	}
 }
 
-// One package, two manifests: sdk/attn-app/package.json is what the workspace
-// links, sdkPackageJSON is what apply materializes. A subpath added to one alone
-// resolves at development time and fails at apply time with "no export", which
-// reads as the app being wrong. The set of specifiers is the promise; this is
-// where the two copies of it have to agree.
 func TestBothManifestsExportTheSameSpecifiers(t *testing.T) {
 	exports := func(what string, data []byte) []string {
 		t.Helper()
@@ -244,7 +221,6 @@ func TestBothManifestsExportTheSameSpecifiers(t *testing.T) {
 		t.Fatalf("the materialized package exports %v, the workspace package exports %v", got, want)
 	}
 
-	// And every specifier it names has to be a file the binary actually carries.
 	files := SDKFiles()
 	for _, specifier := range got {
 		name := "index.d.ts"
@@ -257,8 +233,6 @@ func TestBothManifestsExportTheSameSpecifiers(t *testing.T) {
 	}
 }
 
-// The pin exists so an author typechecks against the same React declarations the
-// running frontend provides. pnpm resolves a range; this is what it resolved to.
 func TestReactTypesPinMatchesTheFrontend(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "app", "pnpm-lock.yaml"))
 	if err != nil {
@@ -276,12 +250,7 @@ func TestReactTypesPinMatchesTheFrontend(t *testing.T) {
 	}
 }
 
-// directDependencyVersions reads the resolved versions of one package from every
-// importer block of a pnpm lockfile. Only the direct entries — the shape is
-//
-//	'@types/react':
-//	  specifier: ^19.1.8
-//	  version: 19.2.7
+// Direct importer entries only, matching the pnpm lockfile's specifier/version shape.
 func directDependencyVersions(lock, pkg string) []string {
 	var out []string
 	lines := strings.Split(lock, "\n")

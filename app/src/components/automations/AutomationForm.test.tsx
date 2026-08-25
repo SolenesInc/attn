@@ -68,9 +68,8 @@ function githubSpecJson(): string {
   return specJSONString(githubValues());
 }
 
-// Built inline (not via formValuesToSpec) to pin the sparse launch shape a
-// CLI-authored, model/effort-omitting definition actually has on disk —
-// launch.model/effort/executable are all daemon-optional (agent default).
+// Built inline, not via formValuesToSpec, to pin the sparse launch shape a
+// CLI-authored definition actually has on disk.
 function sparseLaunchSpecJson(): string {
   return JSON.stringify({
     api_version: AUTOMATION_API_VERSION,
@@ -178,11 +177,8 @@ describe('AutomationForm', () => {
     expect(expectedRevision).toBe(7);
   });
 
-  // Regression pin: the daemon treats launch.model/effort as optional
-  // (absent = agent default), so a CLI-authored definition that omits them
-  // must stay editable, and a prompt-only edit must not inject model/effort
-  // keys the user never touched. Must fail if the schema re-tightens
-  // model/effort back to required.
+  // The daemon treats launch.model/effort as optional (absent = agent default).
+  // Must fail if the schema re-tightens them back to required.
   it('edit: a sparse launch ({driver} only) loads to Agent default and a prompt-only save keeps launch sparse', async () => {
     const user = userEvent.setup();
     const props = baseProps();
@@ -368,7 +364,6 @@ describe('AutomationForm', () => {
     render(<AutomationForm {...props} />);
 
     const sentence = await screen.findByTestId('automation-form-sentence');
-    // Agent default (model '') renders no parenthetical model detail at all.
     await waitFor(() => expect(sentence).not.toHaveTextContent('effort'));
 
     const user = userEvent.setup();

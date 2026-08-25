@@ -6,10 +6,6 @@ import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import type { TerminalLayoutNode } from './types/workspace';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
 
-// Regression coverage for figgy's review on PR #257: a revealed tile-only
-// (sessionless) workspace must be selectable and must render its docked tile,
-// even though it has no session to route selection or layout through.
-// https://github.com/victorarias/attn/pull/257#pullrequestreview-4413194398
 
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
@@ -40,7 +36,6 @@ vi.mock('./components/GhosttyTerminal', async () => {
   return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
 });
 
-// Sidebar stub: one select button per visible workspace, plus the reveal toggle.
 vi.mock('./components/Sidebar', () => ({
   EditorIcon: () => null,
   WorkflowIcon: () => null,
@@ -86,8 +81,6 @@ vi.mock('./components/grid/GridView', () => ({
   ),
 }));
 
-// SessionTerminalWorkspace stub: surface just enough to assert which workspace is
-// active and what layout it was handed.
 vi.mock('./components/SessionTerminalWorkspace', () => ({
   SessionTerminalWorkspace: ({
     workspaceId,
@@ -154,7 +147,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     vi.clearAllMocks();
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
-    // Reveal sessionless workspaces in the sidebar (hidden by default).
     localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
     mockSendWorkspaceSelected = vi.fn();
 
@@ -267,13 +259,10 @@ describe('tile-only (sessionless) workspace selection and render', () => {
   it('renders the tile-only workspace layout but leaves it inactive until selected', async () => {
     render(<App />);
 
-    // The tile-only workspace renders from the daemon layout (no agent panes,
-    // one docked tile) even though no session carries it.
     const tileWorkspace = await screen.findByTestId('workspace-ws-tiles');
     expect(tileWorkspace.getAttribute('data-agent-count')).toBe('0');
     expect(tileWorkspace.getAttribute('data-tile-ids')).toBe('tile-readme');
 
-    // The session-backed workspace is the active one to start.
     expect(screen.getByTestId('workspace-ws-session').getAttribute('data-active')).toBe('1');
     expect(tileWorkspace.getAttribute('data-active')).toBe('0');
   });
@@ -287,11 +276,9 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     await waitFor(() => {
       expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-active')).toBe('1');
     });
-    // The previously active session workspace yields.
     expect(screen.getByTestId('workspace-ws-session').getAttribute('data-active')).toBe('0');
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
     expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
-    // Still rendering its docked tile.
     expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
   });
 
@@ -380,10 +367,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     });
   });
 
-  // The daemon-side worker answers OSC 10/11/12 color queries from the theme
-  // the app pushes down, so App must push it once the socket handshake
-  // completes. Unrelated to the sessionless-workspace regression above, but
-  // reuses the same App-rendering harness.
   it('sends the resolved terminal theme once the daemon handshake completes', async () => {
     render(<App />);
 

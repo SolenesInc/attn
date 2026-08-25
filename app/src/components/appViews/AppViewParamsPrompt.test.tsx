@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AppViewParamsPrompt } from './AppViewParamsPrompt';
 
-// The field has to be typable the instant it appears. It opens from the command
-// menu, and in the packaged app the menu's own focus trap hands focus back to
-// the terminal as it closes — which is after this prompt mounts — so the field
-// only wins if it holds focus rather than merely asking for it once.
+// The packaged command menu's focus trap hands focus back to the terminal as it
+// closes, after this prompt mounts, so the field must hold focus, not just ask.
 
 function renderPrompt(overrides: Partial<Parameters<typeof AppViewParamsPrompt>[0]> = {}) {
   const onSubmit = vi.fn();

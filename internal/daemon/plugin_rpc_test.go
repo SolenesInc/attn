@@ -478,8 +478,6 @@ func TestDaemon_PluginHealthCheckRecordsStatus(t *testing.T) {
 	})
 }
 
-// A steady plugin costs nothing: the 15-second poll publishes a fact only when
-// the verdict moves, so an idle daemon writes no bus rows and pushes no catalog.
 func TestDaemon_PluginHealthPublishesOnlyWhenItMoves(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -537,7 +535,6 @@ func TestDaemon_PluginHealthPublishesOnlyWhenItMoves(t *testing.T) {
 			return count
 		}
 
-		// unknown -> healthy is a move; staying healthy is not.
 		poll(pluginHealthResult{OK: true})
 		poll(pluginHealthResult{OK: true})
 		poll(pluginHealthResult{OK: true})
@@ -551,7 +548,6 @@ func TestDaemon_PluginHealthPublishesOnlyWhenItMoves(t *testing.T) {
 			t.Fatalf("after two identical unhealthy polls: %d facts, want 2", got)
 		}
 
-		// The reason moving is a move even while the status holds.
 		poll(pluginHealthResult{OK: false, Message: "worktree provider timed out"})
 		if got := facts(); got != 3 {
 			t.Fatalf("a new unhealthy message published %d facts, want 3", got)

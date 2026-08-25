@@ -1,5 +1,3 @@
-// Package launchenv builds the small part of a child-process environment that
-// must be consistent across every attn launch surface.
 package launchenv
 
 import (
@@ -12,9 +10,7 @@ import (
 
 const wrapperPathEnv = "ATTN_WRAPPER_PATH"
 
-// ActiveAttnExecutable resolves the attn binary that owns this process. An
-// explicit wrapper is authoritative because it names the active app/profile;
-// the remaining candidates preserve standalone and recovery behavior.
+// An explicit wrapper is authoritative because it names the active app/profile.
 func ActiveAttnExecutable() string {
 	candidates := make([]string, 0, 4)
 	if wrapperPath := strings.TrimSpace(os.Getenv(wrapperPathEnv)); wrapperPath != "" {
@@ -35,9 +31,6 @@ func ActiveAttnExecutable() string {
 	return "attn"
 }
 
-// WithActiveAttnFirst puts the active attn binary's directory first in PATH and
-// deduplicates path entries. It does not make any other environment filtering
-// decisions for the caller.
 func WithActiveAttnFirst(env []string, executable string) []string {
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
@@ -91,7 +84,6 @@ func pathEntryKey(entry string) string {
 	return filepath.Clean(entry)
 }
 
-// FirstExecutablePath returns the first executable file in candidates.
 func FirstExecutablePath(candidates []string) (string, bool) {
 	for _, candidate := range candidates {
 		candidate = strings.TrimSpace(candidate)

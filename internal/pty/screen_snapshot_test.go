@@ -82,10 +82,6 @@ func TestScreenSnapshot_ReadOnlyAndLean(t *testing.T) {
 		subscribers: make(map[string]*sessionSubscriber),
 	}
 	gt.Write([]byte("snapshot"))
-	// A session that has applied 7 chunks holds seqCounter=7 AND
-	// lastReplaySeq=7; the snapshot's LastSeq reports the replay-locked
-	// watermark (the last chunk actually baked into the terminal), never the
-	// raw counter — see TestScreenSnapshotSeqConsistency.
 	session.seqCounter.Store(7)
 	session.lastReplaySeq = 7
 
@@ -104,7 +100,6 @@ func TestScreenSnapshot_ReadOnlyAndLean(t *testing.T) {
 		t.Fatal("expected Running=true")
 	}
 
-	// Read-only: no subscriber registered.
 	if len(session.subscribers) != 0 {
 		t.Fatalf("snapshot must not register a subscriber, got %d", len(session.subscribers))
 	}

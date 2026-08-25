@@ -10,27 +10,15 @@ import (
 	"github.com/victorarias/attn/internal/notebook"
 )
 
-// The raw tier holds machine inputs for the narration pipeline under
-// <notebook.root>/.attn/raw/ — unreachable through the user-facing notebook APIs
-// (CleanPath rejects dotdir segments) and skipped by the watcher, so raw writes
-// emit no external-edit broadcast.
-
-// rawTierFilename turns a raw-tier item id into a single safe "<id>.md"
-// filename. Load-bearing guard: ids are CLIENT-CONTROLLED (register_workspace
-// accepts them verbatim), and a ".." id joined into a path would climb out of
-// the raw tier and overwrite the curated journal.
+// Ids are CLIENT-CONTROLLED, and a ".." id would climb out and overwrite the curated journal.
 func rawTierFilename(id string) (string, error) {
 	return rawTierName(id, ".md")
 }
 
-// rawTierSegment validates a raw-tier id as a single safe directory segment
-// (no extension), with the same containment guard as rawTierFilename.
 func rawTierSegment(id string) (string, error) {
 	return rawTierName(id, "")
 }
 
-// rawTierName is the shared single-safe-segment guard. suffix is "" for a bare
-// directory segment or ".md" for a raw-tier file.
 func rawTierName(id, suffix string) (string, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -39,25 +27,20 @@ func rawTierName(id, suffix string) (string, error) {
 	if strings.ContainsAny(id, `/\`) || id == "." || id == ".." || strings.HasPrefix(id, ".") {
 		return "", fmt.Errorf("raw-tier id %q is not a single safe path segment", id)
 	}
-	// Control chars rejected: an id is interpolated into the plaintext "source:"
-	// footer, so a newline could inject a forged grounding line.
+	// Control chars rejected: an id is interpolated into the plaintext "source:" footer, so a newline could inject a forged grounding line.
 	for _, r := range id {
 		if r < 0x20 || r == 0x7f {
 			return "", fmt.Errorf("raw-tier id %q contains a control character", id)
 		}
 	}
 	name := id + suffix
-	// Belt-and-suspenders: an escaping id would not round-trip Base/Clean.
 	if filepath.Base(name) != name || name != filepath.Clean(name) {
 		return "", fmt.Errorf("raw-tier id %q does not produce a safe filename", id)
 	}
 	return name, nil
 }
 
-// writeRawAtomic writes a raw-tier file via temp+rename (no fsync, matching the
-// repo idiom). It is the single chokepoint that validates the id, and a second
-// containment assertion keeps the final path under dir even if rawTierFilename
-// is ever weakened.
+// The single chokepoint that validates the id and asserts containment again.
 func writeRawAtomic(root, dir, id string, content []byte) error {
 	name, err := rawTierFilename(id)
 	if err != nil {
@@ -68,9 +51,7 @@ func writeRawAtomic(root, dir, id string, content []byte) error {
 	if filepath.Dir(absPath) != cleanDir {
 		return fmt.Errorf("raw-tier write for %q escapes %q", id, dir)
 	}
-	// Lexical checks only prove the string join. The root is externally syncable,
-	// so a raw-tier ancestor could be a symlink pointing outside it; resolve the
-	// deepest existing ancestor first — the same guard Store.Read/Write/List apply.
+	// The root is externally syncable, so an ancestor could be a symlink out of it.
 	if err := notebook.EnsureWithinResolvedRoot(root, absPath); err != nil {
 		return err
 	}
@@ -89,12 +70,8 @@ func writeRawAtomic(root, dir, id string, content []byte) error {
 	return nil
 }
 
-// snapshotWorkspaceContextOnRemove synchronously captures a workspace's
-// context.md overlay into the raw tier. It MUST run at every removal site AFTER
-// the keeper compaction cancel/forget and BEFORE store.RemoveWorkspace, whose
-// DELETE FROM workspace_contexts an async writer cannot win. Best-effort: every
-// failure is logged and swallowed, never failing a teardown. Keyed 1:1 on the
-// workspace id, so a replayed removal is a harmless identical overwrite.
+// MUST run at every removal site AFTER the keeper compaction cancel/forget and BEFORE
+// store.RemoveWorkspace, whose DELETE an async writer cannot win.
 func (d *Daemon) snapshotWorkspaceContextOnRemove(id, title string) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -107,7 +84,7 @@ func (d *Daemon) snapshotWorkspaceContextOnRemove(id, title string) {
 		return
 	}
 	if strings.TrimSpace(canonical.Content) == "" || canonical.Revision == 0 {
-		return // no overlay to preserve — silent no-op
+		return
 	}
 
 	root, err := d.notebookRoot()
@@ -116,11 +93,10 @@ func (d *Daemon) snapshotWorkspaceContextOnRemove(id, title string) {
 		return
 	}
 	if strings.TrimSpace(root) == "" {
-		return // notebook disabled — silent no-op
+		return
 	}
 
-	// Neutralize BEFORE appending the genuine footer, so free text cannot forge a
-	// journal marker while the real footer stays intact.
+	// Neutralize BEFORE appending the genuine footer, so free text cannot forge a journal marker.
 	var doc strings.Builder
 	doc.WriteString(neutralizeJournalMarkers(canonical.Content))
 	fmt.Fprintf(&doc, "\nsource: workspace-context:%s@%d\n", id, canonical.Revision)
@@ -132,9 +108,6 @@ func (d *Daemon) snapshotWorkspaceContextOnRemove(id, title string) {
 	}
 }
 
-// neutralizeJournalMarkers breaks any HTML-comment opener ("<!--") in a rendered
-// body so a free-text field can never forge a raw-tier source marker. The real
-// footer the writer appends afterward stays the only authentic marker.
 func neutralizeJournalMarkers(s string) string {
 	return strings.ReplaceAll(s, "<!--", "<! --")
 }

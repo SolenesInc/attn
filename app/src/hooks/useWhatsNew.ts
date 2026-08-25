@@ -1,6 +1,4 @@
-// app/src/hooks/useWhatsNew.ts
-// One-time "what's new" gating. Shows the modal once per content release, then
-// remembers it was seen. Bump WHATS_NEW_ID when there's a new story to tell.
+// One-time "what's new" gating; bump WHATS_NEW_ID when there's a new story to tell.
 
 import { useCallback, useEffect, useState } from 'react';
 

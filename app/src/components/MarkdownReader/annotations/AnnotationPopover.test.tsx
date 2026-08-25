@@ -1,9 +1,3 @@
-/**
- * AnnotationPopover — submit keys, empty-submit block, Escape, dirty
- * click-outside blocking, draft survival across unmount, header labels
- * (E10–E13 surface).
- */
-
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { AnnotationPopover, peekAnnotationDraft, type AnnotationPopoverProps } from './AnnotationPopover';
@@ -69,14 +63,12 @@ describe('AnnotationPopover', () => {
     const outside = document.createElement('div');
     document.body.appendChild(outside);
 
-    // Dirty: stays open.
     fireEvent.change(textarea(), { target: { value: 'unsaved' } });
     act(() => {
       outside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     });
     expect(props.onClose).not.toHaveBeenCalled();
 
-    // Clean again: closes.
     fireEvent.change(textarea(), { target: { value: '' } });
     act(() => {
       outside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
@@ -100,11 +92,9 @@ describe('AnnotationPopover', () => {
     first.view.unmount();
     expect(peekAnnotationDraft(draftKey)).toBe('work in progress');
 
-    // Reopen the same key: the draft is restored.
     const second = renderPopover({ draftKey });
     expect(textarea().value).toBe('work in progress');
 
-    // Submit clears the stored draft.
     fireEvent.keyDown(textarea(), { key: 'Enter', metaKey: true });
     expect(second.props.onSubmit).toHaveBeenCalledWith('work in progress');
     expect(peekAnnotationDraft(draftKey)).toBeUndefined();

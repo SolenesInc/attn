@@ -1,10 +1,5 @@
-// Derived from GhosttyWebGlRenderer.ts (shader, atlas, glyph, block-element logic
-// reused verbatim) with two deliberate changes:
-//   1. Per-tile scale+translate baked into a_position on the CPU (transform-in-
-//      vertex), so the unchanged shader maps everything to one canvas.
-//   2. The HOT PATH writes floats directly into a preallocated Float32Array via
-//      an index cursor — NOT `number[].push(...)` + `new Float32Array(...)`,
-//      which benchmarked at ~57ms/frame for 25 tiles (hard jank).
+// The hot path writes floats into a preallocated Float32Array via an index
+// cursor: `number[].push` + `new Float32Array` benchmarked ~57ms/frame at 25 tiles.
 import { CellFlags, type GhosttyCell, type GhosttyTerminal } from '../../ghostty';
 import {
   GLYPH_MODE_COLOR,
@@ -35,9 +30,6 @@ interface AtlasGlyph {
   v1: number;
   width: number;
   height: number;
-  // True when the rasterized bitmap carries its own colors (a color font such as
-  // Apple Color Emoji): drawn directly (mode 1) instead of tinted with the cell
-  // foreground.
   colored: boolean;
 }
 
@@ -50,8 +42,6 @@ interface BlockRect {
 
 const ATLAS_SIZE = 2048;
 const SOLID_TEXEL_CENTER = 0.5 / ATLAS_SIZE;
-// Blue accent for the focused (zoomed/input-target) tile, so it is obvious which
-// tile keyboard input is going to. Distinct from the semantic session state.
 const FOCUS: Rgb = { r: 96, g: 165, b: 250 };
 const STATE_COLORS: Record<UISessionState, Rgb> = {
   launching: { r: 96, g: 165, b: 250 },
@@ -60,8 +50,6 @@ const STATE_COLORS: Record<UISessionState, Rgb> = {
   idle: { r: 107, g: 114, b: 128 },
   recoverable: { r: 107, g: 114, b: 128 },
   pending_approval: { r: 234, g: 179, b: 8 },
-  // sky blue — calm and distinct from launching's periwinkle, the royal-blue
-  // PR/focus accent, and the unknown purple.
   scheduled: { r: 14, g: 165, b: 233 },
   unknown: { r: 168, g: 85, b: 247 },
 };
@@ -183,7 +171,6 @@ export class WebGlGridRenderer implements GridRenderer {
 
   private models = new Map<string, GhosttyTerminal>();
 
-  // The single shared vertex scratch. Grown (rarely) on demand; reused forever.
   private readonly vertices = new TerminalVertexBuffer(1 << 18);
   private glyphUploads = 0;
   private atlasResets = 0;
@@ -216,9 +203,6 @@ export class WebGlGridRenderer implements GridRenderer {
     container.appendChild(canvas);
     this.canvas = canvas;
 
-    // The single context. If this class ever creates more than one, the whole
-    // point of grid mode (composite N terminals into 1 GPU context) is void — so
-    // it is created exactly here, once.
     const gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
     if (!gl) throw new Error('grid: WebGL2 unavailable');
     this.gl = gl;
@@ -236,9 +220,6 @@ export class WebGlGridRenderer implements GridRenderer {
     atlasContext.fillStyle = '#ffffff';
     atlasContext.fillRect(0, 0, 1, 1);
 
-    // Premultiply alpha on upload so color-glyph (emoji) bitmaps filter cleanly;
-    // coverage-only glyphs are unaffected (the tinted path reads only the alpha).
-    // See terminalGlyphProgram for the shared pipeline contract.
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     const minFilter = this.mipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR;
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
@@ -259,9 +240,7 @@ export class WebGlGridRenderer implements GridRenderer {
     gl.uniform1i(gl.getUniformLocation(this.program, 'u_atlas'), 0);
     this.uResolution = gl.getUniformLocation(this.program, 'u_resolution');
     gl.enable(gl.BLEND);
-    // Premultiplied-alpha blending (source factor ONE): identical on-screen result
-    // to the old SRC_ALPHA blend for tinted quads, and lets color glyphs composite
-    // without dark edge fringing.
+    // Premultiplied-alpha blending: pairs with UNPACK_PREMULTIPLY_ALPHA_WEBGL above.
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
 
@@ -287,9 +266,7 @@ export class WebGlGridRenderer implements GridRenderer {
     this.glyphUploads = 0;
     this.atlasResets = 0;
 
-    // Walk every visible tile, baking its transform. If the atlas resets mid-walk
-    // (it filled and was nuked), every quad written before the reset references
-    // stale UVs — so re-walk the whole grid once against the fresh atlas.
+    // A mid-walk atlas reset leaves every quad written before it on stale UVs.
     const genBefore = this.atlasGeneration;
     this.walkAll(frames);
     if (this.atlasGeneration !== genBefore) {
@@ -319,8 +296,6 @@ export class WebGlGridRenderer implements GridRenderer {
       gl.deleteBuffer(this.buffer);
       gl.deleteTexture(this.texture);
       gl.deleteProgram(this.program);
-      // Deterministic GPU release — grid mode must not leak contexts (mirrors
-      // GhosttyTerminal.tsx's loseContext-on-unmount).
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
     this.canvas?.remove();
@@ -329,8 +304,6 @@ export class WebGlGridRenderer implements GridRenderer {
     this.gl = null;
     this.canvas = null;
   }
-
-  // --- internals -----------------------------------------------------------
 
   private syncCanvasSize(container: HTMLElement, canvas: HTMLCanvasElement, gl: WebGL2RenderingContext): void {
     const w = Math.max(1, Math.floor(container.clientWidth * this.dpr));
@@ -358,7 +331,7 @@ export class WebGlGridRenderer implements GridRenderer {
   private walkTile(model: GhosttyTerminal, frame: TileFrame): void {
     const m = this.metrics;
     const s = frame.scale;
-    const gs = this.dpr * s; // cell-geometry multiplier (logical metrics -> backing px)
+    const gs = this.dpr * s;
     const ox = frame.rect.x * this.dpr;
     const oy = frame.rect.y * this.dpr;
     const alpha = frame.alpha;
@@ -432,9 +405,6 @@ export class WebGlGridRenderer implements GridRenderer {
       }
     }
 
-    // Always outline the tile so it reads as a panel; the focused tile gets a
-    // brighter accent so the keyboard-input target is unambiguous. Both fade with
-    // the frame alpha during a zoom morph.
     if (frame.focused) {
       this.pushBorder(ox, oy, w, h, FOCUS, FOCUS_BORDER_ALPHA * alpha, Math.max(2 * this.dpr, 2));
     } else {
@@ -505,7 +475,6 @@ export class WebGlGridRenderer implements GridRenderer {
     );
   }
 
-  // Draw a 1-quad-per-edge rectangular outline inset to sit on the content box.
   private pushBorder(x: number, y: number, w: number, h: number, color: Rgb, alpha: number, t: number): void {
     this.pushSolid(x, y, w, t, color, alpha);
     this.pushSolid(x, y + h - t, w, t, color, alpha);
@@ -573,9 +542,6 @@ export class WebGlGridRenderer implements GridRenderer {
     return glyph;
   }
 
-  // Drop every cached glyph so the next requested frame re-rasterizes against
-  // the current document fonts. No-op before mount, when there is nothing to
-  // invalidate.
   invalidateGlyphCache(): void {
     if (!this.gl || !this.atlasContext) return;
     this.resetAtlas();
@@ -609,7 +575,6 @@ export class WebGlGridRenderer implements GridRenderer {
   }
 
   private pushTextured(x: number, y: number, w: number, h: number, glyph: AtlasGlyph, color: Rgb, alpha: number): void {
-    // Color glyphs (emoji) pass the atlas RGBA through; monochrome glyphs tint.
     this.pushQuad(x, y, w, h, glyph.u0, glyph.v0, glyph.u1, glyph.v1, color, alpha, glyph.colored ? GLYPH_MODE_COLOR : GLYPH_MODE_TINT);
   }
 

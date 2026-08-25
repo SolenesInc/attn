@@ -157,8 +157,6 @@ describe('createTerminalKeyInterceptor', () => {
   });
 
   describe('leader-key chords', () => {
-    // Bind a chord (⌘K then D) to an action; the leader collides with no
-    // terminal intercept, so the chord layer owns it.
     const CHORD = { leader: { key: 'k', meta: true }, then: { key: 'd' } };
 
     it('arms the leader and consumes it without leaking to the PTY', () => {

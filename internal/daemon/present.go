@@ -16,10 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// presentationToProto converts a store presentation to its protocol
-// representation. It carries only the presentation row plus its
-// already-enriched latest-round summary — never the manifest or comments,
-// which are round-scoped and fetched separately.
 func presentationToProto(p *store.Presentation) protocol.Presentation {
 	out := protocol.Presentation{
 		ID:                   p.ID,
@@ -52,11 +48,6 @@ func commentToProto(c *store.PresentationComment) protocol.PresentationComment {
 	}
 }
 
-// manifestToView converts a parsed manifest into the wire view sent to the
-// app — the same shape whether it comes from a fresh present_open or a
-// stored round's manifest_yaml. annotations is the resolved-annotations map
-// (path -> resolved annotations); nil when resolution was not attempted or
-// failed, in which case every file's Annotations is simply omitted.
 func manifestToView(m *present.Manifest, annotations map[string][]present.ResolvedAnnotation) protocol.PresentManifestView {
 	files := make([]protocol.PresentFile, len(m.Files))
 	for i, f := range m.Files {
@@ -91,14 +82,6 @@ func manifestToView(m *present.Manifest, annotations map[string][]present.Resolv
 	return view
 }
 
-// roundToProto converts a store round to protocol, reparsing its stored
-// manifest YAML to build the manifest view. The manifest was already
-// validated at open time, so a parse failure here means stored data is
-// corrupt, not a user input error. Annotations are re-resolved against the
-// round's pinned head SHA in repoDir — deterministic, same architecture as
-// the stats/changed-files progressive enhancements below. A resolution
-// problem (unreadable file, broken anchor) never fails the round: the
-// affected file's annotations are simply omitted from the view.
 func roundToProto(r *store.PresentationRound, repoDir string) (*protocol.PresentationRound, error) {
 	m, err := present.ParseManifest([]byte(r.ManifestYAML))
 	if err != nil {
@@ -123,9 +106,6 @@ func roundToProto(r *store.PresentationRound, repoDir string) (*protocol.Present
 	return out, nil
 }
 
-// formatAnchorIssue renders an annotation resolution issue for display to the
-// agent: "path[index]: message" for an issue tied to one annotation, or
-// "path: message" for a file-level issue (index -1, e.g. unreadable content).
 func formatAnchorIssue(issue present.AnchorIssue) string {
 	if issue.Index < 0 {
 		return fmt.Sprintf("%s: %s", issue.Path, issue.Message)
@@ -133,9 +113,7 @@ func formatAnchorIssue(issue present.AnchorIssue) string {
 	return fmt.Sprintf("%s[%d]: %s", issue.Path, issue.Index, issue.Message)
 }
 
-// handlePresentOpen opens a new presentation (or a new round on an existing
-// one, when presentation_id is set) from a raw manifest YAML the agent wrote.
-// The daemon is the sole authority for parsing and pinning: it never trusts a
+// The daemon is the sole authority for parsing and pinning: never trust a
 // caller-supplied SHA or manifest shape.
 func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
@@ -238,9 +216,6 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 	}
 }
 
-// handlePresentFeedback reads a round's reviewer feedback back to the
-// authoring agent as markdown. A round that has not been submitted yet still
-// resolves — the markdown says so, so an agent can poll without erroring.
 func (d *Daemon) handlePresentFeedback(conn net.Conn, msg *protocol.PresentFeedbackMessage) {
 	presentationID := strings.TrimSpace(msg.PresentationID)
 	if presentationID == "" {
@@ -288,9 +263,6 @@ func (d *Daemon) handlePresentFeedback(conn net.Conn, msg *protocol.PresentFeedb
 		verdict = *round.Verdict
 	}
 	markdown := present.RenderFeedback(pres.RepoPath, pres.Title, round.Seq, round.BaseSHA, round.HeadSHA, submittedAt, verdict, feedbackComments)
-	// A reviewer can close a presentation without ever reviewing this round —
-	// surface that explicitly so a polling agent learns the review isn't
-	// coming, rather than polling "not submitted yet" forever.
 	if pres.Status == "closed" && round.SubmittedAt == nil {
 		markdown += "\nPresentation closed without review.\n"
 	}
@@ -311,8 +283,6 @@ func (d *Daemon) handlePresentFeedback(conn net.Conn, msg *protocol.PresentFeedb
 	})
 }
 
-// handleGetPresentations reads the full list of presentations, the way the
-// app renders the present surface.
 func (d *Daemon) handleGetPresentations(client *wsClient, msg *protocol.GetPresentationsMessage) {
 	result := protocol.GetPresentationsResultMessage{
 		Event:   protocol.EventGetPresentationsResult,
@@ -334,8 +304,6 @@ func (d *Daemon) handleGetPresentations(client *wsClient, msg *protocol.GetPrese
 	d.sendToClient(client, result)
 }
 
-// handleGetPresentationRound fetches one round of a presentation — the round
-// record plus its comments — for the detail view.
 func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetPresentationRoundMessage) {
 	result := protocol.GetPresentationRoundResultMessage{
 		Event:   protocol.EventGetPresentationRoundResult,
@@ -383,15 +351,13 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		result.Comments[i] = commentToProto(c)
 	}
 
-	// Best-effort drift signal: the repo may have moved on since the round
-	// was pinned. A rev-parse failure (repo gone, etc.) is non-fatal — just
-	// omit the field.
+	// Best-effort drift signal: a rev-parse failure is non-fatal, just omit the
+	// field.
 	if headSHA, err := attngit.Output(attngit.OpMetadata, pres.RepoPath, "rev-parse", "HEAD"); err == nil {
 		result.RepoHeadSHA = protocol.Ptr(strings.TrimSpace(string(headSHA)))
 	}
 
-	// Per-file ± line stats are a progressive enhancement for the rail: a
-	// lookup failure or empty result must never fail the round fetch.
+	// A stats lookup failure or empty result must never fail the round fetch.
 	stats := d.presentFileStats(pres.RepoPath, round.BaseSHA, round.HeadSHA)
 	if len(stats) > 0 {
 		for i := range result.Round.Manifest.Files {
@@ -403,8 +369,7 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		}
 	}
 
-	// The full changed-file list (tour + other) is a progressive enhancement
-	// too: a git error leaves ChangedFiles nil and the round still loads.
+	// A git error leaves ChangedFiles nil and the round still loads.
 	if changed, err := d.presentChangedFiles(pres.RepoPath, round.BaseSHA, round.HeadSHA, stats); err == nil {
 		result.Round.ChangedFiles = changed
 	}
@@ -413,13 +378,8 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 	d.sendToClient(client, result)
 }
 
-// presentFileStats returns path -> [additions, deletions] for the pinned
-// base..head diff, from `git diff --numstat`. Binary files (numstat "-") are
-// omitted. Rename lines are skipped — the numstat rename encoding
-// ("old => new" or "{old => new}/tail") doesn't cleanly resolve to a single
-// manifest path, and leaving those files stats-less is an accepted
-// limitation. Errors return nil; stats are a progressive enhancement and
-// must never fail a round fetch.
+// Rename lines are skipped: the numstat rename encoding does not cleanly
+// resolve to a manifest path. Errors return nil — stats never fail a fetch.
 func (d *Daemon) presentFileStats(repoDir, baseSHA, headSHA string) map[string][2]int {
 	out, err := attngit.Output(attngit.OpDiff, repoDir, "diff", "--numstat", baseSHA+".."+headSHA)
 	if err != nil {
@@ -428,11 +388,6 @@ func (d *Daemon) presentFileStats(repoDir, baseSHA, headSHA string) map[string][
 	return parsePresentNumstat(string(out))
 }
 
-// presentChangedFiles lists every path changed between the round's pinned
-// base..head SHAs, for the frontend to derive the Tour/Other/Skipped rail
-// groups from (paths already named in the manifest are included too — the
-// frontend does the set subtraction). stats is the same numstat map used for
-// manifest file stats, reused here so numstat only runs once per round fetch.
 func (d *Daemon) presentChangedFiles(repoDir, baseSHA, headSHA string, stats map[string][2]int) ([]protocol.PresentFile, error) {
 	out, err := attngit.Output(attngit.OpDiff, repoDir, "diff", "--name-only", "-z", baseSHA+".."+headSHA)
 	if err != nil {
@@ -453,11 +408,6 @@ func (d *Daemon) presentChangedFiles(repoDir, baseSHA, headSHA string, stats map
 	return files, nil
 }
 
-// parsePresentNumstat parses `git diff --numstat` output into path ->
-// [additions, deletions]. Lines are tab-separated: additions, deletions,
-// path. Binary files report "-" for both counts and are omitted. Rename
-// lines carry a path field containing " => " (optionally with a "{old =>
-// new}" brace segment) and are skipped rather than guessed at.
 func parsePresentNumstat(output string) map[string][2]int {
 	result := make(map[string][2]int)
 	for _, line := range strings.Split(output, "\n") {
@@ -470,7 +420,6 @@ func parsePresentNumstat(output string) map[string][2]int {
 			continue
 		}
 		if parts[0] == "-" || parts[1] == "-" {
-			// Binary file: no line stats available.
 			continue
 		}
 		additions, err := strconv.Atoi(parts[0])
@@ -483,7 +432,6 @@ func parsePresentNumstat(output string) map[string][2]int {
 		}
 		path := parts[2]
 		if strings.Contains(path, " => ") {
-			// Rename line — accepted limitation, see doc comment.
 			continue
 		}
 		result[path] = [2]int{additions, deletions}
@@ -491,12 +439,6 @@ func parsePresentNumstat(output string) map[string][2]int {
 	return result
 }
 
-// handlePresentSubmitRound hands a round's review back to the authoring
-// agent: it validates and stores the comments, marks the round submitted, and
-// — when handback is set — wakes the authoring agent up, either through a
-// ticket comment (ticket-bound presentations) or a direct doorbell (bare
-// sessions, best-effort: skipped, not queued, while the session waits for
-// approval).
 func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.PresentSubmitRoundMessage) {
 	result := protocol.PresentSubmitRoundResultMessage{
 		Event:   protocol.EventPresentSubmitRoundResult,
@@ -583,14 +525,8 @@ func (d *Daemon) handlePresentSubmitRound(client *wsClient, msg *protocol.Presen
 	d.handbackPresentationRound(pres, round.Seq, msg.Verdict)
 }
 
-// handbackPresentationRound wakes the authoring agent once a round has been
-// submitted. Ticket-bound presentations get a durable ticket comment (queued
-// regardless of the session's state); bare sessions get a best-effort direct
-// doorbell that is silently skipped while the session waits for approval — the
-// accepted limitation for a bare presentation, which has no durable inbox to fall
-// back on. verdict is verdict-aware wording: "approved" tells the agent the round
-// was approved (possibly with nits); "feedback" keeps the original "submitted"
-// wording.
+// A bare session gets a best-effort doorbell, silently skipped while it waits
+// for approval — the accepted limitation with no durable inbox.
 func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, verdict string) {
 	var notice string
 	if verdict == "approved" {
@@ -629,10 +565,6 @@ func (d *Daemon) handbackPresentationRound(pres *store.Presentation, seq int, ve
 	d.sessionInputs().release(pres.SessionID, delivery.id)
 }
 
-// handlePresentClose dismisses a presentation without a review: the
-// presentation's status moves straight to "closed". Unlike
-// handlePresentSubmitRound, there is no round submission and no handback —
-// the reviewer is declining to review, not handing feedback back.
 func (d *Daemon) handlePresentClose(client *wsClient, msg *protocol.PresentCloseMessage) {
 	result := protocol.PresentCloseResultMessage{
 		Event:          protocol.EventPresentCloseResult,
@@ -659,9 +591,6 @@ func (d *Daemon) handlePresentClose(client *wsClient, msg *protocol.PresentClose
 	d.publishFact(FactPresentationUpdated, presentationID, nil)
 }
 
-// projectPresentation re-reads the presentation the fact names. The store is
-// the authority and the fan-out is synchronous, so the projection sees exactly
-// what the producer just wrote.
 func (d *Daemon) projectPresentation(ev bus.Event) {
 	pres, err := d.store.GetPresentation(ev.Subject)
 	if err != nil {

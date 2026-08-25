@@ -10,10 +10,6 @@ describe('resolveMarkdownOpenerTarget', () => {
   });
 
   it('never indexes or binds a remote session’s directory', () => {
-    // The remote cwd names a path on another machine: handing it to fs_index
-    // would enumerate this machine's filesystem under a remote label, and
-    // open_markdown would bind a local file to a session the local daemon does
-    // not own. Fall back to the local notebook root, with no session binding.
     const target = resolveMarkdownOpenerTarget(
       { id: 's1', cwd: '/repo', endpointId: 'orb-remote' },
       '/notebook',

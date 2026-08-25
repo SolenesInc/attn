@@ -29,9 +29,8 @@ func callTicketAttach(t *testing.T, d *Daemon, msg *protocol.TicketAttachMessage
 	if err := json.NewDecoder(client).Decode(&resp); err != nil {
 		t.Fatalf("decode ticket attach response: %v", err)
 	}
-	// net.Pipe writes block until read, and the decoder can finish the JSON
-	// value without consuming the encoder's trailing newline — close the pipe
-	// so the handler's Encode returns before we wait on it.
+	// net.Pipe writes block until read, and the decoder can finish the JSON value
+	// without consuming the trailing newline — close the pipe so Encode returns.
 	_ = client.Close()
 	<-done
 	return resp
@@ -46,8 +45,6 @@ func attachSource(t *testing.T, dir, name, content string) protocol.TicketAttach
 	return protocol.TicketAttachFile{SourcePath: path, Filename: name}
 }
 
-// currentTicketEventSeq is the optimistic-concurrency stamp a caller sends with
-// a mutation: the last event it saw on the ticket.
 func currentTicketEventSeq(t *testing.T, d *Daemon, ticketID string) *int {
 	t.Helper()
 	ticket, err := d.store.GetTicket(ticketID)

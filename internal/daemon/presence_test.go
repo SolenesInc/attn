@@ -31,14 +31,9 @@ func callTicketInboxResult(t *testing.T, d *Daemon, sessionID string) *protocol.
 	return resp.TicketInboxResult
 }
 
-// TestTicketInboxSurfacesUserPresence verifies the ticket inbox result carries
-// last_user_activity_at once the daemon has observed a UI-presence websocket
-// command (see isUserPresenceCommand), and omits it when no presence has been
-// recorded since the daemon started.
 func TestTicketInboxSurfacesUserPresence(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
-	// No presence observed yet: the field is absent.
 	result := callTicketInboxResult(t, d, "session-1")
 	if result.LastUserActivityAt != nil {
 		t.Fatalf("last_user_activity_at = %v, want nil before any recorded activity", *result.LastUserActivityAt)
@@ -56,11 +51,6 @@ func TestTicketInboxSurfacesUserPresence(t *testing.T) {
 	}
 }
 
-// TestHandleClientMessageStampsUserPresence drives the real websocket
-// pre-dispatch path (not the recordUserActivity helper directly) to prove a
-// UI-origin command like session_selected reaches isUserPresenceCommand and
-// stamps presence, and that the stamp then surfaces on the ticket inbox
-// result.
 func TestHandleClientMessageStampsUserPresence(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -84,11 +74,6 @@ func TestHandleClientMessageStampsUserPresence(t *testing.T) {
 	}
 }
 
-// TestIsUserPresenceCommandAllowlist locks the exact allowlist named in the
-// design: UI-origin websocket commands that indicate the user is at the app,
-// as opposed to unix-socket CLI/agent commands (which never reach
-// isUserPresenceCommand) or other websocket commands that don't reflect direct
-// user attention.
 func TestIsUserPresenceCommandAllowlist(t *testing.T) {
 	present := []string{
 		protocol.CmdSessionSelected,

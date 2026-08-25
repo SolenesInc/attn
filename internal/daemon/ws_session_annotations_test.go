@@ -73,8 +73,6 @@ func annotationDaemon(t *testing.T) *Daemon {
 }
 
 func TestSessionAnnotations_SurviveASaveAndReload(t *testing.T) {
-	// The reason this is persisted at all: what the user marked has to still be
-	// there after everything that draws it is gone.
 	d := annotationDaemon(t)
 	saved := []protocol.SessionAnnotation{
 		annotation("a1", "msg-old", "an earlier turn"),
@@ -121,8 +119,6 @@ func TestSessionAnnotations_UnannotatedSessionIsEmptyNotAnError(t *testing.T) {
 }
 
 func TestSessionAnnotations_StaleSaveIsRefusedNotAnError(t *testing.T) {
-	// A reply that arrives out of order must not overwrite newer marks. The
-	// client is told stale rather than failed, and re-hydrates.
 	d := annotationDaemon(t)
 	annotationsSave(t, d, "session-1", 2, []protocol.SessionAnnotation{annotation("a2", "msg", "newer")})
 
@@ -144,8 +140,6 @@ func TestSessionAnnotations_StaleSaveIsRefusedNotAnError(t *testing.T) {
 }
 
 func TestSessionAnnotations_ClearTombstonesAgainstAnInFlightSave(t *testing.T) {
-	// Sending the annotations clears them. A save that was already in flight
-	// when that happened must not bring them back.
 	d := annotationDaemon(t)
 	annotationsSave(t, d, "session-1", 1, []protocol.SessionAnnotation{annotation("a1", "msg", "sent")})
 
@@ -183,8 +177,6 @@ func TestSessionAnnotations_RejectsMissingSessionID(t *testing.T) {
 }
 
 func TestSessionAnnotations_DroppedWithTheirSession(t *testing.T) {
-	// A session id never comes back, so its draft is deleted rather than
-	// tombstoned — otherwise the row outlives everything that could read it.
 	d := annotationDaemon(t)
 	d.store.Add(&protocol.Session{ID: "session-1", State: protocol.StateIdle})
 	annotationsSave(t, d, "session-1", 1, []protocol.SessionAnnotation{annotation("a1", "msg", "marked")})
@@ -201,8 +193,6 @@ func TestSessionAnnotations_DroppedWithTheirSession(t *testing.T) {
 }
 
 func TestSessionAnnotations_NoteSurvivesTheSaveWithTheMarks(t *testing.T) {
-	// The note is drafted alongside the marks and belongs to the same draft, so
-	// it comes back from the same get the marks do.
 	d := annotationDaemon(t)
 
 	result := annotationsSaveWithNote(t, d, "session-1", 1,
@@ -218,8 +208,7 @@ func TestSessionAnnotations_NoteSurvivesTheSaveWithTheMarks(t *testing.T) {
 }
 
 func TestSessionAnnotations_NoNoteIsAbsentNotEmpty(t *testing.T) {
-	// An older client sends no note at all; the field stays off the wire so
-	// nothing downstream has to tell "" apart from "not set".
+	// An older client sends no note at all; the field stays off the wire.
 	d := annotationDaemon(t)
 	annotationsSave(t, d, "session-1", 1, []protocol.SessionAnnotation{annotation("a1", "msg", "marked")})
 
@@ -230,8 +219,6 @@ func TestSessionAnnotations_NoNoteIsAbsentNotEmpty(t *testing.T) {
 }
 
 func TestSessionAnnotations_ClearTakesTheNoteWithTheMarks(t *testing.T) {
-	// Clear is what a send does. A note left behind is an instruction already
-	// delivered, waiting to be delivered again.
 	d := annotationDaemon(t)
 	annotationsSaveWithNote(t, d, "session-1", 1,
 		[]protocol.SessionAnnotation{annotation("a1", "msg", "marked")}, "Split this into two PRs.")

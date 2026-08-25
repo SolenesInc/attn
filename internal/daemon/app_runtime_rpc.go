@@ -14,19 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The sidecar's side of the socket: how the app runtime connects, what it may
-// ask the daemon for, and how a dispatch travels.
-//
-// It speaks the same newline-delimited JSON-RPC as a plugin (jsonrpc_peer.go
-// holds the transport both share) but it is not a plugin and does not enter the
-// plugin registry: a plugin is an extension the user installed, and this is one
-// process attn ships and owns.
-//
-// The methods the sidecar may call are the collection operations and the
-// bounded current-state snapshot. Each is scoped by the daemon's own record of
-// the dispatch in flight — see appDispatch. There is no namespace on the wire
-// to get wrong.
-
 const appRuntimeHelloMethod = "app_runtime.hello"
 
 type appRuntimeHelloParams struct {
@@ -39,7 +26,6 @@ type appRuntimeHelloResult struct {
 	OK bool `json:"ok"`
 }
 
-// appRuntimeConnection is the live sidecar.
 type appRuntimeConnection struct {
 	*jsonrpcPeer
 
@@ -72,9 +58,7 @@ func (c *appRuntimeConnection) reconcile(ctx context.Context, req appReconcileRe
 	return result, nil
 }
 
-// appRuntimePingResult answers whether the sidecar's event loop is turning. The
-// host serves it without touching app code, so a silent ping means the loop
-// itself is blocked and no app's handler is being run.
+// Served without touching app code, so a silent ping means the loop is blocked.
 type appRuntimePingResult struct {
 	OK bool `json:"ok"`
 }
@@ -90,11 +74,8 @@ func (c *appRuntimeConnection) ping(ctx context.Context) error {
 	return nil
 }
 
-// parseAppRuntimeHello recognizes the sidecar's opening frame.
-//
-// It runs before the plugin hello sniff, because the plugin parser treats any
-// JSON-RPC frame as a plugin's and would refuse this one with "first plugin
-// method must be hello" — a true sentence about the wrong protocol.
+// Runs before the plugin hello sniff, which would refuse this frame with "first
+// plugin method must be hello" — a true sentence about the wrong protocol.
 func parseAppRuntimeHello(data []byte) (json.RawMessage, appRuntimeHelloParams, bool, error) {
 	var msg jsonRPCMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -124,7 +105,6 @@ func parseAppRuntimeHello(data []byte) (json.RawMessage, appRuntimeHelloParams, 
 	return msg.ID, params, true, nil
 }
 
-// handleAppRuntimeConnection owns the sidecar's connection for its whole life.
 func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader, helloID json.RawMessage, params appRuntimeHelloParams) {
 	runtime := &appRuntimeConnection{
 		jsonrpcPeer: newJSONRPCPeer(conn, reader),
@@ -139,14 +119,11 @@ func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader,
 	}
 	d.setAppRuntimeConnection(runtime)
 	defer func() {
-		// Same ordering as the plugin path: note the disconnect before the
-		// connection stops being reachable, so a replacement's NoteConnected
-		// cancels the grace timer instead of an old defer arming it after the new
-		// process is already healthy.
+		// Before the connection stops being reachable, so a replacement's NoteConnected
+		// cancels the grace timer instead of an old defer arming it afterwards.
 		d.ensureAppRuntimeSupervisor().NoteDisconnected(appRuntimeChildName, runtime.generation)
 		d.clearAppRuntimeConnection(runtime)
-		// Every dispatch waiting on this process learns now. Without it each one
-		// would wait out its whole timeout for an answer that can never come.
+		// Otherwise every parked dispatch waits out its whole timeout.
 		runtime.closePending(io.EOF)
 	}()
 
@@ -172,21 +149,17 @@ func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader,
 		}
 		if msg.Method == "" {
 			if !runtime.routeResponse(msg) {
-				// The caller's context expired first and it has already given up.
-				// Saying so on the wire would be noise the host cannot act on.
 				d.logf("app runtime: answer to request %s arrived with nobody waiting", jsonRPCIDKey(msg.ID))
 			}
 			continue
 		}
 		if msg.Method == appRuntimeEnteredMethod || msg.Method == appRuntimeLeftMethod {
-			// On the read loop on purpose: it is a map write, and its whole value is
-			// the order it arrives in.
+			// On the read loop on purpose: it is a map write whose whole value is the
+			// order it arrives in.
 			d.appRuntimeHandlerMoved(runtime, msg)
 			continue
 		}
-		// Off the read loop: several apps dispatch concurrently over this one
-		// socket, and a collection read for one must not hold up another app's
-		// answers behind it.
+		// Off the read loop: a collection read for one app must not hold up another's.
 		go d.serveAppRuntimeMethod(runtime, msg)
 	}
 }
@@ -194,7 +167,6 @@ func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader,
 func (d *Daemon) setAppRuntimeConnection(runtime *appRuntimeConnection) {
 	d.appRuntimeMu.Lock()
 	d.appRuntimeConn = runtime
-	// Wakes every delivery parked on the cold start.
 	if d.appRuntimeReady != nil {
 		close(d.appRuntimeReady)
 		d.appRuntimeReady = nil
@@ -202,17 +174,12 @@ func (d *Daemon) setAppRuntimeConnection(runtime *appRuntimeConnection) {
 	d.appRuntimeMu.Unlock()
 }
 
-// clearAppRuntimeConnection drops the connection only if it is still the current
-// one. A slow teardown must not unpublish a replacement that has already
-// connected.
 func (d *Daemon) clearAppRuntimeConnection(runtime *appRuntimeConnection) {
 	d.appRuntimeMu.Lock()
 	if d.appRuntimeConn == runtime {
 		d.appRuntimeConn = nil
 	}
 	d.appRuntimeMu.Unlock()
-	// Whatever the daemon gave up waiting for died with the process, so nothing
-	// of it is still holding an event loop that no longer exists.
 	d.forgetEnteredHandlers()
 	d.publishFact(FactAppRuntimeChanged, appRuntimeChildName, nil)
 }
@@ -230,20 +197,9 @@ func (d *Daemon) serveAppRuntimeMethod(runtime *appRuntimeConnection, msg jsonRP
 	_ = runtime.send(jsonRPCResult(msg.ID, result))
 }
 
-// appRuntimeCrashedMethod is the host's last frame before it exits: an error
-// escaped every handler and is about to take the process down, and this says
-// whose code it came from.
-//
-// It is a report, not a request for permission — the host exits either way, and
-// waits only briefly for the answer. Losing it costs the culprit a strike, which
-// is why the host sends it before exiting rather than letting the daemon guess
-// from a dead socket.
 const appRuntimeCrashedMethod = "app_runtime.crashed"
 
 type appRuntimeCrashParams struct {
-	// App is empty when the error carried no stack naming a loaded bundle. Nothing
-	// is charged then: guessing which app was running is how innocents get
-	// disabled.
 	App   string `json:"app"`
 	Kind  string `json:"kind"`
 	Error string `json:"error"`
@@ -263,15 +219,8 @@ func (d *Daemon) appRuntimeCrashed(msg jsonRPCMessage) (any, error) {
 	return appRuntimeHelloResult{OK: true}, nil
 }
 
-// appRuntimeEnteredMethod and appRuntimeLeftMethod are the host saying it is
-// about to call an app's handler, and that the handler has settled. They are
-// notifications: there is nothing to answer, and the point of the first is that
-// it reaches the daemon *before* the handler runs, so it is already on the wire
-// when a handler that never yields freezes the loop behind it.
-//
-// Together they are what makes a frozen loop attributable — the daemon's own
-// dispatch order is not the order handlers hold the loop, and nothing the daemon
-// can observe tells it when a handler left. See attributeWedgedDispatch.
+// entered reaches the daemon *before* the handler runs, so it is already on the wire when
+// a handler that never yields freezes the loop behind it. See attributeWedgedDispatch.
 const (
 	appRuntimeEnteredMethod = "app_runtime.entered"
 	appRuntimeLeftMethod    = "app_runtime.left"
@@ -282,9 +231,6 @@ type appRuntimeHandlerParams struct {
 	App      string `json:"app"`
 }
 
-// enteredHandler is one handler the host entered and has not left. order is the
-// daemon's receive order, which is the host's entry order: the frames arrive on
-// one socket and are recorded on its read loop.
 type enteredHandler struct {
 	app   string
 	order uint64
@@ -306,8 +252,7 @@ func (d *Daemon) appRuntimeHandlerMoved(runtime *appRuntimeConnection, msg jsonR
 	d.noteEnteredHandler(runtime.generation, params.Dispatch, params.App)
 }
 
-// appCollectionParams is what every collection callback carries. There is
-// deliberately no namespace: the daemon reads it off the dispatch record, so an
+// Deliberately no namespace: the daemon reads it off the dispatch record, so an
 // app cannot name one — its own or anybody else's.
 type appCollectionParams struct {
 	Dispatch   string          `json:"dispatch"`
@@ -371,7 +316,6 @@ func (d *Daemon) appRuntimeMethod(msg jsonRPCMessage) (any, error) {
 	}
 }
 
-// appDocument is one document as the SDK's Document type sees it.
 type appDocument struct {
 	ID        string          `json:"id"`
 	Body      json.RawMessage `json:"body"`
@@ -400,7 +344,7 @@ func (d *Daemon) appCollectionGet(dispatch *appDispatch, params appCollectionPar
 	}
 	if !read.Found {
 		// The SDK types this as Document | null, so the absent case is a value
-		// rather than a failure: "no such document" is an ordinary answer.
+		// rather than a failure.
 		return nil, nil
 	}
 	return appDocumentOf(*read.Document), nil
@@ -425,8 +369,7 @@ func (d *Daemon) appCollectionPut(dispatch *appDispatch, params appCollectionPar
 		return nil, err
 	}
 	d.announceCommittedWrite(fact, written.Seq)
-	// Read back rather than synthesize: the SDK hands the caller a Document, and
-	// the timestamps on it are the store's, not this call's idea of now.
+	// Read back rather than synthesize: the timestamps must be the store's.
 	read, _, err := d.store.ReadDocument(dispatch.namespace, params.Collection, params.ID)
 	if err == nil && read.Found {
 		return appDocumentOf(*read.Document), nil
@@ -452,7 +395,7 @@ func (d *Daemon) appCollectionDelete(dispatch *appDispatch, params appCollection
 	return written.Changed, nil
 }
 
-// appQuery fills in the two fields the app is not allowed to choose.
+// Fills in the two fields the app is not allowed to choose.
 func (d *Daemon) appQuery(dispatch *appDispatch, params appCollectionParams) docstore.Query {
 	q := docstore.Query{}
 	if params.Query != nil {

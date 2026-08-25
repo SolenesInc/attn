@@ -1,12 +1,3 @@
-// Package workflowresult implements a schema-validating MCP "result sink" used
-// by the workflow engine's real agent() path. It exposes exactly ONE tool whose
-// inputSchema is the per-call JSON Schema. On tools/call it validates the
-// payload against that schema IN-TURN: a mismatch returns a successful JSON-RPC
-// response carrying isError:true (so the model self-corrects in the same turn,
-// rather than aborting the run); a valid payload is written atomically to the
-// result file. Repeated valid calls are last-write-wins — re-emission is normal
-// LLM behavior and must not error (unlike the workspace-context janitor, which
-// gates read/replace and hard-aborts).
 package workflowresult
 
 import (
@@ -43,12 +34,7 @@ type rpcResponse struct {
 	Error   *rpcError `json:"error,omitempty"`
 }
 
-// ServeResultSink runs the single-tool result sink over the given streams.
-//
-//   - toolName is the one advertised tool (e.g. "return_result").
-//   - schema is the JSON Schema advertised as the tool inputSchema AND validated
-//     against on each call. Empty => a permissive {"type":"object"} default.
-//   - resultPath is the atomic write target for a validated payload.
+// An empty schema means a permissive {"type":"object"}.
 func ServeResultSink(
 	ctx context.Context,
 	toolName string,
@@ -62,8 +48,6 @@ func ServeResultSink(
 		toolName = "return_result"
 	}
 
-	// The schema object surfaced as inputSchema. Empty schema => permissive
-	// object (the no-schema path does not use this sink, so this is defensive).
 	schemaObject := map[string]any{"type": "object"}
 	if len(schema) > 0 {
 		var parsed map[string]any
@@ -73,7 +57,6 @@ func ServeResultSink(
 		schemaObject = parsed
 	}
 
-	// Compile ONCE so every tools/call reuses it.
 	compiled, compileErr := compileSchema(schemaObject)
 
 	scanner := bufio.NewScanner(input)
@@ -159,10 +142,6 @@ func ServeResultSink(
 	return nil
 }
 
-// callTool validates the payload against the compiled schema in-turn. A
-// validation failure returns isError:true (NOT a JSON-RPC error) so the model
-// can self-correct in the same turn; a valid payload is written atomically
-// (last-write-wins).
 func callTool(
 	params map[string]any,
 	toolName string,
@@ -175,20 +154,15 @@ func callTool(
 		return toolResult("tool not found: "+name, true)
 	}
 	if compileErr != nil {
-		// A misconfigured schema is a server-config problem; surface it as an
-		// in-turn tool error rather than silently accepting unvalidated input.
 		return toolResult("Result schema is invalid: "+compileErr.Error(), true)
 	}
 
 	arguments := params["arguments"]
 	if arguments == nil {
-		// Some clients omit arguments entirely; treat as an empty object so the
-		// schema (e.g. required fields) drives the validation message.
 		arguments = map[string]any{}
 	}
 
-	// Re-decode the arguments through jsonschema's number-preserving unmarshal so
-	// validation matches the wire bytes exactly (json.Number, not float64).
+	// Number-preserving unmarshal, so validation sees json.Number, not float64.
 	rawArgs, err := json.Marshal(arguments)
 	if err != nil {
 		return toolResult("Validation failed: arguments are not valid JSON: "+err.Error(), true)
@@ -203,14 +177,11 @@ func callTool(
 	}
 
 	if err := writeResult(resultPath, rawArgs); err != nil {
-		// A write failure is a server-side problem; report it in-turn so the
-		// model does not assume success.
 		return toolResult("Failed to record result: "+err.Error(), true)
 	}
 	return toolResult("Result recorded.", false)
 }
 
-// compileSchema compiles the schema object once for reuse.
 func compileSchema(schemaObject map[string]any) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	const loc = "mem://result-schema"
@@ -227,8 +198,6 @@ func toolResult(text string, isError bool) map[string]any {
 	}
 }
 
-// writeResult atomically writes the validated payload to path (0600), creating
-// the parent directory if needed. Each valid call overwrites the previous one.
 func writeResult(path string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create result directory: %w", err)

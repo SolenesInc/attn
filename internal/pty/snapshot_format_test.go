@@ -9,9 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// A snapshot names the build that encoded it, because a pty-worker outlives an
-// install and its bytes can reach a client whose decoder is a different build.
-// See docs/plans/2026-08-16-snapshot-format-skew.md.
+// A pty-worker outlives an install, so its bytes can reach a client whose decoder is a
+// different build. See docs/plans/2026-08-16-snapshot-format-skew.md.
 func TestInfoStampsSnapshotFormat(t *testing.T) {
 	newSession := func() *Session {
 		return &Session{
@@ -42,8 +41,6 @@ func TestInfoStampsSnapshotFormat(t *testing.T) {
 		t.Fatalf("snapshot format = %q, want %q", info.GhosttySnapshotFormat, buildinfo.SnapshotFormat)
 	}
 
-	// Nothing encoded, nothing to name: an empty format beside empty bytes is
-	// how a stub build and a failed construction already read.
 	bare := newSession()
 	if got := bare.info().GhosttySnapshotFormat; got != "" {
 		t.Fatalf("snapshot format without a terminal = %q, want empty", got)

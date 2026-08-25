@@ -136,9 +136,6 @@ const RELEASES_LATEST_WEB = 'https://github.com/victorarias/attn/releases/latest
 const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_version';
 const DOCK_PANEL_EXIT_MS = 260;
-// The chief-of-staff session is the profile-wide orchestrator and is protected
-// from accidental close. ⌘W and the close action no-op on it; this hint tells the
-// user how to close it deliberately (demote it first).
 const CHIEF_OF_STAFF_CLOSE_HINT = 'Chief of staff is protected — unset the chief role to close it.';
 
 const TERMINAL_AGENT: SessionAgent = 'shell';
@@ -272,9 +269,6 @@ interface LeafDragPreviewState {
   ghostPos: { x: number; y: number } | null;
 }
 
-// Placement for a leaf relocated by a sidebar drag — merging into a workspace or
-// splitting into a new one. Dock against the whole target (empty anchor), left
-// edge, taking ~a third of the resulting split.
 const SIDEBAR_LEAF_DROP_PLACEMENT = { anchorId: '', edge: 'left' as const, ratio: 0.32 };
 
 
@@ -354,9 +348,6 @@ function persistDismissedUpdateVersion(version: string): void {
   }
 }
 
-// Sessionless (tile-only) workspaces — those kept alive by a docked tile after
-// their last terminal closed — are hidden from the sidebar unless the user opts
-// in via the sidebar display popover. The preference persists across launches.
 const SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY = 'attn.sidebar.showSessionless';
 
 function readShowSessionlessWorkspaces(): boolean {
@@ -404,7 +395,6 @@ type SessionCreationJob = {
 };
 
 function App() {
-  // Settings state (must be declared before useDaemonSocket to pass as callback)
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
   const [daemonEndpoints, setDaemonEndpoints] = useState<DaemonEndpoint[]>([]);
@@ -418,21 +408,15 @@ function App() {
 
   const [daemonWorkspaces, setDaemonWorkspaces] = useState<DaemonWorkspace[]>([]);
 
-  // Worktrees state (used by WorktreeCleanupPrompt)
   const [, setWorktrees] = useState<DaemonWorktree[]>([]);
 
-  // Git status state. The value itself was only ever rendered by the old
-  // diff-review panels; the subscribe/unsubscribe lifecycle (driven by
-  // clearGitStatus below) still runs, so keep the setter without reading back
-  // an unused value.
+  // The value is unread; only the subscribe/unsubscribe lifecycle still runs.
   const [, setGitStatus] = useState<GitStatusUpdate | null>(null);
   const [updateAvailableVersion, setUpdateAvailableVersion] = useState<string | null>(null);
   const [updateReleaseUrl, setUpdateReleaseUrl] = useState<string>(RELEASES_LATEST_WEB);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(() => getDismissedUpdateVersion());
   const installChannel = normalizeInstallChannel(import.meta.env.VITE_INSTALL_CHANNEL);
 
-  // Open presentations whose latest round still needs review. Seeded once the
-  // socket connects and kept live via presentation_added/updated broadcasts.
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
 
   const {
@@ -447,12 +431,10 @@ function App() {
     setAuthorStates,
   } = useDaemonStore();
 
-  // Hide loading screen on mount
   useEffect(() => {
     hideBootSplash();
   }, []);
 
-  // Ensure daemon is running before connecting
   useEffect(() => {
     async function ensureDaemon() {
       try {
@@ -465,7 +447,6 @@ function App() {
     ensureDaemon();
   }, []);
 
-  // Check latest GitHub release periodically and notify when newer than local app.
   useEffect(() => {
     if (!isTauri()) return;
     if (!shouldCheckForReleaseUpdates(installChannel)) {
@@ -546,10 +527,6 @@ function App() {
     setUpdateAvailableVersion(null);
   }, [updateAvailableVersion]);
 
-  // Bridge daemon session-exit events to AppContent's pane-aware close handler.
-  // useDaemonSocket lives here in the outer App, but the close logic (worktree
-  // cleanup, focus fallback, pane vs session) lives in AppContent, so AppContent
-  // registers its handler into this ref and we forward exits through it.
   const sessionExitHandlerRef = useRef<((info: SessionExitInfo) => void) | null>(null);
   const registerSessionExitHandler = useCallback((handler: ((info: SessionExitInfo) => void) | null) => {
     sessionExitHandlerRef.current = handler;
@@ -558,29 +535,10 @@ function App() {
     sessionExitHandlerRef.current?.(info);
   }, []);
 
-  // Bumped per-root on every fs_changed event so a Notebook surface (the
-  // fullscreen browser, or a tile bound to that same root) re-lists its
-  // filesystem tree and reloads its open file — without bumping surfaces bound
-  // to an unrelated root. Keyed by the daemon-resolved root string; an
-  // fs_changed with an empty/missing root is normalized to the effective
-  // notebook root (see bumpFsChangeSignal below), matching how a rootless
-  // tile/the fullscreen browser look themselves up.
   const [fsChangeSignals, setFsChangeSignals] = useState<Record<string, number>>({});
-  // Bumped on every tasks_changed broadcast so an open Tasks panel
-  // re-fetches the durable runner's task list (covers any lifecycle transition).
   const [notebookTaskChangeSignal, setTaskChangeSignal] = useState(0);
-  // Global notifications feed: the unread count drives the sidebar badge; the
-  // change signal bumps on every notifications_updated broadcast so an open
-  // notifications panel re-lists. Seeded once initial state arrives (below).
   const [notificationsUnread, setNotificationsUnread] = useState(0);
   const [notificationsChangeSignal, setNotificationsChangeSignal] = useState(0);
-  // Drives the ambient critical surface (sidebar strip + bell escalation). Kept
-  // beside the unread count rather than derived from a listed feed: the panel
-  // only lists while open, and this surface has to be right whether or not the
-  // user has ever opened it.
-  // Every broadcast carries a fresh object, so replace only on a real change:
-  // notifications_updated fires on each notification write, and a new identity
-  // for an unchanged pair would rebuild the header actions each time.
   const [criticalNotifications, setCriticalNotificationsState] =
     useState<CriticalNotificationState>({ count: 0, title: '' });
   const setCriticalNotifications = useCallback((next: CriticalNotificationState) => {
@@ -589,32 +547,17 @@ function App() {
     );
   }, []);
 
-  // Connect to daemon WebSocket. The whole return value goes into context
-  // below, for everything under AppContent; App destructures only the names
-  // its own effects use.
   const daemon = useDaemonSocket({
     onSessionsUpdate: (sessions) => {
       setDaemonSessions(sessions);
-      // Conversation transcripts live only in the app; the sessions list is
-      // what says which ones still have a session to belong to.
       useConversationsStore.getState().retainConversations(sessions.map((session) => session.id));
     },
     onPresentationAdded: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
     onPresentationUpdated: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
-    // The daemon tags each fs_changed with an origin ("ui"/"agent"/"external"), but
-    // every origin is treated the same here: bump the signal for whichever root
-    // changed, so only browsers/tiles bound to that root re-list and reload. An
-    // empty/missing root (treated as notebook-root for safety) is normalized to
-    // the effective notebook root, matching how a rootless tile/the fullscreen
-    // browser key their own lookups (see notebookSurfaceDaemon below).
     onFsChanged: (_origin, _paths, root) => {
       setFsChangeSignals((prev) => bumpFsChangeSignal(prev, root, settings['notebook.root.effective'] || ''));
     },
-    // A task lifecycle transition broadcast bumps the signal so an open Tasks panel
-    // refetches the runner's list (the broadcast itself is payload-free).
     onTasksChanged: () => setTaskChangeSignal((n) => n + 1),
-    // A notifications_updated broadcast carries the authoritative unread count;
-    // set the badge and bump the signal so an open panel re-lists.
     onNotificationsUpdated: (unread, critical) => {
       setNotificationsUnread(unread);
       setCriticalNotifications(critical);
@@ -648,12 +591,8 @@ function App() {
     hasReceivedInitialState,
   } = daemon;
 
-  // Memoize clearGitStatus to prevent subscription effect from re-running
   const clearGitStatus = useCallback(() => setGitStatus(null), []);
 
-  // Register the markdown-annotation draft transport (module-level seam, the
-  // plannotator DraftTransport pattern): markdown tiles read it at call time
-  // instead of threading three helpers through the whole tile prop chain.
   useEffect(() => {
     setMarkdownAnnotationsTransport({
       getMarkdownAnnotations,
@@ -666,9 +605,6 @@ function App() {
     };
   }, [getMarkdownAnnotations, saveMarkdownAnnotations, clearMarkdownAnnotations, submitMarkdownAnnotations]);
 
-  // Seed the notifications unread badge once the socket is up. The
-  // notifications_updated broadcast keeps it live thereafter; this one read
-  // primes the count for notifications that already existed at connect time.
   useEffect(() => {
     if (!hasReceivedInitialState) return;
     let cancelled = false;
@@ -686,8 +622,6 @@ function App() {
     };
   }, [hasReceivedInitialState, sendNotificationList, setCriticalNotifications]);
 
-  // Seed the presentation-notice list once the socket is up. The
-  // presentation_added/updated broadcasts keep it live thereafter.
   useEffect(() => {
     if (!hasReceivedInitialState) return;
     let cancelled = false;
@@ -703,8 +637,6 @@ function App() {
     };
   }, [hasReceivedInitialState, getPresentations]);
 
-  // Wrap the app content with SettingsProvider so useUIScale can access settings.
-  // KeybindingsProvider (inside it) syncs shortcut overrides into the resolver.
   return (
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
       <KeybindingsProvider>
@@ -738,7 +670,6 @@ function App() {
   );
 }
 
-// Props interface for AppContent - receives daemon state and functions from App
 interface AppContentProps {
   daemonSessions: DaemonSession[];
   daemonWorkspaces: DaemonWorkspace[];
@@ -786,13 +717,8 @@ function AppContent({
   clearGitStatus,
   registerSessionExitHandler,
 }: AppContentProps) {
-  // The bell only cares whether anything critical is unread, not how many or
-  // which — depending on the flag keeps the header actions off the broadcast's
-  // cadence and on the state change the user can actually see.
   const hasCriticalNotification = criticalNotifications.count > 0;
 
-  // Every daemon command, read from the context App publishes rather than
-  // threaded down as a hundred props.
   const {
     connectionError,
     disconnectExplanation,
@@ -908,9 +834,6 @@ function AppContent({
     sendCrewSleep,
   } = useDaemonApi();
 
-  // The presentation notice lives in the triggering session's pane header
-  // (HeaderPresentationChip), not a window-wide banner — look it up per
-  // session id, newest first.
   const presentationBySessionId = useMemo(
     () => latestPresentationBySessionId(presentationNotices),
     [presentationNotices],
@@ -940,17 +863,8 @@ function AppContent({
     syncFromDaemonWorkspaces,
   } = useSessionStore();
 
-  // Explicit selection of a sessionless (tile-only) workspace. The selection
-  // model is otherwise session-centric — the active workspace is derived from
-  // the active session — but a tile-only workspace has no session to activate
-  // through, so it needs its own selection anchor. Cleared whenever a session is
-  // selected; the selection controller also ignores it once the workspace gains
-  // sessions or disappears.
   const [selectedSessionlessWorkspaceId, setSelectedSessionlessWorkspaceId] = useState<string | null>(null);
   const [selectedTile, setSelectedTile] = useState<{ workspaceId: string; tileId: string } | null>(null);
-  // handleSelectWorkspace is defined far below (it depends on the workspace view
-  // models); the automation bridge above it reaches the live handler through
-  // this ref so test scenarios can select a workspace by id.
   const selectWorkspaceRef = useRef<(workspaceId: string) => void>(() => {});
 
   const rollbackSessionCreation = useCallback(async ({
@@ -995,12 +909,7 @@ function AppContent({
       await sendRegisterWorkspace(workspaceId, label, cwd, endpointId);
       const createdSessionId = await createSession(label, cwd, sessionId, agent, endpointId, yoloMode, workspaceId, options?.chiefOfStaff, options?.resumeConversationFile, options?.autoMode);
       localCreated = true;
-      // Capture spawn args synchronously, before any await that could let a daemon
-      // sessions broadcast prune the just-created local session. At this point its
-      // workspace has no 'spawning' pane yet, so syncFromDaemonSessions' preservation
-      // guard doesn't cover it — taking the args after `sendWorkspaceAddSessionPane`
-      // races the prune and surfaces as "spawn arguments were not prepared". Mirrors
-      // createSplitSession, which already takes the args before adding the pane.
+      // Before any await: the workspace has no 'spawning' pane yet, so a sessions broadcast can prune this session past syncFromDaemonSessions' guard.
       const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
       if (!spawnArgs) {
         throw new Error('Session spawn arguments were not prepared.');
@@ -1051,22 +960,15 @@ function AppContent({
     return () => window.clearTimeout(timeoutId);
   }, [daemonSessions, sessionCreationJob]);
 
-  // UI scale for font sizing (Cmd+/Cmd-) - now uses SettingsContext
   const { scale, increaseScale, decreaseScale, resetScale } = useUIScale();
   const terminalFontSize = Math.round(14 * scale);
 
-  // Independent font scale for the garden surfaces (null = match app)
   const gardenScale = useGardenScale(scale);
 
-  // Theme (dark/light/system)
   const { preference: themePreference, resolved: resolvedTheme, setTheme } = useTheme();
   const keybindings = useKeybindings();
 
-  // Push the resolved terminal theme to the daemon whenever it changes and
-  // shortly after each (re)connect, so the daemon-side worker can answer OSC
-  // 10/11/12 color queries on the frontend's behalf (see
-  // stripDaemonOwnedResponses in terminalQueryResponses.ts). hasReceivedInitialState
-  // flips on every fresh handshake, so it doubles as the reconnect signal here.
+  // The daemon worker answers OSC 10/11/12 on the frontend's behalf, so it needs the resolved theme; hasReceivedInitialState doubles as the reconnect signal.
   useEffect(() => {
     if (!hasReceivedInitialState) return;
     const theme = getTerminalTheme(resolvedTheme);
@@ -1078,7 +980,6 @@ function AppContent({
     });
   }, [hasReceivedInitialState, resolvedTheme, sendSetTerminalTheme]);
 
-  // Settings modal (lifted from Dashboard for Cmd+, access)
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
@@ -1101,11 +1002,9 @@ function AppContent({
     authorStates.filter(a => a.muted).map(a => a.author),
     [authorStates],
   );
-  // Track PR refresh state for progress indicator
   const [isRefreshingPRs, setIsRefreshingPRs] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  // Worktree cleanup prompt state
   const cleanupRequestIdRef = useRef(0);
   const [closedWorktree, setClosedWorktree] = useState<{ id: number; path: string; branch?: string } | null>(null);
   const [worktreeCleanupState, setWorktreeCleanupState] = useState<{
@@ -1127,9 +1026,6 @@ function AppContent({
     [agentAvailability],
   );
 
-  // Which agents draw a conversation instead of a terminal. The daemon publishes
-  // a driver's `conversation` capability like any other; the app just reads it,
-  // so a plugin registering a new conversation agent needs no app change.
   const conversationPaneAgents = useMemo(() => conversationAgents(settings), [settings]);
 
   useEffect(() => {
@@ -1138,7 +1034,6 @@ function AppContent({
     });
   }, [settings, setLauncherConfig]);
 
-  // Keep local UI sessions in sync with daemon's canonical session list.
   useEffect(() => {
     if (!hasReceivedInitialState) {
       return;
@@ -1153,7 +1048,6 @@ function AppContent({
     syncFromDaemonWorkspaces(daemonWorkspaces);
   }, [daemonWorkspaces, hasReceivedInitialState, syncFromDaemonWorkspaces]);
 
-  // Refresh PRs with proper async handling
   const handleRefreshPRs = useCallback(async () => {
     setIsRefreshingPRs(true);
     setRefreshError(null);
@@ -1169,12 +1063,9 @@ function AppContent({
     }
   }, [sendRefreshPRs]);
 
-  // Track processed deep links to avoid duplicates (persists across re-renders)
   const processedDeepLinks = useRef(new Set<string>());
 
-  // Handle a deep-link URL (used by both cold start and runtime handlers)
   const handleDeepLinkUrl = useCallback((urlStr: string) => {
-    // Deduplicate: only process each unique URL once
     if (processedDeepLinks.current.has(urlStr)) {
       return;
     }
@@ -1186,11 +1077,9 @@ function AppContent({
         const cwd = url.searchParams.get('cwd');
         const label = url.searchParams.get('label') || cwd?.split('/').pop() || 'session';
         if (cwd) {
-          // Check if session for this cwd already exists (read current state)
           const currentSessions = useSessionStore.getState().sessions;
           const existingSession = currentSessions.find((s) => s.cwd === cwd);
           if (existingSession) {
-            // Just activate the existing session
             setActiveSession(existingSession.id);
           } else {
             void createWorkspaceSession(label, cwd);
@@ -1202,7 +1091,6 @@ function AppContent({
     }
   }, [createWorkspaceSession, setActiveSession]);
 
-  // Handle cold-start deep links (app opened via URL when not running)
   useEffect(() => {
     getCurrent().then((urls) => {
       if (urls && urls.length > 0) {
@@ -1216,7 +1104,6 @@ function AppContent({
     });
   }, [handleDeepLinkUrl]);
 
-  // Handle deep links while app is running
   useEffect(() => {
     const unlisten = onOpenUrl((urls) => {
       for (const urlStr of urls) {
@@ -1229,8 +1116,6 @@ function AppContent({
     };
   }, [handleDeepLinkUrl]);
 
-  // Enrich local sessions with daemon state (working/waiting from hooks)
-  // Match by session ID (UUID) - not directory - to handle multiple sessions per directory
   const endpointById = useMemo(
     () => new Map(daemonEndpoints.map((endpoint) => [endpoint.id, endpoint])),
     [daemonEndpoints],
@@ -1276,17 +1161,12 @@ function AppContent({
       costUsd: daemonSession?.cost_usd,
       costUnknown: daemonSession?.cost_unknown ?? false,
       automation: daemonSession?.automation ?? s.automation,
-      // Dropped when a pane status overrides the state: the reason describes the
-      // resolver's answer, and a pane-derived state was not the resolver's.
       state_reason: paneState ? undefined : daemonSession?.state_reason,
     };
   });
 
   const visibleEnrichedSessions = filterSessionsRepresentedInWorkspaceLayouts(daemonWorkspaces, enrichedLocalSessions);
 
-  // The Notebook top-bar chief pulse: undefined when no chief-of-staff session exists
-  // (indicator hidden), else true while it is working. Derived locally from sessions
-  // already in hand — no extra socket call or threaded daemon function.
   const notebookChiefSession = enrichedLocalSessions.find((session) => session.chiefOfStaff);
   const notebookChiefActive = notebookChiefSession ? notebookChiefSession.state === 'working' : undefined;
 
@@ -1322,22 +1202,14 @@ function AppContent({
 
   type DockPanelId = 'workflowRun' | 'attention' | 'automations' | 'garden';
 
-  // Muted section expansion (controlled by Dashboard click)
   const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
 
-  // View state management
   const [view, setView] = useState<'dashboard' | 'session' | 'grid'>('dashboard');
 
-  // Tells the daemon whether anyone can see the session activity lines it would
-  // otherwise generate. The dashboard is where those lines render, so it is the
-  // difference between the two live tiers; a window nobody is looking at stops
-  // generation entirely.
   useClientPresence(sendSetClientPresence, {
     dashboardVisible: view === 'dashboard',
     connected: hasReceivedInitialState,
   });
-  // Focusable app-shell root: claims keyboard focus on focus-less views (dashboard /
-  // empty workspaces) so the global shortcut listener keeps receiving keys.
   const appShellRef = useRef<HTMLDivElement>(null);
   const [dockState, setDockState] = useState<{
     openPanels: Record<DockPanelId, boolean>;
@@ -1354,7 +1226,6 @@ function AppContent({
   const dockPanelCloseTimersRef = useRef<Partial<Record<DockPanelId, number>>>({});
   const gitStatusSubscribedDirRef = useRef<string | null>(null);
 
-  // When activeSessionId changes, update view
   useEffect(() => {
     if (activeSessionId) {
       setView('session');
@@ -1373,7 +1244,6 @@ function AppContent({
     }
   }, [activeSessionId, sendSessionSelected, view]);
 
-  // Subscribe to git status for active session
   useEffect(() => {
     const activeLocalSession = sessions.find((s) => s.id === activeSessionId);
     const nextDirectory =
@@ -1413,17 +1283,6 @@ function AppContent({
     };
   }, [sendUnsubscribeGitStatus, clearGitStatus]);
 
-  // Home is reached two ways, and which one it was decides whether home is a
-  // stop or a wait. Walking here — ⌘0, the sidebar's Home, leaving grid with no
-  // agent selected — is a decision to be here, so nothing may take the user
-  // away again. Being handed here because the queue ran dry is not a decision at
-  // all: there was simply nothing left to go to, and the user is waiting for
-  // work rather than choosing to stop. Only the second arms the latch below.
-  //
-  // The latch is deliberately not a setting. It answers "am I waiting right
-  // now", which is true of one visit to home and false of the next; a
-  // remembered preference would keep pulling the user out of a home they walked
-  // to on purpose, which is the one thing this must never do.
   const [followNextTurn, setFollowNextTurn] = useState(false);
   const enterHome = useCallback((awaitingNextTurn: boolean) => {
     setActiveSession(null);
@@ -1431,21 +1290,14 @@ function AppContent({
     setFollowNextTurn(awaitingNextTurn);
   }, [setActiveSession]);
 
-  // Home because the user asked for it: every button, shortcut and menu route.
   const goToDashboard = useCallback(() => enterHome(false), [enterHome]);
 
-  // Home because the queue ran dry under the user, not because they asked.
   const goHomeAwaitingNextTurn = useCallback(() => enterHome(true), [enterHome]);
 
-  // Leaving home ends the wait, whatever took the user out — the follow itself,
-  // ⌘J, a click in the sidebar, grid. Coming back has to arm it again, so the
-  // latch can never outlive the visit it belongs to.
   useEffect(() => {
     if (view !== 'dashboard') setFollowNextTurn(false);
   }, [view]);
 
-  // Cmd+G toggles the global grid view on/off; leaving grid returns to wherever
-  // the user was (a session if one is active, otherwise the dashboard).
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
   }, [activeSessionId]);
@@ -1541,7 +1393,6 @@ function AppContent({
     };
   }, []);
 
-  // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const toggleSidebarCollapse = useCallback(() => {
@@ -1549,7 +1400,6 @@ function AppContent({
   }, []);
 
 
-  // Auto-collapse sidebar when no sessions, auto-expand when first session is created
   const prevSessionCountRef = useRef(sessions.length);
   useEffect(() => {
     const prevCount = prevSessionCountRef.current;
@@ -1557,16 +1407,12 @@ function AppContent({
     prevSessionCountRef.current = currentCount;
 
     if (currentCount === 0) {
-      // No sessions - collapse
       setSidebarCollapsed(true);
     } else if (prevCount === 0 && currentCount > 0) {
-      // First session created - expand
       setSidebarCollapsed(false);
     }
-    // Otherwise, respect user's manual toggle
   }, [sessions.length]);
 
-  // Location picker state management
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] = useState<LocationPickerPurpose>('workspace');
   const [locationPickerSessionDirection, setLocationPickerSessionDirection] = useState<TerminalSplitDirection>('vertical');
@@ -1585,8 +1431,6 @@ function AppContent({
     currentCap?: number;
   } | null>(null);
 
-  // A view that declared `params` asks for them before it docks, so the tile
-  // arrives with its answer rather than mounting empty and waiting.
   const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
     app: string;
     view: string;
@@ -1648,15 +1492,11 @@ function AppContent({
       await applyChiefOfStaffChange(chiefTransferTarget.sessionId, true);
       setChiefTransferTarget(null);
     } catch {
-      // The shared error toast already contains the daemon error.
     } finally {
       setChiefTransferSaving(false);
     }
   }, [applyChiefOfStaffChange, chiefTransferSaving, chiefTransferTarget]);
 
-  // Read-only workflow runs: the slice is hydrated by useDaemonSocket on the
-  // workflow_run_updated broadcast; listWorkflowRuns backfills the active
-  // session's existing runs on selection (broadcasts only fire on change).
   const workflowRunsMap = useWorkflowRunsStore((s) => s.workflowRuns);
   const activeWorkflowRun = useMemo(
     () => selectLatestWorkflowRunForSession(workflowRunsMap, activeSessionId),
@@ -1689,9 +1529,6 @@ function AppContent({
   const attentionPanelOpen = openDockPanels.attention;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
-  // The garden is one object read in one of two frames. Its dock entry below is
-  // detached: the dock reserves its place and paints nothing, and the frame
-  // flies from exactly the rectangle the dock gave it.
   const [gardenSlotRef, gardenDockRect] = useDockSlotRect();
   const gardenMode: GardenMode = gardenHoldsWindow ? 'full' : gardenPanelOpen ? 'dock' : 'closed';
   const blockingOverlayOpen = locationPickerOpen
@@ -1711,22 +1548,15 @@ function AppContent({
     || sessionCreationJob !== null
     || openPRLauncherJob !== null;
 
-  // The global shortcut listener (a capture-phase window keydown handler) only
-  // receives keys while the WebView holds keyboard focus. A terminal canvas
-  // claims that focus, but the dashboard and empty/pinned workspaces have nothing
-  // focusable — so on those views the WebView can fail to become first responder
-  // and EVERY shortcut (even always-on ones like ⌘K) is dead until the user
-  // clicks into the window. Claim focus on the shell whenever nothing else holds
-  // it and no terminal / focus-trapped overlay owns it. Runs on mount, on view
-  // transitions, and when the window regains focus (e.g. after ⌘-Tab).
+  // Views with nothing focusable (dashboard, empty workspaces) can leave the WebView off first responder, killing EVERY shortcut until the user clicks the window.
   useEffect(() => {
     const claimShellFocus = () => {
-      if (activeSessionId) return;     // a terminal owns focus
-      if (blockingOverlayOpen) return; // an overlay's FocusTrap owns focus
+      if (activeSessionId) return;
+      if (blockingOverlayOpen) return;
       const shell = appShellRef.current;
       if (!shell) return;
       const active = document.activeElement;
-      if (active && active !== document.body) return; // something already focused
+      if (active && active !== document.body) return;
       shell.focus({ preventScroll: true });
     };
     claimShellFocus();
@@ -1744,8 +1574,7 @@ function AppContent({
     return workspaceContexts.map((context) => {
       const workspace = workspacesById.get(context.workspace_id);
       const updatedBy = sessionsById.get(context.updated_by_session_id);
-      // 'attn-keeper' is the keeper's compaction-updater sentinel (a PERSISTED
-      // value; migration 51 realigned existing rows off the old 'attn-janitor').
+      // 'attn-keeper' is a PERSISTED sentinel value; migration 51 realigned existing rows off the old 'attn-janitor'.
       const updatedByLabel = context.updated_by_session_id === 'attn-keeper'
         ? 'Attn Keeper'
         : updatedBy?.label;
@@ -1779,16 +1608,11 @@ function AppContent({
     setNotebookOpen(true);
   }, []);
 
-  // Which tender sessions the daemon still knows. The board says "session gone"
-  // on a seed whose claim outlived its agent — the one card on it somebody has
-  // to act on.
   const liveGardenSessions = useMemo(
     () => new Set(daemonSessions.map((session) => session.id)),
     [daemonSessions],
   );
 
-  // The way across. The dock stays open underneath the window frame, so coming
-  // back is a shrink rather than a re-open.
   const toggleGardenFrame = useCallback(() => {
     if (gardenHoldsWindow) {
       setGardenHoldsWindow(false);
@@ -1797,9 +1621,6 @@ function AppContent({
     }
     setGardenHoldsWindow(true);
   }, [gardenHoldsWindow, openDockPanel]);
-  // Escape goes down one level, never two: window → dock → gone. It sits at the
-  // bottom of the panel's own ladder, below clearing a query and below climbing
-  // the trail, so it is reached only once there is nothing left to climb.
   const escapeGardenFrame = useCallback(() => {
     if (gardenHoldsWindow) {
       toggleGardenFrame();
@@ -1821,48 +1642,20 @@ function AppContent({
     setNotificationsPanelOpen(false);
   }, []);
 
-  // Holds the active workspace id for callbacks that must read it without
-  // re-subscribing to every selection change (assigned by an effect below, once
-  // activeWorkspaceId is derived). Declared here so the notebook-tile dock handler
-  // and the ActionMenu items — both above that derivation — can use it.
   const activeWorkspaceIdRef = useRef<string | null>(null);
 
-  // Mirrors daemonWorkspaces for handleOpenNotebookTile below, same reasoning as
-  // activeWorkspaceIdRef: daemonWorkspaces updates on every workspace/session
-  // change, and depending on it directly would rebind the dock-tile callback (and
-  // any shortcut registered against it) far more often than the workspace-dir
-  // default actually needs.
   const daemonWorkspacesRef = useRef<DaemonWorkspace[]>([]);
 
-  // Dock a fresh Notebook tile into the active workspace. A unique tile id every
-  // time: the daemon treats a duplicate id as a move, so a shared id would just
-  // relocate the first tile instead of opening a second. Defaults the tile's root
-  // to the active workspace's directory (⌘⌥N per the arbitrary-roots plan) so it
-  // opens on the tree the user is working in; falls back to the notebook root
-  // (rootless tileParams) when the workspace has no directory, the directory
-  // belongs to a remote endpoint (see localWorkspaceDirectory), or the directory
-  // already matches the notebook root — see resolveEditorTileRoot.
-  // --- Markdown file opener (Cmd+P) ---
+  // A unique tile id every time: the daemon treats a duplicate id as a move.
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
-  // A focused notebook tile owns Cmd+P for its own in-tile finder; the global
-  // dispatcher gets the keystroke first (capture phase), so hand it back here
-  // rather than letting two bindings race.
   const handleOpenMarkdownFile = useCallback(() => {
     if (claimPaletteFocus()) return;
     setMarkdownOpenerOpen(true);
   }, []);
 
-  // The single writer for the queue setting. The sidebar's display popover and
-  // the command menu both call it, so the two entry points can never disagree
-  // about what is in effect — and neither one has to know the setting's key.
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
-  // Fuzzy mode searches the selected session's working directory; with no
-  // session selected there is no project context, so it falls back to the
-  // notebook root. Neither known = recents only. A remote session's cwd names a
-  // path on another machine and never enters this route — see
-  // resolveMarkdownOpenerTarget.
   const markdownOpenerTarget = useMemo(
     () => resolveMarkdownOpenerTarget(
       sessions.find((session) => session.id === activeSessionId),
@@ -1870,8 +1663,6 @@ function AppContent({
     ),
     [sessions, activeSessionId, settings],
   );
-  // The root goes to the daemon so files in the workspace you are looking at
-  // outrank equally-scored files from another one.
   const loadOpenerRecents = useCallback(
     () => sendRecentFiles(50, markdownOpenerTarget.root || undefined)
       .then((files) => files.map((file) => ({ path: file.path, lastAt: file.lastAt }))),
@@ -1886,12 +1677,7 @@ function AppContent({
     const workspaceId = activeWorkspaceIdRef.current;
     if (!workspaceId) return;
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
-    // Duplicate ids across endpoints are unresolvable from a bare active id
-    // (activeWorkspaceIdRef carries no endpoint identity), so any twin
-    // ambiguity forfeits the workspace-dir default — the tile falls back to
-    // the Notebook root instead of risking adopting a remote twin's
-    // directory. localWorkspaceDirectory still rejects a sole-but-remote
-    // record on top of this.
+    // A twin across endpoints forfeits the workspace-dir default rather than adopt a remote directory: the active id carries no endpoint identity.
     const workspace = soleWorkspaceForId(daemonWorkspacesRef.current, workspaceId);
     const localDirectory = localWorkspaceDirectory(workspace);
     const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
@@ -1906,9 +1692,7 @@ function AppContent({
       });
   }, [sendWorkspaceDockTile, settings]);
 
-  // Dock one of an app's views. A fresh tile id every time, like the notebook
-  // tile: the daemon reads a duplicate id as a move, so a shared one would
-  // relocate the first tile instead of opening a second.
+  // A fresh tile id every time: the daemon reads a duplicate id as a move.
   const dockAppViewTile = useCallback((app: string, view: string, params: string) => {
     const workspaceId = activeWorkspaceIdRef.current;
     if (!workspaceId) return;
@@ -1922,10 +1706,6 @@ function AppContent({
     });
   }, [sendWorkspaceDockTile]);
 
-  // One entry per view of every enabled app. A disabled app is absent rather
-  // than shown greyed out: the picker is a list of what you can dock now, and
-  // `attn app enable` is the way back — the same way a removed app's already
-  // docked tile says so in place rather than vanishing.
   const appViewMenuItems = useMemo<ActionMenuItem[]>(() => {
     const items: ActionMenuItem[] = [];
     for (const app of apps ?? []) {
@@ -2002,9 +1782,6 @@ function AppContent({
       run: () => toggleGardenFrame(),
     },
     {
-      // The switch itself lives in the sidebar's display popover, next to the
-      // other arrangement choices. This entry is the keyboard route to the same
-      // toggle, through the same writer, so the two can never disagree.
       id: 'toggle-queue-mode',
       title: isQueueModeEnabled(settings) ? 'Turn off the agent queue' : 'Turn on the agent queue',
       description: 'Show the turns you owe above the workspace tree',
@@ -2013,8 +1790,6 @@ function AppContent({
       run: handleToggleQueueMode,
     },
     {
-      // Same reasoning as the queue toggle: Settings owns the setting, this owns
-      // the day-to-day flip, and both write the same key.
       id: 'toggle-auto-settle',
       title: isAutoSettleEnabled(settings) ? 'Turn off auto-settle' : 'Turn on auto-settle',
       description: 'Settle a turn once you have steered the agent and it goes back to work',
@@ -2070,9 +1845,6 @@ function AppContent({
     clearSettingError();
   }, [clearSettingError, settingError, showError]);
 
-  // A disconnect the daemon chose is worth a word, and it can only reach us
-  // after we are back. Longer than the default: it explains something the user
-  // already lived through and may have been puzzled by.
   useEffect(() => {
     if (!disconnectExplanation) {
       return;
@@ -2081,9 +1853,6 @@ function AppContent({
     clearDisconnectExplanation();
   }, [clearDisconnectExplanation, disconnectExplanation, showError]);
 
-  // Backfill the active session's workflow runs into the global slice. The
-  // useDaemonSocket workflow_run_updated handler keeps it fresh after this; the
-  // store is the single source the read-only WorkflowRunView renders from.
   useEffect(() => {
     if (!activeSessionId) {
       return;
@@ -2093,14 +1862,7 @@ function AppContent({
     });
   }, [activeSessionId, listWorkflowRuns]);
 
-  // Hydrate the run the panel is actually showing. listWorkflowRuns intentionally
-  // omits each run's agent_calls (the list is a summary surface), so a run sourced
-  // only from that backfill renders "0/0 calls" with no journal. Live runs get
-  // their calls from workflow_run_updated broadcasts, but a completed run sees no
-  // further broadcasts — after a reload it would stay call-less forever. Fetch the
-  // single hydrated run (which includes the journal) the first time the open panel
-  // shows a run with no calls; getWorkflowRun upserts it into the store, and live
-  // broadcasts own freshness from there.
+  // listWorkflowRuns omits agent_calls and a completed run sees no further broadcasts, so without this fetch it stays call-less forever after a reload.
   const workflowRunIdToHydrate = workflowRunIdNeedingHydration(
     workflowRunPanelOpen,
     activeWorkflowRun,
@@ -2116,7 +1878,6 @@ function AppContent({
 
   const [utilityFocusRequestToken, setUtilityFocusRequestToken] = useState(0);
 
-  // No auto-creation - user clicks "+" to start a session
 
   const handleNewWorkspace = useCallback(() => {
     setLocationPickerPurpose('workspace');
@@ -2173,10 +1934,6 @@ function AppContent({
       await sendWorkspaceAddSessionPane(workspaceId, sessionId, label, { paneId: newPaneId, targetPaneId: paneId, direction });
       paneAdded = true;
       if (spawnArgs) {
-        // Name the session this one was split from. The daemon decides what to do
-        // with it — only a shell gets a parent, and splitting off another shell
-        // resolves to that shell's agent — so this stays a statement of fact
-        // rather than a second copy of the rule.
         await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession.id } });
       } else {
         throw new Error('Session spawn arguments were not prepared.');
@@ -2253,7 +2010,6 @@ function AppContent({
           ? TERMINAL_AGENT
           : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
-      // Note: Location is automatically tracked by daemon when session registers
       const folderName = path.split('/').pop() || 'session';
       if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
         await createSplitSession(selectedAgent, locationPickerSessionDirection, undefined, {
@@ -2388,19 +2144,11 @@ function AppContent({
     setClosedWorktree({ id: cleanupRequestId, path: session.cwd, branch: session.branch });
   }, [alwaysKeepWorktrees, enrichedLocalSessions]);
 
-  // The chief-of-staff session is protected from accidental close. Every
-  // user-initiated close path (⌘W and the close action) funnels through
-  // handleClosePane / handleCloseSession, so guarding both here short-circuits
-  // them before any side effects (worktree-cleanup prompt, focus churn, daemon
-  // round-trip). The daemon enforces the same rule authoritatively as a backstop.
   const isChiefOfStaffSession = useCallback(
     (id: string) => daemonSessions.some((ds) => ds.id === id && ds.chief_of_staff === true),
     [daemonSessions]
   );
 
-  // Profile-wide: does any session currently hold the chief role? daemonSessions
-  // spans every workspace, so this is the authoritative "a chief already exists"
-  // signal that gates the new-session dialog's "create as chief" toggle.
   const hasChiefOfStaff = useMemo(
     () => daemonSessions.some((ds) => ds.chief_of_staff === true),
     [daemonSessions]
@@ -2472,17 +2220,11 @@ function AppContent({
     void handleCloseSession(id);
   }, [handleClosePane, handleCloseSession, sessions]);
 
-  // Auto-close a session when its process exits cleanly. A clean voluntary exit
-  // (code 0, no signal) means the user quit the agent/shell and there's nothing
-  // left to do in that pane. Non-zero exits and signal kills (crashes, reloads,
-  // explicit closes) keep the pane open so the error and exit code stay visible.
   const handleSessionProcessExit = useCallback((info: SessionExitInfo) => {
     if (info.exitCode !== 0 || info.signal) {
       return;
     }
-    // A reload's kill can surface as a clean exit (code 0, no signal); the same
-    // id is about to respawn in place, so closing the pane here would tear the
-    // workspace down under the pending spawn ("unknown workspace").
+    // A reload's kill can surface as a clean exit (code 0, no signal); the same id is about to respawn in place, so closing the pane here would tear the workspace down under the pending spawn.
     if (isSessionReloading(info.id)) {
       return;
     }
@@ -2575,7 +2317,6 @@ function AppContent({
     createSession: createWorkspaceSession,
   });
 
-  // Handle opening a PR in a worktree
   const handleOpenPR = useCallback(
     async (pr: DaemonPR) => {
       console.log(`[App] Open PR requested: ${pr.repo}#${pr.number} - ${pr.title}`);
@@ -2640,7 +2381,6 @@ function AppContent({
     [agentAvailability, hasAvailableAgents, openPR, settings.new_session_agent]
   );
 
-  // Worktree cleanup prompt handlers
   const handleWorktreeKeep = useCallback(() => {
     setWorktreeCleanupState({ requestId: null, isDeleting: false, error: null, forceable: false });
     setClosedWorktree(null);
@@ -2667,7 +2407,6 @@ function AppContent({
       } else {
         await sendDeleteWorktree(deleteTarget.path);
       }
-      // Note: Deleted paths are automatically filtered by daemon on next fetch
       setWorktreeCleanupState((current) => (
         current.requestId === deleteTarget.id
           ? { requestId: null, isDeleting: false, error: null, forceable: false }
@@ -2710,38 +2449,21 @@ function AppContent({
     [unmutedWorkspaceViews],
   );
 
-  // The sidebar arrangement in effect. The daemon stamps turns and broadcasts
-  // turn_owed either way; this only selects what the sidebar draws and which
-  // notion of "wants me" the attention surfaces follow.
   const queueModeEnabled = isQueueModeEnabled(settings);
   const queueBands = useMemo(
     () => (queueModeEnabled ? buildQueueBands(unmutedWorkspaceViews) : null),
     [queueModeEnabled, unmutedWorkspaceViews],
   );
 
-  // The workspace the pin/mute commands act on: the one holding the agent you
-  // are looking at, since that is what "this workspace" means from inside a
-  // session. Muted workspaces are searched too — unmuting has to be reachable
-  // from the thing it was applied to.
   const activeWorkspaceForCommands = useMemo(
     () => workspaceViews.find((workspace) => workspace.sessions.some((session) => session.id === activeSessionId)) ?? null,
     [workspaceViews, activeSessionId],
   );
 
-  // Pin and mute reach the command menu because the workspace group header, the
-  // only other place that offers them, is not drawn for ordinary workspaces
-  // while the queue is on. Pinning is how an agent leaves the queue for good, so
-  // without an entry here turning the queue on would be a one-way door. They are
-  // appended rather than declared with the rest because they need the workspace
-  // views, which are built further down.
   const actionMenuItemsWithWorkspaceActions = useMemo<ActionMenuItem[]>(() => {
     const workspace = activeWorkspaceForCommands;
     if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
     const activeSession = workspace.sessions.find((session) => session.id === activeSessionId);
-    // Pinning the agent is offered above pinning its workspace: it is the finer
-    // of the two and the one a user who reached for "pin" from inside a session
-    // usually means. The chief is left out — it is anchored above the queue
-    // already, and the daemon refuses the pin anyway.
     const sessionPinItems: ActionMenuItem[] = activeSession && !activeSession.chiefOfStaff
       ? [{
         id: 'pin-active-session',
@@ -2754,8 +2476,6 @@ function AppContent({
         run: () => sendPinSession(activeSession.id, !activeSession.pinnedAt),
       }]
       : [];
-    // Only claude and codex launches carry the cap to the agent; the daemon
-    // refuses it for anything else, so the entry is not offered there.
     const sessionCapItems: ActionMenuItem[] = activeSession && ['claude', 'codex'].includes((activeSession.agent ?? '').toLowerCase())
       ? [{
         id: 'set-session-context-cap',
@@ -2797,18 +2517,12 @@ function AppContent({
           : 'Nothing from this workspace reaches you',
         keywords: ['mute', 'unmute', 'workspace', 'silence'],
         icon: <AttentionActionIcon />,
-        // mute_workspace toggles; the title is what says which way it will go.
         run: () => sendMuteWorkspace(workspace.id, workspace.endpointId),
       },
     ];
   }, [actionMenuItems, appViewMenuItems, activeWorkspaceForCommands, activeSessionId, sendPinWorkspace, sendPinSession, sendMuteWorkspace]);
 
 
-  // Each arrangement has one notion of what wants the user, and the mode selects
-  // it. In the queue arrangement that is the daemon's turn_owed — which honours
-  // settle, and the shell/chief/pinned/muted exclusions a client cannot see. With
-  // the queue off it stays the state predicate, so pinned agents keep their badge
-  // in the arrangement where pinning means kept in view.
   const wantsAttention = useCallback(
     (session: { state: UISessionState; turnOwed?: boolean }) => (
       queueModeEnabled ? Boolean(session.turnOwed) : isAttentionSessionState(session.state)
@@ -2816,8 +2530,6 @@ function AppContent({
     [queueModeEnabled],
   );
 
-  // Global grid tiles: one per live agent pane across all (unmuted) workspaces,
-  // keyed by the PTY runtimeId that grid mode feeds from / routes input to.
   const gridSessionTiles = useMemo<GridSessionTile[]>(() => {
     const result: GridSessionTile[] = [];
     for (const s of unmutedEnrichedSessions) {
@@ -2835,9 +2547,6 @@ function AppContent({
     return result;
   }, [unmutedEnrichedSessions, wantsAttention]);
 
-  // Grid shape: a manual rows×cols picked from the sidebar square-picker, or Auto
-  // (a near-square that fits every tile — today's default). Persists across
-  // launches. Selecting a shape also opens grid mode (the picker is the launcher).
   const [gridLayout, setGridLayout] = useState<GridLayout>(readGridLayout);
   const handleSelectGridLayout = useCallback((layout: GridLayout) => {
     setGridLayout(layout);
@@ -2845,9 +2554,6 @@ function AppContent({
     setView('grid');
   }, []);
 
-  // Grid membership: every session is on the grid by default; removed (excluded)
-  // sessions persist across launches by stable sessionId. Members = all minus
-  // excluded; hidden = the excluded ones (surfaced for restore).
   const [excludedGridSessions, setExcludedGridSessions] = useState<Set<string>>(readExcludedGridSessions);
   const gridMembers = useMemo(
     () => gridSessionTiles.filter((t) => !excludedGridSessions.has(t.sessionId)),
@@ -2878,10 +2584,6 @@ function AppContent({
     });
   }, []);
 
-  // Resolve the chosen layout against the member count: Auto fits everything; a
-  // fixed shape shows only the first rows×cols members (extras are off-board until
-  // removed or the grid is enlarged). GridView is handed a concrete shape plus the
-  // members that fit, so it stays layout-dumb.
   const resolvedGridLayout = useMemo(
     () => resolveGridLayout(gridMembers.length, gridLayout),
     [gridMembers.length, gridLayout],
@@ -2892,16 +2594,10 @@ function AppContent({
   );
   const gridOffBoardCount = gridMembers.length - visibleGridTiles.length;
 
-  // Calculate attention count for drawer badge (muted workspaces excluded)
   const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
   const { needsAttention: prsNeedingAttention } = usePRsNeedingAttention(prs);
   const attentionCount = waitingLocalSessions.length + prsNeedingAttention.length;
 
-  // Settle the selected session's turn. Undefined while the queue arrangement is
-  // off so the shortcut is not registered at all.
-  //
-  // Only the settle. Moving on to the next agent is not this handler's job —
-  // see the effect below, which does it for every way a turn closes.
   const handleSettleActiveTurn = useMemo(
     () => (queueModeEnabled
       ? () => {
@@ -2912,9 +2608,6 @@ function AppContent({
     [queueModeEnabled, activeSessionId, sendSettleTurn],
   );
 
-  // The snooze duration menu. Snooze needs a *when*, so unlike settle the verb
-  // cannot fire straight from a keystroke or a click — every entry point opens
-  // this and the choice is what sends the command.
   const [snoozeMenu, setSnoozeMenu] = useState<
     { session: { id: string; label: string }; anchor: { top: number; left: number } } | null
   >(null);
@@ -2927,11 +2620,6 @@ function AppContent({
     [],
   );
 
-  // The keyboard path has no click to anchor to, so it anchors to the selected
-  // session's own row — the menu belongs to that agent, and opening it in the
-  // middle of the screen would make the user check which one it means. Falling
-  // back to the viewport corner keeps the verb usable when the row is scrolled
-  // out or the sidebar is collapsed.
   const handleSnoozeActiveSession = useMemo(
     () => (queueModeEnabled
       ? () => {
@@ -2949,10 +2637,6 @@ function AppContent({
     [queueModeEnabled, activeSessionId, enrichedLocalSessions],
   );
 
-  // Snooze and wake for the agent you are in. One entry each rather than one per
-  // duration: six near-identical rows would crowd the palette, and the duration
-  // menu is where the wake times are actually shown. Both are queue-only, like
-  // the shortcut — there is no queue to defer out of with the arrangement off.
   const activeSessionSnoozedUntil = enrichedLocalSessions.find(
     (session) => session.id === activeSessionId,
   )?.turnSnoozedUntil;
@@ -2989,26 +2673,6 @@ function AppContent({
     sendWakeTurn,
   ]);
 
-  // Closing a turn hands over the next agent that owes one, or home when none
-  // does. This is the only place that happens, for every way a turn can close:
-  // the shortcut above, the sidebar row's button, an auto-settle countdown
-  // completing on a daemon timer, another client settling the same turn. They
-  // all arrive here as the same thing — the band the user was in changed — which
-  // is why the handover cannot drift between them. It did: for as long as the
-  // jump lived inside the shortcut handler, only the shortcut moved you.
-  //
-  // Reacting rather than predicting also means a settle the daemon rejects moves
-  // nobody, and costs only the round trip the settle already pays for.
-  //
-  // Scoped to the agent the user is actually looking at: auto-settle fires on
-  // unwatched sessions too, and a timer running somewhere off-screen must never
-  // move the selection. Grid is excluded for the same reason — every tile is
-  // being watched there, and an empty queue would drop the user out of the view
-  // entirely.
-  //
-  // advanceAfterTurnClosed owns which band move counts and where it leads; the
-  // two snapshots it compares are what makes the close observable at all, since
-  // the settled row is gone from the band by the time this runs.
   const previousQueueTurnsRef = useRef<NonNullable<typeof queueBands>['turns']>([]);
   useEffect(() => {
     const previousTurns = previousQueueTurnsRef.current;
@@ -3023,29 +2687,12 @@ function AppContent({
     }
   }, [queueBands, queueModeEnabled, view, activeSessionId, handleSelectSession, goHomeAwaitingNextTurn]);
 
-  // Waiting at home: the next turn to open comes and gets the user.
-  //
-  // This is the other half of the handover. Closing the last turn lands the user
-  // on home, and the queue refilling is the same event as a turn closing seen
-  // from the other side — an agent's claim on the user changed while they were
-  // looking somewhere else. Without this, working the queue to the end parks the
-  // user on a screen that watches the next turn open and says nothing.
-  //
-  // Gated on the latch rather than on being home, which is what keeps a home the
-  // user walked to quiet. It is armed by the handover above, or by the user
-  // ticking the box on the banner; either way the box says which it is, so the
-  // jump is never a surprise.
-  //
-  // The head of the queue, not whichever turn happened to open — a wait that
-  // ends on the oldest owed turn is the same order as the band, ⌘J, and the
-  // handover, and picking by arrival time would make it its own fourth order.
   useEffect(() => {
     if (!followNextTurn || !queueModeEnabled || view !== 'dashboard') return;
     const next = headOfQueue(queueBands);
     if (next) handleSelectSession(next.session.id);
   }, [followNextTurn, queueModeEnabled, view, queueBands, handleSelectSession]);
 
-  // Keyboard shortcut handlers
   const handleJumpToWaiting = useCallback(() => {
     const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
     if (waiting) {
@@ -3053,11 +2700,6 @@ function AppContent({
     }
   }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
 
-  // Sessionless (tile-only) workspaces are revealed via the sidebar display
-  // popover; the preference is the single source of truth for every derived list
-  // below (sidebar render order, ⌘1–9 order, prev/next navigation) so they stay
-  // consistent. They never contribute to unmutedWorkspaceViews, which feeds
-  // session/attention counts.
   const [showSessionlessWorkspaces, setShowSessionlessWorkspaces] = useState<boolean>(readShowSessionlessWorkspaces);
   const [workspaceSelectionStyle, setWorkspaceSelectionStyle] = useState<WorkspaceSelectionStyle>(readWorkspaceSelectionStyle);
   const handleWorkspaceSelectionStyleChange = useCallback((style: WorkspaceSelectionStyle) => {
@@ -3092,14 +2734,10 @@ function AppContent({
     });
   }, [activeSessionId, activeWorkspaceId, view]);
 
-  // activeWorkspaceIdRef is declared earlier (near the ActionMenu items); keep it in
-  // sync here, where activeWorkspaceId is derived.
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
   }, [activeWorkspaceId]);
 
-  // daemonWorkspacesRef mirrors daemonWorkspaces for handleOpenNotebookTile — see
-  // its declaration for why a ref instead of a direct dependency.
   useEffect(() => {
     daemonWorkspacesRef.current = daemonWorkspaces;
   }, [daemonWorkspaces]);
@@ -3109,12 +2747,6 @@ function AppContent({
     }
   }, [activeWorkspaceId, sendWorkspaceSelected, view]);
 
-  // --- Off-screen terminal virtualization (memory) ---
-  // Keep only the active workspace + the N most-recently-used workspaces "warm"
-  // (terminals mounted). Other workspaces render a placeholder and rehydrate
-  // from daemon replay (same_app_remount) when next made visible. N is runtime-
-  // configurable (localStorage + window.attnSetWarmWorkspaces); see
-  // utils/terminalVirtualization.
   const [warmWorkspaceLimit, setWarmWorkspaceLimit] = useState<number>(() => readWarmWorkspaceLimit());
   useEffect(() => {
     const w = window as Window & { attnSetWarmWorkspaces?: (n: number) => number };
@@ -3130,7 +2762,6 @@ function AppContent({
     };
     return () => { delete w.attnSetWarmWorkspaces; };
   }, []);
-  // Most-recently-active workspace ids, most-recent-first. Drives the warm set.
   const [recentWorkspaceIds, setRecentWorkspaceIds] = useState<string[]>([]);
   useEffect(() => {
     if (!activeWorkspaceId) return;
@@ -3153,12 +2784,6 @@ function AppContent({
       : [],
     [view, visibleGridSessionIds, workspaceViews],
   );
-  // Which sessions have a terminal tile the user can actually see right now. The
-  // auto-settle countdown lives on the tile, so anything NOT in here needs the
-  // sidebar to carry it instead — a turn closing off-screen must still be
-  // announced somewhere. Session view shows the selected workspace's panes; grid
-  // view shows the tiles that fit; every other surface (dashboard, notebook, the
-  // board) shows no terminal at all.
   const onScreenSessionIds = useMemo(() => {
     if (view === 'grid') return visibleGridSessionIds;
     if (view !== 'session' || !activeWorkspaceId) return new Set<string>();
@@ -3166,19 +2791,6 @@ function AppContent({
     return new Set((workspace?.sessions ?? []).map((session) => session.id));
   }, [view, visibleGridSessionIds, activeWorkspaceId, workspaceViews]);
 
-  // Every session whose tile is on screen and counting down to something — a turn
-  // about to auto-settle, a ticket nudge about to doorbell, or both.
-  //
-  // Scoped to what is rendered rather than to the selected session, because that
-  // is what the keystroke is answering: each of these tiles is showing a pill
-  // that says which key stops it, and a pill that lies is worse than no pill. It
-  // also makes the nudge half reachable at all — the daemon pauses an incoming
-  // nudge on the *selected* session, so the only nudge countdown a user can ever
-  // watch run is on a split's other pane.
-  //
-  // Off-screen countdowns are deliberately out. They are carried by a thin
-  // sidebar bar with no key on it, and cancelling something you cannot see is
-  // exactly the silent action this feature exists to undo.
   const visibleCountdownSessionIds = useMemo(() => {
     const ids: string[] = [];
     for (const session of enrichedLocalSessions) {
@@ -3187,31 +2799,15 @@ function AppContent({
     }
     return ids;
   }, [enrichedLocalSessions, onScreenSessionIds]);
-  // Who a press answers when nothing is counting down: the focused session, and
-  // only while its own tile is on screen.
-  //
-  // One session rather than all of them, because arming is not cancelling. A
-  // countdown pill announces the key that stops it, so a press that stops every
-  // pill you can see is answering what each of them asked. Nothing asks for an
-  // arm — it is the user getting ahead of a settle that has not been announced —
-  // so it goes where they are looking and nowhere else.
   const armDismissSessionId = useMemo(
     () => (activeSessionId && onScreenSessionIds.has(activeSessionId) ? activeSessionId : undefined),
     [activeSessionId, onScreenSessionIds],
   );
-  // Undefined only when there is neither a visible countdown nor a session to
-  // arm, which unregisters the shortcut entirely: pressing it then falls through
-  // as a no-op rather than firing at a session picked by guesswork.
   const handleCancelCountdown = useMemo(() => {
-    // What is on screen and running wins: the user is answering the thing that
-    // announced itself, not getting ahead of the next one.
     if (visibleCountdownSessionIds.length > 0) {
       return () => visibleCountdownSessionIds.forEach(sendCancelCountdown);
     }
     if (!armDismissSessionId) return undefined;
-    // The daemon decides between arming and disarming: it is the one that knows
-    // whether a dismissal is already standing, and whether this session has an
-    // auto-settle coming at all.
     return () => sendCancelCountdown(armDismissSessionId);
   }, [visibleCountdownSessionIds, armDismissSessionId, sendCancelCountdown]);
 
@@ -3233,9 +2829,6 @@ function AppContent({
   const [leafWorkspaceDrag, setLeafWorkspaceDrag] = useState<LeafWorkspaceDragState | null>(null);
   const [leafDragPreview, setLeafDragPreview] = useState<LeafDragPreviewState | null>(null);
   const [dragHoverWorkspaceId, setDragHoverWorkspaceId] = useState<string | null>(null);
-  // Written synchronously alongside setLeafWorkspaceDrag by handleLeafDragStart
-  // and handleLeafDragEnd so the drop handlers (which read .current at event time)
-  // always see the latest drag without a mirror effect.
   const leafWorkspaceDragRef = useRef<LeafWorkspaceDragState | null>(null);
   const dragHoverTimerRef = useRef<number | null>(null);
 
@@ -3281,11 +2874,6 @@ function AppContent({
     clearWorkspaceDragHoverTimer();
   }, [clearWorkspaceDragHoverTimer]);
 
-  // Renderable terminal state for tile-only workspaces, built straight from the
-  // daemon's broadcast layout (which keeps the docked tile after the last
-  // terminal closes). The session-derived path can't produce this — there is no
-  // session to carry the layout — so the render loop falls back to this map for
-  // any workspace whose layout has tiles and zero agent panes.
   const sessionlessWorkspaceStateById = useMemo(() => {
     const map = new Map<string, TerminalWorkspaceState>();
     for (const workspace of daemonWorkspaces) {
@@ -3300,11 +2888,7 @@ function AppContent({
     return map;
   }, [daemonWorkspaces]);
 
-  // Markdown tiles are daemon-owned docked tiles opened via `attn open <path>`
-  // (and re-dockable by dragging). There is no empty "show tile" toggle: a
-  // tile only exists once it points at a real file.
 
-  // Use workspace order so ⌘1-9 and prev/next match the top-level sidebar rows.
   const visualWorkspaces = sidebarWorkspaceViews;
   const visualIndexByWorkspaceId = useMemo(() => {
     return new Map(visualWorkspaces.map((workspace, index) => [workspace.id, index]));
@@ -3322,8 +2906,6 @@ function AppContent({
         handleSelectSession(sessionId);
         return;
       }
-      // Tile-only workspace: activate it by id (it has no session to route
-      // through) and surface the terminal view so its docked layout renders.
       setSelectedSessionlessWorkspaceId(workspace.id);
       setView('session');
       setUtilityFocusRequestToken((token) => token + 1);
@@ -3403,11 +2985,6 @@ function AppContent({
     void sendWorkspaceMoveLeafToWorkspace(drag.sourceWorkspaceId, workspace.id, drag.leafId, SIDEBAR_LEAF_DROP_PLACEMENT).catch(() => {});
   }, [canMoveDraggedLeafToWorkspace, clearWorkspaceDragHoverTimer, handleSelectWorkspace, sendWorkspaceMoveLeafToWorkspace]);
 
-  // Drop the dragged leaf onto the "New workspace" zone at the foot of the list:
-  // split it out into a fresh workspace. The daemon registers the workspace (rank
-  // seeded to the end of the order), moves the leaf into it, and tears down the
-  // source if it ends up empty, then broadcasts the authoritative layout — so this
-  // is fire-and-forget like the merge path.
   const handleNewWorkspaceDrop = useCallback(() => {
     const drag = leafWorkspaceDragRef.current;
     if (!drag) {
@@ -3418,10 +2995,6 @@ function AppContent({
     void sendWorkspaceMoveLeafToNewWorkspace(drag.sourceWorkspaceId, drag.leafId, SIDEBAR_LEAF_DROP_PLACEMENT).catch(() => {});
   }, [clearWorkspaceDragHoverTimer, sendWorkspaceMoveLeafToNewWorkspace]);
 
-  // Persist a workspace reorder. The Sidebar computes the drop's neighbour ids
-  // from the seam; the daemon derives the fractional rank key and broadcasts the
-  // authoritative order, so this is fire-and-forget (a rejected/timed-out write
-  // just leaves the existing order in place).
   const handleWorkspaceReorder = useCallback((args: {
     workspaceId: string;
     prevWorkspaceId?: string;
@@ -3465,18 +3038,8 @@ function AppContent({
   }, [handleNextWorkspace, handlePrevWorkspace]);
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {
-    // Cmd+W closes the focused leaf. In the packaged app the native "Close Pane"
-    // menu item claims Cmd+W and dispatches session.close (this handler), so when
-    // focus is inside a docked tile — e.g. a notebook tile beside a terminal — we
-    // must close THAT tile here, not the active session's terminal pane. Without
-    // this, Cmd+W while reading a note kills the previously-focused terminal/session.
-    // (Native browser tiles are handled natively before session.close ever fires.)
+    // The packaged app's native "Close Pane" item claims Cmd+W and dispatches session.close, so a focused docked tile must be closed here, not the session.
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    // Inside a tile's own subtree the tile is unambiguous. Otherwise, while focus
-    // is anywhere in the workspace, the workspace's own focus model decides —
-    // data-active-leaf-id names a tile whenever a tile is the focused leaf, so a
-    // click that landed on the workspace frame rather than the tile body still
-    // closes the leaf the user sees as focused.
     const tileId = focused?.closest('[data-pane-kind="tile"]')?.getAttribute('data-pane-id')
       ?? focused?.closest('.session-terminal-workspace')?.getAttribute('data-active-leaf-id')
       ?? '';
@@ -3515,21 +3078,12 @@ function AppContent({
     });
   }, [getPaneSize, reloadSession, sessions, showError]);
 
-  // Open a seed as a tile: the daemon uses the active session to place it, then
-  // binds the tile's annotation target to the seed's tender. Without a placement
-  // session a garden-only open has no workspace, and annotations could never
-  // reach the driving session.
   const handleOpenSeedTile = useCallback((seedId: string) => {
     void sendOpenSeed(seedId, activeSessionId || '').catch((error) => {
       showError(error instanceof Error ? error.message : 'Could not open the seed');
     });
   }, [sendOpenSeed, activeSessionId, showError]);
 
-  // whether a seed's artifact is still on disk, so the row can say
-  // so instead of offering to open nothing. fs_exists resolves under a root, so
-  // an absolute artifact path is asked as (its directory, its name); a root that
-  // does not resolve rejects, and the row stays unflagged rather than claiming a
-  // file is gone on the strength of a path it could not ask about.
   const checkArtifactPath = useCallback((path: string) => {
     const slash = path.lastIndexOf('/');
     if (slash <= 0) return Promise.resolve(true);
@@ -3542,40 +3096,24 @@ function AppContent({
     });
   }, [sendOpenMarkdown, showError]);
 
-  // Reopen the agent that tends a seed. The daemon owns the whole composite
-  // (validate → register workspace → add pane → spawn, with rollback), so the
-  // frontend sends one command and focuses the session it names; the session and
-  // pane arrive through the normal broadcasts. A still-running tender is focused,
-  // not re-spawned (already_running, resolved daemon-side).
   const handleResumeSeed = useCallback((seedId: string) => {
     sendSeedResume(seedId)
       .then((result) => handleSelectSession(result.sessionId))
       .catch((error) => showError(error instanceof Error ? error.message : 'Failed to reopen the agent'));
   }, [sendSeedResume, handleSelectSession, showError]);
 
-  // Start a crew member's day from the sidebar. The daemon owns the composite —
-  // bind, register the member's workspace, add the pane, spawn primed — so this
-  // sends one command and focuses the session it names; a member that turned out
-  // to be awake already resolves with the day it is living, which is the same
-  // thing to focus. A refusal (no such member, a cwd that moved, an outpost) is
-  // shown rather than swallowed: a click that does nothing is the worst answer.
   const handleWakeCrewMember = useCallback((member: string) => {
     sendCrewWake(member)
       .then((result) => handleSelectSession(result.sessionId))
       .catch((error) => showError(error instanceof Error ? error.message : `Failed to wake ${crewDisplayName(member)}`));
   }, [sendCrewWake, handleSelectSession, showError]);
 
-  // Asking for sleep delivers closure work to the member; it does not close the
-  // session itself. The roster changes only after the member consents by filing
-  // its letter with `attn handoff --sleep`.
   const handleSleepCrewMember = useCallback((member: string) => {
     sendCrewSleep(member)
       .catch((error) => showError(error instanceof Error ? error.message : `Failed to ask ${crewDisplayName(member)} to sleep`));
   }, [sendCrewSleep, showError]);
 
-  // The daemon calls the terminal annotation surface needs, as one stable
-  // object: the surface re-fetches on identity change, so four separate props
-  // would refire it on every unrelated render of App.
+  // One stable object: the surface re-fetches on identity change.
   const annotationApi = useMemo(() => ({
     fetchMessages: sendSessionMessagesGet,
     subscribeMessagesChanged: subscribeSessionMessagesChanged,
@@ -3673,9 +3211,6 @@ function AppContent({
       icon: <NotificationsBellIcon />,
       active: notificationsPanelOpen,
       badge: notificationsUnread > 0 ? notificationsUnread : undefined,
-      // The bell half of the ambient critical surface: while something critical
-      // is unread the badge stops being the brand accent (see
-      // CriticalNotificationStrip.css).
       toneClassName: hasCriticalNotification ? 'has-critical' : undefined,
       onClick: toggleNotificationsPanel,
     },
@@ -3688,9 +3223,6 @@ function AppContent({
     },
     {
       id: 'garden',
-      // One object, one button, and it means the garden, docked. The window
-      // frame covers the rail, so coming back from it is Escape, the shortcut,
-      // or the header control — never this.
       title: gardenPanelOpen ? 'Hide the garden' : 'Show the garden',
       icon: <GardenIcon />,
       active: gardenPanelOpen || gardenHoldsWindow,
@@ -3718,9 +3250,6 @@ function AppContent({
 
   const activeSessionZoomed = activeWorkspaceId ? Boolean(zoomModeBySessionId[activeWorkspaceId]) : false;
 
-  // Interactive/contextual behavior for dock chips, keyed by shortcut id. Ids
-  // not present here render as informational chips (keys + label, no click).
-  // `available: false` hides the chip in the current context (e.g. no session).
   const dockActions = useMemo<Partial<Record<ShortcutId, {
     run?: () => void;
     isActive?: boolean;
@@ -3741,15 +3270,12 @@ function AppContent({
     toggleDockPanel,
   ]);
 
-  // The dock is rebuilt from config on every relevant change, so rebinds and
-  // membership/order edits reflect live. Unbound ids and context-unavailable
-  // ids are filtered out.
   const dockItems = useMemo<DockItem[]>(() => (
     keybindings.dock.items.flatMap((id) => {
       const action = dockActions[id];
       if (action && action.available === false) return [];
       const keys = formatShortcut(id);
-      if (!keys) return []; // unbound -> nothing to show
+      if (!keys) return [];
       return [{
         id,
         label: dockShortcutLabel(id),
@@ -3768,8 +3294,6 @@ function AppContent({
     window.close();
   }, []);
 
-  // Terminal panel handlers for active session
-  // Use keyboard shortcuts hook
   const appShortcutsEnabled = !locationPickerOpen
     && !whatsNew.isOpen
     && !actionMenuOpen
@@ -3806,28 +3330,11 @@ function AppContent({
     onOpenGarden: toggleGardenFrame,
     onQuit: handleQuitApp,
     enabled: appShortcutsEnabled && !gardenHoldsWindow,
-    // One gesture, both directions. Every other app shortcut is silenced while
-    // the garden holds the window; its own is not, because the window is the
-    // garden at a different size rather than a modal over it.
     gardenShortcutEnabled: appShortcutsEnabled,
   });
 
-  // The daemon's resolved notebook storage root (settings['notebook.root.effective']).
-  // An fs_changed with no root, and a tile with no explicit root, both key off this
-  // value — see setFsChangeSignals above and makeNotebookSurfaceDaemon below.
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
 
-  // Builds the daemon surface for the fullscreen Notebook and every notebook
-  // tile, bound to `root` (undefined = the notebook storage root, unchanged
-  // behavior). Memoized so a tile's daemon instance is stable across renders
-  // that don't touch its own root's change signal.
-  //
-  // listFiles is root-scoped (fs_index over `root`, or the notebook root when
-  // omitted) — the ⌘P finder browses whatever tree the tile is pinned to, per
-  // the arbitrary-roots plan. backlinksNotebook and sendToChief stay bound to
-  // the notebook storage root regardless of `root`: backlinks only exist
-  // between notebook notes, and "send to chief" appends to the notebook inbox,
-  // so both are meaningless (and left un-widened) off the notebook root.
   const makeNotebookSurfaceDaemon = useCallback((root?: string) => ({
     listDir: (path: string) => sendFsList(path, root),
     readFile: (path: string) => sendFsRead(path, root),
@@ -3859,12 +3366,8 @@ function AppContent({
     connectionGeneration,
   }), [makeNotebookSurfaceDaemon, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration]);
 
-  // The fullscreen browser is always notebook-rooted — same signal a rootless
-  // tile would resolve to via makeNotebookSurfaceDaemon(undefined).
   const notebookRootChangeSignal = fsChangeSignals[fsChangeSignalKey('', effectiveNotebookRoot)] || 0;
 
-  // The fullscreen browser's finder source: fs_index with root omitted, same
-  // notebook-rooted behavior as makeNotebookSurfaceDaemon's listFiles above.
   const notebookBrowserListFiles = useCallback(
     () => sendFsIndex().then(fsIndexToNotebookEntries),
     [sendFsIndex],
@@ -3874,20 +3377,17 @@ function AppContent({
     <DaemonProvider sendPRAction={sendPRAction} sendMutePR={sendMutePR} sendMuteRepo={sendMuteRepo} sendMuteAuthor={sendMuteAuthor} sendPRVisited={sendPRVisited}>
     <NotebookSurfaceProvider value={notebookSurfaceContextValue}>
     <div className="app" ref={appShellRef} tabIndex={-1} style={{ outline: 'none' }} onPointerDownCapture={handleAppPointerDownCapture}>
-      {/* Error banner for version mismatch */}
       {connectionError && (
         <div className="connection-error-banner">
           {connectionError}
         </div>
       )}
-      {/* Warning banner for non-critical issues */}
       {warnings.length > 0 && (
         <div className={`warning-banner ${connectionError ? 'with-connection-error' : ''}`}>
           <span>{warnings.map(w => w.message).join(' ')}</span>
           <button className="warning-dismiss" onClick={clearWarnings} title="Dismiss">×</button>
         </div>
       )}
-      {/* New release banner */}
       {updateAvailableVersion && (
         <div className={`update-banner ${connectionError ? 'with-connection-error' : ''} ${warnings.length > 0 ? 'with-warning' : ''}`}>
           <span>
@@ -3919,10 +3419,6 @@ function AppContent({
           step={openPRLauncherJob.progress.step}
         />
       )}
-      {/* The app shell: the sidebar is a peer of the view stack rather than a
-          child of the session view, so home and a session are both framed by it.
-          Grid view stays outside the shell — it is a full-window takeover and
-          hoisting the sidebar must not quietly put a sidebar beside it. */}
       <div className="app-frame">
         <Sidebar
           workspaces={sidebarWorkspaceViews}
@@ -3991,7 +3487,7 @@ function AppContent({
           onToggleCollapse={toggleSidebarCollapse}
         />
         <div className="view-stack">
-      {/* Dashboard - always rendered, shown/hidden via z-index */}
+      {/* Always rendered; shown/hidden via z-index. */}
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
           sessions={unmutedEnrichedSessions}
@@ -4021,7 +3517,7 @@ function AppContent({
         />
       </div>
 
-      {/* Session view - always rendered to keep terminals alive */}
+      {/* Always rendered, to keep terminals alive. */}
       <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
         <div className="terminal-pane">
           <div className="terminal-main-area">
@@ -4043,8 +3539,6 @@ function AppContent({
                 getActivePaneIdForSession,
               );
               const isActiveWorkspace = workspace.id === activeWorkspaceId;
-              // Mount this workspace's terminals only when it is active or in the
-              // warm set; otherwise it renders placeholders and rehydrates on return.
               const terminalsLive = warmWorkspaceIds === null
                 || isActiveWorkspace
                 || warmWorkspaceIds.has(workspace.id);
@@ -4092,9 +3586,6 @@ function AppContent({
                     onOpenPresentation={handleOpenPresentationWindow}
                     onOpenMarkdown={(path, sessionId) => {
                       void sendOpenMarkdown(path, sessionId).catch((error) => {
-                        // Daemon rejected (e.g. remote/hub session with no local
-                        // workspace) or the socket dropped: fall back to the OS
-                        // default app so the click never silently does nothing.
                         console.error('[Markdown] in-app open failed, falling back to OS open:', error);
                         void openPath(path).catch((openError) => {
                           console.error('[Markdown] OS open fallback failed:', openError);
@@ -4235,8 +3726,6 @@ function AppContent({
             {
               id: 'garden',
               width: 'clamp(380px, 34vw, 560px)',
-              // The place, not the panel: GardenFrame renders the garden into
-              // the rectangle this reserves.
               isOpen: gardenPanelOpen && !gardenHoldsWindow,
               detached: gardenSlotRef,
               children: null,
@@ -4247,8 +3736,7 @@ function AppContent({
         </div>
       </div>
 
-      {/* Grid view — global mission control. Mounted only while active so its
-          single WebGL context is released on exit (mirrors the pane path). */}
+      {/* Mounted only while active, so its WebGL context is released on exit. */}
       {view === 'grid' && (
         <div className="view-container visible">
           <GridView
@@ -4408,17 +3896,13 @@ function AppContent({
             setMarkdownOpenerOpen(false);
             const bindTo = markdownOpenerTarget.sessionId;
             if (bindTo === null) {
-              // The selected session lives on another machine; docking a tile
-              // for this local file would bind it there. Open it locally.
+              // The selected session lives on another machine; docking a tile for this local file would bind it there.
               void openPath(path).catch((openError) => {
                 console.error('[MarkdownOpener] OS open failed:', openError);
               });
               return;
             }
             void sendOpenMarkdown(path, bindTo).catch((error) => {
-              // Same fallback as a cmd+click on a link: if the daemon can't dock
-              // a tile (no local workspace, socket dropped), open the file in the
-              // OS default app rather than doing nothing.
               console.error('[MarkdownOpener] in-app open failed, falling back to OS open:', error);
               void openPath(path).catch((openError) => {
                 console.error('[MarkdownOpener] OS open fallback failed:', openError);
@@ -4427,9 +3911,6 @@ function AppContent({
           }}
         />
       )}
-      {/* Owned here rather than in the sidebar because ⌘⇧S opens it too, and a
-          menu that exists only while the sidebar drew the row would be missing
-          exactly when the shortcut is most useful. */}
       {snoozeMenu && (
         <SnoozeMenu
           sessionLabel={snoozeMenu.session.label}

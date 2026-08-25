@@ -28,9 +28,6 @@ func TestIsCacheHitTruthTable(t *testing.T) {
 		})
 	}
 
-	// Non-terminal status never hits, even with every hash matching: a "running"
-	// (or empty) row is an in-flight progress marker seeded from the store on
-	// resume; replaying it as a result would yield a null/partial value.
 	for _, status := range []string{"running", ""} {
 		t.Run("non-terminal status "+status, func(t *testing.T) {
 			e := JournalEntry{Ordinal: "ord", PromptHash: "ph", SchemaHash: "sh", Status: status}
@@ -40,7 +37,6 @@ func TestIsCacheHitTruthTable(t *testing.T) {
 		})
 	}
 
-	// Terminal statuses other than "ok" still hit when hashes match.
 	for _, status := range []string{"ok", "skipped", "errored"} {
 		t.Run("terminal status "+status, func(t *testing.T) {
 			e := JournalEntry{Ordinal: "ord", PromptHash: "ph", SchemaHash: "sh", Status: status}
@@ -52,20 +48,16 @@ func TestIsCacheHitTruthTable(t *testing.T) {
 }
 
 func TestHashSchemaSentinel(t *testing.T) {
-	// Absent and empty schema both hash to the stable "none" sentinel.
 	if got := hashSchema(nil); got != schemaNoneSentinel {
 		t.Errorf("nil schema hash = %q, want %q", got, schemaNoneSentinel)
 	}
 	if got := hashSchema(json.RawMessage{}); got != schemaNoneSentinel {
 		t.Errorf("empty schema hash = %q, want %q", got, schemaNoneSentinel)
 	}
-	// A present schema hashes to something other than the sentinel (so add/remove
-	// schema flips the hash — R5).
 	present := hashSchema(json.RawMessage(`{"type":"object"}`))
 	if present == schemaNoneSentinel {
 		t.Errorf("present schema hashed to the none sentinel")
 	}
-	// Same schema bytes hash equal; different bytes hash different.
 	if hashSchema(json.RawMessage(`{"a":1}`)) != hashSchema(json.RawMessage(`{"a":1}`)) {
 		t.Errorf("identical schema produced different hashes")
 	}
@@ -91,11 +83,9 @@ func TestMemJournalAppendUpsert(t *testing.T) {
 	if err := j.Append(JournalEntry{Ordinal: "b", Status: "ok"}); err != nil {
 		t.Fatalf("append b: %v", err)
 	}
-	// Duplicate ordinal via Append must error (one entry per ordinal invariant).
 	if err := j.Append(JournalEntry{Ordinal: "a", Status: "ok"}); err == nil {
 		t.Errorf("Append of duplicate ordinal should error")
 	}
-	// Upsert overwrites in place, preserving order.
 	j.Upsert(JournalEntry{Ordinal: "a", Status: "errored", Err: "boom"})
 	got, ok := j.Lookup("a")
 	if !ok || got.Status != "errored" {
@@ -105,7 +95,6 @@ func TestMemJournalAppendUpsert(t *testing.T) {
 	if len(entries) != 2 || entries[0].Ordinal != "a" || entries[1].Ordinal != "b" {
 		t.Errorf("order not preserved after upsert: %+v", entries)
 	}
-	// Upsert of a new ordinal appends.
 	j.Upsert(JournalEntry{Ordinal: "c", Status: "ok"})
 	if len(j.Entries()) != 3 {
 		t.Errorf("upsert of new ordinal should append")
@@ -116,7 +105,6 @@ func TestMemJournalClone(t *testing.T) {
 	j := NewMemJournal()
 	_ = j.Append(JournalEntry{Ordinal: "a", PromptHash: "p", Status: "ok"})
 	clone := j.Clone()
-	// Mutating the clone must not touch the original.
 	clone.Upsert(JournalEntry{Ordinal: "a", PromptHash: "CHANGED", Status: "ok"})
 	orig, _ := j.Lookup("a")
 	if orig.PromptHash != "p" {

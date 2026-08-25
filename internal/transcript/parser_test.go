@@ -67,9 +67,7 @@ func TestExtractLastAssistantMessage_NoAssistant(t *testing.T) {
 	}
 }
 
-// Tests for Claude Code's actual transcript format (content is an array)
 func TestExtractLastAssistantMessage_ClaudeCodeFormat(t *testing.T) {
-	// Claude Code uses content as an array of blocks with type and text fields
 	content := `{"type":"user","message":{"role":"user","content":"test"}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Let me think..."},{"type":"text","text":"How would you like to proceed with the video description feature? I need your input on next steps."}]}}
 `
@@ -89,7 +87,6 @@ func TestExtractLastAssistantMessage_ClaudeCodeFormat(t *testing.T) {
 }
 
 func TestExtractLastAssistantMessage_ClaudeCodeFormat_MultipleTextBlocks(t *testing.T) {
-	// Claude might have multiple text blocks in a single message
 	content := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"First paragraph."},{"type":"text","text":"Second paragraph."}]}}
 `
 	tmpDir := t.TempDir()
@@ -108,7 +105,6 @@ func TestExtractLastAssistantMessage_ClaudeCodeFormat_MultipleTextBlocks(t *test
 }
 
 func TestExtractLastAssistantMessage_ClaudeCodeFormat_OnlyThinking(t *testing.T) {
-	// If a message only has thinking blocks, we should get empty string
 	content := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Just thinking here..."}]}}
 `
 	tmpDir := t.TempDir()
@@ -120,14 +116,12 @@ func TestExtractLastAssistantMessage_ClaudeCodeFormat_OnlyThinking(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Only thinking block, no text, should return empty
 	if result != "" {
 		t.Errorf("expected empty string for thinking-only message, got %q", result)
 	}
 }
 
 func TestExtractLastAssistantMessage_MessageRoleAsAssistant(t *testing.T) {
-	// Test detection by message.role instead of type
 	content := `{"message":{"role":"assistant","content":[{"type":"text","text":"Hello from assistant"}]}}
 `
 	tmpDir := t.TempDir()
@@ -361,10 +355,8 @@ func TestExtractLastAssistantMessageAfterLastUserSince_Claude_FreshAssistantRetu
 	}
 }
 
-// The abort lines below are verbatim captures: claude 2.1.220, codex 0.146.0 and
-// copilot 1.0.77 each driven through a real PTY and interrupted with ESC
-// mid-turn. They are the only record any of them produces of the user halting a
-// turn — no hook fires — so the exact shape is the contract.
+// The abort lines below are verbatim captures from claude 2.1.220, codex 0.146.0 and
+// copilot 1.0.77 interrupted mid-turn. No hook fires, so the exact shape is the contract.
 
 type turnAbortCase struct {
 	name         string
@@ -414,8 +406,6 @@ func TestClaudeTurnAborted(t *testing.T) {
 			wantOK:       true,
 		},
 		{
-			// Captured: halting at a tool-use prompt writes the marker and no
-			// interruptedMessageId at all, so the marker has to be honored on its own.
 			name:         "captured tool-use interrupt with no dedicated field",
 			line:         `{"parentUuid":"9f5d4154-154b-40c5-9f6a-a4fe7de054f2","type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]},"uuid":"b2cf7717-d87d-4613-bf08-f73edb9e0e07","timestamp":"2026-08-01T12:30:36.311Z","userType":"external","entrypoint":"cli"}`,
 			wantReason:   "[Request interrupted by user for tool use]",
@@ -424,8 +414,6 @@ func TestClaudeTurnAborted(t *testing.T) {
 			wantOK:       true,
 		},
 		{
-			// The field alone is enough, so a claude release that reworded the
-			// marker still reports the halt.
 			name:         "the dedicated field carries an unrecognized marker",
 			line:         `{"type":"user","message":{"role":"user","content":"[Request stopped]"},"interruptedMessageId":"msg_01"}`,
 			wantReason:   "[Request interrupted by user]",
@@ -433,37 +421,22 @@ func TestClaudeTurnAborted(t *testing.T) {
 			wantOK:       true,
 		},
 		{
-			// Captured shape of a prompt the user typed. Claude writes submitted
-			// prompts as a plain string and stamps them with promptSource/origin;
-			// its own interrupt entries are a lone text block with neither. Without
-			// that distinction a user who pastes the marker settles their own
-			// working session.
 			name: "the marker pasted as a prompt is not an abort",
 			line: `{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"promptSource":"typed","origin":{"kind":"human"},"permissionMode":"auto","timestamp":"2026-08-01T21:48:07.459Z"}`,
 		},
 		{
-			// The same paste as a content block, which is what an attachment or an
-			// image alongside the text produces.
 			name: "the marker submitted as a block is not an abort",
 			line: `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]},"promptSource":"paste","origin":{"kind":"human"}}`,
 		},
 		{
-			// Claude has written user entries without promptSource/origin for as long
-			// as it has written transcripts, so the metadata cannot be the only guard.
-			// The content shape is the other one: claude's own interrupt is a block,
-			// and anything arriving as a bare string was submitted by someone.
 			name: "the marker as a bare string is not an abort",
 			line: `{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"uuid":"6d41deb5","timestamp":"2026-08-01T22:06:44.538Z"}`,
 		},
 		{
-			// The whole reason the marker is matched exactly rather than by prefix.
 			name: "a user quoting the marker in a prompt is not an abort",
 			line: `{"type":"user","message":{"role":"user","content":"why does [Request interrupted by user] show up in my logs?"}}`,
 		},
 		{
-			// Captured: tool output that happens to contain the marker arrives as a
-			// user entry too, and a grep result quoting attn's own source must not
-			// halt the session reading it.
 			name: "a tool result quoting the marker is not an abort",
 			line: `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01","type":"tool_result","content":"parser.go:12:[Request interrupted by user]"}]}}`,
 		},
@@ -493,9 +466,6 @@ func TestCodexTurnAborted(t *testing.T) {
 			wantOK:       true,
 		},
 		{
-			// The reason codex gives when one turn supersedes another. The turn did
-			// end, but the session is working again immediately, so reporting it as
-			// a halt settles a session that is running.
 			name:       "a replaced turn is not a user halt",
 			line:       `{"type":"event_msg","payload":{"type":"turn_aborted","reason":"replaced"}}`,
 			wantReason: "replaced",
@@ -545,9 +515,6 @@ func TestCopilotTurnAborted(t *testing.T) {
 			wantOK:       true,
 		},
 		{
-			// Reported even though it is not a halt: copilot writes no
-			// assistant.turn_end after an abort, so the watcher's turn bracket has to
-			// be closed by this line whatever caused it.
 			name:       "an abort copilot caused is still reported",
 			line:       `{"type":"abort","data":{"reason":"tool_failure"}}`,
 			wantReason: "tool_failure",

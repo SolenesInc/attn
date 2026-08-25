@@ -188,7 +188,6 @@ func TestParseAgentMsgArgsResolvesTheSenderAndRefusesWhenItCannot(t *testing.T) 
 			want: agentMsgArgs{target: "9f2a", content: "hello", source: "bb22", json: true},
 		},
 		{
-			// The escape hatch for a human at a plain shell: say who is speaking.
 			name:    "outside a session with no sender",
 			args:    []string{"9f2a", "hello"},
 			env:     "",
@@ -232,9 +231,6 @@ func TestParseAgentMsgArgsResolvesTheSenderAndRefusesWhenItCannot(t *testing.T) 
 	}
 }
 
-// The sender reads one line and has to know what happened. Queued and refused
-// both carry the daemon's reason, because both mean "not delivered yet" and the
-// next move differs.
 func TestAgentMsgOutcomeLineCarriesTheDaemonsReason(t *testing.T) {
 	delivered := agentMsgOutcomeLine(&protocol.AgentMsgResult{
 		Status: protocol.AgentMsgStatusDelivered, Detail: "delivered to reviewer", MessageID: "abc",
@@ -253,8 +249,6 @@ func TestAgentMsgOutcomeLineCarriesTheDaemonsReason(t *testing.T) {
 	}
 }
 
-// A send names two sessions, so a failure has to say which one it could not
-// find — otherwise the sender re-checks the wrong id.
 func TestAgentMsgErrorMessageSeparatesTargetFromSender(t *testing.T) {
 	parsed := agentMsgArgs{target: "zzzz", source: "yyyy"}
 	target := agentMsgErrorMessage(parsed, errors.New("daemon error: session_not_found"))
@@ -273,9 +267,8 @@ func TestAgentMsgErrorMessageSeparatesTargetFromSender(t *testing.T) {
 	}
 }
 
-// A message far past the limit never reaches the daemon's refusal: the socket
-// hangs up mid-write and the sender sees a broken pipe. The command answers
-// before it sends, so the size is always named.
+// A message far past the limit never reaches the daemon refusal: the socket hangs
+// up mid-write and the sender sees a broken pipe, so the command answers first.
 func TestParseAgentMsgArgsNamesTheSizeLimitBeforeSending(t *testing.T) {
 	_, err := parseAgentMsgArgs([]string{"target", strings.Repeat("x", protocol.AgentMessageMaxChars+1)}, "sender-session-id")
 	if err == nil {
@@ -290,9 +283,6 @@ func TestParseAgentMsgArgsNamesTheSizeLimitBeforeSending(t *testing.T) {
 	}
 }
 
-// A message that starts with a dash is still a message. Without the separator
-// the leading dash is read as a mistyped flag, which is right far more often —
-// but the error has to name the way through, or the sender is just stuck.
 func TestParseAgentMsgArgsTakesADashLeadingMessageAfterTheSeparator(t *testing.T) {
 	parsed, err := parseAgentMsgArgs([]string{"--", "target", "-hello", "--json"}, "sender-session-id")
 	if err != nil {

@@ -11,20 +11,15 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// waitForPresentFeedback backs `attn present --wait`, an authoring agent's foreground
-// call that must stay alive (so the session shows as working, not idle) until the
-// reviewer submits the round or closes the presentation. This drives the loop
-// deterministically with a manual tick channel and a scripted fetch so every poll
-// is controlled — no daemon, signals, or wall-clock timer.
 func TestWaitForPresentFeedbackPrintsOnceThenReturns(t *testing.T) {
 	type step struct {
 		result *protocol.PresentFeedbackResult
 		err    error
 	}
 	steps := []step{
-		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},                           // poll 0: not yet, silent
-		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},                           // poll 1: still not yet
-		{&protocol.PresentFeedbackResult{Submitted: true, Markdown: "## feedback\n", PresentationStatus: "open"}, nil}, // poll 2: submitted
+		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},
+		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},
+		{&protocol.PresentFeedbackResult{Submitted: true, Markdown: "## feedback\n", PresentationStatus: "open"}, nil},
 	}
 
 	fetchCh := make(chan step, len(steps))
@@ -46,8 +41,6 @@ func TestWaitForPresentFeedbackPrintsOnceThenReturns(t *testing.T) {
 		errCh <- waitForPresentFeedback(ctx, tick, fetch, &out, false)
 	}()
 
-	// Poll 0 runs on entry; two ticks drive polls 1 and 2, the latter of which
-	// submits and returns without consuming another tick.
 	tick <- time.Time{}
 	tick <- time.Time{}
 
@@ -73,7 +66,7 @@ func TestWaitForPresentFeedbackReturnsCtxErrOnCancel(t *testing.T) {
 		errCh <- waitForPresentFeedback(ctx, tick, fetch, &out, false)
 	}()
 
-	cancel() // unblocks the select immediately after poll 0's fetch
+	cancel()
 	err := <-errCh
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("waitForPresentFeedback returned %v, want context.Canceled", err)
@@ -90,9 +83,9 @@ func TestWaitForPresentFeedbackKeepsPollingThroughTransientError(t *testing.T) {
 	}
 	down := errors.New("daemon down")
 	steps := []step{
-		{nil, down}, // poll 0: transient error, keep polling
-		{nil, down}, // poll 1: still down
-		{&protocol.PresentFeedbackResult{Submitted: true, Markdown: "ok", PresentationStatus: "open"}, nil}, // poll 2: recovered and submitted
+		{nil, down},
+		{nil, down},
+		{&protocol.PresentFeedbackResult{Submitted: true, Markdown: "ok", PresentationStatus: "open"}, nil},
 	}
 
 	fetchCh := make(chan step, len(steps))
@@ -125,19 +118,14 @@ func TestWaitForPresentFeedbackKeepsPollingThroughTransientError(t *testing.T) {
 	}
 }
 
-// TestWaitForPresentFeedbackReturnsOnClose covers the case a plain
-// result.Submitted check misses: a reviewer can Close a presentation instead of
-// reviewing a round, which never flips Submitted and would otherwise poll
-// forever. The loop must notice presentation_status == "closed" and return
-// without ever printing markdown.
 func TestWaitForPresentFeedbackReturnsOnClose(t *testing.T) {
 	type step struct {
 		result *protocol.PresentFeedbackResult
 		err    error
 	}
 	steps := []step{
-		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},   // poll 0: not yet
-		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "closed"}, nil}, // poll 1: closed without review
+		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "open"}, nil},
+		{&protocol.PresentFeedbackResult{Submitted: false, PresentationStatus: "closed"}, nil},
 	}
 
 	fetchCh := make(chan step, len(steps))

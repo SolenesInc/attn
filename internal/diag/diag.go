@@ -1,13 +1,5 @@
-// Package diag exposes an opt-in, loopback-only diagnostics endpoint
-// (net/http/pprof profiles plus a /debug/vars JSON snapshot) used to measure
-// attn's memory and CPU footprint. It is disabled unless ATTN_PPROF is set (see
-// config.PprofAddr) and binds 127.0.0.1 only, so it adds no remote attack
-// surface.
-//
-// Importing net/http/pprof registers handlers on http.DefaultServeMux, but the
-// daemon serves its own mux and nothing in the process serves the default mux,
-// so that registration stays inert; this package re-registers the same handlers
-// on a private mux it actually serves.
+// Importing net/http/pprof registers handlers on http.DefaultServeMux, which nothing in
+// this process serves; the same handlers are re-registered here on a private mux.
 package diag
 
 import (
@@ -22,34 +14,22 @@ import (
 	"time"
 )
 
-// Stats is the live daemon snapshot the endpoint reports under /debug/vars,
-// alongside Go runtime and heap numbers. The worker PTY backend runs one
-// subprocess per session, so WorkerPIDs lets a measurement script sum
-// per-session RSS (ps/vmmap) — the dominant memory locus. It is empty for the
-// embedded backend, which has no separate worker processes.
 type Stats struct {
 	Sessions   int            `json:"sessions"`
 	PtyBackend string         `json:"pty_backend"`
 	WorkerPIDs map[string]int `json:"worker_pids,omitempty"`
 }
 
-// StatsFunc returns the current daemon stats. It is invoked on each /debug/vars
-// request, so it must be cheap and safe for concurrent use. May be nil.
+// Invoked on each /debug/vars request, so it must be cheap and safe for
+// concurrent use. May be nil.
 type StatsFunc func() Stats
 
-// Server is a running diagnostics endpoint. The zero value is not usable; obtain
-// one from Start.
 type Server struct {
 	httpServer *http.Server
 	addr       string
 	stats      StatsFunc
 }
 
-// Start binds a loopback HTTP server at addr and serves net/http/pprof plus a
-// /debug/vars JSON snapshot on a private mux (http.DefaultServeMux is left
-// untouched). addr should be a loopback address; callers resolve it via
-// config.PprofAddr, which always yields 127.0.0.1. Pass "127.0.0.1:0" to bind an
-// ephemeral port and read it back with Addr. stats may be nil.
 func Start(addr string, stats StatsFunc) (*Server, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -71,7 +51,6 @@ func Start(addr string, stats StatsFunc) (*Server, error) {
 	return s, nil
 }
 
-// Addr is the resolved loopback address the endpoint is bound to (host:port).
 func (s *Server) Addr() string {
 	if s == nil {
 		return ""
@@ -79,7 +58,7 @@ func (s *Server) Addr() string {
 	return s.addr
 }
 
-// Close gracefully shuts the endpoint down. Safe to call on a nil *Server.
+// Close is safe to call on a nil *Server.
 func (s *Server) Close() error {
 	if s == nil || s.httpServer == nil {
 		return nil

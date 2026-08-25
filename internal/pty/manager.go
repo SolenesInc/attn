@@ -46,7 +46,6 @@ type SpawnOptions struct {
 	YoloMode          bool
 	InitialPromptFile string
 
-	// Executable is the selected CLI path for the current agent.
 	Executable string
 
 	ClaudeExecutable  string
@@ -58,13 +57,8 @@ type SpawnOptions struct {
 	DaemonEnv         []string
 	LifecycleID       string
 
-	// LoginShellEnv, when non-nil, is a pre-computed login shell environment
-	// that replaces the ReadLoginShellEnv call.
 	LoginShellEnv []string
 
-	// Launch policy and model pins are one-shot wrapper inputs. Worker-backed
-	// sessions receive them through the worker process environment; embedded
-	// sessions carry the same contract directly in SpawnOptions.
 	WorkflowGuidanceEnabled bool
 	AutoApprove             bool
 	TrustWorkingDirectory   bool
@@ -73,27 +67,20 @@ type SpawnOptions struct {
 	ContextWindowCap        int
 	UnattendedLaunch        launchcontract.UnattendedLaunchSpec
 
-	// Theme seeds the colors the session answers OSC 10/11/12 queries with,
-	// before the child's first query — set explicitly so a spawn under a
-	// non-default theme never briefly answers with built-in defaults.
+	// Set explicitly, or a spawn under a non-default theme briefly answers with
+	// built-in defaults.
 	Theme TerminalTheme
 }
 
-// ViewportSnapshot is the styled VT serialization of the visible frame. It is
-// self-contained (including cursor state in the payload) and seeds observers
-// (grid tiles) and the automations gate.
 type ViewportSnapshot struct {
 	Payload []byte
-	// Text is the plain visible viewport captured from the same authoritative
-	// Ghostty model as Payload. It intentionally excludes scrollback and styles.
+	// Excludes scrollback and styles.
 	Text    string
 	HasText bool
 	Cols    uint16
 	Rows    uint16
 }
 
-// ScreenSnapshotInfo is the read-only rendered state used to seed observers without
-// attaching or claiming PTY geometry.
 type ScreenSnapshotInfo struct {
 	LastSeq uint32
 	Cols    uint16
@@ -110,26 +97,14 @@ type AttachInfo struct {
 	Running    bool
 	ExitCode   *int
 	ExitSignal *string
-	// GhosttySnapshot is the server-authoritative VT serialization of the whole
-	// terminal (primary + alt screens, scrollback, cursor) from libghostty-vt.
-	// Snapshot geometry is Cols/Rows. nil when the ghostty terminal is absent.
+	// Snapshot geometry is Cols/Rows.
 	GhosttySnapshot []byte
-	// GhosttySnapshotFormat names the wire format GhosttySnapshot is written in
-	// (buildinfo.SnapshotFormat), stamped where the bytes are produced. A
-	// pty-worker outlives an install, so a snapshot can reach a client built
-	// against a different libghostty-vt; carrying the format is what lets that
-	// client decline it. Empty when there is no snapshot.
+	// A worker outlives an install, so a snapshot can reach a client built
+	// against a different libghostty-vt; the format is how it declines.
 	GhosttySnapshotFormat string
-	// GhosttyBlocks are the worker's OSC 133 command blocks resolved to
-	// SCREEN-space rows of GhosttySnapshot, captured under the same lock hold
-	// (atomic with the dump and LastSeq). nil when ghostty is absent.
-	GhosttyBlocks []AttachBlockData
-	// GhosttyPlacements is the kitty placement set of the screen GhosttySnapshot
-	// serializes, captured in that same hold. nil when the session holds no
-	// images, which is every session while the feature is dark.
-	GhosttyPlacements []KittyPlacement
-	// GhosttyScrollbackTruncated reports whether the ghostty terminal dropped
-	// scrollback lines at its cap before this snapshot was taken.
+	// Rows are SCREEN-space, captured atomically with the dump and LastSeq.
+	GhosttyBlocks              []AttachBlockData
+	GhosttyPlacements          []KittyPlacement
 	GhosttyScrollbackTruncated bool
 }
 
@@ -164,9 +139,7 @@ type Manager struct {
 	onExit        func(ExitInfo)
 	onState       func(sessionID string, obs Observation)
 
-	// testHookAfterSpawnReserve, when non-nil, runs after Spawn reserves its
-	// session ID and releases the mutex. Test-only seam for deterministic
-	// overlap; never set in production.
+	// Test-only seam for deterministic overlap; never set in production.
 	testHookAfterSpawnReserve func()
 }
 
@@ -193,8 +166,6 @@ func (m *Manager) SetStateHandler(handler func(sessionID string, obs Observation
 	m.onState = handler
 }
 
-// agentHarnessSignals names which state observers an agent gets; the driver
-// decides, this only reads it.
 func agentHarnessSignals(agent string) agentdriver.HarnessSignalKind {
 	if d := agentdriver.Get(agent); d != nil {
 		return agentdriver.EffectiveCapabilities(d).HarnessSignals
@@ -229,9 +200,8 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	}
 
 	agent := normalizeAgent(opts.Agent, len(opts.ExternalCommand) > 0)
-	// Every PTY, including an ordinary shell pane, resolves bare `attn` to the
-	// installation that launched it. Managed-agent identity remains conditional
-	// in buildSpawnEnv below.
+	// Every PTY resolves bare `attn` to the installation that launched it;
+	// managed-agent identity stays conditional in buildSpawnEnv.
 	attnPath := launchenv.ActiveAttnExecutable()
 
 	m.mu.Lock()
@@ -302,8 +272,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		}
 		return fmt.Errorf("spawn session %s: %w", opts.ID, lastErr)
 	}
-	// Held pollable from here on: the read loop must be stoppable at a chunk
-	// boundary without closing the master. See ptmx.go.
 	pollable, pollErr := pollablePTMX(ptmx)
 	if pollErr != nil {
 		if cmd != nil && cmd.Process != nil {
@@ -334,8 +302,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		theme:       opts.Theme,
 		cleanupDir:  overlayDir,
 	}
-	// The Ghostty terminal backs the classifier, CPR, tiles, and attach restore;
-	// a session without it is not viable.
 	kittyLimit := kittyStorageLimit(m.logf)
 	gt, err := ghosttyvt.New(int(opts.Cols), int(opts.Rows), ghosttyvt.Options{
 		KittyImageStorageLimit: kittyLimit,
@@ -364,10 +330,8 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		removeShellOverlay(overlayDir)
 		return fmt.Errorf("ghostty terminal theme failed: %w", err)
 	}
-	// One epoch per terminal, held by both halves that hand a generation out:
-	// the placement read and the image serve. A worker that replaces another
-	// under the same session id gets a different one, which is what keeps a
-	// client from redrawing the dead worker's pixels (see mintKittyEpoch).
+	// A replacement worker under the same session id gets a different epoch,
+	// which stops a client redrawing the dead worker's pixels.
 	session.kittyEpoch = mintKittyEpoch()
 	session.wireFeed = newWireFeeder(gt, session.kittyEpoch, m.logf, kittyLimit)
 
@@ -376,11 +340,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	return nil
 }
 
-// start registers a fully built session and brings it to life: the observers
-// it reports state through, the shell heartbeat, and the read loop. Spawn and
-// Adopt share it so a session the upgrade rebuilt gets everything a freshly
-// spawned one gets — the adopt path only runs after a terminal-engine bump, so
-// anything missing there would sit unnoticed for months.
 func (m *Manager) start(session *Session, lifecycleID string) {
 	m.mu.Lock()
 	m.sessions[session.id] = session
@@ -396,10 +355,6 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 			onState(id, obs)
 		}
 	}
-	// A shell has no harness to signal for it, so its heartbeat comes from the
-	// terminal itself: the foreground process group says whether a command is
-	// running, and OSC 133 markers (when the shell's integration emits them)
-	// sharpen that with instant command-start/end edges. See shell_signals.go.
 	if isShellPane && session.onState != nil {
 		session.shellSignals = newShellSignalArbiter(session.childProcessGroup())
 		go session.runShellForegroundPoller(shellForegroundPollInterval)
@@ -430,7 +385,6 @@ func (m *Manager) subscribe(
 	return session, nil
 }
 
-// Subscribe registers a byte-stream consumer without creating replay bytes.
 func (m *Manager) Subscribe(
 	sessionID, subscriberID string,
 	send func([]byte, uint32) bool,
@@ -444,7 +398,6 @@ func (m *Manager) Subscribe(
 	return session.subscriptionInfo(), nil
 }
 
-// Attach registers a subscriber before atomically capturing replay state.
 func (m *Manager) Attach(
 	sessionID, subscriberID string,
 	send func([]byte, uint32) bool,
@@ -458,9 +411,6 @@ func (m *Manager) Attach(
 	return session.info(), nil
 }
 
-// KittyImage copies one stored image out of a session's terminal. Returns
-// ErrSessionNotFound for an unknown session and ErrKittyImageNotFound for an id
-// the terminal does not hold — evicted, deleted, or never transmitted.
 func (m *Manager) KittyImage(sessionID string, imageID uint32) (KittyImage, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -469,8 +419,6 @@ func (m *Manager) KittyImage(sessionID string, imageID uint32) (KittyImage, erro
 	return session.kittyImage(imageID)
 }
 
-// SetTheme replaces the embedder-owned terminal colors and the colors sessionID
-// answers OSC 10/11/12 queries with.
 func (m *Manager) SetTheme(sessionID string, theme TerminalTheme) error {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -479,10 +427,6 @@ func (m *Manager) SetTheme(sessionID string, theme TerminalTheme) error {
 	return session.SetTheme(theme)
 }
 
-// Snapshot returns the current rendered screen and sequence watermark for a
-// session WITHOUT registering a subscriber or claiming geometry. It is the
-// read-only seed for observers (e.g. grid tiles) that then dedup the live
-// firehose against LastSeq.
 func (m *Manager) ScreenSnapshot(sessionID string) (ScreenSnapshotInfo, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -507,8 +451,7 @@ func (m *Manager) Input(sessionID string, data []byte) error {
 	return session.input(data)
 }
 
-// Resize applies geometry and reports whether it changed. xpixel/ypixel are
-// the pane's total device pixels, or 0 when no pixel geometry is available.
+// xpixel/ypixel are the pane's total device pixels, 0 when unavailable.
 func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -542,9 +485,6 @@ func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
 	return session.sessionInfo(), nil
 }
 
-// LastSignal is one session's most recent level observation. It reports false
-// for a session that has produced none, and for an unknown session — both mean
-// "nothing to recover", which is the only thing the caller does differently.
 func (m *Manager) LastSignal(sessionID string) (Observation, bool) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -648,10 +588,8 @@ func buildSpawnCommand(opts SpawnOptions, agent, shellPath, attnPath string, env
 	return exec.Command(shellPath, "-l", "-c", postLoginExecCommand(env, args))
 }
 
-// postLoginExecCommand restores the launch PATH after shell login startup has
-// run. This makes the active attn directory authoritative even when a login
-// profile prepends a stale installation. The command itself is exec'd so the
-// PTY remains attached to the actual agent or interactive shell process.
+// Restores the launch PATH after login startup, in case a profile prepends a
+// stale attn. Exec'd, so the PTY stays attached to the real child.
 func postLoginExecCommand(env []string, args []string) string {
 	cmdline := "exec " + shellJoin(args)
 	for _, entry := range env {
@@ -684,8 +622,6 @@ func resolveExternalCommandPath(command string, env []string) (string, bool) {
 	return "", false
 }
 
-// readCachedShellEnvFromProcess reads a JSON-encoded login shell env that the
-// daemon injected into this worker process's environment.
 func readCachedShellEnvFromProcess() []string {
 	raw := os.Getenv("ATTN_CACHED_SHELL_ENV")
 	if raw == "" {
@@ -698,11 +634,8 @@ func readCachedShellEnvFromProcess() []string {
 	return env
 }
 
-// buildSpawnEnv builds a PTY agent's environment. Its identity block
-// (ATTN_SESSION_ID/ATTN_AGENT/ATTN_DAEMON_MANAGED/ATTN_INSIDE_APP + the active
-// attn first on PATH) has a twin in spawnHostSession, internal/daemon: an agent
-// reports by shelling out to `attn`, so both runtimes owe it the same block.
-// Change one and change the other — each is test-pinned separately.
+// The identity block has a twin in spawnHostSession (internal/daemon); change
+// one and change the other, each test-pinned separately.
 func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath string, logf LogFunc) []string {
 	env := os.Environ()
 	launchEnv := []string(nil)
@@ -769,34 +702,25 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
 		}
 	}
-	// Cached login-shell data can contain a parent agent's one-shot launch pins.
-	// Strip them first, then overlay only this session's explicit contract.
+	// Cached login-shell data can carry a parent agent's one-shot launch pins.
 	env = filterEnvKeys(env, launchKeys...)
 	env = MergeEnvironment(env, launchEnv)
-	// Don't leak worker-only configuration transport vars into spawned shells.
 	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
 
-	// Strip CLAUDECODE after all merges so spawned sessions don't think
-	// they're nested.  This var leaks into the daemon env when started
-	// from a Claude Code session, and ReadLoginShellEnv re-captures it
-	// because the login shell inherits the current process environment.
+	// Strip CLAUDECODE after all merges: ReadLoginShellEnv re-captures it from
+	// the inherited environment, and spawned sessions then think they're nested.
 	env = filterEnvKeys(env, "CLAUDECODE")
 
-	// Interactive terminals should not inherit NO_COLOR from whichever
-	// process launched attn. Agent runners commonly set it for their own
-	// output, which would otherwise disable colors inside every PTY.
+	// An agent runner's NO_COLOR would otherwise disable colors in every PTY.
 	env = filterEnvKeys(env, "NO_COLOR")
 
-	// Pin TERM_PROGRAM to ghostty and scrub its version string.
-	// TUIs gate OSC 8 hyperlink emission on TERM_PROGRAM; attn's terminal
-	// core is ghostty and now supports OSC 8, so advertise that deterministically.
+	// TUIs gate OSC 8 hyperlink emission on TERM_PROGRAM.
 	env = filterEnvKeys(env, "TERM_PROGRAM_VERSION")
 	env = MergeEnvironment(env, []string{"TERM=xterm-256color", "TERM_PROGRAM=ghostty"})
 	env = launchenv.WithActiveAttnFirst(env, wrapperPath)
 	if agent == "shell" {
-		// A terminal pane gets the same CLI resolution guarantee as an agent, but
-		// it is not an agent session. Do not let an inherited managed-session
-		// identity make ordinary shell commands report against another session.
+		// An inherited managed-session identity would make ordinary shell
+		// commands report against another session.
 		env = filterEnvKeys(env, "ATTN_SESSION_ID", "ATTN_AGENT")
 	}
 	if agent != "shell" {
@@ -831,12 +755,9 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	if len(opts.ExternalEnv) > 0 {
 		env = MergeEnvironment(env, opts.ExternalEnv)
 	}
-	// External environments cross the worker boundary too, so scrub the
-	// transport envelope again after applying them.
 	env = filterEnvKeys(env, "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV")
-	// Routing is the final overlay. Login-shell and plugin environments may add
-	// credentials and driver state; neither may redirect the session to another
-	// attn daemon.
+	// Routing is the final overlay: no login-shell or plugin variable may
+	// redirect the session to another attn daemon.
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	return env
 }
@@ -860,7 +781,6 @@ func configuredExecutableForAgent(opts SpawnOptions, agent string) string {
 	}
 }
 
-// ReadLoginShellEnv spawns a login shell and captures its environment.
 // Typically ~130ms; callers should cache the result.
 func ReadLoginShellEnv(shellPath string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), shellEnvTimeout)
@@ -896,10 +816,6 @@ func parseNullSeparatedEnv(output []byte) []string {
 	return env
 }
 
-// MergeEnvironment overlays entries onto a base environment, last writer winning
-// per key and the base order preserved. Both spawn paths build their child's
-// environment this way — the PTY manager here, and the daemon's conversation
-// hosts.
 func MergeEnvironment(base, overlay []string) []string {
 	if len(overlay) == 0 {
 		return append([]string(nil), base...)
@@ -994,7 +910,6 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-// GetUserLoginShell returns the current user's login shell path.
 func GetUserLoginShell() string {
 	if runtime.GOOS == "darwin" {
 		if usr, err := user.Current(); err == nil {

@@ -18,7 +18,6 @@ class FakeRPC {
   }
 
   handle(_method: string, _handler: unknown): void {
-    // no-op: this driver never dispatches through its own RPC handle table
   }
 }
 
@@ -38,8 +37,7 @@ function params(overrides?: Partial<DriverSpawnParams>): DriverSpawnParams {
 
 const uuidPattern = /^[0-9a-f-]{36}$/;
 
-// Shared tmp dir for everything socket/file-path related in this file. Keep
-// filenames short: macOS unix socket paths cap at 104 bytes.
+// Keep filenames short: macOS unix socket paths cap at 104 bytes.
 const tmpRoot = mkdtempSync(join(tmpdir(), "attn-pi-"));
 const suitePath = join(tmpRoot, "suite.js");
 writeFileSync(suitePath, "// fake pi suite entrypoint\n");
@@ -59,8 +57,6 @@ function noopRelay(): RelayServer {
   });
 }
 
-// The half of RelayConnection the driver touches when a suite says hello: it
-// binds the connection and asks to hear when it closes.
 function fakeConnection(): any {
   const handlers: Array<() => void> = [];
   return {
@@ -86,8 +82,8 @@ function newDriver(options: {
     executable: options.executable ?? "pi",
     relay: noopRelay(),
     suitePath: options.suitePath ?? suitePath,
-    // Far past anything a test waits for, so only the tests that mean to
-    // exercise the alarm ever see it fire.
+    // Far past anything a test waits for, so only the tests that mean to exercise
+    // the alarm see it fire.
     unbackedGraceMs: options.unbackedGraceMs ?? 60_000,
   });
 }
@@ -157,7 +153,6 @@ describe("PiDriver", () => {
       expect(withConfig.env?.ATTN_PI_AUTOMODE_DENIAL_LOG).toBe("/data/attn-dev/attn-automode-denials.jsonl");
       expect(withConfig.env?.ATTN_PI_SESSION_ID).toBe("session-1");
 
-      // No auto mode, nothing to record: the session is told neither.
       const bare = await driver.spawn(params({ session_id: "session-3", run_id: "run-3" }));
       expect(bare.env?.ATTN_PI_AUTOMODE_DENIAL_LOG).toBeUndefined();
       expect(bare.env?.ATTN_PI_SESSION_ID).toBeUndefined();
@@ -179,8 +174,6 @@ describe("PiDriver", () => {
     expect(sessionID).toMatch(uuidPattern);
     expect(result.argv).toEqual(["pi", "--session-id", sessionID, "-e", suitePath]);
     expect(result.cwd).toBe("/tmp/work");
-    // The token is the run id, so a driver that restarted can rebuild the map
-    // from what attn hands back at driver.register.
     expect(result.env?.ATTN_PI_TOKEN).toBe("run-1");
     expect(result.env?.ATTN_PI_SUITE_SOCKET).toBeTruthy();
 
@@ -395,7 +388,6 @@ describe("PiDriver", () => {
         return { ok: true };
       },
       handle(_method: string, _handler: unknown): void {
-        // no-op: this driver never dispatches through its own RPC handle table
       },
     };
     const driver = newDriver({ rpc, runCommand: fakeRunCommand(), executable: "pi" });
@@ -403,8 +395,8 @@ describe("PiDriver", () => {
     const spawned = await driver.spawn(params({ session_id: "session-1", run_id: "run-1" }));
     const token = spawned.env?.ATTN_PI_TOKEN as string;
 
-    // Do not await yet: this is the classification in flight while a new
-    // message starts a new turn below.
+    // Not awaited: this classification is in flight while a new message starts a
+    // new turn below.
     const stopPromise = driver.suiteReportStop({ token, assistant_text: "done with the task" });
 
     await driver.suiteReportState({ token, state: "working" });
@@ -420,9 +412,6 @@ describe("PiDriver", () => {
     expect(stopReport?.params.verdict).toBe("idle");
   });
 
-  // A pi session outlives the driver process that launched it: its pi keeps
-  // running in a daemon-owned PTY and keeps reporting over the relay. These
-  // cover the recovery that gives those reports somewhere to land.
   describe("adopting the runs attn reports still live", () => {
     function registerWith(activeRuns: unknown[]) {
       const requests: Array<{ method: string; params: any }> = [];
@@ -601,8 +590,6 @@ describe("PiDriver", () => {
     expect(rpc.requests.find((call) => call.method === "session.report_stop")?.params.verdict).toBe("waiting_input");
   });
 
-  // A declaration is only as current as the thing declaring it. These cover the
-  // driver withdrawing one it can no longer stand behind.
   describe("a run with no suite connected", () => {
     test("is reported unknown once the grace passes, rather than left as it was", async () => {
       const rpc = new FakeRPC();

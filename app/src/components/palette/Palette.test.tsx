@@ -4,9 +4,6 @@ import { render, screen, fireEvent } from '../../test/utils';
 import { Palette } from './Palette';
 
 interface Row { path: string }
-
-// A controlled host, mirroring how real callers drive the palette: the caller owns
-// the query and the (already ranked) rows, the palette owns the interaction.
 function Harness({
   rows,
   onPick = () => {},
@@ -67,14 +64,11 @@ describe('Palette', () => {
     const onPick = vi.fn();
     render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
 
-    // Highlight the third row, then type a query that leaves only two.
     fireEvent.keyDown(input(), { key: 'ArrowDown' });
     fireEvent.keyDown(input(), { key: 'ArrowDown' });
     fireEvent.change(input(), { target: { value: 'alpha' } });
     expect(options()).toHaveLength(2);
 
-    // Enter must pick a real row (the query reset put the highlight back on top),
-    // never a phantom index left over from the longer list.
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(onPick).toHaveBeenCalledWith({ path: 'alpha.md' });
   });
@@ -101,7 +95,6 @@ describe('Palette', () => {
 
     fireEvent.keyDown(input(), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    // A workspace-level Escape handler must not also fire (it would close a pane).
     expect(outerEscape).not.toHaveBeenCalled();
   });
 
@@ -121,13 +114,10 @@ describe('Palette', () => {
     const onKeyDown = vi.fn((event: React.KeyboardEvent<HTMLInputElement>) => event.key === 'Enter');
     render(<Harness rows={['a.md']} onPick={onPick} onKeyDown={onKeyDown} />);
 
-    // The caller claims Enter (path mode will claim Tab this way), so the shell's
-    // own pick must not run.
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(onKeyDown).toHaveBeenCalled();
     expect(onPick).not.toHaveBeenCalled();
 
-    // Keys it declines still reach the shell.
     fireEvent.keyDown(input(), { key: 'ArrowDown' });
     expect(options()[0]).toHaveAttribute('aria-selected', 'true');
   });
@@ -135,7 +125,6 @@ describe('Palette', () => {
   it('namespaces classes and ARIA wiring by variant', () => {
     const { container } = render(<Harness rows={['a.md', 'b.md']} />);
 
-    // Both the shared class (styled once) and the caller's own hook are present.
     expect(container.querySelector('.palette.test-palette')).toBeInTheDocument();
     expect(container.querySelector('.palette-option.test-palette-option')).toBeInTheDocument();
 

@@ -1,11 +1,3 @@
-/**
- * PresentTour Test Harness
- *
- * Renders PresentTour (the multi-file `@pierre/diffs` CodeView tour reader)
- * in isolation with mocked review callbacks and a fixed 3-file manifest.
- * Exposes window.__HARNESS__ controls for driving scroll requests and
- * inspecting recorded calls, mirroring DiffViewHarness's conventions.
- */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { PresentTour } from '../../src/components/PresentTour';
 import type { ReviewComment } from '../../src/types/generated';
@@ -15,11 +7,8 @@ function generateLines(count: number, prefix: string): string {
   return Array.from({ length: count }, (_, i) => `  console.log('${prefix} ${i + 1}');`).join('\n');
 }
 
-// Three files, each with SEVERAL separate hunks (not one big unchanged
-// block) so the tour has real scroll range even with expandUnchanged=false
-// collapsing unchanged context — mirrors DiffViewHarness's LARGE_* fixture,
-// which uses the same multi-section-with-deletions shape for the same
-// reason, applied per file across all three.
+// Several separate hunks per file so the tour has real scroll range even with
+// expandUnchanged=false collapsing unchanged context.
 const FILE_A_ORIGINAL = `function alpha() {
   // Section 1
 ${generateLines(12, 'alpha-section1')}
@@ -88,12 +77,8 @@ function makeComment(overrides: Partial<ReviewComment>): ReviewComment {
     id: `comment-${Math.round(performance.now() * 1000)}-${Math.floor(Math.random() * 1e6)}`,
     review_id: 'harness-review',
     filepath: 'src/alpha.ts',
-    // Line 41 is the one genuinely-added line in alpha's modified fixture
-    // (the "new alpha tail" append) — anything inside the unchanged
-    // Section 1-3 bodies is collapsed by `expandUnchanged: false` and never
-    // gets a rendered annotation slot (see PresentTour's own
-    // `lineVisible` guard), so a seeded comment MUST anchor to an actual
-    // hunk line or it silently never renders.
+    // Must anchor to an actual hunk line: `expandUnchanged: false` collapses the unchanged
+    // sections, and a comment seeded there silently never renders.
     line_start: 41,
     line_end: 41,
     content: 'Seeded comment',
@@ -117,16 +102,12 @@ export function PresentTourHarness({ onReady }: HarnessProps) {
   const [scrollNonce, setScrollNonce] = useState(0);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [reviewedPaths, setReviewedPaths] = useState<Set<string>>(new Set());
-  // Mirrors PresentRoot's summary-collapse wiring so e2e can exercise the
-  // fold: any arrival at a file stop collapses it, a manual toggle wins
-  // otherwise.
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   useEffect(() => {
     if (activePath !== null) setSummaryCollapsed(true);
   }, [activePath]);
-  // When `deferred=1`, files start loading (mirroring PresentRoot's fetch pass)
-  // so tests can exercise scroll requests issued before CodeView mounts, then
-  // call `settleDiffs()` to supply content and let the tour finish loading.
+  // `deferred=1` starts files loading so tests can issue scroll requests before CodeView
+  // mounts; `settleDiffs()` then supplies content and lets the tour finish loading.
   const [diffsSettled, setDiffsSettled] = useState(!deferred);
   const failNextAddRef = useMemo(() => ({ current: false }), []);
 
@@ -218,10 +199,6 @@ export function PresentTourHarness({ onReady }: HarnessProps) {
     diff: diffsSettled ? { loading: false, original: f.original, modified: f.modified } : { loading: true },
   }));
 
-  // All harness comments are the user's own in-progress draft-round comments
-  // (editable/deletable), mirroring PresentRoot's `draftIds` case rather than
-  // already-submitted round comments — this lets edit/delete interactions be
-  // exercised directly against seeded comments.
   const readOnlyCommentIds = useMemo(() => new Set<string>(), []);
 
   return (

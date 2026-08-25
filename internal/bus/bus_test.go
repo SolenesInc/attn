@@ -10,10 +10,8 @@ import (
 	"time"
 )
 
-// memStore is an in-memory Store for the delivery tests. Its trim semantics
-// deliberately mirror the SQLite implementation (age window AND the cursor
-// floor held by enabled consumers and installed apps) so a test that passes
-// here is not passing because the fake is more permissive than the real thing.
+// memStore's trim semantics deliberately mirror SQLite's (age window AND cursor
+// floor), so a passing test is not passing because the fake is more permissive.
 type memStore struct {
 	mu        sync.Mutex
 	events    []Event
@@ -24,9 +22,7 @@ type memStore struct {
 	appendErr error
 	boundsErr error
 	deleteErr error
-	// onDelete observes the moment a registration is removed, which is where the
-	// unregister ordering (loop exits, then the row goes) is checkable.
-	onDelete func(name string)
+	onDelete  func(name string)
 }
 
 func newMemStore() *memStore {
@@ -114,9 +110,7 @@ func (m *memStore) DeleteConsumer(name string) error {
 	return err
 }
 
-// SetCursor refuses a name it does not know, exactly as an UPDATE that matches no
-// row would leave a cursor unmoved. A cursor write for a deleted consumer must
-// therefore never reach the store — the fake is what proves it does not.
+// SetCursor refuses a name it does not know, as an UPDATE matching no row would.
 func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -130,8 +124,6 @@ func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
 	return nil
 }
 
-// setBoundsErr makes the log refuse to say where it stands, which is the state
-// a bus must not mistake for "the log is empty, announce everything".
 func (m *memStore) setBoundsErr(err error) {
 	m.mu.Lock()
 	m.boundsErr = err
@@ -196,8 +188,8 @@ func (m *memStore) Trim(cutoff time.Time) (int, error) {
 	return removed, nil
 }
 
-// Compact mirrors the SQLite implementation: for the named fact classes, keep
-// only the newest row per subject, and only touch rows at or below the floor.
+// Mirrors the SQLite implementation: for the named fact classes keep only the
+// newest row per subject, and only touch rows at or below the floor.
 func (m *memStore) Compact(names []string, floor int64) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -224,8 +216,7 @@ func (m *memStore) Compact(names []string, floor int64) (int, error) {
 	return removed, nil
 }
 
-// Producers mirrors the SQLite aggregate: one row per fact class, loudest
-// first, each carrying its totals and one count per cutoff.
+// Mirrors the SQLite aggregate: one row per fact class, loudest first.
 func (m *memStore) Producers(cutoffs []time.Time) ([]ProducerRow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -284,8 +275,6 @@ func (m *memStore) PendingBytes(above int64) (int64, error) {
 	return bytes, nil
 }
 
-// appendOutOfBand puts an event on the log the way a store transaction does:
-// committed, with no fan-out — which is what Announce is for.
 func (m *memStore) appendOutOfBand(name, subject string, now time.Time) int64 {
 	seq, err := m.Append(Event{Name: name, Subject: subject}, now)
 	if err != nil {
@@ -294,8 +283,6 @@ func (m *memStore) appendOutOfBand(name, subject string, now time.Time) int64 {
 	return seq
 }
 
-// dropEventsBelow simulates retention having already trimmed the log, without
-// consulting cursors — the state a killed consumer wakes up into.
 func (m *memStore) dropEventsBelow(seq int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -308,13 +295,12 @@ func (m *memStore) dropEventsBelow(seq int64) {
 	m.events = kept
 }
 
-// recorder collects delivered events for assertions.
 type recorder struct {
 	mu     sync.Mutex
 	names  []string
 	seqs   []int64
-	seen   map[int64]bool // seq -> already handed to this handler once
-	failOn map[int64]int  // seq -> remaining failures
+	seen   map[int64]bool
+	failOn map[int64]int
 }
 
 func newRecorder() *recorder {
@@ -375,8 +361,6 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// A consumer registering for the first time starts at head: registration is not
-// a request to replay the backlog.
 func TestNewConsumerStartsAtHead(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -405,8 +389,6 @@ func TestNewConsumerStartsAtHead(t *testing.T) {
 	}
 }
 
-// The whole point of a durable cursor: a consumer that was not running catches
-// up, in order, from where it left off.
 func TestDownedConsumerCatchesUpInOrder(t *testing.T) {
 	s := newMemStore()
 
@@ -424,7 +406,6 @@ func TestDownedConsumerCatchesUpInOrder(t *testing.T) {
 	waitFor(t, "the first delivery", func() bool { return rec1.count() == 1 })
 	first.Stop()
 
-	// Events published while the consumer is down.
 	offline := testBus(t, s)
 	for _, name := range []string{"b.happened", "c.happened", "d.happened"} {
 		if _, err := offline.Publish(name, "", nil); err != nil {
@@ -460,15 +441,12 @@ func TestDownedConsumerCatchesUpInOrder(t *testing.T) {
 	}
 }
 
-// A failing handler must not lose its event: the cursor stays put and the event
-// is redelivered until it succeeds. That is the at-least-once guarantee, and the
-// reason handlers must tolerate redelivery.
 func TestFailingHandlerRedeliversAndDoesNotAdvance(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
 
 	rec := newRecorder()
-	rec.failOn[1] = 2 // fail the first event twice, then succeed
+	rec.failOn[1] = 2
 
 	if err := b.Register("flaky", All, rec.handle); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -496,7 +474,6 @@ func TestFailingHandlerRedeliversAndDoesNotAdvance(t *testing.T) {
 	})
 
 	_, seqs := rec.snapshot()
-	// seq 1 three times (two failures + the success), then seq 2 once.
 	if len(seqs) != 4 {
 		t.Fatalf("delivery sequence %v, want three attempts at seq 1 then seq 2", seqs)
 	}
@@ -515,9 +492,6 @@ func TestFailingHandlerRedeliversAndDoesNotAdvance(t *testing.T) {
 	}
 }
 
-// A filter selects what the handler sees — and the cursor still moves past what
-// it does not, so an unfiltered flood cannot make a narrow consumer look lagged
-// forever.
 func TestFilteredConsumerSkipsAndStillAdvances(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -548,7 +522,6 @@ func TestFilteredConsumerSkipsAndStillAdvances(t *testing.T) {
 	}
 }
 
-// The hub's shape: live fan-out, in order, with no history and no cursor.
 func TestEphemeralSubscriberGetsLiveEventsOnly(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -592,9 +565,6 @@ func TestEphemeralSubscriberGetsLiveEventsOnly(t *testing.T) {
 	}
 }
 
-// The kill switch lives in the database, so flipping it out from under a running
-// consumer must stop delivery — and flipping it back must resume from where the
-// cursor stands, not from head.
 func TestDisabledConsumerStopsAndResumes(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -619,7 +589,6 @@ func TestDisabledConsumerStopsAndResumes(t *testing.T) {
 			t.Fatalf("Publish(%s): %v", name, err)
 		}
 	}
-	// Give the loop several poll intervals to (wrongly) deliver.
 	time.Sleep(60 * time.Millisecond)
 	if rec.count() != 1 {
 		names, _ := rec.snapshot()
@@ -634,13 +603,9 @@ func TestDisabledConsumerStopsAndResumes(t *testing.T) {
 	}
 }
 
-// Retention can move past a consumer that was disabled long enough. When it comes
-// back it resumes at head rather than replaying a partial, arbitrary window.
 func TestConsumerBelowTheTrimPointResumesAtHead(t *testing.T) {
 	s := newMemStore()
 
-	// Establish the consumer with a cursor of 1, then simulate retention removing
-	// everything up to seq 3 while it was disabled.
 	seed := testBus(t, s)
 	rec0 := newRecorder()
 	if err := seed.Register("stale", All, rec0.handle); err != nil {
@@ -661,7 +626,7 @@ func TestConsumerBelowTheTrimPointResumesAtHead(t *testing.T) {
 			t.Fatalf("Publish(%s): %v", name, err)
 		}
 	}
-	s.dropEventsBelow(4) // only seq 4 survives; the cursor sits at 1
+	s.dropEventsBelow(4)
 
 	revived := testBus(t, s)
 	rec := newRecorder()
@@ -821,7 +786,7 @@ func TestStatusReportsLagAndLiveness(t *testing.T) {
 	b := testBus(t, s)
 
 	rec := newRecorder()
-	rec.failOn[1] = 100 // never succeeds; the consumer stays stalled
+	rec.failOn[1] = 100
 
 	if err := b.Register("stuck", All, rec.handle); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -921,8 +886,6 @@ func TestPayloadRoundTrip(t *testing.T) {
 	}
 }
 
-// A bus without a database still runs: publishes are accepted and dropped,
-// matching the store's own nil-db convention.
 func TestNilStoreIsInert(t *testing.T) {
 	b := New(Options{})
 	if err := b.Register("x", All, func(context.Context, Event) error { return nil }); err != nil {
@@ -944,8 +907,6 @@ func TestNilStoreIsInert(t *testing.T) {
 
 func TestTrimIsCursorAware(t *testing.T) {
 	s := newMemStore()
-	// The delivery goroutine reads this clock while the test moves it, so it is
-	// guarded rather than a bare closure variable.
 	clk := &testClock{now: time.Now()}
 	b := New(Options{
 		Store:        s,
@@ -969,7 +930,6 @@ func TestTrimIsCursorAware(t *testing.T) {
 		return ok
 	})
 
-	// Two events, both far outside the retention window, neither read.
 	clk.advance(-4 * time.Hour)
 	if _, err := b.Publish("a.happened", "", nil); err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -985,18 +945,10 @@ func TestTrimIsCursorAware(t *testing.T) {
 	}
 }
 
-// Backoff escalates for an event a handler cannot get past. A consumer that is
-// merely lagging behind a busy producer, failing occasionally and recovering on
-// redelivery, must not ratchet its way to the retry cap: every successful
-// delivery ends the streak.
 func TestBackoffDoesNotRatchetAcrossSuccessfulDeliveries(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
 
-	// Seed a backlog and a consumer row already at cursor 0, so the consumer
-	// spends the whole test BEHIND head. That is the state the bug lives in: the
-	// batch loop never sees an empty batch, which is the only place the older
-	// code cleared the streak.
 	const backlog = 30
 	for i := 0; i < backlog; i++ {
 		if _, err := s.Append(Event{Name: "a.happened", Subject: "s"}, time.Now()); err != nil {
@@ -1007,8 +959,6 @@ func TestBackoffDoesNotRatchetAcrossSuccessfulDeliveries(t *testing.T) {
 		t.Fatalf("seeding the consumer: %v", err)
 	}
 
-	// Two widely separated events fail once each, with successful deliveries in
-	// between. Record the streak the handler was invoked under.
 	var mu sync.Mutex
 	attempts := map[int64][]int{}
 	failed := map[int64]bool{}
@@ -1047,18 +997,12 @@ func TestBackoffDoesNotRatchetAcrossSuccessfulDeliveries(t *testing.T) {
 	if len(seq20) == 0 {
 		t.Fatalf("seq 20 was never delivered")
 	}
-	// Eighteen successful deliveries separate seq 1's failure from seq 20's. The
-	// streak the handler sees at seq 20 must therefore be 0 — a fresh attempt for
-	// a fresh event — not 1 inherited from an event that has long since succeeded.
 	if seq20[0] != 0 {
 		t.Fatalf("seq 20 was delivered as retry attempt %d; the streak from seq 1 was never reset (all attempts: %v)",
 			seq20[0]+1, attempts)
 	}
 }
 
-// The kill switch has to reach a consumer that is behind a busy producer. Such a
-// consumer never leaves its batch loop, so re-reading the enabled bit only once
-// per drain would leave `attn bus disable` inert for as long as the burst lasts.
 func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -1066,8 +1010,6 @@ func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 	var mu sync.Mutex
 	delivered := 0
 	flipped := false
-	// A handler slow enough that the loop is still inside one backlog when the
-	// bit flips. PollInterval is 5ms in testBus, so the re-read is prompt.
 	handler := func(_ context.Context, _ Event) error {
 		mu.Lock()
 		delivered++
@@ -1091,8 +1033,6 @@ func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 	}
 	t.Cleanup(b.Stop)
 
-	// A backlog far larger than what the consumer should get through before the
-	// kill switch takes effect.
 	const total = 600
 	for i := 0; i < total; i++ {
 		if _, err := b.Publish("a.happened", "s", nil); err != nil {
@@ -1106,7 +1046,6 @@ func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 		return flipped
 	})
 
-	// Well beyond the poll interval and beyond one batch of slow handler calls.
 	time.Sleep(300 * time.Millisecond)
 
 	mu.Lock()
@@ -1116,16 +1055,11 @@ func TestKillSwitchStopsASaturatedConsumer(t *testing.T) {
 		t.Fatalf("the kill switch never took effect: delivered all %d events", got)
 	}
 	t.Logf("delivered %d of %d before the kill switch took effect", got, total)
-	// Delivery stops on the flipping event itself in practice; the ceiling leaves
-	// room for a slow machine while staying far below what an unchecked loop gets
-	// through in 300ms.
 	if got > 100 {
 		t.Fatalf("delivery ran on for %d events after the consumer was disabled", got)
 	}
 }
 
-// testClock is a movable clock safe to read from a delivery goroutine while the
-// test moves it.
 type testClock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -1143,10 +1077,6 @@ func (c *testClock) advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// A failed durable append must not take the wire down with it. Ephemeral
-// subscribers project onto the WebSocket; before the bus existed those were
-// direct broadcasts that could not fail this way, so degrading to fan-out —
-// exactly as a store-less bus does — is what keeps clients in sync.
 func TestFailedAppendStillFansOutToSubscribers(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -1184,7 +1114,6 @@ func TestFailedAppendStillFansOutToSubscribers(t *testing.T) {
 		t.Fatalf("a non-durable event carried seq %d, want 0 as the marker", got[0].Seq)
 	}
 
-	// And the bus recovers: once the store is healthy the next fact is durable.
 	s.setAppendErr(nil)
 	seq, err = b.Publish("ticket.created", "t-2", nil)
 	if err != nil {

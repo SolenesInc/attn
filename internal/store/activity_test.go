@@ -24,16 +24,11 @@ func TestUpdateSessionActivityRoundTripsTheLineAndItsCursor(t *testing.T) {
 	if !record.At.Equal(at) {
 		t.Errorf("at = %v, want %v", record.At, at)
 	}
-	// The cursor is the whole reason a refresh is cheap: it is where the next
-	// read seeks to, and comparing it against the transcript's head is what says
-	// a session has written nothing new.
 	if record.Cursor != "1024" {
 		t.Errorf("cursor = %q, want the cursor it was generated through", record.Cursor)
 	}
 }
 
-// The wire carries the line and its stamp together or not at all — a client
-// ages a line out by its stamp, so a line without one cannot be judged stale.
 func TestGetAndListCarryTheActivityPair(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
@@ -74,8 +69,6 @@ func TestSessionWithoutAnActivityLineCarriesNeitherField(t *testing.T) {
 	}
 }
 
-// The generator is the only writer. A session is re-added on every state change
-// and on respawn, and neither may drop a line the generator paid for.
 func TestReAddingASessionKeepsItsActivity(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
@@ -93,9 +86,6 @@ func TestReAddingASessionKeepsItsActivity(t *testing.T) {
 	}
 }
 
-// Clearing is the "this line is wrong, forget it" path. It drops the cursor
-// too, so the next run re-seeds from head instead of reading a delta against a
-// line that no longer exists.
 func TestClearingActivityAlsoDropsTheCursor(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
@@ -113,9 +103,8 @@ func TestClearingActivityAlsoDropsTheCursor(t *testing.T) {
 	}
 }
 
-// The cold start seeds a cursor before any line exists. Routing that through
-// UpdateSessionActivity would hit the clear rule above and wipe the seed, so the
-// two writers stay separate.
+// Seeding a cursor before any line exists has its own writer: routing it through
+// UpdateSessionActivity would hit the clear rule and wipe the seed.
 func TestSettingTheCursorAloneSurvivesAnEmptyLine(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)

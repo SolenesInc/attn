@@ -9,54 +9,24 @@ import (
 	"time"
 )
 
-// Tickets are the durable unit of tracked work in attn — independent of any
-// session. This file is the store layer for slice 1 of the work tracker (see
-// docs/plans/2026-06-26-work-tracker.md): the schema, CRUD, status transitions,
-// and the archive / TTL lifecycle. Notification events (slice 2) and the live
-// session wiring (slice 3+) layer on top of these primitives; nothing here knows
-// about observers or sessions.
-//
-// Following the workflow_runs convention, the row types are store-local (NOT
-// protocol/generated types) — the protocol/wire shape is owned by a later slice.
+// See docs/plans/2026-06-26-work-tracker.md.
 
-// TicketStatus is the column a ticket sits in. The board informs, it never gates:
-// transitions are permissive (any status may move to any other). The only thing a
-// status drives is lifecycle — the terminal statuses age out via the TTL sweep.
 type TicketStatus string
 
 const (
-	// TicketStatusTodo is the backlog: created, not started.
-	TicketStatusTodo TicketStatus = "todo"
-	// TicketStatusWorking is actively being worked.
-	TicketStatusWorking TicketStatus = "working"
-	// TicketStatusBlocked is paused, owing the chief a reply.
-	TicketStatusBlocked TicketStatus = "blocked"
-	// TicketStatusInReview is done, awaiting a look/approval.
+	TicketStatusTodo     TicketStatus = "todo"
+	TicketStatusWorking  TicketStatus = "working"
+	TicketStatusBlocked  TicketStatus = "blocked"
 	TicketStatusInReview TicketStatus = "in_review"
-	// TicketStatusDone is closed, worked.
-	TicketStatusDone TicketStatus = "done"
-	// TicketStatusFailed is finished, didn't work.
-	TicketStatusFailed TicketStatus = "failed"
-	// TicketStatusCrashed is died without reporting — the one transition attn
-	// itself writes, since a dead worker can't.
-	TicketStatusCrashed TicketStatus = "crashed"
+	TicketStatusDone     TicketStatus = "done"
+	TicketStatusFailed   TicketStatus = "failed"
+	TicketStatusCrashed  TicketStatus = "crashed"
 )
 
-// TicketAuthorAttn is the event author attn uses when it writes a transition on a
-// ticket itself rather than on behalf of the user, the chief, or an agent — the
-// Crashed status a dead worker could not report, and the crashed→working flip
-// when that worker is revived. It is an authoring identity, never an observer,
-// so it accrues no cursors and is excluded from nobody's unread feed.
 const TicketAuthorAttn = "attn"
 
-// TicketAuthorYou is the identity the human user authors with when acting on a
-// ticket directly from the app (changing status, commenting, re-briefing). It is a
-// participant like any other — its events notify the assigned agent — but it has no
-// session, so it is never itself nudged; the app sees changes through the live
-// board broadcast instead.
 const TicketAuthorYou = "you"
 
-// IsValid reports whether st is a known status.
 func (st TicketStatus) IsValid() bool {
 	switch st {
 	case TicketStatusTodo, TicketStatusWorking, TicketStatusBlocked,
@@ -66,8 +36,6 @@ func (st TicketStatus) IsValid() bool {
 	return false
 }
 
-// IsTerminal reports whether st is a settled-and-done status. Terminal tickets
-// carry a closed_at timestamp and are the only ones the TTL sweep removes.
 func (st TicketStatus) IsTerminal() bool {
 	switch st {
 	case TicketStatusDone, TicketStatusFailed, TicketStatusCrashed:
@@ -76,63 +44,46 @@ func (st TicketStatus) IsTerminal() bool {
 	return false
 }
 
-// TicketActivityKind is the type of a human-facing history entry.
 type TicketActivityKind string
 
 const (
-	// TicketActivityStatusChange records a column move (from -> to), optionally
-	// with an accompanying comment.
 	TicketActivityStatusChange TicketActivityKind = "status_change"
-	// TicketActivityComment records a freeform note from either side.
-	TicketActivityComment TicketActivityKind = "comment"
-	// TicketActivityAttach records the files and decision context submitted in
-	// one durable ticket attach.
-	TicketActivityAttach TicketActivityKind = "attach"
+	TicketActivityComment      TicketActivityKind = "comment"
+	TicketActivityAttach       TicketActivityKind = "attach"
 )
 
-// Ticket is the durable record. Activity and Attachments are populated by
-// GetTicket; list operations leave them nil for cheapness.
 type Ticket struct {
 	ID              string
 	Title           string
 	Description     string
 	Status          TicketStatus
-	Assignee        string // bound session id (delegated work), "you" (human), or "" when unassigned; the session-id form is the resume key
-	Cwd             string // last session's working dir (for resume)
-	LastAgentID     string // last session's agent id (for resume)
-	ProjectID       string // future grouping; "" when ungrouped
-	AutomationRunID string // immutable provenance for automation-created work; empty for ordinary tickets
+	Assignee        string
+	Cwd             string
+	LastAgentID     string
+	ProjectID       string
+	AutomationRunID string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-	ClosedAt        *time.Time // set on entering a terminal status; drives the TTL
-	ArchivedAt      *time.Time // set when manually cleared from the board
-	// ReconciledAt is the machine-reconciliation flag: set (atomically, via
-	// ClaimTicketReconciliation) when a dead owning session's outcome was judged
-	// by the reconciliation classifier. Provenance + dedupe lock in one; cleared
-	// when the ticket is reassigned or its assignee session respawns (re-arm).
-	ReconciledAt *time.Time
-	// LatestEventSeq is populated by GetTicket for optimistic app mutations.
-	// Bare list rows leave it at zero.
-	LatestEventSeq int64
+	ClosedAt        *time.Time
+	ArchivedAt      *time.Time
+	ReconciledAt    *time.Time
+	LatestEventSeq  int64
 
-	Activity    []TicketActivity   // populated by GetTicket
-	Attachments []TicketAttachment // populated by GetTicket
+	Activity    []TicketActivity
+	Attachments []TicketAttachment
 }
 
-// TicketActivity is one entry in a ticket's history thread.
 type TicketActivity struct {
 	ID         int64
 	TicketID   string
 	Kind       TicketActivityKind
-	Author     string       // who authored it ("you", a chief, an agent id)
-	FromStatus TicketStatus // status_change only
-	ToStatus   TicketStatus // status_change only
-	Comment    string       // freeform note (may accompany a status change)
+	Author     string
+	FromStatus TicketStatus
+	ToStatus   TicketStatus
+	Comment    string
 	CreatedAt  time.Time
 }
 
-// TicketAttachment is a file attached to the ticket. Slice 1 stores the
-// record; the file-handling ergonomics (copy-into-store) come with slice 4.
 type TicketAttachment struct {
 	ID        int64
 	TicketID  string
@@ -142,52 +93,33 @@ type TicketAttachment struct {
 	CreatedAt time.Time
 }
 
-// TicketAttachResult is the durable portion of an attachment receipt.
 type TicketAttachResult struct {
 	EventSeq     int64
 	Status       TicketStatus
 	Deduplicated bool
 }
 
-// TicketListFilter narrows ListTickets. The zero value lists every non-archived
-// ticket, newest first.
 type TicketListFilter struct {
-	Status          TicketStatus // "" matches any status
-	IncludeArchived bool         // false hides archived tickets (the default board)
+	Status          TicketStatus
+	IncludeArchived bool
 }
 
-// Ticket lifecycle errors. Callers match these with errors.Is; the error string
-// is also surfaced to agents, so it carries the actionable guidance directly.
 var (
-	// ErrTicketIDTaken means a ticket already exists with that slug.
-	ErrTicketIDTaken = errors.New("ticket id already in use")
-	// ErrTicketNotFound means no ticket exists with that id.
-	ErrTicketNotFound = errors.New("ticket not found")
-	// ErrInvalidTicketID means the slug isn't a well-formed handle.
-	ErrInvalidTicketID = errors.New("invalid ticket id")
-	// ErrInvalidTicketStatus means the status isn't one of the known columns.
-	ErrInvalidTicketStatus = errors.New("invalid ticket status")
-	// ErrTicketTitleRequired means a ticket was created without a title.
-	ErrTicketTitleRequired = errors.New("ticket title required")
-	// ErrTicketNotClosed means an open ticket can't be archived — open tickets
-	// are durable and never leave the board until they settle.
-	ErrTicketNotClosed = errors.New("ticket is not closed")
-	// ErrTicketAdoptionConfirmRequired prevents a delegation from silently
-	// replacing a ticket's live owner. A reconciled ticket is a proven orphan and
-	// may be adopted without confirmation.
+	ErrTicketIDTaken                 = errors.New("ticket id already in use")
+	ErrTicketNotFound                = errors.New("ticket not found")
+	ErrInvalidTicketID               = errors.New("invalid ticket id")
+	ErrInvalidTicketStatus           = errors.New("invalid ticket status")
+	ErrTicketTitleRequired           = errors.New("ticket title required")
+	ErrTicketNotClosed               = errors.New("ticket is not closed")
 	ErrTicketAdoptionConfirmRequired = errors.New("ticket has a non-orphan assignee")
 )
 
-// ticketIDPattern is a human-friendly slug: lowercase alphanumerics and hyphens,
-// starting with an alphanumeric. Speakable, typeable, distinctive.
 var ticketIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// ticketScanner abstracts *sql.Row and *sql.Rows so one scan func serves both.
 type ticketScanner interface {
 	Scan(dest ...any) error
 }
 
-// ValidateTicketID reports whether id is a well-formed slug.
 func ValidateTicketID(id string) error {
 	if id == "" {
 		return fmt.Errorf("%w: id is empty", ErrInvalidTicketID)
@@ -198,33 +130,18 @@ func ValidateTicketID(id string) error {
 	return nil
 }
 
-// CreateTicket inserts a new ticket. The id is an agent-chosen memorable slug; on
-// collision it fails with ErrTicketIDTaken and actionable guidance. An empty
-// status defaults to Todo. author records who created it (for the emitted event).
-// The supplied now stamps created_at/updated_at (and closed_at, in the unusual
-// case of creating directly into a terminal status).
 func (s *Store) CreateTicket(t Ticket, author string, now time.Time) (*Ticket, error) {
 	return s.createTicket(t, author, "", nil, now)
 }
 
-// CreateRoleOwnedTicket creates a ticket whose notification ownership belongs to
-// a durable profile role. The concrete author remains on the event for audit.
 func (s *Store) CreateRoleOwnedTicket(t Ticket, author, ownerRole string, now time.Time) (*Ticket, error) {
 	return s.createTicket(t, author, strings.TrimSpace(ownerRole), nil, now)
 }
 
-// CreateTicketWithSubscribers creates a ticket and opts identities into its
-// notifications in the SAME transaction, so a ticket never lands with a partial
-// participant set. Delegation needs this: the delegator (and, when the chief role
-// does not own the ticket, the chief role identity) must be reachable from the
-// ticket's very first event, and a half-created ticket left behind by a failed
-// follow-up subscription would be unroutable. Subscribing carries no cursor write,
-// exactly as AddTicketSubscription does.
 func (s *Store) CreateTicketWithSubscribers(t Ticket, author, ownerRole string, subscribers []string, now time.Time) (*Ticket, error) {
 	return s.createTicket(t, author, strings.TrimSpace(ownerRole), subscribers, now)
 }
 
-// EnsureAutomationTicket creates or adopts the unique ticket for an automation run.
 func (s *Store) EnsureAutomationTicket(t Ticket, author, ownerRole string, now time.Time) (*Ticket, error) {
 	if t.AutomationRunID == "" {
 		return nil, errors.New("automation run id required")
@@ -269,7 +186,6 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 	case nil:
 		return nil, fmt.Errorf("%w: %q is already taken — pick a new name, or append a number (e.g. %q)", ErrTicketIDTaken, t.ID, t.ID+"-2")
 	case sql.ErrNoRows:
-		// free to use
 	default:
 		return nil, err
 	}
@@ -283,7 +199,7 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 		t.ClosedAt = nil
 	}
 	t.ArchivedAt = nil
-	t.ReconciledAt = nil // never born reconciled; the column defaults to ''
+	t.ReconciledAt = nil
 
 	if _, err := tx.Exec(`
 		INSERT INTO tickets (
@@ -298,12 +214,9 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 		return nil, err
 	}
 	createdSeq, _, err := appendTicketEventTx(tx, TicketEvent{
-		TicketID: t.ID,
-		Kind:     TicketEventCreated,
-		Author:   author,
-		// Minting a role-owned ticket is the role's act: the role carries the
-		// creator's attachment, so the session filling it now is not left with a
-		// second, session-bound copy the next role holder cannot inherit.
+		TicketID:   t.ID,
+		Kind:       TicketEventCreated,
+		Author:     author,
 		AuthorRole: ownerRole,
 		ToStatus:   t.Status,
 	}, now)
@@ -318,18 +231,8 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 			return nil, err
 		}
 	}
-	// A ticket born WITH an assignee is a chief delegation: the brief was already
-	// handed to that agent out of band via the spawn prompt, so mark the `created`
-	// event consumed for the assignee. Otherwise it lingers unread on the agent's
-	// OWN ticket and doorbells it the moment it goes idle — a self-nudge about a
-	// brief it already holds. A backlog ticket is born unassigned, so a later pickup
-	// still receives the full brief through `attn ticket inbox`.
-	//
-	// This is a DELEGATION policy living in generic store code: it holds only because
-	// delegation is the sole create path that sets an assignee at birth (backlog
-	// create is unbound). A future "create a pre-assigned ticket whose brief SHOULD
-	// arrive via the inbox" would silently lose its brief here — move this guard up to
-	// the delegation caller if that case ever appears.
+	// Assign-at-birth is delegation only, and its brief already went out in the spawn
+	// prompt; a pre-assigned ticket needing its brief from the inbox would lose it.
 	if t.Assignee != "" {
 		if err := setTicketCursorTx(tx, t.Assignee, t.ID, createdSeq, now); err != nil {
 			return nil, err
@@ -354,8 +257,6 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 	return &t, nil
 }
 
-// GetTicket returns a ticket with its full activity thread and attachments, or
-// (nil, nil) if it doesn't exist.
 func (s *Store) GetTicket(id string) (*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -384,8 +285,6 @@ func (s *Store) GetTicket(id string) (*Ticket, error) {
 	return ticket, nil
 }
 
-// ListTickets returns tickets matching the filter, newest first. Activity and
-// attachments are not loaded (use GetTicket for the full record).
 func (s *Store) ListTickets(filter TicketListFilter) ([]*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -426,11 +325,6 @@ func (s *Store) ListTickets(filter TicketListFilter) ([]*Ticket, error) {
 	return tickets, rows.Err()
 }
 
-// ActiveTicketForSession returns the non-terminal ticket currently assigned to a
-// session — the delegated work it is running — or nil if none. The delegated
-// session's id is the ticket's assignee, so assignee == session is the session ->
-// ticket binding (used by the report path and crash detection). Activity and
-// attachments are not loaded.
 func (s *Store) ActiveTicketForSession(sessionID string) (*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -456,11 +350,6 @@ func (s *Store) ActiveTicketForSession(sessionID string) (*Ticket, error) {
 	return nil, rows.Err()
 }
 
-// ActiveTicketsForSession returns ALL non-terminal tickets currently assigned to
-// a session, newest first — the session-end reconciliation seam needs every one
-// (a session can hold several via `attn ticket take` plus its delegation), where
-// ActiveTicketForSession's newest-only answer suffices for the report path.
-// Activity and attachments are not loaded.
 func (s *Store) ActiveTicketsForSession(sessionID string) ([]*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -487,12 +376,6 @@ func (s *Store) ActiveTicketsForSession(sessionID string) ([]*Ticket, error) {
 	return tickets, rows.Err()
 }
 
-// CrashedTicketsForAssignee returns every non-archived ticket sitting in the
-// Crashed column bound to a session id, newest first — the revival seam
-// (a crashed session respawned/registered/adopted back to live) flips exactly
-// these back to Working. Archived tickets stay archived: the user dismissed
-// them from the board, so a revival must not resurrect them. Activity and
-// attachments are not loaded.
 func (s *Store) CrashedTicketsForAssignee(assignee string) ([]*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -524,12 +407,6 @@ func (s *Store) CrashedTicketsForAssignee(assignee string) ([]*Ticket, error) {
 	return tickets, rows.Err()
 }
 
-// ClaimTicketReconciliation atomically claims the machine-reconciliation flag
-// (set-if-unset). Returns true when this caller won the claim; false when the
-// flag was already set — another path (death-hook vs sweep, or a double-fired
-// session-end seam) owns this verdict. Purely internal bookkeeping: it does NOT
-// bump updated_at or emit an event — the verdict comment that follows is the
-// visible artifact; the flag is provenance + lock.
 func (s *Store) ClaimTicketReconciliation(id string, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -551,12 +428,6 @@ func (s *Store) ClaimTicketReconciliation(id string, now time.Time) (bool, error
 	return n == 1, nil
 }
 
-// ClearTicketReconciliationForAssignee re-arms reconciliation for every ticket
-// bound to a session that just came back to life (a ticket resume respawning the
-// assignee): the claimed flag means "this death was judged once", so a live
-// owner must clear it for the NEXT death to be judged again. Like the claim, it
-// does not bump updated_at or emit an event. A no-op when the session has no
-// flagged tickets.
 func (s *Store) ClearTicketReconciliationForAssignee(assignee string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -575,12 +446,6 @@ func (s *Store) ClearTicketReconciliationForAssignee(assignee string) error {
 	return err
 }
 
-// SetTicketStatus moves a ticket to a new column and records the change in the
-// activity thread (from -> to, with an optional comment). Transitions are
-// permissive. Entering a terminal status stamps closed_at; leaving one clears it
-// AND un-archives the ticket — reopening to an open status makes it durable and
-// visible on the board again, never a hidden zombie immune to the TTL sweep.
-// Returns the updated ticket row.
 func (s *Store) SetTicketStatus(id string, to TicketStatus, author, comment string, now time.Time) (*Ticket, error) {
 	updated, _, err := s.SetTicketStatusWithOptions(id, to, author, comment, TicketMutationOptions{}, now)
 	return updated, err
@@ -656,8 +521,6 @@ func setTicketStatusTx(tx *sql.Tx, id string, to TicketStatus, author, authorRol
 	return current, nil
 }
 
-// AddTicketComment appends a freeform comment to the activity thread and bumps
-// the ticket's updated_at. Returns the new activity entry.
 func (s *Store) AddTicketComment(id, author, comment string, now time.Time) (*TicketActivity, error) {
 	activity, _, err := s.AddTicketCommentWithOptions(id, author, comment, TicketMutationOptions{}, now)
 	return activity, err
@@ -710,11 +573,8 @@ func (s *Store) AddTicketCommentWithOptions(
 	return activity, outcome, err
 }
 
-// EditTicketDescription replaces the ticket's brief, bumps updated_at, and emits a
-// description_edited event authored by author. Detail carries the new brief so the
-// event is self-describing AND so the dedup signature distinguishes one re-brief
-// from another — without it, two consecutive edits would look identical and the
-// second (a real re-brief / steer) would be silently deduped away.
+// The new brief goes in Detail: without it a second consecutive edit looks
+// identical to the first and is silently deduped away.
 func (s *Store) EditTicketDescription(id, description, author string, now time.Time) error {
 	_, err := s.EditTicketDescriptionWithOptions(id, description, author, TicketMutationOptions{}, now)
 	return err
@@ -736,11 +596,6 @@ func (s *Store) EditTicketDescriptionWithOptions(
 	})
 }
 
-// AssignTicket sets (or clears, with "") the assignee, bumps updated_at, and emits
-// an assigned event (Detail = the new assignee) authored by author. It also clears
-// the machine-reconciliation flag: reassignment gives the ticket a new (or
-// renewed) owner, so a future death of that owner deserves a fresh verdict — the
-// re-arm rule of orphaned-ticket reconciliation.
 func (s *Store) AssignTicket(id, assignee, author string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -775,10 +630,6 @@ func (s *Store) AssignTicket(id, assignee, author string, now time.Time) error {
 	return tx.Commit()
 }
 
-// ValidateTicketDelegationAdoption checks whether ticket can be bound to the
-// reserved delegated session. Unassigned tickets and tickets carrying the
-// durable reconciliation stamp are safe to adopt. A different non-orphan
-// assignee requires the caller's explicit confirmation.
 func ValidateTicketDelegationAdoption(ticket *Ticket, sessionID string, confirm bool) error {
 	if ticket == nil {
 		return ErrTicketNotFound
@@ -792,11 +643,6 @@ func ValidateTicketDelegationAdoption(ticket *Ticket, sessionID string, confirm 
 	return nil
 }
 
-// AdoptTicketForDelegation atomically binds an existing ticket to a delegated
-// session, moves it to Working, records the session metadata used by Resume,
-// and installs the same participant routing as a newly-created delegation
-// ticket. The delegated agent's cursor advances through the adoption events
-// because its initial prompt already contains the full ticket description.
 func (s *Store) AdoptTicketForDelegation(id, sessionID, cwd, lastAgentID, author, ownerRole string, subscribers []string, confirm bool, now time.Time) (*Ticket, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -827,10 +673,6 @@ func (s *Store) AdoptTicketForDelegation(id, sessionID, cwd, lastAgentID, author
 	`, sessionID, cwd, lastAgentID, formatTicketTime(now), id); err != nil {
 		return nil, err
 	}
-	// Adoption is the same delegation act as minting, so it attaches the same way:
-	// when a role delegated this ticket, the events the acting session writes here
-	// carry the role. An ordinary session adopting a ticket the role happens to own
-	// passes no ownerRole and stays personally attached, as before.
 	if previousAssignee != sessionID {
 		if _, _, err := appendTicketEventTx(tx, TicketEvent{
 			TicketID: id, Kind: TicketEventAssigned, Author: author, AuthorRole: ownerRole, Detail: sessionID,
@@ -889,8 +731,6 @@ func (s *Store) AdoptTicketForDelegation(id, sessionID, cwd, lastAgentID, author
 	return current, nil
 }
 
-// SetTicketSession records the last session's working dir and agent id, which the
-// Resume affordance (slice 4) reloads from.
 func (s *Store) SetTicketSession(id, cwd, lastAgentID string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -907,12 +747,6 @@ func (s *Store) SetTicketSession(id, cwd, lastAgentID string, now time.Time) err
 	return ticketUpdateResult(res, id)
 }
 
-// SetTicketResumeSessionID mirrors the bound session's agent-native resume id onto
-// every ticket assigned to that session. The session row (and its own
-// resume_session_id) is deleted on close, so this durable copy on the ticket is
-// what lets Resume reattach the prior conversation directly. Purely internal
-// bookkeeping: it does NOT bump updated_at or emit an event, so it never churns
-// the board. A no-op (zero rows) when the session has no bound ticket.
 func (s *Store) SetTicketResumeSessionID(assignee, resumeSessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -931,9 +765,6 @@ func (s *Store) SetTicketResumeSessionID(assignee, resumeSessionID string) error
 	return err
 }
 
-// GetTicketResumeSessionID returns the stored agent-native resume id for the most
-// recent ticket bound to assignee, or "" when none has one. Used at spawn time to
-// resume a ticket whose session row has already been removed.
 func (s *Store) GetTicketResumeSessionID(assignee string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -958,9 +789,6 @@ func (s *Store) GetTicketResumeSessionID(assignee string) string {
 	return strings.TrimSpace(resumeSessionID)
 }
 
-// AddTicketAttachment records an attached file on the ticket, bumps updated_at, and
-// emits an attachment_added event (Detail = filename) authored by author. Returns
-// the stored attachment (with its assigned id).
 func (s *Store) AddTicketAttachment(att TicketAttachment, author string, now time.Time) (*TicketAttachment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1009,9 +837,6 @@ func (s *Store) AddTicketAttachment(att TicketAttachment, author string, now tim
 	return &att, nil
 }
 
-// SubmitTicketAttach records one durable attachment receipt and optionally moves
-// the ticket in the same transaction. The fingerprint prefix in detail makes a
-// lost-response retry discoverable even when a status event followed the attach.
 func (s *Store) SubmitTicketAttach(
 	ticketID, author, fingerprint, detail, activityComment string,
 	status *TicketStatus,
@@ -1106,8 +931,6 @@ func submitTicketAttachTx(
 	return &TicketAttachResult{EventSeq: eventSeq, Status: resultStatus}, nil
 }
 
-// ArchiveTicket clears a closed ticket from the active board. Only terminal
-// tickets may be archived — open tickets are durable and stay until they settle.
 func (s *Store) ArchiveTicket(id string, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1141,14 +964,6 @@ func (s *Store) ArchiveTicket(id string, now time.Time) error {
 	return tx.Commit()
 }
 
-// SweepExpiredTickets hard-deletes terminal tickets whose closed_at is older than
-// now-ttl, cascading to their activity, attachments, events, and event cursors.
-// Any still-active automation continuity binding the ticket documents is
-// released (status=released, reason=ticket_swept — see the
-// automation_continuity_bindings update below), not deleted: binding rows are
-// append-only history in v2. Open tickets (a durable backlog) are never swept.
-// Returns the number of tickets removed. The caller
-// passes now and the TTL (production: time.Now() and 30 days); tests inject both.
 func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1186,22 +1001,8 @@ func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, erro
 	if _, err := tx.Exec(`DELETE FROM automation_ticket_occurrence_events WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
 		return 0, err
 	}
-	// A continuity binding's ticket_id pins it to one thread's documenting
-	// ticket; once that ticket is swept there is nothing left to resume, so
-	// release the binding atomically with it. Bindings are append-only (v2's
-	// Data Model invariant, docs/plans/2026-07-21-automations-v2-simplification.md):
-	// this releases the row (status/released_reason/released_at), it never
-	// deletes it, so a swept thread still leaves a released row as history —
-	// exactly the reason the ticket_swept release reason exists. Already-released
-	// rows are left untouched (their own reason/timestamps stand); only a row
-	// still active when its ticket sweeps is affected. This is what actually
-	// bounds a bound thread's worktree lifetime (see
-	// AutomationSessionHasContinuityBinding and ListPrunableAutomationRuns): the
-	// per-subject reap in ReconcileAutomationReviewRequests only fires once, at
-	// the moment a review request's edge goes inactive, and no-ops if the ticket
-	// is still open at that instant — it does not revisit an edge that stays
-	// inactive while its ticket later ages out. Leave that reap alone; it still
-	// covers the case where the ticket was already gone at withdraw time.
+	// Bindings are append-only, so this releases and never deletes;
+	// already-released rows keep their own reason.
 	if _, err := tx.Exec(
 		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE status=? AND ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`,
 		AutomationBindingStatusReleased, AutomationBindingReleasedTicketSwept, formatTicketTime(now), formatTicketTime(now), AutomationBindingStatusActive, cutoff,
@@ -1222,8 +1023,6 @@ func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, erro
 	return int(n), nil
 }
 
-// --- internal helpers ---
-
 const ticketSelect = `
 	SELECT id, title, description, status, assignee, cwd, last_agent_id,
 		project_id, automation_run_id, created_at, updated_at, closed_at, archived_at, reconciled_at
@@ -1236,8 +1035,7 @@ func nullIfEmpty(value string) any {
 	return value
 }
 
-// updateTicketFieldWithEvent sets a single text column plus updated_at and emits
-// evt, atomically. column is a trusted internal literal, never caller input.
+// column is a trusted internal literal, never caller input.
 func (s *Store) updateTicketFieldWithEvent(id, column, value string, evt TicketEvent, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1274,8 +1072,6 @@ func updateTicketFieldWithEventTx(tx *sql.Tx, id, column, value string, evt Tick
 	return nil
 }
 
-// touchTicketTx bumps updated_at within a transaction, returning ErrTicketNotFound
-// when the ticket is absent (so an activity/attachment can't orphan onto nothing).
 func touchTicketTx(tx *sql.Tx, id string, now time.Time) error {
 	res, err := tx.Exec(`UPDATE tickets SET updated_at = ? WHERE id = ?`, formatTicketTime(now), id)
 	if err != nil {
@@ -1399,8 +1195,8 @@ func (s *Store) GetTicketByAutomationRunID(runID string) (*Ticket, error) {
 	return t, err
 }
 
-// formatTicketTime renders a timestamp as a fixed-width RFC3339 UTC string, so
-// stored timestamps sort lexically (which the TTL sweep relies on).
+// formatTicketTime is fixed-width RFC3339 UTC, so stored timestamps sort lexically
+// — which the TTL sweep relies on.
 func formatTicketTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
@@ -1412,8 +1208,6 @@ func formatTicketTimePtr(t *time.Time) string {
 	return formatTicketTime(*t)
 }
 
-// parseTicketTime is the inverse of formatTicketTime; an unparseable value yields
-// the zero time rather than an error, since timestamps are store-written.
 func parseTicketTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
@@ -1425,19 +1219,6 @@ func parseTicketTime(s string) time.Time {
 	return t
 }
 
-// StrandedTickets returns the mid-flight work the garden cutover left behind:
-// tickets that ended crashed or failed and are still on the board, newest
-// first.
-//
-// The cutover converted the unbound todo column and left in-flight tickets to
-// drain themselves. These are the ones that never drained — their session died,
-// so nobody is reporting to them and no seed mirrors onto them. They are as
-// inert as an unbound todo was, which is what makes them convertible.
-//
-// An automation run's ticket is excluded. It is daemon-internal bookkeeping —
-// continuation, retention and crash classification are keyed on it — and the
-// run already reports to a seed of its own through the mirror, so replanting it
-// would both duplicate that seed and take the key out from under the run.
 func (s *Store) StrandedTickets() ([]*Ticket, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

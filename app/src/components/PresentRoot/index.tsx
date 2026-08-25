@@ -21,8 +21,6 @@ function shortSha(sha: string): string {
   return sha.slice(0, 7);
 }
 
-// Mirrors useTheme's data-theme application, without the settings-write half
-// (this window never edits the theme, only follows it).
 function applyThemeAttribute(preference: string | undefined) {
   if (preference === 'system') {
     document.documentElement.removeAttribute('data-theme');
@@ -32,12 +30,9 @@ function applyThemeAttribute(preference: string | undefined) {
     document.documentElement.setAttribute('data-theme', preference);
     return;
   }
-  // Not yet loaded (or unrecognized) - match useTheme's DEFAULT_PREFERENCE.
   document.documentElement.setAttribute('data-theme', 'dark');
 }
 
-// noop callbacks for the required-but-irrelevant parts of UseDaemonSocketOptions.
-// PresentRoot only cares about presentation/round data and theme settings.
 function noop() {}
 
 interface DiffCacheEntry {
@@ -47,12 +42,6 @@ interface DiffCacheEntry {
   error?: string;
 }
 
-// A rail/tour document row, unified across the three groups the rail derives
-// from a round: the authored tour (manifest.files, in order), Other (paths
-// changed in the round but not named by the manifest, alphabetical), and
-// Skipped (manifest.skip). Additions/deletions on Other/Skipped rows come
-// from the round's changed_files list — the manifest itself only carries
-// stats for tour files.
 interface DocFile {
   path: string;
   note?: string;
@@ -67,10 +56,6 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
 }
 
-// A locally-held, not-yet-submitted comment. line_start/line_end are always
-// positive here (unlike ReviewComment's signed line_end); `side` carries the
-// old/new distinction explicitly, matching the wire shape so submission is a
-// direct field copy.
 interface Draft {
   id: string;
   filepath: string;
@@ -80,9 +65,8 @@ interface Draft {
   content: string;
 }
 
-// Protocol convention (see app/src/utils/reviewComment.ts and DiffView.tsx):
-// a comment anchors at line_start; a NEGATIVE line_end encodes the
-// original/deleted side, with abs(line_end) giving the actual end line.
+// Protocol convention (see app/src/utils/reviewComment.ts): a NEGATIVE line_end
+// encodes the original/deleted side, with abs(line_end) the actual end line.
 function draftToReviewComment(draft: Draft): ReviewComment {
   return {
     id: draft.id,
@@ -97,8 +81,6 @@ function draftToReviewComment(draft: Draft): ReviewComment {
   };
 }
 
-// Inverse of the sign convention above, applied to DiffView's onAddComment
-// callback args (which already arrive pre-encoded the same way).
 function draftFromAddComment(filepath: string, lineStart: number, lineEnd: number, content: string, id: string): Draft {
   return {
     id,
@@ -110,9 +92,8 @@ function draftFromAddComment(filepath: string, lineStart: number, lineEnd: numbe
   };
 }
 
-// PresentationComment (already-submitted, wire shape) uses an explicit
-// side string with positive line_end rather than DiffView's signed
-// convention, so it needs its own mapper into ReviewComment.
+// PresentationComment uses an explicit side string with a positive line_end, not
+// DiffView's signed convention.
 function submittedToReviewComment(comment: PresentationComment): ReviewComment {
   return {
     id: comment.id,
@@ -128,10 +109,6 @@ function submittedToReviewComment(comment: PresentationComment): ReviewComment {
 }
 
 export function PresentRoot() {
-  // Self-gating (isTauri() + __ATTN_AUTOMATION_ENABLED) — a no-op outside a
-  // Tauri automation-enabled build. See usePresentAutomationBridge for the
-  // present_window_* action set and why this window needs its own bridge
-  // rather than sharing the main window's.
   usePresentAutomationBridge();
 
   const presentationId = useMemo(
@@ -146,22 +123,11 @@ export function PresentRoot() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [daemonSettings, setDaemonSettings] = useState<Record<string, string>>({});
   const [refreshSignal, setRefreshSignal] = useState(0);
-  // `activePath` drives the rail's highlight; it's updated both by explicit
-  // navigation (rail click, j/k) and passively by the tour reporting which
-  // file scrolled nearest the top. `scrollRequest` is the tour's imperative
-  // "scroll to this file" instruction — kept separate from `activePath` so a
-  // passive activePath update from scrolling can never itself re-trigger a
-  // programmatic scroll (which would fight the user's own scroll gesture).
-  // Passive scroll updates never report null — the Summary stop (null) is
-  // only entered explicitly (initial state, rail Summary click, or K from the
-  // first file).
+  // `scrollRequest` is kept separate from `activePath` so a passive activePath
+  // update from scrolling can never re-trigger a programmatic scroll.
   const [activePath, setActivePath] = useState<string | null>(null);
   const [scrollRequest, setScrollRequest] = useState<{ path: string | null; nonce: number } | null>(null);
   const scrollNonceRef = useRef(0);
-  // Owned separately from activePath so a manual toggle (click, overscroll
-  // wheel) can win independently of navigation, while still folding
-  // automatically on any arrival at a file stop. See the effect below and
-  // `requestScroll`'s null-path branch for the two ways this un-collapses.
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   useEffect(() => {
     if (activePath !== null) setSummaryCollapsed(true);
@@ -176,15 +142,9 @@ export function PresentRoot() {
   const draftIdCounterRef = useRef(0);
 
   const railRef = useRef<HTMLOListElement>(null);
-  // Kept in sync with the loaded round's identity so the diff-fetch effect
-  // below can reject stale responses from a PREVIOUS round after a
-  // presentation_updated refresh reloads the round (new round.id/base/head).
   const activeRoundKeyRef = useRef<string | null>(null);
   activeRoundKeyRef.current = round ? round.id : null;
 
-  // path=null requests a scroll to the pinned Summary row (stop 0), and also
-  // re-expands the summary card — an explicit return to the Summary stop
-  // should always show it, even if it was manually collapsed earlier.
   const requestScroll = useCallback((path: string | null) => {
     scrollNonceRef.current += 1;
     setActivePath(path);
@@ -192,9 +152,8 @@ export function PresentRoot() {
     if (path === null) setSummaryCollapsed(false);
   }, []);
 
-  // Fires once, unconditionally, regardless of load/error state below — the
-  // splash must come down even if the presentation id is missing or the
-  // fetch fails.
+  // Unconditional: the splash must come down even if the presentation id is missing
+  // or the fetch fails.
   useEffect(() => {
     hideBootSplash();
   }, []);
@@ -243,9 +202,6 @@ export function PresentRoot() {
         setDriftDismissed(false);
         setActivePath((current) => {
           if (current && r.manifest.files.some((f) => f.path === current)) return current;
-          // Default to the pinned Summary stop when the round has one — it
-          // matches the actual initial scroll position (top = summary)
-          // instead of jumping straight past it to the first file.
           if (r.manifest.summary) return null;
           return r.manifest.files[0]?.path ?? null;
         });
@@ -261,13 +217,8 @@ export function PresentRoot() {
     };
   }, [presentationId, hasReceivedInitialState, getPresentationRound, refreshSignal]);
 
-  // tour = manifest.files, in authored order. other = paths the round's
-  // changed_files carries that the manifest didn't name (neither tour nor
-  // skip), alphabetical. skip = manifest.skip, with stats backfilled from
-  // changed_files when available (the manifest itself only carries stats for
-  // tour files — see present.go's handleGetPresentationRound). An absent
-  // changed_files (old daemon, or a git error) collapses `other` to empty and
-  // skip rows lose their stats, but tour/skip still render as before.
+  // The manifest carries stats for tour files only, so skip rows backfill them from
+  // changed_files; an absent changed_files leaves them without stats.
   const tourDocFiles = useMemo<DocFile[]>(
     () => (round?.manifest.files ?? []).map((f) => ({ ...f, group: 'tour' as const })),
     [round]
@@ -295,21 +246,13 @@ export function PresentRoot() {
       })),
     [round, changedByPath]
   );
-  // Full tour document order: appended cards after the authored tour.
   const allDocFiles = useMemo<DocFile[]>(
     () => [...tourDocFiles, ...otherDocFiles, ...skipDocFiles],
     [tourDocFiles, otherDocFiles, skipDocFiles]
   );
-  // Review progress (marks, "N of M", coverage advisory) covers tour + other
-  // only — skipped files were never meant to be walked.
   const progressDocFiles = useMemo<DocFile[]>(() => [...tourDocFiles, ...otherDocFiles], [tourDocFiles, otherDocFiles]);
   const groupByPath = useMemo(() => new Map(allDocFiles.map((f) => [f.path, f.group])), [allDocFiles]);
 
-  // Fetch every tour/other/skip file's diff, pinned to the round's base/head
-  // SHAs, with bounded concurrency — the tour renders all of them at once,
-  // unlike the old single-selection pane that only ever needed one file at a
-  // time. A fresh round (new refreshSignal / new round.id) always gets a
-  // fresh fetch pass: `fileDiffs` is reset to all-loading up front.
   useEffect(() => {
     if (!presentation || !round) {
       setFileDiffs({});
@@ -359,8 +302,6 @@ export function PresentRoot() {
     return () => {
       cancelled = true;
     };
-    // round.id/base_sha/head_sha/presentation.repo_path are stable for the
-    // loaded round's lifetime; sendGetFileDiff is a stable callback.
   }, [presentation, round, sendGetFileDiff]);
 
   const progressPaths = useMemo(() => progressDocFiles.map((f) => f.path), [progressDocFiles]);
@@ -371,21 +312,11 @@ export function PresentRoot() {
     progressPaths
   );
 
-  // J/K walk the full appended-tour document order (tour, other, skip cards
-  // alike); mark/toggle below are what keep skipped files out of progress.
-  // K from the first file (index 0) steps past the clamp onto the pinned
-  // Summary stop (activePath null) when the round has a summary, driving the
-  // exact same path as a rail summary-row click — matching J's behavior of
-  // moving from the summary (activePath null, index -1) onto the first file.
-  // K while already on the summary (activePath null, no lower stop to reach)
-  // stays a no-op. Without a summary, the old clamp-at-0 behavior holds.
   const hasSummary = !!round?.manifest.summary;
   const moveSelection = useCallback((delta: number) => {
     if (allDocFiles.length === 0) return;
     const index = activePath ? allDocFiles.findIndex((f) => f.path === activePath) : -1;
     if (index === -1) {
-      // On the summary (or nothing selected yet): K has nowhere lower to go
-      // (no-op), J lands on the first file.
       if (delta < 0) return;
       requestScroll(allDocFiles[0]?.path ?? null);
       return;
@@ -399,11 +330,6 @@ export function PresentRoot() {
     if (next) requestScroll(next);
   }, [allDocFiles, activePath, requestScroll, hasSummary]);
 
-  // N/P hop across every annotation anchor in the round, in the document
-  // order PresentTour reports (files in tour order, then by rendered line
-  // within a file) — independent of the rail's j/k file-level walk above.
-  // annotationAnchorIndexRef tracks "current" position in that list across
-  // hops; it starts at -1 so the first n lands on the first annotation.
   const [annotationAnchors, setAnnotationAnchors] = useState<AnnotationAnchor[]>([]);
   const annotationAnchorIndexRef = useRef(-1);
   const annotationScrollNonceRef = useRef(0);
@@ -429,10 +355,6 @@ export function PresentRoot() {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
-        // Auto-mark-on-leave (jaunt semantics): advancing past a file marks
-        // the one being left as reviewed. Visiting a file alone (arriving,
-        // scrolling past it passively) never marks it. Skipped files never
-        // get auto-marked — they aren't part of progress.
         if (activePath && groupByPath.get(activePath) !== 'skip') markReviewed(activePath);
         moveSelection(1);
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
@@ -468,14 +390,8 @@ export function PresentRoot() {
 
   const draftIds = useMemo(() => new Set(drafts.map((d) => d.id)), [drafts]);
 
-  // Manifest author annotations, adapted into the same ReviewComment shape
-  // reviewer comments use so the tour can render both through one pipeline.
-  // Each annotation's thread entries become individually-addressable
-  // comments (id `annot:${path}:${annotationIndex}:${threadIndex}`) so a
-  // reply lands as its own ReviewComment once submitted. Annotation line
-  // numbers are always the additions/new side (see the manifest schema), so
-  // line_end carries through unsigned — matching submittedToReviewComment's
-  // convention for a 'new'-side comment.
+  // Annotation line numbers are always the additions/new side, so line_end carries
+  // through unsigned.
   const annotationComments = useMemo<ReviewComment[]>(() => {
     const result: ReviewComment[] = [];
     for (const f of round?.manifest.files ?? []) {
@@ -502,27 +418,15 @@ export function PresentRoot() {
     [annotationComments]
   );
 
-  // All comments across all files: the tour renders every file's diff at
-  // once, unlike the old single-selection pane that only ever needed one
-  // file at a time. Annotations are prepended so a shared anchor renders the
-  // author's notes above any reviewer replies. Memoized (and hoisted above
-  // the early-return branches below, since hooks must run unconditionally)
-  // so a passive activePath update from scrolling doesn't rebuild these on
-  // every render and bump every CodeView item's version.
+  // Hoisted above the early-return branches below: hooks must run unconditionally.
   const allComments = useMemo<ReviewComment[]>(
     () => [...annotationComments, ...comments.map(submittedToReviewComment), ...drafts.map(draftToReviewComment)],
     [annotationComments, comments, drafts]
   );
-  // Submitted comments and annotations (author is the round's owner or
-  // agent, not a local draft) render read-only in the reader — only the
-  // user's own in-progress drafts are editable/resolvable/deletable here.
   const readOnlyCommentIds = useMemo(
     () => new Set(allComments.filter((c) => !draftIds.has(c.id)).map((c) => c.id)),
     [allComments, draftIds]
   );
-  // Rail comment chip: submitted comments (unresolved and resolved alike),
-  // annotations, and in-progress drafts, all merged into the one chip — no
-  // separate annotation indicator.
   const commentCountByPath = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of comments) counts.set(c.filepath, (counts.get(c.filepath) ?? 0) + 1);
@@ -565,8 +469,6 @@ export function PresentRoot() {
     setDrafts((prev) => prev.filter((d) => d.id !== id));
   }, [draftIds]);
 
-  // Drafts have no resolved state in this chunk, and submitted comments are
-  // read-only here, so resolving is a no-op either way.
   const handleResolveComment = useCallback(() => {}, []);
 
   const handleSubmit = useCallback(async (verdict: 'approved' | 'feedback') => {
@@ -597,8 +499,6 @@ export function PresentRoot() {
     }
   }, [round, drafts, submitPresentationRound]);
 
-  // Dismiss without reviewing: no round submission (drafts are intentionally
-  // discarded), no handback — just close the presentation and hide the window.
   const handleClose = useCallback(async () => {
     if (!presentation) return;
     setSubmitting(true);
@@ -645,9 +545,6 @@ export function PresentRoot() {
 
   const showDrift = !!repoHeadSha && repoHeadSha !== round.head_sha && !driftDismissed;
 
-  // Advisory-only coverage line for the submit dialog: never blocks
-  // submission, just tells the user what the tour didn't see them mark.
-  // Covers tour + other, never skipped.
   const unreviewedPaths = progressPaths.filter((p) => !reviewed.has(p));
   const COVERAGE_PREVIEW_COUNT = 5;
   const unreviewedCoverageText =
@@ -655,10 +552,6 @@ export function PresentRoot() {
       ? `${unreviewedPaths.slice(0, COVERAGE_PREVIEW_COUNT).join(', ')}, and ${unreviewedPaths.length - COVERAGE_PREVIEW_COUNT} more`
       : unreviewedPaths.join(', ');
 
-  // Shared row renderer across the Tour/Other/Skipped sections. `index` is
-  // 1-based for Tour rows and null for Other/Skipped (no numbering) — a
-  // reviewed row always shows a checkmark regardless of section, since Other
-  // participates in progress the same as Tour.
   function renderRailRow(file: DocFile, index: number | null) {
     const isReviewed = reviewed.has(file.path);
     const commentCount = commentCountByPath.get(file.path) ?? 0;

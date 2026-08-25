@@ -1,7 +1,3 @@
-// How the settings page's drafts behave now that each field owns one: a field
-// reseeds from its own persisted value and not from any other's, a control that
-// is whole on change writes at once, and opening the modal settles instead of
-// re-rendering forever.
 
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '../test/utils';
@@ -54,9 +50,8 @@ function renderModal(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SettingsModal drafts', () => {
-  // Every draft seeds itself from a hook effect. One of those firing on every
-  // render instead of on a real change renders forever, which shows up here as
-  // a list call that never stops and a test that never finishes.
+  // Every draft seeds itself from a hook effect; one firing on every render instead of on a real
+  // change shows up here as a list call that never stops and a test that never finishes.
   it('settles when it opens: one plugin list, nothing written', async () => {
     const { onListPlugins, onSetSetting } = renderModal();
 
@@ -74,7 +69,6 @@ describe('SettingsModal drafts', () => {
     const input = await screen.findByTestId('settings-projects-directory-input');
     fireEvent.change(input, { target: { value: '/Users/you/half-typed' } });
 
-    // A broadcast about a different setting arrives mid-edit.
     rerender({ settings: { reviewer_model: 'claude-opus-4-6' } });
 
     expect(await screen.findByTestId('settings-projects-directory-input'))
@@ -107,9 +101,6 @@ describe('SettingsModal drafts', () => {
       .toHaveValue('/Users/you/code');
   });
 
-  // The effort <select> is whole the moment it changes, so it writes without a
-  // blur — and raises the mark on the model input it shares a row with rather
-  // than a second one of its own.
   it('writes an effort override on change, under the model field’s mark', async () => {
     const { onSetSetting } = renderModal();
     fireEvent.click(screen.getByTestId('settings-nav-agents'));

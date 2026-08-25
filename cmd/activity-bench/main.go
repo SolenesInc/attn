@@ -1,18 +1,3 @@
-// Command activity-bench is the experiment loop for session activity lines.
-//
-// Prompt quality is the whole product for this feature and it cannot be
-// unit-tested. This harness freezes real transcript windows as a corpus, runs a
-// matrix of prompt x agent x model x effort against it, and reports cost,
-// latency, and what each variant actually wrote.
-//
-// It runs the real code path — internal/transcript for the window,
-// internal/activity for the rendering and checks, internal/agent's
-// HeadlessTaskProvider for the run — so what is benchmarked is what ships.
-//
-//	activity-bench corpus    # freeze windows from live sessions
-//	activity-bench run       # matrix over prompts x models x efforts
-//	activity-bench report    # comparison table + side-by-side lines
-//
 // Design: docs/plans/2026-08-07-session-activity.md
 package main
 
@@ -65,8 +50,7 @@ windows carry source code and conversations and are not committed.
 `)
 }
 
-// defaultDir is where corpus and results live. Gitignored on purpose — these are
-// real transcript excerpts.
+// defaultDir holds real transcript excerpts, so it is gitignored on purpose.
 const defaultDir = ".activity-bench"
 
 func ensureDir(dir string) error {

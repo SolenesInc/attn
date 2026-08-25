@@ -1,6 +1,3 @@
-// How auto mode is turned on: the config it is handed, the flags and the
-// `/auto` command that override it, and the gate that keeps a bare pi
-// untouched.
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +23,6 @@ import {
 import { autoModeStatusKey } from "../automode/ui";
 import { FakePi, FakeUI, toolCall, uiContext } from "./automode-fake-pi";
 
-/** Answers every completion with one verdict, and counts what it was asked. */
 class CountingRegistry implements ModelRegistryLike {
   calls = 0;
 
@@ -244,9 +240,6 @@ describe("turning auto mode on and off", () => {
   });
 });
 
-// The seam suite/index.ts wires: a denied call in the session becomes one
-// suite.report_denial on the driver's relay socket. Everything here is real
-// except pi itself and the driver behind the socket.
 describe("a denial leaving the session", () => {
   test("reaches the relay with the call, the reason and the layer that decided", async () => {
     const socketPath = join(mkdtempSync(join(tmpdir(), "attn-pi-denial-")), "s.sock");

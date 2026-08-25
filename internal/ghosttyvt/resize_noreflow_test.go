@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// rowsHeld counts the buffer rows a terminal is holding: one line per grid row,
-// trailing blank rows trimmed by the formatter. It is the number a reflow moves
-// and a no-reflow resize leaves alone.
 func rowsHeld(term *Terminal) int {
 	lines := strings.Split(term.PlainText(), "\n")
 	if n := len(lines); n > 0 && lines[n-1] == "" {
@@ -18,14 +15,8 @@ func rowsHeld(term *Terminal) int {
 	return len(lines)
 }
 
-// The recipe reaches through three native calls under one mutex, so the first
-// thing to prove is that it returns at all: Write and Resize each take the
-// terminal's lock, and a ResizeNoReflow built out of the public methods would
-// deadlock on its own first write. This test hangs rather than fails if that
-// regresses, which is the only signal a deadlock can give.
-//
-// The rows are the second half of the claim. A 70-column line is two rows at 40
-// columns; a reflow would make it three at 24.
+// Write and Resize each take the terminal's lock, so a ResizeNoReflow built from the
+// public methods deadlocks on its first write; this test hangs rather than fails.
 func TestResizeNoReflowKeepsTheRowsWithWraparoundEnabled(t *testing.T) {
 	term := newT(t, 40, 12)
 	term.Write([]byte(strings.Repeat("p", 70) + "\r\ntail"))
@@ -47,9 +38,8 @@ func TestResizeNoReflowKeepsTheRowsWithWraparoundEnabled(t *testing.T) {
 	}
 }
 
-// With DECAWM already off ghostty does not reflow, so the recipe must not run:
-// writing the mode back on would enable wrapping the program deliberately
-// disabled, and every later line would wrap where it used to overwrite.
+// With DECAWM already off ghostty does not reflow, so writing the mode back on
+// would enable wrapping the program deliberately disabled.
 func TestResizeNoReflowLeavesWraparoundDisabled(t *testing.T) {
 	term := newT(t, 40, 12)
 	term.Write([]byte("\x1b[?7l" + strings.Repeat("p", 70) + "\r\ntail"))

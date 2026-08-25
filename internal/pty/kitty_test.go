@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// The override is a tuning surface now that images ship on, so the two things
-// it must never do are take a session down and turn images off by accident.
-// Unset and unparseable both mean the measured default; only an explicit zero
-// disables the protocol.
 func TestKittyStorageLimitFromEnvironment(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -41,9 +37,6 @@ func TestKittyStorageLimitFromEnvironment(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("kittyStorageLimit() = %d, want %d", got, tc.want)
 			}
-			// A value someone typed and the code did not honor must say so:
-			// silently ignored is the failure nobody can debug. Everything
-			// else is silent, including the explicit zero, which is honored.
 			_, parseErr := strconv.ParseUint(strings.TrimSpace(tc.value), 10, 64)
 			wantLog := tc.set && tc.value != "" && parseErr != nil
 			switch {
@@ -52,8 +45,6 @@ func TestKittyStorageLimitFromEnvironment(t *testing.T) {
 			case !wantLog && len(logs) != 0:
 				t.Errorf("%s=%q logged %q, want silence", kittyStorageLimitEnv, tc.value, logs)
 			case wantLog:
-				// The reader has to be able to act on it: the variable that was
-				// ignored, and the limit their session is actually running at.
 				for _, want := range []string{kittyStorageLimitEnv, tc.value, fmt.Sprint(uint64(kittyStorageLimitDefault))} {
 					if !strings.Contains(logs[0], want) {
 						t.Errorf("log %q does not name %q", logs[0], want)

@@ -1,18 +1,3 @@
-// Package supervise keeps long-lived daemon child processes alive: it starts
-// them, restarts them with capped exponential backoff, fences stale processes
-// and timers behind a generation counter, and parks a child that keeps dying
-// without ever running stably.
-//
-// The supervisor knows nothing about what it supervises. A consumer names a
-// child and hands over a StartFunc; everything the child needs to be launched —
-// binary, arguments, environment — is closed over there. Two consumers exist:
-// the daemon's plugin runtime (one child per installed plugin) and the app
-// runtime's Bun sidecar.
-//
-// A supervised child is expected to dial the daemon back and announce itself,
-// which the consumer reports through NoteConnected/NoteDisconnected. A child
-// that starts but never calls back inside the disconnect grace is killed, which
-// puts it back on the restart path.
 package supervise
 
 import (
@@ -26,8 +11,6 @@ import (
 	"time"
 )
 
-// DesiredState is what the consumer asked for, independent of what the child is
-// currently doing.
 type DesiredState string
 
 const (
@@ -35,8 +18,7 @@ const (
 	DesiredStopped DesiredState = "stopped"
 )
 
-// Phase is where one child sits in the supervision cycle. It is reported
-// verbatim on attn's wire, so the strings are part of the observable surface.
+// Phase strings are reported verbatim on attn's wire.
 type Phase string
 
 const (
@@ -44,13 +26,9 @@ const (
 	PhaseConnected Phase = "connected"
 	PhaseBackoff   Phase = "backoff"
 	PhaseStopped   Phase = "stopped"
-	// PhaseParked is a child the supervisor has given up restarting. Nothing
-	// is scheduled; only a fresh Ensure brings it back.
-	PhaseParked Phase = "parked"
+	PhaseParked    Phase = "parked"
 )
 
-// RestartBackoff is the delay before restart attempt N (capped at the last
-// entry). Eight steps from 250ms to 30s.
 var RestartBackoff = []time.Duration{
 	250 * time.Millisecond,
 	500 * time.Millisecond,
@@ -62,29 +40,13 @@ var RestartBackoff = []time.Duration{
 	30 * time.Second,
 }
 
-// DisconnectGrace is how long a started child has to dial back before it is
-// killed, and how long a connected child that drops its connection has to
-// reconnect.
 const DisconnectGrace = 5 * time.Second
 
-// StableConnection is how long a connection must hold before the child counts
-// as healthy and its restart attempts reset.
 const StableConnection = 60 * time.Second
 
-// DefaultGiveUpAfter is how many consecutive restarts a child gets without ever
-// reaching a stability window before it is parked.
-//
-// Tripwire, not a receipt: no healthy child restarts twice, let alone ten
-// times. At the pinned backoff, ten restarts cost 121.75s of waiting
-// (0.25+0.5+1+2+4+8+16+30+30+30), plus up to DisconnectGrace per attempt for a
-// child that starts and never calls back — so a crash-looping child is parked
-// after roughly two to three minutes. Recalibrate against a measurement if a
-// legitimate child ever reaches it.
+// Tripwire, not a receipt: at the pinned backoff ten restarts cost 121.75s of waiting.
 const DefaultGiveUpAfter = 10
 
-// Exit is how a child process ended. All fields are best-effort: a process
-// killed by a signal has no exit code, and a launcher that never produced a
-// process reports only Error.
 type Exit struct {
 	At       time.Time
 	ExitCode *int
@@ -109,8 +71,6 @@ func (e Exit) String() string {
 	return fmt.Sprintf("%s: %s", e.At.Format(time.RFC3339), detail)
 }
 
-// Snapshot is one child's supervision state at a moment, copied out so the
-// caller holds no supervisor state.
 type Snapshot struct {
 	Desired        DesiredState
 	Phase          Phase
@@ -125,47 +85,31 @@ type Snapshot struct {
 	LastExit       *Exit
 }
 
-// Park is a parking as something outside the supervisor remembers it.
-//
-// The supervisor's own memory ends with its process, so a consumer that must
-// keep a child parked across restarts persists this and hands it back with
-// AdoptParked. ParkedAt is the moment the give-up happened, not the moment it
-// was restored: a park has one timestamp for as long as it lasts.
+// ParkedAt is the moment the give-up happened, never the moment it was restored.
 type Park struct {
 	ParkedAt       time.Time
 	RestartAttempt int
 	LastExit       *Exit
 }
 
-// Process is a started child. Wait blocks until it ends; Kill asks it to die and
-// must be safe to call after it already has.
 type Process interface {
 	Wait() Exit
 	Kill() error
 }
 
-// StartRequest carries what the supervisor knows at launch time. Log is an
-// append-only writer for the child's stdout/stderr — nil when log capture is
-// off or the log file could not be opened, in which case the launcher should
-// discard the child's output as before. The writer is closed once StartFunc
-// returns, so the launcher must hand it to the child rather than keep it.
+// Log is closed once StartFunc returns: the launcher must hand it to the child, not keep it.
 type StartRequest struct {
 	Name       string
 	Generation uint64
 	Log        io.Writer
 }
 
-// StartFunc launches one child. It is called on every start, including
-// restarts, so it must be safe to call repeatedly.
 type StartFunc func(StartRequest) (Process, error)
 
-// Timer is the subset of time.Timer the supervisor uses, so tests can drive
-// time.
 type Timer interface {
 	Stop() bool
 }
 
-// Clock is the supervisor's view of time.
 type Clock interface {
 	Now() time.Time
 	AfterFunc(time.Duration, func()) Timer
@@ -178,25 +122,15 @@ func (realClock) AfterFunc(delay time.Duration, fn func()) Timer {
 	return time.AfterFunc(delay, fn)
 }
 
-// Options configures one supervisor. The zero value is usable: a real clock, the
-// default give-up tripwire, no log capture, and no callbacks.
 type Options struct {
-	Clock Clock
-	// LogDir holds one append-only <name>.log per child, following the
-	// pty-worker pattern. Empty disables log capture.
+	Clock  Clock
 	LogDir string
 	// GiveUpAfter overrides DefaultGiveUpAfter. A negative value never parks.
 	GiveUpAfter int
-	// OnChange reports that one child's supervision state moved. The name is
-	// required: the daemon turns it into a fact, and a fact needs the entity
-	// it is about. Called without the supervisor lock held.
+	// OnChange and OnGiveUp are called without the supervisor lock held.
 	OnChange func(name string)
-	// OnGiveUp reports a child crossing into PhaseParked, once per parking.
-	// Called without the supervisor lock held.
 	OnGiveUp func(name string, snapshot Snapshot)
-	// Logf receives supervisor-level diagnostics (a log file that would not
-	// open, a parked child). Optional.
-	Logf func(format string, args ...any)
+	Logf     func(format string, args ...any)
 }
 
 type child struct {
@@ -219,7 +153,6 @@ type child struct {
 	stabilityTimer  Timer
 }
 
-// Supervisor supervises a set of named children.
 type Supervisor struct {
 	mu          sync.Mutex
 	children    map[string]*child
@@ -256,41 +189,18 @@ func New(opts Options) *Supervisor {
 	}
 }
 
-// ErrParked says the child is one the supervisor has given up restarting, and
-// the caller asked not to revive it.
 var ErrParked = errors.New("supervise: child is parked")
 
-// Ensure declares that a named child should be running, launching it if nothing
-// is running or scheduled for it. Calling it again replaces the StartFunc used
-// by the next start and is otherwise a no-op for a live child — so it is also
-// how a parked child is revived, which resets its restart attempts.
 func (s *Supervisor) Ensure(name string, start StartFunc) error {
 	return s.ensure(name, start, true)
 }
 
-// EnsureUnlessParked is Ensure for a caller that runs per unit of traffic rather
-// than per deliberate act: it starts the child, but reports ErrParked instead of
-// reviving one the supervisor has given up on.
-//
-// Reviving has to stay deliberate. Ensure resets the restart budget, so a caller
-// on a hot path calling it makes the give-up tripwire unreachable — the child
-// crash-loops for as long as traffic keeps arriving, and every parking on the
-// way is announced again.
+// Ensure resets the restart budget, so a hot path calling it would make the give-up tripwire unreachable.
+// it would make the give-up tripwire unreachable.
 func (s *Supervisor) EnsureUnlessParked(name string, start StartFunc) error {
 	return s.ensure(name, start, false)
 }
 
-// AdoptParked begins supervising a child that is already parked, without ever
-// launching it.
-//
-// It is the restore half of Park: a consumer that persisted a give-up hands it
-// back here, and the child lands exactly where the give-up left it — nothing
-// running, nothing scheduled, EnsureUnlessParked refused, Ensure the only way
-// out. Nothing is announced, because nothing moved: the child was parked before
-// this supervisor existed and it is parked now.
-//
-// A name that is already supervised is refused. Adopting onto a live child would
-// overwrite what this process knows with a record an earlier one wrote.
 func (s *Supervisor) AdoptParked(name string, park Park) error {
 	if err := validateName(name); err != nil {
 		return err
@@ -304,9 +214,7 @@ func (s *Supervisor) AdoptParked(name string, park Park) error {
 		return fmt.Errorf("supervise: child %q is already supervised, so a persisted park cannot be adopted onto it", name)
 	}
 	s.children[name] = &child{
-		name: name,
-		// Still wanted, still not running: parking is the supervisor giving up,
-		// not the consumer changing its mind.
+		name:           name,
 		desired:        DesiredRunning,
 		phase:          PhaseParked,
 		parkedAt:       park.ParkedAt,
@@ -357,13 +265,7 @@ func (s *Supervisor) ensure(name string, start StartFunc, revive bool) error {
 	return err
 }
 
-// Stop kills a child and stops supervising it until the next Ensure.
-//
-// It also ends the crash-loop episode: the restart budget counts restarts the
-// supervisor chose, and a deliberate stop is not one of them. Without the reset,
-// stop-then-start — which is what a "restart" verb is — would revive a parked
-// child with no budget left, and the next single exit would park it again. That
-// makes the way back from parked a door that opens once.
+// Reset the budget: without it a stop-then-start revives a parked child with none left, making the way back from parked a door that opens once.
 func (s *Supervisor) Stop(name string) {
 	s.mu.Lock()
 	c := s.children[name]
@@ -390,9 +292,6 @@ func (s *Supervisor) Stop(name string) {
 	s.notify(name)
 }
 
-// TerminateGeneration kills the exact running generation and leaves the child
-// desired-running, so its exit follows the ordinary restart path. A stale
-// caller cannot kill a replacement that has already taken its place.
 func (s *Supervisor) TerminateGeneration(name string, generation uint64) (bool, error) {
 	s.mu.Lock()
 	c := s.children[name]
@@ -406,7 +305,6 @@ func (s *Supervisor) TerminateGeneration(name string, generation uint64) (bool, 
 	return true, process.Kill()
 }
 
-// Shutdown stops every child and refuses further Ensure calls.
 func (s *Supervisor) Shutdown() {
 	s.mu.Lock()
 	if s.shutdown {
@@ -424,9 +322,6 @@ func (s *Supervisor) Shutdown() {
 	}
 }
 
-// NoteConnected reports that a child dialed back. It accepts untracked
-// test/manual connections, but a supervised child must present the exact
-// generation injected into its process.
 func (s *Supervisor) NoteConnected(name string, generation uint64) bool {
 	s.mu.Lock()
 	c := s.children[name]
@@ -452,8 +347,6 @@ func (s *Supervisor) NoteConnected(name string, generation uint64) bool {
 	return true
 }
 
-// NoteDisconnected reports that a child's connection dropped, starting the
-// grace period in which it may reconnect before being killed.
 func (s *Supervisor) NoteDisconnected(name string, generation uint64) {
 	s.mu.Lock()
 	c := s.children[name]
@@ -474,7 +367,6 @@ func (s *Supervisor) NoteDisconnected(name string, generation uint64) {
 	s.notify(name)
 }
 
-// Snapshot copies out one child's state.
 func (s *Supervisor) Snapshot(name string) (Snapshot, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -502,8 +394,7 @@ func snapshotOf(c *child) Snapshot {
 	return snapshot
 }
 
-// copyExit deep-copies an exit so neither side of a hand-off shares the other's
-// memory — the supervisor keeps mutating its copy, and ExitCode is a pointer.
+// Deep copy: the supervisor keeps mutating its copy and ExitCode is a pointer.
 func copyExit(from *Exit) *Exit {
 	if from == nil {
 		return nil
@@ -545,9 +436,6 @@ func (s *Supervisor) spawnLocked(c *child) error {
 	return nil
 }
 
-// startChild opens this start's log file, launches the child, and closes the
-// supervisor's copy of the file descriptor: the child keeps its own, so nothing
-// here has to outlive the launch.
 func (s *Supervisor) startChild(c *child, generation uint64) (Process, error) {
 	req := StartRequest{Name: c.name, Generation: generation}
 	if file := s.openLog(c.name, generation); file != nil {
@@ -602,8 +490,6 @@ func (s *Supervisor) processExited(name string, generation uint64, process Proce
 	s.notify(name)
 }
 
-// scheduleRestartLocked queues the next restart, or parks the child when it has
-// burned through its restarts without ever reaching a stability window.
 func (s *Supervisor) scheduleRestartLocked(c *child) {
 	stopTimer(&c.restartTimer)
 	if s.giveUpAfter > 0 && c.restartAttempt >= s.giveUpAfter {
@@ -686,8 +572,7 @@ func (s *Supervisor) reportGiveUp(name string, snapshot Snapshot) {
 	}
 }
 
-// validateName keeps a child name usable both as a map key and as a log file
-// name, so a name can never write outside LogDir.
+// Keeps a name usable as a log file name, so it can never write outside LogDir.
 func validateName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("supervise: child name is required")

@@ -17,9 +17,6 @@ export type {
 export type { TerminalKeyAction, TerminalKeyEvent } from './keyEncoder';
 export { DIRTY_FALSE, DIRTY_FULL, DIRTY_PARTIAL } from './abi';
 
-/**
- * One loaded libghostty-vt instance, and the terminals created from it.
- */
 export class Ghostty {
   readonly exports: GhosttyExports;
   private readonly keyAbi: GhosttyKeyAbi;

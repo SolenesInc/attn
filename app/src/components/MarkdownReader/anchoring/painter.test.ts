@@ -1,10 +1,3 @@
-/**
- * Paint layer tests. happy-dom has no Custom Highlight API — which is exactly
- * why MarkPainter (the fallback) is the DOM-testable one; the
- * CustomHighlightPainter is tested against a stubbed CSS.highlights registry
- * asserting set contents.
- */
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveDomRange } from './domRange';
 import {
@@ -59,12 +52,11 @@ describe('MarkPainter', () => {
   it('paints a multi-node range without changing rendered text', () => {
     const el = container('<p>hello <b>bold</b> world</p>');
     const painter = new MarkPainter(el);
-    // Rendered text: 'hello bold world'; cover 'lo bold wo'.
     const range = resolveDomRange(el, 3, 13);
     painter.paint('a1', range!, 'comment');
 
     const spans = [...el.querySelectorAll('[data-md-mark="a1"]')];
-    expect(spans.length).toBeGreaterThan(1); // one wrap per covered segment
+    expect(spans.length).toBeGreaterThan(1);
     expect(spans.every((s) => s.className === 'md-mark md-mark-comment')).toBe(true);
     expect(spans.map((s) => s.textContent).join('')).toBe('lo bold wo');
     expect(el.textContent).toBe('hello bold world');
@@ -86,7 +78,6 @@ describe('MarkPainter', () => {
 
     painter.clear('a1');
     expect(el.innerHTML).toBe(original);
-    // Text nodes merged back: the <p> has exactly its original 3 children.
     expect(el.querySelector('p')!.childNodes.length).toBe(3);
   });
 
@@ -104,7 +95,6 @@ describe('MarkPainter', () => {
       '<p>before <span data-md-chrome="1">[blocked image: x]</span> after</p>',
     );
     const painter = new MarkPainter(el);
-    // Anchor text-space (chrome skipped): 'before  after'; cover 'ore  af'.
     const range = resolveDomRange(el, 3, 10);
     painter.paint('a1', range!, 'comment');
 
@@ -181,12 +171,10 @@ describe('CustomHighlightPainter (stubbed registry)', () => {
     const a = new CustomHighlightPainter();
     const b = new CustomHighlightPainter();
 
-    // Same entry id in both tiles (spike marker keys collide across tiles).
     a.paint('comment:x#0', resolveDomRange(tileA, 0, 5)!, 'comment');
     b.paint('comment:x#0', resolveDomRange(tileB, 0, 5)!, 'comment');
     expect(registry.get('attn-md-comment')!.ranges).toHaveLength(2);
 
-    // Tile B's live-reload path: clearAll + repaint. Tile A must survive both.
     b.clearAll();
     expect(registry.get('attn-md-comment')!.ranges).toHaveLength(1);
     expect(registry.get('attn-md-comment')!.ranges[0].toString()).toBe('alpha');

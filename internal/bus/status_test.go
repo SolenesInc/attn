@@ -10,15 +10,8 @@ import (
 	"time"
 )
 
-// Status is the one computation two surfaces render, and the tripwire is the
-// half nobody has to be looking at. Both are driven here on a fixed clock: a
-// rate is a claim about a window, and a test that cannot place events inside
-// one is not testing the claim.
-
 var statusNow = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
-// statusBus builds a bus over a memStore with the clock pinned, so "the last
-// hour" is a place events can be put rather than a race with the wall.
 func statusBus(t *testing.T) (*Bus, *memStore) {
 	t.Helper()
 	s := newMemStore()
@@ -26,7 +19,6 @@ func statusBus(t *testing.T) (*Bus, *memStore) {
 	return b, s
 }
 
-// publishAt appends n events of a class at a fixed age, spread across subjects.
 func publishAt(t *testing.T, s *memStore, name string, subjects, n int, ago time.Duration) {
 	t.Helper()
 	for i := 0; i < n; i++ {
@@ -89,8 +81,6 @@ func TestStatusReportsProducerRatesAndShare(t *testing.T) {
 	}
 }
 
-// The tripwire is an absolute ceiling on a sustained window, and it must not
-// fire on a producer that is merely busy right now.
 func TestStatusDoesNotCallABurstySmallProducerLoud(t *testing.T) {
 	b, s := statusBus(t)
 	// 900 events in the last 10 minutes: a 5400/hour instantaneous rate, far
@@ -111,8 +101,6 @@ func TestStatusDoesNotCallABurstySmallProducerLoud(t *testing.T) {
 	}
 }
 
-// Onset: a class crossing the ceiling on the 6h window is caught within hours,
-// which is the whole point — the bug this exists for ran for a week.
 func TestStatusCatchesASurgeOnTheSustainedWindow(t *testing.T) {
 	b, s := statusBus(t)
 	// 6001 events spread over the last 6 hours: just past 1000/hour.
@@ -132,8 +120,6 @@ func TestStatusCatchesASurgeOnTheSustainedWindow(t *testing.T) {
 	if !ok {
 		t.Fatal("a surging producer must raise a health warning")
 	}
-	// The line has to be actionable on its own: the number, the ceiling it
-	// crossed, and the window it was measured over.
 	for _, want := range []string{"session.state.changed", "1000/hour", "events/hour"} {
 		if !strings.Contains(h.Message, want) {
 			t.Errorf("message %q is missing %q", h.Message, want)
@@ -141,11 +127,8 @@ func TestStatusCatchesASurgeOnTheSustainedWindow(t *testing.T) {
 	}
 }
 
-// Standing loudness: an evening lull drops the 6h rate below the line while the
-// producer still owns most of the log. That is the state production was in.
 func TestStatusCatchesAStandingLoudProducerOnTheBaselineWindow(t *testing.T) {
 	b, s := statusBus(t)
-	// Quiet for the last 6 hours, very loud in the 18 before that.
 	publishAt(t, s, "session.state.changed", 4, 200, 3*time.Hour)
 	for i := 0; i < 24000; i++ {
 		publishAt(t, s, "session.state.changed", 4, 1, 7*time.Hour+time.Duration(i%600)*time.Minute)
@@ -167,8 +150,6 @@ func TestStatusCatchesAStandingLoudProducerOnTheBaselineWindow(t *testing.T) {
 	}
 }
 
-// ReportLoudProducers is the surface nobody has to be looking at. It says
-// nothing when everything is fine — a tripwire working code never feels.
 func TestReportLoudProducersIsSilentOnAHealthyLog(t *testing.T) {
 	s := newMemStore()
 	var lines []string
@@ -218,9 +199,6 @@ func TestReportLoudProducersNamesTheFactRateAndWindow(t *testing.T) {
 	}
 }
 
-// A restart must not buy a loud producer an hour of silence. The retention tick
-// is an hour apart, so the first report has to come before it — otherwise a
-// daemon restarted more often than that never reports at all.
 func TestStartReportsLoudProducersBeforeTheFirstTick(t *testing.T) {
 	s := newMemStore()
 	said := make(chan string, 8)
@@ -287,7 +265,6 @@ func TestStatusReportsConsumerLagAndTheRetentionFloor(t *testing.T) {
 	if ahead.HoldsRetentionFloor {
 		t.Error("only one consumer holds the floor, and it is the lowest")
 	}
-	// Lag counts events; this says how long the oldest has waited.
 	if behind.OldestUnreadAt.IsZero() {
 		t.Error("a consumer with lag must report the age of its oldest unread event")
 	}
@@ -296,15 +273,11 @@ func TestStatusReportsConsumerLagAndTheRetentionFloor(t *testing.T) {
 	}
 }
 
-// The oldest UNREAD event is the one after the cursor, not the one at it. The
-// cursor names what was already handled, so reporting its stamp would age the
-// backlog by one event and read as "waiting" when the consumer is caught up.
 func TestStatusDatesTheOldestUnreadEventFromAfterTheCursor(t *testing.T) {
 	b, s := statusBus(t)
-	// Distinct ages, so an off-by-one is visible rather than absorbed.
-	publishAt(t, s, "pr.updated", 1, 1, 9*time.Hour) // seq 1
-	publishAt(t, s, "pr.updated", 1, 1, 5*time.Hour) // seq 2
-	publishAt(t, s, "pr.updated", 1, 1, 1*time.Hour) // seq 3
+	publishAt(t, s, "pr.updated", 1, 1, 9*time.Hour)
+	publishAt(t, s, "pr.updated", 1, 1, 5*time.Hour)
+	publishAt(t, s, "pr.updated", 1, 1, 1*time.Hour)
 
 	if err := s.SaveConsumer(Consumer{Name: "reader", Cursor: 1, Enabled: true}, statusNow); err != nil {
 		t.Fatalf("SaveConsumer: %v", err)
@@ -319,7 +292,6 @@ func TestStatusDatesTheOldestUnreadEventFromAfterTheCursor(t *testing.T) {
 		t.Fatalf("oldest unread = %s, want seq 2 at %s (seq 1 is already read)", got, want)
 	}
 
-	// And a consumer at the head is waiting on nothing.
 	if err := s.SetCursor("reader", 3, statusNow); err != nil {
 		t.Fatalf("SetCursor: %v", err)
 	}
@@ -333,8 +305,6 @@ func TestStatusDatesTheOldestUnreadEventFromAfterTheCursor(t *testing.T) {
 	}
 }
 
-// A disabled consumer is a deliberate state, but it is also the state that
-// silently stops work. The user must be told, not left to read a false column.
 func TestStatusWarnsAboutADisabledConsumer(t *testing.T) {
 	b, s := statusBus(t)
 	publishAt(t, s, "pr.updated", 4, 10, time.Hour)
@@ -353,7 +323,6 @@ func TestStatusWarnsAboutADisabledConsumer(t *testing.T) {
 	if !strings.Contains(h.Message, "killed") || !strings.Contains(h.Message, "disabled") {
 		t.Errorf("message %q must name the consumer and its state", h.Message)
 	}
-	// A disabled ordinary consumer does not pin the log, exactly as trimming treats it.
 	for _, c := range status.Consumers {
 		if c.Name == "killed" && c.HoldsRetentionFloor {
 			t.Error("a disabled consumer must not be shown holding the retention floor")
@@ -387,8 +356,6 @@ func TestStatusShowsADisabledInstalledAppHoldingTheRetentionFloor(t *testing.T) 
 	}
 }
 
-// "41,000 events behind and not advancing" is the sentence the brief asked for:
-// a lag that is not moving is different from a lag that is being worked through.
 func TestStatusSaysWhenAnEnabledConsumerStopsAdvancing(t *testing.T) {
 	b, s := statusBus(t)
 	publishAt(t, s, "session.state.changed", 4, 100, 3*time.Hour)
@@ -414,7 +381,6 @@ func TestStatusSaysWhenAnEnabledConsumerStopsAdvancing(t *testing.T) {
 	}
 }
 
-// A consumer that is behind but visibly catching up is the system working.
 func TestStatusDoesNotCallAMovingConsumerStalled(t *testing.T) {
 	b, s := statusBus(t)
 	publishAt(t, s, "session.state.changed", 4, 100, 3*time.Hour)
@@ -431,9 +397,6 @@ func TestStatusDoesNotCallAMovingConsumerStalled(t *testing.T) {
 	}
 }
 
-// Live and Stalled only mean something when the snapshot came from the process
-// that owns delivery. `attn bus status` reads the database from outside it, and
-// must not therefore accuse every consumer of not running.
 func TestStatusOnlyClaimsDeliveryKnowledgeWhenItHasIt(t *testing.T) {
 	b, s := statusBus(t)
 	publishAt(t, s, "pr.updated", 2, 5, time.Hour)
@@ -452,7 +415,6 @@ func TestStatusOnlyClaimsDeliveryKnowledgeWhenItHasIt(t *testing.T) {
 		t.Error("a reader outside the daemon cannot know a consumer is not running")
 	}
 
-	// The same registration, seen by a bus that does own delivery loops.
 	running, _ := statusBus(t)
 	running.store = s
 	if err := running.Register("mine", All, func(context.Context, Event) error { return nil }); err != nil {
@@ -489,8 +451,6 @@ func TestStatusOnAnEmptyLog(t *testing.T) {
 	}
 }
 
-// A store that cannot answer must fail the snapshot rather than render a
-// confident picture of a log it could not read.
 func TestStatusFailsWhenTheLogCannotBeRead(t *testing.T) {
 	b, s := statusBus(t)
 	s.setBoundsErr(errors.New("disk gone"))

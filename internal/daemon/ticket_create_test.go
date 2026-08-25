@@ -13,10 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// callTicketCreate drives handleTicketCreate over an in-memory pipe and returns the
-// decoded response. It waits for the handler to fully return — the response is
-// encoded BEFORE the board broadcast, so this barrier keeps a test from racing the
-// fan-out.
+// callTicketCreate waits for the handler to fully return: the response is encoded
+// before the board broadcast, so without that barrier a test races the fan-out.
 func callTicketCreate(t *testing.T, d *Daemon, msg *protocol.TicketCreateMessage) protocol.Response {
 	t.Helper()
 	server, client := net.Pipe()
@@ -35,8 +33,6 @@ func callTicketCreate(t *testing.T, d *Daemon, msg *protocol.TicketCreateMessage
 	return resp
 }
 
-// A standalone create mints an unbound backlog ticket: status todo, no assignee, and
-// a created event authored by the calling session.
 func TestTicketCreateMintsUnboundTodo(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -86,9 +82,6 @@ func TestTicketCreateMintsUnboundTodo(t *testing.T) {
 	}
 }
 
-// A user-chosen id that is already taken is a hard fail — no auto-suffix — and the
-// surfaced error is the ErrTicketIDTaken sentinel from the store path the handler
-// calls.
 func TestTicketCreateExplicitIDCollisionFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	if _, err := d.store.CreateTicket(store.Ticket{ID: "store-migration", Title: "seed"}, "you", time.Now()); err != nil {
@@ -108,15 +101,11 @@ func TestTicketCreateExplicitIDCollisionFails(t *testing.T) {
 		t.Fatalf("error = %q, want the ErrTicketIDTaken guidance", *resp.Error)
 	}
 
-	// The handler surfaced the store's sentinel verbatim; confirm the same store path
-	// returns ErrTicketIDTaken for that id.
 	if _, err := d.store.CreateTicket(store.Ticket{ID: "store-migration", Title: "x"}, "you", time.Now()); !errors.Is(err, store.ErrTicketIDTaken) {
 		t.Fatalf("CreateTicket on a taken id = %v, want ErrTicketIDTaken", err)
 	}
 }
 
-// A title-derived slug collision auto-suffixes to a distinct id rather than failing;
-// both tickets land in todo.
 func TestTicketCreateDerivedSlugAutoSuffixes(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 

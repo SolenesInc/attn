@@ -2,37 +2,17 @@
 
 package pty
 
-// Kitty image identity across worker lifetimes.
-//
-// A session id outlives its worker — runtime_respawned replaces the process, and
-// so do a daemon restart and a revive — while ghostty's generation stamps start
-// over with every terminal. A client keys its pixels by (session, image id,
-// generation), so the two facts together let a replacement worker describe an
-// identity the client already holds different pixels for. mintKittyEpoch is what
-// keeps that from happening; these hold it to the two properties it needs.
-
 import (
 	"testing"
 )
 
-// kittyEpochFloor and kittyEpochCeiling bound where an epoched identity may
-// land: past any stamp a process reaches, and inside what a JS Number keys
-// exactly. Written out rather than shared with the production constants, so a
-// window that moves has to be re-justified here too.
+// Bounds where an epoched identity may land: past any stamp a process reaches, and
+// inside what a JS Number keys exactly.
 const (
 	kittyEpochFloor   = uint64(1) << 32
 	kittyEpochCeiling = uint64(1) << 53
 )
 
-// Both exits of a session speak one numbering. A placement names a generation,
-// the client pulls the pixels behind it, and it stores what comes back under the
-// generation the ANSWER carries — so a fold applied to one exit and not the
-// other leaves every pull landing on a key nothing ever asks for, and the image
-// is re-pulled on every description forever.
-//
-// Every placement exit is taken, because they are separate calls and only one
-// fold site is shared: the live fan-out, the attach snapshot a re-attaching
-// client restores from, and the re-describe a resize produces.
 func TestKittyIdentityIsTheSameAtEveryExit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -86,21 +66,8 @@ func TestKittyIdentityIsTheSameAtEveryExit(t *testing.T) {
 	}
 }
 
-// The reviewer's scenario, and the whole reason the epoch exists: a worker that
-// replaces another must not be able to mint an identity a client is already
-// holding pixels for. The replacement is a new PROCESS — ghostty's stamps
-// restart there, so the same program emitting the same image gets the same low
-// number again, and the client's blob cache and its GPU textures both answer the
-// new placement with the dead worker's pixels.
-//
-// Two spawns, and the assertions are what a unit test can honestly make about
-// that. Ghostty's stamps are unique process-wide (see KittyGeneration), so two
-// terminals inside ONE test binary never collide on their own and comparing
-// their described generations proves nothing — measured: with the fold removed,
-// these two sessions still describe 3 and 5. What has to differ is the epoch
-// itself, because that is the only part of the identity a second process does
-// not reproduce. So: each identity is epoched, and the two epochs are
-// independent draws rather than one process-wide constant.
+// Ghostty's stamps are unique process-wide, so two terminals in ONE test binary never
+// collide (measured: with the fold removed, these sessions still describe 3 and 5).
 func TestKittyIdentitiesFromDifferentWorkersNeverCollide(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -133,8 +100,6 @@ func TestKittyIdentitiesFromDifferentWorkersNeverCollide(t *testing.T) {
 	first, firstEpoch := describe("kitty-worker-one")
 	second, secondEpoch := describe("kitty-worker-two")
 
-	// Inequality of two random draws out of a 2^52-wide window, asserted the way
-	// UUID inequality is: a collision is not a flake anyone will see.
 	if firstEpoch == secondEpoch {
 		t.Errorf("both workers minted epoch %d: a replacement worker would describe the dead one's identities",
 			firstEpoch)

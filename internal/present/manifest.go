@@ -1,5 +1,3 @@
-// Package present parses and validates Present manifests: a small YAML
-// description of a set of git changes to be presented for review.
 package present
 
 import (
@@ -12,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Manifest is the top-level Present manifest (v0, kind "changes").
 type Manifest struct {
 	Version int         `yaml:"version"`
 	Kind    string      `yaml:"kind"`
@@ -23,35 +20,30 @@ type Manifest struct {
 	Skip    []string    `yaml:"skip,omitempty"`
 }
 
-// Frame identifies the repo and git refs a manifest presents changes between.
 type Frame struct {
 	Repo string `yaml:"repo"`
 	Base string `yaml:"base"`
 	Head string `yaml:"head"`
 }
 
-// FileEntry is one file called out in the manifest's reading order.
 type FileEntry struct {
 	Path        string            `yaml:"path"`
 	Note        string            `yaml:"note,omitempty"`
 	Annotations []AnnotationEntry `yaml:"annotations,omitempty"`
 }
 
-// AnnotationEntry pins a note or thread to a location in a file, as authored
-// in the manifest. Exactly one anchor form (anchor | line | start+end) and
-// exactly one body form (note xor thread) must be set; enforced in validate.
+// Exactly one anchor form (anchor | line | start+end) and exactly one body form
+// (note xor thread) must be set; enforced in validate.
 type AnnotationEntry struct {
 	Anchor string `yaml:"anchor,omitempty"` // substring of a head-side line, min 3 chars
 	Line   int    `yaml:"line,omitempty"`   // 1-based head-side line
 	Start  int    `yaml:"start,omitempty"`  // 1-based inclusive range start; requires End
 	End    int    `yaml:"end,omitempty"`    // 1-based inclusive range end; requires Start
 
-	Note   string   `yaml:"note,omitempty"`   // single comment
-	Thread []string `yaml:"thread,omitempty"` // ordered multi-comment thread
+	Note   string   `yaml:"note,omitempty"`
+	Thread []string `yaml:"thread,omitempty"`
 }
 
-// ParseManifest strictly decodes and validates a Present manifest from YAML
-// bytes. Unknown fields are rejected.
 func ParseManifest(data []byte) (*Manifest, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
@@ -68,7 +60,6 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	return &m, nil
 }
 
-// ParseManifestFile reads and parses a Present manifest from a file path.
 func ParseManifestFile(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -137,10 +128,6 @@ func validate(m *Manifest) error {
 	return nil
 }
 
-// validateAnnotation checks that an annotation entry names exactly one
-// anchor form (anchor | line | start+end) and exactly one body form (note
-// xor a non-empty thread). Resolving the anchor against actual file content
-// happens later, in ResolveAnnotations — this only validates shape.
 func validateAnnotation(a AnnotationEntry, field string) error {
 	anchorForms := 0
 	if a.Anchor != "" {
@@ -194,10 +181,8 @@ func validateAnnotation(a AnnotationEntry, field string) error {
 	return nil
 }
 
-// validateNoStaticOverlap rejects line/start+end annotations within one file
-// entry whose ranges are known to overlap without resolving anything against
-// file content (anchor-derived overlaps can only be caught after resolution,
-// in ResolveAnnotations, once an anchor's matched line is known).
+// Anchor-derived overlaps can only be caught after resolution, in
+// ResolveAnnotations.
 func validateNoStaticOverlap(annotations []AnnotationEntry, fileIndex int) error {
 	type staticRange struct {
 		index      int

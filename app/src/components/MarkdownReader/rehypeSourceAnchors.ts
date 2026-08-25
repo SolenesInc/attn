@@ -1,14 +1,5 @@
-/**
- * Stamps stable anchoring attributes onto the hast tree so rendered blocks
- * trace back to raw-file source lines. Every top-level block element, plus
- * every `<li>` anywhere, gets `data-block-id` (deterministic: document-order
- * index + node type, so identical content yields identical ids) and
- * `data-source-line`/`-end` (1-based, in the RAW file).
- *
- * Markdown positions are relative to the parsed string, so a caller that
- * strips frontmatter must pass `lineOffset` = raw lines removed. Pure over the
- * tree — no DOM, no React.
- */
+/** Stamps `data-block-id` (document-order index + node type) and `data-source-line`/`-end`
+ * (1-based, RAW file) onto hast blocks. Stripping frontmatter means passing `lineOffset`. */
 
 import type { Element, Root, RootContent } from "hast";
 
@@ -38,11 +29,8 @@ function blockType(tagName: string): string {
   return BLOCK_TYPE_BY_TAG[tagName] ?? tagName;
 }
 
-/**
- * Stamped always means fully anchored, so a node with no source position is
- * left untouched (false) and must not consume an index slot — consuming one
- * would shift the ids of real source blocks.
- */
+/** A node with no source position is left untouched and must not consume an index slot —
+ * consuming one would shift the ids of real source blocks. */
 function stamp(node: Element, index: number, lineOffset: number): boolean {
   const position = node.position;
   if (

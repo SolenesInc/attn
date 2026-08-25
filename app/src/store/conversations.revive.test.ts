@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useConversationsStore } from './conversations';
 
-// What a conversation looks like after its host died and a new one took over.
-// The store's whole job here is to survive the two things that change: the
-// transcript arrives as one snapshot instead of as the stream that built it,
-// and the envelope spine starts over from 1.
 
 const SESSION = 'sess-1';
 
@@ -69,9 +65,6 @@ describe('conversations store: revive', () => {
     expect(conversation().ready).toBe(true);
   });
 
-  // The snapshot is the host's transcript, and the host is the authority. A
-  // client that had drifted — reconnected mid-run, or watched an earlier host —
-  // must end up with what the host has and not a merge of the two.
   it('replaces the transcript rather than appending to it', () => {
     apply('session_ready', {}, 1);
     apply('message_end', { id: 'stale', role: 'assistant', text: 'from before' }, 2);
@@ -107,9 +100,6 @@ describe('conversations store: revive', () => {
     ]);
   });
 
-  // The landmine: seq belongs to one host process. A replacement mints its
-  // envelopes from 1 again, so without the reset every envelope of the revived
-  // session reads as a duplicate of the dead one's and is dropped.
   it('resets the envelope spine when a new host announces itself', () => {
     apply('session_ready', {}, 1);
     apply('message_end', { id: 'm1', role: 'assistant', text: 'before the crash' }, 40);
@@ -137,9 +127,6 @@ describe('conversations store: revive', () => {
     expect(conversation().items).toHaveLength(1);
   });
 
-  // A new host has not started a run, whatever the dead one was doing when it
-  // went — including the case where the crash happened mid-run and no
-  // run_settled ever arrived.
   it('closes a run the dead host never settled', () => {
     apply('session_ready', {}, 1);
     apply('run_started', {}, 2);

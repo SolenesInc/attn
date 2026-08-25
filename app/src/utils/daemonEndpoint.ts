@@ -25,8 +25,8 @@ function trimOrEmpty(value?: string): string {
   return value?.trim() || '';
 }
 
-// WebSocket endpoint resolution must be frontend-local. We cannot depend on a
-// daemon-delivered setting to discover the websocket used to fetch settings.
+// Frontend-local: a daemon-delivered setting cannot be what discovers the
+// websocket that fetches settings.
 export function resolveDaemonWebSocketURL(options: ResolveDaemonWebSocketURLOptions = {}): string {
   const explicit = trimOrEmpty(options.endpoint?.wsUrl) || trimOrEmpty(options.wsUrl) || trimOrEmpty(import.meta.env.VITE_DAEMON_WS_URL);
   if (explicit !== '') {
@@ -41,14 +41,8 @@ export function resolveDaemonWebSocketURL(options: ResolveDaemonWebSocketURLOpti
   return `${protocol}://${host}:${port}${path}`;
 }
 
-// The HTTP origin of the same daemon, derived from the WebSocket URL rather than
-// resolved a second time: the app bundle route sits on that listener's mux
-// beside /ws, so a profile that moved its port must move both together or a
-// docked app view silently imports another profile's artifact.
-//
-// A remote endpoint's origin is the remote daemon's, which is deliberate and
-// currently unreachable: apps_updated is not relayed, so nothing from a remote
-// registry is ever mountable.
+// Derived from the WebSocket URL rather than resolved again: a profile that moved
+// its port must move both, or a docked app view imports another profile's artifact.
 export function resolveDaemonHTTPOrigin(options: ResolveDaemonWebSocketURLOptions = {}): string {
   const ws = new URL(resolveDaemonWebSocketURL(options));
   return `${ws.protocol === 'wss:' ? 'https:' : 'http:'}//${ws.host}`;

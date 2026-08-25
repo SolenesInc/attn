@@ -19,11 +19,8 @@ import type { UsageLike } from "../automode/usage";
 
 type Call = { model: ModelLike; context: CompletionContext; options?: CompletionOptions };
 
-/**
- * Fake pi ModelRegistry: answers each completion from a queued script and
- * records what it was asked, so a test can read the prompt the classifier
- * built without reaching a provider.
- */
+/** Fake pi ModelRegistry: answers each completion from a queued script and records
+ * what it was asked, so a test can read the prompt without reaching a provider. */
 class FakeRegistry implements ModelRegistryLike {
   readonly calls: Call[] = [];
   auth: RequestAuthLike = { ok: true, apiKey: "key", headers: { "x-test": "1" } };

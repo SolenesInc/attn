@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// link runs one `attn seed link`/`unlink` over the pipe.
 func link(t *testing.T, d *Daemon, from, kind, to string, unlink bool) protocol.Response {
 	t.Helper()
 	msg := protocol.SeedLinkMessage{Cmd: protocol.CmdSeedLink, SeedID: from, Kind: kind, ToSeedID: to}
@@ -47,9 +46,6 @@ func readyIDs(result protocol.SeedReadyResult) []string {
 	return out
 }
 
-// The slice's acceptance, end to end: the plan's three-seed chain, the one seed
-// it leaves ready, and the dependent surfacing the moment its blocker is
-// harvested — nothing nudged, nothing cleared by hand.
 func TestGardenEdges_HarvestingABlockerSurfacesTheDependent(t *testing.T) {
 	d := newGardenDaemon(t)
 	a := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "first"})
@@ -76,8 +72,6 @@ func TestGardenEdges_HarvestingABlockerSurfacesTheDependent(t *testing.T) {
 	}
 }
 
-// Readiness is computed per read and carried on the wire, so the panel renders
-// the same answer the CLI gives instead of deriving its own.
 func TestGardenEdges_ReadyRidesTheSeedOnTheWire(t *testing.T) {
 	d := newGardenDaemon(t)
 	var pushed []protocol.Seed
@@ -99,8 +93,6 @@ func TestGardenEdges_ReadyRidesTheSeedOnTheWire(t *testing.T) {
 	}
 }
 
-// An edge is stored on one side, so `show` has to read the garden to answer the
-// other: what blocks this, and what is part of it.
 func TestGardenEdges_ShowListsBothDirections(t *testing.T) {
 	d := newGardenDaemon(t)
 	a := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "first"})
@@ -163,8 +155,6 @@ func TestGardenEdges_UnlinkPutsTheSeedBack(t *testing.T) {
 	b := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "second"})
 	mustLink(t, d, a.ID, garden.EdgeBlocks, b.ID)
 
-	// Linking the same edge twice is not a refusal and not a write: the garden
-	// did not move, and the caller is told so.
 	if again := mustLink(t, d, a.ID, garden.EdgeBlocks, b.ID); again.Changed {
 		t.Fatal("re-linking the same edge reported a change")
 	}
@@ -191,8 +181,6 @@ func TestGardenEdges_RefusalsNameBothSeeds(t *testing.T) {
 	if cycle.Ok {
 		t.Fatal("a blocks cycle was accepted")
 	}
-	// Loud means the caller can fix it without reading the garden: both seeds,
-	// what it would do, and the edge to remove.
 	for _, want := range []string{a.ID, b.ID, "deadlock", "attn seed unlink"} {
 		if !strings.Contains(protocol.Deref(cycle.Error), want) {
 			t.Fatalf("cycle refusal does not name %q: %s", want, protocol.Deref(cycle.Error))
@@ -220,9 +208,6 @@ func TestGardenEdges_RefusalsNameBothSeeds(t *testing.T) {
 	}
 }
 
-// Dispatch is scope inference and nothing more: a session dispatched at a crown
-// gets that plot from a flag-free ready, --all steps back out to the garden, and
-// the seeds themselves are never fenced — anybody may tend anything.
 func TestGardenEdges_ReadyInfersTheDispatchedPlot(t *testing.T) {
 	d := newGardenDaemon(t)
 	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "the plot"})
@@ -231,7 +216,6 @@ func TestGardenEdges_ReadyInfersTheDispatchedPlot(t *testing.T) {
 	})
 	outside := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "outside"})
 
-	// Undispatched, the same session sees the whole garden.
 	if got := readyIDs(ready(t, d, protocol.SeedReadyMessage{SourceSessionID: protocol.Ptr("sess-a")})); len(got) != 2 {
 		t.Fatalf("undispatched ready = %v, want both seeds", got)
 	}
@@ -251,8 +235,6 @@ func TestGardenEdges_ReadyInfersTheDispatchedPlot(t *testing.T) {
 		t.Fatalf("a plot answer did not carry its crown and progress: %+v", dispatched.Crown)
 	}
 
-	// Not a fence: --all is the way back out, and the seed outside the plot is
-	// still there to be tended.
 	all := ready(t, d, protocol.SeedReadyMessage{SourceSessionID: protocol.Ptr("sess-a"), All: protocol.Ptr(true)})
 	if got := readyIDs(all); len(got) != 2 || all.Scope != "garden" {
 		t.Fatalf("--all from a dispatched session = %v (scope %s), want the whole garden", got, all.Scope)
@@ -260,9 +242,6 @@ func TestGardenEdges_ReadyInfersTheDispatchedPlot(t *testing.T) {
 	move(t, d, "sess-a", outside.ID, garden.VerbTend, "", "trellis")
 }
 
-// A dispatch record outlives the crown it names — a withered plot, a garden
-// somebody rearranged. Inference then infers nothing rather than refusing a
-// caller who asked with no flags at all.
 func TestGardenEdges_ReadyFallsBackWhenTheCrownIsGone(t *testing.T) {
 	d := newGardenDaemon(t)
 	plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "still here"})
@@ -286,8 +265,6 @@ func TestGardenEdges_ReadyScopesToAPlot(t *testing.T) {
 	mustLink(t, d, deeper.ID, garden.EdgePartOf, inside.ID)
 
 	result := ready(t, d, protocol.SeedReadyMessage{Plot: protocol.Ptr(crown.ID)})
-	// The crown and the middle seed both have children, so the leaf is the only
-	// thing in this plot anybody can pick up.
 	if got := readyIDs(result); len(got) != 1 || got[0] != deeper.ID {
 		t.Fatalf("plot ready = %v, want the one leaf %s", got, deeper.ID)
 	}
@@ -303,8 +280,6 @@ func TestGardenEdges_ReadyScopesToAPlot(t *testing.T) {
 	}
 }
 
-// Oldest first, against the newest-first order every other read uses: ready is a
-// work queue, and the seed that has waited longest is the one to hand over.
 func TestGardenEdges_ReadyHandsOverTheOldestFirst(t *testing.T) {
 	d := newGardenDaemon(t)
 	first := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "waited longest"})
@@ -337,8 +312,6 @@ func TestGardenEdges_ReadyCarriesPlotHeadersAndLooseSeeds(t *testing.T) {
 	}
 }
 
-// A tender holds its seed only while its session is one the daemon knows. A
-// session that is gone must not park work forever.
 func TestGardenEdges_ReadyReleasesASeedWhoseSessionIsGone(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-b")
@@ -355,9 +328,6 @@ func TestGardenEdges_ReadyReleasesASeedWhoseSessionIsGone(t *testing.T) {
 	}
 }
 
-// The count an agent is primed with at launch is the same answer `attn seed
-// ready` gives with no flags — one computation, so guidance and the CLI cannot
-// drift apart.
 func TestGardenEdges_LaunchPrimerCountsTheSameReady(t *testing.T) {
 	d := newGardenDaemon(t)
 	a := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "first"})
@@ -379,8 +349,6 @@ func TestGardenEdges_LaunchPrimerCountsTheSameReady(t *testing.T) {
 	}
 }
 
-// An outpost has no garden, so it must not answer these two either — and the
-// primer must hand a launching agent nothing rather than a loop it cannot run.
 func TestGardenEdges_OutpostRefusesLinkAndReady(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(d.stopEventBus)

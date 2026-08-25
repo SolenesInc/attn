@@ -1,10 +1,5 @@
 import { AutomationFormValues } from './automationFormModel';
 
-// compiledSentenceSegments renders the form's current values as a single
-// plain-language sentence, in user vocabulary (no YAML/spec terms). It exists
-// so the form can show "what will actually happen" as the user changes
-// fields, rather than making them mentally compile the trigger/launch/location
-// sections themselves.
 
 export interface SentenceSegment {
   text: string;
@@ -30,11 +25,6 @@ function isFiveFieldCron(cron: string): boolean {
   return fields.length === 5;
 }
 
-// cronPhrase resolves a cron expression to its plain-language phrase, or null
-// when the value is empty or not a 5-field expression (the form's own
-// scheduled-trigger validity gate) — callers render their own "not set" copy
-// for null. Exported so the cron input's live preview reuses exactly the map
-// this sentence is built from, rather than drifting out of sync with it.
 export function cronPhrase(cron: string): string | null {
   const trimmed = cron.trim();
   if (!isFiveFieldCron(trimmed)) return null;

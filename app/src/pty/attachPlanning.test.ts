@@ -24,8 +24,6 @@ describe('attachPlanning', () => {
     });
 
     it('restores at the snapshot grid even when it differs from the requested geometry', () => {
-      // A geometry mismatch never skips the snapshot: the consumer resizes to
-      // the snapshot grid before writing the dump.
       const plan = classifyAttachRestore({
         cols: 100,
         rows: 40,
@@ -38,8 +36,6 @@ describe('attachPlanning', () => {
     });
 
     it('treats an empty Ghostty snapshot as no restore payload', () => {
-      // The pure-Go stub (non-macOS) and a ghostty construction failure both
-      // surface as an empty vt dump: nothing to restore.
       const plan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -50,9 +46,6 @@ describe('attachPlanning', () => {
     });
 
     it('declines a snapshot written in a different build format', () => {
-      // A pty-worker outlives an install, so an upgraded app is offered bytes
-      // its decoder has never seen. Decoding them faults the restore; declining
-      // them costs the scrollback and nothing else.
       const plan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -60,14 +53,10 @@ describe('attachPlanning', () => {
       }, createAttachRequestContext({ cols: 80, rows: 24 }, 'same_app_remount'));
 
       expect(plan.hasSnapshot).toBe(false);
-      // Geometry falls back to the daemon's reported PTY size, not the
-      // snapshot's grid: nothing is being restored at that grid.
       expect(plan.restoreCols).toBe(80);
     });
 
     it('declines a snapshot that names no format', () => {
-      // Every worker running when this shipped omits the field. An unnamed
-      // format is one nobody speaks.
       const plan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -78,9 +67,6 @@ describe('attachPlanning', () => {
     });
 
     it('leaves a foreign-format attach unreset, on the client watermark', () => {
-      // The whole point of declining: an attach that restores nothing must not
-      // clear the pane, and must not adopt a watermark for output it never
-      // rendered.
       const restorePlan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -147,11 +133,6 @@ describe('attachPlanning', () => {
 
   describe('snapshot-less reattach', () => {
     it('keeps client state and its own watermark on a snapshot-less restore reattach', () => {
-      // No snapshot (stub build / ghostty construction failure): there is no
-      // restore payload. Per AGENTS.md the client keeps whatever it has rendered
-      // and dedups the live stream against its OWN last_seq. It must not reset
-      // the model (nothing would repaint it) nor jump the watermark to the
-      // server's last_seq, which would drop the unrendered chunk between them.
       const plan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -169,19 +150,11 @@ describe('attachPlanning', () => {
       expect(effects.shouldReset).toBe(false);
       expect(effects.resetReason).toBe(null);
       expect(effects.restoreAction.kind).toBe('none');
-      // Baseline is the client watermark (11), so seq 12 flows through instead
-      // of being dropped as "already in the dump" — there is no dump.
       expect(effects.queuedOutputsToEmit).toEqual([{ data: 'live-12', seq: 12 }]);
       expect(effects.nextSeq).toBe(12);
     });
 
     it('does not reset or drop queued output on a snapshot-less same-app remount', () => {
-      // Regression (PR #642 review): ghostty construction failed on the worker,
-      // so the attach carries no snapshot. The client's existing model is the
-      // ONLY rendered terminal and the queued chunks (emitted while briefly
-      // detached) were never painted into it. Resetting would blank the idle
-      // shell forever; advancing the watermark to the server's last_seq would
-      // silently discard those queued chunks. Neither may happen.
       const plan = classifyAttachRestore({
         cols: 80,
         rows: 24,
@@ -202,8 +175,6 @@ describe('attachPlanning', () => {
       expect(effects.shouldReset).toBe(false);
       expect(effects.resetReason).toBe(null);
       expect(effects.restoreAction.kind).toBe('none');
-      // Dedup against the client's own watermark (15), NOT the server's
-      // last_seq (20): both queued chunks are past what the client rendered.
       expect(effects.queuedOutputsToEmit).toEqual([
         { data: 'queued-16', seq: 16 },
         { data: 'queued-20', seq: 20 },
@@ -229,10 +200,6 @@ describe('attachPlanning', () => {
       expect(plan.strategy).toBe('none');
     });
 
-    // A pane mounted while its session is inactive attaches with the model's
-    // construction default (e.g. 80x24). Forcing the live PTY to that size
-    // SIGWINCH-churns the shell and width-bounces every attached model,
-    // invalidating a freshly restored grid.
     it('preserves daemon geometry when same-app requested geometry was not measured', () => {
       const plan = planAttachedRuntimeGeometry({
         cols: 80,
@@ -294,9 +261,6 @@ describe('attachPlanning', () => {
 
   describe('sequence dedup', () => {
     it('filters queued output already covered by the attach restore payload', () => {
-      // last_seq names the LAST chunk inside the restore payload, so a queued
-      // chunk with seq == last_seq is a duplicate of restored bytes and must be
-      // skipped; the first genuinely-live chunk is last_seq + 1.
       const restorePlan = classifyAttachRestore({
         cols: 58,
         rows: 46,

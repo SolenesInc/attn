@@ -1,15 +1,5 @@
-/**
- * Headless run of the reader pipeline yielding each stamped block's rendered
- * text. Pure string/data code: no DOM, no React. The processor below must stay
- * byte-for-byte MarkdownReader's pipeline, so offsets over the extracted text
- * hold against the live DOM's text nodes; the pipeline-parity fixture pins it.
- *
- * Normalization rule, entire: a block's `text` is every hast text-node value
- * in its subtree concatenated in tree order — no collapsing, trimming, or NFC
- * — indexed in UTF-16 code units. Two deliberate divergence fixes: `pre`
- * subtrees drop one trailing `\n` to match CodeBlock's render, and React-added
- * chrome has no hast text at all, so the DOM walker skips `[data-md-chrome]`.
- */
+// The processor below must stay byte-for-byte MarkdownReader's pipeline, or
+// offsets over the extracted text stop holding against the live DOM's text nodes.
 
 import type { Element, Root, RootContent } from 'hast';
 import rehypeRaw from 'rehype-raw';
@@ -26,7 +16,7 @@ import rehypeSourceAnchors from '../rehypeSourceAnchors';
 import { readerSanitizeSchema } from '../sanitizeSchema';
 import type { BlockText } from './types';
 
-/** Mirrors MarkdownReader's plugin list; order is load-bearing (index.tsx). */
+/** Order is load-bearing; mirrors MarkdownReader's plugin list (index.tsx). */
 function readerProcessor() {
   return unified()
     .use(remarkParse)
@@ -41,7 +31,6 @@ function readerProcessor() {
     .use(rehypeProseTransforms);
 }
 
-/** Run the full reader pipeline headlessly; returns the final hast root. */
 export function runReaderPipeline(content: string): Root {
   const processor = readerProcessor();
   return processor.runSync(processor.parse(content)) as Root;
@@ -76,11 +65,6 @@ interface OpenBlock {
   out: BlockText;
 }
 
-/**
- * Every stamped block's rendered text, in document order. A descendant's text
- * is always a contiguous slice of its ancestor's, recorded as
- * `parentId`/`startInParent` — that is what `ownerBlockFor` walks.
- */
 export function extractBlockTexts(content: string): BlockText[] {
   const blocks: BlockText[] = [];
   const stack: OpenBlock[] = [];
@@ -152,10 +136,6 @@ export function extractBlockTexts(content: string): BlockText[] {
   return blocks;
 }
 
-/**
- * Canonical owner selection: the deepest stamped descendant fully containing
- * `[start, end)` owns it. Returns that block and the range in its text-space.
- */
 export function ownerBlockFor(
   blocks: BlockText[],
   blockId: string,

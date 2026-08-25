@@ -86,9 +86,8 @@ func TestPluginDriverRegister_ReturnsOnlyActiveRunsOwnedByPlugin(t *testing.T) {
 	if run.SessionID != "owned" || run.RunID != "run-owned" || string(run.Metadata) != `{"native_id":"abc"}` {
 		t.Fatalf("active run=%+v", run)
 	}
-	// A driver process that replaces the one that opened the run has to
-	// continue the run's report cursor; a fresh counter would report under a
-	// seq the store has already passed and every report would be discarded.
+	// A driver process replacing the one that opened the run must continue the run's report
+	// cursor: a fresh counter reports under a seq the store has already passed.
 	if run.Seq != 1 {
 		t.Fatalf("active run seq=%d, want the run's report cursor (1)", run.Seq)
 	}
@@ -790,8 +789,6 @@ func TestPluginDriverRun_IgnoresGenericPTYState(t *testing.T) {
 		t.Fatal("failed to begin plugin-owned state run")
 	}
 
-	// The worker poll, i.e. the one PTY source that may still apply a state: the
-	// point is that the plugin's ownership outranks even that.
 	d.handlePTYState("plugin-state-owner", pty.Observation{
 		Source: pty.SourceWorkerInfo,
 		Claim:  protocol.StateWorking,

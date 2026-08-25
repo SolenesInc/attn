@@ -11,20 +11,13 @@ import (
 	"github.com/victorarias/attn/internal/ticketnotify"
 )
 
-// The observer identities a session reads through live in ticket_identity.go,
-// beside the inverse mapping they must agree with. The delivery path is shared by
-// all runtimes; an optional runtime `ticket inbox --watch` consumes the same unread
-// queue before a countdown has to ring.
+// Observer identities live in ticket_identity.go, beside the inverse mapping they
+// must agree with.
 
 func (d *Daemon) ticketUnreadForSession(sessionID string) (int, error) {
 	return ticketnotify.UnreadAny(d.store, d.ticketObserversForSession(sessionID))
 }
 
-// handleTicketInbox returns the calling session's unread ticket events, bundled by
-// ticket, and advances its per-ticket cursors past them (a consume). This is the
-// agent's read path — what a nudged agent runs to catch up, and what a runtime's
-// optional watch drains. The observer identity is resolved from the session, so the
-// caller names nothing.
 func (d *Daemon) handleTicketInbox(conn net.Conn, msg *protocol.TicketInboxMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {
@@ -51,9 +44,7 @@ func (d *Daemon) handleTicketInbox(conn net.Conn, msg *protocol.TicketInboxMessa
 			}
 		}
 		if attentionErr := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sourceSessionID), now, deliveredThroughSeq); attentionErr != nil {
-			// Cursors have already advanced, so returning only an error here would
-			// hide the consumed bundles. Preserve delivery and let the next
-			// successful attention write repair the interruption clock.
+			// Cursors have already advanced; erroring out here would hide the consumed bundles.
 			d.logf("ticket inbox attention update %s: %v", sourceSessionID, attentionErr)
 		}
 	}
@@ -62,9 +53,6 @@ func (d *Daemon) handleTicketInbox(conn net.Conn, msg *protocol.TicketInboxMessa
 		d.sendError(conn, "ticket inbox: "+err.Error())
 		return
 	}
-	// The consume advanced this session's cursors, so its unread count just dropped.
-	// Refresh the indicator (and cancel any pending countdown if fully drained) — this
-	// is the chokepoint a runtime's optional watch drains through.
 	d.refreshTicketUnread(sourceSessionID)
 	if d.debugLogging && len(bundles) > 0 {
 		pending := 0

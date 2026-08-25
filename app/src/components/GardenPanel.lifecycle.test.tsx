@@ -24,9 +24,6 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   };
 }
 
-// Slice 2's contract for the panel: what state a seed is in and who holds it,
-// without expanding anything, and moving as the daemon pushes. A state that is
-// only visible after a click is a state nobody watching the garden sees.
 describe('GardenPanel lifecycle', () => {
   it('shows a seed s state and its tender in the row', () => {
     const growing = seed({
@@ -42,8 +39,6 @@ describe('GardenPanel lifecycle', () => {
     expect(screen.getByText(/tended by Trellis/)).toBeInTheDocument();
   });
 
-  // A session id is not a pretty name, but "somebody holds this" is the fact the
-  // panel owes the reader — an unnamed tender must not read as unclaimed.
   it('falls back to the claiming session when there is no member', () => {
     const growing = seed({
       id: 's-grow22',
@@ -69,15 +64,11 @@ describe('GardenPanel lifecycle', () => {
     expect(screen.queryByText(/tended by/)).not.toBeInTheDocument();
   });
 
-  // The panel holds no fetch: a state change arrives as a new push, and the row
-  // re-renders from it. This is the whole live contract.
   it('follows a seed through its life as the pushes arrive', () => {
     const planted = seed({ id: 's-life11', title: 'a whole life' });
     const { rerender } = render(
       <GardenPanel isOpen onClose={vi.fn()} seedsTotal={1} seeds={[planted]} />,
     );
-    // Nothing says "planted": most seeds are, so the word would be on almost
-    // every row and would mark nothing. The row is there, and says nothing.
     expect(screen.getByRole('button', { name: /a whole life/ })).toBeInTheDocument();
     expect(screen.queryByText('planted')).not.toBeInTheDocument();
 
@@ -100,9 +91,6 @@ describe('GardenPanel lifecycle', () => {
         seeds={[{ ...planted, status: 'harvested', reason: 'shipped it', rev: 3 }]}
       />,
     );
-    // Harvest ends the seed's time in the default listing: closed seeds sit
-    // behind the counted toggle rather than in the list. Opened, the row says
-    // "done" — the word the reader scans for is the outcome, not the verb.
     expect(screen.queryByRole('button', { name: /a whole life/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /1 closed/ }));
     expect(screen.getByText('done')).toBeInTheDocument();
@@ -124,8 +112,6 @@ describe('GardenPanel lifecycle', () => {
     expect(screen.getByText('shipped it')).toBeInTheDocument();
   });
 
-  // Closed-by-default must never read as an empty garden: the state where
-  // everything is done says so, with the count and the way to see it.
   it('says what is hidden when everything in view is closed', () => {
     const done = seed({ id: 's-done22', title: 'all wrapped', status: 'harvested' });
     const dead = seed({ id: 's-dead11', title: 'went nowhere', status: 'withered' });

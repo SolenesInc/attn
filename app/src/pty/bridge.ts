@@ -14,21 +14,15 @@ export interface PtySpawnArgs {
   shell?: boolean;
   resume_session_id?: string | null;
   resume_picker?: boolean | null;
-  /**
-   * An existing conversation file this session picks up from. Only a
-   * conversation agent reads it — a PTY-backed agent resumes through
-   * resume_session_id. The host FORKS the file, so the conversation it was
-   * copied from is never written to.
-   */
+  /** An existing conversation file this session picks up from; PTY-backed agents
+   * use resume_session_id instead. The host forks it, never writing the original. */
   resume_conversation_file?: string;
   yolo_mode?: boolean | null;
   /** Tri-state: absent follows the promoted auto mode default. */
   auto_mode?: boolean;
   chief_of_staff?: boolean | null;
-  /**
-   * The session this one was split from. Only meaningful for a shell: the daemon
-   * resolves it to the owning agent and stores that as the satellite's parent.
-   */
+  /** The session this one was split from. Only meaningful for a shell: the daemon
+   * resolves it to the owning agent and stores that as the satellite's parent. */
   spawned_from?: string;
   agent?: string;
   label?: string;
@@ -54,8 +48,6 @@ export type PtyAttachPolicy =
   | 'same_app_remount'
   | 'revive';
 
-// The only geometry that is not a live resize: the grid an attach's snapshot
-// restores the model to.
 export type PtyResizeSource =
   | 'attach_restore';
 
@@ -63,18 +55,11 @@ export type PtyEventPayload =
   | { event: 'data'; id: string; data: string | Uint8Array; seq?: number; suppressResponses?: boolean }
   | { event: 'local_resize'; id: string; cols: number; rows: number; source?: PtyResizeSource }
   | { event: 'restore_complete'; id: string }
-  // A server-authoritative snapshot (base64), decoded into the pane's model
-  // rather than written to it. It carries its own grid and its own scrollback.
   | { event: 'restore_snapshot'; id: string; data: string }
   | { event: 'seed_blocks'; id: string; blocks: SeededBlock[] }
-  // The session's whole kitty placement set, as the worker measured it on the
-  // chunk stamped `seq`. Routed through this chain rather than straight to the
-  // pane so it lands behind the bytes of that same seq.
+  // Routed through this chain rather than straight to the pane so it lands behind
+  // the bytes of the same `seq`.
   | { event: 'placements'; id: string; seq: number; placements: PlacementElement[] }
-  // A restore's placements. A snapshot carries no images (the APC bytes were
-  // stripped long before it was serialized), so this is the only path that
-  // carries them across an attach — and an empty set is meaningful: it is what
-  // clears an image the pane was showing before the reattach.
   | { event: 'seed_placements'; id: string; placements: PlacementElement[] }
   | { event: 'exit'; id: string; code: number; signal?: string }
   | { event: 'error'; id: string; error: string }
@@ -83,12 +68,8 @@ export type PtyEventPayload =
 
 type PtyEventHandler = (event: { payload: PtyEventPayload }) => void;
 
-/**
- * A pane's total size in DEVICE pixels — the units the PTY's ws_xpixel/ws_ypixel
- * and XTWINOPS reports speak, and what an image emitter divides by the grid to
- * decide how large to draw. Either field absent means the caller has not
- * measured the pane; the daemon then keeps the cell size it already has.
- */
+// A pane's total size in DEVICE pixels, the units ws_xpixel/ws_ypixel and XTWINOPS
+// speak. Either field absent means unmeasured; the daemon keeps the cell size it has.
 export interface PtyPixelGeometry {
   xpixel?: number;
   ypixel?: number;

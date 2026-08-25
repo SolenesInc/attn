@@ -69,9 +69,6 @@ afterEach(() => {
 });
 
 describe('EventBusSettings', () => {
-  // The page exists because nobody could see what the bus was doing. Reading it
-  // more than once per open would be the other failure — a diagnostics page that
-  // costs battery to leave open.
   it('reads the bus once on open and does not loop', async () => {
     const { getBusStatus } = renderPane(status());
     await waitFor(() => screen.getByTestId('bus-producers'));
@@ -89,9 +86,6 @@ describe('EventBusSettings', () => {
     expect(getBusStatus).toHaveBeenCalledTimes(2);
   });
 
-  // The producers table is the surface that would have caught the flap in a
-  // glance: who is writing, how much of the log they own, across how few
-  // subjects.
   it('shows each producer with its share, subjects and rates, loudest first', async () => {
     renderPane(status({
       producers: [producer(), producer({
@@ -105,14 +99,11 @@ describe('EventBusSettings', () => {
     expect(loud).toHaveTextContent('232,213');
     expect(loud).toHaveTextContent('73.7%');
     expect(loud).toHaveTextContent('103');
-    // A producer over the tripwire is marked, not left for the reader to spot.
     expect(loud).toHaveTextContent('Loud');
 
     expect(screen.getByTestId('bus-producer-pr.updated')).not.toHaveTextContent('Loud');
   });
 
-  // A quiet tail is collapsed, never silently dropped: the count and the share
-  // it accounts for are always on screen.
   it('states what the collapsed tail holds and can expand it', async () => {
     renderPane(status({
       producers: [
@@ -133,9 +124,6 @@ describe('EventBusSettings', () => {
     expect(screen.getByTestId('bus-producer-ticket.created')).toBeInTheDocument();
   });
 
-  // Health arrives as finished sentences from the daemon. The page renders them
-  // rather than re-deriving "this is bad" from the numbers, which is what keeps
-  // it and `attn bus status` saying the same thing.
   it('renders the daemon health findings verbatim', async () => {
     renderPane(status({
       health: [
@@ -161,8 +149,6 @@ describe('EventBusSettings', () => {
     expect(health).toHaveTextContent('Warning');
   });
 
-  // An empty consumer table is the real state of this bus today. It has to read
-  // as a fact about the system, not as a page that failed to load.
   it('explains an empty consumer list rather than showing a blank table', async () => {
     renderPane(status());
     const empty = await screen.findByTestId('bus-no-consumers');
@@ -184,15 +170,11 @@ describe('EventBusSettings', () => {
     expect(screen.getByTestId('bus-consumer-killed')).toHaveTextContent('Disabled');
     expect(screen.getByTestId('bus-consumer-pinner')).toHaveTextContent('Retention floor');
     expect(screen.getByTestId('bus-consumer-pinner')).toHaveTextContent('41,000');
-    // 7 days of waiting, from the oldest unread stamp.
     expect(screen.getByTestId('bus-consumer-pinner')).toHaveTextContent('7d');
     expect(screen.getByTestId('bus-consumer-absent')).toHaveTextContent('Not running');
     expect(screen.getByTestId('bus-consumer-failing')).toHaveTextContent('Stalled');
   });
 
-  // Holding the floor is the system working; holding it past the tripwire is an
-  // outage. If the page draws the two the same way, opening it after the warning
-  // notification tells the reader nothing they did not already know.
   it('separates a normal retention floor from one past the tripwire', async () => {
     renderPane(status({
       consumers: [
@@ -216,8 +198,6 @@ describe('EventBusSettings', () => {
     expect(alarming).not.toHaveTextContent('Retention floor');
   });
 
-  // The tripwire is shown so the reader can check the value in force against the
-  // one they set. Rounding 90 seconds to "2m" names a number they cannot set.
   it('names the tripwire exactly rather than rounding it', async () => {
     renderPane(status({
       pinAlarmSeconds: 90,
@@ -231,8 +211,6 @@ describe('EventBusSettings', () => {
     expect(pill?.getAttribute('title')).toContain('longer than 1m30s');
   });
 
-  // `delivering: false` means the snapshot could not know whether a loop is
-  // running, so the page must not accuse anyone of being down.
   it('does not claim a consumer is down when delivery is not observable', async () => {
     renderPane(status({ delivering: false, consumers: [consumer({ name: 'absent', live: false })] }));
     await screen.findByTestId('bus-consumers');
@@ -240,9 +218,6 @@ describe('EventBusSettings', () => {
     expect(screen.getByTestId('bus-consumer-absent')).not.toHaveTextContent('Not running');
   });
 
-  // `delivering: false` means two different things depending on who read the
-  // snapshot. The CLI read the database; this page always read the daemon, so it
-  // must not borrow the CLI's sentence and claim a transport it did not use.
   it('says the daemon has no delivery loops rather than claiming it read the database', async () => {
     renderPane(status({ delivering: false }));
     await screen.findByTestId('bus-producers');
@@ -252,7 +227,6 @@ describe('EventBusSettings', () => {
     expect(footer).not.toHaveTextContent('from the database');
   });
 
-  // The way in needs the way out: disable and enable are the same button.
   it('toggles a consumer and re-reads the result', async () => {
     const setEnabled = vi.fn().mockResolvedValue({ consumer: 'notifier' });
     const { getBusStatus } = renderPane(status({ consumers: [consumer()] }), setEnabled);
@@ -260,7 +234,6 @@ describe('EventBusSettings', () => {
 
     fireEvent.click(screen.getByTestId('bus-consumer-toggle-notifier'));
     await waitFor(() => expect(setEnabled).toHaveBeenCalledWith('notifier', false));
-    // The daemon is authoritative: the row reflects a re-read, not a local guess.
     await waitFor(() => expect(getBusStatus).toHaveBeenCalledTimes(2));
   });
 

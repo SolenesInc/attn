@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { AppCommandError, handleAppDaemonEvent } from './daemonAppEvents';
 import { pendingRequestKey, type PendingRequests } from './daemonPendingRequests';
 
-// A refused command has to reach the view as something it can branch on. A
-// rebuild in progress is worth retrying; a handler that threw is not, and the
-// two arrive as the same shape of failure with different codes.
-
 function parked(pending: PendingRequests, requestId: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     pending.set(pendingRequestKey('app_command', requestId), { resolve, reject });

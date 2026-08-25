@@ -1,9 +1,5 @@
 // @vitest-environment node
-// The production restore path in miniature: a snapshot the native worker
-// encoded, decoded by the browser module. The two are different builds of the
-// same library configured differently — the worker stores kitty images, this
-// one has kitty compiled out — so the fixture is what pins them to one format.
-// Regenerate it with ATTN_UPDATE_FIXTURES=1 go test ./internal/ghosttyvt.
+// Regenerate the fixture with ATTN_UPDATE_FIXTURES=1 go test ./internal/ghosttyvt.
 // @ts-expect-error -- @types/node is only a transitive peer here
 import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
@@ -91,8 +87,6 @@ describe('adoptSnapshot', () => {
   });
 
   it('puts nothing on the pty', () => {
-    // The fixture's parser sits mid-CSI, which is the case a replay-based
-    // restore would answer queries from.
     const { terminal } = adopted();
     expect(terminal.hasResponse()).toBe(false);
     terminal.free();
@@ -121,9 +115,6 @@ describe('adoptSnapshot', () => {
   });
 
   it('rejects bytes it cannot decode without touching the terminal', () => {
-    // The containment in GhosttyTerminal.restoreSnapshot rests on this: a
-    // refused decode must leave the model it declined to replace intact, so a
-    // snapshot written by another build costs the restore and nothing else.
     const terminal = ghostty.createTerminal(80, 24, {});
     terminal.write('content that survives a refused restore\r\n');
 
@@ -139,8 +130,7 @@ describe('adoptSnapshot', () => {
   it('keeps the terminal usable for live input', () => {
     const { terminal, historyDecoder } = adopted();
     while (historyDecoder.decodeNextPage() !== null) { /* drain */ }
-    // The fixture's parser stopped mid-CSI; 'm' completes that sequence rather
-    // than printing, which is only true if the continuation came back with it.
+    // The fixture's parser stopped mid-CSI; the leading 'm' completes it.
     terminal.write('mok');
     expect(viewportRows(terminal)[5]).toBe('prompt$ ok');
     terminal.free();

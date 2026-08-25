@@ -99,9 +99,6 @@ func storedSubmitDraftCount(t *testing.T, d *Daemon) int {
 	return len(anns)
 }
 
-// Delivered: the payload goes out as a bracketed paste and Enter follows as a
-// second write, the draft is tombstone-cleared, and the result carries the new
-// generation floor so the client can seed its counter without a round-trip.
 func TestMarkdownAnnotationsSubmitDelivered(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -130,14 +127,11 @@ func TestMarkdownAnnotationsSubmitDelivered(t *testing.T) {
 	if n := storedSubmitDraftCount(t, d); n != 0 {
 		t.Fatalf("draft not cleared after delivery: %d annotations remain", n)
 	}
-	// The tombstone must reject a straggling debounced save at the old
-	// generation (the resurrection guard).
 	if err := d.store.SaveMarkdownAnnotationDraft(submitTestPath, "[]", 5, time.Now()); err == nil {
 		t.Fatal("stale save at cleared generation should be rejected")
 	}
 }
 
-// Orphaned ids travel from the message into the payload label.
 func TestMarkdownAnnotationsSubmitCarriesOrphanedIds(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -271,8 +265,6 @@ func storedSeedSubmitDraftCount(t *testing.T, d *Daemon, seedID string) int {
 	return len(anns)
 }
 
-// pending_approval target: nothing is typed, drafts stay intact, and the
-// result reports skipped_pending_approval (success=false, no error).
 func TestMarkdownAnnotationsSubmitSkippedPendingApproval(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -296,7 +288,6 @@ func TestMarkdownAnnotationsSubmitSkippedPendingApproval(t *testing.T) {
 	}
 }
 
-// Unknown target session: error result, drafts intact.
 func TestMarkdownAnnotationsSubmitUnknownSession(t *testing.T) {
 	d := newSubmitDaemon(t)
 	seedSubmitDraft(t, d, 2, submitTestAnnotations())
@@ -312,7 +303,6 @@ func TestMarkdownAnnotationsSubmitUnknownSession(t *testing.T) {
 	}
 }
 
-// Empty draft: error result, no PTY write, no clear.
 func TestMarkdownAnnotationsSubmitEmptyDraft(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex
@@ -333,7 +323,6 @@ func TestMarkdownAnnotationsSubmitEmptyDraft(t *testing.T) {
 	}
 }
 
-// PTY delivery failure: error result, drafts intact (retry-safe).
 func TestMarkdownAnnotationsSubmitDeliveryFailure(t *testing.T) {
 	d := newSubmitDaemon(t)
 	d.ptyBackend = &failingInputBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
@@ -351,12 +340,8 @@ func TestMarkdownAnnotationsSubmitDeliveryFailure(t *testing.T) {
 	}
 }
 
-// A clear failure after a successful delivery still reports delivered (never
-// risk re-delivery) but carries an error so the UI re-hydrates.
 func TestMarkdownAnnotationsSubmitClearFailureStillDelivered(t *testing.T) {
 	d := newSubmitDaemon(t)
-	// Closing the store DB from inside the PTY write makes the delivery
-	// succeed and the follow-up ClearMarkdownAnnotationDraft fail.
 	d.ptyBackend = &fakeSpawnBackend{onInput: func(string, []byte) {
 		if err := d.store.Close(); err != nil {
 			t.Errorf("closing store: %v", err)
@@ -378,7 +363,6 @@ func TestMarkdownAnnotationsSubmitClearFailureStillDelivered(t *testing.T) {
 	}
 }
 
-// failingInputBackend is a fakeSpawnBackend whose PTY input always errors.
 type failingInputBackend struct {
 	*fakeSpawnBackend
 }

@@ -8,9 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// callTicketList drives the board-read handler synchronously and returns the decoded
-// response. handleTicketList has no async side effects, so a plain syncConn suffices.
-// sessionID is passed only to exercise the optional field — the handler ignores it.
+// handleTicketList has no async side effects, so a plain syncConn suffices.
 func callTicketList(t *testing.T, d *Daemon, sessionID, status string, includeArchived bool) protocol.Response {
 	t.Helper()
 	conn := &syncConn{}
@@ -40,11 +38,6 @@ func ticketsByID(tickets []protocol.Ticket) map[string]protocol.Ticket {
 	return out
 }
 
-// The board read is global, not identity-scoped: it returns every ticket and works
-// with NO session at all. This is the whole point of the read foundation — an agent
-// (or a bare terminal) must be able to find a ticket-id without owning a ticket — so
-// the test passes an empty source_session_id and still expects the full board, with
-// each row carrying its description (the brief), not just a bare title.
 func TestHandleTicketListReturnsBoardWithoutSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, agents, _ := delegateMany(t, d, "codex", "Task Y", "Task X")
@@ -70,9 +63,6 @@ func TestHandleTicketListReturnsBoardWithoutSession(t *testing.T) {
 	}
 }
 
-// --status narrows the board to one column. After a delegated ticket is moved to
-// in_review, filtering by in_review returns only it, and filtering by working returns
-// only the other — proving the filter reaches the store query, not just the wire.
 func TestHandleTicketListStatusFilter(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, agents, _ := delegateMany(t, d, "codex", "Task Y", "Task X")

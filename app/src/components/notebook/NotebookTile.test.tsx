@@ -9,21 +9,13 @@ import {
 } from '../../contexts/NotebookSurfaceContext';
 import type { FsWatchResult } from '../../hooks/useDaemonSocket';
 
-// NotebookSurface itself (CodeMirror-backed tree/editor/finder) is covered by
-// NotebookBrowser.test.tsx; here we only need to observe what NotebookTile
-// hands it, so stub it to a thin recorder.
 const surfaceCalls = vi.hoisted(() => [] as Array<{
   changeSignal?: number;
   backlinksNotebook?: unknown;
   sendToChief?: unknown;
 }>);
-// Records one entry per NotebookSurface mount (not per render): a plain push
-// in the render body would double-count every re-render caused by the
-// resolvedRoot/daemon state updates already exercised above, so remount
-// detection needs its own list driven by React's own mount lifecycle
-// (an empty-deps useEffect), which only re-fires when React tears the
-// element down and builds a fresh instance — exactly what `key={root}`
-// on NotebookSurface in NotebookTile.tsx is meant to force on root change.
+// One entry per NotebookSurface MOUNT, not per render: remount detection runs off an
+// empty-deps useEffect, which only re-fires when React rebuilds the element.
 const surfaceMounts = vi.hoisted(() => [] as number[]);
 vi.mock('../NotebookSurface', () => ({
   NotebookSurface: (props: { changeSignal?: number; backlinksNotebook?: unknown; sendToChief?: unknown }) => {
@@ -124,9 +116,8 @@ describe('NotebookTile root-bound daemon + watch lifecycle', () => {
   it('watches an arbitrary root on mount, adopts the resolved root for the daemon, and unwatches it on unmount', async () => {
     const harness = makeHarness({
       effectiveNotebookRoot: '/notebook-root',
-      // fs_watch_result may normalize the path (e.g. resolve symlinks/trailing slash) —
-      // fs_changed events for this subscription carry that resolved form, not the raw
-      // prop, so both the fs_* calls and the changeSignal lookup must key off it too.
+      // fs_watch_result may normalize the path and fs_changed events carry that resolved
+      // form, so the fs_* calls and the changeSignal lookup must key off it too.
       watchResolvesTo: () => '/repo-resolved',
     });
     const { unmount } = render(
@@ -135,20 +126,16 @@ describe('NotebookTile root-bound daemon + watch lifecycle', () => {
       </NotebookSurfaceProvider>,
     );
 
-    // Before resolution: bound to the raw root prop.
     expect(harness.makeDaemon).toHaveBeenCalledWith('/repo');
 
     await waitFor(() => expect(harness.sendFsWatch).toHaveBeenCalledWith('/repo'));
 
-    // After fs_watch_result lands: the daemon is rebuilt against the resolved
-    // root, and the surface re-renders with that instance.
     await waitFor(() => expect(harness.makeDaemon).toHaveBeenCalledWith('/repo-resolved'));
     await waitFor(() => expect(surfaceCalls.length).toBeGreaterThan(1));
 
     unmount();
 
     await waitFor(() => expect(harness.sendFsUnwatch).toHaveBeenCalledWith('/repo-resolved'));
-    // Mount-then-unmount ordering: watch strictly precedes the matching unwatch.
     expect(harness.callLog).toEqual(['watch:/repo', 'unwatch:/repo-resolved']);
   });
 
@@ -180,13 +167,9 @@ describe('NotebookTile root-bound daemon + watch lifecycle', () => {
     );
     await waitFor(() => expect(sendFsWatch).toHaveBeenCalledWith('/repo'));
 
-    // Unmount BEFORE fs_watch resolves: the effect's own cleanup runs with
-    // watchedRootRef still null, so it can't unwatch anything itself.
     unmount();
     expect(sendFsUnwatch).not.toHaveBeenCalled();
 
-    // The daemon-side watcher lands only now — it must still be dropped, or
-    // it leaks until app restart.
     resolveWatch({ root: '/repo-resolved' });
     await waitFor(() => expect(sendFsUnwatch).toHaveBeenCalledWith('/repo-resolved'));
     expect(callLog).toEqual(['watch:/repo', 'unwatch:/repo-resolved']);
@@ -216,10 +199,6 @@ describe('NotebookTile root-bound daemon + watch lifecycle', () => {
   });
 
   it('re-issues fs_watch after a reconnect (connectionGeneration bump), unwatching the pre-reconnect ref first', async () => {
-    // The daemon drops an explicit fs_watch ref whenever the owning client's
-    // socket disconnects, but a normal frontend reconnect leaves the tile
-    // mounted with the same root/callback identities — nothing else in the
-    // effect's deps would re-fire the subscription without connectionGeneration.
     const harness = makeHarness({
       effectiveNotebookRoot: '/notebook-root',
       watchResolvesTo: () => '/repo-resolved',
@@ -233,8 +212,6 @@ describe('NotebookTile root-bound daemon + watch lifecycle', () => {
     await waitFor(() => expect(harness.sendFsWatch).toHaveBeenCalledWith('/repo'));
     await waitFor(() => expect(harness.makeDaemon).toHaveBeenCalledWith('/repo-resolved'));
 
-    // Simulate a reconnect: same root, same context shape, only the
-    // generation counter bumps.
     rerender(
       <NotebookSurfaceProvider value={{ ...harness.value, connectionGeneration: 2 }}>
         <NotebookTile initialPath={null} root="/repo" onOpenFile={() => {}} />
@@ -309,17 +286,8 @@ describe('NotebookTile off-root capability gating', () => {
 });
 
 describe('NotebookTile remounts NotebookSurface on root change', () => {
-  // Regression coverage for a wrong-root-write risk flagged in PR #588 review:
-  // NotebookSurface's init effect deps are `[active]` only, so switching an
-  // already-mounted tile's root via the header switcher previously left
-  // selectedPath/note/draft state carrying over from the old root while the
-  // daemon rebinds underneath it — the next autosave could write the old
-  // document's buffer to the same relative path under the NEW root.
-  // NotebookTile.tsx now keys NotebookSurface on the raw `root` prop so a
-  // root change forces React to tear down and rebuild the surface instance
-  // (fresh selection/note/draft, fresh init effect). These tests assert the
-  // remount actually happens (and doesn't spuriously happen) rather than
-  // just asserting the key prop's value.
+  // NotebookSurface's init effect deps are `[active]` only, so switching an already-mounted
+  // tile's root would carry selectedPath/note/draft over and autosave them under the new root.
 
   it('remounts NotebookSurface when root changes', async () => {
     const harness = makeHarness({ effectiveNotebookRoot: '/notebook-root' });
@@ -348,16 +316,12 @@ describe('NotebookTile remounts NotebookSurface on root change', () => {
     );
     await waitFor(() => expect(surfaceMounts.length).toBe(1));
 
-    // Rerender with an unrelated prop change (onOpenFile identity) but the
-    // same root: this must not remount, guarding against keying on
-    // something that isn't stable across ordinary re-renders.
     rerender(
       <NotebookSurfaceProvider value={harness.value}>
         <NotebookTile initialPath="a.md" root="/a" onOpenFile={() => {}} />
       </NotebookSurfaceProvider>,
     );
 
-    // Give any spurious effect a tick to fire before asserting it didn't.
     await waitFor(() => expect(surfaceCalls.length).toBeGreaterThan(1));
     expect(surfaceMounts.length).toBe(1);
   });
@@ -374,9 +338,6 @@ describe('NotebookTile remounts NotebookSurface on root change', () => {
     );
     await waitFor(() => expect(surfaceMounts.length).toBe(1));
 
-    // The daemon rebuild after resolution re-renders the (same-keyed)
-    // element with a new daemon instance — that's a normal re-render, not
-    // a remount, so surfaceMounts must stay at 1.
     await waitFor(() => expect(harness.makeDaemon).toHaveBeenCalledWith('/private/tmp/x'));
     await waitFor(() => expect(surfaceCalls.length).toBeGreaterThan(1));
     expect(surfaceMounts.length).toBe(1);

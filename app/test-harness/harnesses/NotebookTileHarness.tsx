@@ -1,11 +1,3 @@
-/**
- * NotebookTile Test Harness
- *
- * Renders the `tile` shape of the Notebook (a NotebookTile fed by a mocked
- * NotebookSurfaceProvider) inside a width-controllable frame, so an e2e can verify
- * the tile renders the live surface and folds its rail/tree responsively as the
- * frame narrows. The frame width is set via window.__setTileWidth(px).
- */
 import { useCallback, useMemo, useState, useEffect } from 'react';
 // Pull in the app's design tokens so the surface renders with the real theme.
 import '../../src/App.css';
@@ -49,9 +41,6 @@ declare global {
 
 export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [width, setWidth] = useState(1100);
-  // The tile's seed file, controllable from the URL so an e2e can exercise both a
-  // seeded tile (?initialPath=knowledge/index.md, the default) and a fresh tile
-  // (?initialPath= empty → no seed → the finder auto-opens on the empty screen).
   const initialPathParam = new URLSearchParams(window.location.search).get('initialPath');
   const initialPath = initialPathParam === null ? 'knowledge/index.md' : (initialPathParam || null);
 

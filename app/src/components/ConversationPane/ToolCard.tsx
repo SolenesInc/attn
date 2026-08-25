@@ -17,24 +17,9 @@ const statusLabel: Record<ConversationToolCall['status'], string> = {
   error: 'failed',
 };
 
-/**
- * One tool call in the transcript, collapsed to a line until it is opened.
- *
- * Collapsed is the whole point. The card shows what the agent did — the tool's
- * name, the command or path it did it to, whether it worked — and none of what
- * it read or printed. A transcript of a long session is mostly tool output, and
- * keeping that output out of the app until someone asks for it is why a session
- * that has run a thousand tools still scrolls.
- *
- * Opening the card asks the host for the detail. It arrives as its own envelope
- * and lands in the store, so the card fills in when it does; nothing here waits
- * on a promise, and the same card opened in two windows costs one read.
- */
 export function ToolCard({ sessionId, tool, resolvedTheme = 'dark' }: ToolCardProps) {
   const { sendAgentToolDetail } = useDaemonApi();
   const [expanded, setExpanded] = useState(false);
-  // What has been asked for, so re-opening a card does not ask again and the
-  // "show the whole thing" button does not fire twice on a slow read.
   const [requested, setRequested] = useState<'none' | 'clipped' | 'full'>('none');
 
   const detail = tool.detail;
@@ -44,27 +29,21 @@ export function ToolCard({ sessionId, tool, resolvedTheme = 'dark' }: ToolCardPr
     setRequested(full ? 'full' : 'clipped');
   }, [sendAgentToolDetail, sessionId, tool.callId]);
 
-  // The read is decided here rather than inside the updater: React may replay a
-  // state updater, and a replayed one would ask the host for the same detail
-  // twice.
+  // Decided here rather than inside the updater: React may replay a state updater, asking the host twice.
   const toggle = useCallback(() => {
     const opening = !expanded;
     if (opening && tool.hasDetail && !detail && requested === 'none') fetchDetail(false);
     setExpanded(opening);
   }, [detail, expanded, fetchDetail, requested, tool.hasDetail]);
 
-  // The patch pi hands us is already a unified diff against the file as it was,
-  // so it is rendered as one rather than reconstructed into before/after text —
-  // reconstruction from a 4-line-context patch can only guess at the rest of
-  // the file, and guesses show up as wrong line numbers in the gutter.
+  // Rendered as the unified diff pi hands us: reconstruction from 4-line context guesses the rest of the file.
   const patchOptions = useMemo<FileDiffOptions<undefined>>(() => ({
     diffStyle: 'unified',
     expandUnchanged: false,
     diffIndicators: 'classic',
     theme: { dark: 'pierre-dark', light: 'pierre-light' },
     themeType: resolvedTheme,
-    // Same reason as DiffView: the pure-JS Shiki engine, because WASM fetching
-    // inside the Tauri webview is unreliable under the custom protocol + CSP.
+    // Pure-JS Shiki: WASM fetching inside the Tauri webview is unreliable under the custom protocol + CSP.
     preferredHighlighter: 'shiki-js',
   }), [resolvedTheme]);
 
@@ -83,8 +62,6 @@ export function ToolCard({ sessionId, tool, resolvedTheme = 'dark' }: ToolCardPr
         className="conversation-tool-header"
         data-testid="conversation-tool-toggle"
         aria-expanded={expanded}
-        // A card with nothing behind it still opens: the header says so, and a
-        // control that silently does nothing is worse than one that explains.
         onClick={toggle}
       >
         <span className="conversation-tool-caret" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
@@ -130,12 +107,6 @@ export function ToolCard({ sessionId, tool, resolvedTheme = 'dark' }: ToolCardPr
             <pre className="conversation-tool-output" data-testid="conversation-tool-output">{detail.text}</pre>
           )}
           {detail?.truncated && !detail.full && (
-            // pi keeps the whole output on disk when it clips what it gives the
-            // model, so the clip is a display decision the user can undo. When
-            // there is no file behind it, say that instead of offering a button
-            // that cannot deliver. A `full` answer that is still truncated hit
-            // the host's own read cap and says so in its error, so it needs
-            // nothing here.
             <div className="conversation-tool-note">
               {tool.fullOutput ? (
                 <button

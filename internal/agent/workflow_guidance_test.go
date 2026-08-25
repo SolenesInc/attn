@@ -8,14 +8,10 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 )
 
-// workflowGuidanceMarker is a phrase unique to the workflow-trigger guidance —
-// it appears nowhere in argv, hook commands, or workspace-context guidance, so
-// its presence is a reliable signal that the workflow block was injected.
+// workflowGuidanceMarker appears nowhere in argv, hook commands, or workspace-context guidance, so its presence means the workflow block was injected.
 const workflowGuidanceMarker = "hypercode"
 
 func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
-	// A home launch carries garden guidance but never workflow guidance while the
-	// workflow flag is disabled.
 	off := (&Claude{}).BuildCommand(SpawnOpts{SessionID: "s", Executable: "claude", Garden: true})
 	if !slices.Contains(off.Args, "--append-system-prompt") {
 		t.Fatalf("home launch should append the garden block: %v", off.Args)
@@ -28,14 +24,12 @@ func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
 		t.Fatalf("bare launch leaked workflow guidance: %q", offPrompt)
 	}
 
-	// Enabled without a checkout: the system prompt carries only the workflow guidance.
 	on := (&Claude{}).BuildCommand(SpawnOpts{SessionID: "s", Executable: "claude", InjectWorkflowGuidance: true})
 	prompt := argvValueAfter(on.Args, "--append-system-prompt")
 	if !strings.Contains(prompt, workflowGuidanceMarker) {
 		t.Fatalf("enabled launch missing workflow guidance: %q", prompt)
 	}
 
-	// Enabled with a checkout: both the workspace context and the workflow guidance ride along.
 	both := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:              "s",
 		Executable:             "claude",
@@ -47,7 +41,6 @@ func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {
 		t.Fatalf("enabled launch with checkout missing one of context/workflow guidance: %q", bothPrompt)
 	}
 
-	// A checkout WITHOUT the flag must not leak workflow guidance.
 	contextOnly := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:            "s",
 		Executable:           "claude",
@@ -70,12 +63,6 @@ func TestCodexGenerateConfigOverrides_GatesWorkflowGuidance(t *testing.T) {
 	}
 }
 
-// TestHeadlessSubagentArgvCarriesNoWorkflowGuidance locks the structural
-// nested-workflow suppression: workflow subagents spawn through the headless
-// argv builders, which have no path to the workflow-trigger guidance (only
-// BuildCommand / GenerateConfigOverrides inject it). So even a fully-featured,
-// writable workflow-subagent request must never carry the guidance — if a
-// future change routes guidance through the headless path, this fails loudly.
 func TestHeadlessSubagentArgvCarriesNoWorkflowGuidance(t *testing.T) {
 	req := HeadlessTaskRequest{
 		Model:            "gpt-test",
@@ -100,7 +87,6 @@ func TestHeadlessSubagentArgvCarriesNoWorkflowGuidance(t *testing.T) {
 		if strings.Contains(joined, workflowGuidanceMarker) {
 			t.Fatalf("%s headless argv carried workflow guidance: %v", name, argv)
 		}
-		// The launch-only injection seams must never appear on the headless path.
 		if slices.Contains(argv, "--append-system-prompt") {
 			t.Fatalf("%s headless argv used --append-system-prompt: %v", name, argv)
 		}

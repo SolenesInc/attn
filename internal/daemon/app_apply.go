@@ -14,33 +14,14 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Applying and rolling back: the two commands that move an app's version
-// pointer, and the only writes in the whole apply pipeline.
-//
-// The build happens in the caller — `attn app apply` runs the developer's bun
-// and attn's pinned TypeScript, and hands over a finished artifact. That split
-// is deliberate: the toolchain lives on the developer's PATH, not the daemon's
-// (a daemon launched by the macOS app inherits a minimal PATH and would not find
-// a version-managed bun), and the errors that matter most here — a compiler's
-// file and line — belong in the terminal the author is looking at.
-//
-// What the daemon keeps is everything that has to be atomic or observed: the
-// version row, the pointer, and the fact. It also re-derives the hash from what
-// is actually on disk, so the registry never names content it has not seen.
-
-// appVersionChanged is FactAppVersionChanged's payload.
-//
-// Previous is carried rather than left to be read back because the consumer that
-// cares — the runtime, draining the outgoing version's handlers — would
-// otherwise have to read a pointer that has already moved.
+// Previous is carried rather than read back: the runtime draining the outgoing
+// version's handlers would otherwise read a pointer that already moved.
 type appVersionChanged struct {
 	Name        string `json:"name"`
 	VersionID   int64  `json:"version_id"`
 	PreviousID  int64  `json:"previous_version_id,omitempty"`
 	ContentHash string `json:"content_hash"`
-	// Reason is "apply" or "rollback". The move is the same either way; a
-	// consumer that logs or notifies wants to say which happened.
-	Reason string `json:"reason"`
+	Reason      string `json:"reason"`
 }
 
 const (
@@ -72,9 +53,7 @@ func (d *Daemon) handleAppApply(conn net.Conn, msg *protocol.AppApplyMessage) {
 		return
 	}
 
-	// The artifact's location is derived from the app and the hash, never taken
-	// from the caller: there is exactly one place a version's bundle can be, and
-	// deriving it is what makes that true of the daemon as well as the builder.
+	// Derived from the app and the hash, never taken from the caller.
 	path := appbuild.ArtifactPath(d.appsDir, name, hash)
 	bundle, err := os.ReadFile(path)
 	if err != nil {
@@ -83,9 +62,6 @@ func (d *Daemon) handleAppApply(conn net.Conn, msg *protocol.AppApplyMessage) {
 			name, path, err, d.appsDir))
 		return
 	}
-	// A version is its handler bundle *and* one module per declared view, so the
-	// check reads all of them. The declaration is the only description of the
-	// version the daemon holds, which is what names the views to look for.
 	viewNames, err := appbuild.DeclaredViewNames(declaration)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("app apply %s: %v", name, err))
@@ -136,10 +112,6 @@ func (d *Daemon) handleAppApply(conn net.Conn, msg *protocol.AppApplyMessage) {
 	if source := strings.TrimSpace(protocol.Deref(msg.SourcePath)); source != "" {
 		d.logf("app apply %s: version %d (%s) from %s", name, version.ID, appbuild.ShortHash(hash), source)
 	}
-	// Subscriptions and collections both come from the manifest, so both can
-	// differ from the version before this one. Re-pointing here rather than off
-	// the fact keeps it synchronous with the apply: the reply the author reads
-	// means the new version is already the one that will run.
 	d.syncAppRuntimeForVersion(name)
 	d.publishAppVersionChanged(name, version, previous, appVersionReasonApply)
 
@@ -156,10 +128,6 @@ func (d *Daemon) handleAppApply(conn net.Conn, msg *protocol.AppApplyMessage) {
 	d.sendDocResponse(conn, protocol.Response{Ok: true, AppApplyResult: &result})
 }
 
-// handleAppRollback moves an app onto a version it already has. It builds
-// nothing and reads no source: a version is an immutable row and an artifact
-// still on disk, which is the whole reason rollback is instant and cannot fail
-// halfway.
 func (d *Daemon) handleAppRollback(conn net.Conn, msg *protocol.AppRollbackMessage) {
 	name := strings.TrimSpace(msg.Name)
 	if err := apps.ValidateName(name); err != nil {
@@ -196,10 +164,6 @@ func (d *Daemon) handleAppRollback(conn net.Conn, msg *protocol.AppRollbackMessa
 		d.sendError(conn, "app rollback "+name+": "+err.Error())
 		return
 	}
-	// The two rollbacks move the pointer differently on purpose. A named version
-	// starts serving history again from where it lands; a bare rollback walks the
-	// existing history down one step, which is what lets the next one walk
-	// further rather than come back here.
 	if msg.VersionID == nil {
 		err = d.store.StepAppVersionBack(name, target.ID, time.Now())
 	} else {
@@ -224,13 +188,6 @@ func (d *Daemon) handleAppRollback(conn net.Conn, msg *protocol.AppRollbackMessa
 	d.sendDocResponse(conn, protocol.Response{Ok: true, AppRollbackResult: &result})
 }
 
-// pickRollbackTarget resolves the version to roll onto, and refuses in the
-// reader's terms: a version that is not this app's is refused by listing the
-// ones that are, and an app already on the version asked for is refused rather
-// than answered with a success that changed nothing and a fact about a move that
-// did not happen. Every refusal ends with the app's version list, so the caller
-// can fix its next call from the error alone.
-//
 // versions arrives newest-id-first, as ListAppVersions returns it.
 func pickRollbackTarget(name string, app store.App, versions []store.AppVersion, requested *int) (store.AppVersion, error) {
 	if len(versions) == 0 {
@@ -248,16 +205,8 @@ func pickRollbackTarget(name string, app store.App, versions []store.AppVersion,
 		}
 		return store.AppVersion{}, fmt.Errorf("app rollback %s: version %d is not a version of this app; %s", name, id, versionsSentence(versions, app.CurrentVersionID))
 	}
-	// No version named: one step back along the app's serving history, which the
-	// registry extends at every pointer move. The numerically previous id is a
-	// different question and answers it wrong exactly when rollback matters — an
-	// app that went good, broken, fixed has the broken one below its pointer, and
-	// that is the version an operator is running from.
-	//
-	// Because walking moves along the chain rather than rewriting one pointer,
-	// each further bare rollback goes one step further back, and the step below
-	// the one the app stands on is always a version that really did serve before
-	// it.
+	// One step back along the serving history, not the numerically previous id:
+	// an app that went good, broken, fixed has the broken one below its pointer.
 	if app.CurrentVersionID == 0 {
 		return store.AppVersion{}, fmt.Errorf("app rollback %s: it is not on any version, so there is no back to go to; name one of them. %s",
 			name, versionsSentence(versions, 0))
@@ -275,9 +224,6 @@ func pickRollbackTarget(name string, app store.App, versions []store.AppVersion,
 		name, app.PreviousServingVersionID, app.CurrentVersionID, versionsSentence(versions, app.CurrentVersionID))
 }
 
-// versionsSentence lists what an app actually has, marking the current one. It
-// is appended to every rollback refusal because the next thing the reader needs
-// is the id they should have asked for.
 func versionsSentence(versions []store.AppVersion, current int64) string {
 	parts := make([]string, 0, len(versions))
 	for _, v := range versions {
@@ -290,10 +236,6 @@ func versionsSentence(versions []store.AppVersion, current int64) string {
 	return "its versions, newest first: " + strings.Join(parts, ", ")
 }
 
-// publishAppVersionChanged announces a pointer that actually moved. A re-apply
-// that lands on the version already current moves nothing, and a fact about a
-// change that did not happen would have the runtime drain and reload for no
-// reason.
 func (d *Daemon) publishAppVersionChanged(name string, version store.AppVersion, previous int64, reason string) {
 	if version.ID == previous {
 		return
@@ -318,9 +260,6 @@ func (d *Daemon) currentAppVersion(name string) (int64, error) {
 	return app.CurrentVersionID, nil
 }
 
-// validateContentHash refuses anything that is not a sha256 in lowercase hex.
-// The hash is a directory name and a uniqueness key, and a caller-shaped string
-// in either place is worth one cheap check.
 func validateContentHash(hash string) error {
 	const want = 64
 	if len(hash) != want {
@@ -334,9 +273,6 @@ func validateContentHash(hash string) error {
 	return nil
 }
 
-// validateDeclaration checks the frozen snapshot is JSON for the app being
-// applied. The name inside it is what the runtime will read back, so a snapshot
-// naming a different app would give a version an identity its row denies.
 func validateDeclaration(name, declaration string) error {
 	if strings.TrimSpace(declaration) == "" {
 		return fmt.Errorf("the declaration snapshot is empty; a version records what its manifest said")

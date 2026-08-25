@@ -1,13 +1,3 @@
-// app/src/components/SessionActivitySettings.tsx
-//
-// Settings › Agents › Session activity. One short present-tense line per
-// session saying what each agent is doing right now, generated from the
-// session's own transcript.
-//
-// The agent choice is deliberately required rather than defaulted. Claude and
-// Codex differ enough in speed, price, and which account pays that picking one
-// would be choosing how the user's money is spent, so the daemon reports an
-// enabled-but-unpicked feature as an error and this pane refuses to enable it.
 import { useCallback, useMemo, useState } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
 import { agentLabel } from '../utils/agentAvailability';
@@ -32,15 +22,13 @@ const MODEL_PRESETS: Partial<Record<SessionAgent, { value: string; label: string
   ],
 };
 
-// Effort measured inert on Claude — none, low, medium and high all land within
-// the same output-token band on identical input — so only Codex offers it.
+// Effort measured inert on Claude — none, low, medium and high all land within the same output-token band on identical input — so only Codex offers it.
 const EFFORT_LEVELS: Partial<Record<SessionAgent, string[]>> = {
   codex: ['minimal', 'low', 'medium', 'high'],
 };
 
 interface SessionActivitySettingsProps {
   settings: Record<string, string>;
-  /** Installed agents that can run a scoped headless task. */
   agents: SessionAgent[];
   onSetSetting: (key: string, value: string) => void;
 }
@@ -60,9 +48,7 @@ export function SessionActivitySettings({
   const [agent, setAgent] = useState<SessionAgent | ''>(saved.agent);
   const [model, setModel] = useState(saved.model);
   const [effort, setEffort] = useState(saved.effort);
-  // Whether the model box is a free-text entry. Kept beside the value rather
-  // than inferred from it, so clearing a custom model does not silently snap the
-  // control back to the preset list mid-edit.
+  // Kept beside the value rather than inferred from it, so clearing a custom model does not snap the control back to the preset list mid-edit.
   const [customModel, setCustomModel] = useState(
     Boolean(saved.model) && !(MODEL_PRESETS[saved.agent as SessionAgent] ?? []).some((p) => p.value === saved.model),
   );
@@ -74,8 +60,7 @@ export function SessionActivitySettings({
 
   const handleAgentChange = useCallback((next: SessionAgent | '') => {
     setAgent(next);
-    // The models are per-agent, so carrying one across would save a model the
-    // new agent cannot run.
+    // The models are per-agent, so carrying one across would save a model the new agent cannot run.
     setModel('');
     setEffort('');
     setCustomModel(false);

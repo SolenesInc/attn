@@ -9,8 +9,6 @@ import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSumm
 
 interface TerminalResizeOptions {
   reason?: string;
-  // Pane total in device pixels, carried through to the PTY's winsize. Absent
-  // from any resize that is not a fit — nothing else measures the pane.
   xpixel?: number;
   ypixel?: number;
 }
@@ -22,7 +20,6 @@ export interface PaneRuntimeSpec {
   agent?: string;
   sessionId?: string;
   testSessionId?: string;
-  // Recoverable panes request daemon-owned revival on their mount attach.
   state?: string;
 }
 
@@ -222,7 +219,6 @@ export function useGhosttyPaneRuntime(
       try {
         await inFlightAttach.promise;
       } catch {
-        // The owning attach call reports current-generation failures.
       }
       if (!terminalIsCurrent()) return;
     }
@@ -242,10 +238,8 @@ export function useGhosttyPaneRuntime(
     }
     const attachGeneration = (attachGenerationRef.current.get(pane.runtimeId) ?? 0) + 1;
     attachGenerationRef.current.set(pane.runtimeId, attachGeneration);
-    // A pane mounted while its session is inactive never measured its
-    // container (fit bails on display:none), so its size is the construction
-    // default. That provisional size must not claim PTY geometry authority:
-    // the daemon's geometry holds until a real fit resizes.
+    // A pane mounted while its session is inactive never measured its container, so its
+    // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
     const attachPromise = ptyAttach({
       args: {
@@ -312,13 +306,8 @@ export function useGhosttyPaneRuntime(
     if (!isActiveSessionRef.current) return;
     const pane = paneFor(paneId);
     if (!pane) return;
-    // GhosttyTerminal.fit() is the geometry authority: it measures the real,
-    // settled container and suppresses transient/degenerate measurements itself,
-    // and deliberately emits a small grid for a genuinely small pane (a deep
-    // stacked split, or a short window) so the bottom rows are not clipped.
-    // Re-applying the MIN_USABLE "suspicious" threshold here dropped those
-    // legitimate small fits and stranded the PTY taller than the pane. Guard only
-    // against a non-sensical size.
+    // GhosttyTerminal.fit() is the geometry authority. Re-applying MIN_USABLE here dropped
+    // legitimate small fits and stranded the PTY taller than the pane.
     if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;
     const reason = options?.reason ?? 'ghostty_fit';
     if (!readyRuntimesRef.current.has(pane.runtimeId)) {

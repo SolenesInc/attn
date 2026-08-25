@@ -15,12 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// The supervision behaviors themselves (backoff, generation fencing, stability
-// window, disconnect grace, parking) are covered in internal/supervise. What is
-// tested here is the plugin runtime's own wiring onto it: manifests becoming
-// processes, output landing in the plugin's log file, and a parked plugin
-// reaching the user.
-
 func TestExecPluginProcessLauncherRunsExecutableWithoutBun(t *testing.T) {
 	root := t.TempDir()
 	marker := filepath.Join(root, "started")
@@ -55,9 +49,6 @@ func TestExecPluginProcessLauncherRunsExecutableWithoutBun(t *testing.T) {
 	}
 }
 
-// A plugin's stdout and stderr used to go to /dev/null. They now land in the
-// supervisor's per-plugin log file, which is what `attn` has to show when a
-// plugin misbehaves.
 func TestSupervisedPluginWritesStdoutAndStderrToItsLogFile(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
@@ -106,8 +97,6 @@ func TestPluginLogDirSitsOutsideThePluginDiscoveryDirectory(t *testing.T) {
 	}
 }
 
-// Parking is the end of the retry line, so it has to be visible: the daemon
-// turns it into a durable notification pointing back at the plugin.
 func TestParkedPluginRaisesADurableNotification(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	exitCode := 9
@@ -134,22 +123,18 @@ func TestParkedPluginRaisesADurableNotification(t *testing.T) {
 	if !strings.Contains(record.Detail, "exit code 9") {
 		t.Fatalf("notification detail=%q, want the last exit", record.Detail)
 	}
-	// Nothing retries a parked plugin, so this is the last word the user gets on
-	// it: critical, with the ambient surface that comes with it.
 	if record.Severity != store.NotificationCritical {
 		t.Fatalf("severity = %q, want critical", record.Severity)
 	}
 }
 
-// newTestPluginSupervisor builds a supervisor over the fake clock and launcher, and
-// shuts it down on cleanup. The shutdown is load-bearing inside a bubble: every
-// supervised plugin owns a goroutine parked on its process handle's exit channel,
-// and one still parked when the test body returns is a blocked bubble goroutine.
 func newTestPluginSupervisor(t *testing.T, clock *fakePluginClock, launcher *fakePluginLauncher) *pluginSupervisor {
 	t.Helper()
 	supervisor := newPluginSupervisor(launcher, clock, func(manifest pluginManifest, generation uint64) []string {
 		return []string{fmt.Sprintf("ATTN_PLUGIN_NAME=%s", manifest.Name), fmt.Sprintf("ATTN_PLUGIN_GENERATION=%d", generation)}
 	}, supervise.Options{})
+	// Load-bearing inside a bubble: every supervised plugin owns a goroutine parked
+	// on its process handle's exit channel, and one still parked blocks the bubble.
 	t.Cleanup(supervisor.Shutdown)
 	return supervisor
 }
@@ -288,10 +273,6 @@ func (t *fakePluginTimer) Stop() bool {
 	return true
 }
 
-// requireSupervisor asserts a supervisor condition holds once the bubble has
-// settled. The supervisor reacts to a process exit and to a fired backoff timer on
-// its own goroutine; synctest.Wait() returns after those have run, so the condition
-// is read against a settled supervisor rather than polled at it.
 func requireSupervisor(t *testing.T, condition func() bool, what string) {
 	t.Helper()
 	synctest.Wait()
@@ -300,9 +281,6 @@ func requireSupervisor(t *testing.T, condition func() bool, what string) {
 	}
 }
 
-// waitForSupervisor polls for a condition driven by a real child process, where
-// there is no bubble to settle — the log-capture and ws plugin tests run actual
-// executables on the wall clock.
 func waitForSupervisor(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

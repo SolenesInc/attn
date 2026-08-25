@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-// GenerateCodexConfigOverrides returns Codex CLI -c overrides required for
-// attn-managed terminals without mutating user or project Codex config.
-// attn has always owned the resize-reflow value for its embedded renderer:
-// xterm needed it disabled, while Ghostty correctly renders the enabled redraw.
 func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, launch Launch) []string {
 	wrapper := strings.TrimSpace(wrapperPath)
 	if wrapper == "" {
@@ -41,22 +37,16 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	userPromptSubmit := command("_hook-state", "working", "user_prompt_submit")
 	permissionRequest := command("_hook-state", "pending_approval")
 	preToolUse := command("_hook-state", "working")
-	// Sets "working" like the other state hooks, and records markdown the tool
-	// call wrote from the same payload — one spawn per tool call, not two.
 	postToolUse := command("_hook-tool-use")
 	stop := command("_hook-stop")
 
 	overrides := []string{
-		// Codex's shell environment policy is applied independently for each tool
-		// working directory. Values inherited by the top-level Codex process can
-		// therefore disappear when an agent runs a tool from a child worktree.
-		// Pin attn's routing identity in the per-launch policy so hooks and agent
-		// commands keep targeting this session regardless of tool cwd.
+		// Codex applies its shell environment policy per tool working directory, so values
+		// inherited by the top-level process vanish under a child worktree. Pin them here.
 		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
 		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
 		"features.hooks=true",
-		// Ghostty renders Codex's SIGWINCH redraw correctly, and enabling
-		// reflow prevents resized inline UIs from leaving stale headers.
+		// Reflow enabled: without it a resized inline UI leaves stale headers.
 		"features.terminal_resize_reflow=true",
 		trustedHashOverrides([]codexHookTrustEntry{
 			{eventKey: "session_start", matcher: "startup|resume|clear|compact", command: sessionStart},
@@ -78,12 +68,6 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 			"shell_environment_policy.set.ATTN_SOCKET_PATH="+strconv.Quote(socket),
 		)
 	}
-	// A chief-of-staff launch (NotebookRoot set) gets chief guidance instead
-	// of the workspace-context checkout guidance. Every other workspace agent gets
-	// its workspace-context guidance (plus workflow-trigger guidance when enabled,
-	// folded in by Launch). Non-chief agents are NOT nudged to journal:
-	// the keeper narrates each workspace's own work into the journal, and the chief
-	// journals the cross-workspace layer.
 	if instructions := launch.Instructions(); instructions != "" {
 		overrides = append(overrides, "developer_instructions="+strconv.Quote(instructions))
 	}

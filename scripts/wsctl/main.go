@@ -1,30 +1,3 @@
-// wsctl is a tiny dev helper that drives the daemon's websocket directly.
-//
-// Until a real native UI lands with workspace + spawn affordances, the
-// canvas spike (attn-spike5) has no way to create the workspaces or
-// workspace-bound sessions it consumes. This script fills that gap.
-//
-// Target daemon resolution, in priority order:
-//
-//  1. ATTN_WS_URL — explicit URL, used verbatim (the only way to reach prod).
-//  2. ATTN_PROFILE — the profile's derived WS port (same resolution as every
-//     other attn entrypoint).
-//  3. Fallback: the dev daemon (ws://localhost:29849/ws). wsctl never targets
-//     prod implicitly.
-//
-// The resolved target is printed to stderr on every invocation.
-//
-// Usage:
-//
-//	go run ./scripts/wsctl add-workspace --title T --dir D [--id I]
-//	go run ./scripts/wsctl rm-workspace --id I
-//	go run ./scripts/wsctl add-session --workspace W --cwd D [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
-//	go run ./scripts/wsctl rm-session --id I
-//	go run ./scripts/wsctl kill-session --id I [--reload]
-//	go run ./scripts/wsctl screen --id I
-//	go run ./scripts/wsctl input --id I --text T [--enter]
-//	go run ./scripts/wsctl list
-//	go run ./scripts/wsctl refresh-prs
 package main
 
 import (
@@ -112,10 +85,6 @@ func wsURL() string {
 	return resolveWSURL(os.Getenv("ATTN_WS_URL"), os.Getenv("ATTN_PROFILE"))
 }
 
-// resolveWSURL picks the daemon to talk to. An explicit ATTN_WS_URL always
-// wins (and is the only way to target prod). Otherwise a named ATTN_PROFILE
-// resolves to that profile's derived WS port, and with no profile at all we
-// fall back to the dev daemon — never prod.
 func resolveWSURL(explicitURL, profile string) string {
 	if u := strings.TrimSpace(explicitURL); u != "" {
 		return u
@@ -126,8 +95,6 @@ func resolveWSURL(explicitURL, profile string) string {
 	}
 	return defaultWSURL
 }
-
-// ── Subcommands ──────────────────────────────────────────────────────────────
 
 func addWorkspace(args []string) error {
 	fs := flag.NewFlagSet("add-workspace", flag.ExitOnError)
@@ -200,15 +167,11 @@ func addSession(args []string) error {
 	}
 	sessID := *id
 	if sessID == "" {
-		// Claude Code (and likely other agents) reject non-UUID session
-		// ids — the agent CLI uses them directly as its own session
-		// identifier, which must be UUID-shaped.
+		// Claude Code rejects a non-UUID session id: the agent CLI uses it
+		// directly as its own identifier, which must be UUID-shaped.
 		sessID = newUUID()
 	}
 
-	// The daemon guarantees a workspace layout pane for every spawned session
-	// (spawn_session ensures one, adopting a pre-created pane when present),
-	// so a bare spawn is all a script needs for the session to render.
 	msg := map[string]any{
 		"cmd":          "spawn_session",
 		"id":           sessID,
@@ -232,12 +195,6 @@ func addSession(args []string) error {
 		msg["yolo_mode"] = true
 	}
 
-	// Spawn replies with a SpawnResult — wait briefly for it so we
-	// can surface failures (bad cwd, unknown agent, etc.) instead of
-	// printing "ok" and leaving the user to wonder why nothing
-	// appeared. The pane only exists once spawn succeeds (the daemon
-	// ensures it on the success path), so a failure here leaves nothing
-	// to roll back.
 	resp, err := sendAndWait(msg, "spawn_result", sessID, 30*time.Second)
 	if err != nil {
 		return err
@@ -260,10 +217,8 @@ func rmSession(args []string) error {
 	if *id == "" {
 		return errors.New("--id is required")
 	}
-	// `unregister` SIGTERMs the agent process AND removes the session
-	// record from the daemon's store. `kill_session` only does the
-	// first half — if the agent is already dead, kill_session is a
-	// no-op and the session lingers as a ghost.
+	// `unregister`, not `kill_session`: the latter only SIGTERMs the agent, so
+	// an already-dead one leaves the session record behind as a ghost.
 	msg := map[string]any{
 		"cmd": "unregister",
 		"id":  *id,
@@ -363,8 +318,6 @@ func list(_ []string) error {
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello unlocks the connection; initial_state is the first thing the
-	// daemon sends once it passes.
 	if err := sendClientHello(ctx, conn); err != nil {
 		return err
 	}
@@ -403,10 +356,6 @@ func refreshPRs(args []string) error {
 	return nil
 }
 
-// ── Wire helpers ─────────────────────────────────────────────────────────────
-
-// send opens a connection, presents the client token, drains initial_state,
-// sends the payload, and closes. No response read — fire-and-forget.
 func send(payload map[string]any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -419,8 +368,8 @@ func send(payload map[string]any) error {
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// The daemon sends initial_state once the hello passes; drain it before
-	// our write so the socket buffer doesn't backlog.
+	// Drain initial_state before our write so the socket buffer doesn't
+	// backlog.
 	if err := sendClientHello(ctx, conn); err != nil {
 		return err
 	}
@@ -435,16 +384,12 @@ func send(payload map[string]any) error {
 	if err := conn.Write(ctx, websocket.MessageText, body); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
-	// Tiny grace window so the daemon has time to enqueue the work
-	// before we hang up. Without this, fast-fire calls can race the
-	// daemon's read loop on connection close.
+	// Grace window: without it, fast-fire calls race the daemon's read loop on
+	// connection close.
 	time.Sleep(150 * time.Millisecond)
 	return nil
 }
 
-// sendAndWait sends the payload, then reads frames until it sees an
-// event of the given type (filtered by id when provided) or the
-// timeout elapses. Other frames are silently dropped.
 func sendAndWait(payload map[string]any, expectedEvent, expectedID string, timeout time.Duration) (map[string]any, error) {
 	return sendAndWaitMatch(payload, expectedEvent, func(ev map[string]any) bool {
 		if expectedID == "" {
@@ -455,9 +400,6 @@ func sendAndWait(payload map[string]any, expectedEvent, expectedID string, timeo
 	}, timeout)
 }
 
-// sendAndWaitMatch is sendAndWait with an arbitrary predicate over events of
-// the expected type, for results that carry no top-level "id" field (e.g.
-// workspace_layout_action_result).
 func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(map[string]any) bool, timeout time.Duration) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout+3*time.Second)
 	defer cancel()
@@ -533,18 +475,12 @@ func newID(prefix string) string {
 	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 }
 
-// newUUID returns a random RFC 4122 v4 UUID string. We can't use a
-// timestamp-prefixed id for sessions because the agent CLI we hand the
-// id to (e.g. claude) parses it as a UUID and rejects anything else.
 func newUUID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// Fall back to a timestamp-derived id; agent CLI will then
-		// reject the spawn, which is a clearer failure than silently
-		// generating a non-random "uuid".
 		return newID("sess")
 	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

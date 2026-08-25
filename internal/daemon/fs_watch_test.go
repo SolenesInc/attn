@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// fsWatch drives handleFsWatch directly and returns the decoded result event.
 func fsWatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string) protocol.FsWatchResultMessage {
 	t.Helper()
 	d.handleFsWatch(client, requestID, root)
@@ -21,7 +20,6 @@ func fsWatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string) 
 	return res
 }
 
-// fsUnwatch drives handleFsUnwatch directly and returns the decoded result event.
 func fsUnwatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string) protocol.FsUnwatchResultMessage {
 	t.Helper()
 	d.handleFsUnwatch(client, requestID, root)
@@ -30,10 +28,8 @@ func fsUnwatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string
 	return res
 }
 
-// assertNoFsChangedForRoot fails the test if an fs_changed broadcast for the
-// given (root, origin) pair shows up on ch within the wait window. Any other
-// events (including fs_changed for a different root/origin) are drained and
-// re-queued so a later assertion in the same test still sees them.
+// assertNoFsChangedForRoot drains and re-queues other events so a later assertion
+// in the same test still sees them.
 func assertNoFsChangedForRoot(t *testing.T, ch chan outboundMessage, root, origin string, wait time.Duration) {
 	t.Helper()
 	deadline := time.After(wait)
@@ -56,13 +52,6 @@ func assertNoFsChangedForRoot(t *testing.T, ch chan outboundMessage, root, origi
 	}
 }
 
-// fs_watch on a generic (non-notebook) root starts a live watcher whose external
-// edits surface as fs_changed(origin=external) for ANY file type — catching a
-// watcher that failed to start, or one still filtered to .md-only paths. The
-// event is delivered to the subscribed client directly, not via the hub
-// broadcast: a generic root's fs_changed audience is the watch's own
-// subscriber set (see TestFsWatchAudienceRestrictedToSubscribers), not every
-// connected client.
 func TestFsWatchExternalEditSurfacesForAnyFileType(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -83,11 +72,6 @@ func TestFsWatchExternalEditSurfacesForAnyFileType(t *testing.T) {
 	}
 }
 
-// The audience restriction that fixes the trust-boundary leak: a generic
-// root's fs_changed must reach only clients that hold an fs_watch ref on that
-// root. A second connected (and even trusted) client that never subscribed —
-// and the hub's broadcast path — must see nothing, even though the notebook
-// root's fs_changed still goes to everyone.
 func TestFsWatchAudienceRestrictedToSubscribers(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -113,9 +97,6 @@ func TestFsWatchAudienceRestrictedToSubscribers(t *testing.T) {
 	assertNoFsChangedForRoot(t, nonSubscriber.send, root, originExternal, 700*time.Millisecond)
 }
 
-// Once fs_unwatch drops the last ref on a root, its watcher must actually stop:
-// a subsequent external write produces no fs_changed for that root. Catches a
-// leaked watcher that keeps running after the last subscriber leaves.
 func TestFsUnwatchStopsWatcherAtZeroRefs(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -134,10 +115,6 @@ func TestFsUnwatchStopsWatcherAtZeroRefs(t *testing.T) {
 	assertNoFsChangedForRoot(t, client.send, root, originExternal, 700*time.Millisecond)
 }
 
-// Two clients watching the same root: dropping one client's refs (as disconnect
-// does) must not close the watcher while the other client still holds it; only
-// once the last client unwatches does the watcher actually stop. Catches
-// disconnect cleanup closing too eagerly, or a refcount leak that never closes.
 func TestFsWatchRefcountedAcrossClients(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -170,10 +147,6 @@ func TestFsWatchRefcountedAcrossClients(t *testing.T) {
 	assertNoFsChangedForRoot(t, clientB.send, root, originExternal, 700*time.Millisecond)
 }
 
-// A WS fs_write to a watched generic root must not echo back as its own
-// fs_changed(origin=external) — the self-write suppression must apply to
-// non-notebook watchers too, not just the notebook watcher. The origin=ui
-// broadcast from the write itself still fires as normal.
 func TestFsWatchSelfWriteNotEchoedAsExternal(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -194,10 +167,6 @@ func TestFsWatchSelfWriteNotEchoedAsExternal(t *testing.T) {
 	assertNoFsChangedForRoot(t, watchClient.send, root, originExternal, 700*time.Millisecond)
 }
 
-// The notebook root's watcher is now generic: an external edit to a non-.md file
-// must surface as fs_changed but must NOT also fire notebook_changed (a .txt
-// file is not a note), while an external .md edit must fire BOTH. Catches a
-// broken split in the notebook watcher's onChange wiring.
 func TestNotebookRootWatcherSplitsFsAndNotebookBroadcasts(t *testing.T) {
 	d := newFsDaemon(t)
 	root := d.store.GetSetting(SettingNotebookRoot)
@@ -205,7 +174,6 @@ func TestNotebookRootWatcherSplitsFsAndNotebookBroadcasts(t *testing.T) {
 	d.wsHub.clients[hubClient] = true
 	go d.wsHub.run()
 
-	// Touch the notebook so the always-on watcher starts, then let it settle.
 	listFs(t, d, "")
 	time.Sleep(80 * time.Millisecond)
 
@@ -231,9 +199,6 @@ func TestNotebookRootWatcherSplitsFsAndNotebookBroadcasts(t *testing.T) {
 	}
 }
 
-// A 17th distinct watched root is rejected with a clear error, bounding the
-// number of live non-notebook watchers so a client cannot grow the daemon's
-// goroutine/fd count without limit.
 func TestFsWatchCapsLiveWatchers(t *testing.T) {
 	d := newFsDaemon(t)
 	client := trustedFsClient(32)
@@ -251,13 +216,6 @@ func TestFsWatchCapsLiveWatchers(t *testing.T) {
 	}
 }
 
-// fs_watch inherits the fs surface's root-auth gate via resolveFsRoot: an
-// ordinary (unauthenticated) client asking to watch an explicit root must be
-// denied, and — the behavior that actually matters, not just the reported
-// error — no watcher must be registered for it, so a direct external write
-// under that root produces no fs_changed at all. Catches handleFsWatch
-// bypassing the resolveFsRoot chokepoint (e.g. calling addFsWatchRef before
-// checking the resolve error, or checking success but not identity).
 func TestFsWatchWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -280,9 +238,6 @@ func TestFsWatchWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	assertNoFsChangedForRoot(t, hubClient.send, root, originExternal, 700*time.Millisecond)
 }
 
-// The same untrusted client must still succeed watching with root omitted (the
-// notebook root) — the gate is scoped to the explicit-root escape hatch, not
-// fs_watch as a whole.
 func TestFsWatchOmittedRootStillWorksForUntrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	untrusted := &wsClient{send: make(chan outboundMessage, 8)}

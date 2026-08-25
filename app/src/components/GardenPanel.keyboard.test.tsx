@@ -48,8 +48,6 @@ function row(id: string): HTMLElement {
   return document.querySelector(`[data-seed-row="${id}"]`) as HTMLElement;
 }
 
-// The keyboard is the panel's, not the scroll container's: one handler on the
-// element that carries the role, delegating to whichever renderer is drawing.
 describe('GardenPanel keyboard', () => {
   it('walks the rows of the place it is in, and climbs back out', () => {
     render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
@@ -67,8 +65,6 @@ describe('GardenPanel keyboard', () => {
     expect(screen.queryByRole('heading', { name: 'the migration' })).not.toBeInTheDocument();
   });
 
-  // Right goes in, left comes back out: in columns the arrows mean what they
-  // look like, and the column under focus is the one they walk.
   it('walks a column, drills right and climbs left', () => {
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
     render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
@@ -78,7 +74,6 @@ describe('GardenPanel keyboard', () => {
     fireEvent.keyDown(panel(), { key: 'ArrowRight' });
     expect(screen.getByRole('heading', { name: 'the migration' })).toBeInTheDocument();
 
-    // A second column is on screen now; the arrows walk the one holding focus.
     fireEvent.keyDown(panel(), { key: 'ArrowDown' });
     expect(focusedRow()).toBe('s-one111');
     fireEvent.keyDown(panel(), { key: 'ArrowDown' });
@@ -88,8 +83,8 @@ describe('GardenPanel keyboard', () => {
     expect(screen.queryByRole('heading', { name: 'the migration' })).not.toBeInTheDocument();
   });
 
-  // The arrows in the search field walk the answers. Letting the walk's own
-  // handler see them too would drag focus out of the field mid-question.
+  // Letting the walk's own handler see the field's arrows too would drag focus
+  // out of the field mid-question.
   it('leaves the arrows alone while they are being typed at the search field', () => {
     render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
     const field = screen.getByRole('combobox');
@@ -101,9 +96,6 @@ describe('GardenPanel keyboard', () => {
     expect(field.getAttribute('aria-activedescendant')).toBe('garden-row-s-two111');
   });
 
-  // The mirror of the rule above: an empty field is not holding a question, so
-  // the arrows belong to the walk. Picking an answer clears the query and
-  // leaves focus here, which is the moment this rescues.
   it('hands the arrows back to the walk when the field has no answers to walk', () => {
     render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={world.length} seeds={world} />);
     const field = screen.getByRole('combobox');

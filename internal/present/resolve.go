@@ -8,25 +8,19 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// ResolvedAnnotation is an annotation pinned to concrete head-side lines.
 type ResolvedAnnotation struct {
 	LineStart int
 	LineEnd   int
-	Comments  []string // Note becomes a 1-element slice
+	Comments  []string
 }
 
-// AnchorIssue reports a problem resolving one annotation.
 type AnchorIssue struct {
 	Path    string
-	Index   int // annotation index within the file entry
+	Index   int
 	Message string
 	Warning bool // false = error
 }
 
-// ResolveAnnotations resolves every annotation in m against the head content
-// of each file (git show headSHA:path in repoDir). Returns resolved
-// annotations grouped by file path, plus all issues found. A file with no
-// annotations is never looked up.
 func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]ResolvedAnnotation, []AnchorIssue) {
 	resolved := make(map[string][]ResolvedAnnotation)
 	var issues []AnchorIssue
@@ -64,11 +58,6 @@ func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]Reso
 			candidates = append(candidates, candidate{index: i, r: r})
 		}
 
-		// Resolved ranges must not overlap: the manifest contract requires
-		// each annotation to own a disjoint span of the file. A later
-		// annotation (by manifest order) that overlaps an earlier, already
-		// accepted one is an error and is dropped rather than silently
-		// carried over the protocol.
 		kept := make([]bool, len(candidates))
 		for i := range candidates {
 			kept[i] = true
@@ -106,10 +95,6 @@ func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]Reso
 	return resolved, issues
 }
 
-// resolveOne resolves a single annotation entry against a file's head-side
-// lines. It returns the resolved annotation, an optional issue (error or
-// warning), and whether resolution succeeded (false means the annotation is
-// dropped).
 func resolveOne(a AnnotationEntry, lines []string) (ResolvedAnnotation, *AnchorIssue, bool) {
 	comments := commentsOf(a)
 
@@ -143,7 +128,7 @@ func resolveOne(a AnnotationEntry, lines []string) (ResolvedAnnotation, *AnchorI
 		}
 		return ResolvedAnnotation{LineStart: a.Line, LineEnd: a.Line, Comments: comments}, nil, true
 
-	default: // a.Start / a.End
+	default:
 		if a.End > len(lines) {
 			return ResolvedAnnotation{}, &AnchorIssue{
 				Message: fmt.Sprintf("end %d is out of bounds (file has %d lines)", a.End, len(lines)),
@@ -153,8 +138,6 @@ func resolveOne(a AnnotationEntry, lines []string) (ResolvedAnnotation, *AnchorI
 	}
 }
 
-// commentsOf normalizes an annotation's body into an ordered comment slice —
-// a single-element slice for note, or the thread as-is.
 func commentsOf(a AnnotationEntry) []string {
 	if a.Note != "" {
 		return []string{a.Note}
@@ -162,9 +145,8 @@ func commentsOf(a AnnotationEntry) []string {
 	return a.Thread
 }
 
-// headFileLines reads a file's content at headSHA via `git show` and splits
-// it into lines. Mirrors pin.go's pattern of shelling out to git directly —
-// internal/present stays self-contained and never imports internal/daemon.
+// Shells out directly: internal/present stays self-contained and never imports
+// internal/daemon.
 func headFileLines(repoDir, headSHA, path string) ([]string, error) {
 	out, err := git.Output(git.OpDiff, repoDir, "show", headSHA+":"+path)
 	if err != nil {

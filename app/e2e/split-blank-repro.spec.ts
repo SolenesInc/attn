@@ -1,21 +1,10 @@
 import { test, expect } from './fixtures';
 
-// Repro for: opening a shell split blanks the agent pane (canvas shows a live
-// cursor over blank cells; model still holds the content). The render trace
-// (added in GhosttyTerminal.renderSurface, gated on __ATTN_RENDER_TRACE_ON)
-// records, per paint: the cells-source offset, the printable cell count the
-// MODEL holds, and the `quads` actually submitted to the GPU. That lets us tell
-// "drew nothing despite content" (cells-source/offset) from "drew glyphs but
-// surface stayed blank" (GL/canvas).
-
 const ESC = '';
 const BSU = `${ESC}[?2026h`;
 const ESU = `${ESC}[?2026l`;
 
-// Mirrors the `paint` events pushed into the diagnostics ring
-// (see app/src/utils/terminalDiagnosticsLog.ts `PaintSample`). The ring stores
-// a pane key (paneId/sessionId/debugName) plus the session id, not a single
-// `debug` string.
+// Mirrors `PaintSample` in app/src/utils/terminalDiagnosticsLog.ts.
 interface RenderTraceEntry {
   at: number;
   kind: string;
@@ -78,12 +67,8 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
   const agentId = 's-agent-split';
   const terminal = await setupAgent(page, daemon, agentId);
 
-  // 1) Paint a full frame and confirm it actually rendered (high quad count).
-  //    Read the last REAL draw, not the last trace entry: once the model is
-  //    clean every further paint is a skip (`quads: null`), and `null ?? 0`
-  //    reads a fully painted surface as blank. Nothing re-dirties the model
-  //    here, so a skip landing after the draw is terminal — the poll re-reads
-  //    the same entry until the deadline. That is this step's CI flake.
+  // Once the model is clean every further paint is a skip (`quads: null`) and
+  // `null ?? 0` reads a painted surface as blank.
   await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
   await expect
     .poll(async () => lastRealDraw(await readTrace(page, agentId))?.quads ?? 0)
@@ -91,18 +76,13 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
 
   const sizeBefore = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
 
-  // Reset the trace so we only inspect post-split paints.
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
 
-  // 2) Put the agent mid synchronized-frame (open BSU, no close), exactly like
-  //    the live daemon log showed right before the split SIGWINCH.
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
 
-  // 3) Open the shell split (Cmd+D). This resizes the agent pane.
   await terminal.click({ position: { x: 80, y: 8 } });
   await page.keyboard.press('Meta+d');
 
-  // 4) Confirm the split actually resized the agent pane.
   await expect
     .poll(async () => {
       const size = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
@@ -113,10 +93,8 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
 
   const sizeAfter = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
 
-  // 5) Agent responds to SIGWINCH with a fresh full redraw (2026 + 2J + content).
   await emit(page, agentId, fullFrame('NEW', Math.max(10, (sizeAfter?.rows ?? 24) - 1), Math.max(20, (sizeAfter?.cols ?? 80))));
 
-  // Let paints settle.
   await page.waitForTimeout(800);
 
   const trace = await readTrace(page, agentId);
@@ -136,10 +114,7 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
 
   await terminal.screenshot({ path: 'test-results/split-blank-agent.png' }).catch(() => {});
 
-  // The model must hold the redraw (sanity: bytes were applied).
   expect(modelText).toContain('NEW line 0');
-  // The bug: the agent paints blank despite the model holding content. The
-  // canvas shows whatever the last REAL draw painted, at that draw's geometry.
   expect(draw, 'expected at least one agent draw after the split redraw').toBeTruthy();
   expect(draw!.quads ?? 0, `agent surface drew ${draw?.quads} quads while model held ${draw?.modelPrintable} printable cells`).toBeGreaterThan(50);
   expect({ cols: draw!.cols, rows: draw!.rows }, 'last draw must be at the post-split geometry (a later resize would have cleared the canvas)').toEqual({ cols: sizeAfter?.cols, rows: sizeAfter?.rows });
@@ -162,29 +137,8 @@ async function setupAgent(
   return terminal;
 }
 
-// Emit setup content and keep re-emitting until the model actually shows it.
-//
-// A single `__TEST_EMIT_PTY_DATA` can be lost: it traverses the router's binding
-// lookup (paneRuntimeEventRouter.handleEvent `if (!match) return`), the pane's
-// handle lookup (useGhosttyPaneRuntime.deliverEvent `if (!terminal) return`),
-// and a fire-and-forget `void terminal.write(...)` — each of which drops
-// silently when the pane is not fully wired. `expect.poll` on the pane text
-// re-READS but never re-SENDS, so one lost emit could only ever expire at the
-// deadline. That is the observed CI flake: these specs failed at 5.9s on
-// `toContain('OLD line 0')` against a 5s poll, i.e. ~0.9s of setup and then a
-// full 5s of fruitless re-reads — a dropped emit, not a slow machine.
-//
-// Re-emitting closes that hole and is timing-independent rather than tuned to a
-// machine's speed. `fullFrame` is idempotent (it opens with `2J`/`H` and
-// absolutely positions every row), so a repeat repaints identical content. A
-// non-idempotent payload (scrollback, which appends) is still safe here: a retry
-// only happens when the previous emit produced nothing at all, since any visible
-// marker ends the poll.
-//
-// Use this ONLY for scaffolding. The post-split redraw each test actually
-// exercises must stay a single emit: its timing against the resize IS the
-// behaviour under test, and retrying it would paper over the very bug these
-// specs exist to catch.
+// A single `__TEST_EMIT_PTY_DATA` can be lost while the pane is not fully wired.
+// Scaffolding only: the post-split redraw must stay a single emit.
 async function emitUntilVisible(
   page: import('@playwright/test').Page,
   sessionId: string,
@@ -201,24 +155,8 @@ async function emitUntilVisible(
     .toContain(marker);
 }
 
-// The terminal CONTAINER becoming visible is not the same as the pane being
-// ready to receive PTY data. `__TEST_EMIT_PTY_DATA` delivers to the live
-// terminal handle and silently DROPS the event when no handle is registered yet
-// (useGhosttyPaneRuntime.deliverEvent: `if (!terminal) return`). The handle is
-// only registered once the Ghostty WASM model has finished loading
-// (handleTerminalReady), which lands strictly after the DOM container is
-// visible. Emitting in that window loses the bytes and the model never updates,
-// so the downstream `toContain('… line 0')` poll times out — the flake. In prod
-// this race cannot happen: data only arrives in response to attach, which is
-// itself fired from handleTerminalReady (after the handle exists).
-//
-// `getPaneSize` returning non-null proves that one handle exists, so this gate
-// is necessary — but it is NOT sufficient, and this comment used to claim it
-// was. It misses the router's own binding lookup, and it reads `getSize()`,
-// which GhosttyTerminalHandle documents as reporting the model's provisional
-// construction default until a real fit lands. `emitUntilVisible` covers the
-// remaining gap for setup frames; keep this cheap gate first so the common case
-// settles before any retry loop starts.
+// A visible terminal container is not a pane ready for PTY data: the handle is
+// registered only once the Ghostty model loads, and an earlier emit is dropped.
 async function waitForPaneReady(
   page: import('@playwright/test').Page,
   sessionId: string,
@@ -234,13 +172,8 @@ function chunks(value: string, size: number): string[] {
   return out;
 }
 
-// The newest paint entry that actually DREW. A `quads: null` entry is a
-// renderer skip (nothing dirty, not forced): it leaves the canvas exactly as
-// the previous draw painted it, so asserting on it reads a healthy surface as
-// blank — the source of this spec's historical flake. Every canvas-clearing
-// resize is immediately followed by a forced draw (applyFitDimensions), so the
-// last real draw is what the canvas shows; the geometry assertion below pins
-// it to the final pane size to prove no later resize invalidated it.
+// A `quads: null` entry is a renderer skip that leaves the canvas as the
+// previous draw painted it, so asserting on it reads a healthy surface as blank.
 function lastRealDraw(trace: RenderTraceEntry[]): RenderTraceEntry | undefined {
   for (let i = trace.length - 1; i >= 0; i -= 1) {
     if (trace[i].quads !== null) return trace[i];
@@ -256,7 +189,6 @@ function dumpTail(label: string, trace: RenderTraceEntry[]) {
   }
 }
 
-// Variant: redraw delivered in chunks that race the split's fit()/resize.
 test('agent stays painted when split races a chunked redraw', async ({ page, daemon }) => {
   await daemon.start();
   await page.addInitScript(() => {
@@ -273,11 +205,10 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
 
-  // Open a synchronized frame (no close) — mid-frame, like the live log.
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
 
-  // Fire the split, then immediately spam the redraw in small chunks WITHOUT
-  // awaiting the split to settle, so fit()/resize lands mid-redraw.
+  // The redraw is deliberately not awaited against the split settling: that race
+  // is the behaviour under test.
   await terminal.click({ position: { x: 80, y: 8 } });
   await page.keyboard.press('Meta+d');
   const redraw = fullFrame('NEW', 44, 75);
@@ -297,8 +228,6 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   expect({ cols: draw!.cols, rows: draw!.rows }, 'last draw must be at the final geometry (a later resize would have cleared the canvas)').toEqual({ cols: finalSize?.cols, rows: finalSize?.rows });
 });
 
-// Variant: the user is scrolled up (viewportOffset != 0) when the split lands.
-// This matches the symptom: a live cursor over frozen/blank cells.
 test('agent stays painted when split lands while scrolled up', async ({ page, daemon }) => {
   await daemon.start();
   await page.addInitScript(() => {
@@ -312,15 +241,10 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   const agentId = 's-agent-scroll';
   const terminal = await setupAgent(page, daemon, agentId);
 
-  // Build scrollback so wheel-up produces a non-zero viewport offset.
   const scrollback = Array.from({ length: 200 }, (_, i) => `HIST line ${String(i).padStart(3, '0')}`).join('\r\n');
-  // Assert the scrollback landed rather than assuming it: if this emit were
-  // dropped the wheel-up below would produce a zero offset and the test would
-  // still pass, having silently stopped exercising the scrolled-up case.
   await emitUntilVisible(page, agentId, `${ESC}[2J${ESC}[H${scrollback}`, 'HIST line 199');
   await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
 
-  // Scroll up.
   await terminal.hover({ position: { x: 80, y: 200 } });
   await page.mouse.wheel(0, -600);
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
@@ -336,7 +260,6 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   const draw = lastRealDraw(trace);
   console.log('last real draw:', JSON.stringify(draw));
   await terminal.screenshot({ path: 'test-results/split-blank-scrolled.png' }).catch(() => {});
-  // Diagnostic only: report whether a stale scrollback slice was painted.
   console.log('offset on last draw:', draw?.offset, 'force:', draw?.force, 'quads:', draw?.quads);
 });
 

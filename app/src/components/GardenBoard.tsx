@@ -1,28 +1,5 @@
-// app/src/components/GardenBoard.tsx
-//
-// The garden, as flow. The list answers "what is here"; the board answers "how
-// is the work moving" without the reader opening anything.
-//
-// It is a PROJECTION, never a second state machine. A card's column is read off
-// the seed the daemon already pushed — computed readiness, a live tender,
-// dormancy, a closed status — so the board cannot disagree with `attn seed
-// ready` or with the list beside it. Nothing here is stored.
-//
-// Drag is allowed only where a human owns the transition, and the legal moves
-// are the garden's own five verbs, not a table invented here: hovering a column
-// mid-drag splits it into one labeled zone per verb that would actually be
-// accepted from the state the card is in. A pair with no legal verb grows no
-// zone and the drop bounces. Every zone has a key path — Enter on a card opens
-// the same verbs as a menu.
-//
-// The drag is pointer events, not HTML5 drag-and-drop. WebKit's dnd hands the
-// gesture to a native drag session: it draws its own snapshot of the card, so
-// the thing under the cursor is a screenshot rather than a designed object, and
-// the gesture cannot be driven by anything but a human hand. Pointer events keep
-// both — the carried chip is ours, and the same path a person walks is the one
-// the harness walks.
-//
-// Prototype. See docs/plans/2026-08-20-garden-kanban-board-prototype.md.
+// Drag is pointer events, not HTML5 drag-and-drop: WebKit's native drag session
+// can be driven by nothing but a human hand, so the harness could not walk it.
 import {
   Fragment,
   useCallback,
@@ -50,35 +27,20 @@ import './GardenBoard.css';
 export interface GardenBoardProps {
   seeds: Seed[];
   seedsTotal: number;
-  /** Sessions the daemon still knows, so a card can say its tender walked away. */
   liveSessions: Set<string>;
-  /** False until the first daemon push lands — an empty board is not an empty garden. */
   loaded: boolean;
-  /** Perform one real lifecycle move. Rejects with the daemon's own sentence. */
   onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean) => Promise<unknown>;
-  /** Write on a seed's log — where park and replant put their sentence. */
   onNote: (seedId: string, body: string) => Promise<unknown>;
-  /** The list/board switch, owned by the surface so both views show the same one. */
   viewToggle?: ReactNode;
   onClose: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// The drag, in the DOM. The rules it obeys are in ./gardenBoardModel.
-// ---------------------------------------------------------------------------
-
-// The chip sits below-right of the cursor, and flips to its left near the right
-// edge so the last column — where Closed lives — can still be read while
-// something is being dropped on it.
 function carryTransform(point: { x: number; y: number }): string {
   const flip = point.x > window.innerWidth - 360;
   const dx = flip ? 'calc(-100% - 16px)' : '16px';
   return `translate3d(${point.x}px, ${point.y}px, 0) translate(${dx}, 12px)`;
 }
 
-// What is under the cursor mid-drag. The zones and the columns say who they are
-// in the DOM, so this asks the rendered board rather than deciding legality a
-// second time: a zone that is on screen is a zone this card may use.
 function hitTest(x: number, y: number): { column: ColumnKey | null; verb: Verb | null } {
   const el = document.elementFromPoint(x, y);
   const zone = el?.closest('[data-zone]');
@@ -110,8 +72,6 @@ function ageOf(iso: string): string {
   return `${Math.round(seconds / 86400)}d`;
 }
 
-// A crown's children, counted where they stand. The same phrasing the list view
-// uses, so one plot reads the same in both views.
 function plotCounts(seed: Seed): string {
   const p = seed.plot_progress;
   if (!p) return '';
@@ -154,8 +114,6 @@ export function GardenBoard({
     return map;
   }, [seeds]);
 
-  // Blockers, counted over the whole garden: what holds a seed back can live in
-  // another plot entirely.
   const blockers = useMemo(() => {
     const counts = new Map<string, number>();
     for (const seed of seeds) {
@@ -167,7 +125,6 @@ export function GardenBoard({
     return counts;
   }, [seeds]);
 
-  // A crown that left the garden takes the trail below it with it.
   const livingTrail = useMemo(() => {
     const alive: string[] = [];
     for (const id of trail) {
@@ -178,9 +135,6 @@ export function GardenBoard({
   }, [trail, byID]);
   const plotId = livingTrail.length > 0 ? livingTrail[livingTrail.length - 1] : null;
 
-  // What this level holds. At root that is the crowns and the seeds nothing
-  // claims; inside a plot it is that crown's children — the same rule the list
-  // view drills by, so the two views are never looking at different gardens.
   const scoped = useMemo(() => {
     if (!plotId) {
       return seeds.filter((seed) => {
@@ -191,9 +145,6 @@ export function GardenBoard({
     return seeds.filter((seed) => crownOf(seed) === plotId);
   }, [seeds, plotId, byID]);
 
-  // Ready is ordered the way `attn seed ready` answers: what has waited longest
-  // leads, and what is not ready yet follows it. Everywhere else the freshest
-  // movement is on top.
   const columns = useMemo(() => {
     const out: Record<ColumnKey, Seed[]> = { ready: [], growing: [], parked: [], closed: [] };
     for (const seed of scoped) out[columnOf(seed)].push(seed);
@@ -217,7 +168,6 @@ export function GardenBoard({
     closed: columns.closed.length,
   };
 
-  // Every card on screen, column-major: what the arrows walk.
   const walkOrder = useMemo(() => {
     const order: Array<{ id: string; column: ColumnKey; row: number }> = [];
     for (const { key } of COLUMNS) {
@@ -235,7 +185,6 @@ export function GardenBoard({
     if (compose) composeInput.current?.focus();
   }, [compose]);
 
-  // Escape walks back out one layer at a time, above the surface's own close.
   useEscapeStack(() => setMenuFor(null), menuFor !== null);
   useEscapeStack(() => {
     setCompose(null);
@@ -254,9 +203,6 @@ export function GardenBoard({
     setTrail((prev) => prev.slice(0, depth));
   }, []);
 
-  // Escape climbs the trail one plot at a time. It registers only once you are
-  // inside a plot, so at the top level the stack falls through to the surface's
-  // own close and Escape leaves the garden.
   useEscapeStack(() => climbTo(livingTrail.length - 1), livingTrail.length > 0);
 
   const endDrag = useCallback(() => {
@@ -266,8 +212,6 @@ export function GardenBoard({
     setZoneHover(null);
   }, []);
 
-  // One path for both the drag and the menu: a verb either opens its composer
-  // or, for dispatch, the sheet that says what would happen.
   const beginVerb = useCallback((seed: Seed, verb: Verb, column: ColumnKey) => {
     setMenuFor(null);
     setError(null);
@@ -279,9 +223,6 @@ export function GardenBoard({
     setCompose({ seed, verb, column });
   }, [endDrag]);
 
-  // Where the cursor is, in the board's own words. The zones carry their verb on
-  // a data attribute so this reads the rendered truth rather than recomputing
-  // the legality a second time — a zone that exists is a zone the card may use.
   const drag = useRef<{ seed: Seed; x: number; y: number; armed: boolean } | null>(null);
   const dragEndedAt = useRef(0);
 
@@ -296,8 +237,6 @@ export function GardenBoard({
       const held = drag.current;
       if (!held) return;
       if (!held.armed) {
-        // A press is a click until the hand means it. 5px is the smallest
-        // movement that is not a tremor on a trackpad.
         if (Math.abs(ev.clientX - held.x) + Math.abs(ev.clientY - held.y) < 5) return;
         held.armed = true;
         setDragging(held.seed);
@@ -328,7 +267,6 @@ export function GardenBoard({
     window.addEventListener('pointercancel', release);
   }, [beginVerb, endDrag]);
 
-  // Escape puts the card back down. The native drag had this for free.
   useEscapeStack(() => {
     drag.current = null;
     endDrag();
@@ -345,12 +283,7 @@ export function GardenBoard({
     }
     setBusy(true);
     try {
-      // park and replant refuse a reason — the daemon says so itself — so their
-      // sentence is written on the log, and the move carries none.
       if (!spec.reasonOnSeed && text) await onNote(compose.seed.id, text);
-      // A card somebody else still holds is taken, not moved, and the daemon
-      // refuses it until the caller says so. The composer already said whose
-      // work this is, so pressing commit is that answer.
       await onTransition(
         compose.seed.id,
         compose.verb,
@@ -369,7 +302,6 @@ export function GardenBoard({
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (compose || dispatchFor) return;
-    // An open menu owns the arrows; the menu walks its own verbs.
     if (menuFor) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
@@ -391,7 +323,6 @@ export function GardenBoard({
     }
     if (key === 'ArrowRight' || key === 'ArrowLeft') {
       const seed = selected ? byID.get(selected) : null;
-      // Right on a crown is the drill, exactly as in the list; left climbs out.
       if (key === 'ArrowRight' && seed?.plot_progress) {
         event.preventDefault();
         drillInto(seed.id);
@@ -427,10 +358,8 @@ export function GardenBoard({
     }
   };
 
-  // WebKit does not focus a button when it is clicked, so a handler on the
-  // board's own element would go deaf the moment the mouse touched a card. The
-  // board is a whole surface: it reads keys from the document while it is up,
-  // and steps aside for anything being typed into.
+  // WebKit does not focus a button when it is clicked, so a handler on the board's
+  // own element would go deaf the moment the mouse touched a card.
   const keys = useRef(onKeyDown);
   useLayoutEffect(() => {
     keys.current = onKeyDown;
@@ -496,8 +425,6 @@ export function GardenBoard({
         <div className={`garden-board__columns${dragging ? ' is-dragging' : ''}`}>
           {COLUMNS.map(({ key, label }) => {
             const zones = dragging ? legalVerbs(dragging, key) : [];
-            // A composer in a 132px column cannot be typed in, so the column
-            // that is being written into opens for as long as that lasts.
             const collapsed = key === 'closed' && !closedOpen && compose?.column !== 'closed';
             const composing = compose?.column === key ? compose : null;
             return (
@@ -551,12 +478,8 @@ export function GardenBoard({
                     <ul className="garden-board__cards">
                       {columns[key].map((seed, row) => (
                         <Fragment key={seed.id}>
-                          {/* Ready holds everything nobody is working on, and
-                              the two halves of that are different news. The
-                              count in the header is what can be picked up; the
-                              rest are named here rather than hidden, because a
-                              board that drops work is worse than a long
-                              column. */}
+                          {/* Ready's not-ready remainder is named rather than hidden:
+                              a board that drops work is worse than a long column. */}
                           {key === 'ready' && row === readyCount && readyCount < columns.ready.length && (
                             <li className="garden-board__split" aria-hidden="true">
                               {columns.ready.length - readyCount} not ready yet
@@ -590,8 +513,7 @@ export function GardenBoard({
                     </ul>
                   )}
 
-                  {/* The zones. They exist only while a card is over this
-                      column and only for the verbs its state would accept, so
+                  {/* Zones exist only for the verbs this card's state would accept, so
                       the board can never offer a move the daemon would refuse. */}
                   {hover === key && zones.length > 0 && dragging && (
                     <div className="garden-board__zones">
@@ -616,8 +538,7 @@ export function GardenBoard({
         </div>
       )}
 
-      {/* What the hand is carrying. Ours, not WebKit's snapshot: the title to
-          know what it is, the id to know which one. */}
+      {/* Ours, not WebKit's snapshot. */}
       {dragging && dragPoint && (
         <div
           className="garden-board__carry"
@@ -640,8 +561,6 @@ export function GardenBoard({
   );
 }
 
-// targetColumn is where a verb lands a card, which is the column whose zone
-// offered it.
 function targetColumn(verb: Verb): ColumnKey {
   switch (verb) {
     case 'harvest':
@@ -656,8 +575,6 @@ function targetColumn(verb: Verb): ColumnKey {
   }
 }
 
-// emptyLine says something true about why a column is empty. "No cards" is a
-// tautology; a reader wants to know whether that is good news.
 function emptyLine(key: ColumnKey, columns: Record<ColumnKey, Seed[]>, here: number): string {
   if (here === 0) return 'Nothing planted here yet.';
   switch (key) {
@@ -699,7 +616,6 @@ interface CardProps {
   onMenu: () => void;
   onVerb: (verb: Verb) => void;
   onDragPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  /** True just after a drag ended on this card, so the trailing click is not a click. */
   wasDragged: () => boolean;
 }
 
@@ -710,8 +626,6 @@ function Card({
   const verbs = verbsFor(seed);
   const plot = seed.plot_progress ? plotCounts(seed) : '';
   const menu = useRef<HTMLDivElement | null>(null);
-  // An opened menu takes the focus, or Enter opened something the hand cannot
-  // reach without the mouse it was meant to replace.
   useEffect(() => {
     if (!menuOpen) return;
     menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
@@ -756,8 +670,6 @@ function Card({
           ref={menu}
           onKeyDown={(event) => {
             if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-            // The board's own arrows walk cards; inside an open menu they walk
-            // the verbs, so one key means one thing at a time.
             event.preventDefault();
             event.stopPropagation();
             const items = Array.from(
@@ -790,8 +702,6 @@ function Card({
   );
 }
 
-// What the card says under its title. One line, and it changes by column
-// because a reader asks a different question of each one.
 function CardMeta({
   seed, column, blockers, tenderLive, plot,
 }: { seed: Seed; column: ColumnKey; blockers: number; tenderLive: boolean; plot: string }) {
@@ -825,8 +735,6 @@ function Composer({
   compose, takenFrom, busy, inputRef, onCommit, onCancel,
 }: {
   compose: { seed: Seed; verb: Verb; column: ColumnKey };
-  // Who still holds this seed, when that is somebody. The line it draws is the
-  // board's --force: there is no way to commit without having read it.
   takenFrom: string;
   busy: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -863,9 +771,8 @@ function Composer({
         <kbd>⏎</kbd>
         <kbd>esc</kbd>
       </span>
-      {/* The one line that says where the words go. park and replant store no
-          reason, so theirs lands on the log — which is what the daemon's own
-          refusal tells a caller to do. */}
+      {/* park and replant store no reason, so theirs lands on the log — which is
+          what the daemon's own refusal tells a caller to do. */}
       {!spec.reasonOnSeed && <span className="garden-compose__where">goes on the log</span>}
       {takenFrom !== '' && (
         <span className="garden-compose__taking">takes it from {takenFrom}</span>
@@ -874,9 +781,6 @@ function Composer({
   );
 }
 
-// The dispatch stub. Dragging onto Growing is an intent — an agent claims the
-// seed itself when it starts — so the prototype shows exactly what would be
-// handed over and moves nothing.
 function DispatchSheet({ seed, crown, onClose }: { seed: Seed; crown?: Seed; onClose: () => void }) {
   return (
     <div className="garden-sheet" role="dialog" aria-modal="true" aria-label="Dispatch an agent">

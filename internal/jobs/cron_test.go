@@ -14,13 +14,6 @@ import (
 
 const cronKind = "heartbeat"
 
-// A cron entry is armed by Start one interval out, fires when that interval
-// elapses, and is immediately re-armed for the next one.
-//
-// Converted to synctest (spike leg 1). Recurrence is the one thing worth
-// testing against a clock that really moves: sleeping the entry's own interval
-// in the bubble exercises the arm/fire/re-arm cycle at its real cadence, and
-// costs no wall-clock time.
 func TestACronEntryFiresOnItsIntervalAndRearms(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, nil)
@@ -66,8 +59,6 @@ func TestACronEntryFiresOnItsIntervalAndRearms(t *testing.T) {
 	})
 }
 
-// A failing fire never retires the entry: it records the error and stays armed,
-// because a heartbeat that gives up is a silent outage.
 func TestAFailingCronEntryStaysArmed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
@@ -80,10 +71,8 @@ func TestAFailingCronEntryStaysArmed(t *testing.T) {
 		}
 		mustStart(t, r)
 
-		// Three intervals at their real length. synctest.Wait settles each fire and
-		// its re-arm before the clock moves again, so the sequencing the fake-clock
-		// version had to reason about explicitly — never advance past a schedule the
-		// last fire has not written yet — is now a property of the bubble.
+		// synctest.Wait settles each fire and its re-arm before the clock moves again, so
+		// the clock never advances past a schedule not yet written.
 		for want := int64(1); want <= 3; want++ {
 			time.Sleep(time.Minute)
 			synctest.Wait()
@@ -111,9 +100,6 @@ func TestAFailingCronEntryStaysArmed(t *testing.T) {
 	})
 }
 
-// A restart re-registers the same cron kind against a store that already holds
-// its entry. The existing schedule must survive: re-arming on every boot would
-// mean a daemon restarted more often than the interval never ticks at all.
 func TestRestartKeepsAnExistingCronSchedule(t *testing.T) {
 	store := newMemStore()
 	clock := newFakeClock()
@@ -154,10 +140,6 @@ func TestRestartKeepsAnExistingCronSchedule(t *testing.T) {
 	}
 }
 
-// A cron entry can be killed by a build that does not register its kind:
-// dispatch finds no handler and retires the record. Nothing selects a terminal
-// row and List hides cron entries, so unless arming revives it the heartbeat is
-// gone for good — silently — even after the kind comes back.
 func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := newMemStore()
@@ -173,7 +155,6 @@ func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 		mustStart(t, armed)
 		armed.Stop()
 
-		// A build with no handler for the kind: the due entry is retired.
 		time.Sleep(2 * time.Hour)
 		stranger := New(opts())
 		if err := stranger.Register("something-else", noop); err != nil {
@@ -186,7 +167,6 @@ func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 		}
 		stranger.Stop()
 
-		// The kind is back. The heartbeat must be beating again.
 		time.Sleep(2 * time.Hour)
 		fired := make(chan struct{}, 4)
 		revived := New(opts())
@@ -217,11 +197,6 @@ func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 	})
 }
 
-// The store can refuse the arming write — a busy SQLite under load is the case
-// that happens. A kind that fails to arm has no record at all: dispatch never
-// selects it and finish() never re-arms it, so noting the error and moving on
-// retires the duty until someone restarts the daemon. Arming keeps trying, and
-// while it has not landed it says so both in the log and to a caller asking.
 func TestArmingRetriesUntilTheStoreTakesTheCronEntry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var logMu sync.Mutex
@@ -265,7 +240,6 @@ func TestArmingRetriesUntilTheStoreTakesTheCronEntry(t *testing.T) {
 		}
 
 		store.healSaves()
-		// The retry is one backoff away and the dispatch loop is what runs it.
 		time.Sleep(DefaultBackoffBase + time.Second)
 		synctest.Wait()
 
@@ -276,7 +250,6 @@ func TestArmingRetriesUntilTheStoreTakesTheCronEntry(t *testing.T) {
 		if armed.State != StateQueued {
 			t.Fatalf("re-armed cron entry state = %s, want queued", armed.State)
 		}
-		// Armed is not the same as beating: let the interval elapse and watch it fire.
 		time.Sleep(time.Hour)
 		synctest.Wait()
 		if got := fires.Load(); got != 1 {
@@ -285,9 +258,6 @@ func TestArmingRetriesUntilTheStoreTakesTheCronEntry(t *testing.T) {
 	})
 }
 
-// A runner whose Start failed arms nothing at all, so every kind it registered is
-// missing for a reason it alone knows. Losing the single-instance lock to another
-// runner is how that happens.
 func TestCronEntryReportsARunnerThatNeverStarted(t *testing.T) {
 	store := newMemStore()
 	opts := Options{Store: store, PollInterval: testPoll, Log: func(string, ...any) {}}
@@ -315,9 +285,6 @@ func TestCronEntryReportsARunnerThatNeverStarted(t *testing.T) {
 	}
 }
 
-// Enqueueing ordinary work onto a recurring kind would mint a second record that
-// finish() also re-arms forever — a duplicate heartbeat that List hides and
-// CronEntry never finds.
 func TestEnqueueRefusesACronKind(t *testing.T) {
 	r, _, _ := newTestRunner(t, nil)
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
@@ -331,14 +298,11 @@ func TestEnqueueRefusesACronKind(t *testing.T) {
 			}
 		})
 	}
-	// Arming itself goes through Enqueue, so the guard must not block it.
 	if _, err := r.Enqueue(cronKind, EnqueueOptions{UniqueKey: CronKey, Delay: time.Hour}); err != nil {
 		t.Fatalf("arming a cron entry was refused: %v", err)
 	}
 }
 
-// A zero or negative interval is a registration error, not a kind that fires
-// continuously or never.
 func TestRegisterCronRejectsANonPositiveInterval(t *testing.T) {
 	r, _, _ := newTestRunner(t, nil)
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
@@ -351,8 +315,6 @@ func TestRegisterCronRejectsANonPositiveInterval(t *testing.T) {
 	}
 }
 
-// CronEntry names the mistake when a kind is not recurring, rather than
-// returning an empty result a caller would read as "not armed yet".
 func TestCronEntryRejectsANonCronKind(t *testing.T) {
 	r, _, _ := newTestRunner(t, nil)
 	mustRegister(t, r, "plain", func(context.Context, *Job) (any, error) { return nil, nil })
@@ -361,9 +323,6 @@ func TestCronEntryRejectsANonCronKind(t *testing.T) {
 	}
 }
 
-// The work queue is what something asked for. A cron entry is the queue's own
-// scheduler, permanently queued for its next fire, so it must not sit at the top
-// of every list of outstanding work.
 func TestListExcludesCronEntries(t *testing.T) {
 	r, _, _ := newTestRunner(t, nil)
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
@@ -384,15 +343,11 @@ func TestListExcludesCronEntries(t *testing.T) {
 	if len(list) != 1 || list[0].ID != job.ID {
 		t.Fatalf("list = %+v, want only the enqueued work job", list)
 	}
-	// The entry still exists — it is hidden from the work list, not unarmed.
 	if entry, err := r.CronEntry(cronKind); err != nil || entry == nil {
 		t.Fatalf("cron entry after a List that omitted it: %v (%+v)", err, entry)
 	}
 }
 
-// A heartbeat firing every minute forever is not a lifecycle transition worth
-// reporting: routing it through the change hook would publish a durable event and
-// re-push a snapshot every minute for as long as the daemon runs.
 func TestCronFiringDoesNotReportAChange(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		r, _ := newBubbleRunner(t, nil)
@@ -415,17 +370,12 @@ func TestCronFiringDoesNotReportAChange(t *testing.T) {
 			}
 		}
 
-		// The negative that matters: no change was reported, on a system that has
-		// nothing left to do rather than one that has merely not got round to it.
 		if got := changes.Load(); got != 0 {
 			t.Fatalf("cron firing reported %d change(s), want 0", got)
 		}
 	})
 }
 
-// The interval is configuration, and a record armed under the old one is not on
-// schedule — it is on a schedule nobody asked for any more. Shortening the
-// interval has to take effect, or the knob that sets it is half inert.
 func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 	store := newMemStore()
 	clock := newFakeClock()
@@ -445,7 +395,6 @@ func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 	}
 	first.Stop()
 
-	// Same kind, a minute apart now.
 	second := New(opts())
 	if err := second.RegisterCron(cronKind, time.Minute, noop, HandlerConfig{}); err != nil {
 		t.Fatalf("re-register cron: %v", err)
@@ -463,14 +412,11 @@ func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 	if wait := after.ScheduledAt.Sub(clock.now()); wait > time.Minute {
 		t.Fatalf("next fire is %s out, past the new %s interval", wait, time.Minute)
 	}
-	// Coalescing means it is still the one recurring record, not a second one.
 	if after.ID != armed.ID {
 		t.Fatalf("pulling the entry in minted a second cron record (%s then %s)", armed.ID, after.ID)
 	}
 }
 
-// The mirror of the rule above: a LENGTHENED interval must not push an armed
-// fire out, and a daemon restarted more often than its interval must still tick.
 func TestLengtheningTheIntervalLeavesAnArmedEntryAlone(t *testing.T) {
 	store := newMemStore()
 	clock := newFakeClock()

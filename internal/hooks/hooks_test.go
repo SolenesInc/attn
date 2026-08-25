@@ -12,24 +12,20 @@ func TestGenerateHooks(t *testing.T) {
 
 	settings := Generate(sessionID, socketPath, "/tmp/attn", nil)
 
-	// Verify it's valid JSON
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(settings), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	// Check hooks exist as a map
 	hooksMap, ok := parsed["hooks"].(map[string]interface{})
 	if !ok {
 		t.Fatal("hooks field not found or not a map")
 	}
 
-	// Should have 3 event types
 	if len(hooksMap) < 3 {
 		t.Errorf("expected at least 3 event types, got %d", len(hooksMap))
 	}
 
-	// Verify each event type has hook entries
 	for eventType, entries := range hooksMap {
 		entriesArray, ok := entries.([]interface{})
 		if !ok {
@@ -48,9 +44,6 @@ func TestGenerateHooks(t *testing.T) {
 	}
 }
 
-// The catch-all PostToolUse hook is the one that fires on every tool call, so
-// it stays a single spawn: _hook-tool-use resets the working state AND records
-// any markdown the call wrote, instead of a second hook entry doing the latter.
 func TestGenerateHooks_CatchAllPostToolUseIsOneSpawn(t *testing.T) {
 	settings := Generate("abc123", "/tmp/test.sock", "/tmp/attn", nil)
 
@@ -78,8 +71,8 @@ func TestGenerateCodexConfigOverrides_PostToolUseRecordsEdits(t *testing.T) {
 	if !strings.Contains(overrides, "hooks.PostToolUse=[{ matcher = \"*\", hooks = [{ type = \"command\", command = \"'/tmp/attn' '_hook-tool-use'\"") {
 		t.Fatalf("codex PostToolUse should run _hook-tool-use: %q", overrides)
 	}
-	// Codex only runs a hook whose recorded hash matches, so the trust entry
-	// has to move with the command.
+	// Codex only runs a hook whose recorded hash matches, so the trust entry has to
+	// move with the command.
 	if !strings.Contains(overrides, "post_tool_use") {
 		t.Fatalf("codex overrides should trust the post_tool_use hook: %q", overrides)
 	}
@@ -129,9 +122,6 @@ func TestGenerateHooks_HasSessionStartHook(t *testing.T) {
 	}
 }
 
-// The Notification hook is the only harness-owned signal that says the agent is
-// blocked on the user *and* says why. Losing the registration would leave that
-// evidence silently absent rather than failing anything.
 func TestGenerateHooks_HasNotificationHook(t *testing.T) {
 	var parsed SettingsConfig
 	if err := json.Unmarshal([]byte(Generate("abc123", "/tmp/test.sock", "/tmp/attn", nil)), &parsed); err != nil {
@@ -341,12 +331,10 @@ func TestGenerateCodexConfigOverrides_InjectsWorkflowGuidanceWhenEnabled(t *test
 	if !strings.Contains(on, "hypercode") {
 		t.Fatalf("enabled overrides missing workflow guidance: %q", on)
 	}
-	// The workspace context still rides alongside the workflow guidance.
 	if !strings.Contains(on, "/tmp/context.md") {
 		t.Fatalf("enabled overrides dropped the workspace context: %q", on)
 	}
 
-	// Workflow guidance is injected even without a workspace checkout.
 	noCtx := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{InjectWorkflow: true}), "\n")
 	if !strings.Contains(noCtx, "developer_instructions=") || !strings.Contains(noCtx, "hypercode") {
 		t.Fatalf("workflow guidance not injected without a checkout: %q", noCtx)
@@ -362,8 +350,6 @@ func TestWorkspaceContextSessionStartOutputWrapsGuidance(t *testing.T) {
 	if output.HookSpecificOutput.HookEventName != "SessionStart" {
 		t.Fatalf("hook event = %q", output.HookSpecificOutput.HookEventName)
 	}
-	// Non-chief agents are NOT nudged to journal: the SessionStart fallback carries
-	// only the workspace-context guidance, with no journaling directive appended.
 	want := WorkspaceContextGuidance("/tmp/context.md")
 	if output.HookSpecificOutput.AdditionalContext != want {
 		t.Fatal("hook output should carry only the workspace context guidance")
@@ -422,8 +408,6 @@ func TestChiefGuidanceLeavesGardenToLaunch(t *testing.T) {
 	}
 }
 
-// A woken member's crew block rides beside everything else a launch injects, and
-// comes last — it is the most specific thing this session is.
 func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 	const block = "You are **Trellis**, a crew member of this attn home."
 

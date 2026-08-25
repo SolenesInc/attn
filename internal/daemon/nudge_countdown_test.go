@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ticketnotify"
 )
 
-// currentNudgeTimer returns the session's armed countdown timer, or nil when none is
-// running (paused, canceled, or never armed).
 func currentNudgeTimer(d *Daemon, sessionID string) *time.Timer {
 	d.nudgeMu.Lock()
 	defer d.nudgeMu.Unlock()
@@ -32,10 +30,6 @@ func currentNudgeDeadline(d *Daemon, sessionID string) time.Time {
 	return time.Time{}
 }
 
-// settledNudgeDeadline reads a session's armed countdown deadline inside a
-// synctest bubble: arming can happen on another goroutine, so settle the bubble
-// first and then read the deadline once. A missing deadline here means nothing is
-// going to arm one, not that the poll was early.
 func settledNudgeDeadline(t *testing.T, d *Daemon, sessionID string) time.Time {
 	t.Helper()
 	synctest.Wait()
@@ -46,8 +40,6 @@ func settledNudgeDeadline(t *testing.T, d *Daemon, sessionID string) time.Time {
 	return deadline
 }
 
-// settledNudgeDeadlineBefore is settledNudgeDeadline for the pull-forward case:
-// the deadline that matters is not merely armed, it has moved ahead of a bound.
 func settledNudgeDeadlineBefore(t *testing.T, d *Daemon, sessionID string, before time.Time) time.Time {
 	t.Helper()
 	deadline := settledNudgeDeadline(t, d, sessionID)
@@ -57,10 +49,7 @@ func settledNudgeDeadlineBefore(t *testing.T, d *Daemon, sessionID string, befor
 	return deadline
 }
 
-// fireNudgeNow simulates the countdown timer firing immediately, by invoking the fire
-// callback with the live timer handle — the faithful deterministic path. Tests that
-// use it set an hour-long window override so the real timer never races this
-// hand-fire.
+// Tests that use it set an hour-long window override so the real timer never races it.
 func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	timer := currentNudgeTimer(d, sessionID)
@@ -71,8 +60,6 @@ func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	d.nudgeCountdownFire(sessionID, timer)
 }
 
-// armForTest gives an idle codex agent an unread chief steer, which arms its shared
-// nudge countdown. Returns the agent id and inputs accessor.
 func armForTest(t *testing.T, d *Daemon) (agentID string, inputs func(string) []string) {
 	t.Helper()
 	_, agentID, inputs = delegateForNotify(t, d, "codex")
@@ -82,15 +69,6 @@ func armForTest(t *testing.T, d *Daemon) (agentID string, inputs func(string) []
 	return agentID, inputs
 }
 
-// The end-to-end real-timer path: an idle, inactive codex with unread activity arms a
-// countdown that, on its own, fires after the window and doorbells.
-//
-// Converted to synctest. This test used to shorten the countdown to 15ms and poll
-// for the doorbell over two seconds; it now runs the production 30s window and
-// sleeps exactly it, at no wall-clock cost. The negative half is what the bubble
-// really buys: one tick short of the deadline nothing has been doorbelled, on a
-// daemon with nothing left to do — a claim the polling version could not make at
-// all.
 func TestNudgeCountdownFiresWhenInactive(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -111,9 +89,6 @@ func TestNudgeCountdownFiresWhenInactive(t *testing.T) {
 	})
 }
 
-// The active (currently-selected) session never auto-fires: its countdown is paused
-// (no timer, no nudge_fires_at) and it carries the unread marker plus a click-to-
-// trigger affordance instead.
 func TestNudgeCountdownPausedWhileActive(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -121,7 +96,7 @@ func TestNudgeCountdownPausedWhileActive(t *testing.T) {
 	_, agentID, inputs := delegateForNotify(t, d, "codex")
 	ticketID := boundTicketID(t, d, agentID)
 	d.store.UpdateState(agentID, protocol.StateIdle)
-	d.setSelectedSession(agentID) // the user is in this session
+	d.setSelectedSession(agentID)
 
 	commentOnTicket(t, d, ticketID, "take a look")
 
@@ -140,8 +115,6 @@ func TestNudgeCountdownPausedWhileActive(t *testing.T) {
 	}
 }
 
-// Switching away from the active session resumes its paused countdown so attn
-// delivers the nudge later.
 func TestNudgeCountdownResumesOnSwitchAway(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -151,12 +124,12 @@ func TestNudgeCountdownResumesOnSwitchAway(t *testing.T) {
 		ticketID := boundTicketID(t, d, agentID)
 		d.store.UpdateState(agentID, protocol.StateIdle)
 		d.setSelectedSession(agentID)
-		commentOnTicket(t, d, ticketID, "take a look") // paused while active
+		commentOnTicket(t, d, ticketID, "take a look")
 		if currentNudgeTimer(d, agentID) != nil {
 			t.Fatal("countdown ran while the session was active")
 		}
 
-		d.setSelectedSession(chiefID) // switch away
+		d.setSelectedSession(chiefID)
 
 		settledNudgeDeadline(t, d, agentID)
 	})
@@ -186,8 +159,7 @@ func TestBufferedNudgePreservesDeadlineAcrossSelectionPause(t *testing.T) {
 		d.setSelectedSession(agentID)
 		deadline := settledNudgeDeadline(t, d, chiefID)
 		want := attentionAt.Add(time.Hour)
-		// Store timestamps use RFC3339 second precision, so the durable round-trip
-		// may trim the sub-second component.
+		// Store timestamps use RFC3339 second precision, so the durable round-trip may trim sub-seconds.
 		if delta := deadline.Sub(want); delta < -time.Second || delta > time.Second {
 			t.Fatalf("resumed deadline = %s, want %s", deadline, want)
 		}
@@ -213,26 +185,22 @@ func TestRebuildTicketDeliverySchedulesRearmsUnread(t *testing.T) {
 	})
 }
 
-// Switching TO a session with a running countdown pauses it (no auto-fire while the
-// user is in it).
 func TestNudgeCountdownPausesOnSwitchTo(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
-	agentID, _ := armForTest(t, d) // inactive -> countdown running
+	agentID, _ := armForTest(t, d)
 	if currentNudgeTimer(d, agentID) == nil {
 		t.Fatal("inactive session did not arm a countdown")
 	}
 
-	d.setSelectedSession(agentID) // user switches into it
+	d.setSelectedSession(agentID)
 
 	if currentNudgeTimer(d, agentID) != nil {
 		t.Fatal("countdown kept running after the session became active")
 	}
 }
 
-// Moving to another eligible state keeps the countdown armed. This covers the hook
-// path used by Codex and Claude, which does not flow through handlePTYState.
 func TestNudgeCountdownSurvivesEligibleStateChange(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -291,8 +259,6 @@ func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	var firstWrite sync.Once
 	d.ptyBackend = &fakeSpawnBackend{onInput: func(_ string, data []byte) {
 		inputs <- string(data)
-		// Hold the paste write open: the fence has to survive the whole
-		// paste-then-Enter pair, not just a single write.
 		firstWrite.Do(func() {
 			close(inputStarted)
 			<-releaseInput
@@ -317,7 +283,6 @@ func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	case <-stateDone:
 		t.Fatal("pending approval committed while a doorbell input was in flight")
 	case <-time.After(20 * time.Millisecond):
-		// The shared fence holds the state report until the complete input is sent.
 	}
 
 	close(releaseInput)
@@ -354,9 +319,6 @@ func TestNudgeDeliveryStatePolicy(t *testing.T) {
 	}
 }
 
-// Draining the inbox clears the indicator and cancels the countdown — including when
-// an optional runtime watch is the consumer. After draining, nothing is unread, so
-// there is nothing to nudge.
 func TestNudgeCountdownClearedWhenInboxDrained(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -366,7 +328,7 @@ func TestNudgeCountdownClearedWhenInboxDrained(t *testing.T) {
 		t.Fatal("precondition: no countdown armed")
 	}
 
-	callTicketInbox(t, d, agentID) // the agent reads its queue
+	callTicketInbox(t, d, agentID)
 
 	if currentNudgeTimer(d, agentID) != nil {
 		t.Fatal("countdown survived the inbox drain")
@@ -380,8 +342,6 @@ func TestNudgeCountdownClearedWhenInboxDrained(t *testing.T) {
 	}
 }
 
-// Clicking the indicator (trigger_nudge) delivers the doorbell immediately, bypassing
-// the countdown.
 func TestTriggerNudgeFiresImmediately(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -404,9 +364,6 @@ func TestTriggerNudgeFiresImmediately(t *testing.T) {
 	}
 }
 
-// An explicit click delivers when the session rests in 'unknown' — Codex's common
-// resting state when its turn-end classifier cannot find a transcript. Unknown is
-// also auto-nudge-eligible; the click simply bypasses the countdown.
 func TestTriggerNudgeDeliversWhenUnknown(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -424,8 +381,6 @@ func TestTriggerNudgeDeliversWhenUnknown(t *testing.T) {
 	}
 }
 
-// An explicit click delivers on demand while the agent is working. Working is also
-// auto-nudge-eligible; the click simply bypasses the countdown.
 func TestTriggerNudgeDeliversWhileWorking(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -443,8 +398,6 @@ func TestTriggerNudgeDeliversWhileWorking(t *testing.T) {
 	}
 }
 
-// The one exception: a click never doorbells a pending_approval session — the
-// doorbell's trailing Enter could answer the approval prompt.
 func TestTriggerNudgeSkipsPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -462,9 +415,6 @@ func TestTriggerNudgeSkipsPendingApproval(t *testing.T) {
 	}
 }
 
-// The anti-splice guard: a genuine user keystroke within the guard window blocks the
-// fire and re-arms a fresh countdown rather than splicing the doorbell onto the
-// half-typed line.
 func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -473,7 +423,7 @@ func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	d.nudgeFireHook = func(_, a string) { action = a }
 	agentID, inputs := armForTest(t, d)
 
-	d.noteUserInput(agentID, "") // the user is mid-keystroke (untagged source)
+	d.noteUserInput(agentID, "")
 	fireNudgeNow(t, d, agentID)
 
 	if action != "rearm" {
@@ -487,8 +437,6 @@ func TestNudgeCountdownReArmsAfterRecentKeystroke(t *testing.T) {
 	}
 }
 
-// Automation and replay writes are not the user typing, so they do not trip the
-// keystroke guard.
 func TestNudgeKeystrokeGuardIgnoresAutomation(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour
@@ -509,12 +457,6 @@ func TestNudgeKeystrokeGuardIgnoresAutomation(t *testing.T) {
 	}
 }
 
-// The guard's write path: handlePtyInput must record a genuine keystroke and must NOT
-// record automation/replay writes. The other guard tests poke noteUserInput directly;
-// this one drives the real pty_input handler so the source derivation
-// (Deref + TrimSpace) and the call wiring are covered, not assumed. If genuine input
-// stopped recording the splice guard becomes a no-op; if attach_replay started
-// recording every switched-away session would look "recently typed" and never fire.
 func TestHandlePtyInputRecordsKeystrokeForGuard(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -545,7 +487,6 @@ func TestHandlePtyInputRecordsKeystrokeForGuard(t *testing.T) {
 	}
 }
 
-// Teardown stops every armed timer so no AfterFunc goroutine outlives the daemon.
 func TestStopNudgeCountdownsClearsTimers(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour

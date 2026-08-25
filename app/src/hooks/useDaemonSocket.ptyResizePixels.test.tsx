@@ -1,12 +1,5 @@
-// What a pty_resize carries about the pane's pixel size.
-//
-// The daemon derives a cell from `xpixel / cols` and hands it to the PTY's
-// winsize and the worker terminal, so the pixels are the entire signal an image
-// emitter has for how big a cell is. Two things have to hold on the wire: a
-// measured fit carries them, and a resize that measured nothing OMITS them
-// rather than sending zeros — zero and absent mean the same thing to the
-// daemon, and a resize that claimed a zero-pixel pane would still read as a
-// measurement to anyone reading the traffic.
+// Zero and absent mean the same thing to the daemon, so a resize that measured
+// nothing must OMIT the pixels rather than send zeros.
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -76,7 +69,6 @@ function renderSocket() {
   );
 }
 
-// pty_resize waits for initial state, so nothing reaches the wire before this.
 function emitInitialState(ws: FakeWebSocket) {
   act(() => {
     ws.emit({
@@ -110,8 +102,6 @@ describe('useDaemonSocket pty_resize pixel geometry', () => {
     originalWebSocket = globalThis.WebSocket;
     FakeWebSocket.instances = [];
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
-    // The bridge routes to an in-memory mock unless it believes it is in the
-    // packaged app, and the mock never sends a command.
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockResolvedValue(true);
   });
@@ -141,8 +131,6 @@ describe('useDaemonSocket pty_resize pixel geometry', () => {
     const ws = await waitForOpenSocket();
     emitInitialState(ws);
 
-    // The attach-time reconcile: it re-asserts a grid it was handed, and never
-    // touched a renderer.
     await act(async () => {
       await ptyResize({ id: 'sess-1', cols: 40, rows: 12, reason: 'daemon_known_attach' });
     });
@@ -156,7 +144,6 @@ describe('useDaemonSocket pty_resize pixel geometry', () => {
     const ws = await waitForOpenSocket();
     emitInitialState(ws);
 
-    // A cell needs both divisions; one axis is not geometry the daemon can use.
     await act(async () => {
       await ptyResize({ id: 'sess-1', cols: 40, rows: 12, xpixel: 720, ypixel: 0 });
     });

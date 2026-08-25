@@ -20,31 +20,10 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Wake: a member's day starts at launch. The daemon claims the binding, then
-// spawns a session in the member's own cwd, with its awareness dirs and its
-// priming — charter, the freshest letter, and the verbs of its own home.
-//
-// The claim happens before the spawn, the way a garden dispatch is recorded
-// before one: the launching wrapper asks `crew_prime` for what to inject, and
-// that answer is the binding. A wake that cannot bind never spawns.
-//
-// A member that is already awake is not woken twice. Two agents with the same
-// identity never run at once, so the result names the live day and the caller
-// focuses it — a refusal here would make the sidebar's one action fail exactly
-// when the member is present.
-
-// crewWakeAgent is the harness a wake launches when neither the caller nor the
-// member's record names one. `--agent` picks a harness for one day; `attn crew
-// set <member> --agent <name>` picks the one the member lives on.
 const crewWakeAgent = crew.DefaultAgent
 
-// crewWakeFallbackModel preserves the model crew used before model selection
-// became configurable. It applies only to Claude; other harnesses keep their
-// own default when neither the member nor daemon settings name a model.
 const crewWakeFallbackModel = "claude-fable-5"
 
-// crewWakeModel resolves a member's model: its own choice, the configured
-// default for the launch harness, then the historical Claude fallback.
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 	// A one-day harness override must not receive a model chosen for the
 	// member's usual harness (for example, a Claude id passed to Codex).
@@ -62,10 +41,6 @@ func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 	return nil
 }
 
-// crewAgentAvailable reports whether a harness this daemon can launch answers
-// to that name — a built-in driver or an installed plugin one. Both the wake
-// and `crew set --agent` ask it, so a name is refused when it is typed rather
-// than at the next morning.
 func (d *Daemon) crewAgentAvailable(agent string) bool {
 	if agentdriver.Get(agent) != nil {
 		return true
@@ -74,27 +49,16 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 	return ok
 }
 
-// crewWakePrompt is the first thing a woken member is asked to do. Without it a
-// member launches primed and silent, and the user has to open the session to
-// find out anybody is there.
 const crewWakePrompt = "You have been woken for today. Orient from your charter and your predecessor's letter, verify anything load-bearing they left you, then greet Victor in a few lines: who you are, what you were left with, what you believe the current state is, and what you would do next."
 
-// crewWorkspaceID is a member's durable workspace — one per member, reused by
-// every day. A workspace per wake would litter the sidebar with a new group
-// each morning.
 func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
 
-// crewWakeDelivery is work carried by the one serialized wake path. An agent
-// message replaces the ordinary greeting and persists its row before spawn. A
-// ticket nudge keeps the greeting and runs AfterInitialPrompt only after a hook
-// proves the new day got through priming and submitted that greeting.
 type crewWakeDelivery struct {
 	Record             *store.AgentMessage
 	Prompt             string
 	AfterInitialPrompt func(sessionID string)
 }
 
-// crewMember reads one member by id, behind the fence.
 func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return crew.Member{}, docstore.Document{}, err
@@ -110,10 +74,6 @@ func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error)
 	return member, docs[member.ID], nil
 }
 
-// crewLaunchDir is where a member's sessions launch: its recorded cwd, or its
-// own home when nobody recorded one. The home always exists — it is what made
-// the member — so a wake never fails for want of a directory, and a cwd that
-// has since moved is named rather than silently swapped.
 func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
@@ -139,9 +99,6 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	return resolved, nil
 }
 
-// crewPriming composes what a member's launch injects, reading the prose off
-// the home each time: the files are canonical, so a charter edited between two
-// wakes takes effect at the next one with nothing to invalidate.
 func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return crew.Priming{}, err
@@ -200,8 +157,6 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	return priming, nil
 }
 
-// IPC handlers.
-
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
 	if err != nil {
@@ -211,10 +166,6 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewWakeResult: result})
 }
 
-// handleCrewWakeWS is the sidebar's way in: one command, and the woken session
-// reaches the UI through the normal session and layout broadcasts. A refusal —
-// no such member, a cwd that moved, an outpost — comes back as the error the
-// caller shows, never as a click that did nothing.
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
 	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
 	response := protocol.CrewWakeResultMessage{
@@ -274,8 +225,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 			return awake, nil
 		}
 	}
-	// The wake's own flag wins for the day it starts; the member's record is
-	// what it lives on when nobody named one.
 	if agent == "" {
 		agent = member.LaunchAgent()
 	}
@@ -293,9 +242,8 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	}
 
 	sessionID := uuid.NewString()
-	// Claimed before the spawn, because the launch reads it: the wrapper asks
-	// `crew_prime` for what to inject and the binding is what answers. A member
-	// whose day is claimed by a launch that then fails is released below.
+	// The launch reads the binding through `crew_prime`, so it must be claimed
+	// before the spawn; a failed launch releases it below.
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
 	}
@@ -331,9 +279,8 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 
 	initialPrompt := crewWakePrompt
 	if delivery == nil {
-		// A crew binding becomes visible before the launching agent has crossed
-		// priming and its trust dialog. Gate messages addressed in that window;
-		// the first hook on the far side of the greeting opens and drains it.
+		// A crew binding becomes visible before the launching agent has crossed priming and its
+		// trust dialog; the first hook past the greeting opens and drains the gate.
 		d.notePostInitialPrompt(sessionID, nil)
 	} else {
 		if delivery.Record != nil {
@@ -386,9 +333,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	return result, nil
 }
 
-// crewSessionActuallyLive is the single-holder check used before wake returns
-// AlreadyAwake. The store row is identity and history; SessionInfo.Running is
-// whether an agent process still occupies the seat.
 func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 	if d.isHostSession(sessionID) {
 		return true, nil
@@ -398,8 +342,6 @@ func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {
 	}
 	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	if !ok {
-		// Test and third-party backends without runtime inspection preserve their
-		// existing row-based contract. Production PTY backends implement it.
 		return true, nil
 	}
 	info, err := provider.SessionInfo(context.Background(), sessionID)
@@ -433,10 +375,6 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})
 }
 
-// crewPrimeForSession composes what a launching session must be injected with
-// to be its member, and logs the size — the budget receipt the wake limit and
-// the heartbeat are waiting on. One line per injection, naming what each part
-// cost: grep `crew: priming`. Reports false for a session that is nobody.
 func (d *Daemon) crewPrimeForSession(sessionID string) (crew.Member, string, bool, error) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, "", false, nil
@@ -492,7 +430,6 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 		member.CWD = cwd
 	}
 	if msg.Agent != nil {
-		// Empty clears it back to the crew default, the way an empty cwd does.
 		agent := strings.TrimSpace(strings.ToLower(*msg.Agent))
 		if agent != "" && !d.crewAgentAvailable(agent) {
 			d.sendCrewError(conn, "set", fmt.Errorf("agent %q is not available; `attn agent list` names the harnesses this daemon can launch", agent))
@@ -550,9 +487,6 @@ func absoluteCrewDir(dir string) (string, error) {
 	return absolute, nil
 }
 
-// resolveCrewDir makes a directory absolute and insists it exists. A recorded
-// cwd that is not there only fails at the next wake, which is the wrong end of
-// the day to learn about a typo. An empty value clears the field.
 func resolveCrewDir(dir string) (string, error) {
 	absolute, err := absoluteCrewDir(dir)
 	if err != nil || absolute == "" {

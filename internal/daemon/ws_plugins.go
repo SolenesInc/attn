@@ -92,8 +92,6 @@ func (d *Daemon) handleInstallBundledPluginWS(client *wsClient, msg *protocol.In
 		return
 	}
 	if err := d.startInstalledPlugin(*manifest); err != nil {
-		// Installation is the durable opt-in. The supervisor retains the failed
-		// start and retry diagnostics so Settings can explain a degraded plugin.
 		d.logf("bundled plugin %s installed but failed to start: %v", name, err)
 	}
 	d.publishFact(FactPluginInstalled, name, nil)
@@ -237,8 +235,8 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 		case !item.Installed:
 			info.RuntimeState = pluginRuntimeStateStopped
 		case runtimePhase == pluginPhaseParked:
-			// Parked is not degraded: nothing is being retried, so it must not
-			// read as a plugin that is still coming back on its own.
+			// Parked is not degraded: nothing is being retried, so it must not read as
+			// a plugin that is still coming back on its own.
 			info.RuntimeState = pluginRuntimeStateParked
 		case healthStatus == "unhealthy" || runtimePhase == pluginPhaseBackoff:
 			info.RuntimeState = pluginRuntimeStateDegraded

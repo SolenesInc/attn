@@ -1,4 +1,3 @@
-// internal/daemon/worktree.go
 package daemon
 
 import (
@@ -16,18 +15,11 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Core worktree operations - shared between Unix socket and WebSocket handlers
-
-// doListWorktrees fetches worktrees from store and git, merges them, returns protocol type.
-// It also prunes stale worktrees that no longer exist in git.
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
-	// Get from registry first
 	storedWorktrees := d.store.ListWorktreesByRepo(mainRepo)
 
-	// Get current git worktrees
 	gitWorktrees, err := git.ListWorktrees(mainRepo)
 	if err != nil {
-		// If we can't read git, just return stored worktrees
 		protoWorktrees := make([]protocol.Worktree, len(storedWorktrees))
 		for i, wt := range storedWorktrees {
 			protoWorktrees[i] = protocol.Worktree{
@@ -40,30 +32,24 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 		return protoWorktrees
 	}
 
-	// Build set of valid git worktree paths
 	gitWorktreePaths := make(map[string]bool)
 	for _, gwt := range gitWorktrees {
 		gitWorktreePaths[gwt.Path] = true
 	}
 
-	// Prune stale worktrees from store and build valid list
 	var validWorktrees []*store.Worktree
 	for _, wt := range storedWorktrees {
 		if gitWorktreePaths[wt.Path] {
 			validWorktrees = append(validWorktrees, wt)
 		} else {
-			// Worktree no longer exists in git - remove from store
 			d.store.RemoveWorktree(wt.Path)
 		}
 	}
 
-	// Add any git worktrees not in registry
 	for _, gwt := range gitWorktrees {
-		// Skip main repo
 		if gwt.Path == mainRepo {
 			continue
 		}
-		// Add if not in registry
 		found := false
 		for _, wt := range validWorktrees {
 			if wt.Path == gwt.Path {
@@ -83,7 +69,6 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 		}
 	}
 
-	// Convert to protocol type
 	protoWorktrees := make([]protocol.Worktree, len(validWorktrees))
 	for i, wt := range validWorktrees {
 		protoWorktrees[i] = protocol.Worktree{
@@ -96,8 +81,6 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 	return protoWorktrees
 }
 
-// doCreateWorktree creates a git worktree and registers it in the store.
-// Returns the created worktree path and any error.
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
 	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
 
@@ -124,10 +107,8 @@ func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, 
 		return providerPath, nil
 	}
 
-	// If starting from a remote tracking ref (e.g. "origin/main"), fetch it
-	// first so the worktree is created from the latest upstream commit.
-	// Guard against local branches that happen to contain "/" (e.g. "feat/x")
-	// by checking that the prefix is an actual configured remote.
+	// The remote prefix is checked against the configured remotes, so a local branch
+	// containing "/" is not mistaken for one.
 	if remote, branch, ok := strings.Cut(startingFrom, "/"); ok {
 		if remotes, rerr := git.ListRemotes(mainRepo); rerr == nil && slices.Contains(remotes, remote) {
 			if ferr := git.FetchRemoteBranch(mainRepo, remote, branch); ferr != nil {
@@ -135,10 +116,8 @@ func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, 
 			}
 		}
 	}
-	// If the requested start ref can't be resolved (e.g. "origin/main" in a repo
-	// with no matching remote branch), fall back to the repo's current HEAD so
-	// creation succeeds instead of erroring on an unknown ref. The fetch above
-	// has already run, so a resolvable remote ref is up to date by this point.
+	// An unresolvable start ref falls back to the repo current HEAD so creation
+	// succeeds instead of erroring.
 	if startingFrom != "" && !git.RefExists(mainRepo, startingFrom) {
 		d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
 		startingFrom = ""
@@ -177,26 +156,19 @@ func (d *Daemon) registerCreatedWorktree(mainRepo, path, branch string) {
 	})
 }
 
-// discoverWorktree tries to find a worktree from git state when it's not in the registry.
-// This handles cases where the DB was reset or the worktree was created manually.
-// Returns nil if the path is not a valid worktree or cannot be discovered.
 func (d *Daemon) discoverWorktree(path string) *store.Worktree {
-	// Get the main repo from the worktree's .git file
 	mainRepo := git.GetMainRepoFromWorktree(path)
 	if mainRepo == "" {
 		return nil
 	}
 
-	// List all worktrees from git to find matching entry
 	gitWorktrees, err := git.ListWorktrees(mainRepo)
 	if err != nil {
 		return nil
 	}
 
-	// Find the matching worktree
 	for _, gwt := range gitWorktrees {
 		if gwt.Path == path {
-			// Found it - register in store and return
 			wt := &store.Worktree{
 				Path:      gwt.Path,
 				Branch:    gwt.Branch,
@@ -239,8 +211,6 @@ func (e *deleteWorktreeError) Unwrap() error {
 	return e.err
 }
 
-// doDeleteWorktree removes a worktree from git and the store.
-// Also cleans up any sessions in that directory after external deletion succeeds.
 func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
 	finishOperation := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, path, endpointID)
 	defer func() {
@@ -249,13 +219,10 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 
 	wt := d.store.GetWorktree(path)
 	if wt == nil {
-		// Try to discover it from git state
 		wt = d.discoverWorktree(path)
 		if wt == nil {
-			// Check if the path exists on disk
 			if _, err := os.Stat(path); os.IsNotExist(err) {
-				// Path doesn't exist and not in registry - nothing to delete
-				// Broadcast deleted event anyway so UI removes it
+				// Nothing to delete, but still publish so the UI removes it.
 				d.logf("Worktree %s doesn't exist and not in registry, treating as already deleted", path)
 				d.publishFact(FactWorktreeDeleted, path, nil)
 				d.cleanupDeletedWorktreeSessions(path)
@@ -268,7 +235,6 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 		}
 	}
 
-	// Save branch name before deleting worktree
 	branch := wt.Branch
 	mainRepo := wt.MainRepo
 
@@ -290,11 +256,10 @@ func (d *Daemon) finalizeDeletedWorktree(path, mainRepo, branch string) {
 	d.cleanupDeletedWorktreeSessions(path)
 	d.store.RemoveWorktree(path)
 
-	// Also delete the branch (force=true since worktree is already deleted).
+	// force=true: the worktree is already gone.
 	if branch != "" {
 		if err := git.DeleteBranch(mainRepo, branch, true); err != nil {
 			d.logf("Warning: worktree deleted but failed to delete branch %s: %v", branch, err)
-			// Don't fail the whole operation - worktree is already deleted.
 		} else {
 			d.logf("Deleted branch %s along with worktree", branch)
 		}
@@ -369,14 +334,10 @@ func (e *worktreeNotFoundError) Error() string {
 	return "worktree not found in registry: " + e.path
 }
 
-// Unix socket handlers
-
 func (d *Daemon) handleListWorktrees(conn net.Conn, msg *protocol.ListWorktreesMessage) {
 	protoWorktrees := d.doListWorktrees(msg.MainRepo)
-	// Listing reconciles the registry against git: it prunes worktrees that are
-	// gone and adopts ones created outside attn. The reconciled list travels as
-	// the payload rather than being re-read in the projection, so the push is
-	// exactly what this call computed.
+	// The reconciled list travels as the payload rather than being re-read in the
+	// projection, so the push is exactly what this call computed.
 	d.publishFact(FactWorktreeListReconciled, msg.MainRepo, protoWorktrees)
 	d.sendOK(conn)
 }
@@ -399,8 +360,6 @@ func (d *Daemon) handleDeleteWorktree(conn net.Conn, msg *protocol.DeleteWorktre
 	}
 	d.sendOK(conn)
 }
-
-// WebSocket handlers for async result pattern
 
 func (d *Daemon) handleListWorktreesWS(client *wsClient, msg *protocol.ListWorktreesMessage) {
 	protoWorktrees := d.doListWorktrees(msg.MainRepo)
@@ -431,8 +390,6 @@ func (d *Daemon) handleCreateWorktreeWS(client *wsClient, msg *protocol.CreateWo
 
 func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWorktreeMessage) {
 	go func() {
-		// doDeleteWorktree removes the worktree's sessions internally, so the list
-		// is refreshed once the deletion settles either way.
 		defer d.publishFact(FactWorktreeSessionsRemoved, msg.Path, nil)
 
 		err := d.doDeleteWorktree(msg.Path, msg.EndpointID, deleteWorktreeOptions{
@@ -472,8 +429,8 @@ func (d *Daemon) projectWorktreeCreated(ev bus.Event) {
 	})
 }
 
-// projectWorktreeDeleted needs no payload: the wire event has only ever carried
-// the path, which is the fact's subject.
+// No payload: the wire event has only ever carried the path, which is the fact
+// subject.
 func (d *Daemon) projectWorktreeDeleted(ev bus.Event) {
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:     protocol.EventWorktreeDeleted,

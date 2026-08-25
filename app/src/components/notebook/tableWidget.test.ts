@@ -12,11 +12,6 @@ function stateFor(doc: string, selection: { anchor: number; head?: number }): Ed
   });
 }
 
-// The table field is private (only parseTableData/markdownTables are exported), so
-// tests read its contribution to the standard decorations facet — resolvable from a
-// bare EditorState since markdownTables()'s only decoration source is a StateField
-// (Facet.from(field) needs no view). Counts block-replace ranges without depending on
-// widget internals.
 function replaceRangeCount(state: EditorState): number {
   let count = 0;
   for (const provider of state.facet(EditorView.decorations)) {
@@ -96,8 +91,7 @@ describe('markdownTables reveal gate', () => {
   it('reveals only the table the cursor is inside, with a second table intact', () => {
     const secondTable = '| c | d |\n| --- | --- |\n| 3 | 4 |';
     const full = `${doc}\n\n${secondTable}`;
-    // Cursor on the first table's header line.
     const state = stateFor(full, { anchor: 2 });
-    expect(replaceRangeCount(state)).toBe(1); // only the second table's widget remains
+    expect(replaceRangeCount(state)).toBe(1);
   });
 });

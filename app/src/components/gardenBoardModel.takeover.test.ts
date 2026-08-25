@@ -24,9 +24,6 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
   } as Seed;
 }
 
-// `replant` is the one move that lands on `planted`, so the board's Ready column
-// is reachable from everywhere except Ready itself. These are the two arrows the
-// board used to be missing, and the one it still legitimately has no zone for.
 describe('a seed goes back to the pool from anywhere but the pool', () => {
   it('hands back a seed being grown, without closing it', () => {
     expect(legalVerbs(seed('growing', { session: 'sess-a' }), 'ready')).toEqual(['replant']);
@@ -46,8 +43,7 @@ describe('a seed goes back to the pool from anywhere but the pool', () => {
   });
 });
 
-// heldByOther is garden.Tender.Holds read from the board's side. It decides
-// whether the composer draws its takeover line, which is the board's --confirm.
+// heldByOther is garden.Tender.Holds read from the board's side.
 describe('who still holds a card', () => {
   const live = new Set(['sess-a']);
 

@@ -11,7 +11,7 @@ func TestDockTileAfterPaneCreatesLockedSplit(t *testing.T) {
 		DefaultLayout("pane-root"),
 		"pane-root",
 		DirectionVertical,
-		false, // tile lands to the right of the anchor
+		false,
 		"split-md",
 		"tile-md",
 		string(TileKindMarkdown),
@@ -103,7 +103,6 @@ func TestLayoutEmpty(t *testing.T) {
 }
 
 func TestDockTileBetweenPanes(t *testing.T) {
-	// tile1 | tile2 → docking to the right of tile1 yields tile1 | md | tile2.
 	tree := Node{
 		Type:      "split",
 		SplitID:   "root",
@@ -159,7 +158,6 @@ func TestDockTileMovesExistingInstance(t *testing.T) {
 	if ids := TileIDs(moved); len(ids) != 1 || ids[0] != "tile-md" {
 		t.Fatalf("tile ids after move = %v, want exactly one tile-md", ids)
 	}
-	// pane-a should no longer share a split with the tile; pane-b should.
 	if moved.Children[0].Type != "pane" || moved.Children[0].PaneID != "pane-a" {
 		t.Fatalf("children[0] = %+v, want bare pane-a after move", moved.Children[0])
 	}
@@ -223,7 +221,6 @@ func TestDockTilePersistsTileParams(t *testing.T) {
 		t.Fatalf("TileParamsByID = (%q, %v), want (%q, true)", params, ok, path)
 	}
 
-	// Params survive normalization and an encode/decode round-trip.
 	snapshot := NormalizeWorkspaceLayout(WorkspaceLayout{
 		WorkspaceID:  "workspace-1",
 		ActivePaneID: "pane-root",
@@ -247,7 +244,6 @@ func TestDockTilePersistsTileParams(t *testing.T) {
 		t.Fatalf("params lost in encode/decode: %q", params)
 	}
 
-	// Re-docking (move) with new params retargets the same tile.
 	moved, ok := DockTile(decoded, "pane-root", DirectionVertical, false, "split-md", "tile-md", "markdown", "/other/notes.md", "", 0.5)
 	if !ok {
 		t.Fatal("re-dock failed")
@@ -332,7 +328,6 @@ func TestNormalizeWorkspaceLayoutPreservesTileLeaf(t *testing.T) {
 	if !HasTile(normalized.Layout, "tile-md") {
 		t.Fatal("tile pruned during normalization")
 	}
-	// Tiles are not agent panes: pane bookkeeping must ignore them.
 	if ids := PaneIDs(normalized.Layout); !slices.Equal(ids, []string{"pane-root"}) {
 		t.Fatalf("pane ids = %v, want only pane-root (tile excluded)", ids)
 	}
@@ -352,7 +347,7 @@ func TestNormalizeDropsMalformedTile(t *testing.T) {
 			Ratio:     DefaultSplitRatio,
 			Children: []Node{
 				{Type: "pane", PaneID: "pane-root"},
-				{Type: "tile", TileID: "tile-md"}, // missing kind → malformed
+				{Type: "tile", TileID: "tile-md"},
 			},
 		},
 		Panes: []Pane{
@@ -388,8 +383,6 @@ func TestDockedTileRatioSurvivesEncodeDecode(t *testing.T) {
 }
 
 func TestDockedTileIsOpaqueToTerminalRebalance(t *testing.T) {
-	// A tile docked into a chain must not be redistributed when a sibling
-	// terminal split rebalances. Build pane-a | md, then split pane-a in two.
 	docked, _ := DockTile(DefaultLayout("pane-a"), "pane-a", DirectionVertical, false, "split-md", "tile-md", "markdown", "", "", 0.7)
 	withSecond, changed := Split(docked, "pane-a", "pane-b", "split-terminals", DirectionVertical, DefaultSplitRatio)
 	if !changed {
@@ -419,7 +412,6 @@ func TestDockTileSessionBinding(t *testing.T) {
 		t.Fatalf("tile session = (%q, %v), want session-1", sessionID, ok)
 	}
 
-	// A move (re-dock with an empty session) carries the binding forward.
 	moved, ok := DockTile(docked, "pane-root", DirectionHorizontal, false, "split-md2", "tile-md", "markdown", "/tmp/doc.md", "", 0.5)
 	if !ok {
 		t.Fatal("re-dock failed")
@@ -428,7 +420,6 @@ func TestDockTileSessionBinding(t *testing.T) {
 		t.Fatalf("move dropped session binding: %q", sessionID)
 	}
 
-	// An explicit session rebinds on re-dock.
 	rebound, ok := DockTile(moved, "pane-root", DirectionVertical, false, "split-md3", "tile-md", "markdown", "/tmp/doc.md", "session-2", 0.5)
 	if !ok {
 		t.Fatal("rebinding re-dock failed")

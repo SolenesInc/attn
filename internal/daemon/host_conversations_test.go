@@ -13,10 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The picker's rows come from a shallow read of files pi wrote. Everything here
-// is about that read degrading rather than failing: the file is what resumes,
-// and a row with a poor label still resumes the right conversation.
-
 func writeSession(t *testing.T, root, sessionID, name string, lines ...string) string {
 	t.Helper()
 	dir := filepath.Join(root, sessionID)
@@ -51,8 +47,6 @@ func TestPastConversationsAreLabelledFromTheFile(t *testing.T) {
 	if cwd != "/Users/v/projects/attn" {
 		t.Errorf("cwd = %q", cwd)
 	}
-	// The FIRST thing the user said, whitespace flattened — an assistant line
-	// before it is not what names a conversation.
 	if preview != "fix the paging bug" {
 		t.Errorf("preview = %q", preview)
 	}
@@ -73,8 +67,6 @@ func TestPastConversationsSurviveWhatTheyCannotRead(t *testing.T) {
 	}
 	for _, file := range files {
 		cwd, preview := readPastConversationHead(file.path)
-		// No panics, no errors — a blank label at worst. What matters is that
-		// the row exists at all, because the row is what resumes.
 		if file.path == "" {
 			t.Error("a listed conversation has no file")
 		}
@@ -91,8 +83,6 @@ func TestPastConversationsIgnoreWhatIsNotASessionFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "stray.jsonl"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stray: %v", err)
 	}
-	// An empty file is a host that died before pi wrote anything: there is no
-	// conversation to pick up, so offering one would be a lie.
 	writeSession(t, root, "sess-empty", "a.jsonl")
 	if err := os.Truncate(filepath.Join(root, "sess-empty", "a.jsonl"), 0); err != nil {
 		t.Fatalf("truncate: %v", err)
@@ -129,8 +119,6 @@ func TestPastConversationsListNewestFirstAndSayWhenClipped(t *testing.T) {
 	}
 }
 
-// daemonWithConversation is a daemon holding one conversation session and its
-// launch intent — the state a model switch has to survive into.
 func daemonWithConversation(t *testing.T, intent store.LaunchIntent) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -153,13 +141,10 @@ func daemonWithConversation(t *testing.T, intent store.LaunchIntent) *Daemon {
 	return d
 }
 
-// hostEvent is one envelope off a host's stream, on the spine (seq > 0).
 func hostEvent(sessionID string, body map[string]interface{}) hostsession.Event {
 	return hostsession.Event{SessionID: sessionID, Seq: 1, Kind: "model_changed", Body: body}
 }
 
-// assertCommandError reads the one message a refused command puts on the
-// asking client's socket.
 func assertCommandError(t *testing.T, client *wsClient, want string) {
 	t.Helper()
 	select {
@@ -188,9 +173,6 @@ func itoa(n int) string {
 	return string(digits)
 }
 
-// A model switched mid-session has to survive the host that saw it: a revive
-// reads the launch intent, and without this the conversation quietly goes back
-// to whatever the spawn pinned.
 func TestModelChangedRewritesTheLaunchIntent(t *testing.T) {
 	d := daemonWithConversation(t, store.LaunchIntent{Model: "openai/luna", Effort: "high"})
 
@@ -205,9 +187,6 @@ func TestModelChangedRewritesTheLaunchIntent(t *testing.T) {
 	}
 }
 
-// pi refused the switch and reported the model still in force as nothing. There
-// is nothing to record, and blanking the pinned model would make the next
-// revive launch on a default nobody chose.
 func TestModelChangedWithoutAModelLeavesTheIntentAlone(t *testing.T) {
 	d := daemonWithConversation(t, store.LaunchIntent{Model: "openai/luna"})
 
@@ -219,9 +198,6 @@ func TestModelChangedWithoutAModelLeavesTheIntentAlone(t *testing.T) {
 	}
 }
 
-// The declaration list is what decides whether an envelope restamps
-// `state_since`. A model switch does not move the session, and routing it
-// through applyState would reset "working for 4m" for a picker change.
 func TestModelChangedIsNotAStateDeclaration(t *testing.T) {
 	if hostStateDeclarationKinds["model_changed"] {
 		t.Fatal("model_changed must not be a state declaration")

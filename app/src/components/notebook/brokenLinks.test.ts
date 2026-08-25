@@ -2,10 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { brokenLinkDecorations, notebookLinkPath, notebookLinkPaths } from './brokenLinks';
-
-// The pure helpers work off an EditorState (no view, no daemon), so the broken-link
-// logic is testable headlessly — the async existence cache lives in the plugin, but
-// "which paths to check" and "which links to flag" are pure over the parsed state.
 function stateOf(doc: string): EditorState {
   return EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] });
 }
@@ -76,14 +72,11 @@ describe('brokenLinkDecorations', () => {
     const marks = marksFor(doc, '', missing);
     expect(marks).toHaveLength(1);
     expect(marks[0].class).toBe('cm-md-link-broken');
-    // The mark spans the whole [text](url) link, not just its text.
     expect(doc.slice(marks[0].from, marks[0].to)).toBe('[gone](/knowledge/gone.md)');
   });
 
   it('existence-checks a bare-relative link against the linking note\'s own directory', () => {
-    // A note at knowledge/areas/note.md linking bare `sibling.md` must check
-    // knowledge/areas/sibling.md, not sibling.md at the root — this is the behavior
-    // change PR8 makes.
+    // A bare link resolves against the note's own directory, not the root.
     const doc = 'See [sib](sibling.md).';
     const missingAtRoot = (p: string) => p === 'sibling.md';
     expect(marksFor(doc, 'knowledge/areas', missingAtRoot)).toHaveLength(0);
@@ -98,7 +91,6 @@ describe('brokenLinkDecorations', () => {
 
   it('never flags an external link even if the predicate would match its raw href', () => {
     const doc = 'Read [docs](https://example.com/x).';
-    // notebookLinkPath returns null for the URL, so the predicate is never consulted.
     expect(marksFor(doc, '', () => true)).toHaveLength(0);
   });
 });

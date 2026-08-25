@@ -13,43 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// Differential harness for the document query compiler.
-//
-// The example tests above prove the query rules on cases someone thought of.
-// This asks the same question a second way and checks the two answers match,
-// over combinations nobody enumerated by hand.
-//
-// The second way is deliberately dumb: a shadow table with the same declared
-// affinities but no generated columns and no indexes, populated by SQL out of
-// the real table, queried with a hand-written statement and paginated by slicing
-// a Go array. Everything the real path is clever about — the generated column,
-// its index, and the tuple comparison that implements the After cursor — the
-// shadow does the slow obvious way instead.
-//
-// It is deliberately NOT a Go re-implementation of the query semantics. The
-// fiddly rules here are SQLite's — how "5" compares against 5, where a missing
-// value sorts — and writing down our understanding of them in Go would mostly
-// test that understanding. Both answers come out of SQLite, so nothing here
-// models SQLite; what is compared is only the machinery we built on top of it.
-//
-// Three legs, each covering what the others structurally cannot:
-//
-//   - the sweep, which is every arrangement of a small alphabet across four
-//     documents against every query — exhaustive, so no seed and no luck;
-//   - the large corpus, big enough that SQLite reaches for an index, which is a
-//     different code path over the same column and only exists at size;
-//   - the moving corpus, where documents are written, deleted and the collection
-//     redeclared while the queries run.
-//
-// What none of them catch: a misunderstanding shared by both paths. If the
-// shadow orders the way the compiler orders and both are not what we meant, they
-// agree and are both wrong. The named example tests above are what pin the
-// intent; this covers the combinations those tests structurally cannot.
+// The shadow must stay SQL-only: a Go re-implementation would test our understanding of SQLite instead of the machinery on top of it.
 
-// modelField is the one declared field the exhaustive sweep varies. A single
-// number field is the richest choice for the money: "number" is the type whose
-// column affinity actually converts, so an alphabet over it reaches text that
-// looks numeric, text that does not, and values with no numeric reading at all.
 const modelField = "n"
 
 func modelDeclaration() docstore.CollectionSchema {
@@ -60,13 +25,7 @@ func modelDeclaration() docstore.CollectionSchema {
 	}
 }
 
-// modelBodies is the alphabet a document's body is drawn from. Every entry is a
-// case the compiler's comments claim to handle, and the interesting ones are the
-// ragged three: a declared field says what may be QUERIED, not what a document
-// must contain, so a "number" field legitimately holds text, nothing, or a list.
-//
-// Keep this small and deliberate. The sweep is every arrangement of it, so one
-// more entry multiplies the whole run.
+// The sweep is every arrangement of this alphabet, so one more entry multiplies the whole run.
 var modelBodies = []string{
 	`{"n":1}`,
 	`{"n":2}`,
@@ -76,25 +35,8 @@ var modelBodies = []string{
 	`{"n":[1]}`,
 }
 
-// modelIDs are the corpus's document ids, fixed so the sweep varies bodies only.
-// They are already in ascending order, which is the tiebreaker the compiler
-// appends, so a failure reads against a familiar order.
-//
-// Three is the default because it was measured, not assumed. The count is the
-// sweep's one dial and it is steep — the corpus space is the alphabet raised to
-// it, and the query space grows with it too, so each extra document costs about
-// an order of magnitude:
-//
-//	3 documents:    216 corpora x 396 queries =  85,536 checks,  1.1s
-//	4 documents:  1,296 corpora x 660 queries = 855,360 checks, 13.5s
-//
-// Receipt (2026-08-04): every mutation this harness was falsified against —
-// including the two the example suite misses behaviourally, both of which live
-// in the filter-and-cursor combination — is caught at three documents as well as
-// at four. Four costs twelve times as much for no measured gain, and in CI it
-// would put the Go check level with the frontend one that currently paces the
-// build. It stays one environment variable away for a soak run, which is where
-// the combinations three cannot reach are worth paying for.
+// Receipt (2026-08-04): 3 documents = 85,536 checks in 1.1s, 4 = 855,360 in 13.5s, and every
+// mutation this harness was falsified against is caught at three. ATTN_DOCSTORE_SWEEP raises it.
 var modelIDs = sweepIDs()
 
 func sweepIDs() []string {
@@ -113,9 +55,7 @@ func sweepIDs() []string {
 	return ids
 }
 
-// modelWorld holds the store, the declaration and the shadow table for one run.
-// It is built once and reused across every corpus: rebuilding a store per corpus
-// would run all the migrations again and dominate the sweep.
+// Built once: a store per corpus would run all the migrations again and dominate the sweep.
 type modelWorld struct {
 	t      *testing.T
 	s      *Store
@@ -124,12 +64,6 @@ type modelWorld struct {
 	shadow string
 	ids    []string
 
-	// anchors caches the cursor lookup. Compiling an After cursor needs the
-	// anchor document, and one corpus is asked about the same handful of anchors
-	// by hundreds of queries that cannot have changed it; re-reading each one is
-	// most of the statements the harness runs. Cleared whenever the corpus moves,
-	// which is what refillShadow already marks — every path that writes, deletes
-	// or redeclares goes through it.
 	anchors map[string]*docstore.Document
 }
 
@@ -150,12 +84,6 @@ func newModelWorldFor(t *testing.T, decl docstore.CollectionSchema, ids []string
 	return w
 }
 
-// createShadow builds the dumb table. Same declared affinity per field — that is
-// the collection's stated intent about how its values compare, and reusing it
-// here is deliberate: what this harness tests is the machinery around the
-// column, not the one-line type-to-affinity mapping, which has its own named
-// test. No generated columns and no indexes, so the shadow reads the body the
-// long way and can never be served from an index.
 func (w *modelWorld) createShadow() {
 	w.t.Helper()
 	cols := []string{`id TEXT PRIMARY KEY`, `body TEXT`, `created_at TEXT`, `updated_at TEXT`}
@@ -168,11 +96,7 @@ func (w *modelWorld) createShadow() {
 	}
 }
 
-// shadowColumn is where the dumb table keeps a field. The two reserved names are
-// stamped columns the shadow copies verbatim, so they keep their own names;
-// everything else is a declared field and gets the prefix, for the same reason
-// the real table prefixes them — so a collection may declare a field called
-// `id` without shadowing one.
+// Declared fields get a prefix so a collection may declare a field called `id`.
 func shadowColumn(field string) string {
 	if field == docstore.FieldCreatedAt || field == docstore.FieldUpdatedAt {
 		return field
@@ -180,13 +104,6 @@ func shadowColumn(field string) string {
 	return "s_" + field
 }
 
-// loadCorpus replaces the collection's documents with bodies, then refills the
-// shadow from the real table.
-//
-// The refill is one INSERT ... SELECT, so SQLite does the extraction and the
-// affinity conversion itself. Nothing about a stored value passes through Go on
-// the way to the shadow, which is what keeps the two paths independent without
-// making the test model anything.
 func (w *modelWorld) loadCorpus(bodies []string) {
 	w.t.Helper()
 	base := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
@@ -198,7 +115,7 @@ func (w *modelWorld) loadCorpus(bodies []string) {
 	w.refillShadow()
 }
 
-// refillShadow rebuilds the dumb table from the real one.
+// One INSERT ... SELECT: no stored value passes through Go, which keeps the two paths independent.
 func (w *modelWorld) refillShadow() {
 	w.t.Helper()
 	w.anchors = map[string]*docstore.Document{}
@@ -218,11 +135,6 @@ func (w *modelWorld) refillShadow() {
 	}
 }
 
-// naiveOrder answers the query the dumb way: every matching id, in order, with
-// no limit and no cursor. Paging is applied afterwards by slicing, because
-// slicing an ordered list is the one description of "the next page" that cannot
-// be subtly wrong — which is exactly what makes it worth comparing the
-// compiler's tuple comparison against.
 func (w *modelWorld) naiveOrder(q docstore.Query) []string {
 	w.t.Helper()
 	var where []string
@@ -247,10 +159,7 @@ func (w *modelWorld) naiveOrder(q docstore.Query) []string {
 	return w.scanIDs(stmt, args)
 }
 
-// naiveOp and naiveBind restate the two mappings the compiler also makes —
-// operator to SQL, and a filter's bound to what the statement carries. They are
-// written out here rather than shared so that getting either wrong in the
-// compiler shows up as a disagreement instead of being cancelled out.
+// Never share these mappings with the compiler: a wrong one must show as a disagreement, not cancel out.
 func naiveOp(t *testing.T, op docstore.Op) string {
 	t.Helper()
 	switch op {
@@ -271,7 +180,6 @@ func naiveOp(t *testing.T, op docstore.Op) string {
 
 func naiveBind(t *testing.T, schema docstore.CollectionSchema, f docstore.Filter) any {
 	t.Helper()
-	// A reserved field is a stored timestamp column, compared as text.
 	if f.Field == docstore.FieldCreatedAt || f.Field == docstore.FieldUpdatedAt {
 		switch v := f.Value.(type) {
 		case string:
@@ -307,17 +215,6 @@ func naiveBind(t *testing.T, schema docstore.CollectionSchema, f docstore.Filter
 	return nil
 }
 
-// naivePage applies the cursor and the limit to a full ordered list.
-//
-// The cursor is a POSITION in the order, not a member of the result: a query
-// filtered to documents the anchor itself does not match still pages from where
-// the anchor sits. So "past the anchor" is decided against the unfiltered order
-// — where every document has a position — and the page is the matching ids that
-// fall in that suffix.
-//
-// Both orders come from the same ORDER BY, so the filtered list is a subsequence
-// of the unfiltered one and this stays pure slicing: no comparison of values
-// happens in Go, which is the whole point of the dumb path.
 func naivePage(matching, everything []string, q docstore.Query) []string {
 	out := matching
 	if q.After != "" {
@@ -348,11 +245,7 @@ func naivePage(matching, everything []string, q docstore.Query) []string {
 	return append([]string{}, out...)
 }
 
-// anchorFor reads the document a cursor names — the same read the daemon makes
-// before compiling a paged query — and remembers it for as long as the corpus
-// holds still. A cursor naming a document that is not there stays a nil anchor,
-// which is the case the compiler rejects and an example test pins; caching must
-// not turn that into a miss that silently re-reads.
+// A cursor naming a document that is not there stays a nil anchor, so the cache must remember the miss.
 func (w *modelWorld) anchorFor(after string) (*docstore.Document, error) {
 	if after == "" {
 		return nil, nil
@@ -371,8 +264,6 @@ func (w *modelWorld) anchorFor(after string) (*docstore.Document, error) {
 	return doc, nil
 }
 
-// realIDs runs the query through the compiler and the store — the path under
-// test, exactly as the daemon drives it.
 func (w *modelWorld) realIDs(q docstore.Query) ([]string, error) {
 	anchor, err := w.anchorFor(q.After)
 	if err != nil {
@@ -393,14 +284,6 @@ func (w *modelWorld) realIDs(q docstore.Query) ([]string, error) {
 	return ids, nil
 }
 
-// unindexedIDs runs the compiler's own statement with the index switched off.
-//
-// This is a different question from the shadow's. The shadow asks "did we
-// compile the right query"; this asks "does the index agree with the column it
-// indexes". Same SQL, same fragments, only the access path differs, so any
-// disagreement is the index returning something the underlying values do not
-// support — a class that cannot appear until there is enough data for SQLite to
-// prefer the index at all.
 func (w *modelWorld) unindexedIDs(q docstore.Query) ([]string, error) {
 	anchor, err := w.anchorFor(q.After)
 	if err != nil {
@@ -439,14 +322,6 @@ func (w *modelWorld) scanIDs(stmt string, args []any) []string {
 	return out
 }
 
-// modelQueries enumerates every question the sweep asks of one corpus.
-//
-// The shape of the space, and why each axis is here: sort covers both directions
-// plus the unsorted case whose whole order is the id tiebreaker; the filters
-// cover every operator against a bound that sits inside the alphabet and one
-// that sits at its edge; the limits cover every page size from "less than the
-// corpus" to "the whole corpus"; the cursors cover starting after each document,
-// including ones the filter removes.
 func modelQueries() []docstore.Query {
 	sorts := []*docstore.Sort{
 		nil,
@@ -481,8 +356,6 @@ func modelQueries() []docstore.Query {
 	return out
 }
 
-// describeQuery renders a query the way a failure needs to read it: everything
-// needed to rebuild the case, in one line.
 func describeQuery(q docstore.Query) string {
 	parts := []string{}
 	for _, f := range q.Filters {
@@ -514,14 +387,6 @@ func describeCorpus(bodies []string) string {
 	return strings.Join(parts, " ")
 }
 
-// TestEverySmallCorpusAgreesWithTheDumbQuery is the sweep: every arrangement of
-// the alphabet across the corpus, against every query, checked for exact
-// agreement on the ordered ids.
-//
-// It is exhaustive rather than random on purpose. There is no seed, so nothing
-// passes by luck and no bug waits for someone to change a number; it cannot be
-// flaky; and a failure is already down to four documents, so the case that
-// broke is one you can read instead of one you have to shrink.
 func TestEverySmallCorpusAgreesWithTheDumbQuery(t *testing.T) {
 	w := newModelWorld(t)
 	queries := modelQueries()
@@ -532,11 +397,6 @@ func TestEverySmallCorpusAgreesWithTheDumbQuery(t *testing.T) {
 		w.loadCorpus(bodies)
 		corpora++
 
-		// Only the dumb comparison here, not the unindexed one: four rows never
-		// tempt the planner into an index, so asking the same statement again
-		// with NOT INDEXED would ask an identical question and cost the sweep
-		// half its running time to learn nothing. The large leg is where that
-		// comparison has something to say.
 		cache := map[string][]string{}
 		for _, q := range queries {
 			matching, everything := w.dumbOrders(q, cache)
@@ -557,8 +417,6 @@ func TestEverySmallCorpusAgreesWithTheDumbQuery(t *testing.T) {
 	t.Logf("%d corpora x %d queries = %d checks", corpora, len(queries), checks)
 }
 
-// describeOrdering keys the queries that share a dumb answer: same filters, same
-// sort, regardless of how they page through it.
 func describeOrdering(q docstore.Query) string {
 	var b strings.Builder
 	for _, f := range q.Filters {
@@ -570,7 +428,6 @@ func describeOrdering(q docstore.Query) string {
 	return b.String()
 }
 
-// allCorpora is every assignment of the alphabet to the corpus's documents.
 func allCorpora() [][]string {
 	out := [][]string{{}}
 	for range modelIDs {
@@ -586,8 +443,6 @@ func allCorpora() [][]string {
 	return out
 }
 
-// answer is one query asked every way the harness knows how, so a disagreement
-// says which of the three differed rather than only that something did.
 type answer struct {
 	real      []string
 	dumb      []string
@@ -596,13 +451,6 @@ type answer struct {
 	order     []string
 }
 
-// dumbOrders returns the dumb table's answer to a query and its answer to the
-// same query with the filters removed, reusing anything cache already holds.
-//
-// Both are needed because the cursor is a position: "past the anchor" is read
-// against the order every document has a place in, and the page is the matching
-// ids that fall in that suffix. Neither depends on the limit or the cursor, so
-// one ordering answers every page of itself.
 func (w *modelWorld) dumbOrders(q docstore.Query, cache map[string][]string) (matching, everything []string) {
 	w.t.Helper()
 	orderOf := func(qq docstore.Query) []string {
@@ -619,9 +467,6 @@ func (w *modelWorld) dumbOrders(q docstore.Query, cache map[string][]string) (ma
 	return orderOf(q), orderOf(unfiltered)
 }
 
-// ask runs a query down the real path, the dumb path, and the compiler's own SQL
-// with the index switched off, using cache for the orderings it has already
-// asked the dumb table about.
 func (w *modelWorld) ask(q docstore.Query, cache map[string][]string) answer {
 	w.t.Helper()
 	matching, everything := w.dumbOrders(q, cache)
@@ -643,16 +488,12 @@ func (w *modelWorld) ask(q docstore.Query, cache map[string][]string) answer {
 	}
 }
 
-// check compares the three answers and fails with everything needed to rebuild
-// the case. context names the corpus or the step, whichever the caller has.
 func (w *modelWorld) check(context string, q docstore.Query, a answer) {
 	w.t.Helper()
 	if !sameIDs(a.real, a.dumb) {
 		w.t.Fatalf("%s\nquery   %s\nreal    %v\ndumb    %v\nmatched %v\norder   %v",
 			context, describeQuery(q), a.real, a.dumb, a.matching, a.order)
 	}
-	// Same compiled SQL, only the access path differs, so a disagreement here is
-	// the index returning something the values it indexes do not support.
 	if !sameIDs(a.real, a.unindexed) {
 		w.t.Fatalf("%s\nquery     %s\nindexed   %v\nscanned   %v\nthe index disagrees with the column it indexes",
 			context, describeQuery(q), a.real, a.unindexed)
@@ -671,16 +512,7 @@ func sameIDs(a, b []string) bool {
 	return true
 }
 
-// The large-corpus leg.
-//
-// The sweep above is exhaustive but tiny, and tiny is a regime: with four rows
-// SQLite reads them all, so no query up there ever touches an index. Past a few
-// thousand rows the planner starts preferring the index, which is a different
-// code path inside SQLite over the same declared column — and if the index and
-// the column ever disagree, that is the only place it can show.
-//
-// So this asks bigger, raggeder questions of the same two paths, and asks the
-// compiler's own statement a third time with the index switched off.
+// Big enough that the planner prefers the index: the only regime where it can disagree with its column.
 const (
 	largeCorpusSize  = 4000
 	largeQueriesEach = 400
@@ -698,13 +530,11 @@ func largeDeclaration() docstore.CollectionSchema {
 	}
 }
 
-// largeBody draws a body from a deliberately ragged distribution. Values repeat
-// heavily so tie groups are long — ties are what the cursor's tuple comparison
-// exists for, and a corpus of distinct values would never exercise it.
+// Values repeat heavily so tie groups are long, which is what the cursor's tuple comparison exists for.
 func largeBody(rng *rand.Rand) string {
 	fields := []string{}
 	switch rng.Intn(8) {
-	case 0: // absent
+	case 0:
 	case 1:
 		fields = append(fields, `"n":null`)
 	case 2:
@@ -717,7 +547,7 @@ func largeBody(rng *rand.Rand) string {
 		fields = append(fields, fmt.Sprintf(`"n":%d`, rng.Intn(4)))
 	}
 	switch rng.Intn(6) {
-	case 0: // absent
+	case 0:
 	case 1:
 		fields = append(fields, `"s":null`)
 	case 2:
@@ -726,26 +556,16 @@ func largeBody(rng *rand.Rand) string {
 		fields = append(fields, fmt.Sprintf(`"s":"v%d"`, rng.Intn(4)))
 	}
 	switch rng.Intn(4) {
-	case 0: // absent
+	case 0:
 	case 1:
 		fields = append(fields, `"b":null`)
 	default:
 		fields = append(fields, fmt.Sprintf(`"b":%v`, rng.Intn(2) == 1))
 	}
-	// An undeclared key rides along: the store must carry it untouched and no
-	// query may see it.
 	fields = append(fields, fmt.Sprintf(`"note":"n%d"`, rng.Intn(3)))
 	return "{" + strings.Join(fields, ",") + "}"
 }
 
-// largeQuery draws a query from the whole surface, reserved sort fields
-// included. Cursors are drawn from ids that exist, since a cursor naming a
-// document that is gone is an error the compiler owns and an example test pins.
-//
-// Fields and their bounds come from the schema passed in rather than from a
-// fixed list: a collection can be redeclared mid-run, and a query naming a field
-// the collection no longer declares is a rejection the compiler owns, not a
-// disagreement worth generating.
 func largeQuery(rng *rand.Rand, ids []string, schema docstore.CollectionSchema) docstore.Query {
 	q := docstore.Query{Namespace: schema.Namespace, Collection: schema.Collection}
 
@@ -779,13 +599,6 @@ func largeQuery(rng *rand.Rand, ids []string, schema docstore.CollectionSchema) 
 	return q
 }
 
-// TestALargeRandomCorpusAgreesWithTheDumbQuery is the breadth leg: a few fixed
-// seeds, each building a corpus big enough for the planner to reach for an
-// index, then asking the same questions three ways.
-//
-// The seeds are fixed rather than drawn from the clock. A test that picks a new
-// corpus every run is a test that fails for somebody else, on a case nobody can
-// reproduce; these fail for everybody or for nobody.
 func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 	for _, seed := range []int64{20260804, 7, 991, 40409, 1234567} {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
@@ -794,9 +607,7 @@ func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 			ids := make([]string, largeCorpusSize)
 			bodies := make([]string, largeCorpusSize)
 			for i := range ids {
-				// Ids are zero-padded so their lexicographic order — which is the
-				// tiebreaker the compiler appends — matches the order they were
-				// written in, keeping a failure readable.
+				// Zero-padded so lexicographic order — the tiebreaker the compiler appends — matches write order.
 				ids[i] = fmt.Sprintf("doc-%05d", i)
 				bodies[i] = largeBody(rng)
 			}
@@ -815,9 +626,7 @@ func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 				}
 			}
 
-			// Without this the third comparison is vacuous: if the planner never
-			// chose an index, running the same statement with NOT INDEXED asked
-			// the identical question twice and proved nothing.
+			// Without this the unindexed comparison is vacuous: the planner may never choose an index.
 			if indexed == 0 {
 				t.Fatalf("not one of %d queries reached an index, so the unindexed comparison checked nothing; the corpus is too small or the declaration lost its indexes", largeQueriesEach)
 			}
@@ -826,8 +635,6 @@ func TestALargeRandomCorpusAgreesWithTheDumbQuery(t *testing.T) {
 	}
 }
 
-// usesAnIndex reports whether SQLite chose an index for the query, read out of
-// its own plan rather than guessed from the shape of the SQL.
 func (w *modelWorld) usesAnIndex(q docstore.Query) bool {
 	w.t.Helper()
 	anchor, err := w.anchorFor(q.After)
@@ -850,20 +657,6 @@ func (w *modelWorld) usesAnIndex(q docstore.Query) bool {
 	return false
 }
 
-// The moving-corpus leg.
-//
-// Both legs above ask questions of a frozen pile. Real use is not frozen:
-// documents are written and deleted while queries run, and a field can be
-// redeclared as a different type — or dropped and brought back — with documents
-// already sitting there. Those are the operations where the physical schema does
-// DDL under live data, and none of them are visible to a test that loads a
-// corpus once.
-//
-// This mutates the collection and keeps comparing. The model it carries is
-// deliberately thin: which ids are currently stored, and nothing about ordering
-// or comparison, which stay the dumb query's job. That is the same discipline
-// internal/ticketnotify's routing model uses — restate the rule under test and
-// nothing else, so the test cannot drift into being a second copy of the code.
 const movingSteps = 300
 
 func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
@@ -883,7 +676,6 @@ func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
 				return out
 			}
 
-			// Seed enough documents that the first steps have something to page.
 			for i := 0; i < 40; i++ {
 				id := fmt.Sprintf("doc-%05d", i)
 				if _, err := w.s.PutDocument(w.schema, id, []byte(largeBody(rng)), base.Add(time.Duration(i)*time.Second), nil); err != nil {
@@ -905,8 +697,6 @@ func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
 					}
 					live[id] = true
 				case n < 7:
-					// Rewrite one that is already there, which moves updated_at
-					// and leaves created_at where it was.
 					ids := liveIDs()
 					if len(ids) == 0 {
 						continue
@@ -930,10 +720,6 @@ func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
 					}
 					delete(live, id)
 				default:
-					// Redeclare, which is DDL over live documents: a field's type
-					// changes how its stored values compare, and a field can leave
-					// the declaration and come back. Both rebuild the collection's
-					// columns without rewriting a single body.
 					w.redeclare(randomDeclaration(rng), now)
 					redeclarations++
 				}
@@ -954,10 +740,6 @@ func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
 					w.check(context, q, w.ask(q, cache))
 				}
 
-				// Page all the way through one query. A cursor is only meaningful
-				// against an order, and the order here has just moved underneath
-				// it — so this is the leg that asks whether paging still lands on
-				// every document exactly once when the corpus is not holding still.
 				w.checkFullPagination(context, rng, ids)
 			}
 			if redeclarations == 0 {
@@ -968,9 +750,6 @@ func TestAMovingCorpusAgreesWithTheDumbQuery(t *testing.T) {
 	}
 }
 
-// checkFullPagination walks one query page by page and checks the walk against
-// the dumb query's whole ordered answer. Every document exactly once, in order,
-// no matter where the page boundaries fall.
 func (w *modelWorld) checkFullPagination(context string, rng *rand.Rand, ids []string) {
 	w.t.Helper()
 	q := largeQuery(rng, ids, w.schema)
@@ -1003,8 +782,6 @@ func (w *modelWorld) checkFullPagination(context string, rng *rand.Rand, ids []s
 	}
 }
 
-// redeclare changes the collection's declaration and rebuilds the shadow to
-// match, since the dumb table's columns mirror the declared fields.
 func (w *modelWorld) redeclare(decl docstore.CollectionSchema, now time.Time) {
 	w.t.Helper()
 	if _, err := w.s.DefineDocumentCollection(decl, now); err != nil {
@@ -1017,8 +794,6 @@ func (w *modelWorld) redeclare(decl docstore.CollectionSchema, now time.Time) {
 	w.createShadow()
 }
 
-// randomDeclaration draws a declaration over the same three field names, so a
-// field can change type, leave, and come back across a run.
 func randomDeclaration(rng *rand.Rand) docstore.CollectionSchema {
 	types := []docstore.FieldType{docstore.FieldString, docstore.FieldNumber, docstore.FieldBool}
 	decl := largeDeclaration()
@@ -1035,7 +810,6 @@ func randomDeclaration(rng *rand.Rand) docstore.CollectionSchema {
 	return decl
 }
 
-// storedIDs is every id the collection holds, read straight from its table.
 func (w *modelWorld) storedIDs() []string {
 	return w.scanIDs("SELECT id FROM "+w.table+" ORDER BY id ASC", nil)
 }

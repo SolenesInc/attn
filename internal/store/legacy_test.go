@@ -10,7 +10,6 @@ import (
 )
 
 func TestSeedLegacyDB(t *testing.T) {
-	// Create temp dir
 	tmpDir, err := os.MkdirTemp("", "legacy-db-test")
 	if err != nil {
 		t.Fatal(err)
@@ -19,8 +18,6 @@ func TestSeedLegacyDB(t *testing.T) {
 
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	// Create a legacy-style database with head_sha already in prs table
-	// but no migration history
 	legacySchema := `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY,
@@ -77,7 +74,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	applied_at TEXT NOT NULL
 );
 `
-	// Create legacy DB directly with sqlite
 	legacyDB, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -87,14 +83,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	}
 	legacyDB.Close()
 
-	// Now try to open with OpenDB - this should detect legacy and seed migrations
 	db, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB failed on legacy DB: %v", err)
 	}
 	defer db.Close()
 
-	// Verify migrations were seeded
 	version, err := GetSchemaVersion(db)
 	if err != nil {
 		t.Fatal(err)

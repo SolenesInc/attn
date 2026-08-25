@@ -19,47 +19,18 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// Apps as bus consumers: registration, delivery, the invocation log, and the
-// clock that disables an app stuck on one event.
-//
-// An app is an ordinary durable consumer — `app:<name>`, a persisted cursor,
-// at-least-once, stall-don't-skip, cursor-after-handler. None of that is
-// reimplemented here. What this file adds is what happens between "the bus
-// handed us a fact" and "the cursor moved": resolve the version and the handler,
-// dispatch into the shared sidecar, record what happened, and decide whose fault
-// it was.
-//
-// The last of those is the part worth reading twice. A handler that threw is the
-// app's fault and advances its stall clock. A sidecar that died, or was never
-// there, is the runtime's — it stalls the delivery exactly the same way, but it
-// must never move an app closer to being disabled. Nothing else in attn can tell
-// those apart, so this file has to.
-//
-// See docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
+// Design: docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
 
 const (
-	appInvocationStatusOK = "ok"
-	// appInvocationStatusError is a handler that threw: the app's own fault.
-	appInvocationStatusError = "error"
-	// appInvocationStatusRuntimeError is a dispatch that never reached a handler,
-	// or whose answer never came back. It is recorded — a reader looking at an app
-	// that is doing nothing deserves to see why — but it is not held against the
-	// app.
+	appInvocationStatusOK           = "ok"
+	appInvocationStatusError        = "error"
 	appInvocationStatusRuntimeError = "runtime_error"
 )
 
-// appRuntimeConnectWait is how long a delivery waits for the sidecar to come up
-// before treating its absence as a runtime failure.
-//
-// The runtime starts lazily, on the first fact an app is due, so the very first
-// dispatch after a daemon start pays a cold start. Spawn, connect, hello, import
-// the bundle and run the handler was measured end to end at 77ms (receipt in the
-// plan doc); ten seconds is ~130× that, and a delivery that hits it stalls and
-// retries rather than failing anything permanently.
+// appRuntimeConnectWait bounds the wait for the sidecar to come up. Cold start
+// (spawn, connect, hello, import, run) measured at 77ms; ten seconds is ~130×.
 const appRuntimeConnectWait = 10 * time.Second
 
-// appConnectWait is that tripwire, overridable so a test that dispatches into a
-// runtime which will never connect does not cost ten real seconds per delivery.
 func (d *Daemon) appConnectWait() time.Duration {
 	if d.appRuntimeWait > 0 {
 		return d.appRuntimeWait
@@ -67,33 +38,15 @@ func (d *Daemon) appConnectWait() time.Duration {
 	return appRuntimeConnectWait
 }
 
-// appAutoDisableStall is the whole auto-disable rule: an app that has been stuck
-// on the SAME event for this long is disabled.
-//
-// One clock, no failure-count clause. The thing that has to be prevented is one
-// broken app pinning the durable log's retention floor open for everybody, and
-// that is a function of wall time stalled, not of how many times the retry
-// happened to fire. A count would also punish a fast-failing app more than a
-// slow one for the same amount of harm.
-//
-// Fifteen minutes is roughly five rounds at the bus's two-minute retry cap —
-// long enough that a transient dependency (a git remote, a rebooting service)
-// recovers untouched, short enough to stop calling a genuinely broken app and
-// ask the user to intervene. Its installed lane remains retained while disabled.
+// Fifteen minutes is roughly five rounds at the bus's two-minute retry cap.
 const appAutoDisableStall = 15 * time.Minute
 
-// The three app-runtime tripwires, overridable from the daemon's environment.
-// Each one is minutes long by design, so the only way to witness what it does —
-// in a test harness or by hand — is to move it; without these the auto-disable
-// path can be demonstrated only by waiting fifteen minutes.
 const (
 	appAutoDisableStallEnv = "ATTN_APP_AUTO_DISABLE_STALL"
 	appDispatchTimeoutEnv  = "ATTN_APP_DISPATCH_TIMEOUT"
 	appPingTimeoutEnv      = "ATTN_APP_RUNTIME_PING_TIMEOUT"
 )
 
-// What kind of work an app is stalled on, and what state its rebuild is in. Both
-// vocabularies cross the wire, so they are named once here.
 const (
 	appStallKindSubscription = "subscription"
 	appStallKindReconcile    = "reconcile"
@@ -134,40 +87,14 @@ func (d *Daemon) resolveAppRuntimeTripwires() error {
 	return nil
 }
 
-// appCrashStrikes is the second half of the auto-disable rule: an app the
-// runtime host named as the cause of a sidecar crash this many times inside
-// appCrashWindow is disabled.
-//
-// The stall clock above cannot express this one, which is why there are two. A
-// crash kills the process, so the delivery is retried against a fresh runtime
-// and the next crash may land on a different event entirely — an app whose
-// promise rejects after its handler already returned takes the sidecar down
-// while some other app's event is in flight. A clock keyed on "stuck on the same
-// event" never accrues for the one app that hurts everybody.
-//
-// Three, because supervise parks the whole sidecar after DefaultGiveUpAfter (10)
-// restarts with no stability window — roughly two to three minutes of
-// crash-looping — and every app losing its runtime is exactly the harm this
-// prevents, so the culprit has to go first. Above one, because a single crash
-// can be a machine event (an OOM kill, a signal) whose stack merely passes
-// through an app's bundle.
+// Three: supervise parks the whole sidecar after DefaultGiveUpAfter (10) restarts, so the
+// culprit has to go first; above one, because a single crash can be a machine event.
 const appCrashStrikes = 3
 
-// appCrashWindow is appAutoDisableStall so the auto-disable rule has one
-// duration rather than two: an app broken for a quarter of an hour is disabled,
-// whichever way it is broken.
 const appCrashWindow = appAutoDisableStall
 
-// notificationKindAppAutoDisabled marks the notification an auto-disable writes.
 const notificationKindAppAutoDisabled = "app_auto_disabled"
 
-// appStall is one app's position against the auto-disable clock. There is an
-// entry only while an app is failing; a success deletes it.
-//
-// It is in memory on purpose. The clock measures a stall that is happening now,
-// and a daemon restart genuinely does reset it: the app gets its window again
-// against a runtime that has also just restarted, which is the generous reading
-// and the right one.
 type appStall struct {
 	kind               string
 	seq                int64
@@ -178,12 +105,6 @@ type appStall struct {
 	lastError          string
 }
 
-// appDispatchPlan is everything one delivery needs, read once per event.
-//
-// handler and label are separate on purpose. The handler is a key of the
-// bundle's map for this kind — an event pattern here, a bare command name for a
-// command — and the label is what the invocation log shows, which names the
-// kind because a reader wants to know which of them ran.
 type appDispatchPlan struct {
 	app         string
 	namespace   string
@@ -194,18 +115,13 @@ type appDispatchPlan struct {
 	collections []string
 }
 
-// appLane serializes everything one app does. It is a channel rather than a
-// sync.Mutex so a waiter can carry a deadline: a command queued behind a handler
-// that never returns must refuse inside its own budget instead of adding its
-// wait to it, which is what keeps the daemon's answer ahead of the frontend's
-// timeout.
+// A channel rather than a sync.Mutex so a waiter can carry a deadline.
 type appLane chan struct{}
 
 func (l appLane) Lock() { l <- struct{}{} }
 
 func (l appLane) Unlock() { <-l }
 
-// acquire takes the lane, or gives up when the context does.
 func (l appLane) acquire(ctx context.Context) error {
 	select {
 	case l <- struct{}{}:
@@ -227,15 +143,6 @@ func (d *Daemon) appLane(name string) appLane {
 	return d.appLanes[name]
 }
 
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-
-// registerAppConsumers gives every registered app its durable consumer. It runs
-// once at daemon start, after the bus is up.
-//
-// A registration failure for one app is logged and the others still start: one
-// app with a corrupt declaration must not take the rest of them down.
 func (d *Daemon) registerAppConsumers() {
 	if d.store == nil || d.eventBus == nil {
 		return
@@ -252,17 +159,8 @@ func (d *Daemon) registerAppConsumers() {
 	}
 }
 
-// registerAppConsumer registers, or re-points, one app's consumer.
-//
-// Registering is what mints the cursor, and a fresh consumer starts at head:
-// an app installed today is not asking to be handed a month of backlog. An app
-// that already has a cursor keeps it, which is what makes a daemon restart
-// invisible to a running app.
-//
-// A live consumer whose app has been re-applied with different subscriptions
-// gets SetFilter rather than a re-registration: unregister-then-register would
-// delete the cursor on the way through, and the app would silently skip every
-// fact published while it was being updated.
+// A live consumer gets SetFilter, never a re-registration: unregistering
+// deletes the cursor, and the app skips every fact published meanwhile.
 func (d *Daemon) registerAppConsumer(name string) error {
 	filter, err := d.appFilter(name)
 	if err != nil {
@@ -448,10 +346,6 @@ func (d *Daemon) appReconcileClaim(name string) (store.AppReconcileClaim, error)
 	return d.store.AppReconcilePending(name)
 }
 
-// appReconcileStatusForWire answers "does this app owe a rebuild, and can it run
-// one?" — the two questions an operator has. It reports only what is durable: a
-// running attempt is the row a previous daemon left behind or this one wrote, so
-// status after a restart reads the same before and after startup repair.
 func (d *Daemon) appReconcileStatusForWire(name string) (protocol.AppReconcileStatus, error) {
 	manifest, version, err := d.appDeclaration(name)
 	if err != nil {
@@ -562,11 +456,8 @@ func (d *Daemon) dispatchAppReconcile(ctx context.Context, plan *appDispatchPlan
 	return result, nil
 }
 
-// appFilter reads an app's declared subscriptions off its current version.
-//
-// An app with no version yet subscribes to nothing rather than to everything:
-// bus.ParseFilter reads an empty expression as All, and an app whose code has
-// never been built must not be woken by every fact in the system.
+// An app with no version must subscribe to nothing: bus.ParseFilter reads an
+// empty expression as All.
 func (d *Daemon) appFilter(name string) (bus.Filter, error) {
 	manifest, _, err := d.appDeclaration(name)
 	if err != nil {
@@ -579,8 +470,6 @@ func (d *Daemon) appFilter(name string) (bus.Filter, error) {
 	return bus.Filter(patterns), nil
 }
 
-// appDeclaration loads an app's current version and the manifest frozen into it.
-// The zero AppVersion with a nil error means the app exists but has no version.
 func (d *Daemon) appDeclaration(name string) (appbuild.Manifest, store.AppVersion, error) {
 	row, ok, err := d.store.GetApp(name)
 	if err != nil {
@@ -605,15 +494,8 @@ func (d *Daemon) appDeclaration(name string) (appbuild.Manifest, store.AppVersio
 	return manifest, version, nil
 }
 
-// declareAppCollections creates the document collections a version declared, in
-// the app's own namespace.
-//
-// It runs from syncAppRuntimeForVersion, which is every apply and every
-// rollback, and it is idempotent: declaring a collection that already exists
-// with the same fields is a no-op in the store.
-// A collection an older version declared and this one dropped is left alone —
-// the documents in it are the user's data, and a version bump is not consent to
-// delete them.
+// Leaves alone a collection an older version declared and this one dropped: a
+// version bump is not consent to delete the user's documents.
 func (d *Daemon) declareAppCollections(name string, manifest appbuild.Manifest) {
 	namespace := apps.Namespace(name)
 	for _, collection := range manifest.Collections {
@@ -636,9 +518,6 @@ func (d *Daemon) declareAppCollections(name string, manifest appbuild.Manifest) 
 	}
 }
 
-// syncAppRuntimeForVersion re-points an app's consumer and collections after its
-// version moved. Called from apply and rollback, whose subscriptions and
-// collections can both differ from the version before.
 func (d *Daemon) syncAppRuntimeForVersion(name string) {
 	if d.store == nil {
 		return
@@ -657,21 +536,14 @@ func (d *Daemon) syncAppRuntimeForVersion(name string) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Delivery
-// ---------------------------------------------------------------------------
-
 func (d *Daemon) appEventHandler(name string) bus.Handler {
 	return func(ctx context.Context, ev bus.Event) error {
 		return d.deliverAppEvent(ctx, name, ev)
 	}
 }
 
-// deliverAppEvent runs one fact through one app.
-//
-// Returning an error stalls this app's consumer on this event and has the bus
-// redeliver it with backoff — never skip it. That is true for both failure
-// classes; what differs is what gets recorded and whether the stall clock moves.
+// Returning an error stalls this app's consumer and has the bus redeliver the
+// event — never skip it.
 func (d *Daemon) deliverAppEvent(ctx context.Context, name string, ev bus.Event) error {
 	lane := d.appLane(name)
 	lane.Lock()
@@ -690,9 +562,7 @@ func (d *Daemon) deliverAppEvent(ctx context.Context, name string, ev bus.Event)
 		return err
 	}
 	if plan == nil {
-		// Nothing to run: no version, or a fact that matches the app's filter but
-		// no declared subscription. Advance rather than stall — there is no code
-		// here to succeed on a retry, and a permanent stall would pin retention.
+		// Advance rather than stall: a permanent stall pins retention.
 		return nil
 	}
 
@@ -700,8 +570,6 @@ func (d *Daemon) deliverAppEvent(ctx context.Context, name string, ev bus.Event)
 	result, dispatchErr := d.dispatchToAppRuntime(ctx, plan, ev)
 	took := d.appNow().Sub(started)
 
-	// The consumer is going away (daemon stop, `attn app remove`). Record nothing
-	// and let the bus put the event back: an interrupted delivery did not happen.
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -723,17 +591,10 @@ func (d *Daemon) deliverAppEvent(ctx context.Context, name string, ev bus.Event)
 		invocation.Status = appInvocationStatusRuntimeError
 		invocation.Error = dispatchErr.Error()
 		d.recordAppInvocation(invocation)
-		// Rule 2: the runtime died, so no app is closer to being disabled than it
-		// was. Clearing rather than merely not-advancing is deliberate — leaving a
-		// clock running through an outage would charge the app for the minutes the
-		// sidecar was down.
 		d.clearAppStall(name)
 		return dispatchErr
 
 	case dispatchErr != nil && errors.Is(dispatchErr, context.DeadlineExceeded):
-		// A handler that never returned, and attributeWedgedDispatch has already
-		// established that this app is the one that did not return — either the
-		// loop is turning, or it is frozen and this app is what froze it.
 		invocation.Status = appInvocationStatusError
 		invocation.Error = fmt.Sprintf(
 			"the handler for %s did not return within %s; attn abandoned the dispatch. A handler awaits attn's own APIs, which always settle — an await on something else needs its own timeout.",
@@ -764,8 +625,6 @@ func (d *Daemon) deliverAppEvent(ctx context.Context, name string, ev bus.Event)
 	}
 }
 
-// planAppDispatch resolves what should run. A nil plan with a nil error means
-// there is nothing to run for this fact.
 func (d *Daemon) planAppDispatch(name string, ev bus.Event) (*appDispatchPlan, error) {
 	manifest, version, err := d.appDeclaration(name)
 	if err != nil {
@@ -792,12 +651,6 @@ func (d *Daemon) planAppDispatch(name string, ev bus.Event) (*appDispatchPlan, e
 	return plan, nil
 }
 
-// resolveAppHandler picks which declared subscription a fact arrived under.
-//
-// Exact wins over a wildcard, and among wildcards the longest prefix wins, so an
-// app that declares both `session.*` and `session.state.changed` gets the
-// specific handler for the specific fact. The matching itself is the bus's, not
-// a copy of it.
 func resolveAppHandler(patterns []string, eventName string) string {
 	best := ""
 	for _, pattern := range patterns {
@@ -814,8 +667,6 @@ func resolveAppHandler(patterns []string, eventName string) string {
 	return best
 }
 
-// dispatchToAppRuntime sends one handler run to the sidecar and waits for it, or
-// for the delivery to be cancelled.
 func (d *Daemon) dispatchToAppRuntime(ctx context.Context, plan *appDispatchPlan, ev bus.Event) (appDispatchResult, error) {
 	runtime, err := d.awaitAppRuntime(ctx)
 	if err != nil {
@@ -832,9 +683,8 @@ func (d *Daemon) dispatchToAppRuntime(ctx context.Context, plan *appDispatchPlan
 		dispatch.collections[collection] = struct{}{}
 	}
 	d.registerAppDispatch(dispatch)
-	// Released whatever happens, including the abandoned-timeout path: an id left
-	// behind would let a handler that finally woke up write documents from outside
-	// any delivery.
+	// Released whatever happens: an id left behind lets a handler that finally
+	// woke up write documents from outside any delivery.
 	defer d.releaseAppDispatch(dispatch.id)
 
 	var payload any
@@ -865,70 +715,31 @@ func (d *Daemon) dispatchToAppRuntime(ctx context.Context, plan *appDispatchPlan
 	result, err := runtime.dispatch(callCtx, request)
 	if err != nil {
 		if ctx.Err() == nil && callCtx.Err() != nil {
-			// Our own deadline, not the caller's: something in the sidecar is stuck.
-			// Attributed here rather than by the caller because this dispatch must
-			// still be in the in-flight set for the answer to be right.
+			// Attributed here: the dispatch must still be in the in-flight set.
 			return appDispatchResult{}, d.attributeWedgedDispatch(ctx, runtime, plan.app)
 		}
 		if ctx.Err() != nil {
 			return appDispatchResult{}, ctx.Err()
 		}
-		// The transport failed — the socket died mid-call, or the process did.
 		return appDispatchResult{}, runtimeFailure("%v", err)
 	}
 	return result, nil
 }
 
-// attributeWedgedDispatch decides who is charged for a dispatch that never came
-// back.
-//
-// Every app shares one event loop, so a handler that blocks without yielding
-// blocks all of them: every other app's dispatch times out too, and charging
-// each of them auto-disables apps whose code never ran. The ping tells the two
-// cases apart. The host serves it off that same loop without touching app code,
-// so an answer means the loop is turning and this app's own handler is what is
-// stuck, and silence means the loop is frozen — in which case one specific
-// handler is executing without yielding, and everyone else suffered a runtime
-// failure rather than a fault of their own.
-//
-// Which handler that is, is the host's to say, not the daemon's to guess. The
-// daemon knows only the order it *sent* dispatches, and that order is not the
-// order handlers hold the loop: a handler that awaits an attn API — the ordinary,
-// documented shape — yields, and a spinner dispatched after it is what freezes
-// everything, including the first handler's own reply. Blaming the earliest
-// dispatch charges the well-behaved app and lets the spinner walk. So the host
-// announces each entry before it calls the handler (appRuntimeEnteredMethod), and
-// the culprit is the most recent entry with no answer yet: whoever entered last
-// and never came back is the one on the loop right now.
-//
-// The host also announces each handler leaving (appRuntimeLeftMethod), which is
-// what keeps the ledger honest. The daemon has no way to work out when a handler
-// left: the only thing it could infer that from is the loop still turning, and a
-// handler that yielded and never settled is still on a turning loop. Whatever the
-// daemon guessed there would be wrong exactly for the handler that yields, comes
-// back, and then spins — the one this has to name.
-//
-// So the ledger is dropped only on facts, never on inference: an entry goes when
-// the host says that handler left, and all of them go when the process dies.
+// The order dispatches were sent is not the order handlers hold the loop, so the culprit
+// is the host's most recent unanswered entry; the ledger is dropped only on facts.
 func (d *Daemon) attributeWedgedDispatch(ctx context.Context, runtime *appRuntimeConnection, name string) error {
 	pingCtx, cancel := context.WithTimeout(ctx, d.appPingBudget())
 	defer cancel()
 
 	asked := d.appNow()
 	err := runtime.ping(pingCtx)
-	// Logged because this is the only place that says who wedged the runtime, and
-	// it costs nothing in a healthy system: a dispatch has to burn its whole
-	// timeout to get here.
-	// Microseconds, not milliseconds: an answered ping is the healthy case and it
-	// costs well under a millisecond, which rounds to "0s" and tells the reader
-	// nothing about the margin the timeout is holding.
+	// Microseconds: an answered ping rounds to "0s" in milliseconds.
 	d.logf("apps: %s hit the dispatch timeout; the app runtime %s a liveness ping after %s",
 		name, pingOutcome(err), d.appNow().Sub(asked).Round(time.Microsecond))
 
-	// A timeout has to interrupt the work, not merely stop waiting for it: a
-	// handler that never yields cannot be cancelled from Go, and leaving it on the
-	// shared loop starves every sibling app. The generation is fenced, so a stale
-	// waiter can never kill the replacement that has already taken over.
+	// Generation-fenced, so a stale waiter cannot kill the replacement that has
+	// already taken over.
 	terminated, terminateErr := d.ensureAppRuntimeSupervisor().TerminateGeneration(appRuntimeChildName, runtime.generation)
 	if terminateErr != nil {
 		d.logf("apps: terminating timed-out app runtime generation %d: %v", runtime.generation, terminateErr)
@@ -937,9 +748,6 @@ func (d *Daemon) attributeWedgedDispatch(ctx context.Context, runtime *appRuntim
 	}
 
 	if err == nil {
-		// The loop is turning, so nothing is holding it: this app's own handler is
-		// what did not return. The ledger is left alone — an answered ping says
-		// nothing about which handlers are still on the loop.
 		return context.DeadlineExceeded
 	}
 
@@ -959,13 +767,8 @@ func pingOutcome(err error) string {
 	return "did not answer"
 }
 
-// noteEnteredHandler records that the host has called an app's handler and has
-// not answered for it yet. A generation that does not match wipes the map: those
-// handlers were running in a process that is gone.
-//
-// Ordering is the point, so this runs inline on the connection's read loop rather
-// than in a goroutine per frame — entries arrive in the order the host made them
-// and must be stamped in that order.
+// Runs inline on the connection's read loop, never in a goroutine per frame:
+// entries must be stamped in the order the host made them.
 func (d *Daemon) noteEnteredHandler(generation uint64, dispatchID, name string) {
 	d.appEnteredMu.Lock()
 	defer d.appEnteredMu.Unlock()
@@ -990,8 +793,6 @@ func (d *Daemon) forgetEnteredHandlers() {
 	d.appEnteredMu.Unlock()
 }
 
-// wedgedAppCulprit names the app whose handler is on the frozen loop: the last
-// one the host entered and has not answered for.
 func (d *Daemon) wedgedAppCulprit() (string, bool) {
 	d.appEnteredMu.Lock()
 	defer d.appEnteredMu.Unlock()
@@ -1004,17 +805,10 @@ func (d *Daemon) wedgedAppCulprit() (string, bool) {
 	return latest.app, latest.order > 0
 }
 
-// appRuntimePingWait is how long the sidecar gets to answer a liveness ping.
-//
-// A tripwire past a localhost round trip, not a fit: the host answers off its
-// read loop with a constant, and answered pings measured on a live daemon cost
-// 344µs and 416µs. Two seconds is ~5,000× that, so only a loop that is genuinely
-// not turning reaches it. It is spent only on a dispatch that already burned
-// appDispatchTimeout, so being generous costs nothing that was not already lost.
+// A tripwire, not a fit: answered pings measured on a live daemon cost 344µs and 416µs, so
+// two seconds is ~5,000× and only a loop that is genuinely not turning reaches it.
 const appRuntimePingWait = 2 * time.Second
 
-// appPingBudget is that tripwire, overridable so a test about a frozen loop does
-// not cost two real seconds.
 func (d *Daemon) appPingBudget() time.Duration {
 	if d.appPingWait > 0 {
 		return d.appPingWait
@@ -1022,8 +816,6 @@ func (d *Daemon) appPingBudget() time.Duration {
 	return appRuntimePingWait
 }
 
-// appDispatchBudget is appDispatchTimeout, overridable so a test about a handler
-// that never returns does not cost a real minute.
 func (d *Daemon) appDispatchBudget() time.Duration {
 	if d.appDispatchWait > 0 {
 		return d.appDispatchWait
@@ -1031,8 +823,6 @@ func (d *Daemon) appDispatchBudget() time.Duration {
 	return appDispatchTimeout
 }
 
-// awaitAppRuntime returns the live sidecar, starting it if it is not running and
-// waiting a bounded time for it to connect.
 func (d *Daemon) awaitAppRuntime(ctx context.Context) (*appRuntimeConnection, error) {
 	runtime, ready := d.appRuntimeOrReady()
 	if runtime != nil {
@@ -1063,10 +853,8 @@ func (d *Daemon) awaitAppRuntime(ctx context.Context) (*appRuntimeConnection, er
 	}
 }
 
-// appRuntimeOrReady hands back the live connection, or the channel that closes
-// when one arrives. Both under the same lock: fetching them separately leaves a
-// window where the connection lands between the check and the wait, and the
-// waiter sleeps out its whole timeout beside a healthy runtime.
+// Both under one lock: fetched separately, a connection landing between the
+// check and the wait leaves the waiter asleep beside a healthy runtime.
 func (d *Daemon) appRuntimeOrReady() (*appRuntimeConnection, chan struct{}) {
 	d.appRuntimeMu.Lock()
 	defer d.appRuntimeMu.Unlock()
@@ -1136,8 +924,6 @@ func (d *Daemon) settleAppInvocation(invocation *store.AppInvocation, status, fa
 	return nil
 }
 
-// firstLine trims a stack trace down to its message, for a log line and a bus
-// error that already have the whole text recorded beside them.
 func firstLine(s string) string {
 	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
 		return strings.TrimSpace(s[:idx])
@@ -1145,16 +931,6 @@ func firstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// ---------------------------------------------------------------------------
-// The auto-disable clock
-// ---------------------------------------------------------------------------
-
-// noteAppFailure advances the stall clock for an app-attributed failure, and
-// disables the app if it has been stuck on this event past the window.
-//
-// The clock is per event, not per app: an app failing on a different fact every
-// time is not stuck, it is unreliable, and unreliable does not pin the retention
-// floor. Only the same seq failing over and over does.
 func (d *Daemon) noteAppFailure(name string, ev bus.Event, message string) {
 	stalled, attempts, disable := d.noteAppStall(name, appStallKindSubscription, ev.Seq, ev.Name, 0, message)
 	if !disable {
@@ -1205,12 +981,8 @@ func (d *Daemon) clearAppStall(name string) {
 	d.appStallMu.Unlock()
 }
 
-// noteAppRuntimeCrash charges an app for taking the sidecar down.
-//
-// The host names the culprit from the stack of the error that killed it, which
-// is the only thing in the process that still knows whose code it was: the
-// rejection may surface long after that app's dispatch returned, so "who was
-// running" would name an innocent.
+// The host names the culprit from the killing error's stack: the rejection can surface
+// long after that app's dispatch returned, so "who was running" would name an innocent.
 func (d *Daemon) noteAppRuntimeCrash(name, kind, message string) {
 	now := d.appNow()
 
@@ -1248,7 +1020,6 @@ func (d *Daemon) clearAppCrashes(name string) {
 	d.appCrashMu.Unlock()
 }
 
-// appStallSnapshot reports what an app is stuck on, for `attn app status`.
 func (d *Daemon) appStallSnapshot(name string) (appStall, bool) {
 	d.appStallMu.Lock()
 	defer d.appStallMu.Unlock()
@@ -1259,13 +1030,6 @@ func (d *Daemon) appStallSnapshot(name string) (appStall, bool) {
 	return *stall, true
 }
 
-// autoDisableApp flips the app off, says so on the bus, and tells the user.
-//
-// All three, because each answers a different question: the consumer bit stops
-// delivery and releases the retention floor, the fact reaches anything in the
-// daemon watching the app, and the notification is the only one of the three a
-// person ever sees. An auto-disable nobody is told about is a feature that
-// silently stops working.
 func (d *Daemon) autoDisableApp(name string, ev bus.Event, stalled time.Duration, attempts int, message string) {
 	d.disableAppAutomatically(name, message,
 		fmt.Sprintf("apps: disabled %s — stuck on %s (seq %d) for %s across %d attempts: %s",
@@ -1275,14 +1039,6 @@ func (d *Daemon) autoDisableApp(name string, ev bus.Event, stalled time.Duration
 			name, ev.Name, ev.Seq, stalled.Round(time.Second), attempts, name, name))
 }
 
-// disableAppAutomatically flips the app off, says so on the bus, and tells the
-// user.
-//
-// All three, because each answers a different question: the consumer bit stops
-// delivery and releases the retention floor, the fact reaches anything in the
-// daemon watching the app, and the notification is the only one of the three a
-// person ever sees. An auto-disable nobody is told about is a feature that
-// silently stops working.
 func (d *Daemon) disableAppAutomatically(name, detail, logLine, body string) {
 	consumer := apps.ConsumerName(name)
 	flipped, err := d.store.SetBusConsumerEnabled(consumer, false, d.appNow())
@@ -1291,12 +1047,9 @@ func (d *Daemon) disableAppAutomatically(name, detail, logLine, body string) {
 		return
 	}
 	if !flipped {
-		// Already off, or removed while this delivery was failing.
 		return
 	}
-	// The windows restart from here. Enabling the app again is the supported way
-	// back, and it clears these too; leaving the old clocks in place would disable
-	// a re-enabled app on its very next failure.
+	// Old clocks left in place would disable a re-enabled app on its next failure.
 	d.clearAppStall(name)
 	d.clearAppCrashes(name)
 
@@ -1323,46 +1076,20 @@ func (d *Daemon) disableAppAutomatically(name, detail, logLine, body string) {
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
-// ---------------------------------------------------------------------------
-// Invocation retention
-// ---------------------------------------------------------------------------
-
 const (
-	// appInvocationRetentionKind is the cron entry that trims the invocation log.
-	appInvocationRetentionKind = "app_invocation_retention"
-	// appInvocationRetentionInterval is how often it runs. Hourly, like the bus's
-	// own retention pass: the log grows continuously and a daily sweep would let a
-	// busy day's worth accumulate before anything looked at it.
+	appInvocationRetentionKind     = "app_invocation_retention"
 	appInvocationRetentionInterval = time.Hour
 	appInvocationRetentionTimeout  = 30 * time.Second
 
-	// AppInvocationRetention is the age window for the invocation log. It matches
-	// the bus's own DefaultRetention, which is the useful property: an invocation
-	// whose event has been trimmed off the durable log cannot be re-read against
-	// it, so the row has nothing left to tell anyone.
+	// AppInvocationRetention matches the bus's own DefaultRetention: an invocation
+	// whose event has been trimmed cannot be re-read against the log.
 	AppInvocationRetention = 30 * 24 * time.Hour
 
-	// AppInvocationsPerApp is how many invocations one app keeps, whatever their
-	// age. The age window alone does not bound this table, because how many rows
-	// thirty days holds is entirely a property of what the app subscribed to.
-	//
-	// The receipt, measured over 7.5 days of Victor's production log (275,845
-	// facts): the loudest fact is `session.state.changed` at 1,141/hour, and it is
-	// what a scaffolded app subscribes to out of the box. Thirty days of that is
-	// ~820,000 rows — well over a hundred megabytes for one app, on a database
-	// that is 51MB today. The quietest domain an app would realistically watch
-	// (`ticket.*`) runs at 27/day, three orders of magnitude below.
-	//
-	// 20,000 rows is ~17 hours of the loudest possible app — a whole working day
-	// of "what did it do this morning" — and about 4MB. For anything quieter the
-	// age window trims first and the cap is never felt: at the ticket rate, 20,000
-	// rows is two years.
+	// AppInvocationsPerApp bounds the table the age window cannot. Measured over 7.5 days of
+	// production: `session.state.changed` runs at 1,141/hour, so 20,000 is ~17 hours, ~4MB.
 	AppInvocationsPerApp = 20_000
 )
 
-// appInvocationRetentionHandler is the cron entry. It reports how many rows went
-// so a run that is doing nothing and a run that is not happening look different
-// in the task list.
 func (d *Daemon) appInvocationRetentionHandler(_ context.Context, _ *jobs.Job) (any, error) {
 	if d.store == nil {
 		return map[string]any{"removed": 0}, nil

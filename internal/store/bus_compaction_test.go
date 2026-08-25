@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-// Fact-class compaction: a log of pure invalidations must not grow with how
-// often a subject changed, only with how many subjects there are. These pin the
-// two halves of that — what it removes, and what it must never remove.
-
 func changeOf(subject string) BusEvent {
 	return BusEvent{Name: "document.changed", Subject: subject, Payload: `{}`, Source: "test"}
 }
@@ -36,9 +32,6 @@ func headOf(t *testing.T, s *Store) int64 {
 	return head
 }
 
-// The point of the whole mechanism: a document churned N times leaves one fact,
-// and it is the newest one — the only one that still says anything, since the
-// state itself lives in the table.
 func TestChurningOneSubjectLeavesOneFact(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
@@ -64,9 +57,6 @@ func TestChurningOneSubjectLeavesOneFact(t *testing.T) {
 	}
 }
 
-// Compaction is per subject, not per name: two documents churning at the same
-// time keep one fact each, and a fact of an uncompactable name is untouched
-// however many of them share a subject.
 func TestCompactionKeepsTheNewestOfEverySubjectItTouches(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
@@ -80,8 +70,6 @@ func TestCompactionKeepsTheNewestOfEverySubjectItTouches(t *testing.T) {
 			}
 			newest[subject] = seq
 		}
-		// A fact nobody declared compactable, on a subject that also carries
-		// compactable ones — the name is what decides, not the subject.
 		if _, err := s.AppendBusEvent(BusEvent{
 			Name: "session.state.changed", Subject: "app/x/requests/a", Source: "test",
 		}, now.Add(time.Duration(i)*time.Second)); err != nil {
@@ -121,10 +109,6 @@ func TestCompactionKeepsTheNewestOfEverySubjectItTouches(t *testing.T) {
 	}
 }
 
-// The floor is the safety property. A consumer parked below it has not read what
-// sits above it, so nothing above the floor may go — even facts that compaction
-// would otherwise consider redundant. Without this a lagging consumer would
-// wake to a log missing the very changes it was behind on.
 func TestAConsumerParkedBelowTheFloorPinsEveryFactItHasNotRead(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
@@ -138,7 +122,6 @@ func TestAConsumerParkedBelowTheFloorPinsEveryFactItHasNotRead(t *testing.T) {
 		seqs = append(seqs, seq)
 	}
 
-	// Read the first three, then stop — a consumer that is behind, not gone.
 	floor := seqs[2]
 	if err := s.SaveBusConsumer(BusConsumer{Name: "slowpoke", Cursor: floor, Enabled: true}, now); err != nil {
 		t.Fatalf("registering the consumer: %v", err)
@@ -149,10 +132,6 @@ func TestAConsumerParkedBelowTheFloorPinsEveryFactItHasNotRead(t *testing.T) {
 	}
 
 	got := seqsOnLog(t, s)
-	// Everything it has not read survives, in order. What it already read goes
-	// entirely rather than collapsing to one, because the surviving newest fact
-	// about the subject sits above the floor — a consumer reading forward from
-	// here still sees every change it was behind on.
 	want := seqs[3:]
 	if len(got) != len(want) {
 		t.Fatalf("log holds %v, want %v", got, want)
@@ -164,8 +143,6 @@ func TestAConsumerParkedBelowTheFloorPinsEveryFactItHasNotRead(t *testing.T) {
 	}
 }
 
-// A caller that named no compactable class asked for nothing, which is not the
-// same as asking for everything. Getting this backwards would empty the log.
 func TestCompactingNoNamesRemovesNothing(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
@@ -183,12 +160,6 @@ func TestCompactingNoNamesRemovesNothing(t *testing.T) {
 	}
 }
 
-// The property that says the mechanism actually bounds growth, stated the way it
-// has to hold rather than as a count the fixture happens to produce: after a
-// churning workload the log is no larger than the live documents plus the
-// removals still in the window. It is an inequality because a document may be
-// created and deleted with both facts collapsing to the tombstone, and because
-// nothing forces every live document to have been written at all.
 func TestACompactedLogIsNoLargerThanWhatItDescribes(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
@@ -211,8 +182,6 @@ func TestACompactedLogIsNoLargerThanWhatItDescribes(t *testing.T) {
 		delete(tombstones, id)
 	}
 
-	// Create everything, rewrite each a few times, then delete a third: the
-	// mixed workload, not a single-shaped one.
 	for i := range documents {
 		appendChange(fmt.Sprintf("d%02d", i), false)
 	}
@@ -240,8 +209,6 @@ func TestACompactedLogIsNoLargerThanWhatItDescribes(t *testing.T) {
 	}
 }
 
-// `attn bus status` reports the log's weight, so the numbers have to move with
-// the log rather than being a constant nobody notices is wrong.
 func TestTheLogReportsItsOwnWeight(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)

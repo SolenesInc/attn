@@ -1,7 +1,3 @@
-// The settings page's shape: every section id the automation surface publishes
-// has a nav item that renders something, the ids that moved still resolve, and
-// a field that applies on blur says so.
-
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '../test/utils';
 import { SettingsModal } from './SettingsModal';
@@ -19,8 +15,8 @@ const daemonApi = vi.hoisted(() => ({
 }));
 vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => daemonApi }));
 
-// Every id the modal answers to. A dangling one is a broken deep link, not a
-// rename, so the list lives here as well as in settingsAutomation.
+// A dangling id is a broken deep link, not a rename, so the list lives here as
+// well as in settingsAutomation.
 const SECTION_IDS = [
   'general',
   'workspace',

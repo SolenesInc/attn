@@ -1,14 +1,5 @@
-// The socket half of the app runtime: newline-delimited JSON-RPC 2.0 over the
-// daemon's unix socket, full duplex.
-//
-// It is the same framing the plugin protocol uses (internal/daemon/plugin_rpc.go)
-// and deliberately not a second one — the daemon already has a reader that
-// switches to line framing after a hello, and a sidecar that spoke its own
-// dialect would be a second wire format to keep correct for no gain.
-//
-// Both directions carry requests. The daemon asks this process to run a handler;
-// this process asks the daemon to read and write documents while that handler
-// runs. Ids are per-direction, so the two spaces may collide harmlessly.
+// The socket half of the app runtime: newline-delimited JSON-RPC 2.0 over the daemon's
+// unix socket, full duplex. Ids are per-direction, so the two spaces may collide.
 
 import { connect, type Socket } from "node:net"
 
@@ -53,13 +44,8 @@ type Pending = {
   reject: (reason: Error) => void
 }
 
-/**
- * One connection to the daemon.
- *
- * `onRequest` handles inbound calls. It is invoked without awaiting, so a slow
- * handler never blocks the read loop — a dispatch that takes a second must not
- * stall the document reads of a dispatch already in flight.
- */
+/** One connection to the daemon. `onRequest` is invoked without awaiting, so a slow
+ * handler never blocks the read loop. */
 export class RpcConnection {
   private readonly socket: Socket
   private readonly pending = new Map<string, Pending>()
@@ -120,12 +106,8 @@ export class RpcConnection {
     })
   }
 
-  /**
-   * Tells the daemon something without asking for an answer.
-   *
-   * A closed socket is not an error here: the daemon is what would have listened,
-   * and a notification exists precisely because nothing depends on it arriving.
-   */
+  /** Tells the daemon something without asking for an answer. A closed socket is not
+   * an error: nothing depends on a notification arriving. */
   notify(method: string, params: unknown): void {
     if (this.closed) return
     this.socket.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`)

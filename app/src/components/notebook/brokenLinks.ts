@@ -1,10 +1,3 @@
-// Broken-link flags for the live markdown editor: an in-notebook link whose target
-// does not exist gets a red ⚠. External links and in-document anchors never do.
-//
-// Existence is checked asynchronously (fs_exists), so this is its own ViewPlugin
-// rather than the sync buildDecorations: a late result forces a rebuild through a
-// refresh effect, and a per-editor cache checks each path once, not per keystroke.
-
 import { syntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range, StateEffect } from '@codemirror/state';
 import {
@@ -16,7 +9,6 @@ import {
 } from '@codemirror/view';
 import { resolveNotebookLink } from './linkResolver';
 
-// Structural shape of the daemon's FsExistsResult; no dependency on the hook.
 export interface ExistsCheck {
   path: string;
   exists: boolean;
@@ -25,15 +17,12 @@ export interface ExistsCheck {
 export interface BrokenLinkOptions {
   // A rejection leaves the link UNFLAGGED: only a conclusive absence flags one.
   existsFile?: (path: string) => Promise<ExistsCheck>;
-  // The editing note's root-relative directory; bare-relative targets use it.
   baseDir: string;
 }
 
-// Fired when an async existence check resolves: rebuild so a now-known result paints.
 const refreshBrokenLinks = StateEffect.define<null>();
 
-// Drops cached "missing" verdicts on a disk change; "exists" verdicts stay, or the
-// user's own autosave re-checks every link.
+// "exists" verdicts stay, or every autosave re-checks every link.
 export const revalidateBrokenLinks = StateEffect.define<null>();
 
 const BROKEN = Decoration.mark({
@@ -41,16 +30,11 @@ const BROKEN = Decoration.mark({
   attributes: { title: 'Link target not found in the notebook' },
 });
 
-// The notebook path whose existence decides broken-ness, or null when the href is
-// not an in-notebook reference (external, protocol-relative, anchor, empty) and so
-// must never be flagged. Bare-relative targets resolve against `baseDir`; the
-// daemon only ever sees root-relative paths.
 export function notebookLinkPath(href: string, baseDir: string): string | null {
   const resolved = resolveNotebookLink(href, baseDir);
   return resolved.kind === 'note' ? resolved.path : null;
 }
 
-// The distinct in-notebook link paths; pure over the parsed state, so testable.
 export function notebookLinkPaths(state: EditorState, baseDir: string): string[] {
   const seen = new Set<string>();
   syntaxTree(state).iterate({
@@ -65,7 +49,6 @@ export function notebookLinkPaths(state: EditorState, baseDir: string): string[]
   return [...seen];
 }
 
-// Marks every Link whose target `missing` reports absent; pure over parsed state.
 export function brokenLinkDecorations(
   state: EditorState,
   baseDir: string,
@@ -90,9 +73,7 @@ export function brokenLinks(options: BrokenLinkOptions): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
-      // path -> exists. A path is checked at most once until a revalidate clears it.
       private readonly cache = new Map<string, boolean>();
-      // paths with an in-flight check, so concurrent rebuilds don't double-request.
       private readonly pending = new Set<string>();
 
       constructor(view: EditorView) {

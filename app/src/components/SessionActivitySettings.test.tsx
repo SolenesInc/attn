@@ -16,8 +16,6 @@ const renderPane = (settings: Record<string, string> = {}) => {
 };
 
 describe('SessionActivitySettings', () => {
-  // Picking the agent is choosing whose account pays and how fast lines arrive,
-  // so the feature cannot be switched on before that choice is saved.
   it('refuses to enable before an agent is saved', () => {
     renderPane();
 
@@ -52,8 +50,6 @@ describe('SessionActivitySettings', () => {
     );
   });
 
-  // Effort measured inert on Claude, so offering the control would suggest a
-  // knob that does nothing.
   it('offers reasoning effort only where it changes anything', () => {
     renderPane();
 
@@ -64,8 +60,6 @@ describe('SessionActivitySettings', () => {
     expect(screen.getByTestId('settings-activity-effort')).toBeInTheDocument();
   });
 
-  // The presets are per-agent, so a model carried across agents would be saved
-  // against an agent that cannot run it.
   it('drops the model when the agent changes', () => {
     const onSetSetting = renderPane();
 
@@ -93,9 +87,8 @@ describe('SessionActivitySettings', () => {
     );
   });
 
-  // The presence tier is live state and settings are only re-pushed when a
-  // setting changes, so a tier rendered from the settings snapshot would sit
-  // there claiming `away` at a user who is plainly reading the pane.
+  // The presence tier is live state and settings are only re-pushed when a setting changes,
+  // so a tier rendered from the settings snapshot would claim `away` at a reader who is there.
   it('does not render a presence tier from the settings snapshot', () => {
     renderPane({ 'activity.presence_tier': 'away' });
 
@@ -108,8 +101,6 @@ describe('activityStaleMs', () => {
     expect(activityStaleMs({})).toBe(15 * 60 * 1000);
   });
 
-  // The intervals are the user's to set. A fixed window measured against a slower
-  // cadence would dim every line the instant it was written.
   it('follows a configured cadence', () => {
     expect(activityStaleMs({ 'activity.intervals': JSON.stringify({ watching: 600, present: 1800 }) }))
       .toBe(90 * 60 * 1000);

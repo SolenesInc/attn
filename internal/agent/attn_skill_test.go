@@ -90,12 +90,6 @@ func TestEnsureAttnClaudeSkillInstalled(t *testing.T) {
 	assertAttnSkillTree(t, filepath.Join(home, ".claude", "skills", "attn"))
 }
 
-// TestEnsureAttnClaudeSkillInstalledPrunesOrphanedFiles guards against the
-// actual mechanism behind a reported incident: a reference retired from the
-// skill source (chief-of-staff.md) survived indefinitely on an installed
-// machine because the installer only ever wrote/overwrote known files and
-// never deleted files that fell out of the bundle. A stale reference can
-// directly contradict the current skill's guidance, so install must prune.
 func TestEnsureAttnClaudeSkillInstalledPrunesOrphanedFiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
@@ -148,10 +142,6 @@ func TestEnsureAttnCopilotSkillInstalled(t *testing.T) {
 	assertAttnSkillTree(t, filepath.Join(home, ".copilot", "skills", "attn"))
 }
 
-// TestEnsureAttnCopilotSkillInstalledPrunesOrphanedFiles mirrors the Claude
-// orphan-pruning guard: a stale reference retired from the bundle must not
-// survive on disk and keep teaching outdated guidance (e.g. a leftover
-// chief-of-staff.md telling a delegated leaf it can re-delegate).
 func TestEnsureAttnCopilotSkillInstalledPrunesOrphanedFiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)

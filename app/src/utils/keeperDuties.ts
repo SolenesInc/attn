@@ -5,9 +5,6 @@ import {
   type WorkspaceContextKeeperModelPreset,
 } from './workspaceContextKeeper';
 
-// The keeper's three background duties share one {agent, model} config shape and
-// differ only in settings key, model presets, and what a blank config means. The
-// single source the Settings UI renders one row per duty from.
 
 export type KeeperConfig = WorkspaceContextKeeperConfig;
 export type KeeperModelPreset = WorkspaceContextKeeperModelPreset;
@@ -27,11 +24,8 @@ export interface KeeperDutyDescriptor {
   title: string;
   description: string;
   testIdPrefix: string;
-  /**
-   * A blank config means disabled for an opt-in duty, and the built-in tier
-   * default for the rest — which is what decides between offering a "Disabled"
-   * agent option and offering a "Use default" reset.
-   */
+  /** A blank config means disabled for an opt-in duty and the built-in tier default
+   * for the rest, which decides between a "Disabled" option and a "Use default" reset. */
   optInOnly: boolean;
   /** Row-hint label for the built-in default; empty for opt-in duties. */
   defaultLabel: string;
@@ -39,8 +33,6 @@ export interface KeeperDutyDescriptor {
   modelPresets: (agent: SessionAgent | '') => readonly KeeperModelPreset[];
 }
 
-// Summarize is the cheap tier, narrate the strong one; compaction reuses the
-// workspaceContextKeeper presets unchanged.
 const SUMMARIZE_PRESETS: Partial<Record<SessionAgent, readonly KeeperModelPreset[]>> = {
   claude: [
     { value: 'haiku', label: 'Haiku (Recommended — cheap)' },
@@ -125,10 +117,6 @@ export function isKeeperDutyModelPreset(
   return KEEPER_DUTY_BY_KEY[dutyKey].modelPresets(agent).some((preset) => preset.value === model);
 }
 
-/**
- * The value the model <select> shows: the preset, or the 'custom' sentinel that
- * reveals the free-form input for a model no preset covers.
- */
 export function keeperDutyModelSelection(
   dutyKey: KeeperDutyKey,
   agent: SessionAgent | '',

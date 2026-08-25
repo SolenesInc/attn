@@ -14,8 +14,7 @@ import (
 )
 
 // attn_skill/references/showing.md adapts the show-me skill from
-// github.com/humanlayer/skills (MIT, Copyright (c) 2026 HumanLayer);
-// the shipped notice lives in app/src-tauri/THIRD_PARTY_NOTICES.md.
+// github.com/humanlayer/skills (MIT, Copyright (c) 2026 HumanLayer).
 //
 //go:embed attn_skill
 var attnSkillFiles embed.FS
@@ -57,14 +56,7 @@ func installAttnSkill(skillDir string) error {
 	return pruneOrphanedSkillFiles(skillDir, expected)
 }
 
-// pruneOrphanedSkillFiles removes files and directories under skillDir that are
-// no longer part of the bundled skill — e.g. a reference retired in a later
-// version. installAttnSkill only ever writes/overwrites files present in the
-// current embed, so without this an installed skill accumulates stale content
-// forever: a retired reference stays loadable by name and can directly
-// contradict the current skill's guidance (this is how a leftover
-// chief-of-staff.md, removed from the source tree, kept teaching a delegated
-// leaf that it could re-delegate like the chief).
+// Without this an installed skill accumulates stale content forever: a retired reference stays loadable by name and can contradict the current skill's guidance.
 func pruneOrphanedSkillFiles(skillDir string, expected map[string]bool) error {
 	return filepath.WalkDir(skillDir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -89,13 +81,10 @@ func pruneOrphanedSkillFiles(skillDir string, expected map[string]bool) error {
 	})
 }
 
-// SkillFile returns a bundled skill file by path relative to the skill root,
-// e.g. "SKILL.md" or "references/tickets.md".
 func SkillFile(relative string) ([]byte, error) {
 	return attnSkillFiles.ReadFile(path.Join("attn_skill", relative))
 }
 
-// SkillReferenceNames lists the bundled skill references without the .md suffix.
 func SkillReferenceNames() []string {
 	entries, err := fs.ReadDir(attnSkillFiles, "attn_skill/references")
 	if err != nil {
@@ -119,10 +108,7 @@ func ensureAttnClaudeSkillInstalled() error {
 	return installAttnSkill(filepath.Join(homeDir, ".claude", "skills", "attn"))
 }
 
-// ensureAttnAgentsSkillInstalled writes the skill to ~/.agents/skills, which is
-// not codex's alone: pi scans it unconditionally, so nisse reads the attn skill
-// from there too. Installing it on nisse's own spawn is what keeps a delegated
-// conversation agent from depending on codex being configured.
+// ~/.agents/skills is not codex's alone: pi scans it unconditionally, so a delegated conversation agent does not depend on codex being configured.
 func ensureAttnAgentsSkillInstalled() error {
 	homeDir, err := toolhome.Dir()
 	if err != nil {
@@ -144,8 +130,6 @@ func userGlobalSkillSyncEnabled() bool {
 	return profile == "" || profile == "dev"
 }
 
-// EnsureClaudeSkillInstalled installs the bundled skill only for the default
-// and dev profiles. The bool reports whether synchronization ran.
 func EnsureClaudeSkillInstalled() (bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil
@@ -153,8 +137,6 @@ func EnsureClaudeSkillInstalled() (bool, error) {
 	return true, ensureAttnClaudeSkillInstalled()
 }
 
-// EnsureAgentsSkillInstalled installs the shared agent skill only for the
-// default and dev profiles. The bool reports whether synchronization ran.
 func EnsureAgentsSkillInstalled() (bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil
@@ -162,8 +144,6 @@ func EnsureAgentsSkillInstalled() (bool, error) {
 	return true, ensureAttnAgentsSkillInstalled()
 }
 
-// EnsureCopilotSkillInstalled installs the bundled skill only for the default
-// and dev profiles. The bool reports whether synchronization ran.
 func EnsureCopilotSkillInstalled() (bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil

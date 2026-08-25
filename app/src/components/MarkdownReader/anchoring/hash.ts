@@ -1,15 +1,3 @@
-/**
- * Content hash for anchor records.
- *
- * The reader's re-render gate is plain string equality on `content` (see
- * MarkdownReaderBody's memo contract) — there is no hash there to reuse. This
- * util exists solely for `AnchorRecord.contentHash`: cheap enough to run once
- * per actual content change (the gate already tells callers when that is).
- *
- * FNV-1a over UTF-16 code units (`charCodeAt`, high/low bytes folded in) — no
- * TextEncoder allocation, deterministic across platforms.
- */
-
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 

@@ -82,7 +82,6 @@ func TestPresentLatestRoundEnrichment(t *testing.T) {
 		t.Fatalf("CreatePresentation: %v", err)
 	}
 
-	// No rounds yet.
 	got, err := s.GetPresentation(p.ID)
 	if err != nil {
 		t.Fatalf("GetPresentation: %v", err)
@@ -129,7 +128,6 @@ func TestPresentLatestRoundEnrichment(t *testing.T) {
 		t.Errorf("expected latest round seq=%d unsubmitted, got seq=%d submitted=%v", round2.Seq, got.LatestRoundSeq, got.LatestRoundSubmitted)
 	}
 
-	// ListPresentations should show the same enrichment.
 	list, err := s.ListPresentations()
 	if err != nil {
 		t.Fatalf("ListPresentations: %v", err)
@@ -285,14 +283,12 @@ func TestPresentSubmitRoundStoresCommentsAndSetsSubmittedAt(t *testing.T) {
 		t.Fatalf("expected 3 comments, got %d", len(all))
 	}
 
-	// Default author applied when empty.
 	for _, c := range all {
 		if c.Filepath == "a.go" && c.Content == "a comment, no author" && c.Author != "user" {
 			t.Errorf("expected default author 'user', got %q", c.Author)
 		}
 	}
 
-	// Ordering: filepath, then line_start.
 	if all[0].Filepath != "a.go" || all[0].LineStart != 5 {
 		t.Errorf("expected first comment a.go:5, got %s:%d", all[0].Filepath, all[0].LineStart)
 	}
@@ -303,7 +299,6 @@ func TestPresentSubmitRoundStoresCommentsAndSetsSubmittedAt(t *testing.T) {
 		t.Errorf("expected third comment b.go:10, got %s:%d", all[2].Filepath, all[2].LineStart)
 	}
 
-	// Double-submit should error.
 	if err := s.SubmitPresentationRound(round.ID, "feedback", nil, now); err == nil {
 		t.Error("expected error submitting an already-submitted round")
 	}
@@ -507,7 +502,6 @@ func TestPresentClosePresentation(t *testing.T) {
 		t.Errorf("expected status 'closed', got %q", got.Status)
 	}
 
-	// Closing an already-closed presentation errors.
 	if err := s.ClosePresentation(p.ID, now); err == nil {
 		t.Error("expected error closing an already-closed presentation")
 	}

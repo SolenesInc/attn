@@ -52,7 +52,6 @@ func TestExtractPathFromShellOutput(t *testing.T) {
 }
 
 func TestEnsureGUIPath(t *testing.T) {
-	// Save and restore PATH for test isolation
 	origPath := os.Getenv("PATH")
 	defer os.Setenv("PATH", origPath)
 
@@ -61,13 +60,11 @@ func TestEnsureGUIPath(t *testing.T) {
 		t.Errorf("EnsureGUIPath() returned error: %v", err)
 	}
 
-	// Verify PATH was not cleared
 	newPath := os.Getenv("PATH")
 	if newPath == "" {
 		t.Error("EnsureGUIPath() cleared PATH")
 	}
 
-	// Verify each original path entry is preserved
 	newPathSet := make(map[string]bool)
 	for _, p := range strings.Split(newPath, ":") {
 		newPathSet[p] = true

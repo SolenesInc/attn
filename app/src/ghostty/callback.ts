@@ -1,15 +1,5 @@
-// Installing a JS function as a wasm function pointer.
-//
-// libghostty-vt takes callbacks (write_pty, bell, …) as indices into the
-// module's exported __indirect_function_table. The standard way to put a JS
-// function there is `new WebAssembly.Function(...)` from the js-types proposal —
-// which JavaScriptCore does not implement, and JavaScriptCore is what WKWebView
-// runs. So instead we hand-assemble a tiny wasm module that imports a JS
-// function and re-exports it as a wasm one, which every engine supports.
-//
-// The shim's signature is fixed at (i32, i32, i32, i32) -> (), matching
-// GhosttyTerminalWritePtyFn(terminal, userdata, data, len) — the only callback
-// the browser model installs.
+// libghostty-vt takes callbacks as indices into the module's exported __indirect_function_table, and JavaScriptCore — what WKWebView runs — does not implement `new WebAssembly.Function(...)`, so this hand-assembles a wasm module that imports a JS function and re-exports it as a wasm one.
+// The shim's signature is fixed at (i32, i32, i32, i32) -> (), matching GhosttyTerminalWritePtyFn(terminal, userdata, data, len).
 
 function uleb(n: number): number[] {
   const out: number[] = [];
@@ -49,11 +39,8 @@ let shimModule: WebAssembly.Module | null = null;
 
 export type Callback4 = (a: number, b: number, c: number, d: number) => void;
 
-/**
- * Install `fn` in the module's function table and return its index, for use as
- * a C function pointer. The entry is never reclaimed: a terminal installs one
- * callback for its lifetime, and the table only grows.
- */
+/** Install `fn` in the module's function table and return its index, for use as a C
+    function pointer. The entry is never reclaimed; the table only grows. */
 export function installCallback(
   table: WebAssembly.Table,
   fn: Callback4,

@@ -11,12 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 )
 
-// TestConnCtx_HandleRequest_SetThemeReachesSession covers the set_theme RPC
-// dispatch end to end at the manager level: decoding SetThemeParams and
-// calling manager.SetTheme, observed via the session actually answering an
-// OSC11 color query with the new background afterward. A handler that never
-// decodes params or never calls SetTheme leaves the session answering with
-// its spawn-time default, which this test would catch.
 func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -40,9 +34,6 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 		t.Fatalf("Spawn() error: %v", err)
 	}
 
-	// Drive the RPC dispatch exactly as a real connection would: build the
-	// request envelope, hand it to handleRequest, and drain the response off
-	// the same sendQ a real connCtx write loop would consume.
 	conn := &connCtx{runtime: r, authed: true, connID: "1", sendQ: make(chan any, 4)}
 	params, err := json.Marshal(SetThemeParams{Background: "#ff00ff"})
 	if err != nil {
@@ -60,20 +51,8 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 		t.Fatal("handleRequest(set_theme) sent no response")
 	}
 
-	// Observable effect: attach, feed the session an OSC11 query, and confirm
-	// the reply carries the new background rather than the built-in default.
-	//
-	// This can't just fire the query at the shell's prompt and read it back
-	// off the attached output stream: the manager writes its reply into the
-	// PTY master, and whether that becomes visible on the master-read side
-	// again depends on the shell's own tty echo/raw-mode handling (fish, the
-	// default login shell in this environment, disables kernel echo for its
-	// own line editing, so the reply lands in fish's stdin and never
-	// resurfaces as "output"). Sidestep that entirely: have the shell run a
-	// script that reads its own stdin explicitly (bash's `read` builtin
-	// receives whatever bytes were written to the master regardless of
-	// echo/raw-mode) and prints what it got, wrapped in a marker so a partial
-	// or wrong reply can't accidentally match.
+	// The reply cannot be read back off the output stream: fish disables kernel echo, so it
+	// lands in fish's stdin. Instead the shell runs a script whose `read` takes it explicitly.
 	scriptPath := t.TempDir() + "/query.sh"
 	script := "#!/bin/bash\n" +
 		"printf '\\033]11;?\\007'\n" +
@@ -119,16 +98,8 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 	}
 }
 
-// The runtime's two self-stop clocks — exit cleanup and the orphan watch — run
-// inside synctest bubbles at their shipped lengths. Under real time these tests
-// had to swap 45 seconds and 12 hours for tens of milliseconds and then wait a
-// tolerance window on top; the numbers under test were the test's, not the
-// product's. A bubble's fake clock makes 12 hours free, so the shipped TTL is
-// what fires, and a negative ("this must NOT stop") holds across the whole
-// window rather than across whatever slice the test could afford to wait.
-//
-// The Runtime here owns no socket, no PTY and no child process — it is a struct
-// with timers and a stop channel — so nothing pins the bubble to real time.
+// The two self-stop clocks run inside synctest bubbles at their shipped lengths (45s and
+// 12h). The Runtime owns no socket, PTY or child, so nothing pins the bubble to real time.
 
 func TestRuntime_ExitedSessionCleansUpAfterTTLWithoutConnections(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -139,7 +110,6 @@ func TestRuntime_ExitedSessionCleansUpAfterTTLWithoutConnections(t *testing.T) {
 		synctest.Wait()
 		select {
 		case <-r.stopCh:
-			// expected
 		default:
 			t.Fatal("the runtime did not stop when the exit TTL elapsed")
 		}
@@ -152,7 +122,6 @@ func TestRuntime_ExitCleanupWaitsForConnectionsToClose(t *testing.T) {
 		r.noteConnAuthed()
 		r.noteSessionExited()
 
-		// Well past the TTL, which an authed connection must hold off entirely.
 		time.Sleep(4 * exitedSessionCleanupTTL)
 		synctest.Wait()
 		select {
@@ -167,7 +136,6 @@ func TestRuntime_ExitCleanupWaitsForConnectionsToClose(t *testing.T) {
 		synctest.Wait()
 		select {
 		case <-r.stopCh:
-			// expected
 		default:
 			t.Fatal("the runtime did not stop once the last connection closed")
 		}
@@ -184,7 +152,6 @@ func TestRuntime_OrphanWatchStopsIdleUnownedWorker(t *testing.T) {
 		synctest.Wait()
 		select {
 		case <-r.stopCh:
-			// expected
 		default:
 			t.Fatal("the orphan watch did not stop an idle unowned worker at its TTL")
 		}
@@ -212,7 +179,6 @@ func TestRuntime_OrphanWatchCanceledByAuthedConn(t *testing.T) {
 		synctest.Wait()
 		select {
 		case <-r.stopCh:
-			// expected: watch re-armed when the last authed connection dropped
 		default:
 			t.Fatal("the orphan watch did not stop the worker after the last connection closed")
 		}
@@ -225,8 +191,6 @@ func TestRuntime_OrphanWatchDeferredByOutputActivity(t *testing.T) {
 		r.noteOutputActivity()
 		r.armOrphanWatch()
 
-		// Keep the child "busy" well past the first deadline; the watch must defer
-		// every time output arrives, however long the TTL is.
 		for i := 0; i < 4; i++ {
 			r.noteOutputActivity()
 			time.Sleep(orphanedWorkerTTL / 2)
@@ -238,12 +202,10 @@ func TestRuntime_OrphanWatchDeferredByOutputActivity(t *testing.T) {
 			}
 		}
 
-		// Once output goes quiet, the worker stops after a full idle TTL.
 		time.Sleep(orphanedWorkerTTL)
 		synctest.Wait()
 		select {
 		case <-r.stopCh:
-			// expected
 		default:
 			t.Fatal("the orphan watch did not stop the worker once output went quiet")
 		}
@@ -275,8 +237,6 @@ func TestRuntime_OrphanWatchNotArmedAfterExit(t *testing.T) {
 		r.noteSessionExited()
 		r.armOrphanWatch()
 
-		// Past the orphan TTL but short of the exit cleanup this test parked, so a
-		// stop here could only have come from the watch that must not be armed.
 		time.Sleep(2 * orphanedWorkerTTL)
 		synctest.Wait()
 		select {

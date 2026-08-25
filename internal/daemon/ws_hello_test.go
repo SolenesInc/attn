@@ -17,8 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// drainClientEvents reads what the daemon queued for a client without waiting:
-// every send in these tests happens before the assertion, on this goroutine.
 func drainClientEvents(t *testing.T, client *wsClient) []protocol.WebSocketEvent {
 	t.Helper()
 	var events []protocol.WebSocketEvent
@@ -47,8 +45,6 @@ func eventNames(events []protocol.WebSocketEvent) []string {
 	return names
 }
 
-// newHelloTestDaemon is a daemon complete enough to admit a client: a store to
-// snapshot from and a hub to join. Nothing listens on the socket path.
 func newHelloTestDaemon(t *testing.T, token string) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
@@ -80,9 +76,6 @@ func TestClientHelloAcceptsTheDaemonsToken(t *testing.T) {
 	}
 }
 
-// An unauthorized connection must not see the machine. initial_state carries
-// every session, PR, workspace and ticket, so withholding it — and staying out
-// of the hub that fans out everything after it — is most of what the token buys.
 func TestRefusedClientNeverJoinsTheHubOrSeesState(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	client := newWorkspaceProtocolTestClient()
@@ -103,9 +96,6 @@ func TestRefusedClientNeverJoinsTheHubOrSeesState(t *testing.T) {
 			t.Fatal("a refused client was handed initial_state")
 		}
 	}
-	// Anything broadcast afterwards must miss it too. An admitted client is the
-	// witness: the hub fans one message out to every client under a single lock,
-	// so once the admitted one holds it the refused one has been passed over.
 	go d.wsHub.run()
 	admitted := newWorkspaceProtocolTestClient()
 	d.handleClientHello(admitted, &protocol.ClientHelloMessage{
@@ -123,8 +113,6 @@ func TestRefusedClientNeverJoinsTheHubOrSeesState(t *testing.T) {
 	}
 }
 
-// waitForClientEvent blocks on the client's queue until the named event arrives,
-// which is the happens-before edge the caller needs — not a timeout.
 func waitForClientEvent(t *testing.T, client *wsClient, name string) {
 	t.Helper()
 	for {
@@ -146,9 +134,6 @@ func waitForClientEvent(t *testing.T, client *wsClient, name string) {
 	}
 }
 
-// A port exposed with ATTN_WS_AUTH_TOKEN is gated at the HTTP layer, and a
-// browser served from it cannot read a file on the daemon's disk. Clearing the
-// bearer stands in for the client token — otherwise remote web would close.
 func TestBearerAuthorizedClientNeedsNoClientToken(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	client := newWorkspaceProtocolTestClient()
@@ -169,8 +154,6 @@ func TestBearerAuthorizedClientNeedsNoClientToken(t *testing.T) {
 	}
 }
 
-// A daemon built without Start has no token, and must refuse rather than match
-// the client that also sent nothing.
 func TestDaemonWithoutATokenAuthorizesNobody(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	client := newWorkspaceProtocolTestClient()
@@ -213,8 +196,6 @@ func TestClientHelloWithoutTheTokenIsRefusedAndSaysWhere(t *testing.T) {
 	if got := protocol.Deref(refusal.ErrorCode); got != protocol.ErrorCodeUnauthorizedClient {
 		t.Fatalf("error_code = %q, want %q", got, protocol.ErrorCodeUnauthorizedClient)
 	}
-	// The message is the whole fix: an agent that reads it knows which file to
-	// read next, which "unauthorized" alone never says.
 	message := protocol.Deref(refusal.Error)
 	if !strings.Contains(message, config.ClientTokenPath()) {
 		t.Fatalf("refusal %q does not name the token path %q", message, config.ClientTokenPath())
@@ -245,14 +226,8 @@ func TestClientHelloWithAnotherProfilesTokenIsRefused(t *testing.T) {
 	}
 }
 
-// dialWhenListening retries until the connection is made, which is the signal itself:
-// Start() binds the unix socket before the WebSocket port, so waitForSocket
-// returning does not mean the port answers yet.
-//
-// The pause is backoff, not a guess at how long binding takes: a refused
-// connection comes back in microseconds, and the suite runs seven test binaries
-// against three procs, so an unpaced retry loop spends a whole core starving
-// them.
+// Start() binds the unix socket before the WebSocket port, so waitForSocket returning
+// does not mean the port answers. The pause is backoff; an unpaced loop eats a core.
 func dialWhenListening(t *testing.T, ctx context.Context, url string) *websocket.Conn {
 	t.Helper()
 	for {
@@ -267,8 +242,6 @@ func dialWhenListening(t *testing.T, ctx context.Context, url string) *websocket
 	}
 }
 
-// readCloseReason drains whatever is still in flight and reports why the daemon
-// hung up.
 func readCloseReason(t *testing.T, ctx context.Context, conn *websocket.Conn) string {
 	t.Helper()
 	for {
@@ -282,16 +255,12 @@ func readCloseReason(t *testing.T, ctx context.Context, conn *websocket.Conn) st
 	}
 }
 
-// The wire receipt: a daemon that actually started refuses an anonymous hello
-// over a real WebSocket and accepts the token it minted into its data root.
 func TestDaemonWebSocketRequiresTheClientToken(t *testing.T) {
 	port, err := freeTCPPort()
 	if err != nil {
 		t.Fatalf("freeTCPPort: %v", err)
 	}
 	t.Setenv("ATTN_WS_PORT", strconv.Itoa(port))
-	// Unset so Start() mints into the daemon's own data root, which is what
-	// production does and what the refusal message points at.
 	t.Setenv("ATTN_CLIENT_TOKEN", "")
 	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
@@ -323,10 +292,6 @@ func TestDaemonWebSocketRequiresTheClientToken(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("send tokenless hello: %v", err)
 	}
-	// Pipelined behind the hello, the way a real client sends: it does not wait
-	// for a reply it has no reason to expect. This command must not be answered
-	// — the gate that refuses an unidentified client hangs up on the connection
-	// itself, which would destroy the refusal still queued behind it.
 	if err := writeWS(refused, map[string]interface{}{"cmd": protocol.CmdGetSettings}); err != nil {
 		t.Fatalf("send pipelined get_settings: %v", err)
 	}

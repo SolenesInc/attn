@@ -8,40 +8,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// SQLite persistence for the global notifications feed (see
-// docs/plans/2026-07-02-bg-task-notifications.md). A notification is a durable,
-// read/unread record surfaced in the app's notifications panel; its producer is
-// the durable job queue, which emits one when a background job reaches terminal
-// `dead` (retries exhausted). NotificationRecord is a store-local row type — the
-// daemon owns the mapping to the protocol shape — keeping this package a leaf.
-//
-// read_at is persisted as '' while unread and as a timestamp once read. Timestamps
-// reuse the jobs table's sortableTimeFormat encoding and parseStoreTime decoder
-// (same package), so a blank/garbage value decodes to the zero time. The encoding
-// is the fixed-width one because created_at orders this feed as text.
+// read_at holds '' while unread and a sortableTimeFormat stamp once read;
+// parseStoreTime decodes a blank or garbage value to the zero time.
 
-// NotificationSeverity is how much a notification wants the user. Unlike Kind,
-// which is open, this is a closed set: the app styles the feed by it and gives
-// critical an ambient surface outside the panel, so an unrecognized value must
-// resolve to something rather than render as nothing.
+// A closed set: an unrecognized value must resolve to one of these rather than
+// reach the app unstyled.
 type NotificationSeverity string
 
 const (
-	// NotificationInfo is the default weight and the value every row written
-	// before the severity column carries.
-	NotificationInfo NotificationSeverity = "info"
-	// NotificationWarning is something that failed and stays failed until the
-	// user acts, but costs them nothing until they get to it.
-	NotificationWarning NotificationSeverity = "warning"
-	// NotificationCritical is something that is broken now and will stay broken
-	// silently — it earns a surface the user cannot miss.
+	NotificationInfo     NotificationSeverity = "info"
+	NotificationWarning  NotificationSeverity = "warning"
 	NotificationCritical NotificationSeverity = "critical"
 )
 
-// NormalizeNotificationSeverity maps any input onto the closed set, falling back
-// to info. It runs on write and on scan, not just on write: the column is plain
-// TEXT and nothing stops a hand-written row from holding a typo, and an
-// unrecognized value must not reach the app as a severity it has no styling for.
 func NormalizeNotificationSeverity(raw string) NotificationSeverity {
 	switch NotificationSeverity(strings.ToLower(strings.TrimSpace(raw))) {
 	case NotificationWarning:
@@ -53,25 +32,19 @@ func NormalizeNotificationSeverity(raw string) NotificationSeverity {
 	}
 }
 
-// NotificationRecord is one durable notification row. ReadAt is the zero time
-// while unread; a non-zero ReadAt marks it read.
 type NotificationRecord struct {
 	ID         string
-	Kind       string // e.g. "task_failed" (extensible)
+	Kind       string
 	Severity   NotificationSeverity
 	Title      string
 	Body       string
 	Detail     string
-	SourceKind string // e.g. "task"
-	SourceID   string // e.g. the task id (Retry deep-links here)
+	SourceKind string
+	SourceID   string
 	CreatedAt  time.Time
-	ReadAt     time.Time // zero == unread
+	ReadAt     time.Time
 }
 
-// AddNotification inserts a new notification, generating its id and stamping
-// CreatedAt, and returns the stored record. Notifications are append-only: each
-// actionable event (a task crossing into dead) is its own row, never coalesced
-// with a prior one — a retried-then-redead task is a fresh event worth surfacing.
 func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (NotificationRecord, error) {
 	if s.db == nil {
 		return NotificationRecord{}, fmt.Errorf("store: no database")
@@ -92,7 +65,6 @@ func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (Notifica
 	return rec, nil
 }
 
-// ListNotifications returns every notification, newest-created first.
 func (s *Store) ListNotifications() ([]NotificationRecord, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("store: no database")
@@ -115,9 +87,6 @@ func (s *Store) ListNotifications() ([]NotificationRecord, error) {
 	return out, rows.Err()
 }
 
-// UnreadNotificationCount returns how many notifications are unread (read_at ”).
-// It drives the sidebar's unread badge, so it is a cheap dedicated COUNT rather
-// than a full list + filter.
 func (s *Store) UnreadNotificationCount() (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
@@ -129,15 +98,8 @@ func (s *Store) UnreadNotificationCount() (int, error) {
 	return n, nil
 }
 
-// UnreadCriticalNotifications returns how many critical notifications are unread
-// and the title of the newest of them (empty when the count is zero). Together
-// they are the whole input to the app's ambient critical surface, so they are
-// read in one statement — the surface must never show a count from one instant
-// beside a title from another.
-//
-// The severity comparison is normalization-free on purpose: a row whose severity
-// is a typo is not critical, which is the same answer NormalizeNotificationSeverity
-// gives it.
+// Count and title come from one statement so the ambient surface never mixes
+// two instants.
 func (s *Store) UnreadCriticalNotifications() (int, string, error) {
 	if s.db == nil {
 		return 0, "", fmt.Errorf("store: no database")
@@ -159,9 +121,6 @@ func (s *Store) UnreadCriticalNotifications() (int, string, error) {
 	return n, title, nil
 }
 
-// MarkNotificationRead marks one notification read. Idempotent: the WHERE read_at
-// = ” guard keeps the first read time if it is already read, and a missing id is
-// not an error.
 func (s *Store) MarkNotificationRead(id string, now time.Time) error {
 	if s.db == nil {
 		return fmt.Errorf("store: no database")
@@ -174,8 +133,6 @@ func (s *Store) MarkNotificationRead(id string, now time.Time) error {
 	return nil
 }
 
-// MarkAllNotificationsRead marks every unread notification read, returning how
-// many were flipped.
 func (s *Store) MarkAllNotificationsRead(now time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")

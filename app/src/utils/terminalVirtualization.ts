@@ -1,20 +1,5 @@
-// Runtime-configurable virtualization of off-screen terminal workspaces.
-//
-// Each live workspace keeps a Ghostty WASM model + WebGL renderer (~32 MiB of
-// atlas + GPU texture per pane, plus scrollback) mounted. attn keeps every
-// workspace mounted at once, so replay and memory scale with every persisted
-// workspace. We keep only the active workspace plus the N most-recently-used
-// workspaces "warm" (terminals mounted); the dashboard starts with none mounted.
-// Cold workspaces render a placeholder and rehydrate from daemon replay
-// (same_app_remount) when they next become visible.
-//
-// N is configurable at runtime so the memory-vs-instant-switching tradeoff can
-// be tuned without a rebuild:
-//   - localStorage key `attn.perf.warmWorkspaceLimit`
-//   - window.attnSetWarmWorkspaces(n) — applies live (no reload) and persists
-//   - n = recent workspaces kept warm BESIDES the active one (default 3)
-//   - n = 0  -> only the active workspace is live (maximum memory savings)
-//   - n < 0  -> keep all workspaces live (virtualization disabled)
+// A mounted pane costs ~32 MiB of atlas + GPU texture plus scrollback, and every
+// workspace stays mounted — so only the N most-recently-used are kept warm.
 
 export const WARM_WORKSPACE_LIMIT_STORAGE_KEY = 'attn.perf.warmWorkspaceLimit';
 export const DEFAULT_WARM_WORKSPACE_LIMIT = 3;
@@ -34,15 +19,9 @@ export function writeWarmWorkspaceLimit(limit: number): void {
   try {
     window.localStorage.setItem(WARM_WORKSPACE_LIMIT_STORAGE_KEY, String(limit));
   } catch {
-    // localStorage may be unavailable (private mode); the in-memory value still applies.
   }
 }
 
-// Returns the set of workspace ids whose terminals should stay mounted, or
-// null meaning "all workspaces live" (no virtualization). `allWorkspaceIds` is
-// every currently-rendered workspace; `recentWorkspaceIds` is most-recent-first;
-// `requiredWorkspaceIds` are workspaces currently visible outside the single
-// session view, such as visible grid tiles.
 export function computeWarmWorkspaceIds(
   allWorkspaceIds: string[],
   recentWorkspaceIds: string[],
@@ -51,7 +30,7 @@ export function computeWarmWorkspaceIds(
   requiredWorkspaceIds: string[] = [],
 ): Set<string> | null {
   if (limit < 0) return null;
-  const budget = limit + 1; // active + `limit` recent workspaces.
+  const budget = limit + 1;
   const present = new Set(allWorkspaceIds);
   const warm = new Set<string>();
   for (const id of requiredWorkspaceIds) {

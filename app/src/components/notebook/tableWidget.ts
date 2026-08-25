@@ -1,12 +1,5 @@
-// GFM tables in the Notebook's live markdown editor: a table renders as a real
-// `<table>` widget, and reveals raw pipe-row source when the cursor is inside it — the
-// same reveal-on-cursor model as frontmatterCard, for the same reason.
-//
-// CM constraint that shapes this file: decorations that affect vertical layout (block
-// widgets, replacements spanning line breaks) MUST come directly from a StateField via
-// `EditorView.decorations.from(...)` — the view plugin that powers the inline preview
-// is computed after layout and is forbidden from introducing them. So the table
-// extension lives here, in its own field, mirroring frontmatterCard.ts.
+// CM constraint shaping this file: decorations affecting vertical layout MUST come
+// from a StateField via `EditorView.decorations.from(...)`, never a view plugin.
 
 import { ensureSyntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range, StateField } from '@codemirror/state';
@@ -17,9 +10,9 @@ export type CellAlign = 'left' | 'center' | 'right' | null;
 
 export interface TableData {
   header: string[];
-  align: CellAlign[]; // one entry per column, from the delimiter row (:--- :--: ---:)
-  rows: string[][]; // body rows, raw cell text (inline markdown left as-is, v1)
-  fromLine: number; // 1-based doc line of the table's first (header) row
+  align: CellAlign[];
+  rows: string[][];
+  fromLine: number;
 }
 
 function cellAlign(spec: string): CellAlign {
@@ -39,9 +32,6 @@ function cellTexts(row: SyntaxNode, state: EditorState): string[] {
   return cells;
 }
 
-// Locate the Table syntax node exactly spanning [from, to] within the already-parsed
-// tree, so parseTableData can walk its real children (TableHeader/TableDelimiter/
-// TableRow) rather than re-deriving structure from text.
 function findTableNode(state: EditorState, from: number, to: number): SyntaxNode | null {
   const tree = ensureSyntaxTree(state, to, 50);
   if (!tree) return null;
@@ -61,8 +51,6 @@ function findTableNode(state: EditorState, from: number, to: number): SyntaxNode
   return found;
 }
 
-// Parse the Table syntax node at [from,to] into TableData; null if it isn't a
-// well-formed table (defensive — Lezer only emits Table for valid GFM tables).
 export function parseTableData(state: EditorState, from: number, to: number): TableData | null {
   const table = findTableNode(state, from, to);
   if (!table) return null;
@@ -99,8 +87,6 @@ class TableWidget extends WidgetType {
     return JSON.stringify(this.data) === JSON.stringify(other.data);
   }
 
-  // Reserve roughly the right height before the DOM is measured, so the first layout
-  // doesn't jump the scroll position. CM re-measures the real height after mount.
   get estimatedHeight() {
     return (1 + this.data.rows.length) * 26 + 8;
   }
@@ -149,7 +135,7 @@ class TableWidget extends WidgetType {
       tr.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        gotoLine(fromLine + 2 + rowIndex); // +1 header, +1 delimiter row
+        gotoLine(fromLine + 2 + rowIndex);
       });
       cells.forEach((text, i) => {
         const td = document.createElement('td');
@@ -166,9 +152,6 @@ class TableWidget extends WidgetType {
   }
 }
 
-// Pure decoration builder (no view), so the reveal gate is unit-testable headlessly.
-// Every top-level Table node renders as a widget, except one the selection currently
-// intersects — that table stays raw so it can be edited.
 function tableDecorations(state: EditorState): DecorationSet {
   const tree = ensureSyntaxTree(state, state.doc.length, 50);
   if (!tree) return Decoration.none;
@@ -187,7 +170,7 @@ function tableDecorations(state: EditorState): DecorationSet {
           ranges.push(Decoration.replace({ block: true, widget: new TableWidget(data) }).range(from, to));
         }
       }
-      return false; // tables don't nest
+      return false;
     },
   });
   return Decoration.set(ranges);
@@ -198,8 +181,6 @@ const tableField = StateField.define<DecorationSet>({
   update(value, tr) {
     if (tr.docChanged || tr.selection) {
       const tree = ensureSyntaxTree(tr.state, tr.state.doc.length, 50);
-      // Recompute create()-style from scratch (mirrors frontmatterCard), but if the
-      // tree isn't ready yet, keep the previous set rather than flashing empty.
       if (!tree) return value.map(tr.changes);
       return tableDecorations(tr.state);
     }

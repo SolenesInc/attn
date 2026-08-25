@@ -6,15 +6,8 @@ import (
 	"strings"
 )
 
-// TransitionSessionConversation moves a live attn session to a different
-// agent-native conversation. The binding, ticket resume target, and
-// transcript-scoped activity commit together so no observer can see a successor
-// conversation carrying the prior conversation's derived state. The first
-// binding has no prior activity to invalidate and leaves it untouched.
-//
-// Repeated observations are no-ops. When the live session row is already gone,
-// the ticket mirror is still updated: ticket Resume intentionally captures this
-// binding after close so it can recreate the session later.
+// Repeated observations are no-ops. When the live session row is already gone the ticket
+// mirror is still updated: ticket Resume captures this binding after close.
 func (s *Store) TransitionSessionConversation(sessionID, nativeID string) (bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	nativeID = strings.TrimSpace(nativeID)

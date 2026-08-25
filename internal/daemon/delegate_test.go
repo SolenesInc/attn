@@ -148,8 +148,6 @@ func TestDelegateSpawnsAgentInSourceWorkspaceWithBrief(t *testing.T) {
 	}
 }
 
-// newDelegationDaemon is a home daemon with the garden declared: the shape every
-// delegation runs against now that a dispatch binds a seed.
 func newDelegationDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := newEnrolledDaemon(t, "")
@@ -158,9 +156,6 @@ func newDelegationDaemon(t *testing.T) *Daemon {
 	return d
 }
 
-// Adopting a ticket retired with the rest of the write surface, and the refusal
-// names the garden move that replaced it rather than launching something the
-// caller did not ask for.
 func TestDelegateRefusesTicketAdoption(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
@@ -243,8 +238,6 @@ func TestDelegateNoWorktreeReusesGitCheckout(t *testing.T) {
 	}
 }
 
-// Delegating from the chief binds a seed, tells the delegate where the work
-// lives, and marks the session as chief-delegated.
 func TestChiefOfStaffDelegateBindsSeedAndPrompt(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
@@ -297,7 +290,6 @@ func TestChiefOfStaffDelegateBindsSeedAndPrompt(t *testing.T) {
 		t.Fatalf("initial prompt does not name the seed %s: %q", seedID, prompt)
 	}
 
-	// The delegated session is recognized as chief-delegated via the dispatch record.
 	if ids := d.delegatedFromChiefSessionIDs(); !ids[result.SessionID] {
 		t.Fatalf("delegated session missing from chief-delegated set: %v", ids)
 	}
@@ -348,7 +340,6 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 				t.Fatalf("spawn = %+v, result = %+v", spawn, result)
 			}
 
-			// The delegated session tends its own seed in the resolved workspace.
 			seedID, bound := d.gardenDispatchCrown(spawn.ID)
 			if !bound {
 				t.Fatalf("delegation bound no seed to session %s", spawn.ID)
@@ -358,8 +349,6 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 				t.Fatalf("bound seed = %+v, err=%v", seed, err)
 			}
 
-			// Coordination identity is preserved: the delegated session, not the chief,
-			// owns the workspace context across every placement.
 			checkout, err := d.checkoutWorkspaceContext(&protocol.WorkspaceContextCheckoutMessage{
 				SourceSessionID: spawn.ID,
 			})
@@ -406,7 +395,6 @@ func TestDelegatedFromChiefDecoratesBroadcastSession(t *testing.T) {
 		t.Fatalf("delegate() error = %v", err)
 	}
 
-	// Exercise the same list-broadcast path the sidebar receives.
 	var delegated, chief *protocol.Session
 	for _, session := range d.sessionsForBroadcast(d.store.List("")) {
 		session := session
@@ -439,13 +427,9 @@ func TestDelegatedFromChiefDecoratesBroadcastSession(t *testing.T) {
 	}
 }
 
-// An ordinary (non-chief) delegation binds its seed exactly like the chief's and
-// its delegate is told to report there. It is NOT, however, decorated as
-// delegated-from-chief — that badge belongs to work the chief actually started.
 func TestOrdinaryDelegationBindsSeedWithoutChiefDecoration(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
-	// No chief role is set, so this is a plain session-to-session delegation.
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 
 	var prompt string
@@ -482,7 +466,6 @@ func TestOrdinaryDelegationBindsSeedWithoutChiefDecoration(t *testing.T) {
 		t.Fatalf("bound seed = %+v, err=%v", seed, err)
 	}
 
-	// The agent is told to report on its seed, and is still told it is a leaf.
 	if !strings.Contains(prompt, "attn seed note "+seedID) {
 		t.Fatalf("ordinary delegated prompt missing the seed report contract: %q", prompt)
 	}
@@ -522,10 +505,6 @@ func TestDelegateRollsBackPaneWhenSpawnFails(t *testing.T) {
 	}
 }
 
-// Copilot now supports initial-prompt delegation (it auto-executes the brief via
-// `copilot --interactive`), so delegating to it must succeed and spawn a tracked
-// session carrying the brief — the inverse of the old "rejects" assertion this
-// replaces.
 func TestDelegateAcceptsCopilotInitialPrompt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -568,8 +547,6 @@ func TestDelegateAcceptsCopilotInitialPrompt(t *testing.T) {
 	}
 }
 
-// --model / --effort ride the delegate request into the spawned session's
-// launch options; effort is normalized to lowercase on the way through.
 func TestDelegateThreadsModelAndEffortIntoSpawn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -690,8 +667,6 @@ func TestDelegateDoesNotDefaultEffortForUnsupportedAgent(t *testing.T) {
 	}
 }
 
-// Copilot's launch command applies neither pin, so both flags fail fast at
-// delegate time instead of being silently dropped by the spawned session.
 func TestDelegateRejectsModelEffortForUnsupportedAgent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -766,10 +741,8 @@ func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 		}
 		d.handleClientMessage(client, payload)
 
-		// handleDelegateWS polls the operation every 100ms until it leaves
-		// accepted/preparing. A settled bubble means that poll is the only thing
-		// left that can move, so run a generous number of them out — on the fake
-		// clock they are free.
+		// handleDelegateWS polls the operation every 100ms; on the fake clock a
+		// generous run-out is free.
 		time.Sleep(time.Second)
 		outbound := requireOutbound(t, client, "no delegate_result reached the client")
 		var result protocol.DelegateResultMessage
@@ -1025,9 +998,6 @@ func TestDelegateTruncatesLongWorktreeDefaultName(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-delegated-long")
 
-	// No --name; the worktree folder basename ("repo--feat-delegated-long", 26
-	// runes) exceeds maxDelegationNameRunes. A derived name is truncated instead
-	// of rejected, so the delegation succeeds with a shortened, clean name.
 	result, err := d.delegate(&protocol.DelegateMessage{
 		Cmd:             protocol.CmdDelegate,
 		SourceSessionID: sourceSessionID,
@@ -1175,12 +1145,12 @@ func TestValidateDelegationName(t *testing.T) {
 		input             string
 		creatingWorkspace bool
 		targetWorkspaceID string
-		wantErr           string // substring; "" means expect success
+		wantErr           string
 	}{
 		{"sixteen ASCII accepted", strings.Repeat("a", 16), false, "", ""},
 		{"seventeen ASCII rejected", strings.Repeat("a", 17), false, "", "too long"},
-		{"sixteen runes accepted", strings.Repeat("é", 16), false, "", ""},           // 16 runes, 32 bytes
-		{"seventeen runes rejected", strings.Repeat("é", 17), false, "", "too long"}, // 17 runes
+		{"sixteen runes accepted", strings.Repeat("é", 16), false, "", ""},
+		{"seventeen runes rejected", strings.Repeat("é", 17), false, "", "too long"},
 		{"blank rejected", "   ", false, "", "a name is required"},
 		{"dot rejected", ".", false, "", "not a usable name"},
 		{"separator rejected", string(filepath.Separator), false, "", "not a usable name"},
@@ -1213,8 +1183,6 @@ func TestDelegateRejectsDuplicateWorkspaceNameFromDefault(t *testing.T) {
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "ws-existing", Title: "myproj", Directory: t.TempDir(),
 	})
-	// No --name: the directory basename defaults to "myproj", which collides
-	// with the existing workspace title. The default path must still validate.
 	targetDir := filepath.Join(t.TempDir(), "myproj")
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
@@ -1242,8 +1210,6 @@ func TestDelegateRejectsNameMatchingSourceSession(t *testing.T) {
 	if source == nil || strings.TrimSpace(source.Label) == "" {
 		t.Fatalf("source session has no label: %+v", source)
 	}
-	// Delegating into the current workspace with the source session's own label
-	// (different case) must be rejected as a within-workspace duplicate.
 	_, err := d.delegate(&protocol.DelegateMessage{
 		Cmd:             protocol.CmdDelegate,
 		SourceSessionID: sourceSessionID,
@@ -1611,10 +1577,6 @@ func TestDelegateRollsBackNewWorkspaceAndWorktreeWhenSpawnFails(t *testing.T) {
 	}
 }
 
-// TestDelegateComposesCwdAndWorktree covers the new_workspace placement with
-// both --cwd and --worktree set: the worktree's repo and starting ref are
-// inferred from the cwd (not the source session's directory), and the new
-// workspace ends up placed at the created worktree path, not the cwd itself.
 func TestDelegateComposesCwdAndWorktree(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -1626,8 +1588,6 @@ func TestDelegateComposesCwdAndWorktree(t *testing.T) {
 
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
-	// Source session lives elsewhere so a correct implementation must infer
-	// the worktree's repo/starting-ref from --cwd, not from the source.
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 	worktreePath := filepath.Join(root, "repo--feat-cwd-compose")
@@ -1668,10 +1628,6 @@ func TestDelegateComposesCwdAndWorktree(t *testing.T) {
 	}
 }
 
-// TestDelegateComposedCwdWorktreeRequiresRepoWhenNotAGitRepo covers the
-// failure mode: a --cwd that is not itself a git repository, combined with
-// --worktree and no --repo, must still surface the existing "pass --repo"
-// error rather than silently falling back to the source session's repo.
 func TestDelegateComposedCwdWorktreeRequiresRepoWhenNotAGitRepo(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -1694,10 +1650,6 @@ func TestDelegateComposedCwdWorktreeRequiresRepoWhenNotAGitRepo(t *testing.T) {
 	}
 }
 
-// TestDelegateTruncatesLongDirectoryDefaultName covers the plain (no
-// worktree) new_workspace case: a directory whose basename exceeds
-// maxDelegationNameRunes, with no explicit --name, gets a truncated name
-// instead of a rejected delegation.
 func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -1732,7 +1684,6 @@ func TestDelegateTruncatesLongDirectoryDefaultName(t *testing.T) {
 	}
 }
 
-// initDelegationRepo creates a real git repository with one commit.
 func initDelegationRepo(t *testing.T, root, name string) string {
 	t.Helper()
 	repo := filepath.Join(root, name)
@@ -1744,8 +1695,6 @@ func initDelegationRepo(t *testing.T, root, name string) string {
 	return git.CanonicalizePath(repo)
 }
 
-// addWorkspaceSessionAt spawns an extra session into an existing workspace at
-// the given directory, the way a real pane in that workspace would exist.
 func addWorkspaceSessionAt(t *testing.T, d *Daemon, workspaceID, sessionID, cwd string) {
 	t.Helper()
 	client := newWorkspaceProtocolTestClient()
@@ -1771,14 +1720,6 @@ func addWorkspaceSessionAt(t *testing.T, d *Daemon, workspaceID, sessionID, cwd 
 	expectSpawnResult(t, client, sessionID, true)
 }
 
-// TestDelegateWorktreeIgnoresStaleWorkspaceDirectory is the regression test for
-// a worktree landing in the wrong repository. The target workspace holds a
-// session in repoA, but its stored directory has drifted to repoB — which is
-// what production does, since AddWorkspace overwrites directory on every
-// re-registration and never recomputes it from member sessions.
-//
-// The worktree must be created off repoA (where the workspace's session
-// actually lives), and nothing at all may appear beside repoB.
 func TestDelegateWorktreeIgnoresStaleWorkspaceDirectory(t *testing.T) {
 	root := t.TempDir()
 	repoA := initDelegationRepo(t, root, "repo-a")
@@ -1797,8 +1738,6 @@ func TestDelegateWorktreeIgnoresStaleWorkspaceDirectory(t *testing.T) {
 		Directory: repoA,
 	})
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-target", repoA)
-	// Drift the stored directory to an unrelated repo, exactly as a
-	// re-registration does in production.
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd:       protocol.CmdRegisterWorkspace,
 		ID:        targetWorkspaceID,
@@ -1831,16 +1770,12 @@ func TestDelegateWorktreeIgnoresStaleWorkspaceDirectory(t *testing.T) {
 	if main := git.GetMainRepoFromWorktree(result.Directory); git.CanonicalizePath(main) != repoA {
 		t.Fatalf("worktree main repo = %q, want %q", main, repoA)
 	}
-	// The decisive assertion: no worktree may exist anywhere beside repoB.
 	strayPath := git.CanonicalizePath(git.GenerateWorktreePath(repoB, "feat/right-repo"))
 	if _, statErr := os.Stat(strayPath); !os.IsNotExist(statErr) {
 		t.Fatalf("worktree created in the wrong repository at %s", strayPath)
 	}
 }
 
-// TestDelegateWorktreeAmbiguousWorkspaceRepoRequiresRepo covers the case the
-// member sessions cannot settle: they span two repositories, so there is no
-// defensible inference. Fail and name --repo rather than pick one silently.
 func TestDelegateWorktreeAmbiguousWorkspaceRepoRequiresRepo(t *testing.T) {
 	root := t.TempDir()
 	repoA := initDelegationRepo(t, root, "repo-a")
@@ -1882,8 +1817,6 @@ func TestDelegateWorktreeAmbiguousWorkspaceRepoRequiresRepo(t *testing.T) {
 	}
 }
 
-// TestDelegateWorktreeExplicitRepoOverridesWorkspaceSessions confirms --repo
-// still wins over the inferred repository.
 func TestDelegateWorktreeExplicitRepoOverridesWorkspaceSessions(t *testing.T) {
 	root := t.TempDir()
 	repoA := initDelegationRepo(t, root, "repo-a")
@@ -1924,11 +1857,6 @@ func TestDelegateWorktreeExplicitRepoOverridesWorkspaceSessions(t *testing.T) {
 	}
 }
 
-// TestDelegateNamedWorktreeUsesRepoDefaultForEveryPlacement protects named
-// --worktree delegations from inheriting ambient checkout state. Automatic
-// branch names already resolve the default in applyDefaultDelegationWorktree;
-// these are the placement paths that previously let an omitted --from inherit
-// the branch checked out in the source directory or --cwd.
 func TestDelegateNamedWorktreeUsesRepoDefaultForEveryPlacement(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1995,27 +1923,12 @@ func TestDelegateNamedWorktreeUsesRepoDefaultForEveryPlacement(t *testing.T) {
 	}
 }
 
-// TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault covers the case
-// where a workspace's member sessions sit in different worktrees of the SAME
-// main repository, each on its own branch. The repository is unambiguous, so
-// the delegation must succeed — but no member session's branch is a defensible
-// starting point, and picking a representative session would make the starting
-// ref depend on session-id ordering.
-//
-// The new branch must therefore start from the repository's default branch,
-// matching neither member branch, regardless of which session sorts first.
-//
-// The main checkout is deliberately parked on a divergent topic branch: an
-// implementation that leaves StartingFrom empty gets `git worktree add -b`'s
-// current-HEAD behaviour, so its ambient checkout would steer the delegation.
 func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) {
 	root := t.TempDir()
 	repo := initDelegationRepo(t, root, "repo")
 	runGitDaemon(t, repo, "branch", "-M", "main")
 	mainHead := gitRevParseDaemon(t, repo, "HEAD")
 
-	// Two sibling worktrees of the same repo, each with its own extra commit so
-	// their heads differ from main and from each other.
 	worktreeA := filepath.Join(root, "repo--feat-a")
 	worktreeB := filepath.Join(root, "repo--feat-b")
 	runGitDaemon(t, repo, "worktree", "add", "-b", "feat/a", worktreeA)
@@ -2025,8 +1938,6 @@ func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) 
 	headA := gitRevParseDaemon(t, worktreeA, "HEAD")
 	headB := gitRevParseDaemon(t, worktreeB, "HEAD")
 
-	// Park the main checkout somewhere other than the default branch. Nothing
-	// about the delegation may depend on this.
 	runGitDaemon(t, repo, "checkout", "-q", "-b", "topic/ambient")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "ambient")
 	ambientHead := gitRevParseDaemon(t, repo, "HEAD")
@@ -2046,8 +1957,6 @@ func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) 
 		Title:     "Target",
 		Directory: repo,
 	})
-	// "session-a" sorts before "session-b", so an ordering-dependent
-	// implementation starts the new branch from feat/a.
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-a", worktreeA)
 	addWorkspaceSessionAt(t, d, targetWorkspaceID, "session-b", worktreeB)
 
@@ -2084,8 +1993,6 @@ func TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault(t *testing.T) 
 	}
 }
 
-// TestDelegateWorktreeExplicitFromStillWins confirms an explicit --from is
-// still honoured for an existing-workspace placement.
 func TestDelegateWorktreeExplicitFromStillWins(t *testing.T) {
 	root := t.TempDir()
 	repo := initDelegationRepo(t, root, "repo")
@@ -2129,10 +2036,6 @@ func TestDelegateWorktreeExplicitFromStillWins(t *testing.T) {
 	}
 }
 
-// TestDelegateWorktreePrefersRemoteDefaultBranch pins the documented preference
-// for the remote-tracking default branch: a delegated worktree should start from
-// what upstream has, not from a stale local default. The local default branch is
-// deliberately left behind origin's.
 func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
@@ -2144,9 +2047,6 @@ func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
 	runGitDaemon(t, repo, "push", "-q", "-u", "origin", "main")
 	staleLocalHead := gitRevParseDaemon(t, repo, "main")
 
-	// Advance origin/main beyond the local default branch, then leave the local
-	// checkout behind. A clone elsewhere is the least contrived way to push a
-	// commit the local repo does not have.
 	other := filepath.Join(root, "other")
 	runGitDaemon(t, root, "clone", "-q", origin, other)
 	runGitDaemon(t, other, "commit", "--allow-empty", "-m", "upstream advance")
@@ -2193,12 +2093,6 @@ func TestDelegateWorktreePrefersRemoteDefaultBranch(t *testing.T) {
 	}
 }
 
-// TestDelegateWorktreeExplicitRepoStillUsesRepoDefault covers the same
-// contract as TestDelegateWorktreeSameRepoDifferentBranchesUsesRepoDefault,
-// but with an explicit --repo. --repo selects the repository; only --from may
-// select a non-default starting ref. The workspace's recorded directory is a
-// worktree of that same repository on a divergent branch, so an implementation
-// that keeps it as the start-ref base would inherit that branch instead.
 func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
@@ -2209,20 +2103,15 @@ func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
 	runGitDaemon(t, repo, "remote", "add", "origin", origin)
 	runGitDaemon(t, repo, "push", "-q", "-u", "origin", "main")
 
-	// The workspace's recorded directory: a worktree of the same repository,
-	// parked on its own branch.
 	legacy := filepath.Join(root, "repo--legacy")
 	runGitDaemon(t, repo, "worktree", "add", "-b", "topic/legacy", legacy)
 	runGitDaemon(t, legacy, "commit", "--allow-empty", "-m", "legacy")
 	legacyHead := gitRevParseDaemon(t, legacy, "HEAD")
 
-	// The main checkout is parked elsewhere too, so falling through to
-	// `git worktree add -b`'s current-HEAD behaviour is also detectable.
 	runGitDaemon(t, repo, "checkout", "-q", "-b", "topic/ambient")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "ambient")
 	ambientHead := gitRevParseDaemon(t, repo, "HEAD")
 
-	// Advance origin/main past the local default branch.
 	other := filepath.Join(root, "other")
 	runGitDaemon(t, root, "clone", "-q", origin, other)
 	runGitDaemon(t, other, "commit", "--allow-empty", "-m", "upstream advance")
@@ -2271,10 +2160,6 @@ func TestDelegateWorktreeExplicitRepoStillUsesRepoDefault(t *testing.T) {
 	}
 }
 
-// A failure at the last step of the delegation saga — past a live session — has
-// the deepest compensation set: session, pane, workspace, worktree. This is what
-// proves the rollback stack unwinds everything rather than the subset a
-// particular failure site happened to list.
 func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 	root := t.TempDir()
 	mainRepo := filepath.Join(root, "repo")
@@ -2305,11 +2190,9 @@ func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 		t.Fatal("delegate() succeeded, want the seeded final-step failure")
 	}
 
-	// The worktree it created is gone.
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("worktree still exists after rollback: %v", err)
 	}
-	// The workspace it created is gone; the source workspace survives untouched.
 	workspaces := d.store.ListWorkspaces()
 	if len(workspaces) != 1 || workspaces[0].ID != sourceWorkspaceID {
 		t.Fatalf("workspaces after rollback = %+v, want only the source workspace", workspaces)
@@ -2318,7 +2201,6 @@ func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 		len(layout.Panes) != 1 || layout.Panes[0].SessionID != sourceSessionID {
 		t.Fatalf("source workspace layout after rollback = %+v", layout)
 	}
-	// No orphan session or pane is left behind.
 	for _, session := range d.store.List("") {
 		if session.ID != sourceSessionID {
 			t.Fatalf("delegated session %q survived the rollback", session.ID)
@@ -2326,10 +2208,6 @@ func TestDelegateRollsBackEverythingWhenTheFinalStepFails(t *testing.T) {
 	}
 }
 
-// The same deepest failure, but delegating into the SOURCE workspace: no workspace
-// is created, so unregistering one cannot incidentally take the session with it.
-// The session compensation is the only thing that can remove the spawned session,
-// which is what makes this the load-bearing case for it.
 func TestDelegateRollsBackSpawnedSessionWhenTheFinalStepFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -2356,8 +2234,6 @@ func TestDelegateRollsBackSpawnedSessionWhenTheFinalStepFails(t *testing.T) {
 	}
 }
 
-// A bare delegation from a non-repository source used to silently launch with no
-// checkout at all. It now refuses and names the flags that place it.
 func TestDelegateRefusesDefaultWorktreeFromNonRepoSource(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -2381,8 +2257,6 @@ func TestDelegateRefusesDefaultWorktreeFromNonRepoSource(t *testing.T) {
 	}
 }
 
-// Every explicit placement flag is consent to the target it names, so none of
-// them meets the gate — even when the target has no repository.
 func TestDelegateExplicitPlacementBypassesNonRepoGate(t *testing.T) {
 	nonRepo := t.TempDir()
 	otherWorkspaceDir := t.TempDir()

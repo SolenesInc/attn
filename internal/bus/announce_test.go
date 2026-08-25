@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-// Announce is the entry point for facts the bus did not append itself — a store
-// transaction that committed a change together with the fact describing it. The
-// contract it has to hold is ordering: whoever wrote to the log, subscribers see
-// it in seq order, exactly once.
-
-// A subscriber that watches the same names.
 func watchAll(b *Bus) (func() []Event, func()) {
 	var (
 		mu   sync.Mutex
@@ -48,8 +42,6 @@ func inOrder(seqs []int64) bool {
 	return true
 }
 
-// The plain case: a fact that arrived on the log without going through Publish
-// still reaches subscribers, carrying the seq it was appended at.
 func TestAnnounceDeliversWhatTheLogGainedWithoutPublish(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -68,9 +60,6 @@ func TestAnnounceDeliversWhatTheLogGainedWithoutPublish(t *testing.T) {
 	}
 }
 
-// Announcing is reading forward from a mark, so announcing twice delivers once.
-// This is what lets a caller announce unconditionally after a commit without
-// knowing whether anyone else already did.
 func TestAnnouncingTwiceDeliversOnce(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -87,9 +76,6 @@ func TestAnnouncingTwiceDeliversOnce(t *testing.T) {
 	}
 }
 
-// A bus attached to a log that already has history announces what happens next,
-// not the history — otherwise every daemon start would replay the log at every
-// live subscriber.
 func TestAnnounceDoesNotReplayWhatWasThereBeforeTheBus(t *testing.T) {
 	s := newMemStore()
 	now := time.Now()
@@ -113,10 +99,6 @@ func TestAnnounceDoesNotReplayWhatWasThereBeforeTheBus(t *testing.T) {
 	}
 }
 
-// The ordering property, under the race it exists for: writers commit their
-// facts and then race to announce, and Publish runs against the same mark. Every
-// subscriber must see the log's own order, and see each fact once — never a
-// later seq before an earlier one because its announcer won the race.
 func TestRacingWritersDeliverTheLogsOrderExactlyOnce(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -137,14 +119,11 @@ func TestRacingWritersDeliverTheLogsOrderExactlyOnce(t *testing.T) {
 			defer done.Done()
 			start.Wait()
 			for i := range each {
-				// Commit, then announce — the shape of a composite write. The
-				// gap between the two is where the ordering race lives.
 				if w%2 == 0 {
 					s.appendOutOfBand("document.changed", "app/x/requests/a", time.Now())
 					b.Announce()
 					continue
 				}
-				// Publishes interleave with committed writes on the same mark.
 				if _, err := b.Publish("session.state.changed", "s", map[string]int{"i": i}); err != nil {
 					t.Errorf("publish: %v", err)
 					return
@@ -154,8 +133,6 @@ func TestRacingWritersDeliverTheLogsOrderExactlyOnce(t *testing.T) {
 	}
 	start.Done()
 	done.Wait()
-	// A commit whose announce lost every race is repaired by the next announce;
-	// one final call stands in for the retention tick that would do it anyway.
 	b.Announce()
 
 	got := seqsOf(seen())
@@ -167,9 +144,6 @@ func TestRacingWritersDeliverTheLogsOrderExactlyOnce(t *testing.T) {
 	}
 }
 
-// A bus with no store has no log to read forward from, so Announce is a no-op
-// rather than a panic: the same degradation Publish already makes, and the
-// shape every test daemon runs in.
 func TestAnnounceWithoutAStoreDoesNothing(t *testing.T) {
 	b := New(Options{Log: func(string, ...interface{}) {}})
 	seen, stop := watchAll(b)
@@ -181,8 +155,6 @@ func TestAnnounceWithoutAStoreDoesNothing(t *testing.T) {
 	}
 }
 
-// Compaction is driven from here — the bus decides which names are compactable
-// and where the floor is; the store only runs the SQL. Trim reports both.
 func TestTrimCompactsTheNamesTheBusDeclared(t *testing.T) {
 	s := newMemStore()
 	b := New(Options{
@@ -220,9 +192,8 @@ func TestTrimCompactsTheNamesTheBusDeclared(t *testing.T) {
 	}
 }
 
-// A bus that declared nothing compactable compacts nothing, however much churn
-// the log holds. Compaction is opt-in per fact class because it is only sound
-// for facts that are pure invalidations.
+// Compaction is opt-in per fact class: it is only sound for facts that are pure
+// invalidations.
 func TestTrimCompactsNothingWhenNoNameWasDeclared(t *testing.T) {
 	s := newMemStore()
 	b := New(Options{Store: s, Log: func(string, ...interface{}) {}, Retention: time.Hour})
@@ -244,10 +215,8 @@ func TestTrimCompactsNothingWhenNoNameWasDeclared(t *testing.T) {
 	}
 }
 
-// A bus that could not learn where the log stands must not announce. The mark's
-// zero value means "everything after seq 0", so announcing on an unplaced mark
-// replays the entire log into every live client — the failure the mark exists to
-// prevent, arriving through the door meant to prevent it.
+// The mark's zero value means "everything after seq 0", so announcing on an
+// unplaced mark replays the entire log into every live client.
 func TestABusThatCouldNotFindTheHeadDoesNotReplayTheLog(t *testing.T) {
 	s := newMemStore()
 	now := time.Now()
@@ -265,8 +234,6 @@ func TestABusThatCouldNotFindTheHeadDoesNotReplayTheLog(t *testing.T) {
 		t.Fatalf("a bus with no mark announced %d historical fact(s)", len(got))
 	}
 
-	// A publish still reaches subscribers while the mark is unplaced: losing the
-	// mark must not silence the wire.
 	if _, err := b.Publish("session.state.changed", "s-1", nil); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -274,8 +241,6 @@ func TestABusThatCouldNotFindTheHeadDoesNotReplayTheLog(t *testing.T) {
 		t.Fatalf("a publish under an unplaced mark delivered %d event(s), want 1", len(got))
 	}
 
-	// Once the log answers, the mark is placed from head and only what happens
-	// next is announced — the history stays unreplayed.
 	s.setBoundsErr(nil)
 	b.Announce()
 	if got := seen(); len(got) != 1 {
@@ -289,8 +254,6 @@ func TestABusThatCouldNotFindTheHeadDoesNotReplayTheLog(t *testing.T) {
 	}
 }
 
-// A pass that could not run is not a pass that found nothing. `attn bus trim`
-// exits on this, and "removed 0" is what a clean log prints too.
 func TestTrimReportsAPassThatCouldNotRun(t *testing.T) {
 	s := newMemStore()
 	b := New(Options{
@@ -304,8 +267,6 @@ func TestTrimReportsAPassThatCouldNotRun(t *testing.T) {
 		s.appendOutOfBand("document.changed", "app/x/requests/a", now)
 	}
 
-	// consumerFloor reads the bounds when no enabled consumer is registered, so
-	// a log that will not say where it stands cannot be compacted safely.
 	s.setBoundsErr(errors.New("the log would not say where it stands"))
 	removed, err := b.Trim()
 	if err == nil {

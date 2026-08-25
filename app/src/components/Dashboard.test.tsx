@@ -11,9 +11,6 @@ vi.mock('../contexts/DaemonContext', () => ({
   }),
 }));
 
-// The PR filter is the daemon-facing half of the card and has its own tests;
-// what home is responsible for is how it arranges what comes back, so the hook
-// is stubbed with a list the test controls.
 const prFilter = vi.hoisted(() => ({
   activePRs: [] as unknown[],
   needsAttention: [] as unknown[],
@@ -241,8 +238,6 @@ describe('Dashboard in queue mode', () => {
     const names = Array.from(turns.querySelectorAll('.session-name')).map((n) => n.textContent);
     expect(names).toEqual(['older', 'newer']);
 
-    // The settled agent is still in waiting_input, so the state group exists —
-    // but it holds only the agent whose turn is closed.
     const waiting = screen.getByTestId('session-group-waiting');
     expect(waiting).toContainElement(screen.getByTestId('session-s3'));
     expect(waiting).not.toContainElement(screen.getByTestId('session-s1'));
@@ -250,10 +245,6 @@ describe('Dashboard in queue mode', () => {
     expect(screen.queryByTestId('all-settled')).not.toBeInTheDocument();
   });
 
-  // `home_get_state` reports which agents are still grouped by what they are
-  // doing, and reads that marker to find them. Only the groups that answer that
-  // question carry it — the turn band and the snoozed section share the testid
-  // prefix and answer a different one.
   it('marks the state groups so a reader can tell them from the turn band', () => {
     const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     render(
@@ -333,10 +324,6 @@ describe('Dashboard in queue mode', () => {
     expect(screen.getByTestId('session-group-waiting')).toContainElement(screen.getByTestId('session-s1'));
   });
 
-  // The wait has to be visible and reversible from the screen it happens on:
-  // being moved to another agent without having been told is the surprise the
-  // switch exists to remove, and an armed latch with no way off is a one-way
-  // door.
   describe('the follow-next-turn switch', () => {
     const settled = [{ id: 's1', label: 'busy', state: 'working' as const, cwd: '/a', turnOwed: false }];
 
@@ -381,9 +368,6 @@ describe('Dashboard in queue mode', () => {
   });
 });
 
-// A snooze is an answer to "whose turn is it" — not yours, not yet — so a
-// deferred agent's state has stopped describing anything the user asked about.
-// Leaving it under Working or Idle is what these cover.
 describe('Dashboard snoozed agents', () => {
   const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const props = {
@@ -453,8 +437,6 @@ describe('Dashboard snoozed agents', () => {
     expect(onWakeTurn).toHaveBeenCalledWith('s1');
   });
 
-  // Every other way to end a snooze early is queue-gated, so with the
-  // arrangement off this section is the deferral's only way out.
   it('still shows deferred agents, and the way to wake them, with the queue off', () => {
     const onWakeTurn = vi.fn();
     render(
@@ -472,8 +454,6 @@ describe('Dashboard snoozed agents', () => {
     expect(screen.getByTestId('session-wake-s1')).toBeInTheDocument();
   });
 
-  // The sidebar pulls the chief out of its bands entirely; home lists it with
-  // the rest, so a deferred chief has to land here or it lands nowhere true.
   it('collects a deferred chief too', () => {
     render(
       <Dashboard
@@ -548,7 +528,6 @@ describe('Dashboard pull requests', () => {
     expect(yours.querySelectorAll('[data-testid="pr-card"]')).toHaveLength(2);
     expect(Array.from(yours.querySelectorAll('.pr-repo-inline')).map((n) => n.textContent))
       .toEqual(['attn', 'tool']);
-    // No repo groups on this side — the repo is on the row.
     expect(yours.querySelector('.pr-repo-group')).toBeNull();
 
     const review = screen.getByTestId('pr-section-review');
@@ -593,8 +572,6 @@ describe('Dashboard session activity', () => {
     expect(screen.getByTestId('session-activity-s1')).not.toHaveAttribute('data-stale');
   });
 
-  // Generation stops entirely while nobody is watching, so an old line is a
-  // statement about whenever someone last looked — not about now.
   it('marks a line that stopped being refreshed as stale', () => {
     const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     renderWith({ activity: 'running the frontend test suite', activityAt: longAgo });
@@ -602,9 +579,6 @@ describe('Dashboard session activity', () => {
     expect(screen.getByTestId('session-activity-s1')).toHaveAttribute('data-stale', 'true');
   });
 
-  // The staleness window follows the configured cadence. Measured against the
-  // default 15 minutes, a user who slowed generation to half an hour would watch
-  // every line dim the moment it was written.
   it('takes the staleness window from the configured cadence', () => {
     const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
     renderWith(

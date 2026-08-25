@@ -35,8 +35,6 @@ func list(t *testing.T, d *Daemon, msg protocol.SeedListMessage) protocol.SeedLi
 	return *resp.SeedListResult
 }
 
-// A plot is one command: the crown, its children, and the sequencing between
-// them, all landing together so an agent captures a chunk of work in one move.
 func TestGardenPlot_PlantsACrownWithItsChildren(t *testing.T) {
 	d := newGardenDaemon(t)
 	result := plot(t, d, protocol.SeedPlotMessage{
@@ -65,8 +63,6 @@ func TestGardenPlot_PlantsACrownWithItsChildren(t *testing.T) {
 		}
 	}
 
-	// Every child is part-of the crown, and only the one that said so carries a
-	// blocks edge: children are parallel by default.
 	for slug, child := range byID {
 		parents, blocks := 0, 0
 		for _, edge := range child.Edges {
@@ -88,22 +84,16 @@ func TestGardenPlot_PlantsACrownWithItsChildren(t *testing.T) {
 			t.Fatalf("child %s has %d part-of and %d blocks edges, want 1 and %d", slug, parents, blocks, want)
 		}
 	}
-	// The blocks edge names a real sibling id, not a slug: the plot is minted
-	// before it is written precisely so the edges can point at something.
 	if got := byID["third-step"].Edges; got[1].To != byID["second-step"].ID {
 		t.Fatalf("third-step blocks %q, want the sibling %s", got[1].To, byID["second-step"].ID)
 	}
 
-	// Ready reads the sequencing straight away: two of three are pickable, the
-	// blocked one waits, and the crown is never its own work.
 	got := readyIDs(ready(t, d, protocol.SeedReadyMessage{Plot: protocol.Ptr(result.Crown.ID)}))
 	if len(got) != 2 {
 		t.Fatalf("ready in the fresh plot = %v, want the two unblocked children", got)
 	}
 }
 
-// The whole plot is validated before anything is written: a payload that names
-// a sibling nobody has must leave the garden exactly as it found it.
 func TestGardenPlot_RefusesBeforeWritingAnything(t *testing.T) {
 	d := newGardenDaemon(t)
 	resp := gardenCall(t, func(c net.Conn) {
@@ -120,8 +110,6 @@ func TestGardenPlot_RefusesBeforeWritingAnything(t *testing.T) {
 	}
 }
 
-// One push for a whole plot, not one per seed: a panel that repaints once per
-// child would flicker through a plot's planting.
 func TestGardenPlot_PushesTheGardenOnce(t *testing.T) {
 	d := newGardenDaemon(t)
 	var pushes int
@@ -136,8 +124,6 @@ func TestGardenPlot_PushesTheGardenOnce(t *testing.T) {
 	}
 }
 
-// Planting under a crown is the one-seed form of the same move, and it refuses
-// an edge to a seed that is not here rather than planting an orphan.
 func TestGardenPlot_PlantUnderACrown(t *testing.T) {
 	d := newGardenDaemon(t)
 	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "the plot"})
@@ -158,8 +144,6 @@ func TestGardenPlot_PlantUnderACrown(t *testing.T) {
 	}
 }
 
-// A crown wears its plot everywhere a seed is rendered — the listing that a
-// panel row is built from, and the seed's own page.
 func TestGardenPlot_ProgressRidesWithTheCrown(t *testing.T) {
 	d := newGardenDaemon(t)
 	result := plot(t, d, protocol.SeedPlotMessage{
@@ -180,8 +164,6 @@ func TestGardenPlot_ProgressRidesWithTheCrown(t *testing.T) {
 				t.Fatalf("listed crown progress = %+v, want %+v", seed.PlotProgress, want)
 			}
 		default:
-			// A childless seed has no plot, and an empty progress block on every
-			// row would render "0 of 0 done" beside ordinary work.
 			if seed.PlotProgress != nil {
 				t.Fatalf("seed %s carries a plot it does not have: %+v", seed.ID, seed.PlotProgress)
 			}
@@ -189,8 +171,6 @@ func TestGardenPlot_ProgressRidesWithTheCrown(t *testing.T) {
 	}
 }
 
-// The stale query names open seeds nothing has touched inside the window, and
-// says which window it applied — the rule is half the answer.
 func TestGardenPlot_StaleNamesTheQuietOpenSeeds(t *testing.T) {
 	d := newGardenDaemon(t)
 	fresh := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "just planted"})
@@ -218,7 +198,6 @@ func TestGardenPlot_StaleNamesTheQuietOpenSeeds(t *testing.T) {
 		t.Fatal("a seed planted a moment ago was called stale")
 	}
 
-	// The window is the caller's to move, and the answer says what it used.
 	wide := list(t, d, protocol.SeedListMessage{
 		Stale: protocol.Ptr(true), StaleWindowSeconds: protocol.Ptr(int((100 * 24 * time.Hour) / time.Second)),
 	})
@@ -227,9 +206,6 @@ func TestGardenPlot_StaleNamesTheQuietOpenSeeds(t *testing.T) {
 	}
 }
 
-// A note is log movement even when the seed document itself never changed:
-// somebody writing down what they learned is exactly the seed not being
-// neglected.
 func TestGardenPlot_StaleReadsTheLogNotJustTheDocument(t *testing.T) {
 	d := newGardenDaemon(t)
 	quiet := plantAt(t, d, "old document, live log", time.Now().Add(-30*24*time.Hour))
@@ -250,9 +226,6 @@ func TestGardenPlot_StaleReadsTheLogNotJustTheDocument(t *testing.T) {
 	}
 }
 
-// plantAt writes a seed stamped in the past, which is the only way to witness a
-// window that a test may not wait out. It goes through the same document write
-// the daemon uses, so the stamp is the one the query reads.
 func plantAt(t *testing.T, d *Daemon, title string, at time.Time) string {
 	t.Helper()
 	schema, err := d.seedsCollection()
@@ -280,9 +253,8 @@ func plantAt(t *testing.T, d *Daemon, title string, at time.Time) string {
 	return id
 }
 
-// Dispatch-at-plot rides the delegation: the record is written before the
-// runtime spawns, because the launch primer reads it — a delegate must launch
-// already knowing its plot rather than discovering it on its second command.
+// The dispatch record is written before the runtime spawns because the launch
+// primer reads it: a delegate must launch already knowing its plot.
 func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)
@@ -298,8 +270,6 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 
 	var primed *protocol.SeedReadyResult
 	backend.onSpawn = func(ptybackend.SpawnOptions) {
-		// Read where the launch guidance reads it: after the dispatch is
-		// recorded and while the session is spawning.
 		primed, _ = d.gardenPrime(delegatedSessionID(t, d, sourceSessionID))
 	}
 
@@ -320,8 +290,6 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 		t.Fatalf("primed with %+v, want the crown and its one ready child", primed.Crown)
 	}
 
-	// Scope, not a fence: the delegate's flag-free ready is the plot, and the
-	// seed outside it is still there to be tended.
 	scoped := ready(t, d, protocol.SeedReadyMessage{SourceSessionID: protocol.Ptr(result.SessionID)})
 	if scoped.Scope != "plot" || len(scoped.Seeds) != 1 {
 		t.Fatalf("the delegate's flag-free ready = %+v, want its plot", scoped)
@@ -334,8 +302,6 @@ func TestGardenPlot_DelegationDispatchesAtACrown(t *testing.T) {
 	}
 }
 
-// A delegation aimed at a seed that is not here refuses before any worktree or
-// runtime side effect: launching unaimed is worse than not launching.
 func TestGardenPlot_DelegationRefusesACrownThatIsNotHere(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)
@@ -358,8 +324,6 @@ func TestGardenPlot_DelegationRefusesACrownThatIsNotHere(t *testing.T) {
 	}
 }
 
-// delegatedSessionID is the one session in the source workspace that is not the
-// source itself — the delegate, mid-spawn, before delegate() returns its id.
 func delegatedSessionID(t *testing.T, d *Daemon, sourceSessionID string) string {
 	t.Helper()
 	for _, session := range d.store.List("") {
@@ -371,10 +335,6 @@ func delegatedSessionID(t *testing.T, d *Daemon, sourceSessionID string) string 
 	return ""
 }
 
-// The primer and flag-free `ready` are two builders over one answer: the daemon
-// composes the launch block, the CLI renders the wire result. Undispatched, the
-// count is pinned elsewhere; dispatched, this is the pin — same seeds, same
-// order, or a delegate is primed with work its own `ready` will not offer.
 func TestGardenPlot_ThePrimerAndReadyAgreeInsideAPlot(t *testing.T) {
 	d := newGardenDaemon(t)
 	planted := plot(t, d, protocol.SeedPlotMessage{

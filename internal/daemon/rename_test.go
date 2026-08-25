@@ -32,8 +32,6 @@ func newRenameTestClient() *wsClient {
 	}
 }
 
-// A renamed session label is persisted and, crucially, survives a respawn that
-// carries a stale label — the stored label is the durable authority.
 func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -61,8 +59,6 @@ func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 		t.Fatalf("stored label = %+v, want renamed", got)
 	}
 
-	// Respawn with a stale label, as a reload from a client with out-of-date
-	// local state would. The rename must not be reverted.
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: "s1", Cwd: dir, Cols: 80, Rows: 24,
 		Agent: "claude", WorkspaceID: "workspace-s1", Label: protocol.Ptr("original"),
@@ -96,10 +92,6 @@ func TestDaemon_HandleRenameWorkspace_PersistsTitle(t *testing.T) {
 	}
 }
 
-// A user rename of a workspace must survive a later register_workspace that
-// carries the old derived title — the kind of stale re-registration a
-// reconnect or retry produces. Without the guard the derived title clobbers
-// the rename in both the store and the in-memory registry.
 func TestDaemon_HandleRegisterWorkspace_PreservesRenamedTitleOnReRegister(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
@@ -119,7 +111,6 @@ func TestDaemon_HandleRegisterWorkspace_PreservesRenamedTitleOnReRegister(t *tes
 		t.Fatalf("rename_result success=false error=%q", protocol.Deref(res.Error))
 	}
 
-	// Reconnect/retry re-registers with the stale derived title.
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "derived-title", Directory: dir,
 	})

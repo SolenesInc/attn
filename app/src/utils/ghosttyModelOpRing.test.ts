@@ -23,7 +23,6 @@ describe('ghosttyModelOpRing', () => {
     const ring = createGhosttyModelOpRing();
     ring.beginEpoch(80, 24);
     const chunk = 64 * 1024;
-    // 9 chunks of 64KB = 576KB against a 512KB cap.
     for (let i = 0; i < 9; i += 1) {
       ring.noteWrite(bytes(chunk, i));
     }
@@ -32,7 +31,6 @@ describe('ghosttyModelOpRing', () => {
     expect(stats.retainedWriteBytes).toBeLessThanOrEqual(MODEL_OP_RING_MAX_BYTES);
     expect(stats.droppedOps).toBe(1);
     expect(stats.droppedWriteBytes).toBe(chunk);
-    // The oldest chunk went; the newest is still there, in order.
     expect(writeOps(ring.ops()).map((op) => op.first)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
@@ -61,7 +59,6 @@ describe('ghosttyModelOpRing', () => {
     const cols = ops.map((op) => (op.kind === 'resize' ? op.cols : -1));
     expect(cols[0]).toBe(110);
     expect(cols[cols.length - 1]).toBe(100 + MODEL_OP_RING_MAX_OPS + 9);
-    // Strictly increasing: eviction must not rotate the ring's contents.
     expect(cols.every((value, index) => index === 0 || value === cols[index - 1] + 1)).toBe(true);
   });
 
@@ -86,16 +83,12 @@ describe('ghosttyModelOpRing', () => {
     ring.noteReset();
     ring.noteWrite(bytes(64, 2));
 
-    // The big first write had to go; everything after it kept its order.
     expect(ring.ops().map((op) => op.kind)).toEqual(['resize', 'reset', 'write']);
   });
 
   it('stores copies, so mutating the caller buffer after the push cannot poison the ring', () => {
     const ring = createGhosttyModelOpRing();
     ring.beginEpoch(80, 24);
-    // The real producers hand over views into buffers they still own: a
-    // WebSocket frame's ArrayBuffer, and one decoded attach-replay buffer shared
-    // by every 16KB chunk cut from it.
     const frame = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
     ring.noteWrite(frame.subarray(2, 6));
     frame.fill(0xff);
@@ -170,10 +163,10 @@ describe('ghosttyModelOpRing', () => {
     let clock = 1000;
     const ring = createGhosttyModelOpRing({ now: () => (clock += 1) });
     ring.beginEpoch(80, 24);
-    ring.noteWrite(new Uint8Array([104, 105])); // "hi"
+    ring.noteWrite(new Uint8Array([104, 105]));
     ring.noteResize(81, 24, true);
     ring.noteReset();
-    ring.noteWrite(new Uint8Array([27, 99])); // ESC c
+    ring.noteWrite(new Uint8Array([27, 99]));
 
     const capture = ring.capture();
     expect(capture.ops.map((op) => op.kind)).toEqual(['write', 'resize', 'reset', 'write']);
@@ -189,9 +182,6 @@ describe('ghosttyModelOpRing', () => {
   it('fits the record budget by dropping oldest ops, and says how many', () => {
     const ring = createGhosttyModelOpRing();
     ring.beginEpoch(80, 24);
-    // The ring caps retained bytes at 512KB; base64 of that plus a full 512KB
-    // snapshot stays under the 2MB record budget, so force the budget path with
-    // an oversized single write (kept whole by design) plus a full snapshot.
     ring.noteRestoreChunk(bytes(MODEL_OP_RING_MAX_SNAPSHOT_BYTES, 1), 100, 30);
     ring.noteWrite(bytes(1024, 2));
     ring.noteWrite(bytes(2 * 1024 * 1024, 3));

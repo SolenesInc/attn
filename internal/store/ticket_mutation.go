@@ -10,41 +10,26 @@ import (
 	"time"
 )
 
-// ErrStaleTicketEventSeq means an app action was based on a ticket detail that
-// no longer represents the latest event. The caller must refresh and retry.
 var ErrStaleTicketEventSeq = errors.New("ticket changed since it was opened")
 
-// TicketMutationObserver is one effective unread view for the updater. Ordinary
-// sessions use the same value for both fields; durable roles keep their cursor
-// while excluding events authored by the concrete session holding the role.
 type TicketMutationObserver struct {
 	CursorIdentity string
 	AuthorIdentity string
 }
 
-// TicketMutationOptions selects exactly one precondition for a content
-// mutation: CLI callers supply Observers for consume-or-mutate, while app callers
-// supply ExpectedEventSeq for optimistic concurrency.
 type TicketMutationOptions struct {
 	Observers        []TicketMutationObserver
 	AttentionKey     string
 	ExpectedEventSeq *int64
 }
 
-// TicketMutationOutcome reports unread activity the mutation consumed. CatchUp is
-// owed to the caller either way; Blocked says whether reading it also cost the
-// caller its write — true means the transaction advanced this ticket's applicable
-// cursors and deliberately did not execute the mutation callback.
 type TicketMutationOutcome struct {
 	CatchUp []TicketEvent
 	Blocked bool
 }
 
-// blocksTicketMutation reports whether an unread event must be read before the
-// caller may write. Only another participant's word does. attn's own bookkeeping
-// (the crash stamp, the crashed→working flip, a reconciliation verdict) records
-// what happened TO a session while it was dead, so refusing on it made a revived
-// agent's first report fail every time — on activity describing its own death.
+// Only another participant's word blocks: attn's own bookkeeping describes what happened
+// while a session was dead, and refusing on it failed every revived agent's first report.
 func blocksTicketMutation(event TicketEvent) bool {
 	return strings.TrimSpace(event.Author) != TicketAuthorAttn
 }

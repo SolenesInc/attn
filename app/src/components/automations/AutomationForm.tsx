@@ -1,10 +1,5 @@
-// Structured automation editor (PR6's replacement for the YAML buffer in
-// AutomationEditor.tsx). Create mode (definitionId null) seeds its own
-// defaults and never talks to the daemon until Save; edit mode loads once on
-// mount (D6 in AutomationEditor's design: the host remounts this component on
-// a fresh key whenever the user opens a different target, so "mount" already
-// means "explicit load" — there is no reason to re-fetch on definitionId
-// churn within one mount).
+// The host remounts on a fresh key per target, so mount already means an explicit
+// load: edit mode reads once on mount and never re-fetches on definitionId churn.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Resolver, useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,7 +18,6 @@ import { setAutomationFormAutomationHandle } from './automationFormAutomation';
 import './AutomationForm.css';
 
 export interface AutomationFormProps {
-  // null → create. Non-null → edit that definition.
   definitionId: string | null;
   getDefinition: (definitionId: string) => Promise<{ specJson: string; definition?: AutomationDefinitionSummary }>;
   applyDefinition: (
@@ -41,8 +35,6 @@ export interface AutomationFormProps {
 type LoadStatus = 'loading' | 'ready' | 'load-error';
 type ModelMode = 'preset' | 'custom';
 
-// errorCode reads the apply/delete/setEnabled promise's optional error code
-// without assuming its shape — a plain Error may or may not carry one.
 function errorCode(err: unknown): string {
   const code = (err as { code?: unknown } | null | undefined)?.code;
   return typeof code === 'string' ? code : '';
@@ -52,19 +44,11 @@ function messageOf(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-// modelModeFor decides which model-select option a loaded model resolves
-// to: '' (agent default) and any catalog preset both render as a selected
-// option in the dropdown itself ('preset' mode, no free-text box); only a
-// nonempty model that ISN'T a catalog preset is "custom" — free text the
-// user (or a CLI-authored definition) typed by hand.
 function modelModeFor(agent: AutomationAgent, model: string): ModelMode {
   if (model === '') return 'preset';
   return LAUNCH_CATALOG[agent].models.some((candidate) => candidate.id === model) ? 'preset' : 'custom';
 }
 
-// Create mode's own defaults — deliberately not the daemon's starter-YAML
-// template (that's a YAML-editor affordance for a text buffer with nothing
-// else to seed it from); this form has structured fields to seed directly.
 function makeCreateDefaults(): AutomationFormValues {
   const firstModel = LAUNCH_CATALOG.codex.models[0];
   return {
@@ -87,10 +71,6 @@ function makeCreateDefaults(): AutomationFormValues {
   };
 }
 
-// flattenFieldErrors turns RHF's nested FieldErrors tree into dot-joined
-// paths → message, for the automation bridge's `errors` field. Handles both
-// nested objects (repositoryOverrides.0.repository) and arrays (RHF
-// represents array errors as objects with numeric-string keys).
 function flattenFieldErrors(errors: Record<string, unknown>, prefix = ''): Record<string, string> {
   let out: Record<string, string> = {};
   for (const key of Object.keys(errors)) {
@@ -137,13 +117,8 @@ export function AutomationForm({
     control,
     formState: { errors },
   } = useForm<AutomationFormValues>({
-    // automationFormSchema is typed z.ZodType<AutomationFormValues>, which
-    // leaves zod's input generic as `unknown` — @hookform/resolvers' zod v4
-    // overloads require the input type to extend RHF's FieldValues, so the
-    // resolver's inferred type doesn't line up with useForm<AutomationFormValues>
-    // without this cast. The runtime behavior (parse AutomationFormValues,
-    // report issues per field) is unaffected; this is purely a typing gap
-    // between the two libraries' zod v4 support.
+    // zod leaves the schema's input generic as `unknown`, which
+    // @hookform/resolvers' zod v4 overloads reject.
     resolver: zodResolver(automationFormSchema as never) as unknown as Resolver<AutomationFormValues>,
     mode: 'onBlur',
     reValidateMode: 'onChange',
@@ -171,8 +146,7 @@ export function AutomationForm({
   const [includeInput, setIncludeInput] = useState('');
   const [excludeInput, setExcludeInput] = useState('');
 
-  // Mount-only initial load — see the file-level comment for why this is
-  // correct without a definitionId dependency (D6 convention).
+  // Mount-only; see the file header for why definitionId is not a dep.
   useEffect(() => {
     if (mode !== 'edit' || !definitionId) return;
     let cancelled = false;
@@ -279,7 +253,6 @@ export function AutomationForm({
     performDelete();
   }, [deleteArmed, performDelete]);
 
-  // Clicking anywhere outside the delete control disarms it.
   useEffect(() => {
     if (!deleteArmed) return;
     function handlePointerDown(event: MouseEvent) {
@@ -311,14 +284,8 @@ export function AutomationForm({
     [setValue],
   );
 
-  // regField wraps register() so a field that is ALREADY showing an error
-  // re-validates on every keystroke, not just the next blur. mode:'onBlur' +
-  // reValidateMode:'onChange' looks like it should give this for free, but
-  // reValidateMode only takes effect after the form's first handleSubmit
-  // call (RHF's documented scope for it) — before that, an existing error
-  // only clears on the field's next blur under mode:'onBlur' alone. Since
-  // the pinned config keeps mode/reValidateMode as given, this closes that
-  // gap explicitly rather than changing the pinned trigger strategy.
+  // RHF's reValidateMode only takes effect after the first handleSubmit, so before
+  // that an already-errored field would clear only on its next blur.
   const regField = useCallback(
     (field: keyof AutomationFormValues) => {
       const base = register(field);
@@ -374,8 +341,6 @@ export function AutomationForm({
         return;
       }
       if (next === '') {
-        // Agent default: the model choice carries no opinion on effort
-        // either, so an already-empty (agent-default) effort stays as-is.
         setModelMode('preset');
         setValue('model', '', { shouldDirty: true, shouldValidate: true });
         setValue('effort', '', { shouldDirty: true, shouldValidate: true });
@@ -385,7 +350,7 @@ export function AutomationForm({
       const preset = catalog.models.find((candidate) => candidate.id === next);
       setValue('model', next, { shouldDirty: true, shouldValidate: true });
       const currentEffort = getValues('effort');
-      if (currentEffort === '') return; // agent-default effort carries across model changes
+      if (currentEffort === '') return;
       const { efforts, defaultEffort } = effortOptionsFor(agent, next);
       if (!efforts.includes(currentEffort)) {
         setValue('effort', preset?.defaultEffort ?? defaultEffort, { shouldDirty: true, shouldValidate: true });
@@ -408,10 +373,7 @@ export function AutomationForm({
     );
   }
 
-  // Publish the UI automation bridge handle (testing/packaged-app harness
-  // only — see automationFormAutomation.ts). Re-registered whenever any
-  // closed-over state changes, same as AutomationEditor's registration
-  // effect, so the bridge always reads through current handlers/state.
+  // Re-registered on every state change so the bridge reads current handlers.
   useEffect(() => {
     setAutomationFormAutomationHandle({
       getState: () => ({
@@ -1067,8 +1029,6 @@ export function AutomationForm({
   );
 }
 
-// Exported for the future host (AutomationsPanel) to size/key this
-// component's mount identity, mirroring automationEditorKey.
 export function automationFormKey(definitionId: string | null): string {
   return definitionId ?? '__new__';
 }

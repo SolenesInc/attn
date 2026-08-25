@@ -1,16 +1,3 @@
-// app/src/components/NotificationsPanel.tsx
-//
-// The global notifications feed, opened from the sidebar bell. It lists durable
-// notifications (newest first), lets the user expand one to read the full body +
-// error detail, mark it read, retry the underlying task, or mark all read. The
-// feed's producer is the daemon task runner (a background task that exhausts its
-// retries), so a notification whose source_kind is "task" carries a Retry that
-// re-queues that task by id.
-//
-// Live data flow: the panel fetches on open and on every changeSignal bump (the
-// notifications_updated broadcast). It never optimistically mutates rows — a
-// mark-read / retry issues the command and the resulting broadcast drives the
-// refetch, mirroring the Tasks panel's broadcast-authoritative pattern.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonNotification, Task } from '../hooks/useDaemonSocket';
 import './NotificationsPanel.css';
@@ -21,14 +8,10 @@ interface NotificationsPanelProps {
   listNotifications: () => Promise<{ notifications: DaemonNotification[]; unreadCount: number }>;
   markRead: (notificationId?: string) => Promise<number>;
   retryTask: (taskId: string) => Promise<Task | null>;
-  // Bumps on every notifications_updated broadcast so an open panel re-lists.
   changeSignal: number;
 }
 
-// severityClass maps a notification's severity onto its row modifier, treating
-// anything unrecognized as info. The daemon normalizes too; this is the client
-// half of the same closed set, so a daemon a version ahead cannot render a row
-// with no styling at all.
+// Anything unrecognized is treated as info, so a daemon a version ahead still renders a styled row.
 function severityClass(severity: string | undefined): string {
   switch (severity) {
     case 'critical':
@@ -40,8 +23,6 @@ function severityClass(severity: string | undefined): string {
   }
 }
 
-// formatCreatedAt renders an RFC3339 created_at as a short relative phrase
-// ("now", "5m ago", "3h ago", "2d ago"). Returns '' for an unparseable value.
 function formatCreatedAt(iso: string): string {
   if (!iso) return '';
   const t = Date.parse(iso);
@@ -65,11 +46,8 @@ export function NotificationsPanel({
   const [notifications, setNotifications] = useState<DaemonNotification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  // The expanded row (its full body + detail + actions); null when collapsed.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Notification source-ids whose Retry is in flight (button disabled meanwhile).
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
-  // Monotonic load token: a slow response from a superseded fetch is dropped.
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -88,15 +66,11 @@ export function NotificationsPanel({
     }
   }, [listNotifications]);
 
-  // Fetch on open and whenever a notifications_updated broadcast bumps the signal
-  // (only while open — a closed panel ignores the churn).
   useEffect(() => {
     if (!open) return;
     void refresh();
   }, [open, refresh, changeSignal]);
 
-  // Drop the staleness token when the panel closes so an in-flight fetch can't
-  // stamp rows onto a reopened panel; also collapse any expanded row.
   useEffect(() => {
     if (open) return;
     seqRef.current += 1;
@@ -106,8 +80,6 @@ export function NotificationsPanel({
 
   const unreadCount = notifications.filter((n) => !n.read_at).length;
 
-  // Expand a row; mark it read on first expand (broadcast drives the refetch that
-  // flips its dot). Clicking an expanded row collapses it.
   const handleToggle = useCallback(
     (n: DaemonNotification) => {
       setExpandedId((cur) => (cur === n.id ? null : n.id));

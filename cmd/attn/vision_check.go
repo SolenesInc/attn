@@ -16,13 +16,9 @@ import (
 	"time"
 )
 
-// maxVisionCheckBase64Bytes bounds the size of the base64-encoded image payload
-// sent to the claude CLI. Past this size, prompt captures with --crop/--max-dim
-// are a better fix than raising the limit.
+// Past it, capture with --crop/--max-dim rather than raising the limit.
 const maxVisionCheckBase64Bytes = 4_500_000
 
-// visionCheckResult is the parsed shape of the final `result` stream-json event
-// emitted by `claude -p --output-format stream-json`.
 type visionCheckResult struct {
 	Result      string  `json:"result"`
 	Subtype     string  `json:"subtype"`
@@ -31,7 +27,6 @@ type visionCheckResult struct {
 	NumTurns    int     `json:"num_turns"`
 }
 
-// visionCheckJSONOutput is the --json stdout shape.
 type visionCheckJSONOutput struct {
 	Answer   string  `json:"answer"`
 	Model    string  `json:"model"`
@@ -40,8 +35,6 @@ type visionCheckJSONOutput struct {
 	IsError  bool    `json:"is_error"`
 }
 
-// mediaTypeForPath maps an image file extension to its MIME media type, as
-// required by the claude CLI's image content block.
 func mediaTypeForPath(path string) (string, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png":
@@ -57,9 +50,6 @@ func mediaTypeForPath(path string) (string, error) {
 	}
 }
 
-// buildVisionCheckMessage builds the single stream-json stdin line sent to
-// `claude -p --input-format stream-json`: one user message with a text block
-// (the question) followed by an image block (base64-encoded).
 func buildVisionCheckMessage(question, mediaType, base64Data string) (string, error) {
 	msg := map[string]interface{}{
 		"type": "user",
@@ -88,10 +78,7 @@ func buildVisionCheckMessage(question, mediaType, base64Data string) (string, er
 	return string(b), nil
 }
 
-// parseVisionCheckResult scans claude's stream-json stdout for the last line
-// whose "type" is "result" and decodes it. Lines are read via a bufio.Reader
-// (not bufio.Scanner) because assistant/tool lines carrying large payloads can
-// exceed Scanner's default token size.
+// bufio.Reader, not Scanner: a large payload line exceeds Scanner's token size.
 func parseVisionCheckResult(stdout string) (*visionCheckResult, error) {
 	reader := bufio.NewReader(strings.NewReader(stdout))
 	var last *visionCheckResult
@@ -122,9 +109,6 @@ func parseVisionCheckResult(stdout string) (*visionCheckResult, error) {
 	return last, nil
 }
 
-// resolveClaudeBinary locates the claude CLI, checking PATH first and then a
-// couple of common install locations that may not be on PATH for a
-// non-interactive shell.
 func resolveClaudeBinary() (string, error) {
 	if p, err := exec.LookPath("claude"); err == nil {
 		return p, nil
@@ -163,9 +147,6 @@ func parseVisionCheckArgs(args []string) (image, question, model string, timeout
 	return positionals[0], positionals[1], *modelFlag, *timeoutFlag, *jsonFlag, nil
 }
 
-// runVisionCheck implements `attn vision-check <image> <question>`: a single
-// tool-less LLM call that answers a question about an image without putting
-// the image itself into the calling agent's context.
 func runVisionCheck() {
 	imagePath, question, model, timeout, jsonOut, err := parseVisionCheckArgs(os.Args[2:])
 	if err != nil {

@@ -6,22 +6,14 @@ import (
 	"time"
 )
 
-// TurnStamps decides whether a session owes the user a turn: it does iff
-// OpenedAt is after SettledAt; both zero means no turn ever opened.
-// SnoozedUntil decides nothing — a snooze settles the open turn as it is
-// written, so the deadline only says when the session comes back.
 type TurnStamps struct {
 	OpenedAt     time.Time
 	SettledAt    time.Time
 	SnoozedUntil time.Time
 }
 
-// OpenTurnIfClosed stamps the start of a turn only when no turn is already
-// open, returning true when one was opened; an open turn keeps its age.
-// Trap: the guard is a TEXT comparison, so the stored encoding must sort in
-// time order within a second — sortableTimeFormat, not RFC3339Nano, whose
-// stripped fractions sorted a settle below its same-second open and silently
-// kept the turn open. Migration 95 rewrote the stored stamps.
+// The guard is a TEXT comparison, so the stored encoding must sort in time order within a
+// second — sortableTimeFormat, not RFC3339Nano, whose stripped fractions broke it (migration 95).
 func (s *Store) OpenTurnIfClosed(id string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -52,8 +44,6 @@ func (s *Store) OpenTurnIfClosed(id string, now time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// SettleTurn closes whatever turn is open, unconditionally; settling a session
-// that owes nothing is still recorded.
 func (s *Store) SettleTurn(id string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,10 +68,8 @@ func (s *Store) SettleTurn(id string, now time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// SnoozeTurn defers a session until `until`, settling the open turn and
-// recording the deadline in ONE statement — split, a broadcast could observe a
-// turn both open and suppressed. A past deadline is stored as given; the wake
-// path fires immediately on it.
+// Settles the open turn and records the deadline in ONE statement: split, a
+// broadcast could observe a turn both open and suppressed.
 func (s *Store) SnoozeTurn(id string, until, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -108,8 +96,6 @@ func (s *Store) SnoozeTurn(id string, until, now time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// WakeTurn clears a session's snooze without opening anything — whether a turn
-// then opens is the daemon's call. Reports whether a snooze was cleared.
 func (s *Store) WakeTurn(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -134,10 +120,8 @@ func (s *Store) WakeTurn(id string) bool {
 	return err == nil && updated == 1
 }
 
-// WakeTurnAt clears a snooze only if the stored deadline is exactly the one
-// given — a fired timer uses this instead of WakeTurn, so a snooze re-written
-// while the timer was waking is not clobbered. Reports whether the snooze it
-// was told to end was still the live one.
+// Clears only the exact deadline given, so a fired timer cannot clobber a snooze
+// re-written while it was waking.
 func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -167,8 +151,6 @@ func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// SnoozedSessions is every live snooze, by session id; the daemon reads it at
-// start-up to rebuild its in-memory wake timers.
 func (s *Store) SnoozedSessions() map[string]time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -203,7 +185,6 @@ func (s *Store) SnoozedSessions() map[string]time.Time {
 	return snoozed
 }
 
-// TurnStamps reads one session's stamps; zero values mean no turn ever opened.
 func (s *Store) TurnStamps(id string) TurnStamps {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -236,6 +217,5 @@ func (s *Store) setTurnStampsLocked(id string, stamps TurnStamps) {
 	s.turnStamps[id] = stamps
 }
 
-// parseTurnStamp decodes any RFC3339 spelling (pre-migration-95 stamps
-// included), yielding zero time for ” and anything unreadable.
+// parseTurnStamp decodes any RFC3339 spelling (pre-migration-95 stamps included).
 func parseTurnStamp(value string) time.Time { return parseStoreTime(value) }

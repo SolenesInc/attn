@@ -1,4 +1,3 @@
-// app/src/components/UndoToast.tsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDaemonContext } from '../contexts/DaemonContext';
 import './UndoToast.css';
@@ -10,7 +9,6 @@ export function UndoToast() {
   const { lastMuted, clearLastMuted, sendMutePR, sendMuteRepo, sendMuteAuthor } = useDaemonContext();
   const lastTimestampRef = useRef<number | null>(null);
 
-  // Watch for new mutes by tracking the lastMuted timestamp
   useEffect(() => {
     if (lastMuted && lastMuted.timestamp !== lastTimestampRef.current) {
       lastTimestampRef.current = lastMuted.timestamp;
@@ -21,7 +19,6 @@ export function UndoToast() {
     }
   }, [lastMuted]);
 
-  // Countdown timer
   useEffect(() => {
     if (!visible) return;
 
@@ -41,7 +38,6 @@ export function UndoToast() {
 
   const handleUndo = useCallback(() => {
     if (lastMuted) {
-      // Toggle the mute back (unmute)
       if (lastMuted.type === 'pr') {
         sendMutePR(lastMuted.id);
       } else if (lastMuted.type === 'repo') {

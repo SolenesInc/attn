@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// newOSCTestSession spins up a Session whose ptmx is one end of a socketpair
-// and starts its read loop, so tests can write raw bytes as the "PTY output"
-// side and read replies off the peer — the same harness cpr_response_test.go
-// uses for CPR/DA1.
 func newOSCTestSession(t *testing.T) (s *Session, peer *os.File) {
 	t.Helper()
 	const cols, rows = 80, 24
@@ -24,7 +20,7 @@ func newOSCTestSession(t *testing.T) (s *Session, peer *os.File) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        ptmx,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),
@@ -34,8 +30,6 @@ func newOSCTestSession(t *testing.T) (s *Session, peer *os.File) {
 	return s, peer
 }
 
-// TestOSCColorQuerySingleReply covers 7a: a single OSC11 query gets exactly
-// one reply, using the built-in default background.
 func TestOSCColorQuerySingleReply(t *testing.T) {
 	_, peer := newOSCTestSession(t)
 
@@ -52,10 +46,6 @@ func TestOSCColorQuerySingleReply(t *testing.T) {
 	}
 }
 
-// TestOSCColorQuerySetThemeAffectsReply covers 7b: SetTheme changes the
-// answered color, and a spawn-seeded theme (via SpawnOptions.Theme, mirrored
-// here by constructing the Session with theme already set) answers with the
-// seeded color without any SetTheme call.
 func TestOSCColorQuerySetThemeAffectsReply(t *testing.T) {
 	s, peer := newOSCTestSession(t)
 	s.SetTheme(TerminalTheme{Background: "#ffffff"})
@@ -77,8 +67,6 @@ func TestOSCColorQuerySeededAtSpawnAnswersWithoutSetTheme(t *testing.T) {
 	const cols, rows = 80, 24
 	ptmx, peer := newPollableSocketpair(t)
 
-	// Mirrors what Manager.Spawn does with SpawnOptions.Theme: seed
-	// session.theme before the read loop ever starts, with no SetTheme call.
 	s := &Session{
 		id:          "osc-theme-seeded",
 		cols:        cols,
@@ -106,11 +94,6 @@ func TestOSCColorQuerySeededAtSpawnAnswersWithoutSetTheme(t *testing.T) {
 	}
 }
 
-// TestOSCColorQueryCountsPerChunk covers 7c: a chunk containing 3x OSC11 +
-// 1x OSC10 must produce exactly 3 OSC11 + 1 OSC10 replies — an under-count
-// bug the previous boolean-gated fallback had — and the replies must come
-// back in query order, not grouped by code: positional-pairing clients
-// depend on replies arriving in the order they asked.
 func TestOSCColorQueryCountsPerChunk(t *testing.T) {
 	_, peer := newOSCTestSession(t)
 
@@ -121,7 +104,7 @@ func TestOSCColorQueryCountsPerChunk(t *testing.T) {
 
 	osc10 := "\x1b]10;rgb:d4d4/d4d4/d4d4\x1b\\"
 	osc11 := "\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\"
-	want := osc11 + osc11 + osc10 + osc11 // query order: 11, 11, 10, 11
+	want := osc11 + osc11 + osc10 + osc11
 	reply := readReplyUntil(t, peer, 2*time.Second, func(buf []byte) bool {
 		return len(buf) >= len(want)
 	})
@@ -130,9 +113,6 @@ func TestOSCColorQueryCountsPerChunk(t *testing.T) {
 	}
 }
 
-// TestOSCColorQuerySplitAcrossChunksAnswersOnce covers 7d: a query whose
-// bytes are split across two reads (carried over via findSafeBoundary) must
-// be answered exactly once, not zero or twice.
 func TestOSCColorQuerySplitAcrossChunksAnswersOnce(t *testing.T) {
 	_, peer := newOSCTestSession(t)
 
@@ -141,9 +121,6 @@ func TestOSCColorQuerySplitAcrossChunksAnswersOnce(t *testing.T) {
 	if _, err := peer.Write([]byte(query[:split])); err != nil {
 		t.Fatalf("peer write (first half): %v", err)
 	}
-	// Give the read loop a beat to read+carry over the partial escape before
-	// the rest arrives, so this genuinely exercises the carryover path rather
-	// than racing to land both halves in one coalesced read.
 	time.Sleep(20 * time.Millisecond)
 	if _, err := peer.Write([]byte(query[split:])); err != nil {
 		t.Fatalf("peer write (second half): %v", err)
@@ -157,14 +134,11 @@ func TestOSCColorQuerySplitAcrossChunksAnswersOnce(t *testing.T) {
 		t.Fatalf("reply = %q, want exactly one response %q", reply, want)
 	}
 
-	// Confirm there is nothing further queued (a double-answer bug would
-	// leave a second reply sitting on the pipe).
 	if got, ok := readAvailable(t, peer, 150*time.Millisecond); ok {
 		t.Fatalf("unexpected extra bytes after the single reply: %q", got)
 	}
 }
 
-// TestOSCColorQuery12AnswersWithCursorColor covers 7e.
 func TestOSCColorQuery12AnswersWithCursorColor(t *testing.T) {
 	s, peer := newOSCTestSession(t)
 	s.SetTheme(TerminalTheme{Cursor: "#abcdef"})
@@ -182,8 +156,6 @@ func TestOSCColorQuery12AnswersWithCursorColor(t *testing.T) {
 	}
 }
 
-// TestOSCColorSetIsNeverAnswered covers 7f: an OSC color SET (no "?") must
-// produce zero responses.
 func TestOSCColorSetIsNeverAnswered(t *testing.T) {
 	_, peer := newOSCTestSession(t)
 
@@ -196,25 +168,13 @@ func TestOSCColorSetIsNeverAnswered(t *testing.T) {
 	}
 }
 
-// TestOSCColorReplyWaitsForInFlightInput covers 7g: OSC color replies share
-// the PTY master with Session.input (frontend/worker keystrokes), which runs
-// on a different goroutine than the read loop. `s.ptmx` is a concrete
-// *os.File, so `go test -race` cannot observe interleaved writes to its
-// underlying fd — a missing lock here would not show up as a Go data race,
-// only as corrupted bytes on the wire in production. Assert the actual
-// serialization directly: while writeMu is held by an in-flight input() call,
-// the OSC reply triggered by the read loop must block, and it must only land
-// after input() releases the lock.
+// OSC color replies share the PTY master with Session.input on another goroutine, and
+// -race cannot see interleaved writes to an *os.File's fd; assert serialization directly.
 func TestOSCColorReplyWaitsForInFlightInput(t *testing.T) {
 	s, peer := newOSCTestSession(t)
 
-	// A single persistent reader for the whole test, not readAvailable /
-	// readReplyUntil: those each start their own goroutine blocked in
-	// peer.Read with no way to cancel it early, so using one for the
-	// negative check and a second for the final read leaves the first
-	// orphaned — it can win the race to consume the reply once writeMu is
-	// released, and the second read then blocks forever on bytes that are
-	// already gone.
+	// One persistent reader: readAvailable/readReplyUntil each leave an uncancellable
+	// goroutine in peer.Read, so a second reader lets the first consume the reply.
 	var bufMu sync.Mutex
 	var buf []byte
 	go func() {
@@ -253,8 +213,6 @@ func TestOSCColorReplyWaitsForInFlightInput(t *testing.T) {
 		t.Fatalf("peer write: %v", err)
 	}
 
-	// While writeMu is held by the other writer, the reply must not appear
-	// yet — this is the assertion that catches a missing lock in production.
 	time.Sleep(150 * time.Millisecond)
 	if got := snapshot(); len(got) != 0 {
 		t.Fatalf("OSC reply landed while writeMu was held by another writer: %q", got)
@@ -274,7 +232,6 @@ func TestOSCColorReplyWaitsForInFlightInput(t *testing.T) {
 	t.Fatalf("reply after lock release = %q, want %q", snapshot(), want)
 }
 
-// readAvailable waits up to timeout for at least one byte to arrive on f.
 func readAvailable(t *testing.T, f *os.File, timeout time.Duration) (data []byte, ok bool) {
 	t.Helper()
 	if err := f.SetReadDeadline(time.Now().Add(timeout)); err != nil {
@@ -295,9 +252,6 @@ func readAvailable(t *testing.T, f *os.File, timeout time.Duration) (data []byte
 	return nil, false
 }
 
-// TestColorSchemeQueryAnswersFromTheme covers pi's `CSI ? 996 n`: the query it
-// sends before falling back to OSC 11. Dark and light must come from the same
-// background the OSC 11 answer does.
 func TestColorSchemeQueryAnswersFromTheme(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -330,8 +284,6 @@ func TestColorSchemeQueryAnswersFromTheme(t *testing.T) {
 	}
 }
 
-// TestColorSchemeQueryCountsPerChunk: like the OSC counts, each ask needs its
-// own reply or the asking program waits out its timeout.
 func TestColorSchemeQueryCountsPerChunk(t *testing.T) {
 	_, peer := newOSCTestSession(t)
 
@@ -348,9 +300,6 @@ func TestColorSchemeQueryCountsPerChunk(t *testing.T) {
 	}
 }
 
-// TestColorSchemeReportFollowsMode2031: a child that subscribed with DECSET
-// 2031 is told when the theme changes under it, and one that did not is not
-// written to at all.
 func TestColorSchemeReportFollowsMode2031(t *testing.T) {
 	t.Run("unsubscribed child hears nothing", func(t *testing.T) {
 		s, peer := newOSCTestSession(t)
@@ -371,8 +320,8 @@ func TestColorSchemeReportFollowsMode2031(t *testing.T) {
 			themeChanged <- s.SetTheme(TerminalTheme{Background: "#ffffff"})
 		}
 
-		// The reply makes all preceding bytes observable to the child. DECSET
-		// 2031 must therefore be tracked before the DSR 996 reply is written.
+		// The reply makes all preceding bytes observable to the child, so DECSET 2031 must
+		// be tracked before the DSR 996 reply is written.
 		if _, err := peer.Write([]byte("\x1b[?2031h\x1b[?996n")); err != nil {
 			t.Fatalf("peer write: %v", err)
 		}
@@ -386,8 +335,6 @@ func TestColorSchemeReportFollowsMode2031(t *testing.T) {
 			t.Fatalf("SetTheme: %v", err)
 		}
 
-		// A theme change that does not move the scheme says nothing: the
-		// child repaints on what it is told.
 		if err := s.SetTheme(TerminalTheme{Background: "#fefefe"}); err != nil {
 			t.Fatalf("SetTheme: %v", err)
 		}

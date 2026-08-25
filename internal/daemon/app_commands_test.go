@@ -11,11 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A view acting. What these pin: the envelope reaches the app's own handler with
-// the payload untouched, the answer comes back to the caller that asked, every
-// refusal says what to do about it, and a command that fails costs the app
-// nothing beyond that click.
-
 func commandManifest(commands ...appbuild.Command) appbuild.Manifest {
 	return appbuild.Manifest{
 		Views:    []appbuild.View{tileView("approvals", "Pending approvals")},
@@ -23,8 +18,6 @@ func commandManifest(commands ...appbuild.Command) appbuild.Manifest {
 	}
 }
 
-// appCommandCaller is one WebSocket client invoking commands, decoded into the
-// one envelope this surface answers with.
 type appCommandCaller struct {
 	client *wsClient
 }
@@ -79,9 +72,6 @@ func mustFail(t *testing.T, result protocol.AppCommandResultMessage, wants ...st
 	}
 }
 
-// The whole path: a declared command reaches the handler bound to it, carrying
-// the caller's payload byte for byte, and what the handler returned reaches the
-// caller.
 func TestAppCommandRunsTheHandlerAndAnswersTheCaller(t *testing.T) {
 	d := newAppDaemon(t)
 	version := installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -125,8 +115,6 @@ func TestAppCommandRunsTheHandlerAndAnswersTheCaller(t *testing.T) {
 	}
 }
 
-// A command that takes no argument is a command, and "returned nothing" has to
-// survive as nothing rather than as a null the view has to know about.
 func TestAppCommandWithNoPayloadAndNoAnswerSucceeds(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "refresh"}))
@@ -142,9 +130,6 @@ func TestAppCommandWithNoPayloadAndNoAnswerSucceeds(t *testing.T) {
 	}
 }
 
-// The serving version's declaration is the contract, exactly as it is for
-// views: a rollback takes a command away with it, and the refusal says which
-// version is answering and what it does declare.
 func TestAppCommandIsRefusedByTheServingVersionsDeclaration(t *testing.T) {
 	d := newAppDaemon(t)
 	first := installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -177,8 +162,6 @@ func TestAppCommandRefusesAnAppThatIsDisabledOrMissing(t *testing.T) {
 	mustFail(t, caller.invoke(t, d, "reviewer", "approve", ""), "disabled", "attn app enable reviewer")
 }
 
-// A limit someone can hit is a limit they must see: the refusal names the limit,
-// its value and the ask, and says where larger data belongs.
 func TestAppCommandRefusesAPayloadOverTheLimit(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -190,8 +173,6 @@ func TestAppCommandRefusesAPayloadOverTheLimit(t *testing.T) {
 	mustFail(t, result, "approve", "reviewer", "262144", "document")
 }
 
-// The same limit in the other direction: what the handler answers with is
-// bounded too, or the advertised limit is only half a limit.
 func TestAppCommandRefusesAnAnswerOverTheLimit(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -220,8 +201,6 @@ func TestAppCommandRefusesAPayloadThatIsNotJSON(t *testing.T) {
 	mustFail(t, newAppCommandCaller().invoke(t, d, "reviewer", "approve", "{not json"), "JSON")
 }
 
-// A handler that throws is the app's fault and the caller's answer — recorded,
-// reported in the handler's own words, and nothing more.
 func TestAppCommandCarriesAThrownHandlerBackToTheCaller(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -238,12 +217,10 @@ func TestAppCommandCarriesAThrownHandlerBackToTheCaller(t *testing.T) {
 	}
 }
 
-// A handler that never returns is abandoned, and the refusal is one an agent can
-// act on: the command, the app, and the limit that was reached.
 func TestAppCommandAbandonsAHandlerThatNeverReturns(t *testing.T) {
 	d := newAppDaemon(t)
-	// The shipped tripwires are 60s and 2s; waiting them out would prove nothing
-	// extra and cost a minute.
+	// The shipped tripwires are 60s and 2s; waiting them out would cost a minute
+	// and prove nothing extra.
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -256,26 +233,19 @@ func TestAppCommandAbandonsAHandlerThatNeverReturns(t *testing.T) {
 	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", "")
 
 	mustFail(t, result, "approve", "reviewer", "300ms")
-	// The clock that disables an app exists for a consumer pinning the durable
-	// log. A command pins nothing, so a docked tile must not be able to switch a
-	// healthy app off by clicking.
 	if status := appStatus(t, d, "reviewer"); status.AppStatusResult.Stall != nil {
 		t.Fatalf("a failed command advanced the stall clock: %+v", status.AppStatusResult.Stall)
 	}
 }
 
 // The frontend waits 75s against the daemon's 60s so attn's own refusal — which
-// names the app, the command and what to do — always arrives first. A command
-// that added its wait for the app's lane to that budget would break the ordering
-// and hand the tile the generic "the daemon did not answer" instead.
+// names the app, the command and what to do — always arrives first.
 func TestAppCommandQueuedBehindABusyAppRefusesInsideItsOwnBudget(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
 
-	// The lane held by something that is not going to give it back inside this
-	// command's budget — a handler mid-dispatch, a version move, a reconcile.
 	lane := d.appLane("reviewer")
 	lane.Lock()
 	defer lane.Unlock()
@@ -285,8 +255,6 @@ func TestAppCommandQueuedBehindABusyAppRefusesInsideItsOwnBudget(t *testing.T) {
 	mustFail(t, result, "approve", "reviewer", "300ms", "never got a turn", "attn app logs reviewer")
 }
 
-// Nothing to answer is worse than an error: a request with no id could never
-// reach the caller, so it is refused where the caller can still see it.
 func TestAppCommandWithoutARequestIDIsRefusedOnTheSpot(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -310,8 +278,6 @@ func TestAppCommandWithoutARequestIDIsRefusedOnTheSpot(t *testing.T) {
 	}
 }
 
-// `attn app status` is the only way to see that a command exists without
-// invoking it, and what it shows is the serving version's declaration.
 func TestAppStatusCarriesTheServingVersionsCommands(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(

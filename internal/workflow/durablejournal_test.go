@@ -9,19 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// journalFactory drives a resume scenario over one Journal implementation. The
-// abstraction lets the SAME R-spec scripts run over both MemJournal and the
-// SQLite-backed DurableJournal so the two can never silently diverge.
-//
-//   - fresh() returns the journal used for the first Run.
-//   - reopen() returns the journal handed to Resume. For MemJournal this is the
-//     same in-memory object (today's behavior). For DurableJournal this is a FRESH
-//     adapter rebuilt from SQLite alone — discarding the prior in-memory mirror —
-//     which is what proves durable persistence and append-order reconstruction.
-//   - seedPrefix(entries, n) returns a resume journal containing only the first n
-//     entries, for the kill@k scenario. For MemJournal it appends a prefix into a
-//     new journal; for DurableJournal it wipes the store and rewrites the prefix,
-//     then rebuilds a fresh adapter from the persisted prefix.
 type journalFactory struct {
 	name       string
 	fresh      func() Journal
@@ -54,8 +41,6 @@ func durableFactory(t *testing.T) *journalFactory {
 	t.Helper()
 	s := store.New()
 	const runID = "run-parity"
-	// The run row is not strictly required (no enforced FK), but persisting one
-	// mirrors real usage where a run owns its calls.
 	if err := s.UpsertWorkflowRun(&store.WorkflowRunRow{
 		RunID:      runID,
 		ScriptPath: "/parity.js",
@@ -72,12 +57,9 @@ func durableFactory(t *testing.T) *journalFactory {
 			return NewDurableJournal(s, runID)
 		},
 		reopen: func() Journal {
-			// Fresh adapter, rebuilt from SQLite only — proves persistence.
 			return NewDurableJournal(s, runID)
 		},
 		seedPrefix: func(entries []JournalEntry, n int) Journal {
-			// Wipe persisted calls and rewrite only the prefix, then rebuild a
-			// fresh adapter from the persisted prefix.
 			if err := s.DeleteWorkflowRun(runID); err != nil {
 				t.Fatalf("wipe calls: %v", err)
 			}
@@ -106,9 +88,6 @@ func factories(t *testing.T) []*journalFactory {
 	return []*journalFactory{memFactory(), durableFactory(t)}
 }
 
-// runResume runs script1 from scratch, then resumes with script2 (same engine
-// config), returning both results. The journal under test seeds Run via fresh()
-// and Resume via reopen().
 func runResume(t *testing.T, f *journalFactory, script1, script2 string, args1, args2 any) (RunResult, RunResult) {
 	t.Helper()
 	eng := New(Config{Journal: f.fresh(), Stub: StubFunc(promptEcho), WatchdogTimeout: 5 * time.Second})
@@ -124,8 +103,6 @@ func runResume(t *testing.T, f *journalFactory, script1, script2 string, args1, 
 	return r1, r2
 }
 
-// TestJournalParityR1Identical: R1 over both impls — identical script+args yields
-// 100% cache hits and zero live calls.
 func TestJournalParityR1Identical(t *testing.T) {
 	script := `
 		const a = await agent("alpha");
@@ -149,8 +126,6 @@ func TestJournalParityR1Identical(t *testing.T) {
 	}
 }
 
-// TestJournalParityR2UpstreamEdit: editing an upstream prompt invalidates it and
-// everything structurally after; the prefix before stays cached.
 func TestJournalParityR2UpstreamEdit(t *testing.T) {
 	orig := `
 		const x = await agent("x-input");
@@ -174,8 +149,6 @@ func TestJournalParityR2UpstreamEdit(t *testing.T) {
 	}
 }
 
-// TestJournalParityR3DownstreamEdit: editing only a later prompt keeps the upstream
-// prefix cached; only the edited call onward runs live.
 func TestJournalParityR3DownstreamEdit(t *testing.T) {
 	orig := `
 		const a = await agent("alpha");
@@ -199,8 +172,6 @@ func TestJournalParityR3DownstreamEdit(t *testing.T) {
 	}
 }
 
-// TestJournalParityR4ArgsChange: a call that embeds args runs live when args change;
-// an args-independent call stays cached.
 func TestJournalParityR4ArgsChange(t *testing.T) {
 	script := `
 		const a = await agent("static-prompt");
@@ -217,10 +188,6 @@ func TestJournalParityR4ArgsChange(t *testing.T) {
 	}
 }
 
-// TestJournalParityR5SchemaChange: tampering the first entry's schemaHash (as if it
-// originally had a schema the resume script no longer matches) makes it the
-// divergence boundary. Over the durable arm this also proves the schemaHash column
-// round-trips, since the tampered hash must survive the store write/read.
 func TestJournalParityR5SchemaChange(t *testing.T) {
 	script := `
 		const a = await agent("first");
@@ -238,9 +205,6 @@ func TestJournalParityR5SchemaChange(t *testing.T) {
 			if len(entries) != 2 {
 				t.Fatalf("want 2 journaled, got %d", len(entries))
 			}
-			// Tamper the FIRST entry's schemaHash via Upsert on the SAME run journal,
-			// then reopen for resume. For durable, Upsert writes through to SQLite so
-			// reopen() reads the tampered hash back.
 			first := entries[0]
 			first.SchemaHash = hashSchema(json.RawMessage(`{"type":"object"}`))
 			r1.Journal.Upsert(first)
@@ -257,10 +221,6 @@ func TestJournalParityR5SchemaChange(t *testing.T) {
 	}
 }
 
-// TestJournalParityKillAtK: a kill after k journaled calls (here k=2) replays the
-// persisted prefix and runs the divergent tail live. For the durable arm the
-// surviving rows come from SQLite via a fresh adapter — proving the partial run's
-// write-through survives a process restart.
 func TestJournalParityKillAtK(t *testing.T) {
 	script := `
 		const a = await agent("one");
@@ -280,7 +240,6 @@ func TestJournalParityKillAtK(t *testing.T) {
 				t.Fatalf("fresh run live=%d want 4", r1.LiveCalls)
 			}
 
-			// Kill@2: resume from only the first two persisted entries.
 			killed := f.seedPrefix(r1.Journal.Entries(), 2)
 			eng2 := New(Config{Journal: killed, Stub: StubFunc(promptEcho), WatchdogTimeout: 5 * time.Second})
 			r2, err := eng2.Resume(context.Background(), script, nil)
@@ -300,9 +259,6 @@ func TestJournalParityKillAtK(t *testing.T) {
 	}
 }
 
-// TestDurableJournalRoundTripLossless asserts the JournalEntry<->row mapping is
-// field-for-field lossless for the six JournalEntry fields, including a null Result
-// (errored entry) and the "none" schema sentinel.
 func TestDurableJournalRoundTripLossless(t *testing.T) {
 	cases := []JournalEntry{
 		{Ordinal: "0", PromptHash: "ph0", SchemaHash: "none", Result: json.RawMessage(`"v0"`), Status: "ok"},
@@ -318,15 +274,12 @@ func TestDurableJournalRoundTripLossless(t *testing.T) {
 		if string(out.Result) != string(in.Result) {
 			t.Fatalf("result mismatch: in=%q out=%q", string(in.Result), string(out.Result))
 		}
-		// Null result must round-trip to a nil RawMessage, not an empty non-nil one.
 		if len(in.Result) == 0 && out.Result != nil {
 			t.Fatalf("null result became non-nil: %v", out.Result)
 		}
 	}
 }
 
-// TestDurableJournalAppendRejectsDuplicate proves the one-entry-per-ordinal
-// invariant matches MemJournal exactly (same error path).
 func TestDurableJournalAppendRejectsDuplicate(t *testing.T) {
 	s := store.New()
 	const runID = "run-dup"

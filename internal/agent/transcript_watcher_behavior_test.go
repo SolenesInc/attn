@@ -119,9 +119,8 @@ func TestClaudeWatcherBehaviorSkipClassification(t *testing.T) {
 		t.Fatal("should not skip when LastSeen is unparseable")
 	}
 
-	// A scheduled session is parked on a cron/loop and must never be
-	// reclassified by the watcher — UNCONDITIONALLY, regardless of hook
-	// freshness, because parks routinely outlast the 2-minute stale threshold.
+	// A parked session is never reclassified, regardless of hook freshness: parks
+	// routinely outlast the 2-minute stale threshold.
 	if skip, _ := b.SkipClassification(protocol.SessionStateScheduled, recent, time.Now()); !skip {
 		t.Fatal("should skip for scheduled session (recent hooks)")
 	}
@@ -132,15 +131,12 @@ func TestClaudeWatcherBehaviorSkipClassification(t *testing.T) {
 		t.Fatal("should skip for scheduled session even with unparseable LastSeen")
 	}
 
-	// Legacy RFC3339 (pre-Nano) should still parse and skip if fresh.
 	recentRFC3339 := time.Now().Add(-5 * time.Second).Format(time.RFC3339)
 	if skip, _ := b.SkipClassification(protocol.SessionStateWorking, recentRFC3339, time.Now()); !skip {
 		t.Fatal("should skip with legacy RFC3339 timestamp that is still recent")
 	}
 }
 
-// Every watched agent runs the watcher for the same single reason: a turn the
-// user halted is the one ending none of them report through any other channel.
 func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -149,9 +145,7 @@ func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 		wantDetail string
 		wantAt     string
 		ignored    string
-		// notAHalt ends a turn for the agent's own reasons. It must not settle the
-		// session: the session is often working again a moment later.
-		notAHalt string
+		notAHalt   string
 	}{
 		{
 			name:       "claude",
@@ -185,14 +179,9 @@ func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 			if !got.Aborted || got.AbortDetail != tc.wantDetail {
 				t.Fatalf("got %+v, want the halt reported with detail %q", got, tc.wantDetail)
 			}
-			// Undated, the halt cannot be told from one replayed out of history, and
-			// the watcher throws it away.
 			if got.AbortAt.UTC().Format(time.RFC3339Nano) != tc.wantAt {
 				t.Fatalf("abort at %s, want %s", got.AbortAt.UTC().Format(time.RFC3339Nano), tc.wantAt)
 			}
-			// The halt is a fact about the turn, not a state request: the resolver
-			// weighs it against everything else, so the behavior must not also be
-			// naming a state.
 			if got.State != "" {
 				t.Fatalf("state %q, want none: the behavior reports the fact, the resolver decides", got.State)
 			}
@@ -215,9 +204,8 @@ func newCopilotBehavior() TranscriptWatcherBehavior {
 	return b
 }
 
-// Copilot writes no assistant.turn_end after an abort. Its watcher keeps the turn
-// bracket itself, so the abort has to close it — otherwise Tick pins the session
-// working for the rest of the session's life, whoever caused the abort.
+// Copilot writes no assistant.turn_end after an abort, so the abort has to close
+// the bracket its watcher keeps, or Tick pins the session working forever.
 func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 	for _, abort := range []string{
 		`{"type":"abort","data":{"reason":"user_initiated"}}`,
@@ -236,10 +224,8 @@ func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 
 			got := b.HandleLine([]byte(abort), now.Add(3*time.Second), protocol.SessionStateWorking)
 
-			// Closing the flag below is only half of it. The same turn_start opened
-			// an evidence bracket through Tick, and the result is the only way to
-			// reach it — copilot paints no heartbeat, so a bracket left open there
-			// outlives the stale test and runs the session into `stuck`.
+			// The same turn_start opened an evidence bracket through Tick, and the result
+			// is the only way to reach it: copilot paints no heartbeat, so it runs to `stuck`.
 			if !got.Aborted && !got.BracketClosed {
 				t.Fatalf("got %+v, want the evidence bracket closed: nothing else closes it", got)
 			}
@@ -255,8 +241,6 @@ func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 	}
 }
 
-// Codex must not pick up the default behavior: that one classifies on the quiet
-// window, which would race the Stop hook's verdict on the same turn.
 func TestCodexWatcherNeverClassifies(t *testing.T) {
 	behavior, ok := GetTranscriptWatcherBehavior(Get("codex"))
 	if !ok {

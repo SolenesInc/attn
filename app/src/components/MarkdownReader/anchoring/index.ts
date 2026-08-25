@@ -1,12 +1,3 @@
-/**
- * Anchoring core — pure (content, anchor) → resolution and
- * (anchor, newContent) → rebased | orphan functions. No DOM, no React;
- * everything here is testable in plain node vitest.
- *
- * DOM range resolution and the paint layer live in separate modules layered
- * on top of these (they consume BlockText offsets but never feed back in).
- */
-
 export * from './types';
 export { fnv1a32 } from './hash';
 export { extractBlockTexts, ownerBlockFor, runReaderPipeline } from './extractBlocks';

@@ -11,34 +11,24 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Eviction happens in the hub (maxSlowCount missed broadcasts) and the write
-// pump (one hand-off past wsWriteTimeout). The close frame travels the same TCP
-// stream as the backlog, so a wedged client never reads it — Measured: through a
-// 10 KB/s link the daemon hung up after ~1s and the client read nothing for
-// ~45s. So: attempt the close briefly, abort the transport, and deliver the
-// reason on the next connection (client_eviction_notice), keyed on client_id.
+// The close frame travels the same TCP stream as the backlog, so a wedged client never
+// reads it (measured: on a 10 KB/s link the client read nothing for ~45s after hang-up).
 const (
 	// evictionCloseGrace bounds the close-frame attempt before the transport is
 	// aborted. Tripwire: a writable socket takes microseconds.
 	evictionCloseGrace = 1 * time.Second
 	// evictionMemoryTTL: reconnect backoff caps at 5s and the circuit breaker
 	// resets at 30s, so this is two orders of magnitude past a same-visit return.
-	evictionMemoryTTL = 10 * time.Minute
-	// maxRememberedEvictions bounds the map; only a client cycling fresh ids
-	// reaches it, and dropping the oldest of those is right anyway.
+	evictionMemoryTTL      = 10 * time.Minute
 	maxRememberedEvictions = 16
 )
 
-// evictionRecord is what the hub remembers about a client it hung up on.
 type evictionRecord struct {
-	at     time.Time
-	reason string
-	// undelivered counts messages the client never got.
+	at          time.Time
+	reason      string
 	undelivered int
 }
 
-// rememberEviction files an eviction under the client's id so the next hello
-// from that id can be answered with it; an id-less client only gets the log line.
 func (h *wsHub) rememberEviction(clientID string, record evictionRecord) {
 	if clientID == "" {
 		return
@@ -65,8 +55,6 @@ func (h *wsHub) rememberEviction(clientID string, record evictionRecord) {
 	h.evictions[clientID] = record
 }
 
-// takeEviction returns and forgets the eviction filed for this client id;
-// delivered once.
 func (h *wsHub) takeEviction(clientID string) (evictionRecord, bool) {
 	if clientID == "" {
 		return evictionRecord{}, false
@@ -89,15 +77,8 @@ func (h *wsHub) pruneEvictionsLocked(now time.Time) {
 	}
 }
 
-// evict drops a client the hub has given up on and files the reason for its
-// return. Callers hold h.mu, so the hang-up runs on its own goroutine — closing
-// a wedged socket must never stall the fan-out.
-//
-// The channel closes before the record is filed, not after: a hello that is
-// mid-processing on this same connection reaches takeEviction at its tail, and
-// a record it can still send to is a notice queued to the connection the
-// eviction is killing. Closed-first means every taker fails to send and
-// re-files, so the notice survives for the client's next connection.
+// Callers hold h.mu, so the hang-up runs on its own goroutine. The channel closes BEFORE
+// the record is filed, or a hello here takes it and queues the notice to the dying conn.
 func (h *wsHub) evict(client *wsClient, reason string) {
 	record := evictionRecord{
 		at:          time.Now(),
@@ -109,8 +90,7 @@ func (h *wsHub) evict(client *wsClient, reason string) {
 	go client.hangUp(websocket.StatusPolicyViolation, reason, evictionCloseGrace)
 }
 
-// hangUp attempts the close frame (lands only on a healthy socket), then aborts
-// the transport: SO_LINGER 0 discards unsent bytes and sends a RST — the only
+// Attempts the close frame, then aborts the transport: SO_LINGER 0 sends a RST, the only
 // thing that reaches the peer without queuing behind the backlog.
 func (c *wsClient) hangUp(code websocket.StatusCode, reason string, grace time.Duration) {
 	closed := make(chan struct{})
@@ -127,9 +107,6 @@ func (c *wsClient) hangUp(code websocket.StatusCode, reason string, grace time.D
 	c.abortTransport()
 }
 
-// abortTransport tears the connection down at the socket. Without the raw conn
-// (test servers, listeners outside initHTTPServer) this degrades to nhooyr's
-// CloseNow, which skips the handshake but lets the kernel flush its queue.
 func (c *wsClient) abortTransport() {
 	if c.rawConn == nil {
 		_ = c.conn.CloseNow()
@@ -141,8 +118,8 @@ func (c *wsClient) abortTransport() {
 	_ = c.rawConn.Close()
 }
 
-// rawConnKey carries the accepted connection down to the handler — the only way
-// to it: the WebSocket handshake hijacks the conn behind a wrapper.
+// rawConnKey carries the accepted connection down to the handler, the only way to
+// reach it: the WebSocket handshake hijacks the conn behind a wrapper.
 type rawConnKey struct{}
 
 func withRawConn(ctx context.Context, conn net.Conn) context.Context {
@@ -154,10 +131,6 @@ func rawConnFrom(ctx context.Context) net.Conn {
 	return conn
 }
 
-// sendEvictionNotice tells a returning client what happened to its last
-// connection; sent from the hello handler, where the client names itself.
-// Reports whether the notice was handed to the connection's write pump — a
-// caller that gets false owns the record it took and must re-file it.
 func (d *Daemon) sendEvictionNotice(client *wsClient, record evictionRecord) bool {
 	notice := &protocol.ClientEvictionNoticeMessage{
 		Event:               protocol.EventClientEvictionNotice,

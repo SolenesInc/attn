@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// bindMirrorFixture is the one case the mirror exists for: work that was
-// dispatched at a seed and was ALSO ticket-bound before tickets retired.
 func bindMirrorFixture(t *testing.T, d *Daemon, sessionID string) (seedID, ticketID string) {
 	t.Helper()
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Migrate the store to X", Body: protocol.Ptr("the brief")})
@@ -29,16 +27,12 @@ func bindMirrorFixture(t *testing.T, d *Daemon, sessionID string) (seedID, ticke
 	return seed.ID, created.ID
 }
 
-// A tender closing its seed closes the ticket that same work was bound to, so
-// an in-flight delegation still finishes on its ticket after the cutover.
 func TestSeedMoveMirrorsOntoTheBoundTicket(t *testing.T) {
 	for _, tc := range []struct {
 		verb   garden.Verb
 		reason string
 		want   store.TicketStatus
 	}{
-		// park deliberately records no reason; harvest and wither are the moves
-		// that close a seed with one.
 		{garden.VerbPark, "", store.TicketStatusBlocked},
 		{garden.VerbHarvest, "what got done", store.TicketStatusDone},
 		{garden.VerbWither, "nobody should pick this up", store.TicketStatusFailed},
@@ -63,8 +57,6 @@ func TestSeedMoveMirrorsOntoTheBoundTicket(t *testing.T) {
 	}
 }
 
-// Tending mirrors too, so a ticket whose seed was picked back up does not sit in
-// a stale terminal column.
 func TestTendingMirrorsTheTicketBackToWorking(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedID, ticketID := bindMirrorFixture(t, d, "sess-a")
@@ -78,8 +70,6 @@ func TestTendingMirrorsTheTicketBackToWorking(t *testing.T) {
 	}
 }
 
-// A note is the report verb, so it has to reach the ticket thread — otherwise a
-// card for in-flight work goes silent the moment its tender switches channel.
 func TestSeedNoteMirrorsOntoTheBoundTicket(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedID, ticketID := bindMirrorFixture(t, d, "sess-a")
@@ -95,9 +85,6 @@ func TestSeedNoteMirrorsOntoTheBoundTicket(t *testing.T) {
 	}
 }
 
-// A session dispatched after the cutover has no ticket at all, and a peer noting
-// somebody else's seed is awareness rather than a report about its own work.
-// Neither may reach the board.
 func TestMirrorIsSilentWithoutTheSessionsOwnTicket(t *testing.T) {
 	t.Run("no ticket", func(t *testing.T) {
 		d := newGardenDaemon(t)
@@ -136,8 +123,6 @@ func TestMirrorIsSilentWithoutTheSessionsOwnTicket(t *testing.T) {
 	})
 }
 
-// Every lifecycle verb maps to a column: a move with no mapping would be a
-// silent hole in a board somebody is still reading.
 func TestEverySeedMoveHasATicketColumn(t *testing.T) {
 	for _, verb := range garden.Verbs {
 		if _, ok := seedMoveTicketStatus(verb); !ok {

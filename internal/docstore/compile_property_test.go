@@ -10,25 +10,6 @@ import (
 	"pgregory.net/rapid"
 )
 
-// This package's stated invariant is a security boundary, not a nicety: "every
-// identifier the store executes is derived from an integer or a validated field
-// name — never from caller text" (AGENTS.md). The example tests in
-// docstore_test.go check that on the queries we thought of. A query, though, is
-// a JSON object that arrives from an extension, a UI tile, or `attn doc`, and
-// the string that breaks the rule is by definition one nobody wrote down.
-//
-// So rapid drives Compile with caller strings drawn from a pool of the things an
-// attacker or a confused caller actually sends — quotes, semicolons, comment
-// introducers, empty, unicode, absurdly long — in every position a caller
-// controls, and the assertion is not "it did not blow up" but a grammar: the SQL
-// that comes out is tokenized, and every token has to be a keyword, a stamped
-// column, the minted table, a `?`, or a quoted `f_<declared field>`. Anything
-// else fails, whatever it happens to say. There is no substring check to
-// out-quote, and no database is involved: Compile is pure.
-
-// hostile is what a caller string can be. Nothing here is legal in any position
-// that reaches an identifier, so a compile that succeeds must have kept every
-// one of them out of the SQL — or bound it as an argument, where it is inert.
 var hostile = []string{
 	"",
 	" ",
@@ -53,8 +34,6 @@ var hostile = []string{
 	strings.Repeat("a", 300),
 }
 
-// declaredFields is the collection under test: names that pass Validate, one of
-// each type, so a filter has somewhere legitimate to land.
 var declaredFields = []FieldSpec{
 	{Name: "title", Type: FieldString},
 	{Name: "count", Type: FieldNumber},
@@ -62,9 +41,6 @@ var declaredFields = []FieldSpec{
 	{Name: "_private", Type: FieldString},
 }
 
-// canary values are what a filter bound may be. A bound is caller text with no
-// restriction at all — the whole point of binding it — so the property is that
-// it reaches Args and never the statement.
 var canaryValues = []any{
 	`'); DROP TABLE doc_1; --`,
 	`" OR 1=1 --`,
@@ -93,28 +69,19 @@ var (
 	badOps = []Op{"like", "", "= 1 OR 1", "EQ", "<>"}
 )
 
-// sqlKeywords is every bare word Compile is allowed to write. The list is
-// closed on purpose: a new one has to be added here deliberately, which is the
-// review step that catches a splice added by accident.
+// The list is closed on purpose: adding one is the review step that catches an accidental splice.
 var sqlKeywords = map[string]bool{
 	"SELECT": true, "FROM": true, "WHERE": true,
 	"AND": true, "OR": true, "IS": true, "NOT": true, "NULL": true,
 	"ASC": true, "DESC": true,
-	// The store's own stamped columns, written literally because they are not
-	// caller text.
 	"id": true, FieldCreatedAt: true, FieldUpdatedAt: true,
 }
 
-// checkSQLIdentifiers walks one SQL fragment and reports the first token that is
-// not something Compile is allowed to have written. allowedTable is the minted
-// table name, allowedColumns the generated columns of the declared fields.
 func checkSQLIdentifiers(fragment, allowedTable string, allowedColumns map[string]bool) error {
 	for i := 0; i < len(fragment); {
 		c := fragment[i]
 		switch {
 		case c == '"':
-			// A quoted identifier. Read to the closing quote, undoubling as
-			// SQLite does, and check what it actually names.
 			var ident strings.Builder
 			i++
 			for {
@@ -160,10 +127,6 @@ func isASCIIAlnum(b byte) bool {
 	return (b >= '0' && b <= '9') || (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
 
-// TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers is the headline property: for
-// any caller-controlled input, Compile either refuses — as a typed
-// InvalidQueryError, which is what the surfaces above branch on — or produces
-// SQL whose every identifier it derived itself.
 func TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers(t *testing.T) {
 	allowedColumns := make(map[string]bool, len(declaredFields))
 	for _, f := range declaredFields {
@@ -174,13 +137,8 @@ func TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		attempts++
 
-		// Draw a query the store would accept, then corrupt exactly one part of
-		// it — or none. Corrupting one position at a time is what keeps the
-		// hostile string reaching the code that handles that position: a query
-		// with a bad namespace AND a bad sort field is refused at the namespace
-		// and says nothing about sorting.
 		corrupt := rapid.SampledFrom([]string{
-			"", "", "", "", // half the draws are left well-formed
+			"", "", "", "",
 			"table", "namespace", "collection", "limit",
 			"filter_field", "filter_value", "filter_op", "sort_field", "after",
 		}).Draw(t, "corrupt")
@@ -199,10 +157,6 @@ func TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers(t *testing.T) {
 				TableName(1), TableName(12), TableName(9007199254740991),
 			}).Draw(t, "minted_table")),
 		}
-		// The declaration itself is always one the store would have accepted:
-		// field names are validated at declare time, and that is the assumption
-		// the identifier rule rests on. What varies here is everything a caller
-		// sends afterwards.
 		if err := (CollectionSchema{Namespace: schema.Namespace, Collection: schema.Collection, Fields: schema.Fields}).Validate(); err != nil {
 			t.Fatalf("the fixture declaration does not validate: %v", err)
 		}
@@ -270,22 +224,14 @@ func TestCompiledSQLIsBuiltOnlyFromDerivedIdentifiers(t *testing.T) {
 		}
 	})
 
-	// The tripwire against a vacuous property. Everything above only asserts
-	// anything on a query that compiled; a generator that drifts into refusing
-	// every draw would go green while checking nothing, which is the failure
-	// mode a property test hides best. One in five is far below what the
-	// generators produce and far above zero.
+	// Tripwire against a vacuous property: one in five is far below what the generators
+	// produce and far above zero.
 	if compiles*5 < attempts {
 		t.Fatalf("only %d of %d generated queries compiled; the generators refuse too much to be checking anything",
 			compiles, attempts)
 	}
 }
 
-// typedValue draws a bound the field's declared type accepts, so a well-formed
-// query actually compiles. The bounds are still nasty strings where the type
-// allows one — a string field takes `'); DROP TABLE …` perfectly legitimately,
-// and that is the case worth compiling, because it is the one that proves the
-// value went to Args rather than into the statement.
 func typedValue(t *rapid.T, field string) any {
 	switch field {
 	case "title", "_private":
@@ -297,14 +243,10 @@ func typedValue(t *rapid.T, field string) any {
 	case FieldCreatedAt, FieldUpdatedAt:
 		return rapid.SampledFrom([]any{"2026-08-09T10:00:00Z", "2026-08-09T10:00:00.000000000Z"}).Draw(t, "time_value")
 	default:
-		// The field name was corrupted; nothing types against it.
 		return rapid.SampledFrom(canaryValues).Draw(t, "filter_value")
 	}
 }
 
-// anchorBodies are the cursor documents a paging query can be compiled against:
-// the sort field present, absent, and explicitly null are three different
-// branches in afterTuple, and a body that is not an object at all is a refusal.
 var anchorBodies = []string{
 	`{"title":"a","count":1,"done":true}`,
 	`{}`,
@@ -314,12 +256,6 @@ var anchorBodies = []string{
 	`not json`,
 }
 
-// quoteIdent is the one splice defended by quoting rather than by validation, so
-// it has to be safe for a name that never passed a validator — a field declared
-// before a validation rule existed, say. The property is that it round-trips:
-// what SQLite reads back out of the quoted form is exactly the name that went
-// in, so there is no string that closes the quote early and starts meaning
-// something.
 func TestQuotingAnIdentifierRoundTrips(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		name := rapid.String().Draw(t, "name")
@@ -341,10 +277,6 @@ func TestQuotingAnIdentifierRoundTrips(t *testing.T) {
 	})
 }
 
-// readQuotedIdent decodes a SQLite double-quoted identifier: doubled quotes are
-// one literal quote, the first single quote ends it. It returns the name and
-// whatever followed, which is what tells a broken quoting apart from a working
-// one.
 func readQuotedIdent(s string) (string, string, error) {
 	if len(s) == 0 || s[0] != '"' {
 		return "", "", fmt.Errorf("does not start with a quote")
@@ -366,9 +298,6 @@ func readQuotedIdent(s string) (string, string, error) {
 	return "", "", fmt.Errorf("unterminated")
 }
 
-// The two physical names are the whole derivation chain: a table comes from a
-// row id and a column from a validated field name. Neither may produce something
-// that stops being a plain identifier, whatever it is handed.
 func TestPhysicalNamesStayPlainIdentifiers(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		id := rapid.Int64Range(1, 1<<53-1).Draw(t, "row_id")

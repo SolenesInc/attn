@@ -1,8 +1,5 @@
-// The labels a terminal highlight can carry, and how a set of annotations
-// becomes the text typed back into the session.
-//
-// The set itself is shared with the Markdown reader — see
-// `src/annotations/quickLabels.ts`. This module owns only the payload.
+// The label set is shared with the Markdown reader (`src/annotations/quickLabels.ts`);
+// this module owns only the payload.
 
 export {
   QUICK_LABEL_GROUPS,
@@ -17,23 +14,9 @@ export interface PayloadAnnotation {
   quote: string;
   quickLabelId: string;
   comment: string;
-  // Offset of the annotation's start in the message, used only to order the
-  // payload the way the user reads the message.
   start: number;
 }
 
-// Composes the message typed back into the session.
-//
-// The quote is what makes an annotation legible to the agent: it has no access
-// to what the user highlighted, only to what it wrote, so every item leads with
-// the exact words it is about. Items are ordered by position in the message
-// rather than by when they were made, because the agent reads the payload as a
-// pass over its own answer.
-//
-// The note goes first, before the marks. It is what the user wants done —
-// "let's do x and y" — and the marks are the detail that qualifies it. Sending
-// it after them would make it read as an afterthought, which is exactly the
-// ordering that has people writing "…but also consider what I put below".
 export function buildAnnotationPayload(
   annotations: readonly PayloadAnnotation[],
   note = '',

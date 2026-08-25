@@ -10,12 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The registry as the UI sees it, and what comes back when one of its mounts
-// crashes. What these pin: a tile learns where its bundle is and whether the app
-// is on, a version flip re-pushes the whole list (that IS the reload mechanism),
-// and a crash report is written to the invocation log only when it names a
-// version the app really has.
-
 func appViewManifest(views ...appbuild.View) appbuild.Manifest {
 	return appbuild.Manifest{Description: "reviews approvals", Views: views}
 }
@@ -74,8 +68,6 @@ func TestAppRegistrySnapshotOffersTheViewsTheServingVersionWasBuiltWith(t *testi
 	if names := viewNamesOf(t, d, "roller"); len(names) != 2 {
 		t.Fatalf("after the second apply the snapshot offers %v", names)
 	}
-	// Rolling back is what makes the frozen declaration matter: what docks is
-	// what serves, not what the manifest on disk says today.
 	if err := d.store.SetAppCurrentVersion("roller", first.ID, first.CreatedAt); err != nil {
 		t.Fatalf("roll back to version %d: %v", first.ID, err)
 	}
@@ -135,7 +127,6 @@ func TestAViewCrashIsRecordedAgainstTheVersionThatServedIt(t *testing.T) {
 	if got.VersionID != version.ID {
 		t.Fatalf("the crash is stamped with version %d, want %d", got.VersionID, version.ID)
 	}
-	// The handler name is what makes `attn app logs` say which surface failed.
 	if got.Handler != apps.ViewLabel("approvals") {
 		t.Fatalf("handler is %q", got.Handler)
 	}
@@ -160,8 +151,7 @@ func TestAViewCrashLandsInTheAppLogTheTileTellsYouToRead(t *testing.T) {
 		Error:     "TypeError: board is undefined\n    at Approvals (approvals.js:1:199)",
 	})
 
-	// Read it the way `attn app logs reviewer` does — through the tag filter, so
-	// a line written without the app's tag would be invisible to the author.
+	// Read through the tag filter, the way `attn app logs reviewer` does.
 	lines, _, err := readAppLog(AppRuntimeLogPath(d.socketPath), "reviewer", false, 20)
 	if err != nil {
 		t.Fatalf("reading the app log: %v", err)
@@ -211,8 +201,6 @@ func TestAViewCrashWithAHugeStackIsTruncatedRatherThanDropped(t *testing.T) {
 	if len(got) > appViewCrashErrorLimit+128 {
 		t.Fatalf("the recorded error is %d bytes, past the %d-byte limit", len(got), appViewCrashErrorLimit)
 	}
-	// Half a stack still names the component, so truncation says so rather than
-	// leaving the reader with a message that looks complete.
 	if !strings.Contains(got, "TypeError: boom") || !strings.Contains(got, "truncated") {
 		t.Fatalf("the truncated error is unusable: %q", got[max(0, len(got)-200):])
 	}

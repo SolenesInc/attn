@@ -1,15 +1,3 @@
-// Package crew is attn's roster of durable named identities. A crew member is
-// a charter, a handoff line, and an address; its sessions are its days. The
-// member's home stays plain hand-editable markdown on disk — this package owns
-// the registry over those homes: what a member record IS, how a home directory
-// becomes one, and how a free-string member name resolves to a registered id.
-//
-// It holds no database handle and knows nothing about the daemon —
-// internal/daemon stores what is built here, under the collection declared
-// here. Identity is the invocation, never the files: a session is a member
-// because the daemon stamped a binding at its launch, and reading a charter
-// confers nothing.
-//
 // Design: docs/plans/2026-08-11-the-crew-primitive.md.
 package crew
 
@@ -27,79 +15,39 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// Surface is what the enrollment fence refuses by name on an outpost. One
-// string, so every crew verb refuses in the same words.
 const Surface = "the crew"
 
-// The crew's document-store address. `core/` is attn's own namespace owner.
 const (
 	Namespace         = "core/crew"
 	CollectionMembers = "members"
 )
 
-// HomesDirName is where members live under the data dir: `~/.attn/crew/<id>/`,
-// plain markdown, hand-editable by design. The registry serves reads over it
-// and never becomes a second authority for the prose.
 const HomesDirName = "crew"
 
-// CharterFileName is the one file that makes a directory a member's home.
 const CharterFileName = "CHARTER.md"
 
-// DefaultAgent is the harness a member wakes on when its record names none.
 // The crew simulation has run on Claude Code since 2026-08-06, so a member
-// registered before the agent field existed keeps waking exactly where it was.
+// registered before the agent field existed keeps waking where it was.
 const DefaultAgent = "claude"
 
-// Member is a member's stored body — the registry record, without the store's
-// own envelope. Every declared field is written unconditionally, empty string
-// included, so a filter on `binding_session = ""` matches the members that are
-// asleep.
-//
-// The whole designed schema is here from the first slice even though only part
-// of it moves: `cwd` and `awareness_dirs` are written and returned, and the
-// wake slice gives them meaning without touching a single stored body.
+// Every declared field is written unconditionally, empty string included, so a
+// filter on `binding_session = ""` matches the members that are asleep.
 type Member struct {
-	// ID is the member's durable address — the home directory's name, lowercase,
-	// sayable. It is what recognition will later ride, so nothing renames it.
-	ID string `json:"id"`
-	// CharterPath and HomeDir point at the canonical files; the registry never
-	// copies their prose.
-	CharterPath string `json:"charter_path"`
-	HomeDir     string `json:"home_dir"`
-	// CWD is where the member's sessions launch; empty until the wake slice
-	// records one.
-	CWD string `json:"cwd"`
-	// Agent is the harness this member's days run on. Empty means DefaultAgent —
-	// a member is plain markdown, so any harness can live in one, and the field
-	// is what says which. A wake's own `--agent` still wins for one day.
-	Agent string `json:"agent"`
-	// Model is the model this member's days run on. Empty takes the configured
-	// default for the launch harness, then the crew fallback when none is set.
-	Model string `json:"model"`
-	// AwarenessDirs are the places the member's charter is about.
-	AwarenessDirs []string `json:"awareness_dirs"`
-	// BindingSession is the session living this member's current day, or empty.
-	// One active binding per member is the single-holder rule; whether a
-	// non-empty value still binds is judged at read against live sessions, so a
-	// day that ended without ceremony releases on its own.
-	BindingSession string `json:"binding_session"`
-	// LetterPath and LetterSession are the letter the current day has already
-	// filed, and who filed it. They exist so a turnover that failed after the
-	// filing can be retried against the letter already on disk rather than
-	// against a second one: append-only means the letter is not writable twice,
-	// so without this the only way out of a failed nap would be to wait out the
-	// minute and file a correction. Cleared when a day starts — a fresh day has
-	// written nothing yet.
-	LetterPath    string `json:"letter_path"`
-	LetterSession string `json:"letter_session"`
-	// AutonomousWakes stamps every wake the user did not ask for, RFC3339,
-	// trimmed to the limit's window on each write. Durable because the limit
-	// bounds a night, and a daemon restart in the middle of one must not hand
-	// back a fresh allowance.
+	ID             string   `json:"id"`
+	CharterPath    string   `json:"charter_path"`
+	HomeDir        string   `json:"home_dir"`
+	CWD            string   `json:"cwd"`
+	Agent          string   `json:"agent"`
+	Model          string   `json:"model"`
+	AwarenessDirs  []string `json:"awareness_dirs"`
+	BindingSession string   `json:"binding_session"`
+	// The letter store is append-only: a letter cannot be written twice, so a
+	// turnover that failed after filing retries against the one on disk.
+	LetterPath      string   `json:"letter_path"`
+	LetterSession   string   `json:"letter_session"`
 	AutonomousWakes []string `json:"autonomous_wakes"`
 }
 
-// LaunchAgent is the harness this member's day starts on.
 func (m Member) LaunchAgent() string {
 	if agent := strings.TrimSpace(strings.ToLower(m.Agent)); agent != "" {
 		return agent
@@ -107,9 +55,6 @@ func (m Member) LaunchAgent() string {
 	return DefaultAgent
 }
 
-// FiledLetterFor answers whether sessionID has already filed this member's
-// closing letter, and where it landed. A letter recorded against a different
-// session belongs to a day that has ended and says nothing about this one.
 func (m Member) FiledLetterFor(sessionID string) (string, bool) {
 	if sessionID == "" || m.LetterPath == "" || m.LetterSession != sessionID {
 		return "", false
@@ -117,8 +62,6 @@ func (m Member) FiledLetterFor(sessionID string) (string, bool) {
 	return m.LetterPath, true
 }
 
-// MembersSchema declares which fields a query may name. Everything else in the
-// body is stored and returned untouched.
 func MembersSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
 		Namespace:  Namespace,
@@ -129,7 +72,6 @@ func MembersSchema() docstore.CollectionSchema {
 	}
 }
 
-// Encode renders a member as its stored body.
 func (m Member) Encode() ([]byte, error) {
 	if m.AwarenessDirs == nil {
 		m.AwarenessDirs = []string{}
@@ -140,8 +82,8 @@ func (m Member) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// Decode reads a stored body. Unknown keys are ignored on purpose: a record
-// written by a later attn stays readable by an older one.
+// Unknown keys are ignored on purpose: a record written by a later attn stays
+// readable by an older one.
 func Decode(body []byte) (Member, error) {
 	var member Member
 	if err := json.Unmarshal(body, &member); err != nil {
@@ -150,15 +92,12 @@ func Decode(body []byte) (Member, error) {
 	return member, nil
 }
 
-// MaxIDChars bounds a member id. A member's name is said out loud and typed
-// into a flag; the longest real one is 7 characters (`trellis`), so 40 is a
-// tripwire only a generated string touches.
+// The longest real id is 7 characters (`trellis`); 40 is a tripwire only a
+// generated string touches.
 const MaxIDChars = 40
 
 var memberIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// ValidateID accepts a member id, naming the shape it wanted. The rule is the
-// home directory's: lowercase, starts with a letter, sayable.
 func ValidateID(id string) error {
 	if id == "" {
 		return fmt.Errorf("a member id is required")
@@ -172,14 +111,8 @@ func ValidateID(id string) error {
 	return docstore.ValidateDocumentID(id)
 }
 
-// DisplayName is how a member's id is written wherever a person reads it:
-// Trellis, Keel, Alder. Display capitalizes, identity does not — the id stays
-// lowercase in paths, CLI arguments, JSON fields and the store, and this is the
-// one place the two part ways. The frontend keeps its own copy of the same rule
-// in `app/src/utils/crewName.ts`.
-//
-// The first rune only. Ids may carry `-`, but no real member is two words, and
-// title-casing one would invent a name nobody chose.
+// app/src/utils/crewName.ts keeps the same rule; the id itself stays lowercase
+// in paths, arguments, JSON and the store.
 func DisplayName(id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -189,10 +122,6 @@ func DisplayName(id string) string {
 	return string(unicode.ToUpper(first)) + id[size:]
 }
 
-// HolderName is how something's holder is written for a reader when it can be
-// either a member or a bare session: the member reads as the name it is, and a
-// session id is left exactly as it is rather than dressed up as one. The
-// garden's tenders, planters and note authors are all this shape.
 func HolderName(member, session string) string {
 	if strings.TrimSpace(member) != "" {
 		return DisplayName(member)
@@ -200,10 +129,6 @@ func HolderName(member, session string) string {
 	return strings.TrimSpace(session)
 }
 
-// Resolve finds the registered member a free-string name addresses, folding
-// case so `Trellis` reaches `trellis`. The second return is false when nothing
-// is registered under that name — which is a normal answer, not an error: the
-// garden's free-string members keep tending unregistered.
 func Resolve(name string, members []Member) (Member, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -217,14 +142,6 @@ func Resolve(name string, members []Member) (Member, bool) {
 	return Member{}, false
 }
 
-// ScanHomes reads a crew directory into the member records it holds: every
-// subdirectory with a CHARTER.md is a home. Loose files beside the homes
-// (CREW.md, notes) are not members and are skipped silently; a directory whose
-// name is not a member id is skipped with its reason, so a typo'd home is
-// named rather than quietly absent from the roster.
-//
-// A missing crew directory is an empty roster, not an error: every fresh
-// install starts without one.
 func ScanHomes(dir string, warn func(format string, args ...any)) ([]Member, error) {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {

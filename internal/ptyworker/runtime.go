@@ -36,8 +36,6 @@ func previewWorkerBytesForLog(data []byte) string {
 	return preview
 }
 
-// attachBlocksToWire converts the session's resolved command blocks to their
-// wire form (1:1 fields; pointers alias — both sides are read-only snapshots).
 func attachBlocksToWire(blocks []pty.AttachBlockData) []AttachBlock {
 	if len(blocks) == 0 {
 		return nil
@@ -61,12 +59,7 @@ func attachBlocksToWire(blocks []pty.AttachBlockData) []AttachBlock {
 
 var exitedSessionCleanupTTL = 45 * time.Second
 
-// orphanedWorkerTTL is how long a worker with a live child keeps running with
-// no authenticated daemon connection AND no PTY output before it stops itself.
-// Workers must survive daemon restarts/upgrades (the daemon reattaches within
-// seconds), and an in-flight agent run during a daemon outage keeps producing
-// output, which defers the deadline — so this only reaps sessions that are
-// both unowned and idle, e.g. workers left behind by torn-down profiles.
+// Reaps only workers that are both unowned and idle; PTY output defers it.
 // Override with ATTN_WORKER_ORPHAN_TTL (Go duration; "0" disables reaping).
 var orphanedWorkerTTL = 12 * time.Hour
 
@@ -122,29 +115,19 @@ type Config struct {
 
 	Logf func(format string, args ...interface{}) `json:"-"`
 
-	// AdoptHandoff names the file a previous image of this process left behind
-	// when it replaced itself; the fds are what it passed alongside. Set only
-	// on the adopt half of an in-place upgrade, where every other field in this
-	// struct comes from that file rather than from argv. See upgrade.go.
+	// Set only on the adopt half of an in-place upgrade; see upgrade.go.
 	AdoptHandoff    string
 	AdoptPtmxFD     int
 	AdoptListenerFD int
 
-	// Debug gates verbose per-output-chunk worker logging. When false the
-	// hot-path log call (and its byte-preview allocation) is skipped entirely;
-	// lifecycle and error logs are unaffected. The per-session worker .log only
-	// grows from these per-chunk lines, so gating them caps it for normal runs.
 	Debug bool
 }
 
 type Runtime struct {
 	cfg     Config
 	manager *pty.Manager
-	// adopt is the session this image inherited from the one it replaced; nil
-	// on an ordinary launch, where the worker spawns its own. See upgrade.go.
-	// adopt is handed to the manager once and then released: it carries the
-	// whole screen as VT (measured 590KB on a full 8MB scrollback), and this
-	// process lives for days.
+	// Released after the manager takes it: it carries the whole screen as VT
+	// (measured 590KB on a full 8MB scrollback) and this process lives for days.
 	adopt    *pty.HandoffState
 	adopted  bool
 	listener net.Listener
@@ -164,16 +147,13 @@ type Runtime struct {
 	exited      bool
 	cleanupTTL  *time.Timer
 
-	// Orphan reaping: see orphanedWorkerTTL. orphanTimer is guarded by
-	// lifecycleMu; lastOutputNano is stamped from the PTY output path.
+	// orphanTimer is guarded by lifecycleMu; lastOutputNano by the output path.
 	orphanTTL      time.Duration
 	orphanTimer    *time.Timer
 	lastOutputNano atomic.Int64
 
 	connSeq atomic.Uint64
 
-	// upgradeResume is non-nil only while an in-place upgrade has stopped the
-	// accept loop; see pauseAccept.
 	upgradeMu     sync.Mutex
 	upgradeResume chan net.Listener
 
@@ -192,12 +172,8 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
-		// The handoff carries the session's whole configuration; argv carries
-		// only where to find it and which descriptors it arrived on. The JSON
-		// is therefore the entire contract: a Config field that does not
-		// serialize reaches an adopted session as its zero value while a
-		// spawned one gets the real thing, which is what
-		// TestHandoffCarriesEveryConfigField pins.
+		// The handoff JSON is the entire contract: a Config field that does not
+		// serialize reaches an adopted session as its zero value.
 		inherited := cfg
 		cfg = hf.Config
 		cfg.Logf = logf
@@ -240,11 +216,8 @@ func (r *Runtime) run(ctx context.Context) error {
 
 	r.manager = pty.NewManager(r.logf)
 	r.manager.SetStateHandler(func(_ string, obs pty.Observation) {
-		// An evidence-only observation does not claim a protocol state, so it must
-		// not touch the cached state or be deduped against it: "busy" and "working"
-		// are different vocabularies, and collapsing them would both corrupt the
-		// cache the worker replays to new watchers and silently drop a heartbeat
-		// whenever it happened to equal the last state string.
+		// Evidence-only: it must not touch the cached state or be deduped against
+		// it, or a heartbeat is dropped whenever it equals the last state string.
 		if !obs.Source.ClaimsProtocolState() {
 			r.broadcastLifecycle(stateChangedEvent(r.cfg.SessionID, obs))
 			return
@@ -308,9 +281,8 @@ func (r *Runtime) run(ctx context.Context) error {
 	r.logf("worker startup: session=%s socket=%s registry=%s", r.cfg.SessionID, r.cfg.SocketPath, r.cfg.RegistryPath)
 	var listener net.Listener
 	if r.adopted {
-		// Inherited, not rebound: rebinding leaves a measured ~12ms hole where
-		// a daemon dial fails, and the socket path answering without a pause is
-		// what makes the upgrade invisible.
+		// Inherited, not rebound: rebinding leaves a measured ~12ms hole where a
+		// daemon dial fails.
 		var err error
 		if listener, err = adoptListener(r.cfg.AdoptListenerFD); err != nil {
 			return err
@@ -426,9 +398,8 @@ func (r *Runtime) run(ctx context.Context) error {
 	entry.OwnerPID = r.cfg.OwnerPID
 	entry.OwnerStartedAt = r.cfg.OwnerStartedAt
 	entry.OwnerNonce = r.cfg.OwnerNonce
-	// Record the launch params the daemon can't otherwise source, so a daemon-side
-	// reload (chief assign/demote) re-spawns with the same yolo/executable instead
-	// of defaulting them.
+	// The daemon cannot source these otherwise, and a reload would re-spawn with
+	// defaults instead of the same yolo/executable.
 	entry.LaunchParamsRecorded = true
 	entry.YoloMode = r.cfg.YoloMode
 	entry.ApprovalRoute = r.cfg.ApprovalRoute
@@ -447,10 +418,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	}
 	r.logf("worker startup: registry ready session=%s pid=%d child_pid=%d", r.cfg.SessionID, os.Getpid(), info.PID)
 
-	// Orphan reaping: observe PTY output so a busy child defers the deadline,
-	// then arm the watch. The daemon's first authenticated connection (seconds
-	// away in the normal path) cancels it; it re-arms whenever the last authed
-	// connection drops.
 	r.noteOutputActivity()
 	if _, err := r.manager.Subscribe(
 		r.cfg.SessionID,
@@ -475,10 +442,8 @@ func (r *Runtime) run(ctx context.Context) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// An upgrade closes the listener on purpose, so new connections
-			// queue in the kernel for the image that is about to take over. The
-			// wait ends when the exec replaces this process, or — if the upgrade
-			// rolled back — with the same socket handed back.
+			// An upgrade closes the listener on purpose so new connections queue
+			// in the kernel for the image taking over.
 			if resumed, ok := r.awaitUpgradeListener(); ok {
 				listener = resumed
 				continue
@@ -630,8 +595,6 @@ func (r *Runtime) orphanDeadlineFired() {
 		r.lifecycleMu.Unlock()
 		return
 	}
-	// A busy child (e.g. an agent still finishing a run while the daemon is
-	// down) defers reaping until output has been quiet for a full TTL.
 	idle := time.Since(time.Unix(0, r.lastOutputNano.Load()))
 	if idle < r.orphanTTL {
 		r.orphanTimer = time.AfterFunc(r.orphanTTL-idle, r.orphanDeadlineFired)
@@ -733,8 +696,7 @@ func (r *Runtime) handleConn(conn net.Conn) {
 		if useDeadline {
 			_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		} else {
-			// Streaming connections (attach/watch) stay mostly server-push and
-			// can be idle for long periods. Keep them open until peer close.
+			// Attach/watch are server-push and idle for long periods: no deadline.
 			_ = conn.SetReadDeadline(time.Time{})
 		}
 
@@ -918,9 +880,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			subID = "conn-" + c.connID
 		}
 		send := func(data []byte, seq uint32) bool {
-			// Hot path: one call per output chunk. Gate the verbose log (and
-			// its preview allocation) so DEBUG-off runs don't write a line to
-			// the per-session worker .log for every chunk (an unbounded leak).
+			// One call per output chunk: an ungated log line here grows the
+			// per-session .log without bound.
 			if c.runtime.cfg.Debug {
 				c.runtime.logf(
 					"worker output event: session=%s conn=%s sub=%s seq=%d bytes=%d preview=%q",
@@ -974,14 +935,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 				)
 			}
 		}
-		// Placements ride this connection's own queue, which is what keeps a
-		// set ordered behind the output event carrying the same seq.
-		//
-		// The success path does not log. While an image is on screen this
-		// fires for every chunk that scrolls it, so a line per update is
-		// hundreds a second through a plain `cat` — enough to bury the rest
-		// of the session log. Only a forward failure is worth a line, and it
-		// is bounded by the send queue giving up.
+		// Placements ride this connection's own queue, which keeps a set ordered
+		// behind the output event carrying the same seq. Success must not log.
 		onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
 			seq := update.Seq
 			if !c.sendEvent(EventEnvelope{
@@ -1167,12 +1122,8 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
 	case MethodRemove:
-		// Respond before killing so the RPC doesn't block on process exit.
-		// Kill can wait up to defaultKillTimeout (10s) for the process to
-		// exit, which exceeds the daemon's 5s RPC timeout and causes
-		// spurious "i/o timeout" probe failures.  The subsequent
-		// requestStop() shuts down the worker, which SIGHUPs the child
-		// anyway if it's still alive.
+		// Respond before killing: Kill waits up to defaultKillTimeout (10s),
+		// past the daemon's 5s RPC timeout, and probes then read "i/o timeout".
 		c.sendResult(req.ID, map[string]any{"ok": true})
 		c.shutdown = true
 		_ = c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
@@ -1194,8 +1145,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		if state == "" {
 			state = "working"
 		}
-		// Not a fresh terminal observation: this replays the worker's cached state
-		// so a newly subscribed watcher starts in sync.
+		// Replays the cached state; not a fresh terminal observation.
 		_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, pty.Observation{
 			Source: pty.SourceWorkerInfo,
 			Claim:  state,
@@ -1274,13 +1224,8 @@ func (r *Runtime) infoResult() (InfoResult, error) {
 	exitSignal := r.exitSignal
 	r.stateMu.RUnlock()
 
-	// State is left empty when nothing ever set it, rather than filled in with
-	// `working`. The invented default was read as a claim by everything
-	// downstream — it is what stamped every recovered session `working` and then
-	// `launching` on a daemon restart — and the worker genuinely has no opinion:
-	// no observer has named a protocol state since the screen scraper was
-	// deleted. Saying nothing is the honest answer, and the level below is what
-	// the daemon actually wants.
+	// State stays empty when nothing set it: a default here reads downstream as
+	// a claim, and stamped every recovered session `working` on a daemon restart.
 	result := InfoResult{
 		Running:   info.Running,
 		Agent:     r.cfg.Agent,
@@ -1338,14 +1283,8 @@ func isTemporary(err error) bool {
 	return false
 }
 
-// pauseAccept stops the accept loop and returns the listening socket's
-// descriptor, with CLOEXEC cleared so it crosses an execve. The socket stays
-// bound and keeps queueing connections in the kernel, so a daemon that dials
-// during the swap waits instead of failing — and is served by the image that
-// takes over.
-//
-// It runs before the session is captured: between the capture and the exec,
-// this worker no longer owns the session and would answer "session not found".
+// CLOEXEC is cleared so the socket crosses the execve still bound and queueing.
+// Must run before the session is captured, or dials get "session not found".
 func (r *Runtime) pauseAccept() (int, error) {
 	r.upgradeMu.Lock()
 	defer r.upgradeMu.Unlock()
@@ -1357,14 +1296,11 @@ func (r *Runtime) pauseAccept() (int, error) {
 		return 0, err
 	}
 	r.upgradeResume = make(chan net.Listener, 1)
-	// Closing this listener only ends the accept loop's wait: the dup above
-	// keeps the socket itself open, backlog and all.
+	// The dup above keeps the socket open, backlog and all.
 	_ = r.listener.Close()
 	return fd, nil
 }
 
-// resumeAccept undoes pauseAccept when the upgrade never happened, handing the
-// accept loop the same socket back.
 func (r *Runtime) resumeAccept(fd int) {
 	listener, err := adoptListener(fd)
 	if err != nil {
@@ -1383,8 +1319,7 @@ func (r *Runtime) resumeAccept(fd int) {
 	}
 }
 
-// awaitUpgradeListener parks the accept loop for the duration of an upgrade. It
-// reports false when no upgrade is pausing accepts, which is every other reason
+// Reports false when no upgrade is pausing accepts, which is every other reason
 // Accept can fail.
 func (r *Runtime) awaitUpgradeListener() (net.Listener, bool) {
 	r.upgradeMu.Lock()

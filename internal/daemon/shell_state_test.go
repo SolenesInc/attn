@@ -10,15 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-// A shell's state is resolved from its foreground heartbeat; the worker poll
-// must not touch it. The concrete failure this pins down: the worker runtime
-// caches state "working" from birth, nothing ever sets a shell worker's state,
-// and the watch-subscribe replay reports that cache as a worker-info claim —
-// which would flip every freshly spawned shell out of `idle`.
-//
-// The veto is no longer shell-specific: no agent's worker caches a real state
-// any more, so a worker-info claim may only end `launching`. A shell never sits
-// there, which is why it is still the sharpest case to pin.
 func TestShellIgnoresTheWorkerPollsStateClaim(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "shell-veto.sock"))
 	const id = "shell-worker-info"
@@ -40,9 +31,6 @@ func TestShellIgnoresTheWorkerPollsStateClaim(t *testing.T) {
 	}
 }
 
-// The foreground heartbeat is a shell's entire state pipeline: busy resolves to
-// working, the prompt returning resolves back to idle, and neither transition
-// puts the shell in the attention queue.
 func TestShellForegroundHeartbeatDrivesItsState(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "shell-heartbeat.sock"))
 	const id = "shell-heartbeat"
@@ -61,9 +49,6 @@ func TestShellForegroundHeartbeatDrivesItsState(t *testing.T) {
 		t.Fatalf("state=%q, want idle at the prompt", session.State)
 	}
 
-	// Real states must not put the pane in the queue: attention.Owed excludes
-	// shells, and that exclusion is now a policy choice rather than a
-	// consequence of shells never changing state.
 	d.decorateSessionWithTurn(session)
 	if session.TurnOwed != nil {
 		t.Fatalf("TurnOwed=%v: a shell state change entered the queue", *session.TurnOwed)

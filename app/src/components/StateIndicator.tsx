@@ -1,4 +1,3 @@
-// app/src/components/StateIndicator.tsx
 import './StateIndicator.css';
 import { pickSessionEmoji } from '../utils/sessionEmoji';
 import type { UISessionState } from '../types/sessionState';
@@ -25,12 +24,9 @@ export function StateIndicator({
   className = '',
   reason,
 }: StateIndicatorProps) {
-  // Normalize state for CSS class (waiting_input -> waiting-input)
   const stateClass = state.replace('_', '-');
   const launchingEmoji = state === 'launching' ? pickSessionEmoji(seed ?? '') : null;
-  // Only `unknown` explains itself. Every other state says what it means by its
-  // own name, and a tooltip repeating that is noise; `unknown` is the one badge
-  // that otherwise tells the user something is wrong and nothing about what.
+  // Only `unknown` gets a tooltip; every other state says what it means by name.
   const explanation = state === 'unknown' ? describeUnknownReason(reason) : undefined;
 
   return (
@@ -51,10 +47,7 @@ export function StateIndicator({
   );
 }
 
-// describeUnknownReason turns a resolver reason into something worth reading on
-// hover. Only the reasons that can actually reach `unknown` are named; anything
-// else falls back rather than inventing an explanation for a state the daemon
-// reached some other way.
+// Only the reasons that can actually reach `unknown` are named; anything else falls back.
 function describeUnknownReason(reason: string | undefined): string | undefined {
   switch (reason) {
     case 'stuck':

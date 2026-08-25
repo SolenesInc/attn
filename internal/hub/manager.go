@@ -23,10 +23,6 @@ import (
 
 type StatusCallback func(info protocol.EndpointInfo)
 
-// SessionsChangedCallback reports that the sessions the hub knows about for one
-// endpoint changed. The endpoint id is the subject of the fact the daemon
-// publishes in response, so it is required: "some remote sessions changed
-// somewhere" is a cache invalidation, not an event.
 type SessionsChangedCallback func(endpointID string)
 type RawEventCallback func(data []byte)
 
@@ -39,9 +35,6 @@ func (e *VersionMismatchError) Error() string {
 	return fmt.Sprintf("protocol mismatch: remote=%s local=%s", e.RemoteVersion, e.LocalVersion)
 }
 
-// BinaryMismatchError is returned by consumeRemote when the connection closes
-// while in binary_mismatch state, so the caller can apply the same slow-retry
-// policy as VersionMismatchError instead of the normal fast reconnect.
 type BinaryMismatchError struct {
 	Message string
 }
@@ -100,10 +93,6 @@ type Manager struct {
 	onStatus     StatusCallback
 	onSessions   SessionsChangedCallback
 	onRawEvent   RawEventCallback
-	// homeDaemonID answers "which home is dialing?" at the moment a sync runs.
-	// It is a function, not a value, because enrollment is a file that changes
-	// under a live daemon; it returns "" when this daemon is not a home and
-	// therefore has no home-level state to enroll anyone into.
 	homeDaemonID func() string
 	logf         func(format string, args ...interface{})
 
@@ -183,8 +172,6 @@ func (m *Manager) Start(parent context.Context) {
 }
 
 func (m *Manager) Stop() {
-	// One id per endpoint that actually had sessions: stopping the hub drops
-	// each endpoint's sessions separately, and each is its own fact.
 	var emptied []string
 	shutdownTargets := make([]isolatedShutdownTarget, 0)
 	seenTargets := make(map[string]struct{})
@@ -279,10 +266,6 @@ func (m *Manager) AddEndpoint(name, sshTarget, profile string) (*store.EndpointR
 	return record, nil
 }
 
-// BootstrapEndpoint requests an explicit bootstrap (install binary + start daemon) for the
-// given endpoint.  The flag is consumed at the top of runEndpointLoop so it fires once on
-// the next loop iteration.  Upgrade must be intentional — this is the only path that calls
-// EnsureRemoteReady when the remote daemon is already running.
 func (m *Manager) BootstrapEndpoint(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -459,12 +442,8 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 			return
 		}
 
-		// Explicit bootstrap requested (e.g. user clicked Sync) — install binary and start daemon.
 		if m.consumeBootstrapFlag(id) {
 			m.updateStatus(id, "bootstrapping", "Installing remote binary", nil, nil)
-			// The bootstrap owns its own deadlines: it has two phases whose sizes
-			// differ by an artifact, and one budget here could only be wrong for one
-			// of them.
 			err := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, record.Profile, m.homeDaemonID())
 			if err != nil {
 				m.updateStatus(id, "error", err.Error(), nil, nil)
@@ -476,11 +455,9 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 			}
 		}
 
-		// Try to connect; if it fails the daemon is not running — bootstrap and retry.
 		m.updateStatus(id, "connecting", "Connecting to remote daemon", nil, nil)
 		conn, cmd, err := connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), record.Profile)
 		if err != nil {
-			// Daemon appears down — bootstrap then try once more.
 			m.updateStatus(id, "bootstrapping", "Checking remote platform", nil, nil)
 			bootErr := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, record.Profile, m.homeDaemonID())
 			if bootErr != nil {
@@ -503,18 +480,12 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 			}
 		}
 
-		// Read after connecting, not before: a host whose daemon has never run
-		// has no token to read yet, and reaching here means it is up.
+		// Read after connecting, not before: a host whose daemon has never run has
+		// no token to read yet, and reaching here means it is up.
 		clientToken := m.remoteClientToken(ctx, record.SSHTarget, record.Profile)
 
-		// Present the token and declare the workspace_sessions capability
-		// before anything else: until this hello passes, the remote daemon
-		// sends this connection nothing at all — no initial_state, no
-		// broadcasts — and refuses every gated command (register_workspace,
-		// spawn_session, forwarded client payloads, ...) with a policy
-		// violation. publishConnectionAndSendHello holds writeMu across
-		// publishing the connection and sending the hello so
-		// ForwardEndpointCommand can never win the race and write before it.
+		// Until this hello passes, the remote daemon refuses every gated command.
+		// publishConnectionAndSendHello holds writeMu so ForwardEndpointCommand cannot write first.
 		connected := false
 		consumeErr := m.publishConnectionAndSendHello(ctx, id, conn, cmd, clientToken)
 		if consumeErr == nil {
@@ -532,10 +503,8 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 
 		var versionErr *VersionMismatchError
 		if errors.As(consumeErr, &versionErr) {
-			// Version mismatch — surface to user instead of auto-bootstrapping.
 			status, message := versionMismatchStatus(versionErr)
 			m.updateStatus(id, status, message, nil, nil)
-			// Sleep longer before retrying; the user needs to click Sync.
 			if !sleepOrDone(ctx, 30*time.Second) {
 				return
 			}
@@ -544,9 +513,6 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 
 		var binaryErr *BinaryMismatchError
 		if errors.As(consumeErr, &binaryErr) {
-			// Binary mismatch — connection dropped while in mismatch state.
-			// Keep the binary_mismatch status and use the same slow-retry policy
-			// so the banner stays visible and the user can click Sync.
 			m.updateStatus(id, "binary_mismatch", binaryErr.Message, nil, nil)
 			if !sleepOrDone(ctx, 30*time.Second) {
 				return
@@ -556,7 +522,6 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 
 		if connected {
 			m.updateStatus(id, "disconnected", "Disconnected; reconnecting", nil, nil)
-			// Reset backoff after a successful session — it was healthy.
 			backoff = time.Second
 		} else if consumeErr != nil {
 			m.updateStatus(id, "error", consumeErr.Error(), nil, nil)
@@ -568,9 +533,6 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 	}
 }
 
-// versionMismatchStatus returns the status string and human-readable message for a
-// VersionMismatchError.  "version_mismatch" means the remote is older (safe to sync
-// by upgrading it).  "version_ahead" means the remote is newer (syncing would downgrade it).
 func versionMismatchStatus(e *VersionMismatchError) (string, string) {
 	remoteN, remoteErr := strconv.Atoi(e.RemoteVersion)
 	localN, localErr := strconv.Atoi(e.LocalVersion)
@@ -586,25 +548,8 @@ func versionMismatchStatus(e *VersionMismatchError) (string, string) {
 	)
 }
 
-// sendClientHello identifies the hub connection to the remote daemon. The
-// hello is fire-and-forget (the daemon never replies to it), but without the
-// workspace_sessions capability it declares, the daemon rejects every gated
-// command later forwarded over this connection.
-//
-// kitty_images is what makes a remote session's images visible at all: the
-// remote daemon sends placement descriptions only to clients that ask, and this
-// connection is the only client it has. The relay carries them onward by
-// session id like pty_output.
-//
-// binary_pty_output is deliberately absent, here as for PTY output. The relay
-// is a text pipe — it reads a message, re-reads the envelope as JSON, and
-// re-broadcasts — so a binary frame would arrive as bytes it cannot parse and
-// would be pushed out as an invalid text message. Leaving the bit off makes the
-// remote daemon answer image pulls with base64 JSON, which survives the trip.
-//
-// clientToken is the REMOTE daemon's, read off that host by remoteClientToken —
-// ws-relay is a raw byte pipe, so this hello reaches the remote daemon end to
-// end and is checked there like any other client's.
+// sendClientHello declares this connection's capabilities: without workspace_sessions the
+// remote refuses gated commands; binary_pty_output is absent because the relay is text.
 func sendClientHello(ctx context.Context, conn *websocket.Conn, clientToken string) error {
 	payload, err := json.Marshal(protocol.ClientHelloMessage{
 		Cmd:         protocol.CmdClientHello,
@@ -627,10 +572,6 @@ func sendClientHello(ctx context.Context, conn *websocket.Conn, clientToken stri
 
 func (m *Manager) consumeRemote(ctx context.Context, id string, conn *websocket.Conn) (bool, error) {
 	connected := false
-	// activeStatus and activeMsg track the status established on initial_state so
-	// that subsequent session events preserve it rather than blindly writing
-	// "connected".  For a binary_mismatch connection the WebSocket stays alive
-	// but the endpoint must remain non-"connected" throughout.
 	activeStatus := "connected"
 	activeMsg := "Connected"
 	for {
@@ -829,10 +770,6 @@ func forwardsRawEvent(event string) bool {
 		protocol.EventAttachResult,
 		protocol.EventPtyOutput,
 		protocol.EventPtyDesync,
-		// The same class as the pty stream above: per-session attach traffic a
-		// remote runtime produces for the app. A placement description and the
-		// blob answer it provokes both have to cross the hub, or a remote
-		// session's images never draw.
 		protocol.EventKittyPlacements,
 		protocol.EventKittyImageResult,
 		protocol.EventSessionExited,
@@ -1058,20 +995,12 @@ func (m *Manager) HasConfiguredEndpoints() bool {
 	return len(m.runtimes) > 0
 }
 
-// parkedStatuses are the endpoint statuses that mean the hub is deliberately
-// holding this endpoint back until the user clicks Sync. Every one of them is
-// set with a message naming what differs and how to fix it, and every one of
-// them makes the remote unsafe to command: its binary or its protocol is not
-// the one this client speaks.
 var parkedStatuses = map[string]bool{
 	"binary_mismatch":  true,
 	"version_mismatch": true,
 	"version_ahead":    true,
 }
 
-// ParkedEndpointError refuses a command aimed at an endpoint the hub is
-// holding back. It carries the status message the endpoint list already shows,
-// so the command error and the banner cannot drift apart.
 type ParkedEndpointError struct {
 	EndpointID string
 	Name       string
@@ -1091,12 +1020,8 @@ func (e *ParkedEndpointError) Error() string {
 	return fmt.Sprintf("endpoint %s is parked: %s", who, detail)
 }
 
-// parkedErrorLocked returns the refusal for a held-back endpoint, or nil when
-// commands may be forwarded to it. Callers hold m.mu.
-//
-// The check is on status, not on the connection: a binary_mismatch endpoint
-// keeps a live WebSocket, so without this the command runs on a remote attn
-// already knows is the wrong build.
+// parkedErrorLocked returns the refusal for a held-back endpoint; callers hold m.mu. The
+// check is on status, not the connection: a binary_mismatch endpoint keeps a live socket.
 func parkedErrorLocked(endpointID string, runtime *endpointRuntime) error {
 	if !parkedStatuses[runtime.info.Status] {
 		return nil
@@ -1441,15 +1366,9 @@ func sessionsMatch(left, right protocol.Session) bool {
 		protocol.Deref(left.StateReason) == protocol.Deref(right.StateReason) &&
 		protocol.Deref(left.TurnOwed) == protocol.Deref(right.TurnOwed) &&
 		protocol.Deref(left.TurnOpenedAt) == protocol.Deref(right.TurnOpenedAt) &&
-		// Without this a remote agent snoozed on its own daemon changes nothing
-		// the hub compares, so the re-broadcast is suppressed and the row never
-		// moves into the snoozed section.
+		// Without this a remote agent snoozed on its own daemon changes nothing the hub
+		// compares, so the re-broadcast is suppressed and the row never moves.
 		protocol.Deref(left.TurnSnoozedUntil) == protocol.Deref(right.TurnSnoozedUntil) &&
-		// Same reason as the snooze stamp above: a remote agent pinned on its own
-		// daemon changes nothing else the hub compares, so without this the
-		// re-broadcast is suppressed and the row never leaves the queue. The
-		// satellite link rides along because a shell's parent decides whether it
-		// gets a row at all.
 		protocol.Deref(left.PinnedAt) == protocol.Deref(right.PinnedAt) &&
 		protocol.Deref(left.ParentSessionID) == protocol.Deref(right.ParentSessionID) &&
 		protocol.Deref(left.TicketUnread) == protocol.Deref(right.TicketUnread) &&
@@ -1494,12 +1413,6 @@ func workspaceLayoutsMatch(left, right protocol.WorkspaceLayout) bool {
 	return true
 }
 
-// foreignHomeNotice reports a remote that says it is an outpost of some daemon
-// other than this home. It is not an error — the remote's sessions, PTY, and PR
-// flows are unaffected by enrollment — but it means its garden and crew asks
-// belong elsewhere, so the connection says so out loud rather than leaving a
-// misconfiguration to be discovered by a refusal much later. A remote that is
-// its own home (nobody has enrolled it) is the ordinary case and stays quiet.
 func foreignHomeNotice(homeDaemonID string, msg *protocol.InitialStateMessage) string {
 	if msg == nil || strings.TrimSpace(homeDaemonID) == "" {
 		return ""
@@ -1778,14 +1691,8 @@ func (m *Manager) SetEndpointRemoteWeb(ctx context.Context, endpointID string, e
 	}
 }
 
-// publishConnectionAndSendHello publishes the runtime's connection and sends
-// the client_hello over it atomically with respect to ForwardEndpointCommand.
-// It holds runtime.writeMu from before the connection becomes visible (under
-// m.mu) until after the hello write completes, so a forwarded command can
-// never observe the published connection and win the write race against the
-// hello: ForwardEndpointCommand always reads runtime.conn under m.mu first,
-// so it either sees the old (nil or previous) connection, or it sees this
-// connection but then blocks on writeMu until the hello has been sent.
+// Holds runtime.writeMu from before the connection becomes visible until after the hello
+// write, so a forwarded command either sees the old connection or blocks on writeMu.
 func (m *Manager) publishConnectionAndSendHello(ctx context.Context, id string, conn *websocket.Conn, cmd *exec.Cmd, clientToken string) error {
 	m.mu.Lock()
 	runtime, ok := m.runtimes[id]
@@ -1911,17 +1818,6 @@ func sleepOrDone(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
-// fingerprintMismatch returns true (and a human-readable message) when the remote
-// daemon was built from a different source than this client.
-//
-// Rules:
-//   - If the local fingerprint is unknown (dev build, no ldflags) — skip; we can't
-//     make any claims about what "our" binary is.
-//   - If the local fingerprint is known but the remote is absent/unknown — mismatch:
-//     the running daemon is either an old binary that pre-dates source_fingerprint
-//     tracking, or a dev build.
-//   - If both are known and equal — no mismatch.
-//   - If both are known and differ — mismatch.
 func fingerprintMismatch(remoteFingerprint *string) (bool, string) {
 	local := normalizeFingerprint(buildinfo.SourceFingerprint)
 	if local == "" {

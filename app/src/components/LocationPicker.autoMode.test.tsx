@@ -9,8 +9,6 @@ vi.mock('../hooks/useFilesystemSuggestions', () => ({
   useFilesystemSuggestions: () => useFilesystemSuggestionsMock(),
 }));
 
-// A plugin-driver agent that advertises auto_mode, the way attn-pi does. The
-// per-session toggle is offered for those and nothing else.
 const PI_SETTINGS = {
   snipe_available: 'true',
   snipe_cap_auto_mode: 'true',
@@ -84,8 +82,6 @@ describe('LocationPicker auto mode toggle', () => {
     expect(screen.getByTestId('location-picker-automode-toggle')).toBeInTheDocument();
   });
 
-  // The launcher sees what the session will actually get, which means starting
-  // from the promoted default rather than from a hardcoded guess.
   it('starts from the promoted default', () => {
     renderPicker({ ...PI_SETTINGS, automode_enabled_default: 'false' });
     pickSnipe();
@@ -103,9 +99,8 @@ describe('LocationPicker auto mode toggle', () => {
     });
   });
 
-  // Turning it off is the whole point of a per-session override, and "off" has
-  // to travel as an answer — not as an absent field the daemon reads as
-  // "follow the default", which is what it was just overridden away from.
+  // "off" has to travel as an answer, not as an absent field the daemon reads as
+  // "follow the default".
   it('sends an explicit off when the launcher turns it off', async () => {
     const { onSelect } = renderPicker(PI_SETTINGS);
     pickSnipe();
@@ -117,8 +112,6 @@ describe('LocationPicker auto mode toggle', () => {
     });
   });
 
-  // The picker can open before the settings snapshot lands, so a default that
-  // arrives late still has to move a toggle nobody answered for.
   it('follows a default that arrives after the picker opened', () => {
     const { withSettings } = renderPicker(PI_SETTINGS);
     pickSnipe();
@@ -129,8 +122,6 @@ describe('LocationPicker auto mode toggle', () => {
     expect(screen.getByTestId('location-picker-automode-toggle')).toHaveAttribute('aria-checked', 'false');
   });
 
-  // …and once the launcher has answered, a default moving underneath must not
-  // launch the opposite of what they chose.
   it('keeps an explicit off when the default changes underneath it', async () => {
     const { onSelect, withSettings } = renderPicker(PI_SETTINGS);
     pickSnipe();

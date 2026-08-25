@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// respawnDelegatedSession re-spawns a delegated session under its existing id —
-// the frontend path for reloading a dead pane (and the tail of a ticket Resume).
 func respawnDelegatedSession(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	session := d.store.Get(sessionID)
@@ -32,17 +30,11 @@ func respawnDelegatedSession(t *testing.T, d *Daemon, sessionID string) {
 	expectSpawnResult(t, client, sessionID, true)
 }
 
-// The observed bug (2026-07-08): a delegated session crashes mid-flight — its
-// ticket is stamped Crashed — and the user then reloads the dead pane. The
-// session comes back and works, but the ticket used to sit in Crashed until
-// moved by hand. Reviving the owning session must move the ticket back to
-// Working automatically, authored by attn like the crash stamp itself.
 func TestRespawnOfCrashedSessionRevivesTicketToWorking(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
 	ticketID := boundTicketID(t, d, sessionID)
 
-	// Spontaneous mid-flight death: the ticket is crash-stamped and terminal.
 	d.store.UpdateState(sessionID, protocol.StateWorking)
 	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1})
 	ticket, err := d.store.GetTicket(ticketID)
@@ -53,7 +45,6 @@ func TestRespawnOfCrashedSessionRevivesTicketToWorking(t *testing.T) {
 		t.Fatalf("status after crash = %q, want crashed", ticket.Status)
 	}
 
-	// The user reloads the dead pane: same id, frontend-driven respawn.
 	respawnDelegatedSession(t, d, sessionID)
 
 	ticket, err = d.store.GetTicket(ticketID)
@@ -86,8 +77,6 @@ func TestRespawnOfCrashedSessionRevivesTicketToWorking(t *testing.T) {
 		t.Fatalf("revive author = %q, want attn", revive.Author)
 	}
 
-	// Crash detection is re-armed for the revived run: a later genuine
-	// mid-flight death stamps Crashed again.
 	d.store.UpdateState(sessionID, protocol.StateWorking)
 	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1})
 	ticket, err = d.store.GetTicket(ticketID)
@@ -99,15 +88,12 @@ func TestRespawnOfCrashedSessionRevivesTicketToWorking(t *testing.T) {
 	}
 }
 
-// Revival flips ONLY the Crashed column. A respawn under a ticket the agent
-// left in another column (here In Review) must not move it.
 func TestRespawnLeavesNonCrashedTicketAlone(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
 	ticketID := boundTicketID(t, d, sessionID)
 	callSetTicketStatus(t, d, sessionID, string(protocol.DispatchWorkStateReadyForReview), "PR is up")
 
-	// A clean exit (no crash stamp) followed by a reload of the pane.
 	d.store.UpdateState(sessionID, protocol.StateWaitingInput)
 	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 0})
 	respawnDelegatedSession(t, d, sessionID)
@@ -121,13 +107,6 @@ func TestRespawnLeavesNonCrashedTicketAlone(t *testing.T) {
 	}
 }
 
-// The observed bug (2026-08-09): a revived agent's FIRST report was always
-// refused. Dying and coming back writes two attn-authored events on its ticket —
-// the crash stamp and the crashed→working flip — and the mutation gate refused
-// any write while unread activity existed, so the first report died on activity
-// describing the agent's own death. The delegated agent that hit it did not
-// retry; it told its user "done" and its report never landed. The report must go
-// through on the first attempt, with the records it missed delivered beside it.
 func TestRevivedSessionReportsOnFirstAttempt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
@@ -154,9 +133,6 @@ func TestRevivedSessionReportsOnFirstAttempt(t *testing.T) {
 	}
 }
 
-// A peer's word that landed while the agent was down still gates its first
-// report: the crash records ride along in the same catch-up, but the comment
-// must be read before the agent may write over it.
 func TestRevivedSessionStillGatedByPeerActivity(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
@@ -178,8 +154,6 @@ func TestRevivedSessionStillGatedByPeerActivity(t *testing.T) {
 		t.Fatalf("catch-up = %+v, want crash, peer comment and revive shown", result.CatchUp)
 	}
 
-	// Reading cost the write, not the ability to write: the same command retried
-	// goes through, which is what the refusal tells the agent to do.
 	retry := callSetTicketStatus(t, d, sessionID, string(protocol.DispatchWorkStateReadyForReview), "now reviewed")
 	if !retry.Ok || retry.TicketStatusResult == nil || !retry.TicketStatusResult.Applied ||
 		retry.TicketStatusResult.Status != protocol.TicketStatusInReview {
@@ -187,17 +161,12 @@ func TestRevivedSessionStillGatedByPeerActivity(t *testing.T) {
 	}
 }
 
-// Daemon-restart safety: startup recovery adopting a still-live worker for a
-// crash-stamped ticket's session (a reap on an earlier boot stamped it, the
-// worker survived) moves the ticket back to Working — the same durable-vs-
-// in-memory rigor as the intentional-close mark it clears at the same spot.
 func TestRecoveryAdoptRevivesCrashedTicketToWorking(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := delegateBoundSession(t, d)
 	ticketID := boundTicketID(t, d, sessionID)
 	session := d.store.Get(sessionID)
 
-	// Crash-stamp via the seam, as a reap would.
 	d.store.UpdateState(sessionID, protocol.StateWorking)
 	d.reconcileTicketsOnSessionEnd(sessionID, protocol.StateWorking)
 	ticket, err := d.store.GetTicket(ticketID)
@@ -208,7 +177,6 @@ func TestRecoveryAdoptRevivesCrashedTicketToWorking(t *testing.T) {
 		t.Fatalf("status after crash = %q, want crashed", ticket.Status)
 	}
 
-	// Restart-time recovery finds the worker alive and adopts the session.
 	d.ptyBackend = &fakeWorkerReconcileBackend{
 		liveIDs: []string{sessionID},
 		info: map[string]ptybackend.SessionInfo{
@@ -232,8 +200,6 @@ func TestRecoveryAdoptRevivesCrashedTicketToWorking(t *testing.T) {
 	}
 }
 
-// A session can own more than one crashed ticket, and adopting it revives every
-// one of them — a single survivor left crashed is a ticket nothing will ever move.
 func TestReviveRestoresEveryCrashedTicketOfTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 

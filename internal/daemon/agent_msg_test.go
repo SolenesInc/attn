@@ -19,9 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// recordingDoorbell captures what the daemon typed, which is the only place the
-// composed prompt is observable — the format is the daemon's, so the test has
-// to read it off the wire rather than rebuild it.
 type recordingDoorbell struct {
 	mu     sync.Mutex
 	writes []string
@@ -35,7 +32,6 @@ func (r *recordingDoorbell) backend() *fakeSpawnBackend {
 	}}
 }
 
-// pasted returns the prompt bodies typed so far, paste fencing removed.
 func (r *recordingDoorbell) pasted() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -70,10 +66,6 @@ func callAgentMsg(t *testing.T, d *Daemon, target, source, content string) proto
 	})
 }
 
-// The receiver reads the daemon's composition, not the sender's: who spoke,
-// what they said, the consent boundary, and the command to answer with. The
-// boundary is repeated on every delivery because the message is typed into the
-// PTY, indistinguishable from user input except by this prefix.
 func TestHandleAgentMsgDeliversAnAttributedPromptWithTheBoundary(t *testing.T) {
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -117,9 +109,6 @@ func TestHandleAgentMsgDeliversAnAttributedPromptWithTheBoundary(t *testing.T) {
 	}
 }
 
-// A member name is its durable address. When its day is live, resolution lands
-// on that binding and uses the ordinary attributed delivery path; no second day
-// is started.
 func TestHandleAgentMsgResolvesAnAwakeCrewMemberToItsLiveSession(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -151,10 +140,6 @@ func TestHandleAgentMsgResolvesAnAwakeCrewMemberToItsLiveSession(t *testing.T) {
 	}
 }
 
-// Wake-and-deliver is one operation, not a wake followed by a best-effort
-// paste. The attributed message is persisted before spawn and replaces the
-// ordinary greeting as the day's initial prompt; the prompt-submit hook is the
-// receipt that clears the durable row.
 func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -197,9 +182,6 @@ func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *tes
 		t.Fatalf("message was not durable before the wake completed: queued=%+v err=%v", queued, err)
 	}
 
-	// Worker state alone is not the receipt: a live Claude wake reports working
-	// while its trust dialog is still in front of the initial prompt. It must
-	// neither stamp nor drain the queued row there.
 	if !d.applyState(sessionStateChange{
 		sessionID: result.TargetSessionID,
 		state:     protocol.StateWorking,
@@ -230,10 +212,6 @@ func TestHandleAgentMsgWakesASleepingMemberWithTheMessageAsItsFirstPrompt(t *tes
 	}
 }
 
-// A member is live as soon as its day is durably created, before the initial
-// prompt clears priming. Messages arriving in that interval queue behind the
-// first ask; the prompt-submit receipt must open their drain rather than clear
-// the only bit that remembers they exist.
 func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -288,9 +266,6 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	}
 }
 
-// A message-triggered wake is autonomous. The lifecycle's own limit decides,
-// and its loud refusal reaches the caller with the additional fact that no
-// message landed.
 func TestHandleAgentMsgWakeLimitRefusalDeliversNothing(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingCrewWakeLimit, "0")
@@ -357,9 +332,6 @@ func TestHandleAgentMsgUnknownAddressNamesBothPlacesToLook(t *testing.T) {
 	}
 }
 
-// The load-bearing half of "never a silent drop": a target that cannot take
-// input keeps the message, and the target's next state change is what delivers
-// it. Nothing else re-arms a blocked doorbell.
 func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testing.T) {
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -407,8 +379,6 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 	}
 }
 
-// Every refusal names its reason, so a sender can act on it. A refusal that
-// only said "no" would leave an agent retrying the same thing forever.
 func TestHandleAgentMsgRefusalsNameTheirReason(t *testing.T) {
 	d, doorbell := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -434,8 +404,6 @@ func TestHandleAgentMsgRefusalsNameTheirReason(t *testing.T) {
 		t.Fatalf("self-message detail = %q", detail)
 	}
 
-	// The dedupe window is the guard reached through the handler; the other two
-	// verdicts are the pure function's, tested below.
 	if resp := callAgentMsg(t, d, "target-session-id", "sender-session-id", "same words"); resp.AgentMsgResult.Status != protocol.AgentMsgStatusDelivered {
 		t.Fatalf("first send = %+v", resp.AgentMsgResult)
 	}
@@ -461,8 +429,6 @@ func TestAgentMessageGuardVerdictNamesTheLimitAndTheAsk(t *testing.T) {
 	if !strings.Contains(full, "50") {
 		t.Fatalf("queue-cap verdict = %q", full)
 	}
-	// Dedupe outranks the others: repeating identical text is the loop the guard
-	// exists for, and naming the rate limit instead would send the wrong fix.
 	both := agentMessageGuardVerdict(store.AgentMessageGuardCounts{
 		DuplicateFromSender: true, FromSenderInWindow: agentMessageRateLimit,
 	})
@@ -471,8 +437,6 @@ func TestAgentMessageGuardVerdictNamesTheLimitAndTheAsk(t *testing.T) {
 	}
 }
 
-// A daemon restart must not strand a queued message: the rows outlive the
-// process and the drain decides from memory, so that memory is rebuilt.
 func TestSeedQueuedAgentMessagesRestoresTheDrainAfterRestart(t *testing.T) {
 	d, _ := newAgentMsgDaemon(t)
 	addCharacterizationSession(t, d, "target-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
@@ -495,12 +459,8 @@ func TestSeedQueuedAgentMessagesRestoresTheDrainAfterRestart(t *testing.T) {
 	}
 }
 
-// The size cap has to be reachable through the socket that actually carries the
-// command. Live verification on 2026-08-10 found the earlier cap sitting at the
-// unix frame limit, where an oversize message closed the connection and reached
-// the sender as a bare "EOF" — a limit nobody could see. This pins both halves:
-// a message just over the cap is refused by name, and text past the frame limit
-// is answered rather than hung up on.
+// Live verification on 2026-08-10 found the cap sitting at the unix frame limit, where an
+// oversize message closed the connection and reached the sender as a bare "EOF".
 func TestAgentMsgSizeRefusalsSurviveTheSocket(t *testing.T) {
 	useFreeWSPort(t)
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
@@ -525,8 +485,6 @@ func TestAgentMsgSizeRefusalsSurviveTheSocket(t *testing.T) {
 
 }
 
-// The other half: a request the daemon cannot even read used to close the
-// connection without a word, and a bare EOF names neither the limit nor the ask.
 func TestOversizeSocketFrameIsAnsweredNotDropped(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -534,8 +492,6 @@ func TestOversizeSocketFrameIsAnsweredNotDropped(t *testing.T) {
 	caller, served := net.Pipe()
 	defer caller.Close()
 	go d.handleConnection(served)
-	// An object that fills the frame without ever closing: the daemon reads to
-	// the limit and gives up on it, which is the path being pinned.
 	go io.WriteString(caller, `{"cmd":"agent_msg","content":"`+strings.Repeat("x", maxInitialSocketFrameBytes)+`"`)
 
 	var resp protocol.Response

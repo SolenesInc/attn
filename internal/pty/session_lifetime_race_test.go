@@ -13,19 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// The block feed and the Ghostty terminal are native memory. info() resolves
-// tracked refs against them and resize() moves them, while closePTY frees
-// both. Manager.Remove hands an already-looked-up session to an in-flight
-// attach before closing it, so those two can genuinely overlap in production.
-//
-// These tests drive that overlap directly. They are the regression for the
-// unlocked teardown: with closePTY freeing outside replayMu, a concurrent
-// info() or resize() reads or resizes a freed handle, which -race reports (or
-// which crashes the process outright in the native allocator). Run them under
-// `go test -race ./internal/pty` for the full signal.
+// Run under `go test -race ./internal/pty`: without it these races prove nothing.
 
-// newLifetimeRaceSession builds a Session wired to a real Ghostty terminal and
-// block feed, backed by a pipe rather than a spawned process.
 func newLifetimeRaceSession(t *testing.T, id string, cols, rows int) (*Session, *os.File) {
 	t.Helper()
 
@@ -45,7 +34,7 @@ func newLifetimeRaceSession(t *testing.T, id string, cols, rows int) (*Session, 
 		cols:        uint16(cols),
 		rows:        uint16(rows),
 		ptmx:        r,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() errors, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		subscribers: make(map[string]*sessionSubscriber),
 		running:     true,
 		exited:      make(chan struct{}),
@@ -56,10 +45,6 @@ func newLifetimeRaceSession(t *testing.T, id string, cols, rows int) (*Session, 
 	return s, w
 }
 
-// TestAttachRacesRemove drives info() against closePTY the way Manager.Remove
-// does: the attach already holds the session pointer when teardown starts. The
-// snapshot must either observe a live terminal or an absent one — never a freed
-// handle.
 func TestAttachRacesRemove(t *testing.T) {
 	const cols, rows = 80, 24
 	refBase := ghosttyvt.LiveTrackedRefs()
@@ -69,8 +54,6 @@ func TestAttachRacesRemove(t *testing.T) {
 			s, w := newLifetimeRaceSession(t, fmt.Sprintf("attach-remove-%d", i), cols, rows)
 			go s.readLoop(nil, func(string, ...any) {})
 
-			// Pin some blocks so teardown has refs to free and info() has refs
-			// to resolve — an empty table would race nothing.
 			for j := 0; j < 8; j++ {
 				if _, err := fmt.Fprintf(w, "\x1b]133;A\x07MARK-%02d\r\n", j); err != nil {
 					t.Errorf("pipe write: %v", err)
@@ -78,8 +61,6 @@ func TestAttachRacesRemove(t *testing.T) {
 				}
 			}
 
-			// The attach holds the session pointer before teardown begins,
-			// exactly as Manager.Remove leaves it.
 			var wg sync.WaitGroup
 			start := make(chan struct{})
 
@@ -89,8 +70,6 @@ func TestAttachRacesRemove(t *testing.T) {
 				<-start
 				for k := 0; k < 20; k++ {
 					info := s.info()
-					// Blocks must index their own dump or be absent; a block
-					// resolved from freed memory would be neither.
 					for _, b := range info.GhosttyBlocks {
 						if b.PromptRow < 0 {
 							t.Errorf("negative prompt row %d from a torn-down session", b.PromptRow)
@@ -110,8 +89,6 @@ func TestAttachRacesRemove(t *testing.T) {
 			close(start)
 			wg.Wait()
 
-			// A snapshot taken strictly after teardown is well-defined: no
-			// terminal, so no dump and no blocks.
 			after := s.info()
 			if len(after.GhosttySnapshot) != 0 {
 				t.Fatalf("post-teardown snapshot returned %d bytes, want none", len(after.GhosttySnapshot))
@@ -127,9 +104,6 @@ func TestAttachRacesRemove(t *testing.T) {
 	}
 }
 
-// TestResizeRacesSnapshot drives resize() against info(). The resize mutates
-// the same grid the snapshot serializes and the block refs resolve against, so
-// the two must not overlap; teardown joins the race to cover resize-vs-free.
 func TestResizeRacesSnapshot(t *testing.T) {
 	const cols, rows = 80, 24
 	refBase := ghosttyvt.LiveTrackedRefs()
@@ -149,8 +123,6 @@ func TestResizeRacesSnapshot(t *testing.T) {
 			var wg sync.WaitGroup
 			start := make(chan struct{})
 
-			// Resize across a range of widths: narrowing is what actually moves
-			// tracked refs, so it is the case that exposes an unlocked resize.
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -167,9 +139,6 @@ func TestResizeRacesSnapshot(t *testing.T) {
 				<-start
 				for k := 0; k < 30; k++ {
 					info := s.info()
-					// Every block row must fall inside the grid the same
-					// snapshot reports — a row resolved against a
-					// concurrently-resized terminal would not.
 					for _, b := range info.GhosttyBlocks {
 						if b.PromptRow < 0 || b.PromptRow >= int32(info.Rows) {
 							t.Errorf("block %d row %d outside its own snapshot grid (%dx%d)",

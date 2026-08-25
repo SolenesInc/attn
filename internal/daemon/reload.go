@@ -20,10 +20,8 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// reloadStuckFlagGrace bounds how long a reloading flag lives after a successful
-// respawn. The killed worker's exit normally consumes it within milliseconds; this
-// is only a backstop so a never-arriving exit can't wedge the flag and suppress a
-// future, unrelated exit of the re-spawned session.
+// Backstop only: the killed worker's exit normally consumes the flag within milliseconds,
+// and a never-arriving exit must not wedge it and suppress an unrelated exit.
 const reloadStuckFlagGrace = 5 * time.Second
 
 func (d *Daemon) markReloading(sessionID string) {
@@ -35,9 +33,6 @@ func (d *Daemon) markReloading(sessionID string) {
 	d.reloadingSessions[sessionID] = true
 }
 
-// consumeReloading atomically reports whether sessionID is mid-reload and clears
-// the flag. It is one-shot on purpose: exactly the killed worker's exit should be
-// suppressed; the re-spawned session's later exits must be handled normally.
 func (d *Daemon) consumeReloading(sessionID string) bool {
 	d.reloadingMu.Lock()
 	defer d.reloadingMu.Unlock()
@@ -54,13 +49,8 @@ func (d *Daemon) clearReloading(sessionID string) {
 	delete(d.reloadingSessions, sessionID)
 }
 
-// reloadLockFor returns the per-session mutex that serializes reloadSessionAgent's
-// kill→remove→spawn composite. Without it, two concurrent reloads of the same
-// session (a double-toggle, or a role transfer reloading both chiefs) interleave
-// and the Spawn loser hits "already exists", whose failure path tears down the
-// freshly-respawned agent. Holding it across the whole composite makes the toggles
-// run latest-wins: the later reload kills the in-flight respawn and re-spawns with
-// the session's current chief status.
+// reloadLockFor serializes reloadSessionAgent's kill→remove→spawn composite: two concurrent
+// reloads interleave and the Spawn loser's "already exists" tears down the fresh agent.
 func (d *Daemon) reloadLockFor(sessionID string) *sync.Mutex {
 	d.reloadLocksMu.Lock()
 	defer d.reloadLocksMu.Unlock()
@@ -75,8 +65,6 @@ func (d *Daemon) reloadLockFor(sessionID string) *sync.Mutex {
 	return lock
 }
 
-// sessionHasLiveWorker reports whether the backend currently holds a runtime for
-// sessionID. Mirrors the live-session probe handleSpawnSession uses.
 func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {
 	if d.ptyBackend == nil {
 		return false
@@ -89,9 +77,6 @@ func (d *Daemon) sessionHasLiveWorker(sessionID string) bool {
 	return false
 }
 
-// agentSupportsChiefReload reports whether an agent's launch path injects chief
-// guidance (claude via --append-system-prompt, codex via developer_instructions,
-// or a plugin driver that advertises launch_instructions).
 func (d *Daemon) agentSupportsChiefGuidance(agent string) bool {
 	switch strings.TrimSpace(strings.ToLower(agent)) {
 	case string(protocol.SessionAgentClaude), string(protocol.SessionAgentCodex):
@@ -111,21 +96,11 @@ func (d *Daemon) agentSupportsChiefReload(agent string) bool {
 	return true
 }
 
-// reloadSessionAgent kills a live session's agent worker and re-spawns it in place
-// (resume-preserving) so the launch path re-runs with the session's current
-// chief-of-staff status — the only way a post-launch promotion/demotion reaches the
-// system prompt. The transcript is preserved via resume; the in-flight turn, if
-// any, is lost (accepted). On any inability to reconstruct the original launch
-// flags it ABORTS without touching the live worker, so a yolo chief never silently
-// comes back without --dangerously-skip-permissions.
 func (d *Daemon) reloadSessionAgent(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" || d.ptyBackend == nil || d.store == nil {
 		return
 	}
-	// Serialize reloads of this session: the kill→remove→spawn composite below must
-	// not interleave with a concurrent reload of the same id, or the Spawn loser tears
-	// down the other's respawn. Held across the whole composite (latest-wins).
 	lock := d.reloadLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -141,17 +116,14 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 		return
 	}
 	if !d.sessionHasLiveWorker(sessionID) {
-		// Nothing to reload: a dead pane's next (frontend-driven) spawn re-runs the
-		// launch path and picks up the current chief status on its own.
 		d.logf("reload: session %s has no live worker; skipping", sessionID)
 		return
 	}
 
 	opts, err := d.buildReloadSpawnOptions(session)
 	if err != nil {
-		// Abort, never respawn with defaulted launch flags — leave the live worker
-		// running. A chief that kept its (stale) guidance beats one that silently
-		// loses yolo/executable.
+		// Never respawn with defaulted launch flags: a chief that kept stale guidance
+		// beats one that silently lost yolo/executable.
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
@@ -165,9 +137,6 @@ func (d *Daemon) reloadSessionAgent(sessionID string) {
 	}
 }
 
-// reloadSessionForClient is the daemon-owned Reload: kill and respawn a live
-// session in place, or relaunch a dead one from its stored launch intent.
-// Returns nil when the session is running again.
 func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -183,8 +152,7 @@ func (d *Daemon) reloadSessionForClient(sessionID string, cols, rows int) error 
 	defer lock.Unlock()
 
 	// A conversation session's runtime is a host, not a worker: sessionHasLiveWorker
-	// would report false for a live one and the dead-session branch below would then
-	// no-op against the still-running host. Fork before either.
+	// reports false for a live one, so fork before either branch.
 	if d.isConversationAgent(string(session.Agent)) {
 		return d.reloadConversationSession(session)
 	}
@@ -234,26 +202,21 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 		defer pluginReload.abort()
 	}
 	ctx := context.Background()
-	// Mark BEFORE kill so the killed worker's async exit is suppressed no matter how
-	// quickly it fires relative to the kill returning.
+	// Mark BEFORE kill, so the worker's async exit is suppressed however quickly it
+	// fires relative to the kill returning.
 	d.markReloading(sessionID)
 
 	if killErr := d.ptyBackend.Kill(ctx, sessionID, syscall.SIGTERM); killErr != nil {
-		// Kill's contract is to return only after the child exits; an error here is
-		// almost always "already gone". Mirror terminateSession and proceed.
 		d.logf("reload: kill returned error for %s (continuing): %v", sessionID, killErr)
 	}
-	// Remove synchronously before re-spawning: the suppressed exit deliberately does
-	// NOT remove the backend entry, and Spawn rejects a still-present id. Idempotent.
+	// Remove synchronously first: the suppressed exit deliberately does NOT remove
+	// the backend entry, and Spawn rejects a still-present id.
 	if removeErr := d.ptyBackend.Remove(ctx, sessionID); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
 
 	opts.DaemonEnv = d.spawnRoutingEnv()
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
-		// Respawn failed and the old worker is already dead. Never leave a live-looking
-		// pane over a dead session: clear the flag and run normal exit finalization so
-		// the UI degrades to a dead pane (Blocker 2).
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
 		d.clearReloading(sessionID)
 		d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1})
@@ -272,13 +235,12 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	}
 	d.sessionInputs().forgetSession(sessionID)
 
-	// Success. Do NOT clear the flag here — the killed worker's exit consumes it.
-	// AfterFunc is a backstop only (never-arriving exit), so the flag cannot wedge.
+	// Do NOT clear the flag here — the killed worker's exit consumes it, and the
+	// AfterFunc backstop covers an exit that never arrives.
 	time.AfterFunc(reloadStuckFlagGrace, func() { d.clearReloading(sessionID) })
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
-	// SpawnOptions does not carry the auto mode choice — it never reaches the
-	// worker — so rewriting the intent from it alone would silently drop the
-	// launcher's override on every reload.
+	// SpawnOptions does not carry the auto mode choice, so rewriting the intent from
+	// it alone would drop the launcher's override on every reload.
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 	}
@@ -289,10 +251,6 @@ func (d *Daemon) executePreparedSessionReload(sessionID string, opts ptybackend.
 	return nil
 }
 
-// buildReloadSpawnOptions reconstructs the SpawnOptions for an in-place re-spawn of
-// an existing session. Geometry comes from the live worker (SessionInfoProvider).
-// The worker registry is preferred for live reloading; a durable launch intent
-// supplies the same user-selected values when that registry is unavailable.
 func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.SpawnOptions, error) {
 	sessionID := session.ID
 	paramsProvider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider)
@@ -313,9 +271,6 @@ func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.
 	if _, known, routeErr := recordedApprovalRoute(params.ApprovalRoute, params.YoloMode, params.UnattendedLaunch); routeErr != nil {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("read launch params: %w", routeErr)
 	} else if !known {
-		// A route-aware launch intent can fill the one field an older surviving
-		// worker did not record. Do not copy mutable settings or otherwise replace
-		// the live worker's launch params.
 		if intent, exists := d.store.LaunchIntent(sessionID); exists && intent.ApprovalRoute.Valid() {
 			params.ApprovalRoute = intent.ApprovalRoute
 		}
@@ -360,12 +315,8 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 	driver := agentdriver.Get(agent)
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
-	// Fresh-spawn when there is nothing to resume. A session is assigned its own
-	// id as the resume target at spawn time, but Claude writes its transcript
-	// lazily on the first turn — so a chief promoted before it ever took a turn
-	// has a resume id pointing at a transcript that does not exist, and a resume
-	// would exit non-zero (a dead chief). Downgrading to a fresh launch (which
-	// reuses --session-id) preserves the session identity without resuming.
+	// Claude writes its transcript lazily on the first turn, so a chief promoted before it ever
+	// took one has a resume id pointing at no file; a fresh launch reuses --session-id.
 	if resumeSessionID != "" && !agentdriver.ResumeAvailable(driver, resumeSessionID) {
 		d.logf("reload: resume target %s for session %s is not resumable (no transcript yet); fresh-spawning instead", resumeSessionID, sessionID)
 		resumeSessionID = ""
@@ -391,13 +342,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		LoginShellEnv:           d.cachedLoginShellEnv(),
 		WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
 		AutoApprove:             false,
-		// Carry the context-window cap across an in-place reload so a reloaded
-		// session comes back capped the same way a fresh launch would: its own
-		// pin first, then the chief from chief_context_window_cap (gate on the
-		// persisted chief role, staying consistent with the NotebookGuide RPC
-		// keyed on sessionID), every other session from
-		// default_context_window_cap_<agent>.
-		ContextWindowCap: d.launchContextWindowCap(sessionID, string(session.Agent), d.isChiefOfStaffSession(sessionID)),
+		ContextWindowCap:        d.launchContextWindowCap(sessionID, string(session.Agent), d.isChiefOfStaffSession(sessionID)),
 	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {
@@ -461,10 +406,8 @@ func (p *preparedPluginReload) commit() error {
 	return nil
 }
 
-// preparePluginReload resolves the replacement plugin command before the live
-// worker is killed. That preserves the reload path's fail-safe: an unavailable
-// plugin, invalid metadata, or instruction preparation error leaves the current
-// runtime untouched.
+// preparePluginReload resolves the replacement plugin command BEFORE the live worker is
+// killed, so an unavailable plugin or bad metadata leaves the current runtime untouched.
 func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
 	reg, ok := d.ensurePluginRegistry().driver(string(session.Agent))
 	if !ok {
@@ -500,8 +443,6 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 			prepared.abort()
 			return nil, fmt.Errorf("read auto mode config: %w", err)
 		}
-		// A reload is the same session continuing, so it keeps the choice its
-		// launch was given rather than picking up today's enabled_default.
 		if intent, ok := d.store.LaunchIntent(session.ID); ok && intent.AutoMode != nil {
 			cfg.EnabledDefault = *intent.AutoMode
 		}
@@ -564,8 +505,8 @@ func (p *preparedPluginRoleReload) execute() error {
 	return p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
 }
 
-// preparePluginRoleReload runs driver.resume before a public chief-role change
-// is persisted. A failure leaves both the role and the live worker untouched.
+// preparePluginRoleReload runs driver.resume BEFORE a chief-role change is
+// persisted, so a failure leaves both the role and the live worker untouched.
 func (d *Daemon) preparePluginRoleReload(sessionID string, desiredChief bool) (*preparedPluginRoleReload, bool, error) {
 	session := d.store.Get(sessionID)
 	if session == nil {

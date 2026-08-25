@@ -10,16 +10,12 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// ticketNudgePrompt is the fixed doorbell typed into a nudge-eligible agent: a
-// bounded "go look" trigger, never event content. The agent then reads its own
-// board with `attn ticket list`. This is the doorbell rule — the daemon signals,
-// it never streams the message into the PTY.
+// A bounded "go look" trigger, never event content: the daemon signals, it never
+// streams a ticket's content into the PTY.
 const ticketNudgePrompt = "📋 Activity on a ticket that predates the garden — read the board with `attn ticket list`."
 
-// defaultTicketBundleWindow is the quiet threshold after a ticket doorbell.
-// Busy delegation tickets in the production event history had a median
-// inter-event gap of 9m49s (440 gaps across 67 tickets with at least five events),
-// so ten minutes sits just past the observed burst cadence.
+// Busy delegation tickets in the production event history had a median inter-event gap
+// of 9m49s (440 gaps across 67 tickets), so ten minutes sits just past the burst cadence.
 const defaultTicketBundleWindow = 10 * time.Minute
 const ticketWatchLeaseWindow = 5 * time.Second
 
@@ -71,23 +67,13 @@ func (d *Daemon) ticketDeadline(sessionID string, newestPendingSeq int64, now ti
 	return deadline, false, nil
 }
 
-// ticketNudger adapts the daemon's doorbell primitive to ticketnotify.Nudger.
 type ticketNudger struct{ d *Daemon }
 
 func (n ticketNudger) Nudge(observerID string) error {
-	// The immediate doorbell is gone: arm a visible, pausable countdown instead. The
-	// countdown's timer fire is the only place a real doorbell happens, and only when
-	// the user is not actively typing into the session (the anti-splice guard).
 	n.d.armNudgeCountdown(observerID)
 	return nil
 }
 
-// notifyTicketObservers runs the notification handler for every live session
-// involved with a ticket after an event lands on it. A producer blanket-notifies
-// without caring who caused the event: each observer sees only what it did not
-// author (Notify -> Unread), so the author never notifies itself. All runtimes
-// share one delivery policy: only an approval prompt blocks a countdown. An optional
-// `ticket inbox --watch` may consume the unread activity before it rings.
 func (d *Daemon) notifyTicketObservers(ticketID string) {
 	if d.ptyBackend == nil || d.store == nil {
 		return
@@ -121,9 +107,8 @@ func (d *Daemon) notifyTicketObservers(ticketID string) {
 	}
 }
 
-// notifySleepingTicketMember wakes a member only when this ticket still has
-// unread activity for the durable member identity. The unread event is the
-// durable delivery: neither a failed wake nor its warning advances the cursor.
+// The unread event is the durable delivery: neither a failed wake nor its
+// warning advances the cursor.
 func (d *Daemon) notifySleepingTicketMember(identity, ticketID string) {
 	memberID, ok := store.ParseTicketMemberIdentity(identity)
 	if !ok {
@@ -158,16 +143,11 @@ func (d *Daemon) notifySleepingTicketMember(identity, ticketID string) {
 		d.notifyTicketSession(result.SessionID, time.Now())
 		return
 	}
-	// The indicator can show immediately, but the actual nudge waits on the
-	// prompt-submit receipt registered above, behind charter and handoff priming.
+	// Indicator only: the nudge itself waits on the prompt-submit receipt
+	// registered above, behind charter and handoff priming.
 	d.refreshTicketUnread(result.SessionID)
 }
 
-// seedCrewTicketWakeDeliveries reconstructs the priming gate after a daemon
-// restart. Its premise is durable: a live member binding plus unread member
-// activity. Rebuilding from those facts prevents a restart between spawn and
-// prompt submission from either splicing the nudge ahead of priming or losing
-// it altogether.
 func (d *Daemon) seedCrewTicketWakeDeliveries() error {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
@@ -196,9 +176,8 @@ func (d *Daemon) seedCrewTicketWakeDeliveries() error {
 			d.refreshTicketUnread(sessionID)
 			continue
 		}
-		// A settled session has already crossed its first prompt. Restore its
-		// ordinary unread delivery immediately instead of waiting for a hook it
-		// may never emit while idle.
+		// A settled session has already crossed its first prompt; waiting for a hook
+		// it may never emit would lose the delivery.
 		d.notifyTicketSession(sessionID, time.Now())
 	}
 	return nil
@@ -225,24 +204,15 @@ func (d *Daemon) notifyTicketMemberWakeRefused(memberID, ticketID string, wakeEr
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
-// notifyTicketSession runs Notify for one session's observer when it is a live
-// session. A participant that is not a live session — the attn crash author, or a
-// session already gone — is skipped: there is nothing to nudge.
 func (d *Daemon) notifyTicketSession(sessionID string, now time.Time) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return
 	}
-	// Reflect unread ticket activity on the session for the indicator, independent of
-	// the delivery mechanism, so an active agent and an optional watcher both surface
-	// the unread marker.
 	d.refreshTicketUnread(sessionID)
 	d.notifyUnreadTicketSession(sessionID, now)
 }
 
-// syncNudgeForState cancels a queued doorbell only while a session is waiting for
-// approval. Leaving that state rechecks unread activity so a previously deferred
-// nudge is armed as soon as it is safe.
 func (d *Daemon) syncNudgeForState(sessionID, state string) {
 	if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(state)) {
 		d.cancelNudgeCountdown(sessionID, "waiting for approval")
@@ -251,20 +221,14 @@ func (d *Daemon) syncNudgeForState(sessionID, state string) {
 	go d.notifyUnreadTicketSession(sessionID, time.Now())
 }
 
-// notifyUnreadTicketSession rebuilds a deadline after an approval wait or daemon
-// recovery, when there is no single triggering ticket. It derives the earliest
-// eligible deadline from durable unread events instead of persisting a scheduler.
 func (d *Daemon) notifyUnreadTicketSession(sessionID string, now time.Time) {
 	d.deliveryMu.Lock()
 	defer d.deliveryMu.Unlock()
 	d.notifyUnreadTicketSessionLocked(sessionID, now)
 }
 
-// notifyUnreadTicketSessionLocked is the serialized form used by catch-up paths
-// that already hold deliveryMu. Keeping the unread scan, attention read, deadline
-// calculation, and timer arm in one critical section prevents an old calculation
-// from re-arming an earlier countdown after a concurrent consume advances the
-// observer's attention clock.
+// Unread scan, attention read, deadline calculation and timer arm stay in one critical
+// section, or a stale calculation re-arms after a concurrent consume advanced the clock.
 func (d *Daemon) notifyUnreadTicketSessionLocked(sessionID string, now time.Time) {
 	if d.store == nil {
 		return

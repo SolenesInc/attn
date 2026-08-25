@@ -1,12 +1,3 @@
-// Live-preview decorations for CodeMirror 6 — the Obsidian-style "read and type in
-// the same surface" behavior. The document stays raw, canonical markdown (the
-// external-sync invariant); these decorations only change how it RENDERS:
-//   - heading lines are sized and their leading `#`s hidden
-//   - **bold**, *italic*, `code`, ~~strike~~ render styled with their markers hidden
-//   - [text](url) shows just the text, mod-click follows the link
-// On the line the cursor is on, the raw markers are REVEALED so you can edit them —
-// that line reads exactly as the file does on disk. Everything is derived from the
-// Lezer markdown syntax tree, so it tracks the parser rather than re-implementing it.
 
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range } from '@codemirror/state';
@@ -21,23 +12,14 @@ import {
 import type { Tree } from '@lezer/common';
 import { parseFrontmatterFromDoc } from './frontmatter';
 
-// A note's leading frontmatter is YAML, not markdown — no inline-preview decoration
-// (bullets, bold, etc.) is ever correct there; it renders raw or as the frontmatterCard
-// widget (a separate extension). Returns 0 when the doc has no frontmatter, else the
-// region's end offset.
 function frontmatterEnd(state: EditorState): number {
   const fm = parseFrontmatterFromDoc(state.doc);
-  // Must agree with frontmatterCard's own notion of "is this frontmatter" — an opening
-  // `---` with no closing fence (still being typed, malformed, or truncated past the
-  // bounded prefix) is treated as NOT frontmatter by both extensions, matching
-  // parseFrontmatter's null return. The alternative — suppressing every decoration in
-  // the whole note while the user is mid-typing frontmatter — is worse than a
-  // transient bullet on a YAML list line.
+  // Must agree with frontmatterCard's notion of frontmatter: an unclosed `---` is
+  // NOT frontmatter to either extension.
   return fm ? fm.to : 0;
 }
 
 export interface LiveMarkdownOptions {
-  // Invoked when the user mod-clicks (⌘/Ctrl) a rendered link. Receives the raw href.
   onFollowLink?: (href: string) => void;
 }
 
@@ -50,8 +32,6 @@ const HEADING_LEVEL: Record<string, number> = {
   ATXHeading6: 6,
 };
 
-// Mark decorations (styling). Replace decorations (hide a marker range) are created
-// inline because they carry no shared identity.
 const STRONG = Decoration.mark({ class: 'cm-md-strong' });
 const EMPHASIS = Decoration.mark({ class: 'cm-md-em' });
 const INLINE_CODE = Decoration.mark({ class: 'cm-md-code' });
@@ -60,14 +40,10 @@ const HEADING_MARK = [1, 2, 3, 4, 5, 6].map((n) => Decoration.mark({ class: `cm-
 const HIDE = Decoration.replace({});
 const CODEFENCE = Decoration.mark({ class: 'cm-md-codefence' });
 const CODEINFO = Decoration.mark({ class: 'cm-md-codeinfo' });
-// Keep nearby layout decorations stable while CM adjusts its viewport after edits.
 // Scanning only the exact viewport let a heading cross the boundary during scroll
 // anchoring, changing its line height and nudging the reader by several pixels.
 const DECORATION_MARGIN = 5000;
-// A line decoration applied to every row of a fenced code block, giving the block a
-// contiguous monospace panel (the fences stay visible but dimmed, so nothing shifts).
 const CODEBLOCK_LINE = Decoration.line({ class: 'cm-md-codeblock' });
-// A line decoration applied to every row of a blockquote, mirroring CODEBLOCK_LINE.
 const BLOCKQUOTE_LINE = Decoration.line({ class: 'cm-md-blockquote' });
 
 function linkMark(href: string): Decoration {
@@ -77,8 +53,6 @@ function linkMark(href: string): Decoration {
   });
 }
 
-// A static glyph that replaces a list marker (a bullet for `-`/`*`/`+`). `cls` lets
-// the headless decoration tests identify the widget from its spec without a DOM.
 class GlyphWidget extends WidgetType {
   constructor(readonly glyph: string, readonly cls: string) {
     super();
@@ -95,9 +69,6 @@ class GlyphWidget extends WidgetType {
   }
 }
 
-// Replaces a GFM task marker (`[ ]`/`[x]`) with a checkbox glyph. Carries the marker's
-// source position so the editor-level click handler can toggle it, and its checked
-// state so CM reuses the right widget. `cls` is the test/handler hook.
 class CheckboxWidget extends WidgetType {
   readonly cls = 'cm-md-checkbox';
   constructor(readonly checked: boolean, readonly pos: number) {
@@ -121,8 +92,6 @@ class CheckboxWidget extends WidgetType {
   }
 }
 
-// Replaces a horizontal rule (`---`) with a styled divider. All instances render
-// identically, so there is no state to compare in `eq`.
 class HrWidget extends WidgetType {
   readonly cls = 'cm-md-hr';
   eq() {
@@ -136,10 +105,6 @@ class HrWidget extends WidgetType {
   }
 }
 
-// Build the set of line numbers any selection range touches. A node rendered on one
-// of these lines keeps its raw markers visible (the active-line reveal). Derived
-// from the EditorState (not a view) so the decoration logic is unit-testable
-// headlessly — building a state needs no DOM, mounting a view does.
 function activeLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
   for (const range of state.selection.ranges) {
@@ -150,10 +115,8 @@ function activeLines(state: EditorState): Set<number> {
   return lines;
 }
 
-// `focused` gates the active-line reveal: an unfocused editor renders as fully clean
-// markdown (nothing "active"), so a freshly-opened note reads like a rendered doc
-// even though CM always keeps a selection at position 0. Once focused, the cursor's
-// line reveals its raw markers for editing.
+// `focused` gates the active-line reveal: CM always keeps a selection at position 0,
+// so an unfocused editor must render fully clean.
 interface DecorationRange {
   from: number;
   to: number;
@@ -168,9 +131,8 @@ export function buildDecorations(
   const decos: Range<Decoration>[] = [];
   const { doc } = state;
   const active = focused ? activeLines(state) : new Set<number>();
-  // Headless callers want the complete document. The live ViewPlugin passes an
-  // already-ensured tree plus its logical viewport so cursor motion never reparses an
-  // arbitrarily large note synchronously.
+  // The live ViewPlugin passes an already-ensured tree plus its viewport, so cursor
+  // motion never reparses an arbitrarily large note synchronously.
   const tree = parsedTree ?? ensureSyntaxTree(state, doc.length, 100) ?? syntaxTree(state);
   const scanRange = range ?? { from: 0, to: doc.length };
   const fmEnd = frontmatterEnd(state);
@@ -181,25 +143,19 @@ export function buildDecorations(
     from: scanRange.from,
     to: scanRange.to,
     enter: (node) => {
-      // The frontmatter block is YAML, not markdown — no preview decoration there is
-      // ever right (it's either shown raw or replaced whole by frontmatterCard).
       if (node.from < fmEnd) return;
 
       const name = node.name;
 
-      // ---- block: ATX headings ----
       const level = HEADING_LEVEL[name];
       if (level) {
-        // Size the whole heading line; sizing persists even on the active line.
         decos.push(HEADING_MARK[level - 1].range(node.from, node.to));
         return;
       }
 
-      // ---- block: fenced code ----
       if (name === 'FencedCode') {
-        // Give every row of the block the code panel (monospace + background). Using
         // node.to - 1 avoids grabbing the blank line after a block that ends on a
-        // newline boundary. Styling persists on the active line (it never hides text).
+        // newline boundary.
         const firstLine = doc.lineAt(node.from).number;
         const lastLine = doc.lineAt(Math.max(node.from, node.to - 1)).number;
         for (let n = firstLine; n <= lastLine; n += 1) {
@@ -208,16 +164,13 @@ export function buildDecorations(
         return;
       }
       if (name === 'CodeInfo') {
-        // The language tag after the opening fence (```ts) — dim it like the fence.
         decos.push(CODEINFO.range(node.from, node.to));
         return;
       }
 
-      // ---- block: blockquotes ----
       if (name === 'Blockquote') {
-        // Mirror FencedCode: give every row of the block the quote panel. Do NOT
-        // return here — nested content (including a nested Blockquote) must still be
-        // walked so its own marks and styling apply.
+        // Do NOT return here — nested content (including a nested Blockquote) must
+        // still be walked so its own marks and styling apply.
         const firstLine = doc.lineAt(node.from).number;
         const lastLine = doc.lineAt(Math.max(node.from, node.to - 1)).number;
         for (let n = firstLine; n <= lastLine; n += 1) {
@@ -225,29 +178,23 @@ export function buildDecorations(
         }
       }
       if (name === 'QuoteMark') {
-        if (onActiveLine(node.from)) return; // reveal the raw '>' for editing
+        if (onActiveLine(node.from)) return;
         let to = node.to;
         if (doc.sliceString(to, to + 1) === ' ') to += 1;
         decos.push(HIDE.range(node.from, to));
         return;
       }
 
-      // ---- block: horizontal rule ----
       if (name === 'HorizontalRule') {
-        if (onActiveLine(node.from)) return; // reveal the raw '---' for editing
+        if (onActiveLine(node.from)) return;
         decos.push(Decoration.replace({ widget: new HrWidget() }).range(node.from, node.to));
         return;
       }
 
-      // ---- lists: bullets and task checkboxes ----
       if (name === 'ListMark') {
-        // The leading marker of a list item. Ordered-list numbers (`1.`) are meaningful
-        // and stay as written; only bullet markers are prettified.
         const marker = doc.sliceString(node.from, node.to);
         if (marker !== '-' && marker !== '*' && marker !== '+') return;
-        if (onActiveLine(node.from)) return; // reveal the raw marker for editing
-        // A task item ('- [ ] …') renders just the checkbox; hide its bullet marker
-        // (and the following space) so nothing sits before the box.
+        if (onActiveLine(node.from)) return;
         if (node.node.parent?.getChild('Task')) {
           let to = node.to;
           if (doc.sliceString(to, to + 1) === ' ') to += 1;
@@ -260,7 +207,7 @@ export function buildDecorations(
         return;
       }
       if (name === 'TaskMarker') {
-        if (onActiveLine(node.from)) return; // reveal the raw '[ ]' for editing
+        if (onActiveLine(node.from)) return;
         const checked = /\[[xX]\]/.test(doc.sliceString(node.from, node.to));
         decos.push(
           Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(node.from, node.to),
@@ -268,7 +215,6 @@ export function buildDecorations(
         return;
       }
 
-      // ---- inline styling spans ----
       if (name === 'StrongEmphasis') {
         decos.push(STRONG.range(node.from, node.to));
         return;
@@ -292,12 +238,10 @@ export function buildDecorations(
         return;
       }
 
-      // ---- markers we hide off the active line ----
       if (name === 'HeaderMark') {
         // Only ATX leading `#`s (a Setext underline is also a HeaderMark — leave it).
         if (doc.sliceString(node.from, node.from + 1) !== '#') return;
         if (onActiveLine(node.from)) return;
-        // Swallow the single space after the `#`s so the title sits flush.
         let to = node.to;
         if (doc.sliceString(to, to + 1) === ' ') to += 1;
         decos.push(HIDE.range(node.from, to));
@@ -313,11 +257,8 @@ export function buildDecorations(
       }
       if (name === 'CodeMark') {
         if (node.node.parent?.name === 'InlineCode') {
-          // Inline-code backticks: hidden off the active line like other inline markers.
           if (!onActiveLine(node.from)) decos.push(HIDE.range(node.from, node.to));
         } else {
-          // The ``` fences of a code block: dimmed in place (not hidden), so the block
-          // keeps its line count and the fences read as quiet chrome.
           decos.push(CODEFENCE.range(node.from, node.to));
         }
         return;
@@ -327,7 +268,6 @@ export function buildDecorations(
         return;
       }
       if (name === 'URL') {
-        // The (url) tail of a [text](url) link — hidden; bare/autolink URLs stay.
         if (node.node.parent?.name !== 'Link') return;
         if (!onActiveLine(node.from)) decos.push(HIDE.range(node.from, node.to));
       }
@@ -357,12 +297,9 @@ const baseTheme = EditorView.baseTheme({
     background: 'var(--color-bg-elevated, rgba(127,127,127,0.16))',
   },
   '.cm-md-link': { color: 'var(--accent, #ff6b35)', cursor: 'pointer' },
-  // List bullet glyph replacing a `-`/`*`/`+` marker.
   '.cm-md-bullet': { color: 'var(--accent, #ff6b35)' },
-  // Task checkbox glyph (off the active line); clickable to toggle the task.
   '.cm-md-checkbox': { cursor: 'pointer', color: 'var(--color-text-secondary, #b8b8b8)' },
   '.cm-md-checkbox.is-checked': { color: 'var(--accent, #ff6b35)' },
-  // Fenced code block: a contiguous monospace panel across its rows.
   '.cm-md-codeblock': {
     fontFamily:
       "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace",
@@ -370,16 +307,13 @@ const baseTheme = EditorView.baseTheme({
     background: 'var(--color-bg-elevated, rgba(127,127,127,0.1))',
     borderLeft: '2px solid var(--color-border, rgba(127,127,127,0.35))',
   },
-  // The ``` fences and the language tag: quiet chrome, not prose.
   '.cm-md-codefence': { opacity: '0.5' },
   '.cm-md-codeinfo': { opacity: '0.5', fontStyle: 'italic' },
-  // Blockquote: a left rule across its rows, like an Obsidian/GitHub quote panel.
   '.cm-md-blockquote': {
     borderLeft: '3px solid var(--accent, #ff6b35)',
     paddingLeft: '10px',
     color: 'var(--color-text-secondary, #b8b8b8)',
   },
-  // Horizontal rule: a full-width divider replacing the raw '---'.
   '.cm-md-hr': {
     display: 'inline-block',
     width: '100%',
@@ -387,8 +321,6 @@ const baseTheme = EditorView.baseTheme({
     verticalAlign: 'middle',
     background: 'var(--color-border, rgba(127,127,127,0.35))',
   },
-  // classHighlighter's stable tok-* classes, scoped to fenced code blocks only — the
-  // live-preview decorations above own everything outside a fence.
   '.cm-md-codeblock .tok-keyword': { color: 'var(--syntax-keyword, #c678dd)' },
   '.cm-md-codeblock .tok-string, .cm-md-codeblock .tok-string2': {
     color: 'var(--syntax-string, #98c379)',
@@ -425,12 +357,8 @@ export function liveMarkdownPreview(options: LiveMarkdownOptions = {}): Extensio
       }
 
       rebuild(view: EditorView) {
-        // CodeMirror deliberately parses only the first 3,000 characters on state
-        // creation, then advances around the viewport in the background. Restricting
-        // decorations to the logical viewport plus a bounded margin keeps work bounded,
-        // while ensuring through that range prevents a cursor transaction from replacing
-        // rendered markdown with raw text at the initial parse boundary. The margin also
-        // keeps line-height decorations stable while CM anchors scroll across edits.
+        // CM parses only the first 3,000 characters on state creation, so ensuring through this
+        // range stops a cursor transaction from replacing rendered markdown with raw text.
         const range = {
           from: Math.max(0, view.viewport.from - DECORATION_MARGIN),
           to: Math.min(view.state.doc.length, view.viewport.to + DECORATION_MARGIN),
@@ -447,9 +375,8 @@ export function liveMarkdownPreview(options: LiveMarkdownOptions = {}): Extensio
 
       update(update: ViewUpdate) {
         const currentTree = syntaxTree(update.state);
-        // Markers reveal/hide as the cursor moves and as focus changes (an unfocused
-        // editor renders fully clean). A parse-only transaction must also rebuild so
-        // newly parsed visible syntax becomes decorated without another user action.
+        // A parse-only transaction must also rebuild, so newly parsed visible syntax
+        // becomes decorated without another user action.
         if (
           update.docChanged ||
           update.viewportChanged ||
@@ -472,16 +399,13 @@ export function liveMarkdownPreview(options: LiveMarkdownOptions = {}): Extensio
       if (!href) return false;
       event.preventDefault();
       options.onFollowLink?.(href);
-      // Drop the selection CM would otherwise place at the click point.
       view.dispatch({ selection: { anchor: view.state.selection.main.head } });
       return true;
     },
   });
 
-  // Click a rendered task checkbox to toggle its `[ ]`/`[x]` at the source. The widget
-  // carries the marker's position; the state char sits at pos+1 (just inside the
-  // brackets). preventDefault keeps the click from moving the cursor onto the line
-  // (which would reveal the raw marker and unmount the checkbox mid-click).
+  // The state char sits at pos+1. preventDefault keeps the click from moving the cursor
+  // onto the line, which would reveal the raw marker and unmount the checkbox mid-click.
   const toggleCheckbox = EditorView.domEventHandlers({
     mousedown: (event, view) => {
       const target = (event.target as HTMLElement | null)?.closest('.cm-md-checkbox');

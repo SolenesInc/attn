@@ -1,29 +1,5 @@
-// The receipt behind the numbers in docs/plans/2026-08-20-garden-search.md:
-// what one keystroke costs the client.
-//
-// The panel matches over the pushed snapshot, so every keystroke re-runs
-// `searchGarden` over the whole scope. This measures that, at the sizes the
-// plan argues about. It is a script rather than a test — it asserts nothing and
-// takes half a minute — so it stays out of the vitest glob on purpose.
-//
-//   pnpm --dir app exec tsc src/components/gardenSearch.bench.ts --noCheck \
-//     --target es2022 --module es2022 --moduleResolution bundler --outDir /tmp/gsbench
-//   node /tmp/gsbench/components/gardenSearch.bench.js
-//
-// Run it under both engines. V8 is convenient; JavaScriptCore is the one that
-// counts, because that is what WKWebView runs. Warm, the two land within noise
-// of each other on this workload, which is itself the useful finding — the
-// numbers node prints are the numbers the app gets:
-//
-//   /System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc \
-//     -m /tmp/gsbench/components/gardenSearch.bench.js
-//
-// Every steady-state figure is the minimum of three rounds after a long warmup.
-// JSC's tiering is what makes that necessary: a round measured before the FTL
-// kicks in reads slower than the same work on a corpus five times the size,
-// which is a measurement artifact and not a number anyone should design
-// against. The `first` line is the opposite measurement and is taken before any
-// of that — a snapshot this process has never seen, indexed and scanned once.
+// The receipt behind the numbers in docs/plans/2026-08-20-garden-search.md. Every
+// steady-state figure is the minimum of three rounds after a long warmup.
 import type { Seed } from '../hooks/useDaemonSocket';
 import { buildIndex, parseQuery, searchGarden, type SearchEntry } from './gardenSearch.js';
 
@@ -46,7 +22,6 @@ function words(rand: () => number, n: number): string {
   return out.join(' ');
 }
 
-// A deterministic generator: the numbers have to mean the same thing twice.
 function lcg(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -108,7 +83,6 @@ function timeOne(pool: SearchEntry[], raw: string): number {
   return best(3, 100, () => searchGarden(pool, parseQuery(raw)));
 }
 
-/** What one new snapshot costs: the index is rebuilt, not the query. */
 function timeIndex(seeds: Seed[]): number {
   for (let i = 0; i < 30; i++) buildIndex(seeds, ctx);
   return best(3, 20, () => buildIndex(seeds, ctx));
@@ -116,9 +90,6 @@ function timeIndex(seeds: Seed[]): number {
 
 function report(label: string, seeds: Seed[]) {
   const bytes = seeds.reduce((n, s) => n + (s.body?.length ?? 0) + (s.title?.length ?? 0), 0);
-  // Before anything is warmed: a snapshot the process has never seen, matched
-  // once. That is what the first keystroke after a new push actually costs,
-  // and the only figure here that is not a steady state.
   let at = performance.now();
   const pool = buildIndex(seeds, ctx);
   const coldIndex = performance.now() - at;

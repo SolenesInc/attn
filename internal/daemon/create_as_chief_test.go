@@ -8,10 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// spawnForChiefTest runs the app's create ordering (register workspace, add the
-// session pane, spawn the session) and leaves the spawn_result on the client for
-// the caller to drain. It mirrors the real new-session flow so the create-as-chief
-// wiring is exercised end to end through handleSpawnSession.
+// The app's create ordering: register workspace, add the session pane, spawn.
+// Leaves the spawn_result on the client for the caller to drain.
 func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, agent string, chief bool) {
 	t.Helper()
 	cwd := t.TempDir()
@@ -43,9 +41,6 @@ func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, s
 	})
 }
 
-// A create-as-chief spawn assigns the profile-wide chief role at launch — the only
-// way the very first boot injects chief guidance — and the spawned session
-// broadcasts as the chief.
 func TestCreateAsChiefAssignsRoleAtLaunch(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -68,8 +63,6 @@ func TestCreateAsChiefAssignsRoleAtLaunch(t *testing.T) {
 	}
 }
 
-// The chief role is single-holder: a create-as-chief request while a chief already
-// exists is ignored, never a silent role transfer.
 func TestCreateAsChiefSkippedWhenChiefExists(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -91,8 +84,6 @@ func TestCreateAsChiefSkippedWhenChiefExists(t *testing.T) {
 	}
 }
 
-// A shell has no chief-guidance launch path, so create-as-chief is ignored for it
-// even when requested.
 func TestCreateAsChiefIgnoredForShell(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -126,8 +117,6 @@ func TestCreateAsChiefRejectsPluginWithoutLaunchInstructions(t *testing.T) {
 	}
 }
 
-// A spawn that fails after the role was assigned must roll the role back, so a
-// session that never launched never holds the chief role.
 func TestCreateAsChiefRolledBackOnSpawnFailure(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -142,9 +131,6 @@ func TestCreateAsChiefRolledBackOnSpawnFailure(t *testing.T) {
 	}
 }
 
-// maybeAssignChiefOnSpawn never assigns on a respawn/reload (existingSession set):
-// a respawn of a non-chief session must not silently promote it just because the
-// client echoed the flag.
 func TestMaybeAssignChiefOnSpawnSkipsRespawn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })

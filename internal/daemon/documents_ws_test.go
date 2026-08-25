@@ -11,14 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Live queries over the WebSocket. The delivery semantics themselves are pinned
-// in documents_windowed_test.go against the IPC transport; what these assert is
-// what the second transport adds — an identity per subscription, a way out, a
-// ceiling, and a teardown that survives every way a client can leave.
-
-// wsSubscriber is one WebSocket client's view of its live queries: the send
-// channel the daemon queues into, decoded into the two envelopes this surface
-// speaks.
 type wsSubscriber struct {
 	client *wsClient
 }
@@ -27,9 +19,8 @@ func newWSSubscriber() *wsSubscriber {
 	return &wsSubscriber{client: &wsClient{send: make(chan outboundMessage, 256)}}
 }
 
-// nextEvent reads the next queued message, failing rather than hanging if the
-// daemon sends nothing. The timeout is a tripwire on a deadlock, not a wait for
-// something slow: every assertion here is woken by a real write.
+// A tripwire on a deadlock, not a wait for something slow: every assertion here
+// is woken by a real write.
 func (s *wsSubscriber) nextEvent(t *testing.T) map[string]any {
 	t.Helper()
 	select {
@@ -45,7 +36,6 @@ func (s *wsSubscriber) nextEvent(t *testing.T) map[string]any {
 	}
 }
 
-// nextDelivery reads one doc_subscription_delivery for the given id.
 func (s *wsSubscriber) nextDelivery(t *testing.T, id string) map[string]any {
 	t.Helper()
 	event := s.nextEvent(t)
@@ -88,8 +78,6 @@ func wsSubscribe(d *Daemon, s *wsSubscriber, id string, have []protocol.Document
 	})
 }
 
-// A WebSocket subscription behaves exactly as the IPC one does, plus an id: the
-// current window arrives immediately, and a write brings the next.
 func TestWebSocketSubscriptionDeliversAndStaysLive(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -111,14 +99,11 @@ func TestWebSocketSubscriptionDeliversAndStaysLive(t *testing.T) {
 	if got := deliveryOrder(t, second); len(got) != 2 {
 		t.Fatalf("second delivery ordered %v, want both documents", got)
 	}
-	// Only the new body travels: the subscriber was already sent the other one.
 	if got := upsertIDs(t, second); len(got) != 1 || got[0] != "b" {
 		t.Fatalf("second delivery carried bodies %v, want only b", got)
 	}
 }
 
-// One connection carries many, so a delivery has to say which subscription it
-// belongs to — and each one runs its own query.
 func TestWebSocketSubscriptionsAreIndependentOnOneConnection(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -144,8 +129,6 @@ func TestWebSocketSubscriptionsAreIndependentOnOneConnection(t *testing.T) {
 	}
 }
 
-// The way out for the way in: an unsubscribed query stops costing the daemon a
-// re-run on every write to its collection.
 func TestUnsubscribeEndsTheSubscription(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -159,14 +142,11 @@ func TestUnsubscribeEndsTheSubscription(t *testing.T) {
 	})
 	waitForSubscriptionCount(t, d, 0)
 
-	// An id nobody holds is ignored rather than refused: an unsubscribe racing
-	// the daemon's own ending is the ordinary case.
 	d.handleDocUnsubscribeWS(sub.client, &protocol.DocUnsubscribeMessage{
 		Cmd: protocol.CmdDocUnsubscribe, SubscriptionID: "tile-1",
 	})
 }
 
-// A client that vanishes leaves loops that would re-run its queries forever.
 func TestDisconnectDropsEveryLiveQueryTheClientHeld(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -184,9 +164,6 @@ func TestDisconnectDropsEveryLiveQueryTheClientHeld(t *testing.T) {
 	}
 }
 
-// The tripwire: past the per-client limit a subscription is refused by name,
-// never silently dropped. A refusal a client cannot read is a tile that renders
-// nothing forever with nothing to look up.
 func TestTooManySubscriptionsIsARefusalThatNamesTheLimit(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -217,7 +194,6 @@ func TestTooManySubscriptionsIsARefusalThatNamesTheLimit(t *testing.T) {
 	}
 }
 
-// Two live subscriptions under one id would make every delivery ambiguous.
 func TestASecondSubscriptionUnderOneIDIsRefused(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -237,15 +213,10 @@ func TestASecondSubscriptionUnderOneIDIsRefused(t *testing.T) {
 	}
 }
 
-// The WebSocket has one failure channel, so a query that never starts and a
-// subscription that ends after acceptance both arrive as doc_subscription_ended
-// — told apart by code, which is what lets a host pick between "kill the tile"
-// and "the caller asked for the wrong thing".
 func TestSubscribeRefusalsAndEndingsShareOneEnvelope(t *testing.T) {
 	d := newDaemonForTest(t)
 
 	sub := newWSSubscriber()
-	// Never declared: a refusal, before the subscription exists.
 	wsSubscribe(d, sub, "tile-1", nil)
 	refusal := sub.nextEvent(t)
 	if refusal["event"] != protocol.EventDocSubscriptionEnded ||
@@ -253,8 +224,6 @@ func TestSubscribeRefusalsAndEndingsShareOneEnvelope(t *testing.T) {
 		t.Fatalf("expected an undeclared_collection refusal, got %v", refusal)
 	}
 
-	// Declared, subscribed, then removed underneath it: an ending, after
-	// acceptance.
 	defineTestCollection(t, d)
 	wsSubscribe(d, sub, "tile-2", nil)
 	sub.nextDelivery(t, "tile-2")
@@ -268,8 +237,6 @@ func TestSubscribeRefusalsAndEndingsShareOneEnvelope(t *testing.T) {
 	waitForSubscriptionCount(t, d, 0)
 }
 
-// A cursor names a document that moves out from under a live window, so a
-// subscription refuses one — on both transports, from the one check.
 func TestSubscribingWithACursorIsRefusedOnTheWebSocket(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -290,8 +257,6 @@ func TestSubscribingWithACursorIsRefusedOnTheWebSocket(t *testing.T) {
 	}
 }
 
-// Resume is the same on this transport as on the other: what the client declares
-// it holds is what the first delivery does not re-send.
 func TestWebSocketResumeSendsOnlyWhatChanged(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -311,7 +276,6 @@ func TestWebSocketResumeSendsOnlyWhatChanged(t *testing.T) {
 	})
 	waitForSubscriptionCount(t, d, 0)
 
-	// One of the two moved while nobody was watching.
 	putDoc(t, d, "moved", `{"status":"approved"}`)
 
 	have := []protocol.DocumentRevision{
@@ -328,9 +292,6 @@ func TestWebSocketResumeSendsOnlyWhatChanged(t *testing.T) {
 	}
 }
 
-// On the unix socket the connection IS the subscription, so an id there would
-// name nothing — and a client that sends one has misread the surface badly
-// enough that answering it would be worse than refusing.
 func TestIPCSubscribeRefusesASubscriptionID(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -348,8 +309,6 @@ func TestIPCSubscribeRefusesASubscriptionID(t *testing.T) {
 	}
 }
 
-// undefineTestCollection removes the collection these subscriptions watch, which
-// is what ends an accepted one with collection_undefined.
 func undefineTestCollection(t *testing.T, d *Daemon) {
 	t.Helper()
 	resp := docCall(t, func(c net.Conn) {
@@ -362,9 +321,8 @@ func undefineTestCollection(t *testing.T, d *Daemon) {
 	}
 }
 
-// waitForSubscriptionCount watches the daemon's own registry: a subscription
-// loop ends on its own goroutine, and the count moving IS the signal that it
-// did.
+// The loop ends on its own goroutine, so the registry count moving is the only
+// signal that it did.
 func waitForSubscriptionCount(t *testing.T, d *Daemon, want int) {
 	t.Helper()
 	waitFor(t, fmt.Sprintf("the daemon to hold %d live subscriptions", want), func() bool {

@@ -25,8 +25,6 @@ func snoozedUntil(t *testing.T, d *Daemon, id string) string {
 	return protocol.Deref(session.TurnSnoozedUntil)
 }
 
-// The whole of the deferral: the agent keeps stopping and asking, and none of it
-// puts the session back on the user's plate.
 func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -44,7 +42,6 @@ func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 		t.Fatal("no deadline on the wire, so the row has nothing to park under")
 	}
 
-	// Every ordinary way an agent comes back for the user, while deferred.
 	for _, state := range []string{
 		protocol.StateWorking,
 		protocol.StateWaitingInput,
@@ -58,9 +55,6 @@ func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 	}
 }
 
-// Waking stamps the turn at the instant the user said they would come back, so
-// the row lands at the tail of the queue rather than resurfacing at the age it
-// had when it was deferred.
 func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -93,8 +87,6 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	}
 }
 
-// Waking a busy agent opens nothing. That is not a missed turn: the suppression
-// is gone, so the next state that wants the user opens one normally.
 func TestWakeOpensNoTurnWhileTheAgentIsWorking(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -112,8 +104,6 @@ func TestWakeOpensNoTurnWhileTheAgentIsWorking(t *testing.T) {
 	}
 }
 
-// What the user could not have anticipated still gets through, and consumes the
-// deferral with it — they are back in the loop with that agent.
 func TestBreakThroughStatesEndTheSnooze(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -135,8 +125,6 @@ func TestBreakThroughStatesEndTheSnooze(t *testing.T) {
 			moveTo(d, "s1", protocol.StateWorking)
 			snoozeUntil(d, "s1", time.Now().Add(time.Hour))
 
-			// The reason is filed the way publishResolution files it, immediately
-			// before the state it describes is applied.
 			d.recordStateReason("s1", sessionstate.Resolution{
 				State:  protocol.SessionState(tt.state),
 				Reason: tt.reason,
@@ -155,9 +143,6 @@ func TestBreakThroughStatesEndTheSnooze(t *testing.T) {
 	}
 }
 
-// Snooze reaches any agent, not only one that owes a turn. Deferring a run
-// before it finishes is the case the reach exists for: the turn it would have
-// opened on finishing never opens.
 func TestSnoozingAWorkingAgentSuppressesTheTurnItWouldOpen(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -174,9 +159,6 @@ func TestSnoozingAWorkingAgentSuppressesTheTurnItWouldOpen(t *testing.T) {
 	}
 }
 
-// The deadline is persisted; the timer that fires on it is not. Without the
-// start-up reschedule a snooze would survive a restart as a session that never
-// comes back — the worst failure a deferral can have.
 func TestSnoozeWakesAfterARestart(t *testing.T) {
 	d := newTurnDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -184,10 +166,6 @@ func TestSnoozeWakesAfterARestart(t *testing.T) {
 		addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
 
 		moveTo(d, "s1", protocol.StateIdle)
-		// Written straight to the store, which is the state a restart finds: the
-		// deadline persisted, and no timer in memory to fire on it. Letting it lapse
-		// before the reschedule is the daemon having been down across it — an hour
-		// of downtime here costs no wall-clock time.
 		now := time.Now()
 		if !d.store.SnoozeTurn("s1", now.Add(time.Minute), now) {
 			t.Fatal("setup: the snooze was not stored")
@@ -228,9 +206,8 @@ func TestSnoozeTimerFiresOnItsDeadline(t *testing.T) {
 			t.Fatal("the session still owes a turn immediately after snoozing")
 		}
 
-		// The deadline itself, at its real length: the AfterFunc the snooze armed
-		// fires when the bubble's clock reaches it, not when a test-sized window
-		// happens to elapse.
+		// The real deadline length: the armed AfterFunc fires when the bubble's
+		// clock reaches it, not when a test-sized window happens to elapse.
 		time.Sleep(time.Hour)
 		synctest.Wait()
 		select {
@@ -244,12 +221,6 @@ func TestSnoozeTimerFiresOnItsDeadline(t *testing.T) {
 	})
 }
 
-// Re-snoozing to a later deadline must not be woken by the timer the first
-// snooze armed.
-// Converted to synctest. The claim is a negative — the first snooze's timer must
-// not wake the session — and a 200ms sleep could only make it likely. The bubble
-// runs the superseded deadline's whole window and then settles, so "it did not
-// wake" is a fact about a daemon with nothing left to do.
 func TestResnoozingReplacesThePendingWake(t *testing.T) {
 	d := newTurnDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -260,7 +231,6 @@ func TestResnoozingReplacesThePendingWake(t *testing.T) {
 		snoozeUntil(d, "s1", time.Now().Add(time.Minute))
 		snoozeUntil(d, "s1", time.Now().Add(time.Hour))
 
-		// Well past the superseded deadline, and still well short of the live one.
 		time.Sleep(30 * time.Minute)
 		synctest.Wait()
 		if owed(t, d, "s1") {
@@ -272,15 +242,8 @@ func TestResnoozingReplacesThePendingWake(t *testing.T) {
 	})
 }
 
-// The narrow window the timer's identity check cannot cover: the wake has
-// already proved it is current and let go of the lock, and the second snooze
-// lands before it reaches the store. Nothing in memory can tell the callback it
-// has been superseded by then — only the stored deadline can, which is why the
-// clear is conditioned on it.
-//
-// Without that condition the expired timer clears the deadline the user just
-// chose and cancels the timer armed for it, so the agent comes back immediately
-// and never comes back again.
+// The window the timer's identity check cannot cover: the wake proved it was current and
+// released the lock before the second snooze reached the store, so the clear reads it.
 func TestAResnoozeInsideAFiringWakeKeepsTheLaterDeadline(t *testing.T) {
 	d := newTurnDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -315,7 +278,6 @@ func TestAResnoozeInsideAFiringWakeKeepsTheLaterDeadline(t *testing.T) {
 		if got := snoozedUntil(t, d, "s1"); got != later.UTC().Format(time.RFC3339Nano) {
 			t.Errorf("live deadline = %q, want the re-snooze's %q", got, later.UTC().Format(time.RFC3339Nano))
 		}
-		// And the replacement's own timer is still armed, so it does come back.
 		d.snoozeMu.Lock()
 		pending, ok := d.snoozeTimers["s1"]
 		d.snoozeMu.Unlock()
@@ -328,9 +290,6 @@ func TestAResnoozeInsideAFiringWakeKeepsTheLaterDeadline(t *testing.T) {
 	})
 }
 
-// A snooze arriving mid-countdown makes the pending auto-settle moot: the turn
-// it was going to close is already closed, and leaving the deadline on the wire
-// would animate a settle that will never happen.
 func TestSnoozeCancelsAPendingAutoSettle(t *testing.T) {
 	d := newTurnDaemon(t)
 	d.store.SetSetting(SettingAutoSettleEnabled, "true")
@@ -358,9 +317,6 @@ func TestSnoozeCancelsAPendingAutoSettle(t *testing.T) {
 	}
 }
 
-// A deadline that has already passed is not a live snooze on the wire: the wake
-// is racing this broadcast, and announcing it would park the row for as long as
-// the timer took to land.
 func TestALapsedDeadlineIsNotBroadcast(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")

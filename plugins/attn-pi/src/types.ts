@@ -53,11 +53,8 @@ export function evaluatePiVersion(value: string): VersionCompatibility {
 
 export type DriverCapabilities = Record<string, boolean>;
 
-// One live run attn hands back when this plugin's driver (re)registers. `seq`
-// is the run's report cursor: attn orders session.report_* by a
-// strictly-increasing seq per run, so a replacement driver process must
-// continue from this value rather than from its own fresh counter. It is absent
-// only from an attn too old to send it.
+// `seq` is the run's report cursor: a replacement driver must continue from this
+// value, not from a fresh counter. Absent only from an attn too old to send it.
 export type ActivePluginRun = {
   session_id: string;
   run_id: string;
@@ -71,8 +68,6 @@ export type DriverRegisterResult = {
 };
 
 export type DriverSpawnParams = {
-  // Which of this plugin's registered agents attn is launching. A plugin may
-  // register more than one; without it a two-agent plugin has to guess.
   agent?: string;
   session_id: string;
   run_id: string;
@@ -82,10 +77,6 @@ export type DriverSpawnParams = {
   effort?: string;
   initial_prompt?: string;
   metadata?: unknown;
-  // attn's promoted auto-mode config, in the raw snake_case shape
-  // automode/config.ts parses (enabled_default, environment, allow, hard_deny,
-  // classifier_models/classifier_model, escalation_models/escalation_model).
-  // Absent when the daemon sent none.
   auto_mode?: unknown;
 };
 
@@ -103,8 +94,6 @@ export type SessionClosedParams = {
   signal?: string;
 };
 
-// Resume token: persisted daemon-side via session.report_metadata and handed
-// back verbatim on driver.resume.
 export type PiMetadata = {
   schema: 1;
   pi_session_id: string;

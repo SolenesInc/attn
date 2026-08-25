@@ -12,19 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// The whole in-place upgrade, against a real worker process that really
-// execve's. Everything below the RPC is exercised for real: the read loop
-// stopping at a chunk boundary, the PTY master and the unix listener crossing
-// as inherited descriptors, the screen crossing as plain VT, and the agent
-// child staying the worker's own child through it all.
-//
-// Gated like the other worker integration tests — it builds a binary and
-// spawns processes. Run it with:
-//
-//	ATTN_RUN_WORKER_INTEGRATION=1 go test ./internal/ptybackend -run Upgrade
-//
-// Design and the standalone measurements:
-// docs/plans/2026-08-22-worker-inplace-upgrade.md.
+// Design: docs/plans/2026-08-22-worker-inplace-upgrade.md
 func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping worker integration test in short mode")
@@ -73,7 +61,6 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 	}
 	workerPID, childPID := entry.WorkerPID, entry.ChildPID
 
-	// Put something on the screen that must still be there afterwards.
 	waitForScreen(t, backend, sessionID, "__BEFORE_UPGRADE__",
 		"printf '__BEFORE_UPGRADE__\\n'\n")
 
@@ -88,8 +75,6 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 		t.Error("the upgrade carried an empty screen dump")
 	}
 
-	// The socket keeps answering from the inherited listener, so the very next
-	// call goes through — there is no reconnect loop and no window to tolerate.
 	snap, err := backend.ScreenSnapshot(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("ScreenSnapshot() right after the upgrade: %v", err)
@@ -105,8 +90,6 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 		t.Errorf("the screen did not survive the upgrade; got %q", text)
 	}
 
-	// Same worker process, same agent child: execve replaced the image, not the
-	// process, which is exactly why the child is still reapable.
 	after, err := waitForRegistryEntry(registryPath, 10*time.Second)
 	if err != nil {
 		t.Fatalf("registry entry missing after the upgrade: %v", err)
@@ -118,14 +101,10 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 		t.Errorf("child pid = %d after the upgrade, want %d", after.ChildPID, childPID)
 	}
 
-	// And the child is still reachable and still writing to the same PTY.
 	waitForScreen(t, backend, sessionID, "__AFTER_UPGRADE__",
 		"printf '__AFTER_UPGRADE__\\n'\n")
 
-	// The handoff files are the new image's to consume; leaving them behind
-	// would make the next reader think an upgrade is pending. The paths come
-	// from the same helper the worker writes through, so moving the layout
-	// moves the check with it instead of quietly making it vacuous.
+	// A leftover handoff file makes the next reader think an upgrade is pending.
 	jsonPath, dumpPath := ptyworker.HandoffPaths(filepath.Join(backend.registryDir(), sessionID+".json"), sessionID)
 	for _, path := range []string{jsonPath, dumpPath} {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -169,8 +148,7 @@ func TestWorkerBackend_UpgradeRefusesABinaryThatIsNotOne(t *testing.T) {
 	}
 	defer func() { _ = backend.Remove(context.Background(), sessionID) }()
 
-	// A refusal must leave the session running: the worker validates before it
-	// captures, and capturing is the point of no return.
+	// The worker validates before it captures; capturing is the point of no return.
 	if _, err := backend.upgrade(context.Background(), sessionID, "/nonexistent/attn"); err == nil {
 		t.Fatal("Upgrade() accepted a path with no binary at it")
 	}
@@ -183,9 +161,8 @@ func TestWorkerBackend_UpgradeRefusesABinaryThatIsNotOne(t *testing.T) {
 	}
 }
 
-// waitForScreen sends input and waits until the worker's own rendered screen
-// shows the marker — the screen, not the byte stream, because that is what has
-// to survive the swap.
+// Waits on the rendered screen, not the byte stream: the screen is what has to
+// survive the swap.
 func waitForScreen(t *testing.T, backend *WorkerBackend, sessionID, marker, input string) {
 	t.Helper()
 	if err := backend.Input(context.Background(), sessionID, []byte(input)); err != nil {

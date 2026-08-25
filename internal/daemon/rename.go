@@ -7,10 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleRenameSession updates a session's display label. The store is the durable
-// authority for the name (registration/respawn preserve a non-empty stored
-// label), so the rename survives reconnects and reloads. On success the renamed
-// session is broadcast to every client via session_state_changed.
 func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessionMessage) {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	label := strings.TrimSpace(msg.Label)
@@ -33,10 +29,6 @@ func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessi
 	d.sendRenameResult(client, protocol.CmdRenameSession, sessionID, nil)
 }
 
-// handleRenameWorkspace updates a workspace's title in both the in-memory
-// registry and the store, then broadcasts workspace_state_changed. Like the
-// session label, the stored title is preserved over the name re-derived at
-// register time, so the rename is durable.
 func (d *Daemon) handleRenameWorkspace(client *wsClient, msg *protocol.RenameWorkspaceMessage) {
 	workspaceID := strings.TrimSpace(msg.WorkspaceID)
 	title := strings.TrimSpace(msg.Title)

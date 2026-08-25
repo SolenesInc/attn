@@ -2,10 +2,6 @@ package transcript
 
 import "testing"
 
-// The captured fixtures are the same redacted Claude Code 2.1.233 and Codex
-// 0.147.0 transcripts the usage tests read, so the two quantities are proven
-// against one set of real records.
-
 func TestFollowerReadsClaudeContextOccupancy(t *testing.T) {
 	follower, err := NewFollower(usageFixture(t, "claude-2.1.233.jsonl"), "claude", 0)
 	if err != nil {
@@ -22,8 +18,6 @@ func TestFollowerReadsClaudeContextOccupancy(t *testing.T) {
 			seen = append(seen, record.Context.Tokens)
 		}
 	}
-	// 2 + 7391 + 4709 on the first message, repeated by its content-block
-	// records, then 2 + 262963 + 4111 from the iteration on the second.
 	want := []int64{12102, 12102, 12102, 267076}
 	if len(seen) != len(want) {
 		t.Fatalf("occupancy readings = %v, want %v", seen, want)
@@ -60,9 +54,6 @@ func TestFollowerReadsCodexContextOccupancyAndWindow(t *testing.T) {
 	}
 }
 
-// Occupancy is the LAST request's prompt, never the sum. A message that made
-// three requests carries the same context through all of them; summing would
-// report a session as full at a third of its real fill.
 func TestClaudeOccupancyTakesTheLastIterationNotTheSum(t *testing.T) {
 	line := []byte(`{"type":"assistant","message":{"id":"msg_1","usage":{
 		"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,
@@ -101,7 +92,6 @@ func TestContextOccupancyRejectsRecordsThatSayNothing(t *testing.T) {
 	}
 }
 
-// A window attn cannot trust is no window rather than a negative budget.
 func TestCodexNegativeWindowReadsAsUnstated(t *testing.T) {
 	line := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":900},"model_context_window":-1}}}`)
 	got, ok := ContextOccupancy("codex", line)

@@ -22,8 +22,8 @@ func readFileTrim(path string) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
-// sameDir compares two directory paths after resolving symlinks (macOS maps
-// /var -> /private/var, which `pwd` reports but t.TempDir() does not).
+// sameDir resolves symlinks first: macOS maps /var -> /private/var, which `pwd`
+// reports but t.TempDir() does not.
 func sameDir(a, b string) bool {
 	ra, err := filepath.EvalSymlinks(a)
 	if err != nil {
@@ -36,7 +36,6 @@ func sameDir(a, b string) bool {
 	return ra == rb
 }
 
-// argvValueAfter returns the element immediately following flag, or "".
 func argvValueAfter(argv []string, flag string) string {
 	for i := 0; i+1 < len(argv); i++ {
 		if argv[i] == flag {
@@ -46,8 +45,6 @@ func argvValueAfter(argv []string, flag string) string {
 	return ""
 }
 
-// argvHas reports whether the argv contains want as a contiguous element (exact
-// match), which is stricter than a substring scan over the joined string.
 func argvHas(argv []string, want string) bool {
 	for _, a := range argv {
 		if a == want {
@@ -57,7 +54,6 @@ func argvHas(argv []string, want string) bool {
 	return false
 }
 
-// argvHasPair reports whether flag is immediately followed by value in argv.
 func argvHasPair(argv []string, flag, value string) bool {
 	for i := 0; i+1 < len(argv); i++ {
 		if argv[i] == flag && argv[i+1] == value {
@@ -67,13 +63,7 @@ func argvHasPair(argv []string, flag, value string) bool {
 	return false
 }
 
-// TestJanitorShapedRequestStaysReadOnly is the focused regression for the
-// security invariant: the workspace-context janitor sets none of the E3 fields
-// (no Sandbox, no CWD, no ExtraMCPServers), so BOTH driver argv builders must
-// produce their fully locked-down, read-only output for it. If a future change
-// flips the default to writable, this test fails loudly.
 func TestJanitorShapedRequestStaysReadOnly(t *testing.T) {
-	// Exactly the shape internal/daemon/workspace_context_janitor.go builds.
 	janitor := HeadlessTaskRequest{
 		Model:            "janitor-model",
 		Prompt:           "compact",
@@ -115,11 +105,7 @@ func TestJanitorShapedRequestStaysReadOnly(t *testing.T) {
 	}
 }
 
-// --- Codex argv builder ---
-
 func TestBuildCodexHeadlessArgsReadOnlyDefault(t *testing.T) {
-	// A janitor-shaped request (no Sandbox, no CWD, no ExtraMCPServers) must yield
-	// the read-only argv byte-for-byte equivalent to the locked-down original.
 	argv := buildCodexHeadlessArgs(HeadlessTaskRequest{
 		Model:            "gpt-test",
 		Prompt:           "compact",
@@ -150,7 +136,6 @@ func TestBuildCodexHeadlessArgsReadOnlyDefault(t *testing.T) {
 	if !argvHas(argv, `mcp_servers.attn_context.enabled_tools=["read_context","replace_context"]`) {
 		t.Fatalf("argv did not keep the janitor default tools: %v", argv)
 	}
-	// No extra mcp_servers beyond the primary one.
 	for _, a := range argv {
 		if strings.HasPrefix(a, "mcp_servers.") && !strings.HasPrefix(a, "mcp_servers.attn_context.") {
 			t.Fatalf("janitor-shaped request leaked an extra mcp server: %q", a)
@@ -189,7 +174,6 @@ func TestBuildCodexHeadlessArgsWritableEnablesSandboxAndShell(t *testing.T) {
 	if argvHas(argv, "--dangerously-bypass-approvals-and-sandbox") || argvHas(argv, "danger-full-access") {
 		t.Fatalf("writable used a sandbox bypass: %v", argv)
 	}
-	// Every other feature stays OFF on the writable path.
 	for _, off := range []string{
 		"features.unified_exec=false", "features.apps=false", "features.hooks=false",
 		"features.plugins=false", "features.browser_use=false", "features.computer_use=false",
@@ -200,7 +184,6 @@ func TestBuildCodexHeadlessArgsWritableEnablesSandboxAndShell(t *testing.T) {
 			t.Fatalf("writable re-enabled a non-essential feature (missing %q): %v", off, argv)
 		}
 	}
-	// Extra MCP server is attached IN ADDITION to the primary, with enabled_tools.
 	if !argvHas(argv, `mcp_servers.session_tools.enabled_tools=["do_thing","other_thing"]`) {
 		t.Fatalf("extra MCP server tools not emitted: %v", argv)
 	}
@@ -210,7 +193,6 @@ func TestBuildCodexHeadlessArgsWritableEnablesSandboxAndShell(t *testing.T) {
 	if !argvHas(argv, "mcp_servers.session_tools.required=true") {
 		t.Fatalf("extra MCP server not marked required: %v", argv)
 	}
-	// The primary result sink is still present.
 	if !argvHas(argv, `mcp_servers.attn_workflow_result.enabled_tools=["return_result"]`) {
 		t.Fatalf("primary result sink lost its tool: %v", argv)
 	}
@@ -220,7 +202,7 @@ func TestBuildCodexHeadlessArgsUnknownSandboxFailsClosed(t *testing.T) {
 	argv := buildCodexHeadlessArgs(HeadlessTaskRequest{
 		Model:   "gpt-test",
 		Prompt:  "x",
-		Sandbox: "full-access", // unrecognized => read-only
+		Sandbox: "full-access",
 	}, "", 0)
 	if !argvHasPair(argv, "--sandbox", "read-only") {
 		t.Fatalf("unrecognized sandbox value did not fail closed to read-only: %v", argv)
@@ -231,7 +213,6 @@ func TestBuildCodexHeadlessArgsUnknownSandboxFailsClosed(t *testing.T) {
 }
 
 func TestCodexRunHeadlessTaskUsesCWDAsProcessDir(t *testing.T) {
-	// When CWD is set, the process runs there (the working tree), not WorkDir.
 	dir := t.TempDir()
 	cwd := t.TempDir()
 	scriptPath := dir + "/agent"
@@ -257,13 +238,10 @@ func TestCodexRunHeadlessTaskUsesCWDAsProcessDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pwd: %v", err)
 	}
-	// macOS resolves /var -> /private/var; compare by suffix-resolving both.
 	if !sameDir(got, cwd) {
 		t.Fatalf("process cwd = %q, want %q", got, cwd)
 	}
 }
-
-// --- Claude argv builder ---
 
 func TestBuildClaudeHeadlessArgsReadOnlyDefault(t *testing.T) {
 	argv, err := buildClaudeHeadlessArgs(HeadlessTaskRequest{
@@ -321,11 +299,9 @@ func TestBuildClaudeHeadlessArgsWritableAddsEditAndBashAndExtraServers(t *testin
 			t.Fatalf("writable allowlist missing %q: %q", want, tools)
 		}
 	}
-	// --tools and --allowedTools must match.
 	if argvValueAfter(argv, "--tools") != tools {
 		t.Fatalf("--tools != --allowedTools: %q vs %q", argvValueAfter(argv, "--tools"), tools)
 	}
-	// The extra server is merged into --mcp-config alongside the primary one.
 	cfg := argvValueAfter(argv, "--mcp-config")
 	for _, want := range []string{"attn_workflow_result", "session_tools", "/tmp/session-mcp"} {
 		if !strings.Contains(cfg, want) {
@@ -337,11 +313,9 @@ func TestBuildClaudeHeadlessArgsWritableAddsEditAndBashAndExtraServers(t *testin
 	}
 }
 
-// --- model flag omitted when empty (harness uses its own default) ---
-
 func TestBuildCodexHeadlessArgsOmitsModelWhenEmpty(t *testing.T) {
-	// No Model => codex must NOT receive "-m" at all. An empty "-m" makes codex
-	// reject the run as "model is invalid or unavailable" (surfaced live in E4).
+	// No Model means codex must NOT receive "-m" at all: an empty "-m" makes codex
+	// reject the run as "model is invalid or unavailable".
 	argv := buildCodexHeadlessArgs(HeadlessTaskRequest{
 		Prompt:           "ping",
 		MCPServerName:    "attn_workflow_result",

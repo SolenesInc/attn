@@ -1,18 +1,9 @@
-// app/src/shortcuts/cheatsheet.ts
-// Presentation model for the keyboard shortcuts cheatsheet.
-//
-// Key bindings stay in registry.ts (single source of truth); this module only
-// owns labels, grouping, and ordering. Rows reference registry ids and derive
-// their keycaps via formatShortcut, except for a few rows that are clearer when
-// collapsed (pane arrows, workspace numbers) and supply explicit tokens.
 
 import { ShortcutId } from './registry';
 import { shortcutTokens } from './formatShortcut';
 
 export interface CheatsheetRow {
   label: string;
-  // Each entry is one keycap-combo (array of tokens). Multiple combos render
-  // separated by "/" (e.g. previous / next session).
   combos: string[][];
   note?: string;
 }
@@ -22,7 +13,6 @@ export interface CheatsheetCategory {
   rows: CheatsheetRow[];
 }
 
-/** One combo derived from a registry id. */
 function fromId(id: ShortcutId): string[] {
   return shortcutTokens(id);
 }

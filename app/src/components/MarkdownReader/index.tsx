@@ -31,15 +31,12 @@ import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSou
 import { tilePathBasename } from '../../utils/tilePresentation';
 import './MarkdownReader.css';
 
-// Parsed WITH remark-frontmatter, so remark positions already refer to raw-file
-// lines and the anchor lineOffset is 0. These arrays MUST stay module-level:
-// react-markdown re-parses whenever the plugin array identity changes.
+// Parsing WITH remark-frontmatter is what makes the anchor lineOffset 0. Both
+// arrays MUST stay module-level: react-markdown re-parses on identity change.
 const remarkPlugins = [remarkGfm, remarkFrontmatter];
 const rehypePlugins: PluggableList = [
-  // Order is load-bearing: raw HTML, then sanitize; anchors after sanitize so
-  // data-* never needs whitelisting and author HTML cannot forge it; anchors
-  // before alerts so blockquotes keep their ids and marker-inclusive ranges;
-  // heading slugs before prose transforms so ids come from pre-transform text.
+  // Order is load-bearing: sanitize before anchors so author HTML cannot forge
+  // data-*; anchors before alerts; heading slugs before prose transforms.
   rehypeRaw,
   [rehypeSanitize, readerSanitizeSchema],
   [rehypeSourceAnchors, { lineOffset: 0 }],
@@ -48,7 +45,6 @@ const rehypePlugins: PluggableList = [
   rehypeProseTransforms,
 ];
 
-// GitHub alert chrome: octicon paths (16x16, fill=currentColor) + titles.
 const ALERT_TITLES: Record<AlertKind, string> = {
   note: 'Note',
   tip: 'Tip',
@@ -69,8 +65,6 @@ function isAlertKind(value: unknown): value is AlertKind {
   return typeof value === 'string' && value in ALERT_TITLES;
 }
 
-// rehypeSourceAnchors attributes, pulled off a block's props when the visual
-// wrapper rather than the semantic element must carry the anchor.
 const ANCHOR_ATTRS = ['data-block-id', 'data-source-line', 'data-source-line-end'] as const;
 
 function splitAnchorProps<T extends object>(props: T): {
@@ -125,7 +119,6 @@ function readerComponents(
     pre({ node: _node, children, ref: _ref, ...preProps }) {
       const { text, language, isMermaid } = codeMeta(children);
       if (isMermaid) {
-        // CodeRenderer draws the diagram; keep the anchor attrs on the wrapper.
         return <div {...(preProps as HTMLAttributes<HTMLDivElement>)}>{children}</div>;
       }
       return <CodeBlock code={text} language={language} preProps={preProps} />;
@@ -136,15 +129,14 @@ function readerComponents(
       if (!isAlertKind(alertKind)) {
         return <blockquote {...(props as HTMLAttributes<HTMLElement>)}>{children}</blockquote>;
       }
-      // The wrapper keeps the anchor attributes (in `rest`) plus the kind.
       return (
         <div
           {...(rest as HTMLAttributes<HTMLDivElement>)}
           data-alert-kind={alertKind}
           className={`md-alert md-alert-${alertKind}`}
         >
-          {/* data-md-chrome: React text with no hast counterpart; the anchoring
-              DOM walker skips these subtrees. */}
+          {/* data-md-chrome marks React text with no hast counterpart; the
+              anchoring DOM walker skips these subtrees. */}
           <div className="md-alert-title" data-md-chrome="1">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
               <path d={ALERT_ICON_PATHS[alertKind]} />
@@ -156,8 +148,8 @@ function readerComponents(
       );
     },
     table({ node: _node, children, ...props }) {
-      // The scroll wrapper is the top-level block element, so it takes the
-      // anchor attributes — never duplicated, consumers count data-block-id.
+      // The wrapper takes the anchor attributes, never both: consumers count
+      // data-block-id.
       const { anchorProps, rest } = splitAnchorProps(props as HTMLAttributes<HTMLTableElement>);
       return (
         <div className="md-table-wrap" {...anchorProps}>
@@ -206,8 +198,6 @@ function readerComponents(
       const { srcSet: _srcSet, sizes: _sizes, ...safeProps } = props as Record<string, unknown> &
         HTMLAttributes<HTMLImageElement>;
       const imgSrc = typeof src === 'string' ? src : undefined;
-      // Local targets resolve to an absolute path; remote and unsafe ones keep
-      // the blocked-image fallback — the reader never fetches the network.
       const target = imgSrc ? resolveMarkdownTarget(documentPath, imgSrc) : null;
       if (!target || target.kind !== 'local' || !allowLocalTargets || !isSafeLocalMarkdownImageTarget(target.value)) {
         return (
@@ -265,32 +255,20 @@ function FrontmatterCard({ entries }: { entries: FrontmatterEntry[] }) {
   );
 }
 
-/**
- * Imperative bridge for the tile host's send flow: a handle, not props, so the
- * send button reads call-time state without re-rendering the tile per keystroke.
- */
 export interface MarkdownAnnotationsSendHandle {
-  /** Flush any armed debounced draft save; resolves when it settles. */
   flushPendingSave(): Promise<void>;
-  /** False until the daemon draft loaded. Sends must be refused then: the
-      daemon would format its STORED draft, not the local list. */
+  /** False until the daemon draft loaded; a send before then formats the
+      daemon's STORED draft, not the local list. */
   isHydrated(): boolean;
-  /** Empty local state after a delivered send; the floor seeds the counter. */
   applyDeliveredClear(generationFloor: number): void;
-  /** Ids the client currently shows as orphaned (non-persisted, client-derived). */
   getOrphanedIds(): string[];
 }
 
 export interface MarkdownReaderProps {
-  /** Raw markdown file content (frontmatter included). */
   content: string;
-  /** Opaque document identity plus typed file/seed authority. */
   source: MarkdownDocumentSource;
-  /** False for remote workspaces: local file links/images render blocked. */
   allowLocalTargets?: boolean;
-  /** Markdown TILES pass true; chat-surface readers never see the layer. */
   annotationsEnabled?: boolean;
-  /** Reports the current annotation count (drives the tile header's Send N). */
   onAnnotationsCountChange?: (count: number) => void;
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
 }
@@ -303,18 +281,8 @@ interface MarkdownReaderBodyProps {
   onImageClick: (src: string, alt: string) => void;
 }
 
-/**
- * The rendered document subtree, behind the content re-render gate.
- *
- * GATE CONTRACT: re-renders only when document identity changes — `memo`'s
- * shallow compare on the content STRING is the content hash, and the
- * live-reload poller re-reads the file every 750ms, so an unchanged file must
- * produce zero re-renders. `rootRef`/`onImageClick` stay referentially stable
- * so they never defeat the compare. A re-render remounts the whole tree (fresh
- * component closures are new element types), snapping open `<details>` shut,
- * re-running shiki, and wiping copy-button state; that cost is accepted only
- * when the content really changed.
- */
+// The live-reload poller re-reads the file every 750ms, so an unchanged file must
+// produce zero re-renders: a re-render remounts the tree and open <details> shut.
 const MarkdownReaderBody = memo(function MarkdownReaderBody({
   content,
   path,
@@ -323,8 +291,6 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   onImageClick,
 }: MarkdownReaderBodyProps) {
   const frontmatter = extractFrontmatter(content);
-  // Fresh components per render is fine: the memo gate means the tree remounts
-  // anyway, and per-parse state lives in the rehype passes.
   const components = readerComponents(path, allowLocalTargets, rootRef, onImageClick);
 
   return (
@@ -339,11 +305,6 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   );
 });
 
-/**
- * Document reader for markdown tiles; chat-style surfaces keep the plain
- * `Markdown` component. State (the lightbox) lives OUTSIDE the memoized body,
- * so opening it never re-renders the document subtree.
- */
 export const MarkdownReader = memo(function MarkdownReader({
   content,
   source,
@@ -363,8 +324,6 @@ export const MarkdownReader = memo(function MarkdownReader({
   const handleLightboxClose = useCallback(() => {
     setLightbox(null);
   }, []);
-  // Outside the memoized body so its content-keyed effect fires exactly when
-  // the body remounted. Fully inert (no listeners, paints, or traffic) when off.
   const annotationsApi = useAnnotations({
     rootRef,
     content,
@@ -376,7 +335,6 @@ export const MarkdownReader = memo(function MarkdownReader({
   const annotationsApiRef = useRef(annotationsApi);
   annotationsApiRef.current = annotationsApi;
 
-  // Reports 0 on unmount so a vanished reader never leaves a stale Send N.
   useEffect(() => {
     onAnnotationsCountChange?.(annotationsApi.annotations.length);
   }, [annotationsApi.annotations, onAnnotationsCountChange]);

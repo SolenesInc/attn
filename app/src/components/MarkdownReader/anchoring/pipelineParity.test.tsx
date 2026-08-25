@@ -1,10 +1,5 @@
-/**
- * Pipeline parity — for every [data-block-id] element the chrome-skipped DOM
- * walk text equals extractBlockTexts' text for that id. This single test pins
- * the headless pipeline to the live one forever. (Moved out of the deleted
- * PR4 spike test file; the paint-spike tests it lived with are superseded by
- * annotations/useAnnotations.test.tsx.)
- */
+// Pins the headless pipeline to the live one: for every [data-block-id] element the
+// chrome-skipped DOM walk text equals extractBlockTexts' text for that id.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
@@ -24,9 +19,7 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-// Mirrors REAL shiki `structure: 'inline'` output: per-line spans joined by
-// <br> ELEMENTS (no '\n' text nodes) — the exact shape CodeBlock must repair
-// for anchoring offset parity.
+// Mirrors REAL shiki `structure: 'inline'` output: per-line spans joined by <br> ELEMENTS, no '\n' text nodes.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
     code
@@ -111,8 +104,6 @@ describe('pipeline parity (headless extraction vs live DOM)', () => {
   });
 
   it('keeps parity and offsets for a multi-line shiki block AFTER async hydration', async () => {
-    // Real shiki renders line breaks as <br> elements; without CodeBlock's
-    // newline repair every offset past line 1 shifts and the wrong text paints.
     const doc = 'Intro.\n\n```js\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```\n';
     const { container } = renderReader(doc);
     await waitFor(() => expect(container.querySelector('.md-shiki')).not.toBeNull());
@@ -121,7 +112,6 @@ describe('pipeline parity (headless extraction vs live DOM)', () => {
     const el = container.querySelector(`[data-block-id="${block.blockId}"]`)!;
     expect(blockDomText(el)).toBe(block.text);
 
-    // A line-3 anchor resolves to exactly its own characters post-hydration.
     const start = block.text.indexOf('const c = 3;');
     const range = resolveDomRange(el, start, start + 'const c = 3;'.length);
     expect(range?.toString()).toBe('const c = 3;');

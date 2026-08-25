@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// seedLegacyTask writes a row directly into the retired task runner's table,
-// which nothing in the codebase writes anymore — the handover is the only reader.
 func seedLegacyTask(t *testing.T, s *Store, id, kind, subject, state, meta string, at time.Time) {
 	t.Helper()
 	_, err := s.db.Exec(
@@ -37,8 +35,6 @@ func jobCount(t *testing.T, s *Store) int {
 	return n
 }
 
-// oneForOne is the translation a caller with nothing to interpret would write:
-// every legacy row becomes the job that replaces it, keeping its id.
 func oneForOne(rec LegacyTaskRecord) JobRecord {
 	return JobRecord{
 		ID:          rec.ID,
@@ -55,8 +51,6 @@ func oneForOne(rec LegacyTaskRecord) JobRecord {
 	}
 }
 
-// The handover moves everything still owed onto the jobs table and empties the
-// old one, so it cannot run twice on the same rows.
 func TestMigrateLegacyTasksMovesOwedWorkAndEmptiesTheTable(t *testing.T) {
 	s := New()
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -113,8 +107,6 @@ func TestMigrateLegacyTasksMovesOwedWorkAndEmptiesTheTable(t *testing.T) {
 	}
 }
 
-// Work that already happened is dropped rather than moved: nothing re-runs a
-// done task, and moving it would only replay old rows into the new table.
 func TestMigrateLegacyTasksDropsCompletedRows(t *testing.T) {
 	s := New()
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -140,9 +132,6 @@ func TestMigrateLegacyTasksDropsCompletedRows(t *testing.T) {
 	}
 }
 
-// The whole point of doing this in one transaction. If any job write fails, the
-// old rows must still be there: this path runs once per installation and the
-// work it carries has no other copy, so a partial handover is lost work.
 func TestAFailedJobWriteLeavesEveryLegacyRowIntact(t *testing.T) {
 	s := New()
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -150,8 +139,6 @@ func TestAFailedJobWriteLeavesEveryLegacyRowIntact(t *testing.T) {
 	seedLegacyTask(t, s, "compact_context:ws-2", "compact_context", "ws-2", "queued", "", at)
 	seedLegacyTask(t, s, "compact_context:ws-3", "compact_context", "ws-3", "queued", "", at)
 
-	// Two distinct ids claiming one coalescing key: the partial unique index on
-	// (kind, unique_key) refuses the second write, mid-handover.
 	collide := func(rec LegacyTaskRecord) JobRecord {
 		job := oneForOne(rec)
 		job.UniqueKey = "same"
@@ -168,8 +155,6 @@ func TestAFailedJobWriteLeavesEveryLegacyRowIntact(t *testing.T) {
 		t.Fatalf("%d job rows survived a rolled-back handover, want 0", n)
 	}
 
-	// The failure is recoverable: nothing was consumed, so a later start that can
-	// translate the rows moves all of them.
 	moved, err := s.MigrateLegacyTasks(oneForOne)
 	if err != nil {
 		t.Fatalf("migrate after a failed attempt: %v", err)
@@ -182,8 +167,6 @@ func TestAFailedJobWriteLeavesEveryLegacyRowIntact(t *testing.T) {
 	}
 }
 
-// A store with no database reports it rather than quietly reporting a handover
-// of zero rows, which reads identically to "there was nothing owed".
 func TestMigrateLegacyTasksWithoutADatabaseIsAnError(t *testing.T) {
 	var s Store
 	if _, err := s.MigrateLegacyTasks(oneForOne); err == nil {

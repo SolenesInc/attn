@@ -3,30 +3,15 @@ import { act, cleanup, render } from '@testing-library/react';
 import { Markdown } from './index';
 import mdLong from '../ConversationPane/__recordings__/md-long.jsonl?raw';
 
-// What is being timed here is the PARSE, which is the bill (see streaming.ts).
-// Highlighting is not part of it, so this mock never settles: shiki is asked
-// and never answers, no highlight state is written, and both legs are timed on
-// the same work. A resolving mock instead charges the naive leg one highlight
-// per code block per delta — ~8,000 of them across this recording — and times
-// the harness rather than the split.
+// Never settles on purpose: a resolving mock charges the naive leg ~8,000 highlights
+// across this recording and times the harness, not the parse split being measured.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(() => new Promise<string>(() => {})),
 }));
 vi.mock('shiki', () => shikiMock);
 
-/**
- * What the settled/tail split buys, measured on the real recording.
- *
- * `streaming` off is the naive baseline: react-markdown reparses the whole
- * message on every delta, which is what a straight reuse of the shared
- * component would do. The numbers are printed rather than asserted — happy-dom
- * is not a browser and its absolute cost means little — but the RATIO between
- * the two runs is the same work in the same place, and that is the receipt.
- *
- * The ratio moves with the machine too: 35x and 17.6x on two boxes in 2026-08.
- * Read it as an order of magnitude, not as a threshold — a smaller number here
- * is a different box until something else says otherwise.
- */
+/** `streaming` off is the naive full-reparse baseline. The RATIO is the receipt,
+ * not the absolute cost: 35x and 17.6x measured on two boxes in 2026-08. */
 
 function prefixes(): string[] {
   const rows = mdLong.trim().split('\n').map((line: string) => JSON.parse(line));

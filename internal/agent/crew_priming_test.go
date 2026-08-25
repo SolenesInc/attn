@@ -7,9 +7,6 @@ import (
 
 const crewBlock = "You are **Trellis**, a crew member of this attn home."
 
-// A woken member is its member on both built-in harnesses: the priming rides the
-// same launch-guidance path as the standing guidance, and a session nobody woke
-// as a member is primed with no crew block at all.
 func TestBuiltinAgentsCarryTheCrewPriming(t *testing.T) {
 	opts := SpawnOpts{SessionID: "s", Executable: "claude", CrewPriming: crewBlock}
 
@@ -29,8 +26,6 @@ func TestBuiltinAgentsCarryTheCrewPriming(t *testing.T) {
 	}
 }
 
-// A member's awareness dirs are what its charter is about, so its sessions can
-// reach them: both harnesses take extra directories natively.
 func TestAwarenessDirsAreReachableFromTheLaunch(t *testing.T) {
 	opts := SpawnOpts{
 		SessionID:     "s",
@@ -55,8 +50,6 @@ func TestAwarenessDirsAreReachableFromTheLaunch(t *testing.T) {
 		}
 	}
 
-	// A session with no awareness dirs adds none: the flag exists only where a
-	// member asked for it.
 	plain := strings.Join((&Claude{}).BuildCommand(SpawnOpts{SessionID: "s", Executable: "claude"}).Args, "\x00")
 	if strings.Contains(plain, "--add-dir") {
 		t.Errorf("a launch with no awareness dirs widened its reach anyway:\n%s", plain)

@@ -1,10 +1,3 @@
-// An artifact is an object, not a chip. The kind is named in words in a fixed
-// left gutter so the column is scannable and there is no icon vocabulary to
-// learn; alignment does the work a box would have done.
-//
-// A seed's artifacts, as objects rather than chips. Three facts decide a row:
-// what kind of thing it is, which part of it a person recognizes, and whether
-// following it stays inside attn or leaves it. Everything else is noise.
 import { useEffect, useState } from 'react';
 import type { SeedArtifactReference } from '../types/generated';
 import { artifactKey } from './seedArtifacts';
@@ -31,10 +24,7 @@ interface Presentation {
   href: string;
 }
 
-// A GitHub pull request and a random link are not the same object, and a reader
-// scanning a seed's artifacts should never have to read a URL to tell them
-// apart. The recognition is the view's, not the daemon's: the wire kind stays
-// `url`, and a URL that does not match reads as a plain link.
+// The recognition is the view's, not the daemon's: the wire kind stays `url`.
 const PR_URL = /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/(pull|issues)\/(\d+)/;
 
 function present(artifact: SeedArtifactReference): Presentation {
@@ -76,19 +66,14 @@ function present(artifact: SeedArtifactReference): Presentation {
       host = parsed.host.replace(/^www\./, '');
       rest = `${parsed.pathname}${parsed.search}`.replace(/\/$/, '');
     } catch {
-      // Not parseable: the whole string is the only identity there is.
     }
     return { ...base, kind: 'link', primary: host, secondary: rest === '/' ? '' : rest, external: true, href: url };
   }
   return { ...base, kind: artifact.kind, primary: artifact.repository ?? artifact.kind };
 }
 
-/**
- * Which artifact paths are missing. Only absolute paths are checked: a
- * repo-relative path resolves against a worktree this surface does not know, so
- * asking about it would answer "missing" about a file that is right there.
- * Making every artifact answerable is a daemon-side projection, not a view.
- */
+/** Which artifact paths are missing. Absolute paths only: a repo-relative path
+ * resolves against a worktree this surface does not know. */
 function useMissingPaths(
   artifacts: readonly SeedArtifactReference[],
   check?: (path: string) => Promise<boolean>,
@@ -145,8 +130,6 @@ export function SeedArtifactRows({ artifacts, onOpenMarkdownArtifact, checkArtif
         );
 
         if (gone) {
-          // Nothing to open, so nothing offers to. The path stays whole and
-          // selectable: the next move is finding where the file went.
           return (
             <li key={artifactKey(artifact)} className="seed-artifact is-gone" title={view.path}>
               {body}

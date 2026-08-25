@@ -1,11 +1,4 @@
-// Model and effort catalogs for automation launch configuration.
-//
-// These catalogs are maintained here rather than derived from the agent
-// CLIs: neither codex nor claude exposes an API to enumerate its available
-// models. Effort options are modeled per-model, not per-agent, because a
-// model's supported effort levels (and its sensible default) vary between
-// models offered by the same agent — e.g. codex's "mini" models and
-// claude's "haiku" drop the highest effort tier.
+// Maintained by hand because neither codex nor claude can enumerate its models.
 
 export type AutomationAgent = 'codex' | 'claude';
 
@@ -61,9 +54,6 @@ export const LAUNCH_CATALOG: Record<AutomationAgent, AgentLaunchCatalog> = {
   },
 };
 
-// effortOptionsFor resolves the effort list and default for a given agent
-// and model. modelId '' or any id not present in the agent's catalog falls
-// back to the agent's custom entry (free-text model names typed by hand).
 export function effortOptionsFor(
   agent: AutomationAgent,
   modelId: string,

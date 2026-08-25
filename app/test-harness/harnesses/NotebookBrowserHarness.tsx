@@ -1,15 +1,6 @@
-/**
- * NotebookBrowser Test Harness
- *
- * Renders the whole notebook modal (lazy filesystem tree + single live-editor
- * document pane) with mocked daemon functions, in a real browser, so the fs-backed
- * layout and the CodeMirror live editor can be exercised and eyeballed together.
- * Edits are recorded via the writeFile mock so the autosave path is observable.
- */
 import { useCallback, useEffect, useRef, useState } from 'react';
-// Pull in the app's design tokens (--color-*, --accent) so the harness renders with
-// the real theme — without this the editor/modal fall back to undefined variables and
-// the screenshot isn't color-representative.
+// Pull in the app's design tokens so the harness renders with the real theme —
+// without this the screenshot isn't color-representative.
 import '../../src/App.css';
 import { NotebookBrowser } from '../../src/components/NotebookBrowser';
 import type {
@@ -28,18 +19,16 @@ import type { HarnessProps } from '../types';
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-// A small fixture filesystem: a PARA-shaped notebook root with nested folders, a
-// markdown index, a plain text file, and a binary file (placeholder). listDir
-// returns the immediate children of a directory ('' = root).
+// A small fixture filesystem, PARA-shaped. listDir returns the immediate children of a
+// directory ('' = root).
 const TREE: Record<string, FsEntry[]> = {
   '': [
     { path: 'journal', name: 'journal', isDir: true, size: 0 },
     { path: 'knowledge', name: 'knowledge', isDir: true, size: 0 },
     { path: 'notes.txt', name: 'notes.txt', isDir: false, size: 64 },
     { path: 'cover.png', name: 'cover.png', isDir: false, size: 4096 },
-    // A dedicated fixture note for fence/blockquote/hr live-preview e2e coverage — kept
-    // out of listFiles/TREE offsets that other tests already depend on (e.g. the Cmd+P
-    // finder's fixed option count and index.md's heading/scroll offsets).
+    // Fence/blockquote/hr live-preview e2e fixture — kept out of the listFiles/TREE offsets
+    // other tests depend on (Cmd+P's fixed option count, index.md's heading offsets).
     { path: 'fences.md', name: 'fences.md', isDir: false, size: 96 },
     { path: 'images.md', name: 'images.md', isDir: false, size: 64 },
   ],
@@ -85,9 +74,8 @@ ${INDEX_FILLER}
 ![gone](assets/missing.png)
 `,
   'notes.txt': 'Plain text scratch file.\nNo markdown affordances here — just edit and autosave.\n',
-  // Fixture for PR8's link-resolver e2e coverage: a bare-relative link to a sibling
-  // note (resolves against foo.md's own directory, knowledge/areas — not the root),
-  // and a same-note #heading link whose target sits well below the fold.
+  // Link-resolver e2e fixture: a bare-relative link to a sibling note (resolves against
+  // knowledge/areas), and a #heading link whose target sits well below the fold.
   'knowledge/areas/foo.md': `# Foo area
 
 A [sibling link](bar.md) resolved bare-relative, and a jump to [Down Below](#down-below).
@@ -122,9 +110,8 @@ After the rule.
 `,
 };
 
-// Drive an external file change the way the daemon's fs_changed would: override a
-// file's bytes/hash, then bump the changeSignal so the open browser re-reads it. Kept
-// off the typed HarnessAPI (a fixed shape); the e2e casts window to reach it.
+// Drive an external file change the way the daemon's fs_changed would. Kept off the
+// typed HarnessAPI (a fixed shape); the e2e casts window to reach it.
 interface NotebookHarnessControls {
   // Stage new bytes for `path` (so the next read returns them) and bump changeSignal.
   // Omit content to fire a no-op fs_changed (the open file re-reads unchanged).
@@ -132,9 +119,8 @@ interface NotebookHarnessControls {
   // The bytes a path currently reads as, so the e2e can derive a minimally-edited
   // version (an agent appending a line) rather than guessing the fixture body.
   getContent: (path: string) => string;
-  // Force every writeFile call to report a CAS conflict (simulating an out-of-band
-  // disk change) until toggled off, so e2e can drive the conflict-banner flow
-  // without racing a real write.
+  // Force every writeFile call to report a CAS conflict until toggled off, so e2e can
+  // drive the conflict-banner flow without racing a real write.
   forceConflict: (on: boolean) => void;
 }
 declare global {
@@ -171,9 +157,8 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
     // broken-link flag fires here (broken links have their own dedicated harness).
     return { path, exists: true };
   }, []);
-  // Serves the live editor's inline image widget: assets/tiny.png resolves to a real
-  // (tiny) PNG; anything else — e.g. assets/missing.png — rejects, so the widget
-  // renders its broken placeholder.
+  // Serves the live editor's inline image widget: assets/tiny.png resolves to a real PNG;
+  // anything else rejects, so the widget renders its broken placeholder.
   const readAsset = useCallback(async (path: string): Promise<FsReadAssetResult> => {
     window.__HARNESS__.recordCall('readAsset', [path]);
     if (path === 'assets/tiny.png') {

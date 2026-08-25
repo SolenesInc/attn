@@ -10,10 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// setupSessionWorkspaceWithTile mirrors the real app flow that produces a
-// tile-only workspace: register a workspace, add and spawn one agent session
-// pane, then dock a markdown tile beside it. The session is later closed in
-// each test; the docked tile is what should keep the workspace alive.
 func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, workspaceID, sessionID, paneID string) {
 	t.Helper()
 	d = NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -60,9 +56,6 @@ func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, w
 	return d, client, workspaceID, sessionID, paneID
 }
 
-// assertTileOnlyWorkspaceAlive checks the invariant at the heart of tile-only
-// workspaces: the session is gone, but the workspace entity, its layout, and the
-// docked tile all survive, and the workspace tracks no sessions.
 func assertTileOnlyWorkspaceAlive(t *testing.T, d *Daemon, workspaceID, sessionID string) {
 	t.Helper()
 	if session := d.store.Get(sessionID); session != nil {
@@ -102,11 +95,6 @@ func TestClosingLastPaneKeepsTileOnlyWorkspaceAlive(t *testing.T) {
 	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
 }
 
-// Undocking the last tile of a sessionless workspace is the user closing the last
-// thing that workspace holds. It must take the workspace with it: a workspace with
-// a leafless layout is unreachable by every layout command (they all go through
-// ensureWorkspaceLayout), so leaving one behind strands a sidebar row whose close
-// button can never work again.
 func TestUndockingLastTileTearsDownSessionlessWorkspace(t *testing.T) {
 	d, client, workspaceID, sessionID, paneID := setupSessionWorkspaceWithTile(t)
 	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
@@ -156,8 +144,7 @@ func TestTileOnlyWorkspaceSurvivesStartupReap(t *testing.T) {
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
 	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
 
-	// Simulate a daemon restart: drop the in-memory registry and rebuild it from
-	// the store. The startup reap must keep a sessionless, tile-only workspace.
+	// A daemon restart: drop the in-memory registry and rebuild it from the store.
 	d.workspaces = newWorkspaceRegistry()
 	d.loadWorkspacesFromStore()
 

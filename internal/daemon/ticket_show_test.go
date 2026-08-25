@@ -12,9 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// callTicketShow drives the agent-socket handler synchronously and returns the
-// decoded response. handleTicketShow has no async side effects, so a plain
-// syncConn suffices.
 func callTicketShow(t *testing.T, d *Daemon, ticketID string) protocol.Response {
 	t.Helper()
 	conn := &syncConn{}
@@ -26,10 +23,6 @@ func callTicketShow(t *testing.T, d *Daemon, ticketID string) protocol.Response 
 	return resp
 }
 
-// ticket_show is the agent-socket counterpart of the app's get_ticket: a
-// non-consuming full-record read (description + complete activity thread with
-// full bodies + current artifacts) for a ticket with 2+ activity events, including a
-// long multi-line comment. Nothing here should be truncated.
 func TestHandleTicketShowReturnsFullRecord(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := time.Now()
@@ -93,8 +86,6 @@ func TestHandleTicketShowReturnsFullRecord(t *testing.T) {
 	}
 }
 
-// An unknown id fails with Ok:false and an error, not a panic — the same
-// contract as the app's get_ticket over websocket.
 func TestHandleTicketShowUnknownIDFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	resp := callTicketShow(t, d, "nope")

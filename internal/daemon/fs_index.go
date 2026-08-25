@@ -12,13 +12,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// maxFsIndexEntries bounds a single fs_index walk. Server-side on purpose — no
-// request may widen it; an over-cap walk stops early and reports truncated=true.
 const maxFsIndexEntries = 25000
 
-// handleFsIndex resolves rawRoot through resolveFsRoot — the chokepoint every
-// fs_* command uses, so it inherits the auth gate with no separate check here —
-// then enumerates it. Replies with fs_index_result correlated by requestID.
 func (d *Daemon) handleFsIndex(client *wsClient, requestID, rawRoot string, extensions []string) {
 	var files []string
 	var truncated bool
@@ -41,8 +36,6 @@ func (d *Daemon) handleFsIndex(client *wsClient, requestID, rawRoot string, exte
 	d.sendToClient(client, msg)
 }
 
-// normalizeExtensions lowercases the requested extensions and strips a leading
-// dot, so a client may send "md" or ".md". An empty result means "every file".
 func normalizeExtensions(extensions []string) []string {
 	normalized := make([]string, 0, len(extensions))
 	for _, ext := range extensions {
@@ -54,8 +47,6 @@ func normalizeExtensions(extensions []string) []string {
 	return normalized
 }
 
-// matchesExtension reports whether name has one of the wanted extensions. No
-// filter means everything matches.
 func matchesExtension(name string, extensions []string) bool {
 	if len(extensions) == 0 {
 		return true
@@ -72,9 +63,6 @@ func matchesExtension(name string, extensions []string) bool {
 	return false
 }
 
-// skippedPath reports whether a root-relative slash path lives inside a skipped
-// directory. Only .git qualifies: path mode (listDirectoryEntries) lists
-// dot-prefixed documents, so fuzzy mode hiding them would break surface parity.
 func skippedPath(rel string) bool {
 	for _, segment := range strings.Split(rel, "/") {
 		if skippedDirName(segment) {
@@ -84,20 +72,12 @@ func skippedPath(rel string) bool {
 	return false
 }
 
-// skippedDirName is the one rule both file surfaces apply; everything else —
-// including dot-directories — stays visible.
 func skippedDirName(name string) bool {
 	return name == ".git"
 }
 
-// indexRoot enumerates files under root as sorted root-relative slash paths,
-// git-first with a tree-walk fallback. The cap applies AFTER extension
-// filtering — otherwise unasked-for files exhaust it and matches silently
-// vanish; cap is injected so tests can exercise truncation cheaply.
-//
-// The Stat is load-bearing: a nonexistent or non-directory root can pass
-// resolveFsRoot, and WalkDir's skip-and-continue branch would turn it into a
-// silent success with zero files. Fail loudly instead.
+// The cap applies AFTER extension filtering, or unasked-for files exhaust it. The Stat is
+// load-bearing: WalkDir's skip-and-continue makes a bad root a silent zero-file success.
 func indexRoot(root string, cap int, extensions []string) ([]string, bool, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -113,8 +93,6 @@ func indexRoot(root string, cap int, extensions []string) ([]string, bool, error
 	return indexRootViaWalk(root, cap, wanted)
 }
 
-// indexRootViaGit lists root's files through `git ls-files`; ok=false means git
-// could not answer and the caller should fall back to walking.
 func indexRootViaGit(root string, cap int, extensions []string) (files []string, truncated bool, ok bool) {
 	// -z: NUL-separated, so odd bytes come back verbatim, not git-quoted.
 	out, err := git.Output(git.OpMetadata, root,
@@ -131,8 +109,6 @@ func indexRootViaGit(root string, cap int, extensions []string) (files []string,
 		if _, dup := seen[rel]; dup {
 			continue
 		}
-		// Index entries include symlinks, gitlinks, and deleted files; fs_read
-		// only serves regular files, so drop anything else.
 		info, statErr := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
 		if statErr != nil || !info.Mode().IsRegular() {
 			continue
@@ -148,10 +124,8 @@ func indexRootViaGit(root string, cap int, extensions []string) (files []string,
 	return files, truncated, true
 }
 
-// indexRootViaWalk walks root recursively, skipping .git and node_modules and
-// every non-regular entry — a FIFO or socket in the list would be advertised as
-// openable when fs_read rejects it. A per-entry walk error skips that
-// entry/subtree without failing the whole index.
+// Skips .git, node_modules and every non-regular entry — a FIFO or socket would be
+// advertised as openable when fs_read rejects it. A walk error skips that entry/subtree.
 func indexRootViaWalk(root string, cap int, extensions []string) ([]string, bool, error) {
 	var files []string
 	truncated := false

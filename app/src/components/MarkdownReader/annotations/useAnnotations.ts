@@ -1,30 +1,5 @@
-/**
- * useAnnotations — the markdown annotation engine. Owns:
- *
- * - the annotation list + a parallel non-persisted orphan map,
- * - painter integration (comment/deletion highlights via the anchoring
- *   paint layer; 'global' annotations have no paint),
- * - the content-keyed resolve/rebase pass (the live-reload contract the
- *   PR4 spike proved — see the effect comment below),
- * - selection machinery (mouseup → validation → pending anchor the
- *   selection toolbar consumes),
- * - daemon draft persistence (hydrate on mount, 500ms debounced full-list
- *   saves with a pre-incremented generation, tombstoning clears — the
- *   plannotator useAnnotationDraft contract over the websocket transport).
- *
- * Mounted in the OUTER MarkdownReader (outside the memo-gated body) so the
- * content effect fires exactly when the body remounted: unchanged content →
- * memo gate blocks the re-render → the effect never fires → painted Ranges
- * stay valid; zero work on the 750ms live-reload common path. Changed
- * content → the body remounted synchronously during commit, so by effect
- * time the DOM is final: clearAll → resolveOrRebase every anchor → repaint.
- *
- * Known seam (inherited from the spike): async shiki swaps code-block
- * innards post-commit, which detaches in-`pre` Ranges. Mitigation: one
- * rAF-deferred repaint pass for annotations whose block contains a `pre`.
- * If live-verify shows it insufficient, document — do not add a
- * MutationObserver in this PR.
- */
+// Mount this in the OUTER MarkdownReader, outside the memo-gated body: the content
+// effect must fire when the body remounted, or the pass clears still-valid Ranges.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
@@ -47,14 +22,10 @@ import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 
 export const ANNOTATION_SAVE_DEBOUNCE_MS = 500;
-/** Re-try cadence after a failed hydrate — saves stay locked until one succeeds. */
 export const ANNOTATION_HYDRATE_RETRY_MS = 2000;
-/** Re-try cadence after a failed save/clear (daemon down, socket blip). */
 export const ANNOTATION_SAVE_RETRY_MS = 5000;
 
-/** Painter id for the provisional (pre-toolbar-action) selection highlight. */
 const PENDING_PAINT_ID = 'md-pending-selection';
-/** Painter id for the transient sidebar-focus glow. */
 const FOCUS_PAINT_ID = 'md-focus-glow';
 const FOCUS_GLOW_MS = 2000;
 
@@ -64,25 +35,18 @@ export interface UseAnnotationsOptions {
   rootRef: RefObject<HTMLElement | null>;
   /** Raw markdown content — MUST be the same string the reader body renders. */
   content: string;
-  /** Opaque identity plus the typed fields the daemon acts on. */
   source: MarkdownDocumentSource;
-  /** False disables everything (chat-surface readers never annotate). */
   enabled: boolean;
-  /** Test seam. Defaults to the module-registered app transport. */
   transport?: MarkdownAnnotationsTransport | null;
 }
 
 export interface UseAnnotationsApi {
   annotations: Annotation[];
-  /** Non-persisted, derived per content pass. Orphans stay listed + sendable. */
   orphans: Map<string, AnnotationOrphanReason>;
   selectedId: string | null;
   pending: PendingSelection | null;
 
-  /** Feed a (real or synthetic) selection through validation. Used by the
-      internal mouseup listener; exposed for tests and the toolbar layer. */
   handleSelectionChange(selection: SelectionLike | null): PendingSelection | null;
-  /** Whole-block pending (code-block hover toolbar path). */
   beginBlockSelection(blockId: string): PendingSelection | null;
   clearPendingSelection(): void;
 
@@ -93,29 +57,19 @@ export interface UseAnnotationsApi {
   deleteAnnotation(id: string): void;
   clearAll(): void;
 
-  /** Run any armed debounced save now; resolves when it settles (PR6 send).
-      Also awaits a save that already left the debounce window and is
-      mid-round-trip, so a Send can never race past an in-flight save. */
   flushPendingSave(): Promise<void>;
-  /** True once the daemon draft (or its absence) has been loaded. While
-      false, local edits are NOT persisted (saves are suppressed), so a Send
-      would deliver the daemon's stale draft — callers must gate on this. */
+  /** While false, saves are suppressed: a Send that does not gate on this
+      delivers the daemon's stale draft. */
   isHydrated(): boolean;
-  /** Empty local state after a delivered send WITHOUT a daemon clear (the
-      daemon already tombstoned); seeds the generation counter from `floor`. */
   applyDeliveredClear(generationFloor: number): void;
 
   selectAnnotation(id: string | null): void;
-  /** Select + glow + scroll the highlight into view (sidebar card click). */
   focusAnnotation(id: string): void;
 
-  /** Set on every create; the sidebar skips focus-scroll for it. */
   justCreatedIdRef: RefObject<string | null>;
-  /** The layer mirrors its popover-open state here so THIS tile's mouseup
-      guard reads its own popover, not any popover in the document (two
-      markdown tiles must not block each other's selection handling). */
+  /** Read for THIS tile's mouseup guard, not a document-wide popover query:
+      two markdown tiles must not block each other's selection handling. */
   popoverOpenRef: RefObject<boolean>;
-  /** Last capture-phase mouseup position (quick-label picker placement). */
   lastMousePosRef: RefObject<{ x: number; y: number } | null>;
   painterMode: 'custom-highlight' | 'mark' | 'none';
 }
@@ -181,19 +135,12 @@ export function useAnnotations({
     return (painterRef.current ??= createHighlightPainter(root));
   }, [rootRef]);
 
-  // ---- persistence -------------------------------------------------------
 
   const persistNowRef = useRef<(() => void) | null>(null);
-  /** The save/clear currently on the wire (null when none). flushPendingSave
-      awaits it so a Send after the debounce fired — but before its request
-      settled — cannot read the draft ahead of that save and then tombstone
-      the edit undelivered. */
+  /** flushPendingSave awaits this so a Send after the debounce fired — but
+      before its request settled — cannot tombstone the edit undelivered. */
   const inFlightPersistRef = useRef<Promise<void> | null>(null);
 
-  /** Transport failure: warn (repo logging conventions) and re-arm the save
-      timer so the draft re-persists once the socket is back, instead of
-      silently dropping the last debounced edit. Retry stops on unmount and
-      on path change (the guard below). */
   const schedulePersistRetry = useCallback((saveUri: string, op: string, err: unknown) => {
     console.warn(`[md-annotations] ${op} failed for ${saveUri}; retrying`, err);
     if (!mountedRef.current || sourceRef.current.uri !== saveUri || saveTimerRef.current !== null) {
@@ -205,8 +152,6 @@ export function useAnnotations({
     }, ANNOTATION_SAVE_RETRY_MS);
   }, []);
 
-  /** Returns a promise that settles when the triggered save/clear settles
-      (resolves on failure too — the retry timer handles re-persisting). */
   const persistNow = useCallback((): Promise<void> => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -217,7 +162,7 @@ export function useAnnotations({
     }
     const t = getTransport();
     if (!t) {
-      return Promise.resolve(); // local-only mode
+      return Promise.resolve();
     }
     const saveSource = sourceRef.current;
     const saveUri = saveSource.uri;
@@ -225,9 +170,8 @@ export function useAnnotations({
     const generation = generationRef.current;
     const list = annotationsRef.current;
     const request = list.length === 0
-      ? // Last annotation removed: tombstone instead of saving [] so a stale
-        // stored draft can never offer back deleted content (plannotator
-        // remove-on-empty semantics; also the primitive PR6's clear-on-send uses).
+      ? // Last annotation removed: tombstone instead of saving [] so a stale stored
+        // draft can never offer back deleted content.
         t.clearMarkdownAnnotations(saveSource, generation)
           .then(({ generation: floor }) => {
             generationRef.current = Math.max(generationRef.current, floor);
@@ -236,8 +180,6 @@ export function useAnnotations({
       : t.saveMarkdownAnnotations(saveSource, list.map(annotationToWire), generation)
           .then(({ stale }) => {
             if (stale && sourceRef.current.uri === saveUri) {
-              // A tombstone (or newer writer) raced us: drop local pending state
-              // and re-hydrate the authoritative draft.
               void hydrateRef.current?.();
             }
           })
@@ -266,10 +208,6 @@ export function useAnnotations({
     }, ANNOTATION_SAVE_DEBOUNCE_MS);
   }, [persistNow]);
 
-  /** Run any armed debounced save immediately. Resolves when the flushed
-      save settles (on `stale` too — the daemon has newer truth either way);
-      no-op resolve when nothing is pending. The PR6 send flow awaits this
-      before submitting so the payload includes the last keystroke's edit. */
   const flushPendingSave = useCallback((): Promise<void> => {
     if (saveTimerRef.current === null) {
       // No armed debounce — but a save whose debounce already fired may still
@@ -281,14 +219,7 @@ export function useAnnotations({
     return persistNow();
   }, [persistNow]);
 
-  // ---- paint / rebase ----------------------------------------------------
 
-  /**
-   * Bring every annotation up to date against `nextContent` and repaint.
-   * Rebased anchors are written back into the list AND re-persisted (the
-   * re-baselined lines are what PR6 sends). Orphans keep their last-known
-   * anchor for sidebar display but are never painted.
-   */
   const refreshAndPaint = useCallback(
     (nextContent: string) => {
       const root = rootRef.current;
@@ -326,13 +257,13 @@ export function useAnnotations({
 
       for (const annotation of annotationsRef.current) {
         if (!annotation.anchor) {
-          next.push(annotation); // global: nothing to resolve or paint
+          next.push(annotation);
           continue;
         }
         const result = resolveOrRebase(nextContent, annotation.anchor, blocks);
         if (result.state === 'orphan') {
           nextOrphans.set(annotation.id, result.reason);
-          next.push(annotation); // keep last-known anchor for sidebar display
+          next.push(annotation);
           continue;
         }
         let updated = annotation;
@@ -358,7 +289,7 @@ export function useAnnotations({
       setAnnotations(next);
       setOrphans(nextOrphans);
       if (rebasedAny) {
-        scheduleSave(); // re-baselining must persist (plan §Anchoring)
+        scheduleSave();
       }
 
       // Shiki seam: async highlighting swaps <pre> innards after commit,
@@ -375,10 +306,8 @@ export function useAnnotations({
       if (inPreIds.length > 0 && typeof requestAnimationFrame === 'function') {
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = null;
-          // `nextOrphans` was already committed via setOrphans: a late paint
-          // failure must publish a FRESH map (mutating the committed one
-          // bypasses React and hides the orphan badge) and drop the stale
-          // detached Range so click hit-testing never uses dead rects.
+          // A late paint failure must publish a FRESH orphan map: mutating the
+          // committed one bypasses React and hides the orphan badge.
           const failed: string[] = [];
           for (const id of inPreIds) {
             const annotation = annotationsRef.current.find((a) => a.id === id);
@@ -402,7 +331,6 @@ export function useAnnotations({
     [ensurePainter, rootRef, scheduleSave],
   );
 
-  // Content-keyed effect — the live-reload contract (see module comment).
   useEffect(() => {
     if (!enabled) {
       return;
@@ -418,7 +346,6 @@ export function useAnnotations({
     };
   }, [content, enabled, refreshAndPaint, rootRef]);
 
-  // ---- hydration ---------------------------------------------------------
 
   const hydrate = useCallback(async () => {
     const token = ++hydrateTokenRef.current;
@@ -426,19 +353,19 @@ export function useAnnotations({
       clearTimeout(hydrateRetryTimerRef.current);
       hydrateRetryTimerRef.current = null;
     }
-    // Distinguishes initial hydration from a re-sync (stale save): only the
-    // initial one may merge locally created records into the snapshot below.
+    // Only the INITIAL hydration may merge locally created records into the
+    // snapshot below; a re-sync must not.
     const wasHydrated = hasHydratedRef.current;
     hasHydratedRef.current = false;
     const t = getTransport();
     if (!t) {
-      hasHydratedRef.current = true; // local-only: annotations work in-session
+      hasHydratedRef.current = true;
       return;
     }
     try {
       const result = await t.getMarkdownAnnotations(sourceRef.current);
       if (hydrateTokenRef.current !== token) {
-        return; // superseded by a newer hydrate (path change / stale re-sync)
+        return;
       }
       let mergedOutageRecords = false;
       generationRef.current = Math.max(generationRef.current, result.generation);
@@ -446,13 +373,8 @@ export function useAnnotations({
         .map(annotationFromWire)
         .filter((a): a is Annotation => a !== null);
       if (!wasHydrated) {
-        // Initial hydration succeeded after one or more failures: anything in
-        // the local list was created DURING the outage (the path effect reset
-        // the list before the first attempt) and must survive the snapshot —
-        // assigning it verbatim would erase the user's notes. A re-sync after
-        // a stale save must NOT do this: there the authoritative store just
-        // tombstoned/superseded our pending list (e.g. send-clear), and
-        // merging would resurrect it.
+        // Anything in the local list was created DURING the outage and must survive
+        // the snapshot. A re-sync after a stale save must NOT do this: it resurrects.
         const known = new Set(list.map((a) => a.id));
         const createdDuringOutage = annotationsRef.current.filter((a) => !known.has(a.id));
         if (createdDuringOutage.length > 0) {
@@ -462,22 +384,16 @@ export function useAnnotations({
       }
       annotationsRef.current = list;
       hasHydratedRef.current = true;
-      // Anchors resolve/rebase against the CURRENT content (records carry
-      // contentHash, so a file edited while closed rebases exactly once here).
       refreshAndPaint(contentRef.current);
       if (mergedOutageRecords) {
-        // The merged records only existed locally — persist the union now
-        // that saves are unlocked (creation during the outage could not).
         scheduleSave();
       }
     } catch (err) {
       if (hydrateTokenRef.current !== token) {
         return;
       }
-      // Keep saves SUPPRESSED (hasHydratedRef stays false) and retry: marking
-      // this "hydrated" would let a generation-0 save go out, come back stale
-      // against any prior draft/tombstone floor, and the stale re-hydrate
-      // would then wipe every annotation the user just created.
+      // Keep saves SUPPRESSED (hasHydratedRef stays false) and retry: a generation-0
+      // save would come back stale and wipe every annotation just created.
       console.warn(`[md-annotations] hydrate failed for ${sourceRef.current.uri}; retrying`, err);
       hydrateRetryTimerRef.current = setTimeout(() => {
         hydrateRetryTimerRef.current = null;
@@ -517,10 +433,8 @@ export function useAnnotations({
     setPending(null);
     void hydrate();
     return () => {
-      // Leaving this document (URI change or unmount): flush any pending
-      // save for it before the refs are reset for the next one.
       flushPendingSave();
-      hydrateTokenRef.current += 1; // invalidate in-flight hydration
+      hydrateTokenRef.current += 1;
       if (hydrateRetryTimerRef.current) {
         clearTimeout(hydrateRetryTimerRef.current);
         hydrateRetryTimerRef.current = null;
@@ -538,8 +452,6 @@ export function useAnnotations({
     flushPendingSave,
   ]);
 
-  // Flush the debounce window when the app is backgrounded or the window
-  // closes — best-effort fire-through-socket, no keepalive equivalent needed.
   useEffect(() => {
     if (!enabled) {
       return;
@@ -557,7 +469,6 @@ export function useAnnotations({
     };
   }, [enabled, flushPendingSave]);
 
-  // ---- pending selection -------------------------------------------------
 
   const clearPendingSelection = useCallback(() => {
     painterRef.current?.clear(PENDING_PAINT_ID);
@@ -566,7 +477,6 @@ export function useAnnotations({
     try {
       window.getSelection()?.removeAllRanges();
     } catch {
-      // test DOMs without a Selection implementation
     }
   }, []);
 
@@ -638,20 +548,17 @@ export function useAnnotations({
       paintPending(next);
       pendingRef.current = next;
       setPending(next);
-      // Same focus claim as the mouseup path: macOS WebKit does not focus
-      // buttons on click, so the whole-block gesture must also pull keyboard
-      // focus into the reader for type-to-comment.
+      // Same focus claim as the mouseup path: macOS WebKit does not focus buttons on
+      // click, so the gesture must pull keyboard focus in for type-to-comment.
       try {
         root.focus({ preventScroll: true });
       } catch {
-        // test DOMs without focus options support
       }
       return next;
     },
     [paintPending, rootRef],
   );
 
-  // ---- selection / hit-test listeners -------------------------------------
 
   useEffect(() => {
     if (!enabled) {
@@ -669,28 +576,18 @@ export function useAnnotations({
     const onRootMouseUp = (event: MouseEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest('.md-selection-toolbar, .md-annotation-popover, .md-quick-label-picker, .md-annotations-sidebar')) {
-        return; // interacting with annotation chrome never disturbs pending
+        return;
       }
       if (popoverOpenRef.current) {
-        // A comment is being composed IN THIS TILE: a stray click must not
-        // clear the pending selection out from under the open popover (its
-        // dirty-close guard keeps it open, and submit needs the pending).
-        // Per-tile state, not a document query: another tile's popover must
-        // not block selection handling here.
         return;
       }
       const next = handleSelectionChange(window.getSelection());
       if (next) {
-        // Claim keyboard focus on an explicit selection gesture: WebKit does
-        // not move focus on mousedown in non-focusable content, so without
-        // this the terminal's hidden input keeps document.activeElement —
-        // type-to-comment keys leak to the shell and the toolbar's
-        // editable-element guard blocks them. Only a real selection steals
-        // focus (terminal focus ownership stays intact for plain clicks).
+        // WebKit does not move focus on mousedown in non-focusable content; without
+        // this the terminal's hidden input keeps focus and keys leak to the shell.
         try {
           root.focus({ preventScroll: true });
         } catch {
-          // test DOMs without focus options support
         }
       }
     };
@@ -698,11 +595,10 @@ export function useAnnotations({
     const onRootClick = (event: MouseEvent) => {
       const selection = window.getSelection?.();
       if (selection && !selection.isCollapsed) {
-        return; // a drag-select click is not a highlight click
+        return;
       }
-      // Mark-fallback mode: the paint itself split/wrapped the text nodes,
-      // collapsing the Ranges cached below — but the wrapper spans carry the
-      // annotation id, so hit the DOM directly first.
+      // Mark-fallback mode: the paint split the text nodes and collapsed the
+      // Ranges cached below, but the wrapper spans carry the annotation id.
       const markEl =
         event.target instanceof Element ? event.target.closest('[data-md-mark]') : null;
       const markId = markEl?.getAttribute('data-md-mark');
@@ -711,8 +607,6 @@ export function useAnnotations({
         setSelectedId(markId);
         return;
       }
-      // CustomHighlightPainter has no DOM to click: point-in-range hit-test
-      // over the painted ranges. O(annotations); lists are small.
       for (const [id, range] of rangesRef.current) {
         for (const rect of range.getClientRects()) {
           if (
@@ -739,7 +633,6 @@ export function useAnnotations({
     };
   }, [enabled, handleSelectionChange, rootRef]);
 
-  // ---- creation / mutation -----------------------------------------------
 
   const addAnnotation = useCallback(
     (annotation: Annotation): Annotation => {
@@ -800,9 +693,8 @@ export function useAnnotations({
         anchor: p.anchor,
         quickLabelId: label.id,
         ...(label.tip !== undefined ? { quickLabelTip: label.tip } : {}),
-        // Display text snapshotted at creation: the daemon-side send-payload
-        // formatter has no copy of the label set, so the wire record carries
-        // what the user saw (falls back to the raw id for older drafts).
+        // Display text is snapshotted at creation: the daemon-side send-payload
+        // formatter has no copy of the label set.
         quickLabelText: `${label.emoji} ${label.text}`,
       })),
     [createFromPending],
@@ -867,10 +759,8 @@ export function useAnnotations({
     setPending(null);
     const t = getTransport();
     if (t && hasHydratedRef.current) {
-      // Invalidate any in-flight re-hydrate (stale-save path): its `get` was
-      // sent before this clear, so letting it resolve would resurrect the
-      // pre-clear list locally. (Only when hydrated — a first hydrate still
-      // in flight must survive, or saves would stay locked forever.)
+      // Invalidate any in-flight re-hydrate: its `get` predates this clear. Only when
+      // hydrated — a first hydrate still in flight must survive, or saves stay locked.
       hydrateTokenRef.current += 1;
       const clearSource = sourceRef.current;
       const clearUri = clearSource.uri;
@@ -883,30 +773,16 @@ export function useAnnotations({
     }
   }, [getTransport, schedulePersistRetry]);
 
-  /**
-   * Local-only mirror of clearAll after a successful PR6 send: the daemon
-   * already tombstone-cleared the draft at delivery time, so this must NOT
-   * issue a second daemon clear — it only empties local state and seeds the
-   * generation counter from the daemon's new floor.
-   *
-   * Resurrection guard: a debounced save scheduled before Send that races
-   * past flushPendingSave cannot resurrect drafts — the daemon clear
-   * tombstoned at the stored generation, so the straggler save comes back
-   * `{stale: true}`, the save path drops pending state and re-hydrates, and
-   * (thanks to the hydrate-token bump below invalidating anything older) the
-   * re-hydrate returns the empty post-clear draft.
-   */
+  // The daemon already tombstone-cleared the draft at delivery time, so this must
+  // NOT issue a second daemon clear.
   const applyDeliveredClear = useCallback((generationFloor: number) => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    hydrateTokenRef.current += 1; // invalidate in-flight re-hydrates
-    // The token bump above makes any in-flight/retrying hydrate return early
-    // WITHOUT ever setting hasHydratedRef — but the post-clear empty state IS
-    // the authoritative daemon state at the returned floor, so mark hydrated
-    // here (and stop the failed-hydrate retry loop). Leaving it false would
-    // permanently suppress every subsequent save: silent draft data loss.
+    hydrateTokenRef.current += 1;
+    // The post-clear empty state IS the authoritative daemon state at the returned
+    // floor; leaving hasHydratedRef false would suppress every save: silent data loss.
     if (hydrateRetryTimerRef.current) {
       clearTimeout(hydrateRetryTimerRef.current);
       hydrateRetryTimerRef.current = null;
@@ -925,10 +801,8 @@ export function useAnnotations({
     setPending(null);
   }, []);
 
-  /** Call-time read (a ref, not state): the send flow checks this at submit. */
   const isHydrated = useCallback(() => hasHydratedRef.current, []);
 
-  // ---- selection focus -----------------------------------------------------
 
   const selectAnnotation = useCallback((id: string | null) => {
     selectedIdRef.current = id;
@@ -939,10 +813,8 @@ export function useAnnotations({
     (id: string) => {
       selectAnnotation(id);
       const painter = painterRef.current;
-      // Re-resolve from the anchor rather than trusting the cached Range: in
-      // mark-fallback mode the annotation's own paint split/replaced the text
-      // nodes, which collapses the Range captured before painting. Offsets are
-      // over text content, so re-resolution is immune to the span wrapping.
+      // Re-resolve from the anchor rather than the cached Range: in mark-fallback mode
+      // the annotation's own paint split the text nodes and collapsed it.
       const annotation = annotationsRef.current.find((a) => a.id === id);
       let range: Range | null = null;
       if (annotation?.anchor) {
@@ -953,7 +825,7 @@ export function useAnnotations({
         range = rangesRef.current.get(id) ?? null;
       }
       if (!painter || !range) {
-        return; // orphan: nothing painted, card click never scrolls (E22)
+        return;
       }
       rangesRef.current.set(id, range);
       if (focusTimerRef.current) {
@@ -966,7 +838,7 @@ export function useAnnotations({
       }, FOCUS_GLOW_MS);
       if (justCreatedIdRef.current === id) {
         justCreatedIdRef.current = null;
-        return; // just-created: glow but skip the scroll (E19)
+        return;
       }
       const container = range.startContainer;
       const el = container instanceof Element ? container : container.parentElement;
@@ -975,7 +847,6 @@ export function useAnnotations({
     [selectAnnotation],
   );
 
-  // ---- automation bridge ---------------------------------------------------
 
   useEffect(() => {
     if (!enabled) {
@@ -1014,8 +885,7 @@ export function useAnnotations({
     return registerMarkdownAnnotationsAutomationHandle(handle);
   }, [enabled]);
 
-  // Unmount marker for async retry guards (save/hydrate timers must not
-  // re-arm after the hook is gone).
+  // Unmount marker: save/hydrate timers must not re-arm after the hook is gone.
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -1023,7 +893,6 @@ export function useAnnotations({
     };
   }, []);
 
-  // Focus-glow timer teardown.
   useEffect(() => {
     return () => {
       if (focusTimerRef.current) {

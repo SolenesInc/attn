@@ -252,9 +252,6 @@ fn native_position(window: &tauri::Window, x: f64, y: f64) -> LogicalPosition<f6
     LogicalPosition::new((x + inset.0).max(0.0), (y + inset.1).max(0.0))
 }
 
-// Where a browser webview sits and whether it shows. One value because the five
-// numbers only ever travel together, and a caller that could pass four of them
-// is a caller that can pass them in the wrong order.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct Geometry {
     pub x: f64,
@@ -1147,9 +1144,7 @@ fn cookie_domain_matches(host: &str, domain: Option<&str>) -> bool {
     };
     let host = host.to_ascii_lowercase();
     let domain = raw_domain.trim_start_matches('.').to_ascii_lowercase();
-    // cookie::Cookie normalizes away a leading dot, including for cookies
-    // converted from WKWebView. Apply RFC domain matching to the normalized
-    // value rather than using the dot as the domain-cookie signal.
+    // cookie::Cookie normalizes away a leading dot, so apply RFC domain matching to the normalized value rather than using the dot as the domain-cookie signal.
     !domain.is_empty() && (host == domain || host.ends_with(&format!(".{domain}")))
 }
 

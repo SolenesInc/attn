@@ -26,9 +26,6 @@ func enqueue(t *testing.T, s *Store, id, sender, target, content string, created
 	}
 }
 
-// A message is queued the moment it is accepted and stops being queued only
-// when a delivery is stamped — that pair is what makes "never a silent drop"
-// survive a restart.
 func TestAgentMessagesQueueUntilDeliveryIsStamped(t *testing.T) {
 	s := newAgentMessageStore(t)
 	now := time.Now()
@@ -73,8 +70,6 @@ func TestAgentMessagesQueueUntilDeliveryIsStamped(t *testing.T) {
 	}
 }
 
-// Re-stamping must not move a delivery time: a racing drain that delivered
-// nothing would otherwise rewrite the receipt of a message it never sent.
 func TestMarkAgentMessageDeliveredIsWriteOnce(t *testing.T) {
 	s := newAgentMessageStore(t)
 	first := time.Now().Add(-time.Hour)
@@ -119,9 +114,6 @@ func TestDeleteQueuedAgentMessageRollsBackOnlyAnUndeliveredRow(t *testing.T) {
 	}
 }
 
-// The guard's three counts, each scoped to exactly what its limit is about:
-// dedupe to one sender's identical text, the rate to one sender's traffic, and
-// the queue cap to the target's whole backlog from everyone.
 func TestAgentMessageGuardCountsScopeEachLimit(t *testing.T) {
 	s := newAgentMessageStore(t)
 	now := time.Now()
@@ -143,7 +135,6 @@ func TestAgentMessageGuardCountsScopeEachLimit(t *testing.T) {
 		t.Fatalf("backlog = %d; the queue cap counts every sender", counts.UndeliveredForTarget)
 	}
 
-	// The same text outside the dedupe window is a new message, not a repeat.
 	stale, err := s.AgentMessageGuardCounts("sender", "target", "stale words", now.Add(-10*time.Second), now.Add(-30*time.Second))
 	if err != nil {
 		t.Fatal(err)
@@ -153,9 +144,7 @@ func TestAgentMessageGuardCountsScopeEachLimit(t *testing.T) {
 	}
 }
 
-// The drop is safe only because nothing ever wrote that table. This plants the
-// pre-101 world — the dispatch message table present, agent_messages absent —
-// and shows the migration replaces one with the other on a real database.
+// The drop is safe only because nothing ever wrote that table.
 func TestMigration101ReplacesTheDormantDispatchTable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -181,8 +170,8 @@ func TestMigration101ReplacesTheDormantDispatchTable(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("plant the pre-101 schema: %v", err)
 	}
-	// Sanity: without this the test would pass against a database that never
-	// had the old table at all.
+	// Without this the test would pass against a database that never had the old
+	// table.
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM chief_of_staff_dispatch_messages`).Scan(new(int)); err != nil {
 		t.Fatalf("the planted schema lacks the table this migration drops: %v", err)
 	}

@@ -22,53 +22,36 @@ import (
 // Codex, ~12s on Claude, worst observed ~19s.
 const sessionActivityTimeout = time.Minute
 
-// sessionActivityBudgetUSD caps one run. Set two orders of magnitude above the
-// measured cost ($0.0027 on Codex, $0.011–0.017 on Claude) so only a runaway
-// touches it.
+// sessionActivityBudgetUSD caps one run, two orders of magnitude above the measured
+// cost ($0.0027 on Codex, $0.011-0.017 on Claude), so only a runaway touches it.
 const sessionActivityBudgetUSD = "0.50"
 
-// sessionActivityConcurrency bounds concurrent generations. Three is roughly
-// how many sessions move at once in a working day, so the common case never
-// queues and a pathological one degrades into a queue.
 const sessionActivityConcurrency = 3
 
 // activityMaxTurns is 2, not 1: a headless run that exhausts its turn budget
 // exits non-zero even when it already produced the text.
 const activityMaxTurns = 2
 
-// The scan tick, a cron entry on the shared job queue. It fires faster than any
-// tier interval on purpose: it decides nothing, it only asks each session
-// whether ITS interval has elapsed.
 const (
 	sessionActivityScanKind     = "session_activity_scan"
 	sessionActivityScanInterval = 30 * time.Second
 	sessionActivityScanTimeout  = 30 * time.Second
 )
 
-// sessionActivityRun is what one session's last pass left behind. Two stamps,
-// two gates: ObservedAt is written by every pass ("have we looked since the
-// transcript moved"), SpentAt only by a pass that called the agent ("may we
-// spend again").
 type sessionActivityRun struct {
 	ObservedAt time.Time
 	SpentAt    time.Time
-	// Err is why the last spending run produced nothing; cleared by a run that works.
-	Err string
-	// Transcript is the last resolved path, ResumeID the resume id it was
-	// resolved under. See sessionActivityTranscript.
+	Err        string
 	Transcript string
 	ResumeID   string
 }
 
-// sessionActivityRunRecord reads one session's last pass.
 func (d *Daemon) sessionActivityRunRecord(sessionID string) sessionActivityRun {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
 	return d.sessionActivityRuns[sessionID]
 }
 
-// noteSessionActivityRun records a pass. mutate receives the current record so a
-// caller can move one stamp without clobbering the other.
 func (d *Daemon) noteSessionActivityRun(sessionID string, mutate func(*sessionActivityRun)) {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
@@ -80,8 +63,6 @@ func (d *Daemon) noteSessionActivityRun(sessionID string, mutate func(*sessionAc
 	d.sessionActivityRuns[sessionID] = record
 }
 
-// forgetSessionActivityRuns drops records for sessions that no longer exist, so
-// the map cannot outgrow the session list on a long-running daemon.
 func (d *Daemon) forgetSessionActivityRuns(live map[string]struct{}) {
 	d.sessionActivityRunsMu.Lock()
 	defer d.sessionActivityRunsMu.Unlock()
@@ -92,7 +73,6 @@ func (d *Daemon) forgetSessionActivityRuns(live map[string]struct{}) {
 	}
 }
 
-// latest returns whichever stamp is later, treating the zero time as "never".
 func latest(a, b time.Time) time.Time {
 	if a.After(b) {
 		return a
@@ -100,10 +80,8 @@ func latest(a, b time.Time) time.Time {
 	return b
 }
 
-// sessionActivityScanHandler enqueues a refresh for every session whose interval
-// has elapsed and whose transcript has moved. Both are measured against the last
-// PASS, not the last stored line: measuring against the line makes a failing or
-// empty generation invisible and re-runs it every tick.
+// Interval and transcript movement are measured against the last PASS, not the last
+// stored line: against the line, a failing generation is invisible and re-runs every tick.
 func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, error) {
 	if !d.activityEnabled() {
 		return nil, nil
@@ -113,7 +91,6 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	if interval <= 0 {
 		return nil, nil
 	}
-	// A misconfiguration is worth one log line per tick rather than silence.
 	if _, err := d.activityConfigured(); err != nil {
 		d.logf("session_activity: enabled but not runnable: %v", err)
 		return nil, nil
@@ -141,10 +118,6 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	return nil, nil
 }
 
-// transcriptMovedSince reports whether a session wrote anything since its line
-// was generated, via stat rather than the reader because it runs over every
-// session on every tick. Never-generated counts as moved: the executor turns
-// that into a cursor seed.
 func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time) bool {
 	if since.IsZero() {
 		return true
@@ -160,11 +133,8 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	return info.ModTime().After(since)
 }
 
-// sessionActivityTranscript resolves a session's transcript path and caches it
-// across ticks; resolving it on Codex measured 235–489ms per session. Two
-// things invalidate the cache and both are checked: the file going away, and a
-// resume under a new id (which writes a new file and leaves the old one
-// stat-able), hence the remembered resume id.
+// Caches the resolved path across ticks: resolving it on Codex measured 235-489ms per
+// session. A resume under a new id writes a new file, hence the remembered resume id.
 func (d *Daemon) sessionActivityTranscript(session *protocol.Session) string {
 	if session == nil {
 		return ""
@@ -183,17 +153,11 @@ func (d *Daemon) sessionActivityTranscript(session *protocol.Session) string {
 	return path
 }
 
-// sessionActivityPayload carries the transcript path and conversation binding
-// observed at enqueue time, so a debounced run neither re-resolves the path nor
-// writes derived state across a later conversation transition.
 type sessionActivityPayload struct {
 	Transcript string `json:"transcript,omitempty"`
 	ResumeID   string `json:"resume_id,omitempty"`
 }
 
-// enqueueSessionActivity queues a refresh for one session, coalesced by session
-// id. Every suppression check lives here rather than in the executor, so a
-// suppressed refresh costs a map lookup instead of a queued job.
 func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -202,7 +166,6 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	if !d.activityEnabled() {
 		return
 	}
-	// away is a hard stop, checked first because it must cost nothing.
 	if d.PresenceTier() == PresenceAway {
 		return
 	}
@@ -230,8 +193,6 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	}
 }
 
-// sessionGeneratesActivity reports whether a session has something to say;
-// shells and satellites do not.
 func sessionGeneratesActivity(session *protocol.Session) bool {
 	if session == nil {
 		return false
@@ -239,7 +200,6 @@ func sessionGeneratesActivity(session *protocol.Session) bool {
 	if session.ParentSessionID != nil && strings.TrimSpace(*session.ParentSessionID) != "" {
 		return false
 	}
-	// Remote sessions are deferred: their transcript lives on the remote daemon.
 	if session.EndpointID != nil && strings.TrimSpace(*session.EndpointID) != "" {
 		return false
 	}
@@ -251,12 +211,7 @@ func sessionGeneratesActivity(session *protocol.Session) bool {
 	return isFinder
 }
 
-// sessionActivityHandler generates one session's line: read the delta since the
-// stored cursor, render it, ask a tool-less agent for one sentence, store it
-// with the cursor it was generated through. A missing cursor (cold start) and a
-// mismatched one (Claude compaction) both re-seed at head instead of failing.
 func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any, error) {
-	// A run queued before the toggle or tier changed must not spend after it.
 	if !d.activityEnabled() || d.PresenceTier() == PresenceAway {
 		return nil, nil
 	}
@@ -272,11 +227,8 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 
 	session := d.store.Get(sessionID)
 	if session == nil {
-		// The session is gone; its line went with it. Nothing to retry.
 		return nil, nil
 	}
-	// Every pass past here counts as having looked, whatever it goes on to do;
-	// the scan measures transcript movement from this stamp.
 	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now()
 	})
@@ -295,9 +247,9 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	}
 
 	stored := d.store.GetSessionActivity(sessionID)
+	// Cold start, checked before the read: reading from byte 0 succeeds, which is
+	// the problem — a full scan summarizing history as if it were now.
 	if stored.Cursor == "" {
-		// Cold start, checked before the read: reading from byte 0 succeeds, which
-		// is the problem — a full scan summarizing history as if it were now.
 		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
 	}
 	window, err := activity.Read(transcriptPath, string(session.Agent), stored.Cursor)
@@ -307,15 +259,12 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		errors.Is(err, transcript.ErrCursorPastEnd) ||
 		errors.Is(err, transcript.ErrInvalidCursor) ||
 		errors.Is(err, activity.ErrDeltaTooLarge):
-		// Re-seed and skip: the next movement works against a cursor that validates.
 		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
 	default:
 		return nil, fmt.Errorf("session_activity: read %s: %w", transcriptPath, err)
 	}
 
 	if window.Empty() {
-		// Nothing appended: the line is still true. Advance the cursor anyway so
-		// the next trigger measures movement from here.
 		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
 	}
 
@@ -341,8 +290,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 			return p.RunHeadlessTask(ctx, r)
 		}
 	}
-	// Stamped before the call: a run killed by the timeout spent the same as one
-	// that answered, and stamping after would let a hanging run retry every tick.
+	// Stamped before the call: a hanging run would otherwise retry every tick.
 	d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 		record.SpentAt = time.Now()
 	})
@@ -355,18 +303,13 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		// billed prefix drops from 46,745 tokens to 33,955.
 		SystemPrompt: prompt.System,
 		WorkDir:      workDir,
-		// No OutputSchema on purpose: the answer IS the final text, and Codex's
-		// tool-free path has no schema support at all.
+		// No OutputSchema: the answer IS the final text, and Codex's tool-free path has none.
+		// MaxTurns/MaxBudgetUSD are Claude-only; DisableTools plus the ctx timeout bound both.
 		DisableTools: true,
-		// MaxTurns and MaxBudgetUSD are Claude-only; `codex exec` has no flag for
-		// them. What bounds both agents is DisableTools plus ctx's
-		// sessionActivityTimeout.
 		MaxTurns:     activityMaxTurns,
 		MaxBudgetUSD: sessionActivityBudgetUSD,
 	})
 	if err != nil {
-		// Kept, not just logged: a run that always fails is rate limited like a
-		// successful one, so nothing else would surface it. `attn activity` reads it.
 		d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 			record.Err = err.Error()
 		})
@@ -375,8 +318,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 
 	line, ok := activity.Sanitize(result.Text)
 	if !ok {
-		// Keep whatever line is there — a stale true line beats a blank row — but
-		// advance the cursor so the next trigger works from fresh events.
 		d.logf("session_activity: session=%s produced no usable line (%s)", sessionID, result.Diagnostics)
 		d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 			record.Err = "the agent answered with nothing usable"
@@ -388,14 +329,10 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if note := window.Report.String(); note != "" {
 		d.logf("session_activity: session=%s window truncated: %s", sessionID, note)
 	}
-	// Re-checked after the agent call: a user who switched the feature off during
-	// it has had every line cleared, and this one would be stranded on home.
 	if !d.activityEnabled() {
 		return nil, nil
 	}
 	if !d.store.UpdateSessionActivityForConversation(sessionID, resumeID, line, time.Now(), window.NextCursor) {
-		// The row vanished or changed conversations mid-run. Nothing from this
-		// transcript belongs on the current session state.
 		return nil, nil
 	}
 	d.publishFact(FactSessionActivityChanged, sessionID, nil)
@@ -403,8 +340,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-// reseedSessionActivity moves the cursor to the transcript head, keeping the
-// existing line. Used for a cold start and for a mismatched cursor.
 func (d *Daemon) reseedSessionActivity(sessionID, resumeID, transcriptPath string) error {
 	head, err := activity.SeedCursor(transcriptPath)
 	if err != nil {
@@ -414,8 +349,7 @@ func (d *Daemon) reseedSessionActivity(sessionID, resumeID, transcriptPath strin
 	return nil
 }
 
-// advanceSessionActivityCursor moves the cursor forward without changing the
-// line. An empty cursor here would silently clear the line.
+// An empty cursor here would silently clear the line.
 func (d *Daemon) advanceSessionActivityCursor(sessionID, resumeID string, stored store.SessionActivity, next string) error {
 	if next == "" || next == stored.Cursor {
 		return nil
@@ -424,9 +358,6 @@ func (d *Daemon) advanceSessionActivityCursor(sessionID, resumeID string, stored
 	return nil
 }
 
-// clearAllSessionActivity forgets every line, one fact per session so each row
-// re-renders. Used when the feature is switched off, so home stops asserting
-// what attn no longer keeps true.
 func (d *Daemon) clearAllSessionActivity() {
 	for _, session := range d.store.List("") {
 		if d.store.GetSessionActivity(session.ID).Line == "" {
@@ -437,8 +368,6 @@ func (d *Daemon) clearAllSessionActivity() {
 	}
 }
 
-// handleActivityStatus answers what the daemon believes about session activity
-// right now — the only view of it from a terminal or a headless daemon.
 func (d *Daemon) handleActivityStatus(conn net.Conn, _ *protocol.ActivityStatusMessage) {
 	result := protocol.ActivityStatusResult{
 		PresenceTier: d.PresenceTier().String(),
@@ -467,8 +396,6 @@ func (d *Daemon) handleActivityStatus(conn net.Conn, _ *protocol.ActivityStatusM
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ActivityStatusResult: &result})
 }
 
-// handleClearSessionActivity forgets one session's line and its cursor, so the
-// next line describes what happens next rather than an already-summarized window.
 func (d *Daemon) handleClearSessionActivity(conn net.Conn, msg *protocol.ClearSessionActivityMessage) {
 	sessionID := strings.TrimSpace(msg.ID)
 	if sessionID == "" {

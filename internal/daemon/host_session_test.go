@@ -8,11 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The app shuts its composer the moment it sends a prompt — the host's
-// run_started is a round trip away and a second Enter inside that window would
-// be refused with nothing the user can see. That makes silence here a pane that
-// never opens again, so a prompt the daemon cannot deliver comes back as the
-// run it will never open.
 func TestAgentPromptWithoutAHostSettlesTheRun(t *testing.T) {
 	hub := newWSHub()
 	var broadcast [][]byte

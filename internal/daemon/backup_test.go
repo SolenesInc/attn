@@ -8,11 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestPerformDatabaseBackup_SurfacesLastBackupAt proves a successful
-// performDatabaseBackup call records lastBackupAt and surfaces it as a
-// parseable RFC3339 UTC db.last_backup_at settings key, so live clients (and
-// db restore's "did the backup succeed recently" sanity check) can see the
-// backup cadence move.
 func TestPerformDatabaseBackup_SurfacesLastBackupAt(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	s, err := store.NewWithDB(dbPath)
@@ -44,12 +39,8 @@ func TestPerformDatabaseBackup_SurfacesLastBackupAt(t *testing.T) {
 	}
 }
 
-// TestPerformDatabaseBackup_FailedBackupLeavesKeyAbsent proves a failed
-// backup (a non-durable in-memory fallback store, same guard BackupNow
-// enforces) never sets db.last_backup_at — a stale or fabricated success
-// timestamp would be worse than an absent one.
 func TestPerformDatabaseBackup_FailedBackupLeavesKeyAbsent(t *testing.T) {
-	s := store.New() // in-memory fallback: not durable, BackupNow refuses
+	s := store.New()
 	defer s.Close()
 
 	d := &Daemon{store: s, dataRoot: t.TempDir()}

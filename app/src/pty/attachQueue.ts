@@ -1,13 +1,5 @@
-// Per-key async serialization for PTY attach requests.
-//
-// Attaches to the same session must not overlap: the pending-action key, the
-// attach context, and the queued-output buffer in the daemon socket are all
-// per-session singletons, so a second in-flight attach corrupts the first
-// (its promise never settles and its result/context pair up wrong). Session
-// creation alone issues two back-to-back attaches (fresh_spawn, then the pane
-// mount's same_app_remount), so overlap is routine. enqueuePerKey runs tasks
-// for the same key strictly one after another — a failed or timed-out task
-// (all attach paths are time-bounded) never blocks the next one.
+// Attaches to the same session must not overlap: the pending-action key, the attach
+// context and the queued-output buffer are per-session singletons in the socket.
 export function enqueuePerKey<T>(
   chains: Map<string, Promise<unknown>>,
   key: string,

@@ -46,10 +46,6 @@ describe('GardenFrame', () => {
   beforeEach(() => useGardenWalk.setState({ trail: [] }));
   afterEach(() => vi.restoreAllMocks());
 
-  // The reason the frame exists rather than two surfaces: promotion moves the
-  // box, it does not build a new one. Every piece of panel state that survives
-  // — the trail, the open seed, the scroll offset, focus, and whatever the
-  // panel grows next — survives because this node is never replaced.
   it('carries the very same panel across the promotion', () => {
     const { rerender } = render(<GardenFrame {...props('dock')} />);
     const docked = document.querySelector('.garden-panel');
@@ -76,9 +72,6 @@ describe('GardenFrame', () => {
     expect(frameEl().style.height).toBe('984px');
   });
 
-  // Closed is a state of the frame, not an absence of it: it keeps its dock
-  // rectangle and slides out, which is what lets it slide back in with the
-  // reader's place intact.
   it('stays mounted and inert when closed', () => {
     render(<GardenFrame {...props('closed')} />);
     expect(frameEl()).toHaveClass('is-closed');
@@ -99,11 +92,6 @@ describe('GardenFrame', () => {
     expect(screen.queryByTestId('garden-frame')).toBeNull();
   });
 
-  // Two views over one garden, and the switch between them belongs to the frame
-  // so that neither view owns the other. The dock has no room for four columns
-  // of cards, so it is only offered in the window — and the promotion itself
-  // always lands on the list, because the gesture says "this, bigger" and
-  // arriving somewhere else would say the opposite.
   describe('the list/board switch', () => {
     const board = { moveSeed: vi.fn(), noteSeed: vi.fn(), loaded: true };
 
@@ -127,8 +115,6 @@ describe('GardenFrame', () => {
       expect(document.querySelector('.garden-board')).toBeNull();
       expect(document.querySelector('.garden-panel')).not.toBeNull();
 
-      // And it does not come back on the next promotion: the choice belonged to
-      // the stay it was made in, not to the reader forever.
       rerender(<GardenFrame {...props('full')} {...board} />);
       expect(document.querySelector('.garden-board')).toBeNull();
       expect(document.querySelector('.garden-panel')).not.toBeNull();

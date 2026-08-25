@@ -117,10 +117,8 @@ func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
 	}
 }
 
-// Enter must reach the PTY as its own write, a real interval after the paste
-// terminator. Claude Code folds a CR arriving in the same read as the paste end
-// into the pasted text — the payload then sits unsent in the composer — and an
-// undelayed second write lands in that same read.
+// Claude Code folds a CR arriving in the same read as the paste end into the pasted
+// text, leaving the payload unsent, and an undelayed second write lands in that read.
 func TestTypeDoorbellDelaysEnterAfterThePaste(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -157,10 +155,8 @@ func TestTypeDoorbellDelaysEnterAfterThePaste(t *testing.T) {
 	}
 }
 
-// A keystroke racing the doorbell's paste-to-Enter gap must not be spliced into
-// the submission. The user types while the paste is on the wire and the Enter
-// has not been sent yet; the fence has to write their bytes after the Enter, so
-// the doorbell submits its own payload and the typed line stays in the composer.
+// A keystroke arriving inside the doorbell's paste-to-Enter gap has to be written
+// after the Enter, or it is spliced into the doorbell's own submission.
 func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -189,7 +185,6 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	delivery := maintenanceSessionInput("input-test", "splice-race", "splice-race", "ping", sessionInputAtTurnBoundary)
 	go func() { inputDone <- d.sessionInputs().try(context.Background(), delivery).err }()
 
-	// Type into the same session while the doorbell sits in its submit delay.
 	<-pasteSeen
 	typed := make(chan struct{})
 	var typedAt time.Time
@@ -218,8 +213,8 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 			t.Fatalf("PTY writes = %q, want %q (the keystroke was spliced into the submission)", writes, want)
 		}
 	}
-	// Without this the ordering above could hold because the keystroke simply
-	// arrived late: it has to have entered the gap before the Enter went out.
+	// Without this the ordering above holds vacuously when the keystroke simply
+	// arrived late.
 	if !typedAt.Before(writtenAt[1]) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}

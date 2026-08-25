@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// spawnProbeReadDeadline bounds how long the plugin probe waits for a second
-// driver.spawn request that must never arrive.
 const spawnProbeReadDeadline = 250 * time.Millisecond
 
 func newSpawnCharacterizationDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, *wsClient, string) {
@@ -24,8 +22,6 @@ func newSpawnCharacterizationDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, *
 	return newSpawnCharacterizationDaemonOn(t, NewForTesting(filepath.Join(t.TempDir(), "test.sock")))
 }
 
-// newSpawnCharacterizationDaemonOn is newSpawnCharacterizationDaemon against a
-// daemon the caller built outside a synctest bubble.
 func newSpawnCharacterizationDaemonOn(t *testing.T, d *Daemon) (*Daemon, *fakeSpawnBackend, *wsClient, string) {
 	t.Helper()
 	backend := &fakeSpawnBackend{}
@@ -317,9 +313,7 @@ func TestSpawnCharacterizationAlreadyLivePluginRespawnSkipsPluginPrep(t *testing
 		requireDone(t, secondSpawnDone, "the already-live spawn never returned")
 		expectSpawnResult(t, client, msg.ID, true)
 
-		// The probe reports only once its own 250ms read deadline expires, and a
-		// settled bubble is exactly the state where nothing else will move the
-		// clock — so run it out.
+		// The probe reports only once its own 250ms read deadline expires, and a settled bubble is where nothing else moves the clock.
 		time.Sleep(spawnProbeReadDeadline)
 		synctest.Wait()
 		select {

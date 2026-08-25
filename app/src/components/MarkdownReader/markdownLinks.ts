@@ -1,8 +1,5 @@
-/**
- * Link/image target safety for rendered markdown documents. Moved here from
- * WorkspaceDockTile so the reader owns one implementation (the tile re-exports
- * `resolveMarkdownTarget` for its existing consumers/tests).
- */
+// Link/image target safety for rendered markdown documents. WorkspaceDockTile
+// re-exports `resolveMarkdownTarget` for its existing consumers.
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
@@ -11,9 +8,8 @@ export type MarkdownTarget =
   | { kind: 'fragment'; value: string }
   | { kind: 'local'; value: string };
 
-// Plannotator's dangerous-protocol rule, minus `file:` — attn routes `file:`
-// links through resolveMarkdownTarget's host check plus the safe-extension
-// gate below instead of dropping them outright.
+// `file:` is deliberately absent: those links go through resolveMarkdownTarget's
+// host check plus the safe-extension gate below instead of being dropped.
 const DANGEROUS_LINK_PROTOCOL = /^\s*(javascript|data|vbscript)\s*:/i;
 
 /** Returns null when the URL must not render as a link at all. */

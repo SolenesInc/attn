@@ -54,15 +54,8 @@ func TestMismatchReason_ReportsMissingFingerprint(t *testing.T) {
 	}
 }
 
-// TestRemoveStaleSocketFiles_LeavesPIDFileInPlace proves removeStaleSocketFiles
-// removes the stale listening socket but never unlinks the PID file. The PID
-// file's exclusive flock (held across acquirePIDLock/releasePIDLock in
-// internal/daemon, and across an entire restore by cmd/attn/db.go's
-// acquireDaemonLock) is the sole mutual-exclusion mechanism; unlinking it
-// here — right before spawnDaemon's acquirePIDLock reopens the path with
-// O_CREATE — would let a concurrent flock holder (e.g. a restore in
-// progress) keep its lock on an orphaned inode while a new daemon silently
-// creates and locks a different one at the same pathname.
+// The PID file's exclusive flock is the sole mutual-exclusion mechanism: unlinking it here
+// would leave a concurrent holder locking an orphaned inode at the same pathname.
 func TestRemoveStaleSocketFiles_LeavesPIDFileInPlace(t *testing.T) {
 	dir := t.TempDir()
 	socketPath := filepath.Join(dir, "attn.sock")

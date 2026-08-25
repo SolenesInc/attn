@@ -1,12 +1,5 @@
-// useQuery — a live document query, as a view sees it.
-//
-// The whole A3.4 delivery contract lives here so a view never meets it: render
-// `order`, take each body from `upsert` or from the cache, forget everything
-// else. What a view gets is an array that stays current.
-//
-// Design: docs/plans/2026-08-05-ext-a3.4-doc-store-positions-and-windows.md
-// (delivery semantics) and docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md
-// ("What an author writes").
+// Design: docs/plans/2026-08-05-ext-a3.4-doc-store-positions-and-windows.md and
+// docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
 
 import { useEffect, useMemo, useState } from "react"
 import type { Document, Filter } from "./index"
@@ -26,11 +19,8 @@ export interface LiveQueryOptions {
 }
 
 export interface QueryError {
-  /**
-   * What to act on. `collection_undefined` and `collection_redeclared` mean this
-   * query is over; `invalid_query`, `undeclared_collection` and
-   * `subscription_limit` mean it never started.
-   */
+  // `collection_undefined` and `collection_redeclared` mean this query is over;
+  // `invalid_query`, `undeclared_collection` and `subscription_limit` mean it never started.
   code: string
   message: string
 }
@@ -42,45 +32,20 @@ export interface QueryResult<Body> {
   asOfSeq: number
   /** Whether the daemon is serving this query right now. */
   live: boolean
-  /**
-   * Set when the subscription ended and will not resume on its own. It is a
-   * state to render, not an exception: a tile that spins forever because its
-   * collection was removed is worse than one that says so.
-   */
+  /** Set when the subscription ended and will not resume: a state to render. */
   error: QueryError | null
 }
 
-/**
- * How many unmounted queries keep their bodies for a resume.
- *
- * Same receipt as the daemon's per-client subscription tripwire (measured
- * 2026-08-13 against Victor's production database: seven live workspaces, three
- * of them holding one docked tile): a client cannot hold more live queries than
- * that, so retaining more caches than that is retaining for tiles that cannot
- * all exist. Evicting costs one full first delivery instead of a diffed one —
- * bytes, never correctness — so this bound is silent by design.
- */
+// How many unmounted queries keep their bodies for a resume. Same receipt as the daemon's
+// per-client subscription tripwire (measured 2026-08-13 against the production database).
 const RESUME_CACHE_LIMIT = 64
 
-/**
- * Bodies by query, kept past unmount so a remount resumes with `have` and the
- * daemon sends only what changed. Insertion-ordered, refreshed on write, so the
- * oldest untouched query is the one evicted.
- *
- * One cache serves one subscription at a time. The daemon credits `have`
- * per subscription, so two tiles running the same query against one shared cache
- * would resume each other's bodies: one mount's forget-delete invalidates what
- * the daemon still credits to the other, and under steady writes the pair
- * ping-pongs full resubscribes. A cache is therefore checked out while a
- * subscription holds it, and a second holder of the same query gets a private
- * cache that resumes nothing — bytes on its first delivery, never a wrong window.
- */
+// Bodies by query, kept past unmount so a remount resumes with `have`. One cache serves one
+// subscription at a time, or two tiles would invalidate each other's credited bodies.
 const resumeCaches = new Map<string, { bodies: Map<string, RawDocument>; held: boolean }>()
 
-/**
- * Take the cache for this query, or a private one when another subscription
- * already holds it. Every checkout is paired with a `releaseCache`.
- */
+// Take the cache for this query, or a private one when another subscription already holds
+// it. Every checkout is paired with a `releaseCache`.
 function checkoutCache(key: string): { bodies: Map<string, RawDocument>; release: () => void } {
   const existing = resumeCaches.get(key)
   if (existing && !existing.held) {
@@ -90,7 +55,7 @@ function checkoutCache(key: string): { bodies: Map<string, RawDocument>; release
     return { bodies: existing.bodies, release: () => (existing.held = false) }
   }
   if (existing) {
-    // Held elsewhere: a detached cache, kept out of the map so releasing it
+    // A detached cache, kept out of the map so releasing it cannot clobber the holder's bodies.
     // cannot clobber the holder's bodies.
     return { bodies: new Map<string, RawDocument>(), release: () => {} }
   }
@@ -110,7 +75,6 @@ function checkoutCache(key: string): { bodies: Map<string, RawDocument>; release
   return { bodies: fresh.bodies, release: () => (fresh.held = false) }
 }
 
-/** The identity of a query, which is what a resume cache is keyed by. */
 function queryKey(namespace: string, collection: string, options: LiveQueryOptions): string {
   return JSON.stringify([
     namespace,
@@ -131,20 +95,8 @@ function parseBody<Body>(raw: RawDocument): Document<Body> {
   }
 }
 
-/**
- * Subscribe to a collection and stay current.
- *
- * ```tsx
- * const { docs, live } = useQuery("requests", {
- *   filters: [{ field: "status", op: "eq", value: "pending" }],
- *   sort: { field: "updated_at", desc: true },
- *   limit: 20,
- * })
- * ```
- *
- * The collection is this app's — the namespace comes from where the tile is
- * mounted, so a view cannot read another app's documents by asking.
- */
+// Subscribe to a collection and stay current. The namespace comes from where the tile is
+// mounted, so a view cannot read another app's documents by asking.
 export function useQuery<Body = unknown>(
   collection: string,
   options: LiveQueryOptions = {},
@@ -159,10 +111,8 @@ export function useQuery<Body = unknown>(
   })
   const [live, setLive] = useState(false)
   const [error, setError] = useState<QueryError | null>(null)
-  // The query this state describes. A view that changes its filter, sort or limit
-  // must not render the previous query's window labelled as the new one's, and it
-  // must not stay `live` across the gap — so the reset happens during the render
-  // that changes the key, before anything downstream reads either.
+  // Reset during the render that changes the key, or a view renders the previous window
+  // labelled as the new one, or stays `live` across the gap.
   const [describedKey, setDescribedKey] = useState(key)
   if (describedKey !== key) {
     setDescribedKey(key)
@@ -170,9 +120,6 @@ export function useQuery<Body = unknown>(
     setLive(false)
     setError(null)
   }
-  // Bumped when a delivery names a body nobody holds. That is the one invariant
-  // violation the contract anticipates, and its remedy is to start over with no
-  // `have` — invisible to the view beyond one fuller delivery.
   const [generation, setGeneration] = useState(0)
 
   useEffect(() => {
@@ -196,8 +143,7 @@ export function useQuery<Body = unknown>(
     }
 
     setError(null)
-    // Survives this effect, and this mount: it is what `have()` reads on a
-    // resubscribe, and what a remount resumes from.
+    // Survives this effect and this mount: it is what `have()` reads.
     const { bodies: cache, release } = checkoutCache(key)
     let dropped = false
 
@@ -207,16 +153,13 @@ export function useQuery<Body = unknown>(
       for (const id of delivery.order) {
         const raw = cache.get(id)
         if (!raw) {
-          // A body we neither hold nor were sent. The subscription is broken;
-          // start over with an empty cache so the next first delivery is whole.
           cache.clear()
           if (!dropped) setGeneration((n) => n + 1)
           return
         }
         docs.push(parseBody<Body>(raw))
       }
-      // The forget rule: anything not named in `order` is gone from the window,
-      // so holding its body would resume a query that no longer wants it.
+      // The forget rule: anything not named in `order` is gone from the window.
       const named = new Set(delivery.order)
       for (const id of Array.from(cache.keys())) {
         if (!named.has(id)) cache.delete(id)
@@ -247,8 +190,6 @@ export function useQuery<Body = unknown>(
       unsubscribe()
       release()
     }
-    // `key` is the query's whole identity, so it stands in for the options object
-    // a caller rebuilds on every render.
   }, [runtime, collection, key, generation])
 
   return useMemo(

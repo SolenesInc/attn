@@ -97,12 +97,7 @@ interface UseUiAutomationBridgeArgs {
   fitSessionActivePane: (sessionId: string) => void;
   sendRuntimeInput: (runtimeId: string, data: string, source?: string) => void;
   isRuntimeAttached: (runtimeId: string) => boolean;
-  // Automations panel (profile-level). Mutation verbs drive the real panel
-  // controls (toggle/run-now/select); the bridge only needs to open the dock
-  // and read the rendered DOM.
   openAutomationsPanel?: () => void;
-  // Presentation notices (pane-header review chips). Read-only for the
-  // bridge: the chip DOM is the source of truth for what's actually rendered.
   presentationNotices?: Presentation[];
   resetSessionPaneTerminal: (sessionId: string, paneId: string) => boolean;
   injectSessionPaneBytes: (sessionId: string, paneId: string, bytes: Uint8Array) => Promise<boolean>;
@@ -132,9 +127,7 @@ function waitForBenchmarkDelay(delayMs: number) {
   });
 }
 
-// The seed is written to the model, but output paints are paced at 30 Hz, so
-// the dense surface may not have reached the GPU yet. Wait for a paint that
-// happened after the seed instead of for a fixed interval.
+// Output paints are paced at 30 Hz, so wait for a paint after the seed rather than a fixed interval.
 async function waitForSeededPaint(
   readPerf: () => { renderCount: number } | undefined,
   renderCountBeforeSeed: number,
@@ -146,10 +139,6 @@ async function waitForSeededPaint(
   }
 }
 
-// A freshly created utility shell keeps emitting its prompt after the reset
-// request returns, and there is no event for "the shell is done talking". Wait
-// on the real signal instead of a fixed sleep: the pane's parsed-write counter
-// going unchanged across consecutive frames means nothing more arrived.
 async function waitForPaneWriteQuiescence(
   readWriteCount: () => number | null,
   quietFrames = 3,
@@ -165,11 +154,8 @@ async function waitForPaneWriteQuiescence(
   }
 }
 
-// Let `frames` frames actually elapse, so a React commit, the layout it
-// triggers, and the paint that follows each get their own frame to happen in.
-// The awaits have to be sequential: nextAnimationFrame() registers its callback
-// when it is constructed, so building them all up front queues them onto the
-// same frame and Promise.all would return after one, whatever `frames` says.
+// The awaits must stay sequential: nextAnimationFrame() registers its callback when it
+// is constructed, so building them all up front queues them onto the same frame.
 async function settleUi(frames = 2) {
   for (let index = 0; index < frames; index += 1) {
     await nextAnimationFrame();
@@ -392,23 +378,13 @@ function collectPaneDomMetrics(paneElement: Element | null) {
     terminalContainer: elementMetrics(terminalContainer),
     terminalSurface: elementMetrics(terminalSurface),
     canvas: elementMetrics(canvas),
-    // GhosttyTerminal renders this when it gives up rebuilding the renderer
-    // (see the WebGL context-loss recovery give-up path) — exposed so the
-    // packaged-app harness can assert recovery actually cleared it, not just
-    // that the diagnostics log said so.
     errorVisible: paneElement.querySelector('.ghostty-terminal-error') != null,
   };
 }
 
 async function captureDomScreenshotData(selector?: string) {
-  // An optional selector scopes the capture to a subtree. This avoids serializing
-  // the whole #root (which holds the WebGL terminal canvas html-to-image cannot
-  // serialize quickly and times out on) when you only need one panel.
-  //
-  // If a selector is given but does not resolve, DO NOT silently fall back to
-  // #root: that fallback re-introduces the terminal-canvas hang while hiding the
-  // real cause (the element you asked for is not mounted). Fail fast with a clear
-  // message instead so the caller learns the panel is not on screen.
+  // An unresolved selector must NOT fall back to #root: that re-introduces the WebGL-canvas
+  // serialization hang while hiding the real cause (the element asked for is not mounted).
   let target: HTMLElement;
   if (selector) {
     const selected = document.querySelector(selector);
@@ -427,17 +403,12 @@ async function captureDomScreenshotData(selector?: string) {
   const { toPng } = await import('html-to-image');
   const backgroundColor = getComputedStyle(document.body).backgroundColor || '#111111';
 
-  // Freeze CSS animations/transitions for the duration of the capture. Two reasons:
-  // (1) WebKit can leave html-to-image's serialized SVG <image> in a never-settled
-  //     load state when the cloned subtree has a running `animation: ... infinite`
-  //     (e.g. the live "Current step" spinner), so toPng hangs until the caller
-  //     times out. A static completed panel captures instantly; a live one stalls.
-  // (2) A screenshot should be a stable frame, not a random mid-animation tick.
+  // A running CSS animation in the cloned subtree can leave html-to-image's serialized SVG
+  // <image> in a never-settled load state in WebKit, so toPng hangs until the caller times out.
   const freeze = document.createElement('style');
   freeze.textContent =
     '*,*::before,*::after{animation:none!important;transition:none!important;}';
   document.head.appendChild(freeze);
-  // Force a style/layout flush so the freeze takes effect before we serialize.
   void document.body.offsetHeight;
 
   let dataUrl: string;
@@ -446,9 +417,7 @@ async function captureDomScreenshotData(selector?: string) {
       cacheBust: true,
       pixelRatio: 1,
       backgroundColor,
-      // Embedding @font-face resources fetches each font and can hang indefinitely
-      // (the capture then times out). Skip it — captured text falls back to system
-      // fonts, which is fine for verification screenshots.
+      // Embedding @font-face resources fetches each font and can hang indefinitely.
       skipFonts: true,
     });
   } finally {
@@ -589,11 +558,6 @@ function collectSessionUiState(
   const firstAgentPane = firstAgentPaneId
     ? document.querySelector(`[data-pane-session-id="${session.id}"][data-pane-id="${firstAgentPaneId}"]`)
     : null;
-  // The auto-settle indicator as the pane header actually drew it. The wire
-  // carries either a deadline or the frozen flag, never both, and only the DOM
-  // can testify that the tile drew the one it was sent — a running countdown
-  // animating against a deadline, or a still full bar that says attn is waiting
-  // for the user to stop interacting.
   const settlingChip = firstAgentPane?.querySelector('[data-testid="settling-indicator"]') ?? null;
   const settlingFill = firstAgentPane?.querySelector('.settling-header-track-fill') ?? null;
   const workspaceId = session.workspaceId;
@@ -629,8 +593,6 @@ function collectSessionUiState(
       ? {
           text: settlingChip.textContent?.trim() || '',
           held: settlingChip.classList.contains('settling-header--held'),
-          // A frozen bar carries no width transition, because there is no
-          // deadline to animate toward. That absence is the assertion.
           frozenBar: Boolean(settlingFill instanceof HTMLElement
             && settlingFill.classList.contains('settling-track-fill--held')),
         }
@@ -849,9 +811,6 @@ function dispatchShortcutEvent(shortcutId: ShortcutId) {
   if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, shortcutId)) {
     throw new Error(`Unknown shortcut: ${shortcutId}`);
   }
-  // Resolve through overrides so automation exercises the live binding. A chord
-  // fires as two synchronous keystrokes (leader then follow), which the shared
-  // chord state machine pairs up.
   const binding = resolveBinding(shortcutId);
   if (!binding) {
     throw new Error(`Shortcut is unbound: ${shortcutId}`);
@@ -864,10 +823,6 @@ function dispatchShortcutEvent(shortcutId: ShortcutId) {
   dispatchCombo(binding);
 }
 
-// Finds the WebGL canvas of the pane currently visible on screen — the one
-// workspace root marked visible, and within it the pane its own
-// data-active-pane-id names. Used by the lose_webgl_context harness action to
-// verify context-loss recovery without needing a sessionId/paneId round trip.
 function findActivePaneCanvas(): HTMLCanvasElement | null {
   const workspace = document.querySelector('[data-session-terminal-workspace][data-session-visible="1"]');
   const activePaneId = workspace?.getAttribute('data-active-pane-id');
@@ -924,13 +879,8 @@ function wheelPaneElement(sessionId: string, paneId: string, deltaY: number, del
   }));
 }
 
-// Resolves a pane's terminal container plus the rect of its CELL GRID. The
-// grid rect is the canvas, which the renderer sizes to exactly
-// cols*cellWidth x rows*cellHeight; the container is taller/wider by the
-// fit remainder. Cell math must use the grid rect — proportional division of
-// the container rect drifts downward and clicks the wrong row near the
-// bottom of the pane (the app's own hit-test divides the canvas rect by the
-// renderer's real cell metrics).
+// Cell math must use the canvas (grid) rect, not the container rect: the container is
+// larger by the fit remainder, so proportional division clicks the wrong row.
 function paneTerminalGrid(sessionId: string, paneId: string) {
   const paneElement = document.querySelector(
     `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"]`
@@ -990,8 +940,6 @@ function clickPaneCell(
   }));
 }
 
-// Page-coordinate center of a terminal cell plus the window inner size, so
-// native (HID) drivers can convert to window-relative click positions.
 function paneCellRect(
   sessionId: string,
   paneId: string,
@@ -1008,19 +956,12 @@ function paneCellRect(
   };
 }
 
-// The annotation surface, read from the DOM. What a scenario needs to know is
-// what the user can see: whether an alt-drag resolved to something annotatable
-// (the popup opened), what each filed annotation quotes, and what the panel is
-// about to send. The wash itself is painted into the WebGL surface and is
-// verified by the projection's own tests, not from here.
 function annotationSurfaceState() {
   const popup = document.querySelector('[data-testid="annotation-popup"]');
   const panel = document.querySelector('[data-testid="annotation-panel"]');
   const notice = document.querySelector('[data-testid="annotation-notice"]');
   const text = (root: Element | null | undefined, selector: string) =>
     root?.querySelector(selector)?.textContent?.trim() ?? '';
-  // Reported so a driver can check the surface is actually reachable — a popup
-  // or panel hanging off an edge is present in the DOM and unusable on screen.
   const box = (node: Element | null) => {
     if (!node) return null;
     const rect = node.getBoundingClientRect();
@@ -1031,21 +972,11 @@ function annotationSurfaceState() {
     popupRect: box(popup),
     panelRect: box(panel),
     viewport: { width: window.innerWidth, height: window.innerHeight },
-    // Every terminal grid on screen. The popup is portalled to the body and
-    // positioned against the window, so the DOM no longer says which pane it
-    // belongs to — but landing outside all of them is the failure, and that a
-    // driver can see. A popup over the sidebar or a neighbouring pane is
-    // present, correctly sized, and unusable.
     paneRects: Array.from(document.querySelectorAll('.terminal-container.ghostty-terminal'))
       .map((pane) => box(pane))
       .filter((rect): rect is NonNullable<typeof rect> => rect !== null),
     popupQuote: text(popup, '.anno-popup-quote'),
-    // The comment box's current contents, so a driver can tell "reopened an
-    // annotation to edit it" from "opened an empty box beside it".
     popupDraft: (popup?.querySelector('.anno-popup-text') as HTMLTextAreaElement | null)?.value ?? null,
-    // Whether the box the editor opened for is the one taking keystrokes. An
-    // editor that opens without the caret in it sends the next sentence to the
-    // PTY, and nothing else on this surface would show that.
     commentFocused: Boolean(
       popup
       && popup.querySelector('.anno-popup-text')
@@ -1058,20 +989,11 @@ function annotationSurfaceState() {
       emoji: text(card, '.anno-card-chip'),
       quote: text(card, '.anno-card-quote'),
       comment: text(card, '.anno-card-comment'),
-      // The row and its remove control, so a driver can see the control is
-      // still on the row's first line. A comment that spans the row used to
-      // push it onto a line of its own, which is invisible to every
-      // text-only assertion.
       rect: box(card),
       removeRect: box(card.querySelector('.anno-card-remove')),
     })),
-    // What goes out ahead of the marks. Null when the panel is closed, which is
-    // also the only time there is nowhere to type it.
     note: (panel?.querySelector('.anno-panel-note') as HTMLTextAreaElement | null)?.value ?? null,
     footer: text(panel, '.anno-panel-foot'),
-    // What an annotate gesture that resolved to nothing said for itself. The
-    // whole failure mode this covers is silence, so a driver asserting only on
-    // popup/panel presence cannot tell "explained itself" from "did nothing".
     notice: notice?.textContent?.trim() ?? null,
     noticeRect: box(notice),
   };
@@ -1104,9 +1026,6 @@ function hoverPaneCell(
 ): HTMLElement {
   const { terminal, gridRect } = paneTerminalGrid(sessionId, paneId);
   if (alt) {
-    // The terminal also learns alt from the keyboard, because holding it over
-    // an already-parked pointer is how the annotation affordance is normally
-    // reached. Send both so either path is exercised.
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', altKey: true, bubbles: true }));
   }
   terminal.dispatchEvent(new MouseEvent('mousemove', {
@@ -1117,9 +1036,8 @@ function hoverPaneCell(
     altKey: alt,
     ...paneCellPoint(gridRect, size, cell),
   }));
-  // The element, not its cursor: hover state routes through React, so reading
-  // the computed style here returns the style from before this move. The caller
-  // reads it after settling.
+  // Returns the element, not its cursor: hover state routes through React, so the computed
+  // style here is still the pre-move one. The caller reads it after settling.
   return terminal;
 }
 
@@ -1129,9 +1047,6 @@ function dragPaneSelection(
   size: { cols: number; rows: number },
   start: { col: number; row: number },
   end: { col: number; row: number },
-  // Held modifier. A TUI with mouse reporting on owns a plain drag; alt is the
-  // terminal's existing escape hatch back to local selection, and telling the
-  // two apart is the whole point of driving this from a scenario.
   modifiers: { altKey?: boolean } = {},
 ) {
   const { terminal, gridRect } = paneTerminalGrid(sessionId, paneId);
@@ -1165,10 +1080,6 @@ function dragPaneSelection(
   }));
 }
 
-// dragLeafHeader synthesizes a leaf re-dock drag: pointerdown on the leaf's
-// draggable header, then pointermove/pointerup on window at a drop point given
-// as a fraction of the panes container. This exercises the real beginLeafDrag →
-// computeDockTarget → onMoveLeaf path without a physical OS drag.
 function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
   const leaf = document.querySelector(`[data-pane-id="${leafId}"]`);
   const header = leaf?.querySelector('.workspace-pane-header, .workspace-dock-tile-header');
@@ -1207,8 +1118,6 @@ function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
     }));
   };
 
-  // pointerdown bubbles to React's onPointerDown (beginLeafDrag); move/up reach
-  // the window listeners beginLeafDrag registers.
   fire('pointerdown', header, startX, startY, { button: 0, buttons: 1 });
   fire('pointermove', window, dropX, dropY, { buttons: 1 });
   fire('pointerup', window, dropX, dropY, { button: 0, buttons: 0 });
@@ -1294,8 +1203,6 @@ interface ClickModifiers {
   alt?: boolean;
 }
 
-// Like clickElement, but dispatches at the element's center with optional
-// modifier keys (for mod-click link navigation etc).
 function clickElementWithModifiers(element: HTMLElement, modifiers?: ClickModifiers) {
   const rect = element.getBoundingClientRect();
   const clientX = rect.x + rect.width / 2;
@@ -1311,10 +1218,8 @@ function clickElementWithModifiers(element: HTMLElement, modifiers?: ClickModifi
     shiftKey: modifiers?.shift ?? false,
     altKey: modifiers?.alt ?? false,
   };
-  // Pointer events first, in the order a real browser fires them. Anything
-  // listening for pointerdown — the modern default for "the user touched the
-  // app" — is otherwise invisible to every scenario that clicks through this
-  // helper, and the scenario reads as passing while the behavior never ran.
+  // Pointer events first, in the order a real browser fires them: anything listening for
+  // pointerdown is otherwise invisible and the scenario reads as passing.
   const pointerInit: PointerEventInit = { ...init, pointerId: 1, pointerType: 'mouse', isPrimary: true };
   element.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
   element.dispatchEvent(new MouseEvent('mousedown', init));
@@ -1335,10 +1240,8 @@ function setInputValue(element: HTMLInputElement, value: string) {
   element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
 }
 
-// Set the value of a real form control (input/textarea/select) the way React's
-// controlled-component machinery expects: bypass React's value-tracker via the
-// native prototype setter, then fire both `input` (text controls) and `change`
-// (selects) so the component's onChange runs exactly as a user edit would.
+// Bypass React's value-tracker via the native prototype setter, then fire both `input`
+// and `change` so the component's onChange runs exactly as a user edit would.
 function setControlValue(
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
   value: string,
@@ -1352,8 +1255,6 @@ function setControlValue(
   element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
 }
 
-// Click an element by data-testid the way clickPaneElement clicks a pane: a full
-// mousedown/mouseup/click sequence so handlers that listen to any of them fire.
 function clickTestId(testid: string) {
   const element = document.querySelector(`[data-testid="${testid}"]`);
   if (!(element instanceof HTMLElement)) {
@@ -1364,27 +1265,11 @@ function clickTestId(testid: string) {
   }
 }
 
-// The garden panel, as a scenario reads it: where you are in the garden, and
-// what is in front of you. It is a stack of places — one list of rows per
-// place, and a seed's own page instead of an expanded row — so the state this
-// reports is what a scenario needs to say where the reader is standing and
-// whether climbing put them back: the trail, the rows, and the scroll offset.
-//
-// There is exactly one panel in the document. Docked and holding the window are
-// the same panel in a frame of a different size (see GardenFrame), which is why
-// `frame` is reported beside `layout` rather than a scenario having to guess
-// which of two surfaces it is driving.
 function frontGardenPanel(): HTMLElement | null {
   const panel = document.querySelector('.garden-panel');
   return panel instanceof HTMLElement ? panel : null;
 }
 
-// The frame flies between the two rectangles, so the state a scenario reads
-// right after pressing the control would be a box mid-travel — and what a
-// scenario asserts on (the layout, the columns, the widths) is derived from
-// that box. Wait for the rectangle itself to stop moving. That is the real
-// signal in every case, including prefers-reduced-motion, where it has already
-// stopped on the first frame.
 const FRAME_FLIGHT_FRAME_BUDGET = 90;
 async function gardenFrameAtRest() {
   let last = -1;
@@ -1395,24 +1280,15 @@ async function gardenFrameAtRest() {
     const width = frame instanceof HTMLElement ? Math.round(frame.getBoundingClientRect().width) : -1;
     still = width === last ? still + 1 : 0;
     last = width;
-    // Three frames unchanged: an eased transition never repeats a width, so one
-    // repeat already means it has landed.
+    // Three frames unchanged: an eased transition never repeats a width, so one repeat means it landed.
     if (still >= 3) return;
   }
-  // The flight is 180ms — about 11 frames at 60Hz, fewer on a faster display.
-  // Reaching this means the box never settled, which is a defect worth naming
-  // rather than a scenario reading a rectangle in motion.
+  // The flight is 180ms — about 11 frames at 60Hz — so reaching this means the box never settled.
   throw new Error(
     `the garden frame was still moving after ${FRAME_FLIGHT_FRAME_BUDGET} frames (last width ${last})`,
   );
 }
 
-/**
- * The board prototype's reader. The list has its own above; this one answers
- * for the columns, so a scenario can drive drill, drag and the verb menu
- * without a screenshot. Prototype surface — see
- * docs/plans/2026-08-20-garden-kanban-board-prototype.md.
- */
 function collectGardenBoardUiState() {
   const board = document.querySelector('.garden-board');
   if (!(board instanceof HTMLElement)) {
@@ -1451,7 +1327,6 @@ function collectGardenBoardUiState() {
       ? {
           verb: compose.querySelector('.garden-compose__verb')?.textContent?.trim() ?? '',
           seed: compose.querySelector('.garden-compose__id')?.textContent?.trim() ?? '',
-          // The takeover line, when the card is somebody else's live work.
           taking: compose.querySelector('.garden-compose__taking')?.textContent?.trim() ?? '',
         }
       : null,
@@ -1478,15 +1353,11 @@ function collectGardenUiState() {
     signal: row.querySelector('.garden-row__signal')?.textContent?.trim() ?? '',
     tender: row.querySelector('.garden-row__tender')?.textContent?.trim() ?? '',
     plot: row.querySelector('.garden-row__plot')?.textContent?.trim() ?? '',
-    // Why this row is in a result list: the plot it came from, and the line of
-    // body that matched when the title did not explain itself.
     home: row.querySelector('.garden-row__home')?.textContent?.trim() ?? '',
     snippet: row.querySelector('.garden-row__snippet')?.textContent?.trim() ?? '',
   }));
   const viewport = panel.querySelector('.garden-viewport');
   const focused = document.activeElement;
-  // The columns renderer puts several lists on screen at once, so a flat row
-  // list cannot say which level a row belongs to.
   const columnsBox = panel.querySelector('.garden-columns');
   const columns = Array.from(
     panel.querySelectorAll('.garden-column:not(.garden-column--reader):not(.garden-column--results)'),
@@ -1501,9 +1372,6 @@ function collectGardenUiState() {
   const activeDescendant = field instanceof HTMLInputElement ? field.getAttribute('aria-activedescendant') : null;
   return {
     present: true,
-    // Which frame the garden is being read in, and how wide that frame made it.
-    // Layout follows width, so these three move together: the promotion is what
-    // takes the panel across the threshold.
     frame: frameBox?.classList.contains('is-full') ? 'full' : frameBox ? 'dock' : 'none',
     frameWidth: frameBox instanceof HTMLElement ? Math.round(frameBox.clientWidth) : -1,
     layout: columnsBox ? 'columns' : 'stack',
@@ -1518,9 +1386,6 @@ function collectGardenUiState() {
     scrollHeight: viewport instanceof HTMLElement ? viewport.scrollHeight : -1,
     focusedRow: focused instanceof HTMLElement ? focused.getAttribute('data-seed-row') ?? '' : '',
     seeds,
-    // Search and filters are one line and one state, so one reader answers for
-    // both: what the query says, where it is looking, what it found, and every
-    // move the panel is offering out of the current answer.
     search: {
       query: field instanceof HTMLInputElement ? field.value : '',
       focused: document.activeElement === field,
@@ -1539,7 +1404,6 @@ function collectGardenUiState() {
   };
 }
 
-// A seed's own page — its document, its artifact rows, its log.
 function collectGardenSeedPage() {
   const page = document.querySelector('.garden-page');
   if (!(page instanceof HTMLElement)) return { present: false };
@@ -1562,9 +1426,6 @@ function collectGardenSeedPage() {
   };
 }
 
-// The panel drill and the docked seed tile mount the same seed document, so one
-// reader answers for both — and the artifact set it reports is the daemon's
-// projection over the whole log, not anything the view recomputed.
 function collectSeedDocumentState(scope: string, seedId: string) {
   const named = seedId ? `[data-seed-id="${seedId}"]` : '';
   const root = document.querySelector(`${scope} .seed-document${named}`);
@@ -1584,9 +1445,6 @@ function collectSeedDocumentState(scope: string, seedId: string) {
   };
 }
 
-// Serialize what AutomationsPanel is actually rendering: definition rows
-// (with enabled/failure/inline-error state) and, when a definition is
-// selected, its run history.
 function collectAutomationsUiState() {
   const panel = document.querySelector('[data-testid="automations-panel"]');
   if (!(panel instanceof HTMLElement)) {
@@ -1631,10 +1489,6 @@ function collectAutomationsUiState() {
   };
 }
 
-// The form's RHF field/error state lives in component state, not the DOM, so
-// there is nothing to scrape here the way collectAutomationsUiState scrapes
-// the list panel — this reads through the registered handle instead, same as
-// automationFormAutomation.ts's own doc comment describes.
 const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
   present: false,
   mode: 'create',
@@ -1683,8 +1537,6 @@ function getLocationPickerOverlay() {
   return overlay instanceof HTMLElement ? overlay : null;
 }
 
-// The global markdown opener's rendered state, for harness assertions: what the
-// palette is actually showing, in order, without guessing from screenshots.
 function collectMarkdownOpenerUiState() {
   const root = document.querySelector('.markdown-opener');
   if (!root) {
@@ -2031,9 +1883,8 @@ export function useUiAutomationBridge({
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
         };
       case 'dismiss_whats_new': {
-        // A fresh profile shows the one-time What's New modal on first launch,
-        // which sits above the workspace and swallows native HID clicks.
-        // Dismiss it the way a user can: a backdrop click (persists "seen").
+        // A fresh profile's one-time What's New modal sits above the workspace and swallows native
+        // HID clicks. Dismiss it the way a user can: a backdrop click (persists "seen").
         const overlay = document.querySelector('.whats-new-overlay');
         if (overlay instanceof HTMLElement) {
           clickElement(overlay);
@@ -2043,9 +1894,6 @@ export function useUiAutomationBridge({
         return { dismissed: false };
       }
       case 'markdown_get_annotations_state': {
-        // Read-only view of the markdown annotation engine (list incl. orphan
-        // flags, painter mode, generation) so the harness can assert
-        // paint/rebase/orphan/persistence without screenshots-only evidence.
         return (
           getMarkdownAnnotationsAutomationHandle()?.getState() ??
           INACTIVE_MARKDOWN_ANNOTATIONS_STATE
@@ -2087,10 +1935,8 @@ export function useUiAutomationBridge({
         if (!handle || !handle.getState().open) throw new Error('settings modal is not open');
         handle.selectSection(sectionId);
         await settleUi(2);
-        // Re-read through the module getter rather than the captured handle:
-        // SettingsModal re-registers a fresh handle on each render (its
-        // useEffect depends on selectedSection), so the captured handle's
-        // getState still closes over the pre-selection section.
+        // Re-read through the module getter: SettingsModal re-registers a fresh handle on each
+        // render, so a captured handle still closes over the pre-selection section.
         return getSettingsAutomationHandle()?.getState() ?? INACTIVE_SETTINGS_STATE;
       }
       case 'capture_screenshot_data':
@@ -2110,10 +1956,6 @@ export function useUiAutomationBridge({
         return { clicked: true, bounds: rectSnapshot(element) };
       }
       case 'dom_focus': {
-        // Focus without clicking, so a scenario can put the keyboard on a
-        // control and then press real keys at it. Fails loudly when the target
-        // refuses focus, which is the interesting answer for anything claiming
-        // to be keyboard-reachable.
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_focus requires selector');
         const element = document.querySelector(selector);
@@ -2183,7 +2025,6 @@ export function useUiAutomationBridge({
         return { dispatched: true, defaultPrevented: event.defaultPrevented };
       }
       case 'dom_compose_text': {
-        // Keep composition checks independent of the active input source.
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         const text = typeof payload.text === 'string' ? payload.text : null;
         if (!selector || text === null) {
@@ -2213,16 +2054,8 @@ export function useUiAutomationBridge({
         return { composed: true, text };
       }
       case 'dom_hover': {
-        // Pointer-over without a click, for affordances that only exist while
-        // hovered — the sidebar's session-name reveal, hover-revealed row
-        // controls. Victor's rule is no CGEvent HID takeover, so this is the
-        // synthetic-DOM equivalent.
-        //
-        // Both the pointer and mouse families are dispatched because handlers in
-        // this app come from either (React's onMouseEnter and native
-        // pointerenter listeners both appear). enter/leave do not bubble by
-        // spec, so this fires them on the element itself: the selector has to
-        // name the element that actually listens, not an ancestor.
+        // Both the pointer and mouse families are dispatched (handlers here come from either), and
+        // enter/leave do not bubble, so the selector must name the element that actually listens.
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_hover requires selector');
         const leave = payload.leave === true;
@@ -2253,10 +2086,6 @@ export function useUiAutomationBridge({
         return { hovered: !leave, bounds: rectSnapshot(element) };
       }
       case 'drag_dom': {
-        // A press-move-release on an arbitrary element. Drag handles that live
-        // outside the terminal (the annotation panel's header) have no
-        // pane-relative verb to reach them, and a click verb cannot express the
-        // movement that is the whole behavior.
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         const dx = typeof payload.dx === 'number' ? payload.dx : 0;
         const dy = typeof payload.dy === 'number' ? payload.dy : 0;
@@ -2270,8 +2099,7 @@ export function useUiAutomationBridge({
         element.dispatchEvent(new MouseEvent('mousedown', {
           bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, ...from,
         }));
-        // Two moves: a drag implementation that arms on the first move and
-        // applies on subsequent ones would otherwise look like it worked.
+        // Two moves: a drag that arms on the first and applies on later ones would otherwise look like it worked.
         for (const step of [0.5, 1]) {
           window.dispatchEvent(new MouseEvent('mousemove', {
             bubbles: true, cancelable: true, view: window, buttons: 1,
@@ -2308,9 +2136,7 @@ export function useUiAutomationBridge({
         return { typed: text };
       }
       case 'dom_select': {
-        // Selects need their own verb: dom_type goes through the input value
-        // setter, which a <select> ignores, and a scenario that drives a settings
-        // pane has no other way to choose an option.
+        // Selects need their own verb: dom_type goes through the input value setter, which a <select> ignores.
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         const value = typeof payload.value === 'string' ? payload.value : null;
         if (!selector) throw new Error('dom_select requires selector');
@@ -2367,15 +2193,6 @@ export function useUiAutomationBridge({
         return session ? serializeSession(session, getActivePaneIdForSession) : null;
       }
       case 'home_get_state': {
-        // What home is saying about the queue, read off the banner the user is
-        // looking at. `allSettled: false` is a real answer — the banner is drawn
-        // only while nothing is owed — and `followNextTurn` is the switch that
-        // decides whether the next turn to open comes and gets the user, so a
-        // caller can testify both to how it was set and to who set it.
-        //
-        // Scoped to the view that is actually on screen: home stays mounted
-        // behind the session view, so an unscoped query would report the banner
-        // to a caller looking at an agent.
         const visible = document.querySelector('.view-container.visible');
         const banner = visible?.querySelector('[data-testid="all-settled"]') ?? null;
         const follow = visible?.querySelector('[data-testid="follow-next-turn"] input');
@@ -2386,9 +2203,6 @@ export function useUiAutomationBridge({
           if (!section) return null;
           return {
             count: section.querySelector('.pr-section-count')?.textContent?.trim() || '',
-            // The repo as the row itself names it: inline on the flat side, on a
-            // group header on the review side. Which one carries it is the whole
-            // difference between the two halves.
             rows: Array.from(section.querySelectorAll('[data-testid="pr-card"]')).map((row) => ({
               number: row.querySelector('.pr-number')?.textContent?.trim() || '',
               repo: row.querySelector('.pr-repo-inline')?.textContent?.trim() || '',
@@ -2403,11 +2217,7 @@ export function useUiAutomationBridge({
           allSettled: Boolean(banner),
           detail: banner?.querySelector('.all-settled-detail')?.textContent?.trim() || '',
           followNextTurn: follow instanceof HTMLInputElement ? follow.checked : null,
-          // The strip of keyboard hints home used to carry. Reported so its
-          // absence is something a caller can testify to rather than infer.
           shortcutFooter: Boolean(visible?.querySelector('.dashboard-footer')),
-          // Agents the user deferred. Collapsed by default, so `rows` is empty
-          // until something expands it — which is a real answer, not a gap.
           snoozed: {
             present: Boolean(snoozedGroup),
             header: snoozedHeader?.textContent?.trim() || '',
@@ -2420,12 +2230,8 @@ export function useUiAutomationBridge({
               canWake: Boolean(row.querySelector('.session-wake-btn')),
             })),
           },
-          // Which agents home is still grouping by state. A deferred agent
-          // appearing here is the defect the snoozed section exists to remove.
-          // Read from the groups that mark themselves, not from the testid
-          // prefix: the turn band and the snoozed section share it and are not
-          // state groups, and an exclusion list would silently gain a hole the
-          // next time a group is added.
+          // Read from the groups that mark themselves, not from the testid prefix: the turn band
+          // and the snoozed section share it and are not state groups.
           stateGroupSessionIds: Array.from(
             visible?.querySelectorAll('[data-session-group="state"] .session-row') || [],
           ).map((row) => (row.getAttribute('data-testid') || '').slice('session-'.length)),
@@ -2436,15 +2242,8 @@ export function useUiAutomationBridge({
         };
       }
       case 'queue_get_state': {
-        // Read the rendered band, not the model behind it: ordering, membership,
-        // and the live state dot are the whole claim of the queue arrangement,
-        // and only the DOM can testify that what the user sees matches it.
         const band = document.querySelector('[data-testid="sidebar-queue"]');
         const readRow = (row: Element, prefix: string) => {
-          // The control that opens the row. Reported as its own element rather
-          // than folded into the row so a caller can testify that opening an
-          // agent is reachable by keyboard — a real button, focusable, with an
-          // accessible name — and not a click handler the keyboard cannot see.
           const open = row.querySelector('.queue-row-select');
           return {
             id: (row.getAttribute('data-testid') || '').slice(prefix.length),
@@ -2452,8 +2251,6 @@ export function useUiAutomationBridge({
             state: row.getAttribute('data-state') || '',
             workspaceId: row.getAttribute('data-workspace-id') || '',
             age: row.querySelector('.queue-row-age')?.textContent?.trim() || '',
-            // When a deferred agent comes back, as the row says it. Empty on
-            // every row that is not snoozed.
             wake: row.querySelector('.queue-row-wake-at')?.textContent?.trim() || '',
             selected: row.classList.contains('selected'),
             open: open
@@ -2466,9 +2263,6 @@ export function useUiAutomationBridge({
           };
         };
         const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
-        // The snoozed section is a sibling of the bands, not part of them —
-        // deferred agents answer "what did I put off", not "whose turn is it" —
-        // so it is read from the document rather than from within the band.
         const snoozedSection = document.querySelector('[data-testid="sidebar-snoozed"]');
         const snoozedHeader = snoozedSection?.querySelector('[data-testid="snoozed-section-header"]');
         return {
@@ -2479,27 +2273,17 @@ export function useUiAutomationBridge({
             .map((row) => readRow(row, 'queue-turn-')),
           settled: Array.from(band?.querySelectorAll('[data-testid^="queue-settled-"]') || [])
             .map((row) => readRow(row, 'queue-settled-')),
-          // Agents pinned out of the queue one at a time. Below settled and above
-          // the pinned workspaces the tree still draws, so a caller can testify
-          // that the two kinds of pinning are distinct places.
           pinned: Array.from(band?.querySelectorAll('[data-testid^="queue-pinned-"]') || [])
             .map((row) => readRow(row, 'queue-pinned-')),
           snoozed: {
             present: Boolean(snoozedSection),
             header: snoozedHeader?.textContent?.trim() || '',
             expanded: snoozedHeader?.getAttribute('aria-expanded') === 'true',
-            // Empty while the section is collapsed, which is a real answer: a
-            // collapsed section is what the user sees.
             rows: Array.from(snoozedSection?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
-          // What is left of the tree while the queue is on: pinned and tile-only
-          // workspaces. An agent in a band must not also be here — appearing
-          // twice is what made a row look like it moved.
           treeSessionIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
             .map((row) => (row.getAttribute('data-testid') || '').slice('sidebar-session-'.length)),
-          // The groups themselves, which is what lets a caller tell "this group
-          // does not draw that agent" apart from "this group is not drawn yet".
           treeWorkspaceIds: Array.from(document.querySelectorAll('.session-list [data-testid^="sidebar-workspace-"]'))
             .map((group) => (group.getAttribute('data-testid') || '').slice('sidebar-workspace-'.length)),
         };
@@ -2572,8 +2356,6 @@ export function useUiAutomationBridge({
           ? payload.endpoint_id
           : undefined;
         const chiefOfStaff = payload.chief_of_staff === true;
-        // An existing conversation this session picks up from — the automation
-        // half of the picker's resume bar. Only a conversation agent reads it.
         const resumeConversationFile = typeof payload.resume_conversation_file === 'string'
           && payload.resume_conversation_file.length > 0
           ? payload.resume_conversation_file
@@ -2614,10 +2396,6 @@ export function useUiAutomationBridge({
         return { key, value };
       }
       case 'set_warm_workspace_limit': {
-        // Drives window.attnSetWarmWorkspaces (terminal virtualization warm-set
-        // size) so the perf harness can A/B retained RSS at different warm
-        // limits. Returns the applied limit plus the count of virtualized
-        // (torn-down) panes so the harness can verify virtualization engaged.
         const setter = (window as Window & { attnSetWarmWorkspaces?: (n: number) => number }).attnSetWarmWorkspaces;
         if (!setter) {
           throw new Error('attnSetWarmWorkspaces is not available');
@@ -2632,27 +2410,15 @@ export function useUiAutomationBridge({
         return { limit, virtualizedPanes };
       }
       case 'get_warm_workspace_limit': {
-        // Read-only companion to set_warm_workspace_limit: returns the current
-        // warm-workspace limit (default-aware, read from localStorage) so the
-        // perf harness can capture it before a sweep and restore it afterward
-        // instead of leaking the last swept value into the next run.
         const limit = readWarmWorkspaceLimit();
         const virtualizedPanes = document.querySelectorAll('[data-testid^="pane-virtualized-"]').length;
         return { limit, virtualizedPanes };
       }
       case 'dump_terminal_geometry': {
-        // Same-moment app-side read of every mounted pane's model grid, cell
-        // metrics, and clientWidth/Height — avoids the
-        // cross-clock ambiguity of comparing a harness screenshot's timestamp
-        // against a separately-read disk dump.
         const snapshots = dumpTerminalGeometry();
         return { snapshots };
       }
       case 'lose_webgl_context': {
-        // Deliberately kills the active pane's WebGL context so the packaged
-        // app harness can verify GhosttyTerminal's context-loss auto-recovery
-        // (epoch rebuild + backoff) end to end, without needing a real GPU
-        // fault to reproduce it.
         const canvas = findActivePaneCanvas();
         if (!canvas) {
           throw new Error('No active pane canvas found');
@@ -2720,8 +2486,6 @@ export function useUiAutomationBridge({
           getActivePaneIdForSession,
         );
       }
-      // The pane header's seed chip: what a delegated session says it reports
-      // to, read from the rendered header rather than from the store.
       case 'session_seed_chip_get_state': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
         if (!sessionId) {
@@ -2740,9 +2504,6 @@ export function useUiAutomationBridge({
         };
       }
       case 'select_workspace': {
-        // Mirrors the sidebar row click and ⌘1–9 (both call selectWorkspace).
-        // Activates a workspace by id, including a tile-only one that has no
-        // session to route selection through.
         const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
         if (!workspaceId) {
           throw new Error('select_workspace requires workspaceId');
@@ -2752,11 +2513,6 @@ export function useUiAutomationBridge({
         return { workspaceId };
       }
       case 'app_view_get_state': {
-        // Every docked app-view tile the DOM is holding. `placeholder` names the
-        // host's own state when nothing mounted; a host with no placeholder is
-        // rendering the app's component, and `text` is then that component's
-        // output — the only proof from outside that the view's module linked
-        // against attn's React and ran.
         const scope = typeof payload.workspaceId === 'string' && payload.workspaceId
           ? document.querySelector(`[data-session-terminal-workspace="${payload.workspaceId}"]`)
           : document;
@@ -2774,10 +2530,6 @@ export function useUiAutomationBridge({
         };
       }
       case 'get_workspace_ui_state': {
-        // Workspace-centric DOM query (the session UI-state verbs key off a
-        // session id, which a tile-only workspace lacks). Reports whether the
-        // workspace's terminal surface is mounted, whether it is the active
-        // (visible) one, and which leaves it is rendering.
         const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
         if (!workspaceId) {
           throw new Error('get_workspace_ui_state requires workspaceId');
@@ -3294,8 +3046,7 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const blockState = getPaneBlockState(viewSessionId, paneId);
-        // Stable response shape: callers can distinguish "pane has no live
-        // terminal handle" (available=false) from "pane has no blocks".
+        // Stable response shape: available=false ("no live terminal handle") is not "no blocks".
         return {
           sessionId,
           paneId,
@@ -3313,9 +3064,6 @@ export function useUiAutomationBridge({
         const paneId = resolvePaneId(session, getActivePaneIdForSession, payload.paneId);
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         const placementState = getPanePlacementState(viewSessionId, paneId);
-        // Same shape rule as get_pane_block_state: available=false is "this pane
-        // has no live terminal handle", which is not the same answer as "this
-        // pane is showing no images".
         return {
           sessionId,
           paneId,
@@ -3358,22 +3106,8 @@ export function useUiAutomationBridge({
           ).sessions[0]?.panes.find((pane) => pane.paneId === paneId) || null,
         };
       }
-      // --- Conversation pane (host-backed sessions) ------------------------
-      // Read straight off the rendered DOM rather than the store: what a
-      // conversation session shows is the thing under test, and a store that
-      // is right while the pane draws nothing is exactly the bug this has to
-      // be able to catch.
-      // Puts the transcript where a reader who scrolled back would have it, so
-      // a scenario can assert that an arriving stream does not move them.
-      // SPIKE-ONLY. Replays a recorded envelope stream into a live pane at the
-      // gaps it was recorded at. The nisse host resolves its model through pi's
-      // static catalog (`getModel`), which cannot see a provider declared in an
-      // agent dir, so the harness's stub provider is unreachable from a
-      // conversation session — and a real model would not reproduce a recording
-      // anyway. `applyEnvelope` is exactly what the socket's `agent_event` calls,
-      // so everything the spike is about — store, pane, markdown, scroll — is the
-      // real path. Returns once the replay is scheduled; progress is read with
-      // `conversation_get_state`.
+      // SPIKE-ONLY. Replays a recorded envelope stream into a live pane: a conversation session
+      // cannot reach the harness's stub provider through pi's static catalog (`getModel`).
       case 'conversation_replay_envelopes': {
         const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : '';
         const rows = Array.isArray(payload.envelopes) ? payload.envelopes : [];
@@ -3431,9 +3165,6 @@ export function useUiAutomationBridge({
             role: element.dataset.role || '',
             streaming: element.dataset.streaming === 'true',
             text: rendered?.textContent || '',
-            // The message text is markdown, drawn as structure. `text` alone
-            // cannot tell a heading from the hashes that made it, so a scenario
-            // asserting the rendering needs the shape it produced.
             html: rendered?.innerHTML || '',
             blocks: {
               headings: rendered?.querySelectorAll('h1, h2, h3, h4, h5, h6').length ?? 0,
@@ -3446,9 +3177,6 @@ export function useUiAutomationBridge({
             },
           };
         });
-        // Where the transcript is scrolled. Blocks change height as they close,
-        // so following the stream and reading scrolled-back history are both
-        // measured here rather than inferred from the text.
         const list = root.querySelector('[data-testid="conversation-messages"]');
         const scroll = list instanceof HTMLElement
           ? {
@@ -3458,9 +3186,6 @@ export function useUiAutomationBridge({
             fromBottom: Math.round(list.scrollHeight - list.scrollTop - list.clientHeight),
           }
           : null;
-        // The reading column, measured rather than inferred: a max-width that
-        // silently fails to apply looks exactly like a pane too narrow to show
-        // it. `available` is what the column had to work with.
         const firstMessage = root.querySelector('.conversation-message');
         const column = list instanceof HTMLElement && firstMessage instanceof HTMLElement
           ? {
@@ -3468,18 +3193,10 @@ export function useUiAutomationBridge({
             message: Math.round(firstMessage.getBoundingClientRect().width),
           }
           : null;
-        // What the agent has been sent and has not read yet, in the order the
-        // pane shows it. A nudge scenario asserts the whole arc on this: the
-        // entry appears here, then leaves as the message it delivered appears
-        // in `messages`.
         const queued = Array.from(root.querySelectorAll('[data-testid="conversation-queued"]')).map((node) => ({
           kind: node.querySelector('.conversation-queued-label')?.textContent || '',
           text: node.querySelector('.conversation-queued-text')?.textContent || '',
         }));
-        // Every tool card in the transcript, and what an opened one is showing.
-        // A card's collapsed state is part of the contract — a scenario asserts
-        // that output is absent until the card is opened — so `expanded` and
-        // `output` are reported separately rather than folded together.
         const tools = Array.from(root.querySelectorAll('.conversation-tool')).map((node) => {
           const element = node as HTMLElement;
           const body = element.querySelector('[data-testid="conversation-tool-body"]');
@@ -3493,14 +3210,10 @@ export function useUiAutomationBridge({
             waiting: Boolean(body?.querySelector('[data-testid="conversation-tool-waiting"]')),
             output: body?.querySelector('[data-testid="conversation-tool-output"]')?.textContent || '',
             hasPatch: Boolean(body?.querySelector('[data-testid="conversation-tool-patch"]')),
-            // The card is offering the whole of an output pi clipped.
             fullOutputAvailable: Boolean(body?.querySelector('[data-testid="conversation-tool-full"]')),
             detailError: body?.querySelector('[data-testid="conversation-tool-detail-error"]')?.textContent || '',
           };
         });
-        // The rows that explain a silence: a compaction, a retry, a model
-        // switch. `done` is what separates one still happening from one that
-        // settled, which is the whole point of drawing them.
         const notices = Array.from(root.querySelectorAll('.conversation-notice')).map((node) => {
           const element = node as HTMLElement;
           return {
@@ -3522,33 +3235,19 @@ export function useUiAutomationBridge({
           tools,
           notices,
           queued,
-          // The host holds conversation older than what is drawn. Present only
-          // then; a scenario clicks it and asserts the transcript grew upwards.
           loadEarlierAvailable: Boolean(earlier),
           loadingHistory: Boolean(earlier instanceof HTMLButtonElement && earlier.disabled),
-          // How much of the conversation the host's retention budget dropped for
-          // good. 0 when nothing is gone, which is every ordinary session — the
-          // row it reads from appears only once there is also nothing left to
-          // page, so this is the whole of "the transcript starts above here".
           historyDropped: Number(
             root.querySelector('[data-testid="conversation-history-dropped"]')?.getAttribute('data-dropped') || 0,
           ),
-          // What the agent runs on now, and what this machine could switch it
-          // to. Empty when the host said nothing about models.
           model: model?.value || '',
           models: model ? Array.from(model.options).flatMap((option) => (option.value ? [option.value] : [])) : [],
-          // Present only while something is queued: the way out of the queue.
           queueClearAvailable: Boolean(root.querySelector('[data-testid="conversation-queue-clear"]')),
           inputDisabled: Boolean(textarea?.disabled),
           placeholder: textarea?.placeholder || '',
           draft: textarea?.value || '',
-          // "Send" or "Steer": which of the two a plain Enter would do.
           sendLabel: send?.textContent || '',
           followUpAvailable: Boolean(root.querySelector('[data-testid="conversation-follow-up"]')),
-          // The host is gone and the conversation is waiting in its session
-          // file. Present only then, and it carries its own way back — a
-          // revive scenario asserts the banner, clicks it, and asserts the
-          // transcript that comes back.
           recoverable: Boolean(root.querySelector('[data-testid="conversation-recoverable"]')),
           reloadAvailable: Boolean(root.querySelector('[data-testid="conversation-reload"]')),
         };
@@ -3557,8 +3256,6 @@ export function useUiAutomationBridge({
         return collectGardenUiState();
       case 'garden_board_get_state':
         return collectGardenBoardUiState();
-      // The way across the two frames, through the control the reader presses.
-      // It toggles: from the dock it promotes, from the window it returns.
       case 'garden_toggle_frame': {
         const control = frontGardenPanel()?.querySelector('.garden-chrome__frame');
         if (!(control instanceof HTMLElement)) {
@@ -3569,8 +3266,6 @@ export function useUiAutomationBridge({
         await gardenFrameAtRest();
         return collectGardenUiState();
       }
-      // Opening a seed IS the drill — one target per row, whether the seed has
-      // a plot under it or not.
       case 'garden_open_plot':
       case 'garden_open_seed': {
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
@@ -3583,9 +3278,6 @@ export function useUiAutomationBridge({
         await settleUi(3);
         return collectGardenUiState();
       }
-      // Typing into the search line, through the field the reader types into:
-      // the query is the panel's only filter state, so a scenario that sets it
-      // has set every filter there is.
       case 'garden_search': {
         const query = typeof payload.query === 'string' ? payload.query : null;
         if (query === null) throw new Error('garden_search requires query');
@@ -3598,8 +3290,6 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return collectGardenUiState();
       }
-      // The keyboard paths that have no pointer equivalent: walking the answers,
-      // widening the scope, and clearing the query.
       case 'garden_search_key': {
         const key = typeof payload.key === 'string' ? payload.key : null;
         if (!key) throw new Error('garden_search_key requires key');
@@ -3642,8 +3332,6 @@ export function useUiAutomationBridge({
       }
       case 'garden_seed_page':
         return collectGardenSeedPage();
-      // A real key at whatever holds focus, so the keyboard design is driven the
-      // way a reader drives it (no HID takeover).
       case 'garden_press': {
         const key = typeof payload.key === 'string' ? payload.key : '';
         if (!key) throw new Error('garden_press requires key');
@@ -3659,10 +3347,7 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return collectGardenUiState();
       }
-      // scroll the place the reader is standing in.
       case 'garden_scroll': {
-        // `column` names a list level by its data-column key; without it the
-        // reader's own viewport is the target, in either renderer.
         const column = typeof payload.column === 'string' ? payload.column : '';
         const panel = frontGardenPanel();
         const viewport = column
@@ -3696,9 +3381,6 @@ export function useUiAutomationBridge({
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         return collectSeedDocumentState(scope, seedId);
       }
-      // Automations panel (profile-level). Mutations drive the real rendered
-      // controls (checkbox/button clicks), same convention as the garden_*
-      // verbs above; automations_get_state is the read-only DOM snapshot.
       case 'automations_open_panel': {
         if (!openAutomationsPanel) {
           throw new Error('automations_open_panel is not configured');
@@ -3736,9 +3418,6 @@ export function useUiAutomationBridge({
         await settleUi(3);
         return collectAutomationsUiState();
       }
-      // Structured automation form. getState reads live component state
-      // through the registered handle rather than scraping the DOM — see
-      // collectAutomationFormUiState above for why.
       case 'automation_form_open': {
         const definitionId = typeof payload.definitionId === 'string' ? payload.definitionId : '';
         clickTestId(definitionId ? `automation-edit-${definitionId}` : 'automation-new');
@@ -3792,12 +3471,8 @@ export function useUiAutomationBridge({
         return collectAutomationFormUiState();
       }
       case 'click_nudge_trigger': {
-        // The "deliver now" trigger renders only in NudgeIndicator's paused mode
-        // (the session is selected, has unread ticket activity, and is not stopped at
-        // an approval prompt — the deliver-on-demand chip shows in every other state).
-        // The pane-header chip button and the sidebar-row button both issue the same
-        // trigger_nudge command; prefer the header button, fall back to the sidebar.
-        // 'tile' is accepted as a legacy alias for the header surface.
+        // The deliver-now trigger renders only in NudgeIndicator's paused mode. The header chip and
+        // the sidebar button issue the same trigger_nudge; 'tile' is a legacy alias for the header.
         const requested = typeof payload.surface === 'string' ? payload.surface : 'any';
         const header = document.querySelector('.nudge-header-trigger');
         const sidebar = document.querySelector('[aria-label="Deliver the pending ticket nudge now"]');
@@ -3900,8 +3575,6 @@ export function useUiAutomationBridge({
         );
 
         if (benchmarkPayload === 'progress') {
-          // The shell's own prompt can move the cursor or erase rows right
-          // after the seed, so let it finish before building the fixture.
           await waitForPaneWriteQuiescence(() => paneTerminalPerf()?.writeParsedCount ?? null);
           await drainSessionPaneTerminal(sessionId, paneId);
           await settleUi(2);
@@ -3917,10 +3590,8 @@ export function useUiAutomationBridge({
           if (!(await drainSessionPaneTerminal(sessionId, paneId))) {
             throw new Error(`Failed to drain progress fixture in pane ${paneId}`);
           }
-          // Output paints are paced at 30 Hz, so the seed is written but not
-          // necessarily painted yet. Wait for a paint that actually covers it
-          // rather than for a fixed interval, or the measured writes overwrite
-          // a fixture whose dense surface never rendered.
+          // Output paints are paced at 30 Hz: wait for a paint that actually covers the seed, or the
+          // measured writes overwrite a fixture whose dense surface never rendered.
           await waitForSeededPaint(paneTerminalPerf, beforeSeed.renderCount);
           await settleUi(2);
         }
@@ -4128,11 +3799,8 @@ export function useUiAutomationBridge({
   handleAutomationRequestRef.current = handleAutomationRequest;
 
   useEffect(() => {
-    // Gate flipped from compile-time `VITE_UI_AUTOMATION` to a runtime
-    // global injected by the Rust shell (`append_invoke_initialization_script`).
-    // The Rust-side decision lives in `app/src-tauri/src/profile.rs::automation_enabled`
-    // and applies the same rule as the workspace UI: explicit
-    // ATTN_AUTOMATION wins, otherwise dev profile defaults on.
+    // Runtime gate injected by the Rust shell; the rule lives in
+    // app/src-tauri/src/profile.rs::automation_enabled.
     const automationEnabled =
       typeof window !== 'undefined' && (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
     if (!isTauri() || !automationEnabled) {
@@ -4142,12 +3810,8 @@ export function useUiAutomationBridge({
     void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
     const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
       const request = event.payload;
-      // The Rust automation server (ui_automation.rs) broadcasts every request
-      // to ALL webview windows and resolves on the FIRST response with a
-      // matching request_id — so exactly one listener must answer any given
-      // request. present_window_* actions belong to the present window's OWN
-      // bridge (usePresentAutomationBridge); ignore them here without
-      // emitting a response so that bridge's answer is the only one.
+      // The automation server broadcasts to ALL webview windows and resolves on the first response,
+      // so exactly one listener answers; present_window_* belongs to usePresentAutomationBridge.
       if (isPresentWindowAction(request.action)) {
         return;
       }

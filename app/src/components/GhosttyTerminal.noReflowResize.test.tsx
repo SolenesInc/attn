@@ -1,14 +1,5 @@
-// Every resize of the local model takes the no-reflow path.
-//
-// `resizeLocal` is where the daemon's `pty_resized` echo lands, and a non-owner
-// client (a hub mirror, a second window) reaches the model through nothing else.
-// The worker resizes its authoritative terminal without reflow, and so do fit
-// and historical replay — so a client that re-wrapped its history here would
-// hold a different frame from the worker whose rows every placement and block on
-// the wire is numbered in.
-//
-// This fails if the live branch goes back to a plain `terminal.resize(...)`: the
-// mode-7 dance disappears from the model's op log.
+// A client that re-wrapped its history would hold a different frame from the worker whose
+// rows every placement is numbered in. Fails if the branch goes back to `terminal.resize`.
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -35,7 +26,7 @@ const mocks = vi.hoisted(() => {
         terminal.rows = rows;
         terminal.ops.push({ kind: 'resize', cols, rows });
       },
-      // DEC mode 7. The no-reflow recipe reads it and only dances when it is on.
+      // DEC mode 7 (autowrap).
       getMode: (mode: number) => (mode === 7 ? control.wraparound : false),
       getScrollbackLength: () => 0,
       getViewport: () => [],
@@ -97,8 +88,6 @@ vi.mock('../utils/terminalPerf', () => ({ registerTerminalPerfGetter: () => () =
 
 import { GhosttyTerminal, type GhosttyTerminalHandle } from './GhosttyTerminal';
 
-// This suite drives resizes through the observer itself, so it installs one it
-// can hold a handle on rather than using the inert class from setup.ts.
 beforeEach(() => {
   globalThis.ResizeObserver = class {
     observe() {}
@@ -107,8 +96,6 @@ beforeEach(() => {
   } as unknown as typeof ResizeObserver;
 });
 
-// Mounts one pane and hands back its model with the mount-time writes (the
-// grapheme-cluster mode set) cleared, so the op log holds only the resize.
 async function mountTerminal(): Promise<{
   handle: GhosttyTerminalHandle;
   model: { ops: ModelOp[] };

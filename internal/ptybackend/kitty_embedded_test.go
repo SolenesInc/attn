@@ -2,11 +2,6 @@
 
 package ptybackend
 
-// The embedded backend hosts the same pty.Session the worker does, so it owes
-// its clients the same description. A placement pipeline that only exists on
-// the worker path is the classic "works where I tested it" defect: the daemon
-// picks its backend at runtime.
-
 import (
 	"context"
 	"testing"

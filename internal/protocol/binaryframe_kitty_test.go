@@ -5,11 +5,8 @@ import (
 	"testing"
 )
 
-// A kitty image frame is a header followed by raw pixels with no length prefix
-// and no self-describing structure: everything after the header IS the image.
-// So every field boundary in the header has to be exactly where the decoder
-// thinks it is — an off-by-one there does not fail, it hands the client the
-// right pixels with the wrong stride, which renders as plausible garbage.
+// A kitty image frame is a header followed by raw pixels with no length prefix: an off-by-one
+// in a field boundary hands the client the right pixels with the wrong stride.
 func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 	pixels := []byte{0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x7f, 0x80}
 	layouts := map[byte]string{
@@ -83,13 +80,9 @@ func TestEncodeKittyImageFrameRejectsUnservableFrames(t *testing.T) {
 	if _, err := EncodeKittyImageFrame(string(bytes.Repeat([]byte("x"), 256)), 1, 1, 1, 1, KittyImageFormatCodeRGB, []byte{0}); err == nil {
 		t.Error("encoding a 256-byte session id succeeded, want an error")
 	}
-	// A layout the protocol has no name for would reach the client as pixels
-	// with an unknowable stride, so it never leaves the daemon.
 	if _, err := EncodeKittyImageFrame("sess-1", 1, 1, 1, 1, 9, []byte{0}); err == nil {
 		t.Error("encoding an unknown format code succeeded, want an error")
 	}
-	// A header with nothing behind it sizes a texture the client then has
-	// nothing to fill.
 	if _, err := EncodeKittyImageFrame("sess-1", 1, 1, 4, 4, KittyImageFormatCodeRGB, nil); err == nil {
 		t.Error("encoding a pixel-less image succeeded, want an error")
 	}
@@ -131,8 +124,8 @@ func TestDecodeKittyImageFrameRejectsMalformedFrames(t *testing.T) {
 		}
 	}
 
-	// The other direction too: the type byte is the only thing separating a
-	// multi-megabyte blob from terminal bytes about to be written to a screen.
+	// The type byte is the only thing separating a multi-megabyte blob from
+	// terminal bytes about to be written to a screen.
 	if _, _, _, err := DecodePtyOutputFrame(good); err == nil {
 		t.Error("pty output decoder accepted a kitty image frame, want a rejection")
 	}

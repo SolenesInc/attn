@@ -1,9 +1,3 @@
-/**
- * createAnchor — build an AnchorRecord from a range in a block's rendered
- * text. Pure; the DOM-selection → (blockId, start, end) mapping is the UI
- * layer's job (PR5).
- */
-
 import { extractBlockTexts, ownerBlockFor } from './extractBlocks';
 import { fnv1a32 } from './hash';
 import type { AnchorRecord, BlockText } from './types';
@@ -11,11 +5,8 @@ import type { AnchorRecord, BlockText } from './types';
 /** Context window size for prefix/suffix (chars of rendered text). */
 export const CONTEXT_CHARS = 32;
 
-/**
- * Build a record from already-extracted blocks. Internal building block for
- * `createAnchor` and rebase re-baselining (which must not fuzz-compound:
- * every rebased record is rebuilt from scratch against the new content).
- */
+/** Rebase re-baselining must not fuzz-compound: every rebased record is rebuilt
+ * from scratch against the new content. */
 export function buildAnchor(
   blocks: BlockText[],
   contentHash: string,
@@ -52,18 +43,8 @@ export function buildAnchor(
   };
 }
 
-/**
- * Create an anchor for `[start, end)` of `blockId`'s rendered text in
- * `content`. Returns null when the block doesn't exist, the range is out of
- * bounds, or the slice is empty/whitespace-only. The owning block is the
- * deepest stamped element containing the range (a range given against a `ul`
- * but contained in one `li` is re-attributed to the `li`); a range that only
- * exists spanning two sibling stamped blocks cannot be expressed and yields
- * null by the bounds check (single-block contract).
- *
- * `blocks` (optional) must be `extractBlockTexts(content)` — pass it when the
- * caller already ran the pipeline for this content.
- */
+/** Null when the block is missing, the range is out of bounds or empty, or it
+ * spans two sibling blocks. `blocks` must be `extractBlockTexts(content)`. */
 export function createAnchor(
   content: string,
   blockId: string,

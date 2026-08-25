@@ -1,12 +1,5 @@
-/**
- * FrontmatterCard Test Harness
- *
- * Renders the live-preview editor over a note that opens with a YAML frontmatter
- * block, so the in-editor frontmatter card (stage 4b) can be exercised in a real
- * browser — the card is a CodeMirror block widget and CM can't mount under happy-dom.
- * The current value is recorded on every change so the raw-reveal round-trip is
- * observable. ?empty=1 starts with a note that has frontmatter but no body.
- */
+// Renders the live-preview editor over a note with YAML frontmatter: the card is a
+// CodeMirror block widget and CM can't mount under happy-dom. ?empty=1 omits the body.
 import { useCallback, useEffect, useState } from 'react';
 import '../../src/App.css';
 import '../../src/components/NotebookBrowser.css';

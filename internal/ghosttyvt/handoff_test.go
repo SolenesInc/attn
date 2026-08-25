@@ -8,11 +8,8 @@ import (
 	"testing"
 )
 
-// A worker hands its screen to its replacement as plain VT because that is the
-// one currency a different libghostty-vt still reads. These pin what the dump
-// carries, what it drops, and the one correction it needs on top of the
-// upstream formatter. Receipts, including the cross-version run:
-// docs/plans/2026-08-22-worker-inplace-upgrade.md.
+// A worker hands its screen to its replacement as plain VT because that is the one currency
+// a different libghostty-vt still reads.
 
 func handoffInto(t *testing.T, source *Terminal) *Terminal {
 	t.Helper()
@@ -72,9 +69,6 @@ func writeLines(term *Terminal, n int) {
 }
 
 func TestHandoffVTReplaysTheScreen(t *testing.T) {
-	// Grid shapes a session actually reaches, plus the ones that broke an
-	// earlier cursor-based correction: a screen that has not scrolled yet, one
-	// scrolled by exactly one row, and a cursor parked above the content.
 	cases := []struct {
 		name  string
 		write func(*Terminal)
@@ -123,20 +117,14 @@ func TestHandoffVTReplaysTheScreen(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			source := newT(t, 80, 24)
 			tc.write(source)
-			// Read the source's state before HandoffVT consumes it; for a
-			// primary-screen session it changes nothing, but the assertions
-			// must not depend on that.
 			assertSameScreen(t, source, handoffInto(t, source))
 		})
 	}
 }
 
 func TestHandoffVTPutsTheCursorBelowTheLastLine(t *testing.T) {
-	// The upstream formatter stops at the last non-blank row, so a replay of
-	// its output alone leaves the cursor ON the last line instead of below it,
-	// and the child's next line overwrites one it already printed. This is the
-	// bug the row-deficit correction exists for: remove the correction and
-	// this fails.
+	// The upstream formatter stops at the last non-blank row, so replaying its output alone
+	// leaves the cursor ON the last line. Remove the row-deficit correction and this fails.
 	source := newT(t, 80, 24)
 	writeLines(source, 60)
 
@@ -166,8 +154,6 @@ func TestHandoffVTCarriesThePrimaryScreenUnderAnAltScreenApp(t *testing.T) {
 		t.Errorf("alternate screen lost: %q", got)
 	}
 
-	// HandoffVT already dropped the source to the primary screen to reach it,
-	// which is what makes it destructive. Drop the replay too and compare.
 	replayed.Write([]byte("\x1b[?1049l"))
 	assertSameScreen(t, source, replayed)
 	if got := replayed.ViewportText(); !strings.Contains(got, "shell history that must survive") {
@@ -176,9 +162,6 @@ func TestHandoffVTCarriesThePrimaryScreenUnderAnAltScreenApp(t *testing.T) {
 }
 
 func TestHandoffVTDropsKittyImages(t *testing.T) {
-	// A known, deliberate loss: the dump has no image data, and an image
-	// scrolled into history has no cell left to be placed at. The user sees a
-	// blank where an image was until the program redraws.
 	source := newKittyT(t, 80, 24, 64<<20)
 	source.Write([]byte("\x1b_Ga=T,i=32,f=24,s=1,v=1;/wAA\x1b\\"))
 	if len(source.KittyPlacements()) != 1 {
@@ -190,11 +173,6 @@ func TestHandoffVTDropsKittyImages(t *testing.T) {
 }
 
 func TestHandoffVTKeepsItsShortfallInsideAScrollingRegion(t *testing.T) {
-	// The documented limit: the correction's line feeds land outside the
-	// scrolling region and scroll nothing, so a scrolled screen that also has
-	// a region set and a blank bottom row stays one row short. Programs that
-	// set a region keep the screen full, so a real session does not reach it.
-	// Pinned so a future fix shows up here as a failure rather than a surprise.
 	source := newT(t, 80, 24)
 	writeLines(source, 30)
 	source.Write([]byte("\x1b[5;20r"))

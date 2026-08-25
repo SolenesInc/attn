@@ -10,15 +10,6 @@ import {
   type SnapshotToolItem,
 } from "../host/envelope";
 
-/**
- * Slice 4: dying and coming back.
- *
- * Two halves are tested here, and they are the two halves the acceptance rests
- * on. `reconstructTranscript` is what makes a revived conversation show its
- * history — including the tool cards and the output behind them — and
- * `TranscriptStore` is what makes a snapshot served to an attaching client agree
- * with what a client that watched the whole stream is holding.
- */
 
 function userEntry(id: string, text: string): SessionEntryLike {
   return { type: "message", id, message: { role: "user", content: [{ type: "text", text }] } };
@@ -75,8 +66,8 @@ describe("reconstructTranscript", () => {
       "tool:read",
       "assistant:It is a main package.",
     ]);
-    // Namespaced so a revived host minting m1 for its next reply cannot collide
-    // with a message that came off disk.
+    // Namespaced so a revived host minting m1 cannot collide with a message
+    // that came off disk.
     expect(items[0]!.kind === "message" && items[0]!.id).toBe("h:e1");
   });
 
@@ -100,8 +91,6 @@ describe("reconstructTranscript", () => {
       truncated: true,
       full_output: true,
     });
-    // The output comes back with the card, so an expand on a revived session
-    // answers from memory exactly as it did before the crash.
     expect(details.get("c1")).toEqual({
       text: "applied",
       patch: "--- a\n+++ b\n",
@@ -173,8 +162,6 @@ describe("launchPromptIsUndelivered", () => {
   const brief = "Fix the flaky test and report on the ticket.";
 
   test("a host that reopened nothing still owes the launch its brief", () => {
-    // The zero-file early crash: killed before pi's first assistant message, so
-    // the replacement opens a session that never heard the brief.
     expect(launchPromptIsUndelivered(brief, [], false)).toBe(true);
   });
 
@@ -184,17 +171,12 @@ describe("launchPromptIsUndelivered", () => {
   });
 
   test("an interrupted conversation already carries the brief, so it is not re-sent", () => {
-    // The prompt was persisted and the answer was not. Re-sending would make the
-    // agent do the work twice; this reopens as `waiting_input` instead.
     const { items } = reconstructTranscript([userEntry("e1", brief)]);
     expect(conversationInterrupted(items)).toBe(true);
     expect(launchPromptIsUndelivered(brief, items, false)).toBe(false);
   });
 
   test("a conversation holding only notices has still not been told anything", () => {
-    // Notices are minted for what happened TO a conversation, and pi writes one
-    // kind of them before the first word is said. Counting a row nobody spoke as
-    // delivery is how a delegation launches with its brief silently swallowed.
     const { items } = reconstructTranscript([
       { type: "compaction", id: "e1", tokensBefore: 120_000 } as unknown as SessionEntryLike,
     ]);
@@ -204,9 +186,6 @@ describe("launchPromptIsUndelivered", () => {
   });
 
   test("a forked conversation is owed the brief however much history came with it", () => {
-    // The history was earned by the conversation this session was picked up
-    // from. This session has never been told what it is for, and skipping the
-    // brief would leave a delegation staring at somebody else's work.
     const { items } = reconstructTranscript([userEntry("e1", "Something else entirely."), assistantEntry("e2", "Done.")]);
     expect(launchPromptIsUndelivered(brief, items, false)).toBe(false);
     expect(launchPromptIsUndelivered(brief, items, true)).toBe(true);
@@ -289,8 +268,6 @@ describe("TranscriptStore", () => {
     expect(ids(snapshot.items)).toEqual(["m3", "m4", "m5"]);
     expect(snapshot.total).toBe(5);
     expect(snapshot.truncated).toBe(true);
-    // The window clipped them; retention did not. The difference is what scroll
-    // -back exists to serve.
     expect(snapshot.has_more).toBe(true);
     expect(snapshot.epoch).toBe("e1");
   });
@@ -300,8 +277,6 @@ describe("TranscriptStore", () => {
     store.apply("message_end", { id: "m1", role: "assistant", text: "x".repeat(80) });
     store.apply("message_end", { id: "m2", role: "assistant", text: "y".repeat(80) });
     const snapshot = store.snapshot();
-    // The newest item always travels, even alone over budget: a snapshot with
-    // nothing in it would be worse than one that names what it clipped.
     expect(snapshot.items).toHaveLength(1);
     expect(snapshot.truncated).toBe(true);
     expect(snapshot.has_more).toBe(true);
@@ -314,8 +289,6 @@ describe("TranscriptStore", () => {
     }
     const snapshot = store.snapshot();
     expect(snapshot.total).toBe(5);
-    // Four retained, three windowed: one page of scroll-back is left and the
-    // fifth item is gone for good.
     expect(snapshot.truncated).toBe(true);
     expect(snapshot.has_more).toBe(true);
     expect(ids(store.page("message:m3").items)).toEqual(["m2"]);

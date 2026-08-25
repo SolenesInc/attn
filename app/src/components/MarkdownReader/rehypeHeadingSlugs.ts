@@ -1,16 +1,5 @@
-/**
- * rehypeHeadingSlugs — stamps GitHub-style slug ids on h1–h6.
- *
- * Runs AFTER sanitize (author HTML can't forge unprefixed ids — sanitize
- * clobbers incoming ids with `user-content-`) and BEFORE rehypeProseTransforms.
- * The ordering is load-bearing: slugs must come from the PRE-transform text,
- * because emoji shortcodes delete letters (`## Deploy :rocket:` must keep the
- * id `deploy-rocket` that GitHub tooling and doc authors link against, not
- * `deploy` computed from the rendered 🚀).
- *
- * A fresh slugger per tree run keeps the per-document dedup contract
- * (`-1`, `-2`, … suffixes) that the React renderers previously provided.
- */
+// Runs AFTER sanitize and BEFORE rehypeProseTransforms: slugs must come from the
+// pre-transform text, or `## Deploy :rocket:` loses the id `deploy-rocket`.
 
 import type { Element, Root, RootContent } from 'hast';
 import { createSlugger } from './slugify';

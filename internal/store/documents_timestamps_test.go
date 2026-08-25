@@ -9,17 +9,9 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// created_at and updated_at are TEXT columns, so every sort and every
-// "changed since" filter on them is a text comparison and the stored encoding
-// is the whole definition of "before". Documents written a second apart cannot
-// tell a working encoding from a broken one: the part that has to be right is
-// what happens inside one second, which is also where bursty writes land.
-//
-// These tests write four documents inside one second, at offsets whose
-// trailing-zero-stripped encodings sort in an order that is not their own.
+// created_at and updated_at are TEXT columns, so every sort and every "changed
+// since" filter on them is a text comparison.
 
-// raggedSeconds are ids in chronological order with the sub-second offsets that
-// separate them, all within the same second.
 var raggedSeconds = []struct {
 	id     string
 	offset time.Duration
@@ -30,8 +22,6 @@ var raggedSeconds = []struct {
 	{"t5", 500 * time.Millisecond},
 }
 
-// storeWithRaggedStamps writes the four documents and returns the store, the
-// declaration, and the instant the first was written at.
 func storeWithRaggedStamps(t *testing.T) (*Store, docstore.CollectionSchema, time.Time) {
 	t.Helper()
 	s := New()
@@ -85,8 +75,6 @@ func stampQuery(sort *docstore.Sort, filters ...docstore.Filter) docstore.Query 
 	}
 }
 
-// Sorting on a stamp orders by time, not by the shape of the text it is stored
-// as. This is the assertion the whole encoding exists to satisfy.
 func TestSortingOnAStampOrdersDocumentsByWhenTheyWereWritten(t *testing.T) {
 	s, _, _ := storeWithRaggedStamps(t)
 
@@ -107,11 +95,6 @@ func TestSortingOnAStampOrdersDocumentsByWhenTheyWereWritten(t *testing.T) {
 	}
 }
 
-// "Everything changed since X" is one of the two things the reserved stamps are
-// for. A bound on the second boundary is the ordinary case — it is what a caller
-// writes by hand and what a whole-second clock produces — and it used to sort
-// above every stamp inside that second, so a sweep found one document out of
-// four and said nothing.
 func TestAChangedSinceFilterFindsEverythingChangedSince(t *testing.T) {
 	s, _, base := storeWithRaggedStamps(t)
 
@@ -126,7 +109,6 @@ func TestAChangedSinceFilterFindsEverythingChangedSince(t *testing.T) {
 		t.Fatalf("updated_at >= the second boundary gave %v, want every document: %v", got, want)
 	}
 
-	// Strictly after the first document's stamp excludes it and nothing else.
 	got, err = readIDs(t, s, stampQuery(
 		&docstore.Sort{Field: docstore.FieldUpdatedAt},
 		docstore.Filter{Field: docstore.FieldUpdatedAt, Op: docstore.OpGt, Value: base},
@@ -139,9 +121,6 @@ func TestAChangedSinceFilterFindsEverythingChangedSince(t *testing.T) {
 	}
 }
 
-// The canonical way to resume a sweep is to take the last document's stamp off
-// the wire and use it as the next bound. That is a round trip through the stored
-// encoding and back, so it only works if a bound and a stamp mean the same thing.
 func TestASweepResumesFromTheStampItWasHandedBack(t *testing.T) {
 	s, _, _ := storeWithRaggedStamps(t)
 
@@ -164,8 +143,6 @@ func TestASweepResumesFromTheStampItWasHandedBack(t *testing.T) {
 	}
 }
 
-// A caller writing a bound by hand does not know the stored encoding and should
-// not have to: every RFC3339 spelling of one instant is the same bound.
 func TestABoundMeansTheSameInEveryRFC3339Spelling(t *testing.T) {
 	s, _, _ := storeWithRaggedStamps(t)
 
@@ -196,8 +173,6 @@ func TestABoundMeansTheSameInEveryRFC3339Spelling(t *testing.T) {
 	}
 }
 
-// A stamp that is not a timestamp is a caller mistake that used to compare as
-// text against every stored stamp, matching whatever happened to sort under it.
 func TestAStampFilterRefusesAValueThatIsNotATimestamp(t *testing.T) {
 	s, _, _ := storeWithRaggedStamps(t)
 
@@ -208,10 +183,6 @@ func TestAStampFilterRefusesAValueThatIsNotATimestamp(t *testing.T) {
 	}
 }
 
-// Migration 91 rewrites what earlier versions stored. Its input is the encoding
-// they wrote, so the test writes that encoding rather than describing it: the
-// stamps go in the way an older store would have written them, the migration
-// runs, and the sort that was scrambled comes back in order.
 func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -231,9 +202,6 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		}
 	}
 
-	// Roll the stamps back to the encoding migration 91 exists to replace, and
-	// plant one value it cannot read, which it must leave alone rather than
-	// turn into year 1.
 	table := docstore.TableName(collectionID(t, s, "app/approval-gate", "requests"))
 	for _, r := range raggedSeconds {
 		old := base.Add(r.offset).Format(time.RFC3339Nano)
@@ -249,8 +217,6 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("unrecord migration 91: %v", err)
 	}
 
-	// Sanity: the planted state is the broken one, so a pass here would mean the
-	// test proves nothing.
 	if got, err := readIDs(t, s, stampQuery(&docstore.Sort{Field: docstore.FieldCreatedAt})); err != nil {
 		t.Fatal(err)
 	} else if sameOrder(got, chronological()) {
@@ -269,8 +235,6 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 		t.Fatalf("after migration 91 the stamps sort as %v, want %v", got, want)
 	}
 
-	// Re-running finds nothing left to do and changes nothing: the rewrite is a
-	// decode and re-encode, so an already-converted stamp yields itself.
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 91`); err != nil {
 		t.Fatalf("unrecord migration 91 again: %v", err)
 	}

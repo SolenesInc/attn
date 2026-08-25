@@ -10,34 +10,21 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-// Per-session trace ring recording every state observation — applied, vetoed,
-// store-discarded, or skipped. Nothing here arbitrates: no function in this
-// file can change a session's state.
-
-// Source names for non-PTY state evidence, named after the mechanism rather
-// than the state it reports.
 const (
-	stateSourceHook         = "hook_state"
-	stateSourceStopHook     = "hook_stop"
-	stateSourceClassifier   = "classifier"
-	stateSourceTranscript   = "transcript_watcher"
-	stateSourcePluginDriver = "plugin_driver"
-	// Reports a notification_type, not a state.
-	stateSourceHookNotify = "hook_notify"
-	// Claude's StopFailure hook (turn ended on an API error); reports an error_type.
+	stateSourceHook            = "hook_state"
+	stateSourceStopHook        = "hook_stop"
+	stateSourceClassifier      = "classifier"
+	stateSourceTranscript      = "transcript_watcher"
+	stateSourcePluginDriver    = "plugin_driver"
+	stateSourceHookNotify      = "hook_notify"
 	stateSourceHookStopFailure = "hook_stop_failure"
 	stateSourceHookCompaction  = "hook_compaction"
-	// The agent's resolved permission mode — who answers an approval request.
-	stateSourceReviewer = "reviewer"
-	stateSourceResolver = "resolver"
+	stateSourceReviewer        = "reviewer"
+	stateSourceResolver        = "resolver"
 )
 
-// stateTraceRecordGateHook runs inside the recorder's lock, between the liveness
-// check and the write. Tests only: the seam a concurrent removal must hit.
 var stateTraceRecordGateHook func(sessionID string)
 
-// stateTraceRecorder returns the daemon's trace ring, building it on first use
-// so a directly-constructed test daemon traces without a dedicated init site.
 func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
 	d.stateTraceOnce.Do(func() {
 		d.stateTrace = statetrace.New(statetrace.DefaultCapacity)
@@ -45,9 +32,8 @@ func (d *Daemon) stateTraceRecorder() *statetrace.Recorder {
 	return d.stateTrace
 }
 
-// recordStateObservation is the single write path into the trace. An observation
-// for a session with no store row is logged, never ringed — it would leak one
-// map entry per stale id.
+// The single write path into the trace. An observation for a session with no
+// store row is logged, never ringed: it would leak a map entry per stale id.
 func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observation) {
 	if strings.TrimSpace(sessionID) == "" {
 		return
@@ -70,7 +56,6 @@ func (d *Daemon) recordStateObservation(sessionID string, obs statetrace.Observa
 	d.logf("%s", obs.LogLine(sessionID))
 }
 
-// traceStateChange records the fate of a change that reached applyState.
 func (d *Daemon) traceStateChange(change sessionStateChange, outcome statetrace.Outcome, reason string) {
 	source := change.origin.source
 	if source == "" {
@@ -87,8 +72,6 @@ func (d *Daemon) traceStateChange(change sessionStateChange, outcome statetrace.
 	})
 }
 
-// traceStateVeto records an observation rejected before it reached applyState —
-// the ones no other log line mentions at all.
 func (d *Daemon) traceStateVeto(sessionID string, origin stateOrigin, claim, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:     origin.source,
@@ -100,8 +83,6 @@ func (d *Daemon) traceStateVeto(sessionID string, origin stateOrigin, claim, rea
 	})
 }
 
-// traceStateEvidence records an observation whose source does not drive session
-// state; it never reaches applyState.
 func (d *Daemon) traceStateEvidence(sessionID string, origin stateOrigin, claim string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:     origin.source,
@@ -112,8 +93,6 @@ func (d *Daemon) traceStateEvidence(sessionID string, origin stateOrigin, claim 
 	})
 }
 
-// traceStateSkip records a source that looked and reported no claim — only the
-// trace separates "ran and had nothing to add" from "never ran".
 func (d *Daemon) traceStateSkip(sessionID, source, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
 		Source:  source,
@@ -122,7 +101,6 @@ func (d *Daemon) traceStateSkip(sessionID, source, reason string) {
 	})
 }
 
-// forgetStateTrace drops a session's ring when the session goes away.
 func (d *Daemon) forgetStateTrace(sessionID string) {
 	d.stateTraceRecorder().Forget(sessionID)
 }
@@ -139,7 +117,6 @@ func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMes
 	})
 }
 
-// stateExplainResult renders the current trace for one session.
 func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateExplainResult {
 	recorded := d.stateTraceRecorder().Observations(session.ID)
 	observations := make([]protocol.StateExplainEntry, 0, len(recorded))
@@ -198,8 +175,6 @@ func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotific
 	d.sendOK(conn)
 }
 
-// handleHookStopFailure records Claude's StopFailure hook (replaces Stop on an
-// API error); no end-of-turn work applies — there is no finished turn.
 func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFailureMessage) {
 	errorType := strings.TrimSpace(msg.ErrorType)
 	if errorType == "" {
@@ -215,7 +190,6 @@ func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFail
 	d.sendOK(conn)
 }
 
-// handleHookCompaction records Claude's PreCompact/PostCompact pair.
 func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactionMessage) {
 	phase := "finished"
 	if msg.Active {
@@ -229,8 +203,6 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 	d.sendOK(conn)
 }
 
-// tracePermissionMode records the agent's resolved approval mode. It rides on
-// the state hook, not attn's launch flags: the mode can change mid-session.
 func (d *Daemon) tracePermissionMode(sessionID, mode string) {
 	mode = strings.TrimSpace(mode)
 	if mode == "" {

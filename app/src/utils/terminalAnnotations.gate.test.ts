@@ -26,8 +26,6 @@ const MESSAGE = 'A soft line wrap moves overflowing text onto the next visual li
   + 'width changes.';
 const ANCHOR = 'visual line without inserting a real';
 
-// A grid whose contents can be swapped underneath the store, which is how a
-// stale mapping is reproduced without waiting for one.
 class FakeGrid implements MessageRowAccess {
   rows: string[];
   colCount: number;
@@ -119,16 +117,14 @@ describe('the containment gate', () => {
     const grid = new FakeGrid(render(MESSAGE, 62));
     expect(store.project(grid)).toHaveLength(1);
 
-    // The TUI repaints the screen, but nothing tells the store: same row count,
-    // same width, no write recorded. The cached mapping is now a lie.
     grid.rows = grid.rows.map(() => '› Use /skills to list available skills');
 
     expect(store.project(grid)).toHaveLength(0);
   });
 
   it('is what refuses, not the invalidation — the mapping still resolves rows', () => {
-    // Without this, the test above would pass for the wrong reason: the aligner
-    // failing to resolve anything rather than the gate rejecting what it found.
+    // Without this, the test above passes for the wrong reason: the aligner
+    // resolving nothing rather than the gate rejecting what it found.
     const { store } = storeWithAnchor();
     const grid = new FakeGrid(render(MESSAGE, 62));
     const resolved = store.project(grid)[0].rows.map((r) => r.row);
@@ -143,7 +139,6 @@ describe('the containment gate', () => {
 
   it('still paints a wash the viewport has clipped short', () => {
     const { store } = storeWithAnchor();
-    // Only the tail of the message is on screen: the anchor's first word is gone.
     const grid = new FakeGrid(render(MESSAGE, 62).slice(1));
 
     const washes = store.project(grid);
@@ -170,10 +165,6 @@ describe('annotationAt', () => {
   });
 
   it('does not offer a wash the gate refused', () => {
-    // The affordance is derived from the same projection as the paint, so an
-    // annotation that is invisible this frame cannot be clicked either.
-    // Otherwise the user would reopen an annotation by clicking words that have
-    // nothing to do with it.
     const { store } = storeWithAnchor();
     const grid = new FakeGrid(render(MESSAGE, 62));
     const wash = store.project(grid)[0].rows[0];
@@ -213,8 +204,6 @@ describe('the search window', () => {
   });
 
   it('goes back to the whole buffer after a geometry change', () => {
-    // A span measured at the old width names rows that hold different text after
-    // a reflow. Seeding a bounded search from it finds the message shifted.
     const { store } = storeWithAnchor();
     const padding = Array.from({ length: 400 }, (_, i) => `build output line ${i}`);
     const grid = new FakeGrid([...padding, ...render(MESSAGE, 62), ...padding]);
@@ -239,8 +228,6 @@ describe('the annotatable window', () => {
   });
 
   it('keeps annotations on a past turn when a new turn arrives', () => {
-    // The bug this exists to prevent: the agent answering again used to wipe
-    // everything the user had marked on what it said before.
     const { store } = storeWithAnchor();
 
     expect(store.setMessages([
@@ -265,8 +252,6 @@ describe('the annotatable window', () => {
   });
 
   it('keeps an annotation whose message fell out of the window, unpainted', () => {
-    // Its quote is still the user's work and still belongs in the panel; what
-    // it cannot do is paint, because its text is not on this grid.
     const { store } = storeWithAnchor();
     const next = 'Something the agent said next.';
     store.setMessages([{ key: 'turn-2', markdown: next }]);
@@ -277,8 +262,6 @@ describe('the annotatable window', () => {
   });
 
   it('keeps the annotations when the terminal is reset, dropping only alignments', () => {
-    // A reset means the buffer is gone, not the user's marks: they address
-    // markdown, and re-resolve against whatever the buffer becomes.
     const { store } = storeWithAnchor();
     const grid = new FakeGrid(render(MESSAGE, 62));
     expect(store.project(grid)).toHaveLength(1);
@@ -343,8 +326,6 @@ describe('anchorForSelection', () => {
   });
 
   it('resolves a drag to whichever turn it landed on', () => {
-    // Two messages on one grid: the anchor has to name the message the words
-    // came from, or the offsets would address the wrong text entirely.
     const store = new TerminalAnnotationStore();
     const older = 'The older answer mentions a retry wrapper around the call.';
     store.setMessages([

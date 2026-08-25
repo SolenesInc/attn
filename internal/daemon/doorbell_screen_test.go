@@ -11,9 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The fixtures are real viewports captured from live claude sessions, with the
-// prose redacted and the structure left exactly as it rendered — the structure
-// is the whole of what the guard reads.
 func readDoorbellScreen(t *testing.T, name string) string {
 	t.Helper()
 	text, err := os.ReadFile(filepath.Join("testdata", "doorbell", name+".txt"))
@@ -24,12 +21,6 @@ func readDoorbellScreen(t *testing.T, name string) string {
 }
 
 func TestScreenShowsSelector(t *testing.T) {
-	// claude-question-selector is the case that motivates the guard: the
-	// question tool fires no permission hook, so the session still reads
-	// `working` while the screen waits for a keypress.
-	// claude-resume-selector says "Enter to confirm", not "to select" — it is
-	// caught on "Esc to cancel", which is why both halves of the pattern are
-	// there.
 	for _, name := range []string{"claude-question-selector", "claude-resume-selector"} {
 		line, blocked := screenShowsSelector(readDoorbellScreen(t, name))
 		if !blocked {
@@ -49,10 +40,8 @@ func TestScreenShowsSelector(t *testing.T) {
 	}
 }
 
-// The footer is read a bounded distance up the viewport, so a selector that has
-// already scrolled away does not hold a nudge off forever. Receipt for the
-// depth is in doorbell_screen.go: on the captured corpus 6, 8 and 12 lines find
-// the same screens, and 20 starts matching assistant prose.
+// Receipt for the footer depth is in doorbell_screen.go: on the captured corpus
+// 6, 8 and 12 lines find the same screens, and 20 starts matching assistant prose.
 func TestScreenShowsSelectorReadsOnlyTheFooter(t *testing.T) {
 	scrolled := "Enter to select · Esc to cancel\n" +
 		strings.Repeat("a line of ordinary output\n", doorbellScreenTailLines)
@@ -60,17 +49,12 @@ func TestScreenShowsSelectorReadsOnlyTheFooter(t *testing.T) {
 		t.Fatalf("a selector that scrolled out of the footer still blocked, on %q", line)
 	}
 
-	// Blank lines are not what pushes it out of range: a selector footer is
-	// routinely followed by them.
 	padded := "Enter to select · Esc to cancel\n\n\n\n\n\n\n\n\n\n"
 	if _, blocked := screenShowsSelector(padded); !blocked {
 		t.Fatal("blank padding hid a selector footer from the guard")
 	}
 }
 
-// Prose is where a word-based rule can go wrong, so the words were chosen to
-// not appear in one. "to confirm" is deliberately absent from the pattern for
-// exactly this reason.
 func TestScreenShowsSelectorLeavesProseAlone(t *testing.T) {
 	prose := []string{
 		"∴ Let me check the AGENTS.md rules to confirm this is a docs-only PR, then start",
@@ -90,9 +74,6 @@ func TestScreenShowsSelectorOnAnEmptyScreen(t *testing.T) {
 	}
 }
 
-// The guard where it actually runs: a doorbell must not type at a screen that
-// is waiting for a keypress, because the paste plus its Enter would answer the
-// selector instead of reaching the agent.
 func TestDoorbellHeldOffByAnOnScreenSelector(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	var typed [][]byte
@@ -112,8 +93,6 @@ func TestDoorbellHeldOffByAnOnScreenSelector(t *testing.T) {
 	if len(typed) != 0 {
 		t.Fatalf("the doorbell wrote %q at a screen waiting for a keypress", typed)
 	}
-	// Same session, same state, composer back: the guard is about the screen and
-	// nothing else, and it must not leave the nudge stuck once the selector goes.
 	backend.screen = readDoorbellScreen(t, "claude-composer-working")
 	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
 		t.Fatalf("typing at a composer failed: %v", attempt.err)

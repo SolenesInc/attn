@@ -4,7 +4,6 @@ import './TerminalContextMenu.css';
 export interface TerminalContextMenuItem {
   id: string;
   label: string;
-  // Display-only accelerator hint; the real shortcuts live on the terminal.
   shortcut?: string;
   disabled?: boolean;
   separatorBefore?: boolean;
@@ -21,7 +20,6 @@ interface TerminalContextMenuProps {
 export function TerminalContextMenu({ position, items, onSelect, onClose }: TerminalContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Keep the menu inside the frame: flip/clamp after the first layout.
   useLayoutEffect(() => {
     const menu = menuRef.current;
     const frame = menu?.offsetParent as HTMLElement | null;

@@ -9,9 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// withAgentMessageTakenWindow restores confirmation for one test; TestMain
-// zeroes it so the fake PTY, which never reports working, does not time out
-// every delivery in the package.
+// withAgentMessageTakenWindow restores confirmation for one test; TestMain zeroes it
+// so the fake PTY, which never reports working, does not time out every delivery.
 func withAgentMessageTakenWindow(t *testing.T, window time.Duration) {
 	t.Helper()
 	previous := sessionInputTakenWindow
@@ -19,10 +18,6 @@ func withAgentMessageTakenWindow(t *testing.T, window time.Duration) {
 	t.Cleanup(func() { sessionInputTakenWindow = previous })
 }
 
-// The bug this exists for: a PTY write returning proves the bytes reached the
-// terminal, not that the agent read them. A session with a modal in front of
-// its composer eats the paste while reporting the same settled title as one
-// waiting at its prompt, and the sender used to be told "delivered".
 func TestAgentMsgQueuesWhenTheTargetNeverTakesIt(t *testing.T) {
 	withAgentMessageTakenWindow(t, 50*time.Millisecond)
 	d, doorbell := newAgentMsgDaemon(t)
@@ -37,8 +32,6 @@ func TestAgentMsgQueuesWhenTheTargetNeverTakesIt(t *testing.T) {
 	if !strings.Contains(result.Detail, "did not start a turn") {
 		t.Fatalf("detail does not say what happened: %q", result.Detail)
 	}
-	// Typed once, then Enter pressed again rather than the text pasted twice: the
-	// paste may be sitting in the composer, and a second paste would double it.
 	if prompts := doorbell.pasted(); len(prompts) != 1 {
 		t.Fatalf("pasted %d times, want 1: %q", len(prompts), prompts)
 	}
@@ -52,10 +45,6 @@ func TestAgentMsgQueuesWhenTheTargetNeverTakesIt(t *testing.T) {
 	}
 }
 
-// A message typed into a composer and never taken is still sitting in it, so
-// the drain submits it rather than pasting a second copy. Repasting is how a
-// target stuck behind a dialog collects one copy per state change and then
-// reads the same message N times when it clears.
 func TestAgentMsgRedeliveryPressesEnterRatherThanRepasting(t *testing.T) {
 	withAgentMessageTakenWindow(t, 50*time.Millisecond)
 	d, doorbell := newAgentMsgDaemon(t)

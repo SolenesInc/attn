@@ -8,10 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// fprintTicketShow must never truncate a comment body — that is the whole point
-// of `ticket show` over the consuming `ticket inbox` read. This exercises a
-// long multi-line comment plus a status-transition activity line and checks
-// both render verbatim.
 func TestFprintTicketShowFullBodyNoTruncation(t *testing.T) {
 	longComment := strings.Repeat("this is a long verdict line. ", 20) + "\nsecond line\nthird line: the conclusion"
 	from := protocol.TicketStatusWorking
@@ -64,8 +60,6 @@ func TestFprintTicketShowFullBodyNoTruncation(t *testing.T) {
 	}
 }
 
-// An empty-activity ticket (freshly created, unbound) should render sanely
-// with no artifact/activity noise instead of blowing up.
 func TestFprintTicketShowEmptyActivity(t *testing.T) {
 	ticket := &protocol.Ticket{
 		ID:        "fresh-ticket",

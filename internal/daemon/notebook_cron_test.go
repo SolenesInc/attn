@@ -70,10 +70,6 @@ func TestValidateNotebookCronSettings(t *testing.T) {
 	}
 }
 
-// TestMigrateNotebookCronSettingKeys covers the one-time rename of the persisted
-// notebook.dreaming.{frequency,timezone} settings to notebook.cron.*: configured
-// legacy values are carried forward, the legacy rows are dropped, and the migration
-// is idempotent — a re-run never clobbers a value set under the new key.
 func TestMigrateNotebookCronSettingKeys(t *testing.T) {
 	t.Run("copies both legacy values forward and drops the legacy rows", func(t *testing.T) {
 		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -102,7 +98,6 @@ func TestMigrateNotebookCronSettingKeys(t *testing.T) {
 
 		d.migrateNotebookCronSettingKeys()
 
-		// User reconfigures under the new key, and (defensively) a stale legacy row reappears.
 		d.store.SetSetting(SettingNotebookCronFrequency, "30 2 * * *")
 		d.store.SetSetting(legacyNotebookDreamingFrequencyKey, "0 5 * * *")
 

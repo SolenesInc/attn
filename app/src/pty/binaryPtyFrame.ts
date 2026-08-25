@@ -1,40 +1,18 @@
-// Decoder for the daemon's binary websocket frames, sent only to clients that
-// advertised the `binary_pty_output` capability. Must stay in sync with
-// internal/protocol/binaryframe.go:
-//
-//   0x01 pty_output
-//     offset 0      frame type (1 byte)
-//     offset 1      session id length L (1 byte)
-//     offset 2      session id (L bytes, UTF-8)
-//     offset 2+L    seq (4 bytes, uint32 big-endian)
-//     offset 6+L    raw PTY bytes (rest of frame)
-//
-//   0x02 kitty_image
-//     offset 0      frame type (1 byte)
-//     offset 1      session id length L (1 byte)
-//     offset 2      session id (L bytes, UTF-8)
-//     offset 2+L    image id (4 bytes, uint32 big-endian)
-//     offset 6+L    image generation (8 bytes, uint64 big-endian)
-//     offset 14+L   width in pixels (4 bytes, uint32 big-endian)
-//     offset 18+L   height in pixels (4 bytes, uint32 big-endian)
-//     offset 22+L   pixel format (1 byte)
-//     offset 23+L   raw pixels (rest of frame)
-//
-// Allocation discipline: no envelope, no base64, one id string and a view.
+// Must stay in sync with internal/protocol/binaryframe.go.
 
 import { kittyPixelFormatFromCode, type KittyPixelFormat } from '../utils/kittyImageFormat';
 
 export const BINARY_FRAME_TYPE_PTY_OUTPUT = 0x01;
 export const BINARY_FRAME_TYPE_KITTY_IMAGE = 0x02;
 
-const PTY_HEADER_BYTES = 1 + 1 + 4; // type + id length + seq
-const KITTY_HEADER_BYTES = 1 + 1 + 4 + 8 + 4 + 4 + 1; // + image id, generation, w, h, format
+const PTY_HEADER_BYTES = 1 + 1 + 4;
+const KITTY_HEADER_BYTES = 1 + 1 + 4 + 8 + 4 + 4 + 1;
 
 export interface BinaryPtyOutputFrame {
   kind: 'pty_output';
   id: string;
   seq: number;
-  /** View into the frame's buffer — valid as long as the buffer is. */
+  /** Valid only as long as the frame's buffer is. */
   data: Uint8Array;
 }
 
@@ -46,7 +24,7 @@ export interface BinaryKittyImageFrame {
   width: number;
   height: number;
   format: KittyPixelFormat;
-  /** View into the frame's buffer — valid as long as the buffer is. */
+  /** Valid only as long as the frame's buffer is. */
   pixels: Uint8Array;
 }
 
@@ -54,8 +32,6 @@ export type BinaryFrame = BinaryPtyOutputFrame | BinaryKittyImageFrame;
 
 const utf8Decoder = new TextDecoder();
 
-/** Decode one binary websocket frame, or null (always announced) when it is
- * malformed or of an unknown type. */
 export function decodeBinaryFrame(buffer: ArrayBuffer): BinaryFrame | null {
   if (buffer.byteLength < 2) return null;
   const view = new DataView(buffer);

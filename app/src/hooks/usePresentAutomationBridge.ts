@@ -11,9 +11,8 @@ const UI_AUTOMATION_READY_EVENT = 'attn://ui-automation/ready';
 
 const PRESENT_WINDOW_ACTION_PREFIX = 'present_window_';
 
-// The request carries no window field, so action-name prefix is the only
-// routing there is: exactly one of the two bridge listeners may answer a
-// request, since Rust resolves on the first matching response.
+// The request carries no window field, so the action-name prefix is the only routing:
+// exactly one bridge listener may answer, since Rust resolves on the first response.
 export function isPresentWindowAction(action: string): boolean {
   return action.startsWith(PRESENT_WINDOW_ACTION_PREFIX);
 }
@@ -35,8 +34,6 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-// The dialog mounts on a React state update, not synchronously with the click
-// that triggers it, so it has to be waited for.
 async function waitForSubmitDialog(timeoutMs = 1_000): Promise<HTMLElement> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -47,8 +44,8 @@ async function waitForSubmitDialog(timeoutMs = 1_000): Promise<HTMLElement> {
   throw new Error('present_window_submit: submit dialog did not appear');
 }
 
-// Submit-dialog buttons are addressed by class, never by position: their order
-// is not a contract.
+// Submit-dialog buttons are addressed by class, never by position: their order is
+// not a contract.
 const SUBMIT_DIALOG_ACTION_CLASS: Record<string, string> = {
   feedback: 'present-root-submit-feedback',
   approve: 'present-root-submit-approve',
@@ -86,11 +83,6 @@ async function handlePresentWindowAction(action: string, payload?: Record<string
   }
 }
 
-/**
- * The present window's half of the UI automation bridge: same transport as
- * useUiAutomationBridge, but it answers only `present_window_*` actions and
- * stays silent on the rest, leaving those to the main window's bridge.
- */
 export function usePresentAutomationBridge(): void {
   useEffect(() => {
     const automationEnabled =
@@ -104,7 +96,6 @@ export function usePresentAutomationBridge(): void {
     const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
       const request = event.payload;
       if (!isPresentWindowAction(request.action)) {
-        // Not ours — the main window's bridge answers this one.
         return;
       }
 

@@ -14,27 +14,10 @@ import (
 	"time"
 )
 
-// blockingStub is the E5 controllable AgentStub. Unlike DefaultStub (which
-// returns instantly and therefore never actually exercises the concurrency
-// semaphore) and ScriptedStub (which gates by ordinal, in a test-chosen ORDER),
-// blockingStub holds every Run() goroutine inside the critical section — past the
-// semaphore acquire in host.go's dispatch — until the test releases it. Because
-// the engine acquires the semaphore BEFORE calling Run and releases it AFTER,
-// every goroutine parked inside Run is holding a semaphore slot. The number of
-// goroutines simultaneously inside Run is therefore the live in-flight count, and
-// its high-water-mark is the observed max concurrency.
-//
-// It records:
-//   - inFlight: goroutines currently inside Run (atomic, live).
-//   - maxInFlight: high-water-mark of inFlight (atomic).
-//   - calls: total Run invocations seen (atomic).
-//
-// resultFor must be a pure function of the prompt so replay/result assertions
-// hold; the schema is ignored (these tests do not vary by schema).
 type blockingStub struct {
 	resultFor func(prompt string) json.RawMessage
 
-	release chan struct{} // closed by the test to let every parked Run proceed
+	release chan struct{}
 
 	inFlight    atomic.Int64
 	maxInFlight atomic.Int64
@@ -51,7 +34,6 @@ func newBlockingStub(resultFor func(prompt string) json.RawMessage) *blockingStu
 func (s *blockingStub) Run(ctx context.Context, call AgentCall) (json.RawMessage, error) {
 	s.calls.Add(1)
 	cur := s.inFlight.Add(1)
-	// Raise the high-water-mark to cur (monotonic CAS loop).
 	for {
 		hw := s.maxInFlight.Load()
 		if cur <= hw || s.maxInFlight.CompareAndSwap(hw, cur) {
@@ -67,7 +49,6 @@ func (s *blockingStub) Run(ctx context.Context, call AgentCall) (json.RawMessage
 	}
 }
 
-// releaseAll lets every currently-parked and future Run proceed.
 func (s *blockingStub) releaseAll() { close(s.release) }
 
 func echoPrompt(prompt string) json.RawMessage {
@@ -75,9 +56,6 @@ func echoPrompt(prompt string) json.RawMessage {
 	return b
 }
 
-// boomOrEchoStub errors on any prompt containing "boom" (a terminal subagent
-// failure -> null slot/item; the engine never rejects) and echoes otherwise. It
-// yields so the good and bad slots truly race under concurrent dispatch.
 func boomOrEchoStub() AgentStub {
 	return StubFunc(func(call AgentCall) (json.RawMessage, error) {
 		runtime.Gosched()
@@ -88,23 +66,8 @@ func boomOrEchoStub() AgentStub {
 	})
 }
 
-// assertCapSaturatedAndBounded runs script (which must dispatch N live agents
-// concurrently, N strictly greater than cap), proves the cap is both REACHED and
-// never EXCEEDED, and returns the completed result for further assertions.
-//
-// Determinism: the run goroutine launches N agents whose Run() all park inside
-// the stub. With a cap of `cap`, the semaphore admits exactly `cap` of them; the
-// rest block on `rs.sem <- struct{}{}` and never enter Run. As each finishes it
-// frees a slot, admitting the next, so the high-water-mark can never exceed
-// `cap`. If the semaphore were broken (e.g. unbounded), inFlight would blow past
-// `cap` and maxInFlight would record it — failing the test.
-//
-// Runs in a synctest bubble: the saturation check used to poll an atomic against
-// a 5s deadline, which could only ever say "capN were in flight at some moment I
-// happened to look". synctest.Wait returns when every goroutine in the bubble is
-// durably blocked — the admitted agents parked in the stub, the rest parked on
-// the semaphore — so the reading is of a system that has finished admitting.
-// "Exactly capN, and no more are coming" is now the claim rather than the hope.
+// In a synctest bubble synctest.Wait returns when every goroutine is durably blocked, so
+// the reading is "exactly capN, and no more are coming" rather than a poll.
 func assertCapSaturatedAndBounded(t *testing.T, script string, capN, wantLive int) RunResult {
 	t.Helper()
 	var result RunResult
@@ -122,17 +85,14 @@ func assertCapSaturatedAndBounded(t *testing.T, script string, capN, wantLive in
 			done <- r
 		}()
 
-		// Dispatch has settled: exactly `capN` goroutines are inside Run.
 		synctest.Wait()
 		if got := stub.inFlight.Load(); got != int64(capN) {
-			// Release so the run goroutine can unwind before we fail.
 			stub.releaseAll()
 			<-done
 			t.Fatalf("cap never saturated: inFlight settled at %d, want %d (semaphore not admitting up to the cap?)",
 				got, capN)
 		}
 
-		// The cap is saturated. Now release everything and let the run finish.
 		stub.releaseAll()
 		r := <-done
 
@@ -161,12 +121,6 @@ func capVerdict(got, capN int64) string {
 	return "not reached (cap under-utilized)"
 }
 
-// TestParallelConcurrencyReachesCapNeverExceeds dispatches N=12 parallel agents
-// with the concurrency cap pinned to 3. It proves, under genuine goroutine
-// concurrency with a blocking stub, that the live in-flight count REACHES exactly
-// 3 and NEVER exceeds it, and that all 12 still complete with correct results.
-// This closes E1's open issue: with DefaultStub returning instantly the semaphore
-// was wired but its throughput bound was never observed under real contention.
 func TestParallelConcurrencyReachesCapNeverExceeds(t *testing.T) {
 	const n, capN = 12, 3
 	script := fmt.Sprintf(`
@@ -180,7 +134,6 @@ func TestParallelConcurrencyReachesCapNeverExceeds(t *testing.T) {
 
 	r := assertCapSaturatedAndBounded(t, script, capN, n)
 
-	// All N slots resolved with their per-slot result; none null, none lost.
 	out, ok := r.Value.([]interface{})
 	if !ok || len(out) != n {
 		t.Fatalf("parallel result = %#v, want %d-element slice", r.Value, n)
@@ -193,10 +146,6 @@ func TestParallelConcurrencyReachesCapNeverExceeds(t *testing.T) {
 	}
 }
 
-// TestPipelineConcurrencyReachesCapNeverExceeds is the pipeline analogue. A
-// pipeline of N=12 items over a single stage dispatches all 12 stage-0 agents
-// concurrently; with the cap at 3 the in-flight count reaches exactly 3 and never
-// exceeds it, and all 12 items complete.
 func TestPipelineConcurrencyReachesCapNeverExceeds(t *testing.T) {
 	const n, capN = 12, 3
 	script := fmt.Sprintf(`
@@ -219,26 +168,15 @@ func TestPipelineConcurrencyReachesCapNeverExceeds(t *testing.T) {
 	}
 }
 
-// raceStub resolves every call with a pure function of the prompt but with a
-// nondeterministic real delay (a tiny randomized-by-the-runtime goroutine yield),
-// so across runs the agents resolve in genuinely different real orders. Unlike
-// ScriptedStub (which the test releases in a SCRIPTED order), nothing here
-// dictates ordering — the Go scheduler does. This is the true-concurrency
-// strengthening of E1's injected-reorder ordinal tests.
 type raceStub struct {
 	resultFor func(prompt string) json.RawMessage
 }
 
 func (s *raceStub) Run(_ context.Context, call AgentCall) (json.RawMessage, error) {
-	// Yield to the scheduler so resolution order is genuinely nondeterministic
-	// across runs and across goroutines. No sleep duration is prescribed; runtime
-	// scheduling decides who finishes first.
 	runtime.Gosched()
 	return s.resultFor(call.Prompt), nil
 }
 
-// ordinalMapUnderRace runs script under a raceStub with a large concurrency cap
-// (so dispatch is genuinely parallel) and returns the ordinal->result mapping.
 func ordinalMapUnderRace(t *testing.T, script string, capN int) map[string]string {
 	t.Helper()
 	stub := &raceStub{resultFor: echoPrompt}
@@ -259,23 +197,7 @@ func ordinalMapUnderRace(t *testing.T, script string, capN int) map[string]strin
 	return out
 }
 
-// TestOrdinalStabilityUnderGenuineConcurrency runs the same parallel+pipeline
-// workflow many times under REAL goroutine concurrency (no scripted release
-// order; the scheduler decides resolution order) and asserts the ordinal->result
-// mapping — i.e. the journal cache map — is byte-identical across every run.
-//
-// This strengthens E1's TestParallelOrdinalStabilityUnderReorder /
-// TestPipelinePostAwaitOrdinalStability, which inject a chosen resolution order
-// via ScriptedStub. Here NOTHING scripts the order: with a wide concurrency cap
-// and a yielding stub, agents resolve in whatever order the Go runtime picks, so
-// each repetition is a fresh real race. If structural ordinals leaked any
-// timing dependence, the maps would diverge between runs (and -race would also
-// flag the shared-state access). Run under -race.
 func TestOrdinalStabilityUnderGenuineConcurrency(t *testing.T) {
-	// A mix that exercises every fan-out path concurrently: a parallel barrier of
-	// post-await thunks, plus a pipeline whose stage callbacks issue post-await
-	// agents. Post-await is the timing-sensitive case (the path stack is unwound at
-	// the await), so it is the strongest probe for a temporal leak.
 	script := `
 		const mk = async (n) => {
 			const r = await agent("x:" + n);
@@ -289,7 +211,7 @@ func TestOrdinalStabilityUnderGenuineConcurrency(t *testing.T) {
 		return [p, q];
 	`
 
-	const capN = 8 // wide enough to dispatch the whole fan-out concurrently
+	const capN = 8
 	baseline := ordinalMapUnderRace(t, script, capN)
 	if len(baseline) == 0 {
 		t.Fatalf("baseline produced no journaled calls")
@@ -305,7 +227,6 @@ func TestOrdinalStabilityUnderGenuineConcurrency(t *testing.T) {
 	}
 }
 
-// dumpSorted renders an ordinal->result map deterministically for diffs.
 func dumpSorted(m map[string]string) string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -319,11 +240,6 @@ func dumpSorted(m map[string]string) string {
 	return string(b)
 }
 
-// TestParallelNeverRejectsNullSlotUnderConcurrency proves the parallel
-// never-reject / null-slot contract holds under GENUINE concurrent dispatch (not
-// just the instant-stub path covered by TestParallelThrowingThunkNullSlot): a mix
-// of throwing thunks, stub-error thunks, and good thunks all run concurrently; the
-// barrier resolves, throwing/errored slots are null, good slots carry their value.
 func TestParallelNeverRejectsNullSlotUnderConcurrency(t *testing.T) {
 	boomStub := boomOrEchoStub()
 	script := `
@@ -355,10 +271,6 @@ func TestParallelNeverRejectsNullSlotUnderConcurrency(t *testing.T) {
 	}
 }
 
-// TestPipelineNeverRejectsNullItemUnderConcurrency is the pipeline analogue: under
-// concurrent dispatch, a throwing stage and a stub-errored stage each drop their
-// item to null for the rest of the pipeline, surviving items flow through both
-// stages, and the pipeline never rejects.
 func TestPipelineNeverRejectsNullItemUnderConcurrency(t *testing.T) {
 	boomStub := boomOrEchoStub()
 	script := `
@@ -382,8 +294,6 @@ func TestPipelineNeverRejectsNullItemUnderConcurrency(t *testing.T) {
 	if !ok || len(out) != 3 {
 		t.Fatalf("result = %#v, want 3-element slice", res.Value)
 	}
-	// keep flows through both stages; throw is dropped at stage 0; boom errors at
-	// the stub in stage 0 (null) and stays null through stage 1.
 	want := []interface{}{"R:s1:R:s0:keep", nil, nil}
 	if !reflect.DeepEqual(out, want) {
 		t.Fatalf("items = %#v, want %#v", out, want)

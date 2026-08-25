@@ -1,8 +1,5 @@
-/**
- * GitHub-style heading slugs, ported from plannotator's `slugifyHeading`
- * (packages/ui/utils/slugify.ts) — unicode-preserving, unlike a naive
- * `[^\w]` strip which destroys non-ASCII headings.
- */
+/** GitHub-style heading slugs, ported from plannotator's `slugifyHeading` —
+ * unicode-preserving, unlike a naive `[^\w]` strip. */
 export function slugifyHeading(text: string): string {
   return text
     .toLowerCase()
@@ -13,11 +10,8 @@ export function slugifyHeading(text: string): string {
     .replace(/^-+|-+$/g, ''); // trim hyphens
 }
 
-/**
- * Per-document dedup: the first occurrence keeps the bare slug, later
- * duplicates get `-1`, `-2`, … An empty slug yields no id (undefined).
- * Create a fresh slugger per document render.
- */
+/** Per-document dedup: the first occurrence keeps the bare slug, later ones get
+ * `-1`, `-2`, …; an empty slug yields undefined. One slugger per document render. */
 export function createSlugger(): (text: string) => string | undefined {
   const counts = new Map<string, number>();
   return (text: string) => {

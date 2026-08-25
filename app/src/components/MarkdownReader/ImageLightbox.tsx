@@ -7,20 +7,8 @@ export interface ImageLightboxProps {
   onClose: () => void;
 }
 
-/**
- * Full-viewport image lightbox, ported from plannotator's Viewer. Portals to
- * document.body so it escapes tile overflow/stacking contexts. Closes on
- * Escape or backdrop click; clicking the image itself does not close. Mounts
- * and unmounts instantly (no enter/exit motion), which is trivially
- * reduced-motion-safe.
- *
- * Escape goes through useEscapeStack (the app-wide LIFO dismiss stack): the
- * lightbox only mounts while open, so it sits on top of the stack for its
- * whole lifetime and one Escape press closes ONLY the lightbox — never the
- * overlay/tile underneath. (A hand-rolled window listener cannot do this:
- * stopPropagation does not shield other listeners on the same node, so it
- * would dismiss the stack-top overlay simultaneously.)
- */
+// Portals to document.body so it escapes tile overflow/stacking contexts. Escape goes
+// through useEscapeStack, so one press closes only the lightbox, not the tile underneath.
 export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
   useEscapeStack(onClose, true);
 

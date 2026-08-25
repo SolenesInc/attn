@@ -386,9 +386,6 @@ func TestLatestOwedAppReconcileInvocationKeepsAnOkBoundaryAboveProgress(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This is the state a non-atomic caller could leave if its handler settlement
-	// committed but the request/cursor transaction failed. The boundary must stay
-	// recoverable even though the attempt itself says ok.
 	if settled, err := s.SettleAppInvocation(id, AppInvocationStatusOK, "", now.Add(time.Second)); err != nil || !settled {
 		t.Fatalf("settle = %t, %v", settled, err)
 	}

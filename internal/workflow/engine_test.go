@@ -9,19 +9,13 @@ import (
 	"time"
 )
 
-// promptEcho is a stub whose result is the literal prompt, so downstream prompts
-// that embed an upstream result change deterministically when the upstream changes.
 func promptEcho(call AgentCall) (json.RawMessage, error) {
 	b, _ := json.Marshal(call.Prompt)
 	return b, nil
 }
 
-// TestResumeR1PostAwaitPipelineIsFullCacheHit guards R-spec R1 for the load-bearing
-// post-await case: a pipeline whose stage callback issues an agent() AFTER its own
-// internal await. With temporal ordinals, resume would assign a logical call a
-// different ordinal than the original run whenever subagent timing differed, miss
-// the journal, trip the divergence latch, and re-run live (paid) calls despite an
-// identical script. Run several trials so a scheduling-dependent collision surfaces.
+// With temporal ordinals, resume assigned a logical call a different ordinal whenever
+// subagent timing differed, missing the journal and re-running live (paid) calls.
 func TestResumeR1PostAwaitPipelineIsFullCacheHit(t *testing.T) {
 	script := `
 		const out = await pipeline(["X", "Y", "Z"], async (v, item, i) => {
@@ -55,8 +49,6 @@ func TestResumeR1PostAwaitPipelineIsFullCacheHit(t *testing.T) {
 	}
 }
 
-// TestAgentTerminalFailureResolvesNull: an agent() whose stub returns an error
-// resolves to null (never rejects the script); the run completes.
 func TestAgentTerminalFailureResolvesNull(t *testing.T) {
 	failOnSecond := StubFunc(func(call AgentCall) (json.RawMessage, error) {
 		if strings.Contains(call.Prompt, "boom") {
@@ -85,7 +77,6 @@ func TestAgentTerminalFailureResolvesNull(t *testing.T) {
 	if obj["bIsNull"] != true {
 		t.Errorf("failed agent should resolve null, got bIsNull=%v", obj["bIsNull"])
 	}
-	// The errored call is journaled with status "errored" and a null result.
 	var erroredSeen bool
 	for _, e := range res.Journal.Entries() {
 		if e.Status == "errored" {
@@ -100,8 +91,6 @@ func TestAgentTerminalFailureResolvesNull(t *testing.T) {
 	}
 }
 
-// TestParallelThrowingThunkNullSlot: a throwing thunk yields a null slot and the
-// parallel call resolves (never rejects).
 func TestParallelThrowingThunkNullSlot(t *testing.T) {
 	script := `
 		const out = await parallel([
@@ -128,8 +117,6 @@ func TestParallelThrowingThunkNullSlot(t *testing.T) {
 	}
 }
 
-// TestPipelineThrowingStageDropsItem: a throwing stage drops that item to null for
-// the remaining stages; other items flow through; pipeline never rejects.
 func TestPipelineThrowingStageDropsItem(t *testing.T) {
 	script := `
 		const out = await pipeline(["keep", "drop"],
@@ -157,7 +144,6 @@ func TestPipelineThrowingStageDropsItem(t *testing.T) {
 	}
 }
 
-// TestPipelineStageSignature: the stage cb receives (prevResult, originalItem, index).
 func TestPipelineStageSignature(t *testing.T) {
 	script := `
 		const out = await pipeline(["A", "B"],
@@ -170,7 +156,6 @@ func TestPipelineStageSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// Stage 0 prev is the original item; index threads through; item is preserved.
 	entries := res.Journal.Entries()
 	var sawFirstA, sawSecondB bool
 	for _, e := range entries {
@@ -191,7 +176,6 @@ func TestPipelineStageSignature(t *testing.T) {
 	}
 }
 
-// sameJSON compares two exported Go values by their JSON encoding.
 func sameJSON(a, b any) bool {
 	ab, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)

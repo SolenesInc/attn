@@ -1,22 +1,8 @@
-/**
- * Terminal-annotation daemon events: the annotatable message window
- * (`session_messages_get_result`) and the persisted annotation list
- * (`session_annotations_*_result`). Kept out of `useDaemonSocket.ts` so that
- * grepping a `session_annotations_` wire name lands in a file about
- * annotations.
- *
- * These use the shared `<kind>:<requestId>` correlation, not the keyed
- * last-writer-wins scheme in daemonMarkdownAnnotationEvents.ts. The difference
- * is deliberate: markdown drafts supersede each other client-side, whereas
- * these are ordered server-side by a generation, so every request here is an
- * ordinary one that deserves its own answer.
- */
 
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
 import { labelByEmoji } from '../annotations/quickLabels';
 
-/** The event shapes this module reads, loosely typed off the wire union. */
 type SessionAnnotationEvent = {
   event: string;
   session_id?: unknown;
@@ -33,7 +19,6 @@ type SessionAnnotationEvent = {
   generation?: unknown;
 };
 
-/** One assistant message that can be annotated. */
 export interface DaemonSessionMessage {
   key: string;
   markdown: string;
@@ -52,7 +37,6 @@ function toMessageWindowStatus(raw: unknown): SessionMessageWindowStatus | undef
   }
 }
 
-/** A persisted annotation, exactly as the store holds it. */
 export interface DaemonSessionAnnotation {
   id: string;
   messageKey: string;
@@ -86,12 +70,9 @@ function toAnnotations(raw: unknown): DaemonSessionAnnotation[] {
         : labelByEmoji(String(record?.emoji ?? ''))?.id ?? '',
       comment: String(record?.comment ?? ''),
     };
-    // An entry with no id could never be addressed by a later save, so it is
-    // dropped rather than shown as something the user can edit.
   }).filter((annotation) => annotation.id !== '' && annotation.messageKey !== '');
 }
 
-/** The wire shape of an annotation, as a save sends it. */
 export function annotationToWire(annotation: DaemonSessionAnnotation): Record<string, unknown> {
   return {
     id: annotation.id,
@@ -104,10 +85,6 @@ export function annotationToWire(annotation: DaemonSessionAnnotation): Record<st
   };
 }
 
-/**
- * Handle one terminal-annotation event. Returns false when the event is not one
- * of ours, so the caller can keep its own dispatch exhaustive.
- */
 export function handleSessionAnnotationDaemonEvent(
   event: SessionAnnotationEvent,
   pending: PendingRequests,
@@ -154,9 +131,6 @@ export function handleSessionAnnotationDaemonEvent(
       return true;
 
     case 'session_annotations_save_result': {
-      // A stale save is a protocol outcome, not a failure: the client's list
-      // lost to a newer one and it re-hydrates. Resolving it as an error would
-      // put a routine race in front of the user.
       if (!event.success && event.stale === true) {
         settlePendingRequest(
           pending,
@@ -188,10 +162,6 @@ export function handleSessionAnnotationDaemonEvent(
       return true;
 
     case 'session_annotations_submit_result': {
-      // A skip is an outcome to show, not a failure to report: the session is
-      // sitting on an approval prompt where the submit's Enter would answer it,
-      // so nothing was typed and the marks are still there to retry with.
-      // Rejecting would file that alongside a dead socket and lose the reason.
       const skipped = !event.success && event.status === 'skipped_pending_approval';
       settlePendingRequest(
         pending,

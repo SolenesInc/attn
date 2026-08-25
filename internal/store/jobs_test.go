@@ -81,7 +81,6 @@ func TestJobs_UniqueKeyIsScopedToItsKind(t *testing.T) {
 		}
 	}
 
-	// The same subject under two kinds is two jobs, not a collision.
 	got, ok, err := s.GetJobByUniqueKey("compact", "ws-1")
 	if err != nil || !ok {
 		t.Fatalf("get compact: ok=%v err=%v", ok, err)
@@ -105,8 +104,6 @@ func TestJobs_UniqueKeyIsScopedToItsKind(t *testing.T) {
 func TestJobs_KeylessJobsAreNotCoalesced(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	// Two keyless jobs of one kind must coexist: that is what the partial unique
-	// index exists to allow, and what durable activities depend on.
 	for _, id := range []string{"job-a", "job-b"} {
 		if err := s.UpsertJob(newJobRecord(id, "activity", now)); err != nil {
 			t.Fatalf("upsert %s: %v", id, err)
@@ -119,7 +116,6 @@ func TestJobs_KeylessJobsAreNotCoalesced(t *testing.T) {
 	if len(all) != 2 {
 		t.Fatalf("stored %d keyless jobs, want 2", len(all))
 	}
-	// An empty key must never resolve to one of them.
 	if _, ok, err := s.GetJobByUniqueKey("activity", ""); err != nil || ok {
 		t.Errorf("empty key matched a job: ok=%v err=%v", ok, err)
 	}
@@ -156,8 +152,6 @@ func TestJobs_EligibleOrdersAndFiltersTheQueue(t *testing.T) {
 	for _, rec := range got {
 		ids = append(ids, rec.ID)
 	}
-	// Priority first, then earliest scheduled. A future, running, done, or dead
-	// row is not claimable.
 	want := []string{"high", "due", "retrying"}
 	if len(ids) != len(want) {
 		t.Fatalf("eligible = %v, want %v", ids, want)
@@ -219,7 +213,6 @@ func TestJobs_RecoverRunningJobs(t *testing.T) {
 	if got.Attempts != 1 {
 		t.Errorf("attempts = %d, want the spent attempt preserved", got.Attempts)
 	}
-	// An untouched row keeps its schedule.
 	if other, _, _ := s.GetJob("queued"); other.State != "queued" || !other.ScheduledAt.After(now) {
 		t.Errorf("a queued job was disturbed by recovery: %+v", other)
 	}
@@ -257,7 +250,6 @@ func TestJobs_TrimDoneKeepsDeadAndFreshJobs(t *testing.T) {
 	if _, ok, _ := s.GetJob("fresh-done"); !ok {
 		t.Error("a recently completed job was trimmed")
 	}
-	// A dead job is the record a failure notification points at.
 	if _, ok, _ := s.GetJob("old-dead"); !ok {
 		t.Error("an aged dead job was trimmed")
 	}

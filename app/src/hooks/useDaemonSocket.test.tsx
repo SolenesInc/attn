@@ -195,11 +195,9 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
     const ws = await waitForOpenSocket();
 
-    // Clean voluntary exit: no signal.
     ws.emit({ event: 'session_exited', id: 'clean-exit', exit_code: 0 });
     expect(onSessionExited).toHaveBeenCalledWith({ id: 'clean-exit', exitCode: 0, signal: undefined });
 
-    // Signal kill (e.g. reload/close): signal is forwarded so consumers can skip auto-close.
     ws.emit({ event: 'session_exited', id: 'killed', exit_code: -1, signal: 'SIGTERM' });
     expect(onSessionExited).toHaveBeenCalledWith({ id: 'killed', exitCode: -1, signal: 'SIGTERM' });
 
@@ -223,13 +221,10 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const ws = await waitForOpenSocket();
     ws.sent = [];
 
-    // The daemon replaced this session's agent in place (chief assign/demote reload).
     ws.emit({ event: 'runtime_respawned', id: 'reload-sess' });
 
     const sent = ws.sent.map((entry) => JSON.parse(entry));
-    // Re-attach with explicit relaunch_restore so the fresh worker's scrollback replays.
     expect(sent).toContainEqual({ cmd: 'attach_session', id: 'reload-sess', attach_policy: 'relaunch_restore' });
-    // A reload is a runtime replacement, not a close: the session must not be torn down.
     expect(onSessionExited).not.toHaveBeenCalled();
 
     unmount();
@@ -1533,7 +1528,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       });
     });
 
-    // A result without the source workspace id (just the leaf) must not resolve it.
     act(() => {
       ws.emit({
         event: 'workspace_layout_action_result',
@@ -2399,8 +2393,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       state: 'idle',
     };
 
-    // First sighting registers the row; the rename arrives as another
-    // session_state_changed for the same id. It must replace, not append.
     act(() => {
       ws.emit({ event: 'session_state_changed', session });
     });
@@ -2494,7 +2486,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
     const ws = await waitForOpenSocket();
 
-    // Sent before the daemon handshake completes: must queue, not drop.
     act(() => {
       result.current.sendSetTerminalTheme({
         foreground: '#d4d4d4', background: '#1e1e1e', cursor: '#d4d4d4',
@@ -2571,7 +2562,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       });
     });
 
-    // Daemon restarts and drops its in-memory theme; the client reconnects.
     act(() => {
       ws.close();
     });
@@ -2595,7 +2585,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       });
     });
 
-    // No new sendSetTerminalTheme call — the re-seed must happen on its own.
     await waitFor(() => {
       expect(reconnected.sent.map((entry) => JSON.parse(entry))).toContainEqual({
         cmd: 'set_terminal_theme',
@@ -2781,8 +2770,6 @@ describe('useDaemonSocket fs surface', () => {
     );
   }
 
-  // The last command the daemon would have received, parsed (request_id correlates
-  // the result event the test then emits).
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
@@ -2865,7 +2852,6 @@ describe('useDaemonSocket fs surface', () => {
     const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
-    // A successful (non-conflict) write.
     const ok = result.current.sendFsWrite('a.txt', 'v1');
     await Promise.resolve();
     let sent = lastSent(ws);
@@ -2879,7 +2865,6 @@ describe('useDaemonSocket fs surface', () => {
     });
     await expect(ok).resolves.toEqual({ path: 'a.txt', hash: 'h2', conflict: false, currentHash: undefined });
 
-    // A stale-base conflict: still a resolved result, with current_hash mapped.
     const conflicting = result.current.sendFsWrite('a.txt', 'v2', 'deadbeef');
     await Promise.resolve();
     sent = lastSent(ws);
@@ -2953,7 +2938,6 @@ describe('useDaemonSocket seed resume request/result', () => {
     );
   }
 
-  // request_id correlates the result event the test then emits back.
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
@@ -3022,10 +3006,6 @@ describe('useDaemonSocket seed resume request/result', () => {
   });
 });
 
-// The notebook and markdown-annotation events moved out of useDaemonSocket.ts
-// into daemonNotebookEvents.ts and daemonMarkdownAnnotationEvents.ts. Nothing
-// covered them at the time, so the move was unfalsifiable; these exercise the
-// two correlation schemes through the hook's public surface.
 describe('useDaemonSocket notebook and annotation events', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -3039,9 +3019,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
     vi.clearAllMocks();
   });
 
-  // Take the socket this render created, by index. Grabbing the newest instance
-  // races with a reconnect leaked from an earlier test and hands back a socket
-  // the hook under test never writes to.
+  // Take the socket this render created, by index: the newest instance may be a reconnect leaked from an earlier test.
   async function renderAndOpen(extra: Record<string, unknown> = {}) {
     const before = FakeWebSocket.instances.length;
     const rendered = renderNotebookHook(extra);
@@ -3106,8 +3084,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
   });
 
   it('resolves session_messages_get with an empty window rather than rejecting', async () => {
-    // A session with no annotatable prose yet is a success with nothing to
-    // annotate. Rejecting would report a failure that did not happen.
     const { result, unmount, ws } = await renderAndOpen();
 
     const promise = result.current.sendSessionMessagesGet('session-1');
@@ -3203,8 +3179,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
       generation: 7,
     });
 
-    // The wire is snake_case and the store is not; the boundary is here, so a
-    // stored annotation arrives usable rather than half-translated.
     await expect(promise).resolves.toEqual({
       annotations: [{
         id: 'anno-1',
@@ -3215,9 +3189,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
         quickLabelId: 'clarify-this',
         comment: 'why this?',
       }],
-      // A get that carried no note reads as an empty one: the panel's box has
-      // to be settable either way, and there is nothing for "absent" to mean
-      // that "" does not already say.
       note: '',
       generation: 7,
     });
@@ -3291,9 +3262,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
   });
 
   it('resolves a stale save rather than rejecting it', async () => {
-    // Losing to a newer write is a routine outcome the caller handles by
-    // re-hydrating; surfacing it as an error would put a race in front of the
-    // user as a failure.
     const { result, unmount, ws } = await renderAndOpen();
 
     const promise = result.current.sendSessionAnnotationsSave('session-1', [], '', 2);
@@ -3376,8 +3344,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
   });
 
   it('resolves a submit the daemon refused for a pending approval', async () => {
-    // The caller has to tell "nothing was sent, keep the marks" apart from a
-    // broken socket, so the skip arrives as a status rather than a rejection.
     const { result, unmount, ws } = await renderAndOpen();
 
     const promise = result.current.sendSessionAnnotationsSubmit('session-1', 'feedback');
@@ -3471,7 +3437,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
     expect(listSent.cmd).toBe('notebook_list');
     expect(backlinksSent.cmd).toBe('notebook_backlinks');
 
-    // Answer out of order: each result must find its own waiter.
     ws.emit({ event: 'notebook_backlinks_result', request_id: backlinksSent.request_id, success: true, entries: [{ path: 'b.md' }] });
     ws.emit({ event: 'notebook_list_result', request_id: listSent.request_id, success: true, entries: [{ path: 'a.md' }] });
 
@@ -3588,8 +3553,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('drops an annotation result whose request was superseded', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    // `get` deliberately shares one in-flight round-trip per document, so
-    // supersede is exercised through `save`, which does replace its waiter.
     const source = fileMarkdownSource('ws-1', '/tmp/doc.md');
     const first = result.current.saveMarkdownAnnotations(source, [], 1);
     await Promise.resolve();
@@ -3600,7 +3563,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
     expect(firstSent.request_id).not.toBe(secondSent.request_id);
     await expect(first).rejects.toThrow('Superseded by a newer request');
 
-    // The late answer to the superseded request must not settle the live one.
     ws.emit({
       event: 'markdown_annotations_save_result',
       request_id: firstSent.request_id,
@@ -3627,7 +3589,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
     const sent = lastSent(ws);
     const second = result.current.getMarkdownAnnotations(source);
     await Promise.resolve();
-    // No second command: a rejected hydrate would lock that tile's saves.
     expect(lastSent(ws).request_id).toBe(sent.request_id);
 
     ws.emit({
@@ -3688,10 +3649,6 @@ describe('useDaemonSocket notebook and annotation events', () => {
   });
 });
 
-// The app-command envelope, through the hook's public surface. What it pins is
-// the half a view cannot see: the payload travels as JSON text, a handler that
-// returned nothing is a success rather than a rejection, and a refusal reaches
-// the caller in the daemon's own words.
 describe('useDaemonSocket app commands', () => {
   let originalWebSocket: typeof WebSocket;
 

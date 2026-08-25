@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// sendClientHelloAs identifies a test client the way the app does: with an id
-// that outlives the connection, so the daemon can recognise it on its return.
 func sendClientHelloAs(t *testing.T, conn *websocket.Conn, clientID string) {
 	t.Helper()
 	if err := writeWS(conn, map[string]interface{}{
@@ -31,27 +29,13 @@ func sendClientHelloAs(t *testing.T, conn *websocket.Conn, clientID string) {
 	}
 }
 
-// Eviction sizing for the direct link. One message per broadcast, big enough
-// that the write pump blocks on the socket almost immediately, and 256 of them
-// queued behind it — so the backlog the daemon is sitting on is enormous
-// compared to anything the two kernels can hold.
-//
-// The receipt: an aborted connection on loopback delivers whatever the client's
-// receive buffer already holds and then fails; measured on macOS that is ~400 KB
-// (probe: 1 MB written into a stalled connection, SO_LINGER 0, client read
-// 400,368 bytes and then ECONNRESET, 0 ms after the abort). Linux CI's autotuned
-// buffers are larger but nowhere near the cap below.
+// Receipt: an aborted connection on loopback delivers what the client's receive buffer
+// holds and then fails; measured on macOS 400,368 bytes (1 MB written, SO_LINGER 0).
 const (
-	stalledClientMessageBytes = 1 << 20  // 1 MB a broadcast
-	maxBacklogDeliveredBytes  = 32 << 20 // a client that reads more than this was fed its backlog
+	stalledClientMessageBytes = 1 << 20
+	maxBacklogDeliveredBytes  = 32 << 20
 )
 
-// A client that stopped reading has a backlog in the daemon's send channel and
-// in both kernels. When the hub gives up on it, none of that may be paid out
-// first: the connection must end now, not after the daemon has spent the whole
-// queue on it. Before the fix the write pump drained every queued message into
-// the socket and only then closed, which is what made an eviction take as long
-// as the backlog it was caused by.
 func TestEvictedClientIsNotFedItsBacklogFirst(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 	tmpDir := shortTempDir(t)
@@ -77,8 +61,6 @@ func TestEvictedClientIsNotFedItsBacklogFirst(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Connected, identified, and then silent: it never reads, so the daemon's
-	// writes stall as soon as the kernels are full.
 	stalled := dialDaemonWSAs(t, ctx, "127.0.0.1:"+wsPort, "stalled-client")
 	defer stalled.Close(websocket.StatusNormalClosure, "")
 
@@ -91,8 +73,6 @@ func TestEvictedClientIsNotFedItsBacklogFirst(t *testing.T) {
 	}
 	stopFlood()
 
-	// Read it out. What arrives is what the client's kernel already held; what
-	// must not arrive is the queue the daemon was holding for it.
 	readCtx, cancelRead := context.WithTimeout(ctx, evictionDeathBudget)
 	defer cancelRead()
 	start := time.Now()
@@ -117,10 +97,6 @@ func TestEvictedClientIsNotFedItsBacklogFirst(t *testing.T) {
 	}
 }
 
-// An evicted connection cannot be told why it was evicted — the close frame
-// queues behind the backlog that caused it. The daemon therefore remembers, and
-// the client's next hello collects the answer. Over loopback here; the degraded
-// link this exists for is covered in the toxiproxy test.
 func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 	tmpDir := shortTempDir(t)
@@ -138,8 +114,6 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 	first := dialDaemonWSAs(t, ctx, addr, clientID)
 	defer first.Close(websocket.StatusNormalClosure, "")
 
-	// Wait for the hello to land before evicting: the id is what the eviction is
-	// filed under, and it exists only once the daemon has read it.
 	waitForCond(t, 5*time.Second, "the daemon to record the client id", func() bool {
 		found := false
 		d.wsHub.ForEachClient(func(c *wsClient) {
@@ -150,8 +124,6 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 		return found
 	})
 
-	// Evict it exactly as the fan-out does when a client misses maxSlowCount
-	// broadcasts: drop it from the hub, then hang up.
 	d.wsHub.mu.Lock()
 	for client := range d.wsHub.clients {
 		if client.ClientID() != clientID {
@@ -163,7 +135,6 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 	}
 	d.wsHub.mu.Unlock()
 
-	// The connection ends without waiting for anything to drain.
 	deathCtx, cancelDeath := context.WithTimeout(ctx, evictionDeathBudget)
 	defer cancelDeath()
 	if err := readUntilClosed(deathCtx, first); err == nil {
@@ -172,7 +143,6 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 		t.Fatalf("evicted client still connected after %s", evictionDeathBudget)
 	}
 
-	// Back with the same id, and the daemon volunteers what happened.
 	second := dialDaemonWSAs(t, ctx, addr, clientID)
 	defer second.Close(websocket.StatusNormalClosure, "")
 	notice := readEventUntil(t, ctx, second, protocol.EventClientEvictionNotice)
@@ -183,50 +153,32 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 		t.Errorf("eviction notice undelivered_messages = %v, want at least %d", notice["undelivered_messages"], maxSlowCount)
 	}
 
-	// Told once. A client that keeps reconnecting is not re-told about a
-	// disconnect it has already been shown.
 	if _, ok := d.wsHub.takeEviction(clientID); ok {
 		t.Error("the eviction is still on file after being delivered")
 	}
 }
 
-// An eviction can be filed while a hello is still mid-processing — the hub
-// evicts on its own goroutine, and the hello's takeEviction runs at its tail.
-// When that hello belongs to the connection being evicted, the notice cannot
-// be written to a channel that is already closed, and consuming the record
-// anyway would lose the only copy: the client's next connection is never told
-// why it went away. A notice that cannot be handed over goes back on file.
-//
-// Found as a 1-in-10 race in TestEvictedClientLearnsWhyOnItsNextConnection
-// (the original CI failure); staged here without the timing — a synthetic
-// client, so no real hello is in flight to share the take.
 func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
 	defer d.Stop()
 
 	const clientID = "app-instance-1"
 	client := &wsClient{
-		send: make(chan outboundMessage, 8),
-		// Cleared ATTN_WS_AUTH_TOKEN at the HTTP layer, which stands in for the
-		// client token — the property under test is the notice, not the gate.
+		send:             make(chan outboundMessage, 8),
 		bearerAuthorized: true,
 	}
 
-	// The eviction's order: the channel closes before the record is filed.
 	client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, slowClientCloseReason)
 	d.wsHub.rememberEviction(clientID, evictionRecord{
 		at: time.Now(), reason: slowClientCloseReason, undelivered: maxSlowCount,
 	})
 
-	// The in-flight hello reaches its tail on a connection that is already gone.
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		Cmd: protocol.CmdClientHello, ClientKind: "daemon-test", ClientID: protocol.Ptr(clientID),
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
 	})
 
-	// The notice could not be delivered to a closed channel, so the record went
-	// back on file rather than dying with the connection that raced it.
 	record, ok := d.wsHub.takeEviction(clientID)
 	if !ok {
 		t.Fatal("an eviction filed mid-hello was lost: the next connection will never be told why")
@@ -239,17 +191,6 @@ func TestAnEvictionFiledMidHelloIsNotLostWithTheConnection(t *testing.T) {
 	}
 }
 
-// The hub's slow-count rule is not how a real client dies. A client that has
-// stopped draining takes one large snapshot straight past the write deadline
-// long before 256 more messages pile up behind it, so the write pump gives up
-// first. That is an eviction by any other name, and it has to be filed like
-// one, or the client that comes back is the only one who never finds out why it
-// went away.
-//
-// This is the shape the live app hit: a frozen socket, a snapshot the pump sat
-// on for the whole deadline, and a hub whose slow-count never reached 2. The
-// connection ending is the library's own doing — asserted here because the
-// notice is worthless if the client never gets disconnected in the first place.
 func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 	tmpDir := shortTempDir(t)
@@ -288,15 +229,11 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 		return found
 	})
 
-	// One message far larger than anything the two kernels will hold for a
-	// client that never reads it, so the pump blocks on the socket itself. The
-	// client stays silent throughout: reading is what it cannot do.
 	d.wsHub.BroadcastRawText([]byte(strings.Repeat("x", 8<<20)))
 	waitForCond(t, evictionDeathBudget, "the daemon to drop the stalled client", func() bool {
 		return d.wsHub.ClientCount() == 0
 	})
 
-	// Only now does it read, and all that is left for it is the end.
 	deathCtx, cancelDeath := context.WithTimeout(ctx, evictionDeathBudget)
 	defer cancelDeath()
 	if err := readUntilClosed(deathCtx, stalled); err == nil {
@@ -305,8 +242,6 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 		t.Fatalf("stalled client still connected %s after the write deadline", evictionDeathBudget)
 	}
 
-	// The hub never got the chance to count this client slow — which is exactly
-	// why the write pump has to file the eviction itself.
 	logMu.Lock()
 	for _, line := range hubLog {
 		if strings.Contains(line, "too slow") || strings.Contains(line, "client slow") {
@@ -326,11 +261,6 @@ func TestWriteStallEndsTheConnectionAndIsRemembered(t *testing.T) {
 	}
 }
 
-// The keepalive is the exit a stalled app actually takes — measured live, the
-// unanswered ping beat both the slow-count and the write deadline to it. So it
-// has to file the disconnect like an eviction, and it has to know when not to:
-// an unanswered ping with nothing owed is a connection that died, and a client
-// that comes back from that has nothing to be told.
 func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 	tmpDir := shortTempDir(t)
@@ -346,13 +276,8 @@ func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// A client that answers nothing and is owed nothing. Its ping goes
-	// unanswered within the shrunk timeout and the daemon drops it — promptly,
-	// which is the second half of this: closing a WebSocket means waiting out a
-	// close handshake, and a peer that has stopped answering pings will not
-	// answer that either. Budget: 200ms to the ping, 200ms to give up on it, up
-	// to a second of grace. The same client held on for 5.4s when the daemon
-	// waited out the handshake.
+	// A peer that stopped answering pings will not answer a close handshake either;
+	// measured, the same client held on for 5.4s when the daemon waited one out.
 	const pingDeathBudget = 2 * time.Second
 	const quietID = "went-away"
 	quiet := dialDaemonWSAs(t, ctx, addr, quietID)
@@ -364,8 +289,6 @@ func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) 
 		t.Errorf("a connection that died owing nothing was filed as an eviction: %+v", record)
 	}
 
-	// A client the daemon is mid-message to when the ping goes unanswered. Same
-	// silence on the wire, a different fact about the client.
 	const stalledID = "fell-behind"
 	stalled := dialDaemonWSAs(t, ctx, addr, stalledID)
 	defer stalled.Close(websocket.StatusNormalClosure, "")
@@ -383,10 +306,6 @@ func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) 
 		return d.wsHub.ClientCount() == 0
 	})
 
-	// Back to the shipped keepalive before reconnecting: a 200ms pong deadline
-	// is a trap for a healthy client too, and this leg is about what the daemon
-	// says, not how fast it pings. The ping loops of the two dropped clients
-	// captured their pacing at start, so this write races nothing.
 	d.wsPingInterval, d.wsPingTimeout = 0, 0
 	second := dialDaemonWSAs(t, ctx, addr, stalledID)
 	defer second.Close(websocket.StatusNormalClosure, "")
@@ -396,9 +315,6 @@ func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) 
 	}
 }
 
-// The eviction memory is a small bounded map with no owner watching it: what
-// keeps it honest is that records expire, are handed over once, and that a
-// flood of unknown clients cannot grow it without bound.
 func TestEvictionMemoryForgetsWhatItShould(t *testing.T) {
 	h := newWSHub()
 	logged := 0

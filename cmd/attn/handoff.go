@@ -13,15 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn handoff` is how a crew member ends its day: it files the letter the
-// member wrote to its successor, and the day turns over behind it. The prose is
-// the member's own — attn names the file, refuses to overwrite one already
-// filed, and wakes the successor with that letter as its thread.
-//
-// It is the member's own verb rather than `attn crew handoff` because the
-// member is the only one who can run it: the calling session's binding decides
-// whose day is closing, so there is no member to name.
-
 func writeHandoffHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn handoff -m "<your letter>"
 
@@ -136,8 +127,6 @@ func runHandoff(args []string) {
 		fmt.Printf("%s's letter is filed at %s.\n", crew.DisplayName(result.Member), result.Path)
 	}
 	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
-		// The letter is on disk; only the successor is missing. Say both, and say
-		// which is which — this session is still alive and still the member.
 		fmt.Fprintf(os.Stderr, "handoff: no successor was woken: %s\nThis day is still running and %s is still bound to it. `attn handoff --retry` turns it over again with the letter above — it is filed, so do not write another.\n", napErr, crew.DisplayName(result.Member))
 		os.Exit(1)
 	}

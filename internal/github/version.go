@@ -10,7 +10,6 @@ import (
 
 var ghVersionRe = regexp.MustCompile(`(?m)^gh version ([0-9]+\.[0-9]+\.[0-9]+)`)
 
-// CheckGHVersion runs `gh --version` and returns the parsed version string.
 // Note: Daemon ensures PATH is set at startup via pathutil.EnsureGUIPath()
 func CheckGHVersion() (string, error) {
 	output, err := exec.Command("gh", "--version").Output()
@@ -25,7 +24,6 @@ func CheckGHVersion() (string, error) {
 	return version, nil
 }
 
-// RequireGHVersion ensures the gh CLI meets the minimum version requirement.
 func RequireGHVersion(minVersion string) error {
 	version, err := CheckGHVersion()
 	if err != nil {
@@ -97,7 +95,6 @@ func parseVersionParts(v string) ([]int, error) {
 			parts = append(parts, 0)
 			continue
 		}
-		// Strip any trailing non-digit characters.
 		digits := seg
 		for i, r := range seg {
 			if r < '0' || r > '9' {

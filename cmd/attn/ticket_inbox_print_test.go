@@ -9,10 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// TestFprintTicketInboxUserPresence covers the presence header this feature
-// adds ahead of the unread bundles: printed when the daemon has observed the
-// user at the app (last_user_activity_at present), omitted entirely when it
-// hasn't (nil) — mirroring the daemon's own absent-when-unobserved contract.
 func TestFprintTicketInboxUserPresence(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
 		lastActive := time.Now().Add(-90 * time.Second).UTC().Format(time.RFC3339)

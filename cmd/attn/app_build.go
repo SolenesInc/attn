@@ -18,15 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The four commands that turn a directory into an installed app: `new`, `apply`,
-// `rollback` and `dev`.
-//
-// Building runs here rather than in the daemon. The toolchain is the developer's
-// — a version-managed bun is on their PATH and not on the PATH of a daemon the
-// macOS app launched — and the output that matters most, a compiler's file and
-// line, belongs in the terminal they are watching. The daemon owns the part that
-// has to be atomic and observed: the version row, the pointer, the fact.
-
 func runAppNew(args []string) {
 	var dir, name, description string
 	rest := args
@@ -83,16 +74,7 @@ func runAppApply(args []string) {
 	printApplied(result, res)
 }
 
-// applyApp runs the pipeline and records the result.
-//
-// A refused apply leaves its artifact behind on purpose. Only the daemon knows
-// whether the version row was written, and the CLI cannot tell a refusal from a
-// commit whose response was lost — so removing the artifact here would sometimes
-// delete the bundle a live version points at, which is a broken app rather than
-// wasted bytes. The leftover is inert: nothing lists it, the path is
-// content-addressed so re-applying the same content lands on it and reuses it
-// instead of accumulating, and the daemon re-hashes it before any row can name
-// it.
+// A refused apply's artifact stays behind on purpose: the CLI cannot tell a refusal from a commit whose response was lost, so deleting it would sometimes delete the bundle a live version points at.
 func applyApp(dir string, progress *os.File) (*protocol.AppApplyResult, appbuild.Result, error) {
 	res, err := appbuild.Build(context.Background(), appbuild.Options{
 		Dir:      dir,
@@ -116,9 +98,6 @@ func applyApp(dir string, progress *os.File) (*protocol.AppApplyResult, appbuild
 
 func printApplied(result *protocol.AppApplyResult, res appbuild.Result) {
 	moved := result.PreviousVersionID != nil && *result.PreviousVersionID != result.VersionID
-	// Three outcomes, and the reader has to be able to tell them apart: a new
-	// version, an old version this content already had a row for (so the pointer
-	// moved back onto it), and nothing at all happening.
 	var state string
 	switch {
 	case result.VersionCreated:
@@ -134,9 +113,7 @@ func printApplied(result *protocol.AppApplyResult, res appbuild.Result) {
 		fmt.Printf("  was on version %d\n", *result.PreviousVersionID)
 	}
 	fmt.Printf("  artifact %s\n", result.ArtifactPath)
-	// A version made of several artifacts gets each one's size named. There is no
-	// bundle size cap — nothing measured yet would justify a number — so making
-	// the numbers visible is what apply owes an author instead.
+	// There is no bundle size cap — nothing measured would justify a number — so naming each artifact's size is what apply owes an author instead.
 	if len(res.ViewBytes) > 0 {
 		fmt.Printf("    %s  %d bytes\n", appbuild.ArtifactName, res.BundleBytes)
 		for _, v := range res.ViewBytes {
@@ -145,8 +122,6 @@ func printApplied(result *protocol.AppApplyResult, res appbuild.Result) {
 	}
 }
 
-// totalArtifactBytes is everything a version holds: the handler bundle and one
-// module per view.
 func totalArtifactBytes(res appbuild.Result) int64 {
 	total := res.BundleBytes
 	for _, v := range res.ViewBytes {
@@ -194,16 +169,9 @@ func runAppRollback(args []string) {
 	}
 	target := fmt.Sprintf("version %d (%s)", result.VersionID, appbuild.ShortHash(result.ContentHash))
 	switch {
-	// Bare rollback walks recorded history rather than the version list, and the
-	// id it lands on can be higher than the one it left — a fix applied on top of
-	// an old version leaves exactly that behind it. Saying which version it was
-	// serving before is what makes the choice checkable, and the walk is always
-	// backwards in time, whatever the ids did.
 	case versionID == 0 && result.PreviousVersionID != nil:
 		fmt.Printf("rolled app %s back to %s, which was serving before version %d\n",
 			result.Name, target, *result.PreviousVersionID)
-	// A version named explicitly can move the pointer forward, and calling that
-	// "rolled back" would be a lie about which direction the app just went.
 	case result.PreviousVersionID != nil && *result.PreviousVersionID < result.VersionID:
 		fmt.Printf("moved app %s forward to %s\n  was on version %d\n",
 			result.Name, target, *result.PreviousVersionID)
@@ -216,10 +184,7 @@ func runAppRollback(args []string) {
 	fmt.Printf("  artifact %s\n", result.ArtifactPath)
 }
 
-// devDebounce is how long `attn app dev` waits for edits to stop before
-// rebuilding. An editor's save is several filesystem events — write, rename,
-// attribute change — and a formatter on save adds more; 200ms is past the tail
-// of that burst and under the point a person notices a delay.
+// 200ms: an editor's save is several filesystem events (write, rename, attribute change) plus a formatter's, past the tail of that burst and under the point a person notices a delay.
 const devDebounce = 200 * time.Millisecond
 
 func runAppDev(args []string) {
@@ -228,8 +193,6 @@ func runAppDev(args []string) {
 	if err != nil {
 		appFail("dev", err)
 	}
-	// Parse before watching so a directory that is not an app says so now rather
-	// than after the first save.
 	manifest, err := appbuild.LoadManifest(abs)
 	if err != nil {
 		appFail("dev", err)
@@ -270,8 +233,7 @@ func runAppDev(args []string) {
 			if !devRelevant(event.Name) {
 				continue
 			}
-			// A new directory has to be watched too, or an app that grows a
-			// subdirectory silently stops rebuilding on edits inside it.
+			// Watch new directories too, or edits inside one silently stop rebuilding.
 			if event.Op&fsnotify.Create != 0 {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					_ = watchAppTree(watcher, event.Name)
@@ -290,9 +252,6 @@ func runAppDev(args []string) {
 	}
 }
 
-// devApply is one pass of the loop. It never exits the process: a build that
-// fails is the normal state of a directory being edited, and a watcher that dies
-// on the first type error is a watcher nobody can use.
 func devApply(dir string) {
 	started := time.Now()
 	result, res, err := applyApp(dir, nil)
@@ -306,20 +265,8 @@ func devApply(dir string) {
 	fmt.Printf("  in %s\n\n", time.Since(started).Round(time.Millisecond))
 }
 
-// devDialRetry is how long the invocation stream waits before dialling again
-// after the daemon closed on it. A `dev` session outlives a daemon restart —
-// installing a new build is a normal thing to do while writing an app — and a
-// stream that quietly never came back would read as "my handler stopped
-// running".
 const devDialRetry = 2 * time.Second
 
-// devWatchInvocations prints every invocation of the app being edited, beside
-// the apply results, until dev stops.
-//
-// It says nothing about a daemon it cannot reach. `attn app dev` builds and
-// typechecks perfectly well against a stopped daemon (the apply itself will say
-// so, loudly, with the socket path), and repeating that here every two seconds
-// would bury the build output this command exists to show.
 func devWatchInvocations(app string, stop <-chan struct{}) {
 	for {
 		_ = appClient().AppWatch(app, stop, func(inv protocol.AppInvocationInfo) bool {
@@ -345,10 +292,7 @@ func devInvocationLine(inv protocol.AppInvocationInfo) string {
 	return line
 }
 
-// devRelevant filters the noise. node_modules and .git are large and never part
-// of what is built from here; the generated file is rewritten by the build
-// itself, and while WriteGenerated skips an unchanged write, a manifest edit does
-// change it — without this the rebuild it triggers would trigger another.
+// Also drops the generated file the build rewrites: a manifest edit changes it, so without this each rebuild triggers another.
 func devRelevant(path string) bool {
 	base := filepath.Base(path)
 	switch base {
@@ -360,8 +304,7 @@ func devRelevant(path string) bool {
 			return false
 		}
 	}
-	// Editors write through temporary files; reacting to each one rebuilds
-	// against a half-written tree.
+	// Editors write through temporary files; reacting rebuilds a half-written tree.
 	return !strings.HasSuffix(base, "~") && !strings.HasPrefix(base, ".#")
 }
 
@@ -383,9 +326,6 @@ func watchAppTree(watcher *fsnotify.Watcher, root string) error {
 	})
 }
 
-// appPathArgs reads the `<path> [--json]` shape apply and dev share. The path
-// defaults to the working directory, because the common case is running it from
-// inside the app.
 func appPathArgs(verb string, args []string) (string, bool) {
 	dir := ""
 	asJSON := false

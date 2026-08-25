@@ -8,14 +8,11 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The flag the caller used chooses the kind, so nobody types it twice — and a
-// call naming two documents is refused rather than silently picking one.
 func TestSeedArtifactFlagsChooseTheKind(t *testing.T) {
 	cases := []struct {
-		name string
-		args []string
-		want *protocol.SeedArtifactReference
-		// refusal is the substring the error must carry when want is nil.
+		name    string
+		args    []string
+		want    *protocol.SeedArtifactReference
 		refusal string
 	}{
 		{
@@ -81,8 +78,6 @@ func TestSeedArtifactFlagsChooseTheKind(t *testing.T) {
 				protocol.Deref(got.URL) != protocol.Deref(tc.want.URL) {
 				t.Fatalf("reference = %+v, want %+v", got, tc.want)
 			}
-			// Whatever the CLI composes must survive the daemon's own rule; a
-			// flag combination that only the CLI accepts is a broken verb.
 			if _, err := garden.ValidateArtifact(garden.ArtifactReference{
 				Kind:               got.Kind,
 				Path:               protocol.Deref(got.Path),

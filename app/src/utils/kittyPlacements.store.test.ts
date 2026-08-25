@@ -1,15 +1,4 @@
 // @vitest-environment node
-// The placement store against the model the app actually renders.
-//
-// The store's whole job is turning the worker's screen-relative rows into rows
-// of the client's buffer, and the only thing that makes that hard is scrollback:
-// a mapping that forgets the history offset looks perfect on a terminal that has
-// never scrolled. So these run against the real wasm ghostty with real history
-// behind it, and assert on the TEXT the mapped row holds — a store that lands an
-// image one row off, or on the screen instead of in the scrollback, fails here.
-//
-// @types/node isn't a direct dependency of this package (only a transitive peer
-// of vite/vitest), matching terminalOsc133.parity.test.ts's pattern.
 // @ts-expect-error -- see above
 import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
@@ -46,7 +35,6 @@ function rowText(cells: GhosttyCell[] | null): string {
   return text.replace(/ +$/, '');
 }
 
-/** One absolute buffer row's text, scrollback and screen alike. */
 function textAtBufferRow(term: GhosttyTerminal, bufferRow: number): string {
   const history = term.getScrollbackLength();
   return bufferRow < history
@@ -54,8 +42,6 @@ function textAtBufferRow(term: GhosttyTerminal, bufferRow: number): string {
     : rowText(term.getLine(bufferRow - history));
 }
 
-// A placement carrying only what the store reads; everything else is what the
-// worker sends for a plain, freshly transmitted image.
 function placement(overrides: Partial<PlacementElement> = {}): PlacementElement {
   return {
     image_id: 1,
@@ -85,8 +71,6 @@ describe('KittyPlacementStore against the real terminal model', () => {
     ghostty = await loadGhostty();
   });
 
-  // 40 lines through a 10-row screen: nine tenths of the buffer is history, so
-  // any mapping that ignores it is off by dozens of rows.
   function scrolledTerminal(): GhosttyTerminal {
     const term = ghostty.createTerminal(40, 10, { scrollbackLimit: 10000 });
     const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\r\n');
@@ -130,8 +114,6 @@ describe('KittyPlacementStore against the real terminal model', () => {
       placement({ placement_id: 2, viewport_row: -history }),
     ], history);
 
-    // Correct or absent: the one that maps to row -1 is dropped, the one that
-    // maps to row 0 is the first row the client still has.
     expect(store.placements().map((p) => p.placementId)).toEqual([2]);
     expect(store.placements()[0].bufferRow).toBe(0);
   });
@@ -146,8 +128,6 @@ describe('KittyPlacementStore against the real terminal model', () => {
     term.update();
     store.apply(2, [placement({ viewport_row: 2 })], term.getScrollbackLength());
 
-    // The image did not move on screen, so it moved down the buffer by exactly
-    // the history those writes produced.
     expect(store.placements()[0].bufferRow).toBe(before + 3);
     expect(textAtBufferRow(term, store.placements()[0].bufferRow)).toBe(rowText(term.getLine(2)));
   });
@@ -220,8 +200,6 @@ describe('KittyPlacementStore apply rules', () => {
     store.seed([], 0);
 
     expect(store.placements()).toHaveLength(0);
-    // The live stream resumes from the attach watermark; holding the old seq
-    // would reject its first descriptions.
     expect(store.apply(1, [placement()], 0)).toBe(true);
   });
 

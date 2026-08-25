@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// routingOverrideEnv is every variable that can outrank ATTN_PROFILE when a
-// path or endpoint is resolved: the set the fence checks, and the set
-// `attn profile-env` clears. Order is the order the fence reports them in.
 var routingOverrideEnv = []string{
 	"ATTN_DATA_DIR",
 	"ATTN_SOCKET_PATH",
@@ -19,24 +16,12 @@ var routingOverrideEnv = []string{
 	"ATTN_WS_PORT",
 }
 
-// RoutingOverrideEnv returns the routing variables that outrank ATTN_PROFILE.
 func RoutingOverrideEnv() []string {
 	return append([]string(nil), routingOverrideEnv...)
 }
 
-// ValidateProfileRouting refuses a process whose ATTN_PROFILE disagrees with
-// the routing it actually resolved. An explicit path override outranks the
-// profile, so one inherited from a parent attn session points a named profile
-// at another profile's world while every profile-derived name still says
-// otherwise. On 2026-08-17 that combination let `make install PROFILE=<name>`
-// take the production PID lock and migrate the production database.
-//
-// Call it before anything opens a database, takes the PID lock, binds a
-// socket, or stops another daemon. The contradiction is never intentional:
-// there is no correction, only a refusal naming both sides.
-//
-// ATTN_DATA_DIR with no ATTN_PROFILE stays legal and unchecked — that is how
-// every test suite and harness scopes itself away from a real profile.
+// Receipt: on 2026-08-17 an inherited path override let `make install PROFILE=<name>` take
+// the production PID lock and migrate the production database. Call this before any of that.
 func ValidateProfileRouting() error {
 	profile := Profile()
 	if profile == "" {
@@ -45,9 +30,7 @@ func ValidateProfileRouting() error {
 	profileDir := DataDirForProfile(profile)
 	profilePort := WSPortForProfile(profile)
 
-	// ATTN_DATA_DIR comes first: every other default derives from it, so
-	// reporting it once explains the rest. configKey names the config.json
-	// field that can also produce the value — the only other source there is.
+	// ATTN_DATA_DIR comes first: every other default derives from it.
 	checks := []struct {
 		env       string
 		configKey string
@@ -83,8 +66,6 @@ func ValidateProfileRouting() error {
 			continue
 		}
 		if dataDirConflict || check.configKey == "" {
-			// Derived from the data dir that is already reported; one line is
-			// enough to explain the whole set.
 			continue
 		}
 		conflicts = append(conflicts, routingConflict{
@@ -100,10 +81,6 @@ func ValidateProfileRouting() error {
 	return formatRoutingConflict(profile, profileDir, profilePort, conflicts)
 }
 
-// routingConflict is one resolved value that does not belong to the active
-// profile, and where it came from: an environment variable, or a field in the
-// profile's own config.json. The source decides the remedy — scrubbing the
-// environment cannot fix a file.
 type routingConflict struct {
 	label      string
 	value      string
@@ -142,8 +119,6 @@ func formatRoutingConflict(profile, profileDir, profilePort string, conflicts []
 	return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 }
 
-// scrubFlags renders the `-u NAME` flags for the variables that are actually
-// set, so the printed command clears exactly what disagreed.
 func scrubFlags(names []string) string {
 	var b strings.Builder
 	for _, name := range names {
@@ -152,16 +127,11 @@ func scrubFlags(names []string) string {
 	return b.String()
 }
 
-// lookupRoutingOverride reports whether a routing variable is set to a
-// non-empty value, and what it holds.
 func lookupRoutingOverride(name string) (string, bool) {
 	value := strings.TrimSpace(os.Getenv(name))
 	return value, value != ""
 }
 
-// routingValuesAgree compares a resolved routing value against the profile's
-// canonical one. Paths compare canonically (an env override may be relative or
-// reach the same directory through a symlink); ports compare as trimmed text.
 func routingValuesAgree(resolved, expected string, isPath bool) (bool, error) {
 	if !isPath {
 		return strings.TrimSpace(resolved) == strings.TrimSpace(expected), nil

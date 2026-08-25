@@ -69,10 +69,6 @@ func TestFrameGeometryDiscipline(t *testing.T) {
 	}
 }
 
-// TestFrameGeometryDisciplineNarrow exercises an actual truncation, at a
-// width narrow enough (~10 cols) that both banner rows must be clipped —
-// the case a single-row combined banner could never satisfy in a
-// realistic ~20-col pane.
 func TestFrameGeometryDisciplineNarrow(t *testing.T) {
 	const cols, rows = 10, 24
 	for _, style := range testStyles {

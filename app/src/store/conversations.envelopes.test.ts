@@ -108,9 +108,6 @@ describe('conversations store', () => {
 
     expect(conversation().queue).toEqual({ steering: ['one'], followUp: ['two', 'three'] });
 
-    // Nothing survives a settle: pi drains a follow-up inside the run rather
-    // than after it, so a queue still standing here belongs to a host that has
-    // stopped speaking.
     apply('run_settled', {}, 4);
     expect(conversation().queue).toEqual({ steering: [], followUp: [] });
   });
@@ -119,8 +116,6 @@ describe('conversations store', () => {
     apply('session_ready', {}, 1);
     apply('run_started', {}, 2);
     apply('queue_update', { steering: ['cut in'], followUp: ['and then'] }, 3);
-    // What the host emits after clearQueue(): the strip empties because pi says
-    // its queues are empty, never because the app removed an entry itself.
     apply('queue_update', { steering: [], followUp: [] }, 4);
 
     expect(conversation().queue).toEqual({ steering: [], followUp: [] });
@@ -152,7 +147,6 @@ describe('conversations store', () => {
     apply('message_start', { id: 'm1', role: 'assistant' }, 1);
     apply('tool_card', { id: 't1' }, 2);
     expect(messages()).toHaveLength(1);
-    // The unknown envelope still advances the cursor: it happened.
     expect(conversation().lastSeq).toBe(2);
   });
 
@@ -207,7 +201,6 @@ describe('conversations store', () => {
       expect(tool.hasDetail).toBe(true);
       expect(tool.truncated).toBe(true);
       expect(tool.fullOutput).toBe(true);
-      // One card, not two: the finish updates the call that started.
       expect(tools()).toHaveLength(1);
     });
 
@@ -257,8 +250,6 @@ describe('conversations store', () => {
     it('keeps a full answer when a clipped one lands after it', () => {
       apply('tool_finished', { call_id: 'c1', name: 'bash', status: 'ok', summary: 'yes | head -n 100000', files: [], detail: true, patch: false, truncated: true, full_output: true }, 1);
       apply('tool_detail', { call_id: 'c1', text: 'everything', full: true, truncated: false }, 2);
-      // A second client's collapsed fetch answering late must not shrink the
-      // card the user is reading.
       apply('tool_detail', { call_id: 'c1', text: 'clipped', full: false, truncated: true }, 3);
 
       expect(tools()[0].detail).toEqual({ text: 'everything', full: true, truncated: false });

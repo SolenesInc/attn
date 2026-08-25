@@ -10,15 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn app logs` and `attn app runtime` — the two commands that are about the
-// shared process rather than about one app.
-//
-// Every installed app's handlers run in one supervised Bun sidecar. That is the
-// design, not an implementation detail leaking out: isolation between apps is
-// failure attribution, not an OS boundary. So "why is my app not doing
-// anything" has two possible answers — the app, or the runtime — and these are
-// how a reader tells them apart.
-
 func runAppLogs(args []string) {
 	name := ""
 	lines := 0
@@ -57,8 +48,8 @@ func runAppLogs(args []string) {
 		fmt.Fprintln(os.Stderr, "       attn app logs runtime   # the whole shared log")
 		os.Exit(2)
 	}
-	// `runtime` is not an app and never can be — internal/apps reserves it — so
-	// the name check has to let it through here.
+	// `runtime` is not an app and never can be — internal/apps reserves it — so the
+	// name check has to let it through here.
 	if name != appRuntimeName {
 		if err := apps.ValidateName(name); err != nil {
 			appFail("logs", err)
@@ -70,8 +61,6 @@ func runAppLogs(args []string) {
 		appFail("logs", err)
 	}
 	if len(result.Lines) == 0 {
-		// Naming the file is the actionable half: an empty answer can mean the app
-		// has never printed anything, or that the runtime has never started.
 		fmt.Printf("no output from %s yet (%s)\n", name, result.Path)
 		return
 	}
@@ -83,8 +72,6 @@ func runAppLogs(args []string) {
 	}
 }
 
-// appRuntimeName is the shared runtime's name on every surface: the supervised
-// child, the log file, and `attn app logs runtime`.
 const appRuntimeName = "runtime"
 
 func runAppRuntime(args []string) {
@@ -128,12 +115,8 @@ func runAppRuntimeStatus(args []string) {
 	}
 	fmt.Println("app runtime")
 	if result.Runtime == nil {
-		// Never started is not stopped. Saying "stopped" for a daemon that has had
-		// no reason to start one would send the reader looking for a fault.
 		fmt.Printf("  state:    %s\n", appRuntimeNeverStarted)
 		if result.Apps > 0 && result.AppsEnabled == 0 {
-			// The one case where "has not happened yet" is wrong: this daemon will
-			// never start a runtime, and nothing about waiting will change that.
 			fmt.Printf("            every installed app is disabled, so nothing will start one — `attn app enable <name>`\n")
 		}
 	} else {
@@ -161,8 +144,6 @@ func writeAppRuntimeInfo(info protocol.AppRuntimeInfo) {
 	if info.Phase == "parked" {
 		fmt.Printf("            attn gave up restarting it after %d attempts; no app's handlers are running.\n", info.RestartAttempt)
 		if info.ParkedAt != nil {
-			// The park outlives the daemon that made it, so this is not "a moment
-			// ago" — it is how long apps have actually been dead.
 			fmt.Printf("            parked since %s.\n", *info.ParkedAt)
 		}
 		fmt.Printf("            `attn app runtime restart` tries again.\n")
@@ -180,9 +161,6 @@ func writeAppRuntimeInfo(info protocol.AppRuntimeInfo) {
 	}
 }
 
-// appRuntimeRestartTakesNoName is the teaching error. Somebody typing an app
-// name here believes apps restart individually, and the answer is the design,
-// not the syntax — so it says what the runtime is before it says what to type.
 func appRuntimeRestartTakesNoName(arg string) error {
 	return fmt.Errorf(
 		"takes no app name, and %q looks like one. Every app's handlers run in one shared runtime, so restarting it restarts them all — there is nothing per-app to restart. To stop one app, `attn app disable %s`.",

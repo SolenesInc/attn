@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// TokenUsage is one provider billing response, normalized into independently
-// priced token classes. Key is stable when a transcript record is replayed, so
-// a durable consumer can upsert the absolute counters without charging twice.
 type TokenUsage struct {
 	Key                          string
 	Model                        string
@@ -21,8 +18,6 @@ type TokenUsage struct {
 	CacheReadTokens              int64
 }
 
-// HasTokens distinguishes a real usage observation from Claude's synthetic
-// zero-token messages and Codex's info:null rate-limit updates.
 func (u TokenUsage) HasTokens() bool {
 	return u.InputTokens > 0 ||
 		u.OutputTokens > 0 ||
@@ -32,9 +27,6 @@ func (u TokenUsage) HasTokens() bool {
 		u.CacheReadTokens > 0
 }
 
-// UsageExtractor carries the small amount of provider context that usage
-// records omit. In particular, Codex announces the model on turn_context and
-// reports tokens later on token_count.
 type UsageExtractor struct {
 	agent      string
 	codexModel string
@@ -46,8 +38,6 @@ func NewUsageExtractor(agent string) *UsageExtractor {
 	return &UsageExtractor{agent: strings.ToLower(strings.TrimSpace(agent))}
 }
 
-// SupportsUsage reports whether attn knows how to extract token usage from
-// this harness's transcript format.
 func SupportsUsage(agent string) bool {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "claude", "codex":
@@ -57,11 +47,6 @@ func SupportsUsage(agent string) bool {
 	}
 }
 
-// Observe reads one complete provider JSONL record. sourceKey must identify the
-// source record stably across replay; Follower supplies its transcript
-// fingerprint and byte offset. Repeated identical Claude content-block records
-// are suppressed, while a revised absolute snapshot for the same message is
-// emitted so a durable consumer can apply only its delta.
 func (e *UsageExtractor) Observe(line []byte, sourceKey string) (TokenUsage, bool) {
 	var usage TokenUsage
 	var ok bool
@@ -88,9 +73,6 @@ func (e *UsageExtractor) setCodexModel(model string) {
 	e.codexModel = strings.TrimSpace(model)
 }
 
-// seedCodexModelBefore restores the model context when a follower bootstraps
-// from the middle or tail of a rollout. The closest earlier turn_context owns
-// every later token_count until another turn_context replaces it.
 func (e *UsageExtractor) seedCodexModelBefore(f *os.File, before int64) error {
 	if e.agent != "codex" {
 		return nil
@@ -145,10 +127,8 @@ func extractClaudeUsage(line []byte) (TokenUsage, bool) {
 		}
 		return usage, true
 	}
-	// Current Claude transcripts sometimes zero the top-level counters while
-	// retaining the actual request in iterations. When iterations are present,
-	// they are the authority; adding both would double-charge the common case
-	// where the top level repeats the sole iteration.
+	// Claude transcripts sometimes zero the top-level counters while retaining the
+	// request in iterations, so iterations are the authority; adding both doubles.
 	for _, iteration := range entry.Message.Usage.Iterations {
 		if !addClaudeUsage(&usage, iteration) {
 			return TokenUsage{}, false
@@ -173,13 +153,11 @@ func addClaudeUsage(dst *TokenUsage, src claudeUsageFields) bool {
 	}
 
 	classifiedWrite := src.CacheCreation.Ephemeral5mInputTokens + src.CacheCreation.Ephemeral1hInputTokens
-	if classifiedWrite < 0 { // int64 overflow
+	if classifiedWrite < 0 {
 		return false
 	}
 	unclassifiedWrite := src.CacheCreationInputTokens - classifiedWrite
 	if unclassifiedWrite < 0 {
-		// Some transcript versions carry the breakdown even when the aggregate is
-		// zero. The priced classes are still complete; there is no residual.
 		unclassifiedWrite = 0
 	}
 	updates := []struct {

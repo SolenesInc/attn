@@ -7,9 +7,8 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// addChiefWorkspaceLayout wires a workspace whose layout holds two agent panes
-// so the close-pane guard can be exercised against the chief pane while leaving
-// a sibling pane to prove ordinary panes still close.
+// addChiefWorkspaceLayout wires a workspace with two agent panes, so the guard is
+// exercised against the chief pane while a sibling proves ordinary panes close.
 func addChiefWorkspaceLayout(t *testing.T, d *Daemon, workspaceID, chiefSessionID, chiefPaneID, otherSessionID, otherPaneID string) {
 	t.Helper()
 	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "shared", Directory: "/tmp/" + workspaceID})
@@ -35,9 +34,6 @@ func addChiefWorkspaceLayout(t *testing.T, d *Daemon, workspaceID, chiefSessionI
 	}
 }
 
-// A direct unregister of the chief-of-staff session is refused: the session
-// survives and the client is told the chief is protected, so an accidental ⌘W or
-// close action cannot tear down the orchestrator.
 func TestHandleUnregisterWS_RefusesChiefOfStaff(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
@@ -56,8 +52,6 @@ func TestHandleUnregisterWS_RefusesChiefOfStaff(t *testing.T) {
 	expectCommandError(t, client, protocol.CmdUnregister, chiefOfStaffProtectedError)
 }
 
-// The guard is scoped to the chief alone: an ordinary session still unregisters
-// normally even while a chief exists in the same profile.
 func TestHandleUnregisterWS_AllowsNonChiefWhileChiefExists(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
@@ -76,8 +70,6 @@ func TestHandleUnregisterWS_AllowsNonChiefWhileChiefExists(t *testing.T) {
 	}
 }
 
-// Closing the chief's workspace pane is refused too: the pane and its session
-// survive and the layout is untouched.
 func TestHandleWorkspaceLayoutClosePane_RefusesChiefOfStaff(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
@@ -101,8 +93,6 @@ func TestHandleWorkspaceLayoutClosePane_RefusesChiefOfStaff(t *testing.T) {
 	}
 }
 
-// A non-chief pane in the same workspace still closes, removing only that
-// session and leaving the protected chief pane in place.
 func TestHandleWorkspaceLayoutClosePane_AllowsNonChiefPane(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")

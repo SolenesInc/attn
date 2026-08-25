@@ -1,20 +1,18 @@
 package transcript
 
-// AssistantMessage is one canonical assistant event annotations can address.
 type AssistantMessage struct {
 	Key     string
 	Content string
 }
 
-// AssistantWindowLimits bound the rolling live window. Oversize messages are
-// dropped whole because truncating their text would invalidate stored offsets.
+// Oversize messages are dropped whole: truncating their text would invalidate
+// stored offsets.
 type AssistantWindowLimits struct {
 	MaxMessages     int
 	MaxMessageChars int
 	MaxTotalChars   int
 }
 
-// AssistantWindowReport names what the rolling window omitted.
 type AssistantWindowReport struct {
 	DroppedOversize int
 	LargestDropped  int
@@ -26,7 +24,6 @@ func (r AssistantWindowReport) Truncated() bool {
 	return r.OmittedPrefix || r.DroppedOversize > 0 || r.DroppedOld > 0
 }
 
-// AssistantWindow incrementally retains the newest canonical assistant events.
 type AssistantWindow struct {
 	limits   AssistantWindowLimits
 	messages []AssistantMessage
@@ -37,14 +34,10 @@ func NewAssistantWindow(limits AssistantWindowLimits) *AssistantWindow {
 	return &AssistantWindow{limits: limits}
 }
 
-// MarkPrefixOmitted records that following began in a bounded tail rather than
-// at byte zero. The exact number of older messages is deliberately unknown:
-// counting them would require the full-file scan this window replaces.
 func (w *AssistantWindow) MarkPrefixOmitted() {
 	w.report.OmittedPrefix = true
 }
 
-// Apply returns true when the externally visible snapshot changed.
 func (w *AssistantWindow) Apply(events []Event) bool {
 	changed := false
 	for _, event := range events {

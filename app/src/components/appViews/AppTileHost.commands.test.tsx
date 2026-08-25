@@ -6,12 +6,6 @@ import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiConte
 import { useDaemonStore } from '../../store/daemonSessions';
 import type { AppRegistryEntry } from '../../hooks/useDaemonSocket';
 
-// A view acting, from the click to the socket and back.
-//
-// The two claims worth pinning: a view names a command and never an app — the
-// host binds which app is asked, the same rule the document namespace follows —
-// and a command that fails reaches the view as a message it can render rather
-// than as a rejection nobody caught.
 
 const loadAppView = vi.hoisted(() => vi.fn());
 vi.mock('./loadAppView', async () => {
@@ -68,8 +62,8 @@ describe('a view invoking a command', () => {
     renderHost(sendAppCommand);
     const button = await screen.findByRole('button', { name: 'Approve' });
 
-    // Awaited: the runner settles its own pending state after the answer, and
-    // asserting before that is asserting mid-update.
+    // The runner settles its own pending state after the answer, so asserting
+    // before the await is asserting mid-update.
     await act(async () => {
       fireEvent.click(button);
     });

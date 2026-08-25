@@ -3,16 +3,6 @@ import { act, render } from '@testing-library/react';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
-// ⌘. answers one of two different things depending on what is on screen, and
-// App is what picks which. A countdown running in front of the user is answered
-// wherever it is — every visible one at once, because each pill announced this
-// key. With nothing counting down the same press gets ahead of the next
-// auto-settle, and that one goes to the focused session alone: nothing asked for
-// it, so it belongs where the user is looking.
-//
-// Both halves are the same wire command; the daemon decides between cancelling,
-// arming, and disarming. What is asserted here is only who the press names.
-
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
@@ -23,7 +13,6 @@ const { mockSetActiveSession, mockSendCancelCountdown } = vi.hoisted(() => ({
   mockSendCancelCountdown: vi.fn(),
 }));
 
-// The daemon's auto-settle view of the two panes, mutated per step.
 let autoSettleFiresAt: Record<string, string | undefined>;
 let activeSessionId: string | null;
 
@@ -86,15 +75,11 @@ function socketArgs(): SocketArgs {
   return calls[calls.length - 1]?.[0] as SocketArgs;
 }
 
-/** The shortcut handlers App registered on its last render. */
 function shortcutHandlers<T>(): T {
   const calls = mockUseKeyboardShortcuts.mock.calls;
   return calls[calls.length - 1]?.[0] as T;
 }
 
-// One workspace split between two panes, so both sessions are on screen at once
-// — the only arrangement where "every visible countdown" and "the focused one"
-// can disagree.
 const PANES = ['s1', 's2'];
 
 function workspacePayload() {
@@ -132,7 +117,6 @@ function broadcast() {
   });
 }
 
-/** The sessions named by the last ⌘. press, in the order the app named them. */
 function pressCancelCountdown(): string[] {
   mockSendCancelCountdown.mockClear();
   const shortcuts = shortcutHandlers<{ onCancelCountdown?: () => void }>();
@@ -252,7 +236,6 @@ describe('who ⌘. names', () => {
     });
   });
 
-  /** Renders and puts the user on s1 with both panes on screen. */
   function focusFirstPane() {
     render(<App />);
     broadcast();
@@ -264,8 +247,6 @@ describe('who ⌘. names', () => {
   it('names the focused session alone when nothing is counting down', () => {
     focusFirstPane();
 
-    // s2 is on screen and owes a turn too, but nothing on it is counting: only
-    // the pane the user is in gets a dismissal armed against it.
     expect(pressCancelCountdown()).toEqual(['s1']);
   });
 
@@ -274,17 +255,12 @@ describe('who ⌘. names', () => {
     autoSettleFiresAt.s2 = '2999-01-01T00:00:00.000Z';
     broadcast();
 
-    // The pill is on the pane the user is not in, and the press still answers it
-    // — a pill naming a key that does nothing is worse than no pill.
     expect(pressCancelCountdown()).toEqual(['s2']);
   });
 
   it('names nothing when no tile is on screen at all', () => {
     focusFirstPane();
 
-    // Home: no terminal is rendered, so there is nothing announcing the key and
-    // nothing the user can see to arm. The shortcut unregisters rather than
-    // firing at a session picked by guesswork.
     const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
     act(() => { shortcuts.onGoToDashboard(); });
     broadcast();

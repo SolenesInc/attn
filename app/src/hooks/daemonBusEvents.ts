@@ -1,8 +1,3 @@
-// Event-bus diagnostics: the two results the bus settings page waits on.
-//
-// Its own module rather than a case in the hook's switch, because the domain is
-// self-contained — nothing else in the app reads bus internals — and the switch
-// is already long. Reached from the switch's `default` chain.
 
 import type {
   BusConsumerStatus,
@@ -13,7 +8,6 @@ import { type PendingRequests, settlePendingRequest } from './daemonPendingReque
 
 export type { BusConsumerStatus, BusHealthEntry, BusProducerStatus };
 
-/** The daemon's whole picture of the bus, as the settings page draws it. */
 export interface BusStatus {
   earliest: number;
   head: number;
@@ -22,24 +16,17 @@ export interface BusStatus {
   /** RFC3339; empty on an empty log. */
   oldestAt: string;
   newestAt: string;
-  /**
-   * The snapshot came from the process owning the delivery loops, which is what
-   * makes each consumer's `live` field mean anything.
-   */
   delivering: boolean;
   retentionSeconds: number;
   recentWindowSeconds: number;
   baselineWindowSeconds: number;
   surgeRatePerHour: number;
-  /** How long a consumer may pin the retention floor before the pin is reported. */
   pinAlarmSeconds: number;
   producers: BusProducerStatus[];
   consumers: BusConsumerStatus[];
   health: BusHealthEntry[];
 }
 
-// A loosely typed view of the wire event: these arrive as parsed JSON, so every
-// field is checked rather than asserted.
 interface BusDaemonEvent {
   event?: string;
   success?: boolean;
@@ -69,10 +56,6 @@ const toBusStatus = (event: BusDaemonEvent): BusStatus => ({
   health: list<BusHealthEntry>(event.health),
 });
 
-/**
- * Settles a bus result, or returns false for an event this module does not own
- * so the caller can keep looking.
- */
 export function handleBusDaemonEvent(event: BusDaemonEvent, pending: PendingRequests): boolean {
   switch (event.event) {
     case 'bus_status_result':

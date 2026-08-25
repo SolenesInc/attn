@@ -1,32 +1,3 @@
-/**
- * SelectionToolbar — the floating action bar over a pending selection (or a
- * hovered code block). Ported from plannotator's AnnotationToolbar minus
- * math/images/keyboard-copy.
- *
- * Buttons: Delete (redline — creates instantly, no popover), Comment,
- * ⚡ quick-label picker toggle, three promoted quick labels, Cancel.
- *
- * Positioning: `center-above` for prose (centered over the selection rect),
- * `top-right` for code blocks (right-aligned above the block); recomputed on
- * capture-phase scroll + resize, closing when the anchor rect scrolls fully
- * out of the viewport (closeOnScrollOut).
- *
- * Escape goes through useEscapeStack (repo-wide LIFO dismiss contract), NOT
- * the local keydown handler: the picker registers above the toolbar, so
- * Escape dismisses picker → toolbar in open order, and any app overlay
- * stacked later wins first.
- *
- * Type-to-comment guard set (spec E9, donor order minus Escape — see above):
- *   1. IME composing → ignore
- *   2. editable event target or activeElement → ignore
- *   3. picker open → picker owns the keyboard
- *   4. Alt+Digit1..0 (no ctrl/meta) → quick-label N
- *   5. remaining ctrl/meta/alt combos → ignore
- *   6. Tab/Enter → ignore
- *   7. non-single-char keys → ignore
- *   8. else → open the comment popover seeded with the typed char
- */
-
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../../../hooks/useEscapeStack';
@@ -61,11 +32,9 @@ export interface SelectionToolbarProps {
   onRequestComment: (initialChar?: string) => void;
   onQuickLabel: (label: QuickLabel) => void;
   onClose: () => void;
-  /** Close when the anchor rect fully leaves the viewport. */
   closeOnScrollOut?: boolean;
   /** Read at zap-click time: last mouseup position for picker placement. */
   getCursorHint?: () => { x: number; y: number } | null;
-  /** Hover grace callbacks (code-block hover toolbar keeps itself alive). */
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }
@@ -92,7 +61,6 @@ export function SelectionToolbar({
   const showQuickLabelsRef = useRef(showQuickLabels);
   showQuickLabelsRef.current = showQuickLabels;
 
-  // Position on mount + capture-phase scroll + resize; scroll-out close.
   useEffect(() => {
     const updatePosition = () => {
       const rect = getAnchorRect();
@@ -119,7 +87,6 @@ export function SelectionToolbar({
     };
   }, [getAnchorRect, positionMode, closeOnScrollOut, onClose]);
 
-  // Type-to-comment + Alt+N quick labels + Escape (guard set — see module doc).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) {
@@ -128,7 +95,6 @@ export function SelectionToolbar({
       if (isEditableElement(e.target) || isEditableElement(document.activeElement)) {
         return;
       }
-      // Picker open → QuickLabelPicker owns all keyboard input.
       if (showQuickLabelsRef.current) {
         return;
       }
@@ -158,12 +124,11 @@ export function SelectionToolbar({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onRequestComment, onQuickLabel]);
 
-  // Escape dismiss via the centralized stack: registered on mount, so the
-  // picker (which mounts later) sits above and dismisses first (LIFO).
+  // Registered on mount, so the picker (which mounts later) sits above and dismisses first.
   useEscapeStack(onClose, true);
 
-  // Dismiss on outside pointerdown (disabled while the picker is open — the
-  // picker owns its own outside-dismiss with one-tick deferral).
+  // Disabled while the picker is open — it owns its own outside-dismiss with a one-tick
+  // deferral.
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
       if (showQuickLabelsRef.current) {
@@ -258,8 +223,6 @@ export function SelectionToolbar({
     document.body,
   );
 }
-
-// ---- icons (donor SVGs, stroke=currentColor) --------------------------------
 
 const TrashIcon = () => (
   <svg className="md-toolbar-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

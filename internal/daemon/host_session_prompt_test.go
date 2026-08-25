@@ -11,17 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A launch prompt for a conversation session — a delegation brief, most of the
-// time — belongs to the session rather than to the host process that was first
-// handed it. These are the two halves of that: it reaches the driver at spawn,
-// and it is still there for the host that replaces one killed before pi wrote
-// anything down.
-
 const conversationBrief = "Fix the flaky test in internal/store.\nReport on the ticket when it is green."
 
-// serveOneDriverSpawn answers the plugin pipe's next driver.spawn with a host
-// command the daemon can really run, and hands back the params it was called
-// with. Health checks in between are answered so the registration stays alive.
 func serveOneDriverSpawn(t *testing.T, conn net.Conn, argv []string) <-chan pluginDriverSpawnParams {
 	t.Helper()
 	spawned := make(chan pluginDriverSpawnParams, 1)
@@ -49,8 +40,6 @@ func serveOneDriverSpawn(t *testing.T, conn net.Conn, argv []string) <-chan plug
 	return spawned
 }
 
-// idleHostCommand is a host that does nothing but stay alive on its stdin, so
-// the spawn pipeline completes against a real process.
 func idleHostCommand(t *testing.T) []string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "idle-host.sh")
@@ -100,9 +89,6 @@ func TestConversationLaunchPromptReachesTheDriverAndOutlivesItsHost(t *testing.T
 		t.Fatal("the driver was never asked to spawn")
 	}
 
-	// The durable half. A host killed before pi's first assistant message leaves
-	// no session file, so the replacement starts an empty conversation — and an
-	// empty conversation with no brief is a delegated agent with nothing to do.
 	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
 		t.Fatal("a conversation session spawned with no stored launch intent")
@@ -116,10 +102,6 @@ func TestConversationLaunchPromptReachesTheDriverAndOutlivesItsHost(t *testing.T
 	}
 }
 
-// A PTY agent's relaunch resumes its transcript, so replaying the launch prompt
-// there would set a delegated agent to work on a brief it already finished. The
-// prompt is written to a file the wrapper consumes exactly once and is
-// deliberately not part of what a relaunch reconstructs.
 func TestPTYLaunchPromptIsNotStoredForReplay(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}

@@ -45,9 +45,6 @@ function rowFor(title: string): HTMLElement {
   return row;
 }
 
-// Severity is what the panel styles each row by, so the class that carries it
-// has to be on the row for every value — including one the daemon may send that
-// this build does not know, which must land somewhere rather than nowhere.
 describe('NotificationsPanel severity', () => {
   it('styles each row by its severity', async () => {
     renderPanel([
@@ -86,7 +83,6 @@ describe('NotificationsPanel severity', () => {
     await waitFor(() => expect(screen.getByText('Plugin stopped')).toBeInTheDocument());
 
     const row = rowFor('Plugin stopped');
-    // Severity describes the event, not whether the user has seen it.
     expect(row).toHaveClass('sev-critical');
     expect(row).not.toHaveClass('is-unread');
   });

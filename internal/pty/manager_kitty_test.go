@@ -2,10 +2,6 @@
 
 package pty
 
-// The whole worker half, on a real spawned process: the override reaches the
-// terminal ghostty is built with, a program's image is observed and described
-// to the attached client, and the pixels behind it can be fetched back.
-
 import (
 	"bytes"
 	"errors"
@@ -17,18 +13,14 @@ import (
 	"time"
 )
 
-// kittySpawn starts a session whose child emits payload once the test releases
-// it. The handshake matters: a child that writes at spawn time can be finished
-// before the test attaches, and a test that closed that gap with a sleep would
-// pass or fail on machine speed.
+// kittySpawn's release handshake exists because a child that writes at spawn time can be
+// finished before the test attaches, and a sleep would close that gap on machine speed.
 type kittySpawn struct {
 	manager *Manager
 	id      string
 	updates chan PlacementUpdate
 	exited  chan struct{}
 
-	// The byte stream the client would see, so a test can wait for a marker the
-	// payload ends with and know the child has written everything it is going to.
 	mu      sync.Mutex
 	output  []byte
 	arrived chan struct{}
@@ -39,10 +31,6 @@ func newKittySpawn(t *testing.T, id, payload string) *kittySpawn {
 	return newKittySpawnCmd(t, id, payload, "read release; cat %s")
 }
 
-// newKittySpawnCmd runs script with the payload path substituted in. The shape
-// of the script decides the session's lifetime: the plain one exits once it has
-// emitted, a trailing read holds the session open for tests that need to act on
-// it afterwards.
 func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "payload")
@@ -59,8 +47,6 @@ func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 		exited:  make(chan struct{}),
 		arrived: make(chan struct{}, 1),
 	}
-	// Shutdown kills a held child, so the handler can fire from teardown as well
-	// as from the child finishing on its own.
 	var once sync.Once
 	m.SetExitHandler(func(ExitInfo) { once.Do(func() { close(spawn.exited) }) })
 
@@ -94,11 +80,8 @@ func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 	return spawn
 }
 
-// waitForOutput blocks until marker has come out of the session, then returns
-// the replay watermark. A payload can span several chunks, so "the image was
-// described" is NOT the same moment as "the child is done writing" — a test
-// that wants a stable watermark has to wait for the end of the output, and a
-// marker at the end of the payload is the only thing that says so.
+// A payload can span several chunks, so "the image was described" is not "the
+// child is done writing": a stable watermark needs a marker at the end of it.
 func (k *kittySpawn) waitForOutput(t *testing.T, marker string) uint32 {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
@@ -125,8 +108,8 @@ func (k *kittySpawn) waitForOutput(t *testing.T, marker string) uint32 {
 	return session.lastReplaySeq
 }
 
-// release lets the child emit, and returns once it has exited — which is the
-// read loop's own statement that every byte it produced has been fed and fanned.
+// release returns once the child has exited, which is the read loop's own statement
+// that every byte it produced has been fed and fanned.
 func (k *kittySpawn) release(t *testing.T) {
 	t.Helper()
 	if err := k.manager.Input(k.id, []byte("\n")); err != nil {
@@ -139,9 +122,6 @@ func (k *kittySpawn) release(t *testing.T) {
 	}
 }
 
-// The default is images ON, and on over the real spawn path rather than only in
-// a hand-built terminal: nothing in the environment, and a program that draws an
-// image gets it stored and described.
 func TestSpawnedSessionDescribesImagesByDefault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -164,9 +144,6 @@ func TestSpawnedSessionDescribesImagesByDefault(t *testing.T) {
 	}
 }
 
-// The escape hatch, over the same path: an explicit zero is the one value that
-// turns the protocol off, and it must reach ghostty rather than being read as
-// "unset".
 func TestSpawnedSessionDescribesNoImagesWhenTheLimitIsZero(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -186,10 +163,6 @@ func TestSpawnedSessionDescribesNoImagesWhenTheLimitIsZero(t *testing.T) {
 	}
 }
 
-// With the override, every hop works on the spawn path: the limit reaches
-// ghostty's options, the transmission is accepted, the placement is observed,
-// the attached client is told, and the pixels are fetchable by the id the
-// placement carries.
 func TestSpawnedSessionDescribesImagesUnderTheStorageOverride(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")

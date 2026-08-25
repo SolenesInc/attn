@@ -9,9 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// notificationToProtocol converts one durable notification row into the
-// user-facing protocol type. read_at is emitted as RFC3339 (UTC) when read and
-// "" while unread, matching the schema's documented convention.
 func notificationToProtocol(rec store.NotificationRecord) protocol.Notification {
 	pn := protocol.Notification{
 		ID:         rec.ID,
@@ -38,10 +35,6 @@ func notificationsToProtocol(recs []store.NotificationRecord) []protocol.Notific
 	return out
 }
 
-// sendNotificationListWSResult lists the whole notification feed (newest first)
-// with the current unread count and replies to a websocket client with a
-// notification_list_result correlated by requestID. A nil store is a successful
-// empty list, not an error.
 func (d *Daemon) sendNotificationListWSResult(client *wsClient, requestID string) {
 	if d.store == nil {
 		d.sendToClient(client, protocol.NotificationListResultMessage{
@@ -77,11 +70,6 @@ func (d *Daemon) sendNotificationListWSResult(client *wsClient, requestID string
 	d.sendToClient(client, msg)
 }
 
-// sendNotificationMarkReadWSResult marks one notification read (when
-// notificationID is set) or all unread ones (when nil), replies with a
-// notification_mark_read_result carrying the post-mark unread count, and — on a
-// successful mark — broadcasts notifications_updated so every client updates its
-// badge and any open panel re-lists.
 func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID string, notificationID *string) {
 	fail := func(m string) {
 		d.sendToClient(client, protocol.NotificationMarkReadResultMessage{
@@ -95,8 +83,6 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 		fail("notification store unavailable")
 		return
 	}
-	// Collect the ids being marked before the write: "all unread were read" is a
-	// list of notifications, and each one is a fact of its own.
 	var markedIDs []string
 	var markErr error
 	if notificationID != nil && *notificationID != "" {
@@ -134,12 +120,8 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 	})
 }
 
-// notificationKindTaskFailed marks a notification produced by a background task
-// that exhausted its retries.
 const notificationKindTaskFailed = "task_failed"
 
-// taskFailureTitles maps a task kind to a human-facing notification title. An
-// unknown kind falls back to a generic title carrying the raw kind string.
 var taskFailureTitles = map[string]string{
 	compactContextKind:           "Context compaction failed",
 	notebookSummarizeSessionKind: "Session summary failed",
@@ -147,12 +129,7 @@ var taskFailureTitles = map[string]string{
 	reconcileKind:                "Ticket reconciliation failed",
 }
 
-// notifyTaskTerminalFailure is the job queue's OnTerminalFailure sink: it turns
-// a job that exhausted its retries (reached the terminal dead state) into a
-// durable notification and broadcasts the new unread count. It is wired to the
-// runner in startJobQueue and runs on the runner's goroutine, so it must not
-// block or panic. A nil store drops the notification — the same mode in which the
-// runner does not persist jobs at all.
+// Runs on the job runner's goroutine, so it must not block or panic.
 func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	if t == nil || d.store == nil {
 		return
@@ -165,9 +142,6 @@ func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
-// renderTaskFailureNotification builds the durable notification for a dead job.
-// SourceKind/SourceID point back at the job so the detail dialog's Retry can
-// re-queue it; Detail carries the raw last error for diagnosis.
 func renderTaskFailureNotification(t *jobs.Job) store.NotificationRecord {
 	title := taskFailureTitles[t.Kind]
 	if title == "" {
@@ -178,9 +152,7 @@ func renderTaskFailureNotification(t *jobs.Job) store.NotificationRecord {
 		attemptWord = "attempts"
 	}
 	return store.NotificationRecord{
-		Kind: notificationKindTaskFailed,
-		// A dead job stays dead until the user retries it, but nothing else
-		// degrades while it waits — that is warning, not critical.
+		Kind:       notificationKindTaskFailed,
 		Severity:   store.NotificationWarning,
 		Title:      title,
 		Body:       fmt.Sprintf("attn retried %d %s and gave up. Retry to run it again.", t.Attempts, attemptWord),
@@ -190,12 +162,6 @@ func renderTaskFailureNotification(t *jobs.Job) store.NotificationRecord {
 	}
 }
 
-// broadcastNotificationsUpdated announces that the notification feed changed (a
-// new notification was added, or one/all were marked read) so every client
-// updates its unread badge and any open panel re-lists. It reads the current
-// unread count and does a non-blocking broadcast, holding no shared state, so it
-// is safe to invoke concurrently — including from the task runner's terminal-
-// failure callback. A nil store broadcasts an unread count of 0.
 func (d *Daemon) projectNotificationsUpdated() {
 	d.projectSnapshot(snapshotNotifs, func() {
 		unread, criticalCount, criticalTitle := 0, 0, ""

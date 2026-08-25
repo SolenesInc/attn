@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// FindCodexTranscript searches Codex session logs for the most recent session
-// matching the given cwd and start time. Returns empty string if not found.
 func FindCodexTranscript(cwd string, startedAt time.Time) string {
 	sessionsDir := codexSessionsDir()
 	if sessionsDir == "" {
@@ -51,7 +49,6 @@ func FindCodexTranscript(cwd string, startedAt time.Time) string {
 		if statErr != nil {
 			return nil
 		}
-		// Skip files that are too old to be relevant.
 		if info.ModTime().Before(startedAt.Add(-5 * time.Minute)) {
 			return nil
 		}
@@ -76,13 +73,8 @@ func FindCodexTranscript(cwd string, startedAt time.Time) string {
 			return nil
 		}
 
-		// This finder resolves interactive attn panes, which codex records with
-		// source "cli". `codex exec` rollouts (source "exec") are headless runs —
-		// attn's own stop-time classifier among them — that share the pane's cwd
-		// and land seconds after the real conversation, so cwd+newest would pick
-		// them over the pane's rollout. They are categorically not what any
-		// caller is looking for. Rollouts predating the source field keep the old
-		// behavior.
+		// `codex exec` rollouts share the pane's cwd and land seconds after the real conversation,
+		// so cwd+newest would pick them. Rollouts predating the source field keep the old behavior.
 		if entry.Payload.Source == "exec" {
 			return nil
 		}
@@ -108,8 +100,6 @@ func FindCodexTranscript(cwd string, startedAt time.Time) string {
 			return nil
 		}
 
-		// Fallback for resumed/continued sessions where session_meta timestamp is old
-		// but the transcript file is still actively written.
 		if fallbackPath == "" || info.ModTime().After(fallbackModTime) {
 			fallbackPath = path
 			fallbackModTime = info.ModTime()
@@ -124,9 +114,6 @@ func FindCodexTranscript(cwd string, startedAt time.Time) string {
 	return fallbackPath
 }
 
-// FindCodexTranscriptForResume resolves a transcript by the native Codex
-// session id recorded in its session_meta event. Unlike cwd/time discovery it
-// cannot select a plausible neighbouring session.
 func FindCodexTranscriptForResume(resumeID string) string {
 	resumeID = strings.TrimSpace(resumeID)
 	if resumeID == "" {
@@ -164,9 +151,6 @@ func FindCodexTranscriptForResume(resumeID string) string {
 	return found
 }
 
-// codexSessionsDir follows Codex's CODEX_HOME override when present. This is
-// necessary for isolated profiles and test environments; the default remains
-// the native ~/.codex/sessions location.
 func codexSessionsDir() string {
 	if codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME")); codexHome != "" {
 		return filepath.Join(codexHome, "sessions")
@@ -267,8 +251,6 @@ func absDuration(d time.Duration) time.Duration {
 	return d
 }
 
-// FindCopilotTranscript searches Copilot session-state for the most recently
-// active events stream matching cwd and launch timing.
 func FindCopilotTranscript(cwd string, startedAt time.Time) string {
 	homeDir, err := toolhome.Dir()
 	if err != nil {
@@ -300,11 +282,8 @@ func FindCopilotTranscript(cwd string, startedAt time.Time) string {
 			return filepath.SkipDir
 		}
 
-		// Compared through symlinks, as codex's finder is: copilot records the
-		// resolved cwd, so a session launched under /tmp writes /private/tmp and a
-		// literal comparison finds nothing. Copilot's live state comes from the
-		// watcher, so a transcript it cannot find leaves the session showing
-		// `launching` for as long as it runs.
+		// Compared through symlinks, as codex's finder is: copilot records the resolved cwd, so a
+		// session launched under /tmp writes /private/tmp.
 		matchedCWD := readCopilotWorkspaceCWD(workspacePath)
 		if matchedCWD == "" || !pathsEquivalent(matchedCWD, cwdClean) {
 			return filepath.SkipDir
@@ -369,14 +348,11 @@ func FindCopilotTranscript(cwd string, startedAt time.Time) string {
 	return bestPath
 }
 
-// FindCopilotTranscriptForResume resolves a Copilot resume ID to a transcript path.
-// Resume IDs are directory names under ~/.copilot/session-state.
 func FindCopilotTranscriptForResume(resumeID string) string {
 	if strings.TrimSpace(resumeID) == "" {
 		return ""
 	}
 
-	// Resume IDs are directory names; reject path traversal / separators.
 	if strings.Contains(resumeID, "/") || strings.Contains(resumeID, "\\") || strings.Contains(resumeID, "..") {
 		return ""
 	}
@@ -392,8 +368,6 @@ func FindCopilotTranscriptForResume(resumeID string) string {
 	return path
 }
 
-// FindClaudeTranscript searches Claude project directories for a transcript
-// file matching the session ID. Returns empty string if not found.
 func FindClaudeTranscript(sessionID string) string {
 	if strings.TrimSpace(sessionID) == "" {
 		return ""
@@ -425,7 +399,6 @@ func FindClaudeTranscript(sessionID string) string {
 			return filepath.SkipAll
 		}
 
-		// Claude stores transcript files directly under each project dir.
 		return filepath.SkipDir
 	})
 

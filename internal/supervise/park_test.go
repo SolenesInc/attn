@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// A park has one timestamp for as long as it lasts, and it is the moment the
-// supervisor gave up — not the moment of the exit that pushed it over, and not
-// the moment anything asked about it afterwards.
 func TestParkingStampsWhenItHappened(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -37,7 +34,6 @@ func TestParkingStampsWhenItHappened(t *testing.T) {
 		t.Fatalf("ParkedAt moved %s → %s while nothing happened", parked.ParkedAt, later.ParkedAt)
 	}
 
-	// Leaving parked clears it: a running child has no park to be timestamped.
 	if err := supervisor.Ensure("fixture", launcher.start); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
@@ -46,9 +42,6 @@ func TestParkingStampsWhenItHappened(t *testing.T) {
 	}
 }
 
-// AdoptParked is how a consumer that persisted a give-up hands it back. The
-// restored child must be exactly where the give-up left it — including never
-// having been launched by this supervisor.
 func TestAdoptParkedRestoresWithoutLaunching(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -84,13 +77,11 @@ func TestAdoptParkedRestoresWithoutLaunching(t *testing.T) {
 		t.Fatalf("LastExit=%+v, want the recorded exit code 1", snapshot.LastExit)
 	}
 
-	// Nothing scheduled means nothing runs, however long anyone waits.
 	clock.Advance(24 * time.Hour)
 	if got := launcher.count(); got != 0 {
 		t.Fatalf("starts after adopting a park=%d, want 0", got)
 	}
 
-	// Traffic finds it parked, and only the deliberate act revives it.
 	if err := supervisor.EnsureUnlessParked("fixture", launcher.start); !errors.Is(err, ErrParked) {
 		t.Fatalf("EnsureUnlessParked=%v, want ErrParked", err)
 	}
@@ -107,8 +98,6 @@ func TestAdoptParkedRestoresWithoutLaunching(t *testing.T) {
 	}
 }
 
-// Adopting is a restore, not an announcement: the child was parked before this
-// supervisor existed, so nothing moved and nobody is told again.
 func TestAdoptParkedIsSilent(t *testing.T) {
 	changes, giveUps := 0, 0
 	supervisor := New(Options{
@@ -124,8 +113,6 @@ func TestAdoptParkedIsSilent(t *testing.T) {
 	}
 }
 
-// A persisted park describes a child an earlier process gave up on. Applying it
-// over a live child would replace what this process knows with a stale record.
 func TestAdoptParkedRefusesASupervisedChild(t *testing.T) {
 	launcher := &fakeLauncher{}
 	supervisor := New(Options{Clock: newFakeClock()})

@@ -5,8 +5,6 @@ import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
 
-// Zoom mode is a layout flag — no terminal needed, and the real one drags in
-// the Ghostty WASM model.
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
   return {
@@ -23,8 +21,6 @@ function singlePaneWorkspace(): TerminalWorkspaceState {
   };
 }
 
-// Stands in for the daemon session store: a source that pushes new values at
-// React from outside the render cycle, the way a WebSocket snapshot burst does.
 function createBurstStore() {
   const listeners = new Set<() => void>();
   let version = 0;
@@ -47,8 +43,6 @@ function createBurstStore() {
   };
 }
 
-// App's shape around zoom mode: it owns the flag, re-renders on every daemon
-// session snapshot, and hands the workspace a fresh inline setter each time.
 function renderUnderBurstingParent() {
   const onSetZoomActive = vi.fn();
   const store = createBurstStore();
@@ -91,13 +85,8 @@ function zoomedPaneId(container: HTMLElement) {
 }
 
 describe('SessionTerminalWorkspace zoom mode', () => {
-  // Regression: the workspace used to keep its own zoom flag and push it back
-  // to App from an effect that depended on App's inline callback. Since App
-  // writes what it receives into its own state, every parent render produced
-  // another write and another parent render. A burst of daemon session
-  // snapshots keeps that cycle from settling and React aborts the tree with
-  // error #185 (maximum update depth). Zoom mode now lives in App, so the
-  // workspace only ever writes it from the shortcut.
+  // Regression: a workspace-owned zoom flag pushed back to App from an effect
+  // never settled under a burst of daemon snapshots, and React aborted (#185).
   it('never writes zoom mode back to the parent on its own', () => {
     const { onSetZoomActive, store } = renderUnderBurstingParent();
 

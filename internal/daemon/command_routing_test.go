@@ -11,11 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// protocolCommands reads every Cmd* string constant out of the protocol
-// package's source. Derived rather than hand-listed on purpose: a hand-listed
-// set of commands silently stops covering the ones added after it was written,
-// and a coverage test that has quietly stopped covering things is worse than no
-// test, because the name still reads as a guarantee.
 func protocolCommands(t *testing.T) map[string]string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -52,13 +47,8 @@ func protocolCommands(t *testing.T) map[string]string {
 	return commands
 }
 
-// Commands that already had no CommandMeta entry when this guard was written.
-// They take the defaults: logged, non-blocking during recovery, and no declared
-// scope — which also means the session-routing guard below cannot see them.
-//
-// This list exists to stop the gap growing, not to bless it. It may only get
-// shorter: classifying one is a matter of giving it a real CommandMeta entry and
-// deleting the line here. Nothing may be added.
+// This list may only get shorter — give a command a real CommandMeta entry and
+// delete its line here. Nothing may be added.
 var commandsPredatingTheScopeGuard = map[string]bool{
 	"automation_apply": true, "automation_cleanup": true, "automation_definition_get": true, "automation_definitions_get": true,
 	"automation_delete": true, "automation_run": true, "automation_runs_get": true, "automation_set_enabled": true,
@@ -97,8 +87,6 @@ func TestEveryProtocolCommandIsClassified(t *testing.T) {
 	}
 }
 
-// The debt list may only shrink. An entry that has since been classified, or
-// that names a command that no longer exists, is stale.
 func TestUnclassifiedCommandListOnlyShrinks(t *testing.T) {
 	commands := protocolCommands(t)
 	for wire := range commandsPredatingTheScopeGuard {
@@ -112,20 +100,9 @@ func TestUnclassifiedCommandListOnlyShrinks(t *testing.T) {
 	}
 }
 
-// Commands that act on a session and are answered by whichever daemon receives
-// them, with the reason each is allowed to be. Everything else scoped to a
-// session must be routed to the daemon that owns it — see
-// TestSessionScopedCommandsReachTheSessionOwner.
-//
-// A hub holds the browser's connection for sessions running on other machines.
-// A session-scoped command it answers locally reads its own store instead of
-// the owner's, which fails in a way nothing local can see: the local pane keeps
-// working and only a remote pane is wrong.
+// A hub answering one of these locally reads its own store instead of the owner's,
+// and fails invisibly: the local pane keeps working, only a remote pane is wrong.
 var sessionCommandsAnsweredWhereTheyLand = map[string]string{
-	// The agent process talks to the daemon on its own machine over the unix
-	// socket. These never arrive on the browser websocket, so the daemon that
-	// receives them is the owner by construction and there is nothing to
-	// forward.
 	protocol.CmdRegister:            "arrives from the agent process over the unix socket",
 	protocol.CmdState:               "arrives from the agent process over the unix socket",
 	protocol.CmdStop:                "arrives from the agent process over the unix socket",
@@ -146,21 +123,13 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdSetTicketStatus:     "arrives from the agent process over the unix socket",
 	protocol.CmdOpenSentFiles:       "arrives from the agent process over the unix socket",
 
-	// Reaches its endpoint through its own handler rather than the shared
-	// routers, because it has work to do on both sides: it detaches and
-	// unregisters locally, then forwards to the owner.
 	protocol.CmdUnregister: "handleUnregisterWS forwards to the endpoint itself",
 
-	// Answered by the hub because the hub is what owns the thing acted on: the
-	// ticket board is the hub's store, and the browser tile belongs to the
-	// local app that hosts the webview.
 	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
 }
 
-// The id fields the routers read. A session-scoped command that names its
-// target with a field absent from this probe reads as unrouted, so the failure
-// message says to check here first.
+// A command naming its target with a field absent from this probe reads as unrouted.
 func routingProbe(wire string) []byte {
 	return []byte(`{"cmd":"` + wire + `","id":"probe","session_id":"probe","target_session_id":"probe",` +
 		`"workspace_id":"probe","source_workspace_id":"probe","source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)
@@ -172,12 +141,6 @@ func routedByAnyRouter(wire string, msg interface{}) bool {
 		remoteCommandPTYTargetID(wire, msg) != ""
 }
 
-// Every command that acts on a session has to reach the daemon that owns that
-// session. There are four routers plus a handful of handlers that forward for
-// themselves, and nothing previously made a new command pick one: it just
-// defaulted to being answered wherever it landed. That is how session_messages_get
-// and the three session_annotations_* commands shipped unrouted — the feature
-// worked perfectly on every local session and was broken for every remote one.
 func TestSessionScopedCommandsReachTheSessionOwner(t *testing.T) {
 	unrouted := []string{}
 	for wire := range protocolCommands(t) {
@@ -210,8 +173,6 @@ func TestSessionScopedCommandsReachTheSessionOwner(t *testing.T) {
 	}
 }
 
-// The exception list has to rot loudly. An entry for a command that is now
-// routed, or that no longer exists, is a claim nobody rechecked.
 func TestSessionCommandExceptionsAreStillNeeded(t *testing.T) {
 	commands := protocolCommands(t)
 	for wire, reason := range sessionCommandsAnsweredWhereTheyLand {

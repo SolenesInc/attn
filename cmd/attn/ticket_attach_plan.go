@@ -421,9 +421,8 @@ func retireNotebookPlanSource(plan planAttachment, canonicalPath string) (bool, 
 	return true, nil
 }
 
-// requireGitPathUntracked enforces the no-tracked-source deletion promise at
-// the deletion edge. Exit code 1 is git ls-files' expected "not tracked"
-// result; every other failure is ambiguous and therefore preserves the file.
+// requireGitPathUntracked enforces the no-tracked-source deletion promise. Exit code 1 is
+// git ls-files' "not tracked"; every other failure is ambiguous and preserves the file.
 func requireGitPathUntracked(repoRoot, repoPath string) error {
 	_, err := attngit.Output(attngit.OpMetadata, repoRoot, "ls-files", "--error-unmatch", "--", repoPath)
 	if err == nil {

@@ -9,11 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A conversation picked up by file is named in the launch intent, and the intent
-// is re-offered to every replacement host. If the file is gone by the time the
-// host runs, the fork throws and the host exits — and the revive hands it the
-// same missing path again. The user sees a session flap and is told nothing.
-// The spawn refuses instead, naming the file.
 func TestSpawnRefusesAMissingConversationToPickUp(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -47,11 +42,6 @@ func TestSpawnRefusesAMissingConversationToPickUp(t *testing.T) {
 	}
 }
 
-// The counterpart, and the reason the check is scoped rather than blanket: once
-// a session has forked its own copy, the host continues that copy and never
-// opens the resume file again. A revive must not start depending on a file it
-// will not read — an established conversation stays revivable long after the one
-// it was picked up from is deleted.
 func TestSpawnStillRevivesWhenTheSourceConversationIsGone(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
@@ -62,7 +52,6 @@ func TestSpawnStillRevivesWhenTheSourceConversationIsGone(t *testing.T) {
 	sessionID := "attn-resume-established"
 	workspaceID, cwd := seedReloadableClaudeSession(t, d, sessionID)
 
-	// This session already holds its own forked history.
 	stateDir := hostSessionStateDir(sessionID)
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("mkdir host state dir: %v", err)
@@ -87,9 +76,6 @@ func TestSpawnStillRevivesWhenTheSourceConversationIsGone(t *testing.T) {
 	}
 }
 
-// A directory is not a conversation. The picker cannot produce one, but the
-// launch intent is a string and this is the shape of the failure that would
-// otherwise reach pi as an unreadable-file throw.
 func TestSpawnRefusesADirectoryAsAConversation(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

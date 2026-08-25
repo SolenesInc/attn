@@ -2,13 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { SessionLabel } from './SessionLabel';
 
-/**
- * The reveal exists because generated session names outrun the sidebar's width.
- * What these tests pin is the part that is easy to regress by "simplifying":
- * the trigger is the whole row, the panel only appears for names that were
- * actually cut off, and it starts outside the rail so it cannot bury the row's
- * hover-revealed actions.
- */
 
 const LONG = 'judge yielded stops so background waits stay green';
 
@@ -48,9 +41,6 @@ describe('SessionLabel hover reveal', () => {
     const { row } = renderRow(LONG, { scrollWidth: 420, clientWidth: 180 });
 
     expect(panel()).toBeNull();
-    // Entering through the row's vertical padding never touches the label span.
-    // Binding the trigger to the span would drop the reveal for that whole band,
-    // so the row is what must carry it.
     fireEvent.pointerEnter(row);
 
     expect(panel()?.textContent).toBe(LONG);
@@ -89,16 +79,12 @@ describe('SessionLabel hover reveal', () => {
     fireEvent.pointerEnter(row);
     expect(panel()).not.toBeNull();
 
-    // Captured at the window, so a scroll on the inner scroller counts too.
     fireEvent.scroll(row);
 
     expect(panel()).toBeNull();
   });
 
   it('clears the row entirely, leaving the hover-revealed actions visible', () => {
-    // The `•••` button appears on the same hover that opens this panel, so a
-    // panel starting anywhere inside the rail would bury the actions for exactly
-    // as long as they are reachable.
     const { row } = renderRow(LONG, { scrollWidth: 420, clientWidth: 180 });
 
     fireEvent.pointerEnter(row);
@@ -112,12 +98,7 @@ describe('SessionLabel hover reveal', () => {
     fireEvent.pointerEnter(row);
 
     const style = (panel() as HTMLElement).style;
-    // Flush against the sidebar, so the panel reads as this row continuing out
-    // of it. Anchored to the rail rather than the row, whose right edge shifts
-    // with nesting depth and would make the panel jitter down the list.
     expect(style.left).toBe(`${RAIL_RIGHT}px`);
-    // Lifted by the panel's own vertical padding so the revealed glyphs sit on
-    // the same line as the truncated ones.
     expect(style.top).toBe('34px');
   });
 

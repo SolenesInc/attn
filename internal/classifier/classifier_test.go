@@ -48,8 +48,8 @@ func TestParseResponse_Parked(t *testing.T) {
 	}
 }
 
-// The harness-facts line is composed beside the template on purpose: the PARKED
-// rule keys on its marker, so the two must not drift apart.
+// The PARKED rule keys on the harness-facts marker, so the line and the template
+// must not drift apart.
 func TestComposeYieldInput_CarriesTheMarkerThePromptKeysOn(t *testing.T) {
 	input := ComposeYieldInput("The build is still running; I'll continue when it completes.", 2)
 	if !strings.Contains(input, "[harness facts]") {
@@ -82,8 +82,6 @@ func TestParseResponse_Done(t *testing.T) {
 		}
 	}
 }
-
-// Additional edge case tests for comprehensive coverage
 
 func TestParseResponse_MixedCase(t *testing.T) {
 	tests := []struct {
@@ -228,7 +226,6 @@ func TestBuildPrompt(t *testing.T) {
 func TestBuildPrompt_ContainsRequiredElements(t *testing.T) {
 	prompt := BuildPrompt("Test input text")
 
-	// Verify prompt requests strict JSON response
 	if !strings.Contains(prompt, "STRICT JSON") {
 		t.Error("BuildPrompt should request strict JSON response")
 	}
@@ -236,17 +233,14 @@ func TestBuildPrompt_ContainsRequiredElements(t *testing.T) {
 		t.Error("BuildPrompt should include exact JSON verdict formats")
 	}
 
-	// Verify prompt explains WAITING criteria
 	if !strings.Contains(prompt, "question") {
 		t.Error("BuildPrompt should explain WAITING criteria (asks a question)")
 	}
 
-	// Verify prompt explains DONE criteria in contrast with asking for user input
 	if !strings.Contains(prompt, "DONE only") || !strings.Contains(prompt, "does not ask the user") {
 		t.Error("BuildPrompt should explain DONE criteria")
 	}
 
-	// Verify prompt includes concrete examples for greeting questions
 	if !strings.Contains(prompt, "What can I help you with today?") {
 		t.Error("BuildPrompt should include greeting question example")
 	}
@@ -255,7 +249,6 @@ func TestBuildPrompt_ContainsRequiredElements(t *testing.T) {
 func TestBuildPrompt_EmptyInput(t *testing.T) {
 	prompt := BuildPrompt("")
 
-	// Even with empty input, prompt should have structure
 	if !strings.Contains(prompt, "WAITING") {
 		t.Error("BuildPrompt should still contain WAITING instruction for empty input")
 	}
@@ -264,8 +257,6 @@ func TestBuildPrompt_EmptyInput(t *testing.T) {
 	}
 }
 
-// A run that hits the turn cap before the structured-output turn still has its
-// prose verdict in the final text; that text is the fallback.
 func TestParseVerdict_FallsBackToFinalTextWithoutStructuredOutput(t *testing.T) {
 	result, ok := ParseVerdict(nil, "WAITING")
 	if !ok {
@@ -286,7 +277,6 @@ func TestParseVerdict_PrefersStructuredOutputOverFinalText(t *testing.T) {
 	}
 }
 
-// An unusable structured output must not swallow a usable final text.
 func TestParseVerdict_IgnoresVerdictlessStructuredOutput(t *testing.T) {
 	result, ok := ParseVerdict(json.RawMessage(`{"unrelated":true}`), "WAITING")
 	if !ok {
@@ -437,7 +427,6 @@ echo '{"type":"turn.completed"}'
 		t.Fatalf("ClassifyWithCodex() = %q, want idle", got)
 	}
 
-	// Exactly one invocation, with the configured model: the fallback is gone.
 	invocationsRaw, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read log file: %v", err)
@@ -447,8 +436,6 @@ echo '{"type":"turn.completed"}'
 		t.Fatalf("model invocations = %q, want [test-model] (no fallback)", invocations)
 	}
 
-	// The flags that make classification robust must be present: classify
-	// regardless of cwd trust, and ignore the user's config (MCP/tools).
 	argsRaw, err := os.ReadFile(argsPath)
 	if err != nil {
 		t.Fatalf("read args file: %v", err)

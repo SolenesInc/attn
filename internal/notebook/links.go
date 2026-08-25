@@ -2,17 +2,10 @@ package notebook
 
 import "regexp"
 
-// rootAbsoluteLinkRE matches markdown links whose target is a root-absolute
-// notebook path, e.g. [an area note](/knowledge/areas/foo.md). External
-// (http://…), relative (foo.md), and anchor-only (#section) targets are
-// intentionally not matched: the Notebook linking convention is root-absolute
-// markdown only — no [[wikilinks]] — so the targets resolve without an external
-// resolver and survive moves.
+// Root-absolute markdown targets only, by convention — no [[wikilinks]], and
+// relative/external/anchor-only targets are deliberately unmatched.
 var rootAbsoluteLinkRE = regexp.MustCompile(`\[[^\]]*\]\((/[^)\s]+)\)`)
 
-// Links extracts the root-absolute link targets from markdown body text, in
-// first-seen order with duplicates removed. Any #anchor suffix is preserved on
-// the returned target.
 func Links(body string) []string {
 	matches := rootAbsoluteLinkRE.FindAllStringSubmatch(body, -1)
 	seen := make(map[string]bool, len(matches))

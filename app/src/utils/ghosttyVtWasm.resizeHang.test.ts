@@ -1,8 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-// @types/node isn't a direct dependency of this package (only a transitive peer
-// of vite/vitest, so pnpm doesn't expose its types to tsc here); these three Node
-// APIs are the only thing this file needs from it.
+// @types/node isn't a direct dependency of this package (only a transitive peer of
+// vite/vitest), so these three Node APIs need a suppression.
 // @ts-expect-error -- see above
 import { spawn } from 'node:child_process';
 // @ts-expect-error -- see above
@@ -10,15 +9,8 @@ import { execPath } from 'node:process';
 // @ts-expect-error -- see above
 import { fileURLToPath } from 'node:url';
 
-// Guards the vendored ghostty-vt wasm against an infinite loop in its resize
-// path: at the old pin, hyperlink-heavy output followed by a widen and two
-// narrow resizes never returned from ghostty_terminal_resize -- in the app that
-// is a frozen pane at 100% CPU, with no trap and so no recovery.
-//
-// Each step runs under a worker-thread watchdog in its own process
-// because a synchronous wasm loop never yields the thread it runs on, so an
-// in-process assertion would hang the test runner instead of failing it.
-// Exit codes: 0 = every step returned, 1 = hang, 2 = trap/exception.
+// Guards the vendored ghostty-vt wasm against an infinite loop in its resize path: at the
+// old pin, resizes never returned. Exit codes: 0 = returned, 1 = hang, 2 = trap.
 const reproScript = fileURLToPath(
   new URL('../../scripts/repro-ghostty-vt-resize-hang.mjs', import.meta.url),
 );

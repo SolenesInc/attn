@@ -154,7 +154,6 @@ export interface GhosttyTerminalProps {
   fontSize: number;
   resolvedTheme?: ResolvedTheme;
   debugName: string;
-  // Working directory used to resolve relative file paths detected in output.
   cwd?: string;
   runtimeLogMeta?: {
     sessionId: string;
@@ -166,52 +165,21 @@ export interface GhosttyTerminalProps {
     paneCount: number;
   };
   onInput: (data: string, source?: string) => void;
-  // User pointer movement inside this terminal. Kept separate from onInput:
-  // application-mouse bytes belong to the TUI, while this signal only keeps an
-  // auto-settle countdown from closing under an engaged user.
   onPointerActivity?: () => void;
-  // Cmd+click on a markdown file path routes here (docking an in-app markdown
-  // tile) instead of opening the OS default app. sessionId is the pane's
-  // session, or '' when the pane has none (the daemon falls back to the
-  // selected session). Absent = markdown paths open like any other path.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onReady: (terminal: GhosttyTerminalHandle) => void;
-  // xpixel/ypixel are the pane's total size in DEVICE pixels, which is what the
-  // PTY's ws_xpixel/ws_ypixel and XTWINOPS report and what an image emitter
-  // sizes its output from. Only a fit knows them (it is the one place holding
-  // the renderer's cell metrics); every other resize path omits them.
   onResize: (cols: number, rows: number, options?: { reason?: string; xpixel?: number; ypixel?: number }) => void;
-  // A corrupt Ghostty WASM model was discarded and replaced. The owner uses
-  // this only for the user-facing notice; onReady performs the actual reattach.
   onTerminalModelRecovered?: () => void;
-  // Annotations on the agent's last message, anchored to offsets in that
-  // message's markdown rather than to rows. The terminal paints whichever of
-  // them still pass the store's containment gate against the live grid, and
-  // routes alt-drags through it; it never owns or mutates the set.
   annotations?: TerminalAnnotationStore;
-  // Bumped by the owner after mutating the store. The store is a mutable
-  // object, so React has nothing to compare — this is what tells the terminal
-  // an added, edited, or removed annotation needs a repaint.
   annotationsVersion?: number;
-  // An alt-drag landed on text that belongs to one of the annotatable
-  // messages. The terminal reports which message, the resolved markdown span,
-  // and where the release happened; the owner opens its editor and decides
-  // whether to keep it.
   onAnnotationAnchor?: (
     anchor: MessageAnchor,
     at: { clientX: number; clientY: number },
   ) => void;
-  // An alt-drag asked to annotate and resolved to nothing — the store has no
-  // window to align against, or the dragged text is not in one of its messages.
-  // Reported rather than swallowed: the gesture was deliberate, and silence is
-  // indistinguishable from a broken feature. The drag still behaves as an
-  // ordinary selection; the owner only supplies the explanation.
   onAnnotationMiss?: (
     reason: 'no-messages' | 'outside-messages',
     at: { clientX: number; clientY: number },
   ) => void;
-  // An alt-click landed on an existing wash. The owner reopens that annotation
-  // for editing; the terminal only says which one was pointed at.
   onAnnotationActivate?: (
     annotationId: string,
     at: { clientX: number; clientY: number },
@@ -231,51 +199,22 @@ export interface GhosttyTerminalHandle {
       deferRender?: boolean;
     },
   ) => Promise<void>;
-  // `restore` sizes the model to an attach's grid without painting it: the
-  // snapshot adoption queued behind it is what the pane should show.
   resizeLocal: (
     cols: number,
     rows: number,
     options?: { restore?: boolean },
   ) => Promise<void>;
-  // Adopt a server-authoritative snapshot, replacing the model's whole state
-  // with the daemon worker's. Enqueued on the write chain, and the grid it
-  // lands on comes from the snapshot itself.
   restoreSnapshot: (snapshot: Uint8Array) => Promise<void>;
-  // Seed the command-block store from a server-authoritative restore snapshot.
-  // Enqueued on the write chain so it runs after the snapshot is adopted and
-  // the restored buffer exists to compute anchor text from.
   seedBlocks: (blocks: SeededBlock[]) => Promise<void>;
-  // Apply one described kitty placement set. Enqueued on the write chain so the
-  // positions land against the grid the bytes of that seq produced.
   applyPlacements: (sessionId: string, seq: number, placements: PlacementElement[]) => Promise<void>;
-  // Seed placements from a restore snapshot, after the dump write. An empty set
-  // is meaningful: it clears what the pane drew before the reattach.
   seedPlacements: (sessionId: string, placements: PlacementElement[]) => Promise<void>;
   reset: () => void;
-  // Hand back (or take back) the GPU drawing buffer while the pane is off-screen.
-  // The model, its scrollback, and the GL context all survive; only the surface
-  // the terminal renderer would show goes. Releasing must be paired with a restore
-  // before the pane is painted again, and the restore repaints synchronously so
-  // a revealed pane never shows a blank frame.
   setSurfaceReleased: (released: boolean) => void;
   scrollToTop: () => boolean;
   getText: () => string;
   getSize: () => { cols: number; rows: number } | null;
-  // The grid's rect in viewport coordinates. What a pane-anchored overlay
-  // positions itself against: fitting the window is not enough for one, because
-  // a window also holds the sidebar and the neighbouring panes, and an overlay
-  // that lands there is present in the DOM and unreachable on screen.
   getBounds: () => DOMRect | null;
-  // True once the model's size has come from a real container measurement
-  // (a fit() that did not bail). Until then getSize() reports the provisional
-  // construction default, which must never claim PTY geometry authority.
   hasMeasuredSize: () => boolean;
-  // True when the model grid is taller or wider than the container it is
-  // rendering into (see geometryOverflowsContainer). A pane can land in this
-  // state on reveal after the window shrank while it was hidden; a caller
-  // that catches it can force a refit rather than leaving the clip in place
-  // indefinitely.
   overflowsContainer: () => boolean;
   getVisibleContent: () => TerminalVisibleContentSnapshot;
   getVisibleStyleSummary: () => TerminalVisibleStyleSnapshot;
@@ -284,11 +223,6 @@ export interface GhosttyTerminalHandle {
   drain: () => Promise<void>;
 }
 
-// Live inspection of the command-block store for the get_pane_block_state
-// bridge action. Returns BOTH the raw stored rows AND the live re-anchor delta /
-// drawable span, so a harness can assert the "correct or absent" invariant: no
-// surviving block has endRow beyond the buffer, and every drawable span is
-// in-bounds (or null). This replaces the old 'block' jsonl disk stream.
 export interface BlockStateSnapshotBlock {
   id: number;
   command: string;
@@ -317,12 +251,6 @@ const EMPTY_BLOCK_STATE: BlockStateSnapshot = {
   selectedBlockId: null, blocks: [],
 };
 
-// Live inspection of the kitty placement store for the get_pane_placement_state
-// bridge action. Reports the set as APPLIED — buffer rows, sizes, image
-// identity — plus where each lands on screen now and whether its pixels are in
-// hand, which together are what "this image is on screen" means. A harness can
-// assert an image appeared, moved with the scroll, and vanished when the
-// program deleted it, without reaching into the renderer.
 export interface PlacementStateSnapshotEntry {
   imageId: number;
   placementId: number;
@@ -336,9 +264,7 @@ export interface PlacementStateSnapshotEntry {
   sourceY: number;
   sourceWidth: number;
   sourceHeight: number;
-  /** Viewport row of the placement's top edge; negative means it starts above. */
   screenRow: number;
-  /** Its rectangle intersects the grid's pixel box. */
   visible: boolean;
   blob: KittyImageStatus;
 }
@@ -367,29 +293,16 @@ interface SelectionRange {
   endCol: number;
 }
 
-// Ghostty's native renderer resets synchronized-output mode after 1000ms so
-// one bad producer cannot freeze rendering indefinitely.
+// Ghostty's native renderer resets synchronized-output mode after 1000ms.
 const SYNCHRONIZED_OUTPUT_RENDER_TIMEOUT_MS = 1000;
 
-// The annotation wash and its rail. A fixed hue rather than a theme token: the
-// grid's own colors belong to the agent's output, and an annotation has to read
-// as something laid over that output by the user in every theme.
 const ANNOTATION_COLOR = '#a78bfa';
 
-// Hover-time link detection state (Warp's fragment-boundary model): the word
-// fragment under the pointer is analyzed once and cached; pointer movement
-// inside the fragment costs nothing. The generation counter invalidates the
-// cache when content or the viewport shifts under the pointer. The fragment
-// lives on a logical line — the hovered row joined with its soft-wrapped
-// neighbors — so links spanning visual rows detect and underline whole.
 interface HoverLinkState {
   generation: number;
   line: LogicalLine;
-  // Fragment span as logical indexes into line.text.
   startIndex: number;
   endIndex: number;
-  // link.startCol/endCol are logical indexes; linkSpan is the same range
-  // mapped to viewport rows for the underline overlay.
   link: DetectedTerminalLink | null;
   linkSpan: LogicalSpan | null;
 }
@@ -406,7 +319,6 @@ function isWorkspaceResizeActive(element: HTMLElement | null): boolean {
   }
   return Boolean(element?.closest('.session-terminal-panes[data-resizing-split-id]'));
 }
-
 
 function wordRangeAtColumn(line: string, col: number): { startCol: number; endCol: number } | null {
   const isWordCharacter = (character: string | undefined) => Boolean(character && /[\w-]/.test(character));
@@ -459,16 +371,8 @@ function colorNumber(value: string): number {
   return Number.parseInt(value.slice(1), 16);
 }
 
-// Count printable cells in the live viewport window. getViewport() returns a
-// fixed-capacity buffer whose tail can hold stale cells from a larger pre-resize
-// grid, so only the first cols*rows entries are counted.
-//
-// This is deliberately a second, renderer-independent witness. The blank-on-
-// split watchdog compares "how much the model holds" against "how many quads
-// the renderer drew"; if both numbers come out of the same render pass they
-// move together and an under-drawing renderer can never be caught. Too
-// expensive for every paint, which is why renderSurface uses the render
-// sample's own count and only the watchdog probe re-scans.
+// getViewport()'s tail holds stale cells from a larger pre-resize grid, so count only cols*rows.
+// A renderer-independent witness: numbers from one render pass can never catch under-drawing.
 function countModelPrintable(terminal: GhosttyModel): number {
   const viewport = terminal.getViewport();
   const windowLen = terminal.cols * terminal.rows;
@@ -563,12 +467,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
     const rendererRef = useRef<WebGlTerminalRenderer | null>(null);
-    // Belongs to the pane, not to a renderer instance: it outlives the rebuilds.
     const surfaceReleasedRef = useRef(false);
     const inputRef = useRef<(() => void) | null>(null);
     const modelSizeRef = useRef({ cols: 80, rows: 24 });
-    // False until fit() measures the container: the construction-default size
-    // is provisional and must not be pushed to the PTY as geometry authority.
     const hasMeasuredSizeRef = useRef(false);
     const viewportOffsetRef = useRef(0);
     const wheelRemainderRowsRef = useRef(0);
@@ -587,12 +488,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const cwdRef = useRef(cwd);
     const hoverGenerationRef = useRef(0);
     const hoverLinkRef = useRef<HoverLinkState | null>(null);
-    // Model writes and viewport changes happen above the hover-link callbacks in
-    // this module. They invalidate by generation; the next paint (or click)
-    // crosses this seam to re-read the one logical line under the stationary
-    // pointer before trusting or drawing the cached link.
     const refreshHoverLinkRef = useRef<(() => void) | null>(null);
-    // undefined = not fetched yet; null = unavailable (non-Tauri host).
     const homeDirRef = useRef<string | null | undefined>(undefined);
     const pathExistsCacheRef = useRef(new Map<string, boolean | Promise<boolean>>());
     const findOpenRef = useRef(false);
@@ -605,35 +501,18 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const findInputRef = useRef<HTMLInputElement>(null);
     const runFindScanRef = useRef<(() => void) | null>(null);
     const osc133StateRef = useRef<Osc133State>(emptyOsc133State());
-    // Carries a lone trailing ESC across output chunks so a RIS split on the
-    // chunk boundary still re-enables grapheme clustering (see terminalGraphemeMode).
     const graphemeResetCarryRef = useRef(false);
-    // Both stores are built once, by useState's lazy initializer, and carried by
-    // a ref: `useRef(new Store())` constructs a store on every render and throws
-    // it away, which is waste on a component that re-renders per repaint. Same
-    // shape as modelOpRing below.
+    // useRef(new Store()) would construct a store on every render; useState's lazy initializer builds it once.
     const [blockStore] = useState(() => new TerminalBlockStore());
     const blockStoreRef = useRef(blockStore);
     const selectedBlockIdRef = useRef<number | null>(null);
     const [placementStore] = useState(() => new KittyPlacementStore());
     const placementStoreRef = useRef(placementStore);
-    // The session id the placements were described for. The blob cache is
-    // app-level and keyed by it, and it arrives on the description rather than
-    // from props: a pane's own runtime id is the same id, but the description is
-    // what makes that a fact rather than an assumption.
     const placementSessionRef = useRef('');
     const writeChainRef = useRef(Promise.resolve());
-    // Bounded ring of the raw inputs fed to this pane's model, dumped into the
-    // model_fault diagnostics record so a trap arrives with its own repro. Its
-    // epoch is one model: beginEpoch runs at construction, and a fault's rebuild
-    // starts a new one.
-    // Built by useState's lazy initializer so the ring is allocated once per
-    // pane rather than on every render; the ref only carries it.
     const [modelOpRing] = useState(createGhosttyModelOpRing);
     const modelOpRingRef = useRef(modelOpRing);
     const fitResizeCoalescerRef = useRef<ResizeCoalescer | null>(null);
-    // `fit` is defined far below; resizeLocal needs to re-assert local geometry
-    // when the daemon's PTY size overflows this window, so reach it via a ref.
     const fitRef = useRef<() => void>(() => undefined);
     const overflowRefitRafRef = useRef<number | null>(null);
     const applyFitDimensionsRef = useRef<(dimensions: TerminalDimensions) => void>(() => undefined);
@@ -658,9 +537,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const scheduledRenderCoalescedRef = useRef(0);
     const scheduledRenderDeferredRef = useRef(0);
     const writeCountRef = useRef(0);
-    // Diagnostics: model instance (increments on rebuild) and last paint quads,
-    // used by the blank-on-split watchdog to tell a fresh empty model and an
-    // under-drawn surface apart.
     const modelInstanceRef = useRef(0);
     const lastPaintQuadsRef = useRef(0);
     const lastModelPrintableRef = useRef(0);
@@ -679,41 +555,23 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const onAnnotationAnchorRef = useRef(onAnnotationAnchor);
     const onAnnotationMissRef = useRef(onAnnotationMiss);
     const onAnnotationActivateRef = useRef(onAnnotationActivate);
-    // Set on mousedown when alt was held over a pane that has a message under
-    // annotation, so the release knows to resolve an anchor instead of just
-    // copying. Cleared on every mousedown.
     const annotationDragRef = useRef(false);
-    // The annotation the pointer went down on with alt held, if any. A release
-    // that never became a drag reopens it instead of starting a new one.
     const annotationClickRef = useRef<string | null>(null);
-    // The annotation under the pointer while alt is held. Drives the hover
-    // treatment that tells the user the wash is a thing they can click.
     const annotationHoverRef = useRef<string | null>(null);
     const altHeldRef = useRef(false);
     const runtimeMetaRef = useRef(runtimeLogMeta);
     const debugNameRef = useRef(debugName);
     const diagKeyRef = useRef<string>(runtimeLogMeta?.paneId ?? runtimeLogMeta?.sessionId ?? debugName);
-    // Bumping this remounts the <canvas> (keyed by it below), forcing a fresh
-    // getContext('webgl2') — the only way off a lost context, since a canvas
-    // keeps returning the same (dead) context object from getContext() for
-    // its own lifetime. See the recovery effect for why this beats setError.
+    // A canvas keeps returning the same dead context from getContext(), so only a
+    // fresh keyed element recovers from a lost one.
     const [rendererEpoch, setRendererEpoch] = useState(0);
-    // Recovery attempt counter (reset to 0 once a construction succeeds) and
-    // the pending retry timer, if any. Refs, not state: they must be readable
-    // synchronously inside the mount effect's own cleanup/scheduling without
-    // triggering a render.
     const recoveryAttemptRef = useRef(0);
-    // Dedupe failures from the same model while React applies the epoch bump.
-    // Do not use this to represent a pending recovery: a replacement can fault
-    // during its own initial fit and must trigger another rebuild.
     const modelFaultDedupeRef = useRef<{
       operation: string;
       error: string;
       model: number;
       rendererEpoch: number;
     } | null>(null);
-    // Survives epoch rebuilds until a replacement has completed its initial
-    // fit and become ready. Only then may the app announce recovery.
     const modelRecoveryPendingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [linkCursorActive, setLinkCursorActive] = useState(false);
@@ -725,9 +583,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const filterQueryRef = useRef('');
     const filterInputRef = useRef<HTMLInputElement>(null);
     const filterRescanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // Read by the mount effect at construction time without being a dependency
-    // of it — see the font-size effect below for why font changes must not
-    // rebuild the model/renderer.
     const fontSizeRef = useRef(fontSize);
 
     onInputRef.current = onInput;
@@ -743,10 +598,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     debugNameRef.current = debugName;
     cwdRef.current = cwd;
     fontSizeRef.current = fontSize;
-    // Stable diagnostics key for the per-pane watchdog/probe registries. paneId
-    // is stable for a pane's life and correlates with daemon/workspace logs;
-    // debugName can change (its agent/title segment is reassigned on relabel).
-    // A ref keeps the key out of callback dependency arrays.
     diagKeyRef.current = runtimeLogMeta?.paneId ?? runtimeLogMeta?.sessionId ?? debugName;
 
     const inputLatencyRuntimeId = runtimeLogMeta?.runtimeId;
@@ -760,10 +611,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     }, [onPointerActivity]);
 
     const recoverFromModelFault = useCallback((operation: string, reason: unknown) => {
-      // An invalid model can make several queued render/write operations fail
-      // before React applies the epoch bump. One rebuild per model is enough;
-      // a fault from a replacement model has a new epoch and must not be
-      // suppressed by the old model's dedupe record.
       if (modelFaultDedupeRef.current?.rendererEpoch === rendererEpoch) return;
       const error = reason instanceof Error ? reason.message : String(reason);
       const stack = reason instanceof Error ? reason.stack : undefined;
@@ -774,8 +621,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         cols = terminal?.cols;
         rows = terminal?.rows;
       } catch {
-        // The fault itself may make a model accessor unsafe. The model id and
-        // operation still correlate this record with the surrounding timeline.
       }
       const fault = {
         operation,
@@ -791,15 +636,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       try {
         snapshot = captureUiSnapshot();
       } catch {
-        // Capturing supplementary DOM state must never defeat containment.
       }
-      // The inputs this model saw, base64-encoded once, here on the rare path.
       let capture: ModelFaultCapture | undefined;
       try {
         capture = modelOpRingRef.current.capture();
       } catch {
-        // Same rule as the DOM snapshot: evidence is best-effort, containment
-        // is not.
       }
       noteModelFault(diagKeyRef.current, {
         session,
@@ -820,9 +661,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       recordUiDiag({
         kind: 'ghostty_model_fault',
         diagnosticFile: UI_DIAGNOSTICS_FILE,
-        // The shell-level record stays small; the model's input capture (the
-        // replayable repro) rides the terminal-diagnostics model_fault record
-        // with the same pane/model/rendererEpoch.
         captureIn: TERMINAL_DIAGNOSTICS_FILE,
         pane: diagKeyRef.current,
         session,
@@ -833,9 +671,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         rows,
         snapshot,
       });
-      // The bad model lives in WASM, so do not try to reset or redraw it. A
-      // new epoch replaces both the canvas and model; onReady then reattaches
-      // the daemon-owned PTY and restores its terminal from a snapshot.
       setError(null);
       setRendererEpoch((value) => value + 1);
     }, [rendererEpoch]);
@@ -889,9 +724,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       if (selectedBlockIdRef.current !== null) {
         const block = blockStoreRef.current.blockById(selectedBlockIdRef.current);
         const access = blockRowAccess();
-        // Re-anchor against the live buffer before drawing: a stale stored row
-        // (e.g. scrollback trimmed since the click) must clear the selection,
-        // never draw a box at dead coordinates.
         const span = block && access
           ? blockViewportSpanAnchored(
               block,
@@ -901,19 +733,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             )
           : null;
         if (!span) {
-          // The block was evicted from the store, never completed, or its anchor
-          // is gone: the selection no longer refers to anything drawable.
           selectedBlockIdRef.current = null;
         } else if (span.visible) {
-          // A faint accent wash behind the block, plus the crisp border. The
-          // wash gives the selection weight without competing with the text;
-          // the border keeps the bounds legible where the wash is too subtle.
-          // The renderer omits border edges that fall outside the viewport
-          // (visibleOutlineEdges), so an over-tall block reads as "continues
-          // above/below" instead of a box around the whole terminal. When the
-          // block covers EVERY visible row, skip the wash too — tinting the
-          // entire viewport reads as "a giant box swallowed the terminal";
-          // the side rails alone carry the selection.
           if (!span.spansViewport) {
             overlays.push({
               startRow: span.startRow,
@@ -957,23 +778,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const annotationAccess = annotationStore ? messageRowAccess() : null;
       if (annotationStore && annotationAccess) {
         const firstRow = viewportBufferStart(scrollbackLength, viewportOffsetRef.current);
-        // project() is the gate: it hands back only the rows that still quote
-        // the text each annotation was anchored to. A wash that fails is simply
-        // absent for this frame — never redrawn at whatever moved into its old
-        // place. Rows outside the viewport are dropped here rather than in the
-        // store, so scrolling back to the message brings the wash with it.
         for (const wash of annotationStore.project(annotationAccess)) {
-          // Alt over a wash is the gesture that reopens it, so the hover
-          // treatment only appears when alt is actually down: without it the
-          // highlight would promise a click that does nothing.
           const hovered = altHeldRef.current && annotationHoverRef.current === wash.annotationId;
           for (const range of wash.rows) {
             const viewportRow = range.row - firstRow;
             if (viewportRow < 0 || viewportRow >= terminal.rows) continue;
-            // A violet wash plus a solid rail under the text. The wash alone
-            // washed out against bright TUI output; the rail is what survives
-            // it, and it stays clear of the palette already spoken for by
-            // command blocks (blue) and find matches (amber).
             overlays.push({
               startRow: viewportRow,
               startCol: range.startCol,
@@ -995,11 +804,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           }
         }
       }
-      // Kitty images. Positions are recomputed every frame from the store's
-      // buffer rows, so scrolling moves them with the text they sit in without
-      // anything being re-described. A placement whose pixels have not arrived
-      // (or never will) simply is not drawn — the cache's answer, whichever it
-      // is, wakes this pane to draw again.
       const imageQuads: WebGlImageQuad[] = [];
       const placed = placementStoreRef.current.placements();
       if (placed.length > 0) {
@@ -1068,9 +872,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         rows: terminal.rows,
         force,
         offset: viewportOffsetRef.current,
-        // A clean-model render is a no-op. Preserve the last painted model
-        // count in diagnostics so a later no-op record cannot make a healthy
-        // surface look blank without re-scanning the complete grid.
         modelPrintable: sample?.modelPrintable ?? lastModelPrintableRef.current,
         quads: sample ? sample.quads : null,
         cellsArrayLen: sample ? sample.cellsArrayLen : null,
@@ -1079,22 +880,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
       return true;
       } catch (reason) {
-        // `renderer.render()` reads Ghostty's WASM-owned dirty cells. A bounds
-        // trap or invalid code point there used to escape React and unmount the
-        // whole application. Contain it to this pane and rebuild from the
-        // daemon's snapshot instead.
+        // A WASM trap in renderer.render() used to escape React and unmount the whole app.
         recoverFromModelFault('render', reason);
         return false;
       }
     }, [getViewportCells, recoverFromModelFault, resolvedTheme]);
 
-    // Off-screen panes hand their GPU drawing buffer back; the owner that knows
-    // whether this pane is on screen drives both directions. The restore repaints
-    // from the model, which never left, so the caller only has to run it before
-    // the browser paints the reveal.
     const setSurfaceReleased = useCallback((released: boolean) => {
-      // The owner re-asserts this on every layout pass; only a real transition
-      // may repaint, or a visible pane would take a forced full paint per render.
       if (surfaceReleasedRef.current === released) return;
       surfaceReleasedRef.current = released;
       const renderer = rendererRef.current;
@@ -1107,9 +899,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       renderSurface(true);
     }, [renderSurface]);
 
-    // The annotation store is a mutable object, so adding, editing, or removing
-    // an annotation changes nothing React can see. The owner bumps the version
-    // instead, and that is the repaint signal.
     useEffect(() => {
       renderSurface(true);
     }, [annotations, annotationsVersion, renderSurface]);
@@ -1132,13 +921,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     }, []);
 
-    // A wheel gesture delivers events far faster than the display refreshes — a
-    // macOS trackpad reaches 120 Hz and adds a multi-second momentum tail — and
-    // a paint with the viewport scrolled off the bottom reassembles the visible
-    // cells. Painting per event queues more work than the main thread can
-    // drain, so the window stops answering until the tail ends. The offset math
-    // stays inline, so the events still accumulate; only the paint is capped at
-    // one per frame.
+    // A wheel gesture outruns the display (120 Hz trackpad plus a momentum tail), and
+    // painting per event queues more work than the main thread can drain.
     const scheduleScrollRender = useCallback(() => {
       if (scheduledScrollRenderRef.current !== null) return;
       scheduledScrollRenderRef.current = requestAnimationFrame(() => {
@@ -1147,10 +931,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [renderSurface]);
 
-    // `force` is not optional on purpose. A forced paint repaints a clean model
-    // (what an image placement needs); an unforced one is a no-op when nothing
-    // changed (what streamed output wants, so the row cache can serve it). A
-    // default here would silently pick one for the next caller.
+    // `force` is not optional on purpose: a default would silently pick one of the
+    // two paints for the next caller.
     const scheduleOutputRender = useCallback((force: boolean) => {
       scheduledRenderRequestsRef.current += 1;
       scheduledOutputRenderForceRef.current ||= force;
@@ -1189,11 +971,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }, SYNCHRONIZED_OUTPUT_RENDER_TIMEOUT_MS);
     }, [scheduleOutputRender]);
 
-    // Reads the one row it was asked for. Hover detection calls this up to
-    // MAX_WRAP_JOIN_ROWS times per pointer position, and reassembling every
-    // visible cell to slice a single line out of it is what made one wheel
-    // step with the viewport scrolled off the bottom cost the whole viewport
-    // seven times over.
+    // Reads one row: reassembling the whole viewport here cost it seven times over per wheel step.
     const lineAtVisibleRow = useCallback((row: number): string => {
       const terminal = terminalRef.current;
       if (!terminal) return '';
@@ -1230,10 +1008,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       );
     }, []);
 
-    // The grid, reduced to what the annotation projection reads. Every call
-    // goes at the LIVE buffer, which is the whole point: the store re-derives
-    // rows from the message text each time and re-reads the cells it is about
-    // to paint, so nothing about a row survives a write or a reflow.
     const messageRowAccess = useCallback((): MessageRowAccess | null => {
       const terminal = terminalRef.current;
       if (!terminal) return null;
@@ -1251,9 +1025,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     }, [selectionLineAtBufferRow]);
 
-    // The annotation under a viewport cell, if any. Asking the store rather
-    // than caching the painted rows keeps the hit test and the paint reading
-    // the same gated projection.
     const annotationAtCell = useCallback((cell: { row: number; col: number } | null): string | null => {
       const terminal = terminalRef.current;
       const store = annotationsRef.current;
@@ -1321,10 +1092,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             runs.push(run);
           }
         }
-        // `wrapped` joins this line onto the previous one, so the flag that
-        // answers it belongs to the row above — and once that row has fallen
-        // into scrollback it carries no flag, which is the same fold
-        // isContinuationRow covers with a full-row heuristic.
+        // `wrapped` belongs to the row above, and a scrollback row carries no flag.
         const wrapped = row > 0 && (activeRow > 0
           ? terminal.rowWrapsIntoNext(activeRow - 1)
           : selectionLineAtBufferRow(row - 1, 0, terminal.cols).length === terminal.cols);
@@ -1479,9 +1247,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       setFindUi((ui) => ({ ...ui, open: true }));
       requestAnimationFrame(() => {
         const input = findInputRef.current;
-        // If the user already started typing into the input before this frame
-        // fired, leave their caret alone — select() would make the next
-        // keystroke replace what they typed.
+        // Leave the caret alone if the user already typed: select() would replace it.
         if (!input || document.activeElement === input) return;
         input.focus();
         input.select();
@@ -1503,10 +1269,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return blockStoreRef.current.blockById(selectedBlockIdRef.current);
     }, []);
 
-    // Live block-store snapshot for the get_pane_block_state bridge action.
-    // Returns the raw stored rows plus the live re-anchor delta and the drawable
-    // viewport span each block, so a harness can verify "correct or absent"
-    // without a disk log.
     const getBlockState = useCallback((): BlockStateSnapshot => {
       const terminal = terminalRef.current;
       const access = blockRowAccess();
@@ -1537,16 +1299,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     }, [blockRowAccess]);
 
-    // Single entry point for changing the selected block: keeps the ref and the
-    // repaint in lock-step so the click and right-click paths can't drift.
     const selectBlock = useCallback((blockId: number | null) => {
       selectedBlockIdRef.current = blockId;
       renderSurface(true);
     }, [renderSurface]);
 
-    // Copy a selected block: whole = command + output, otherwise command only.
-    // Extraction re-anchors against the live buffer and refuses (returns
-    // false) when the block's content has been trimmed away.
     const selectedBlockCopyText = useCallback((whole: boolean): string | null => {
       const block = selectedBlock();
       const access = blockRowAccess();
@@ -1589,7 +1346,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const delta = access ? reanchorDelta(block, access) ?? 0 : 0;
       const target = edge === 'top'
         ? block.promptRow + delta
-        // Last block row at the bottom of the viewport (endRow is exclusive).
         : Math.max(block.promptRow + delta, block.endRow + delta - terminal.rows);
       scrollToBufferRow(target);
     }, [blockRowAccess, scrollToBufferRow]);
@@ -1659,8 +1415,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return writeChainRef.current;
     }, [recoverFromModelFault]);
 
-    // Coalesce a verification fit into the next animation frame, replacing
-    // any frame already queued.
     const scheduleCoalescedRefit = useCallback(() => {
       if (overflowRefitRafRef.current !== null) {
         cancelAnimationFrame(overflowRefitRafRef.current);
@@ -1683,8 +1437,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         if (!terminal) return;
         const searchableOutput = typeof data === 'string' ? data : new TextDecoder().decode(data);
         if (searchableOutput) {
-          // Preserve the existing terminal contract: OSC 52 writes copy text
-          // to the host clipboard; clipboard read queries are not answered.
           const parsed = parseOsc52Writes(osc52StateRef.current, searchableOutput);
           osc52StateRef.current = parsed.state;
           for (const payload of parsed.payloads) {
@@ -1692,30 +1444,18 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
               void writeClipboardText(new TextDecoder().decode(bytes));
             } catch {
-              // Ignore malformed clipboard output.
             }
           }
         }
         const scrollbackBefore = terminal.getScrollbackLength();
         const viewportOffsetBefore = viewportOffsetRef.current;
-        // Segment the stream at OSC 133 markers so each marker's buffer
-        // position can be read from the model cursor right after the bytes
-        // preceding it are applied. Without markers this degenerates to a
-        // single write of the original bytes.
         const chunkBytes = typeof data === 'string' ? utf8Encoder.encode(data) : data;
-        // Capture-on-fault: record the raw chunk BEFORE the model sees it, so a
-        // trapping write is in the ring, and pre-wrapper, so the ring holds what
-        // the app was asked to write rather than the OSC 133 / grapheme-mode
-        // segmentation of it. A restore's base state enters the ring through
-        // restoreSnapshot instead; this path only ever sees live output.
         modelOpRingRef.current.noteWrite(chunkBytes);
         const osc133 = parseOsc133(osc133StateRef.current, chunkBytes);
         osc133StateRef.current = osc133.state;
         for (const segment of osc133.segments) {
           if (segment.bytes.length > 0) {
-            // Write through the model re-asserting grapheme clustering right
-            // after any RIS, so emoji later in this same chunk stay whole (see
-            // terminalGraphemeMode).
+            // Re-assert grapheme clustering right after any RIS, or emoji later in this chunk break.
             graphemeResetCarryRef.current = writeReassertingClustering(
               terminal,
               segment.bytes,
@@ -1724,8 +1464,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           }
           if (segment.marker) {
             const cursor = terminal.getCursor();
-            // Block completions are inspected live via get_pane_block_state, not
-            // streamed to disk.
             blockStoreRef.current.applyMarker(
               segment.marker,
               { row: terminal.getScrollbackLength() + cursor.y, col: cursor.x },
@@ -1733,8 +1471,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             );
           }
         }
-        // Backstop: recover clustering if an explicit DECRST 2027l (or any other
-        // mode-off this chunk did not split on) left it disabled.
+        // Backstop for a DECRST 2027l this chunk did not split on.
         ensureGraphemeClustering(terminal);
         const responses: string[] = [];
         while (terminal.hasResponse()) {
@@ -1743,14 +1480,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         }
         if (!options?.suppressResponses) {
           for (const response of responses) {
-            // CPR (cursor position), DA1 (device attributes), and OSC 10/11/12
-            // (color) replies are all owned by the daemon-side worker, which
-            // answers them directly from the theme the app pushes down via
-            // set_terminal_theme. Answering here too would double-reply and the
-            // shell reads the extra bytes as stray input — and after a
-            // reattach the frontend can miss them entirely, stalling fish's
-            // prompt. Strip all three; forward everything else (DSR, OSC52,
-            // etc.) the model produced.
+            // CPR, DA1, and OSC 10/11/12 replies are the worker's; answering here too
+            // double-replies and the shell reads the extra bytes as stray input.
             const forwarded = stripDaemonOwnedResponses(response);
             if (forwarded) onInputRef.current(forwarded);
           }
@@ -1760,14 +1491,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scrollbackBefore,
           terminal.getScrollbackLength(),
         );
-        // Content changed under the pointer: drop the hover-link fragment cache.
         hoverGenerationRef.current += 1;
-        // Anything written can have moved the annotated message — a TUI redraw
-        // rewrites it in place, and appended output pushes it up the buffer.
-        // The cached alignment is only good for the buffer it was measured in.
         annotationsRef.current?.noteWrite();
         if (findOpenRef.current && findQueryRef.current) {
-          // New output while find is open: refresh matches once writes settle.
           if (findRescanTimerRef.current) clearTimeout(findRescanTimerRef.current);
           findRescanTimerRef.current = setTimeout(() => {
             findRescanTimerRef.current = null;
@@ -1816,13 +1542,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
 
-    // Adopt a server-authoritative snapshot. Nothing here is parsed — the
-    // decoder rebuilds the model's state directly — so a restore cannot answer
-    // a query, and the grid it lands on is the worker's own.
-    //
-    // Only the renderable prefix lands on this operation. Scrollback is the
-    // half that scales with the history budget, so it is decoded on a later
-    // frame and the first paint does not wait on it.
     const restoreSnapshot = useCallback((snapshot: Uint8Array) => {
       return enqueueOperation('restoreSnapshot', () => {
         const terminal = terminalRef.current;
@@ -1832,11 +1551,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         try {
           historyDecoder = terminal.adoptSnapshot(snapshot);
         } catch (reason) {
-          // Bytes this decoder cannot read are a payload fault, not a model
-          // fault: replacing the model would remount the pane, reattach, and be
-          // served the same bytes forever. adoptSnapshot throws before it swaps
-          // the handle, so the model it declined to replace is still usable and
-          // the live stream keeps painting on it.
+          // A payload fault, not a model fault: replacing the model would reattach and be
+          // served the same bytes forever.
           recordUiDiag({
             kind: 'snapshot_decode_rejected',
             diagnosticFile: UI_DIAGNOSTICS_FILE,
@@ -1847,8 +1563,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
           return;
         }
-        // The decoded terminal carries the worker's modes, and the worker never
-        // asserted the app's grapheme clustering.
+        // The decoded terminal carries the worker's modes, and the worker never asserted grapheme clustering.
         graphemeResetCarryRef.current = false;
         ensureGraphemeClustering(terminal);
         osc133StateRef.current = emptyOsc133State();
@@ -1872,8 +1587,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
                 restoredRows += rows;
               }
             } catch (reason) {
-              // READY installed a usable prefix; a bad lazy page must not
-              // discard it and reattach to the same bytes.
               historyDecoder.close();
               recordUiDiag({
                 kind: 'snapshot_history_decode_rejected',
@@ -1892,12 +1605,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [enqueueOperation, flushSynchronizedOutputRender]);
 
-    // Seed the command-block store from a server-authoritative restore snapshot.
-    // Enqueued on the write chain so it runs after the snapshot is adopted: a
-    // snapshot rebuilds the grid without replaying markers, so this is the only
-    // path that carries blocks across an attach. Seed rows are absolute buffer
-    // rows of the freshly-restored terminal, the same space live applyMarker
-    // records, so anchor text read here matches what re-anchoring expects.
     const seedBlocks = useCallback((blocks: SeededBlock[]) => {
       return enqueueOperation('seedBlocks', () => {
         const terminal = terminalRef.current;
@@ -1910,10 +1617,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [enqueueOperation, selectionLineAtBufferRow]);
 
-    // Ask for the pixels behind every placement the cache lacks. Idempotent per
-    // (session, image, generation): a set re-described because it scrolled asks
-    // for nothing, and a failed pull is not retried until a retransmission mints
-    // a new generation.
     const requestPlacementBlobs = useCallback(() => {
       const sessionId = placementSessionRef.current;
       if (!sessionId) return;
@@ -1922,10 +1625,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     }, []);
 
-    // Apply one described placement set. Enqueued on the write chain so it lands
-    // behind the bytes of the chunk it was measured on — the positions are
-    // meaningless against any other grid — and so the scrollback length it maps
-    // against is the one those bytes produced.
     const applyPlacements = useCallback((
       sessionId: string,
       seq: number,
@@ -1943,10 +1642,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [enqueueOperation, requestPlacementBlobs, scheduleOutputRender]);
 
-    // Seed placements from a restore snapshot, after the dump write. The dump
-    // carries no images, so this is the only path that survives an attach; an
-    // empty set is a real message here, clearing whatever the pane was drawing
-    // before the reattach.
     const seedPlacements = useCallback((sessionId: string, placements: PlacementElement[]) => {
       return enqueueOperation('seedPlacements', () => {
         const terminal = terminalRef.current;
@@ -1958,20 +1653,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, [enqueueOperation, requestPlacementBlobs, scheduleOutputRender]);
 
-    // Pixels landing (or failing to) is the only thing that changes an image's
-    // drawability between descriptions, so it is the only repaint signal this
-    // feature adds. No polling, no animation frame of its own.
     useEffect(() => kittyImageCache.subscribe((sessionId, imageId) => {
       if (sessionId !== placementSessionRef.current) return;
       if (!placementStoreRef.current.placements().some((p) => p.imageId === imageId)) return;
       scheduleOutputRender(true);
     }), [scheduleOutputRender]);
 
-    // Live placement-store snapshot for the get_pane_placement_state bridge
-    // action: the set as applied, where each entry lands on screen right now,
-    // and whether its pixels are in hand. Deliberately not renderer internals —
-    // a harness asserts that an image is positioned and drawable, and the
-    // renderer's own answer to that is a texture id.
     const getPlacementState = useCallback((): PlacementStateSnapshot => {
       const terminal = terminalRef.current;
       if (!terminal) return { ...EMPTY_PLACEMENT_STATE };
@@ -2024,27 +1711,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     }, []);
 
-    // Reconcile the block store with the model's new geometry after a resize.
-    //
-    // A WIDTH change invalidates stored rows: the no-reflow path every resize
-    // now takes can still truncate or pad the rows it keeps — clear the store
-    // (correct-or-absent; new commands rebuild it). Now that no resize reflows,
-    // a future improvement can turn this clear into a reanchor.
-    //
-    // A HEIGHT-only change shifts rows uniformly (rows move between scrollback
-    // and screen) — re-anchor each block and keep it.
     const reconcileBlocksAfterResize = useCallback((widthChanged: boolean) => {
       if (widthChanged) {
-        // Blocks are stored as rows, so a width change destroys them.
-        // Annotations are stored as message offsets and survive — but the
-        // alignment that maps them onto rows does not, and its bounded search
-        // window is seeded from rows that no longer hold the same text.
         annotationsRef.current?.noteGeometryChange();
         blockStoreRef.current.clear();
-        // Placements are stored as buffer rows too. The worker re-describes its
-        // whole set after a resize, so this is a gap of one description rather
-        // than a loss — absent until then beats drawing an image over the wrong
-        // text.
         placementStoreRef.current.clear();
         selectedBlockIdRef.current = null;
         return;
@@ -2056,9 +1726,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     }, [blockRowAccess]);
 
-    // `restore` marks the geometry that arrives with an attach: the model is
-    // sized to the worker's grid and left unpainted, because the snapshot
-    // adoption queued right behind it is what the pane should show.
     const resizeLocal = useCallback((
       cols: number,
       rows: number,
@@ -2080,11 +1747,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
           return;
         }
-        // No-reflow, whichever call site this is. The daemon's resize echo
-        // reaches a non-owner client (a hub mirror) through here, and the worker
-        // resizes without reflow too — a client that re-wrapped its history
-        // would hold a different frame from every other client and from the
-        // worker whose rows the wire's placements and blocks are numbered in.
+        // No reflow, whichever call site: the worker does not reflow either, and the wire's
+        // placements and blocks are numbered in its rows.
         modelOpRingRef.current.noteResize(cols, rows, true);
         resizeGhosttyWithoutReflow(terminal, cols, rows);
         reconcileBlocksAfterResize(cols !== fromCols);
@@ -2100,13 +1764,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         if (!options?.restore) {
           renderSurface(true);
-          // The daemon's authoritative PTY rows are not bounded by this
-          // client's window. If they leave the canvas taller than the
-          // container (another client, or a prior taller layout, set the PTY
-          // one row too tall), the bottom line is clipped at the window edge.
-          // Re-assert this client's own floored geometry. `fit()` bails when
-          // inactive, so this never fights the geometry authority;
-          // it only corrects a live overflow the active client can actually see.
+          // The daemon's PTY rows are not bounded by this window; re-assert this client's
+          // own floored geometry when they overflow the container.
           const container = containerRef.current;
           if (
             container
@@ -2122,8 +1781,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const terminal = terminalRef.current;
       const renderer = rendererRef.current;
       if (!terminal || !renderer) {
-        // A dead model/renderer left this bail silent before, which is exactly
-        // when the trace matters most — log it defensively (meta may not exist yet).
         noteResize(diagKeyRef.current, {
           session: runtimeMetaRef.current?.sessionId ?? undefined,
           paneKind: runtimeMetaRef.current?.paneKind ?? undefined,
@@ -2132,9 +1789,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         return;
       }
-      // Inactive session wrappers use display:none. Resizing the Ghostty
-      // model from that hidden geometry discards an idle alternate-screen
-      // frame before the session becomes visible again.
+      // Inactive wrappers use display:none; resizing from that hidden geometry discards
+      // an idle alternate-screen frame.
       const paneKind = runtimeMetaRef.current?.paneKind ?? undefined;
       const session = runtimeMetaRef.current?.sessionId ?? undefined;
       const fitContainer = containerRef.current;
@@ -2152,9 +1808,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       try {
         const fromCols = terminal.cols;
         const fromRows = terminal.rows;
-        // Every fit resize takes the no-reflow path; the ring records which of
-        // the two call sites a resize came from because the mode-7 dance writes
-        // extra bytes into the model that a repro has to reproduce.
         modelOpRingRef.current.noteResize(dims.cols, dims.rows, true);
         resizeGhosttyWithoutReflow(terminal, dims.cols, dims.rows);
         reconcileBlocksAfterResize(dims.cols !== fromCols);
@@ -2182,9 +1835,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const container = containerRef.current;
       const renderer = rendererRef.current;
       if (!container || !renderer) {
-        // A dead renderer/unmounted container left this bail silent before,
-        // which is exactly when the trace matters most — log it defensively
-        // (meta may not exist yet).
         noteResize(diagKeyRef.current, {
           session: runtimeMetaRef.current?.sessionId ?? undefined,
           paneKind: runtimeMetaRef.current?.paneKind ?? undefined,
@@ -2213,8 +1863,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'suspiciousSize', toCols: dims.cols, toRows: dims.rows, cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
-      // The size is now backed by a real container measurement: attaches may
-      // treat it as authoritative PTY geometry (see hasMeasuredSize).
       hasMeasuredSizeRef.current = true;
       if (!fitResizeCoalescerRef.current) {
         fitResizeCoalescerRef.current = createResizeCoalescer(
@@ -2230,9 +1878,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       fit,
       openFind,
       focus: () => {
-        // The find bar / block filter own keyboard focus while open: a
-        // deferred pane focus (e.g. focusPane's retry loop after a session
-        // switch) must not steal it and leak keystrokes into the PTY.
         if (filterInputRef.current) {
           if (document.activeElement !== filterInputRef.current) filterInputRef.current.focus();
           return true;
@@ -2290,15 +1935,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const canvas = canvasRef.current;
       if (!container || !canvas) return;
       const perfId = `ghostty-${debugNameRef.current}`;
-      // One resource owner per effect run; disposing it below cancels the
-      // recovery timer and disconnects the resize observer together.
-      // The attempt COUNT is a ref because it survives the renderer epoch bump.
       const resources = createRendererEffectResources();
 
-      // Schedules the next WebGL-recovery attempt (a lost context or a failed
-      // renderer construction land here) with escalating backoff. A pending
-      // timer is never doubled: a context-lost event and a construction
-      // failure could otherwise both fire for the same dead renderer.
       const scheduleRecovery = () => {
         if (resources.isRecoveryScheduled()) return;
         recoveryAttemptRef.current += 1;
@@ -2313,10 +1951,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         }
         noteRecovery(diagKeyRef.current, { session, paneKind, attempt, outcome: 'scheduled', delayMs: delay });
         resources.scheduleRecovery(() => {
-          // A stale timer must not resurrect a pane that has since unmounted
-          // (or been torn down for an unrelated reason, e.g. this same effect
-          // already cleaned up) — cleanup below also cancels this outright,
-          // this is a second line of defense.
           if (!active) return;
           setRendererEpoch((value) => value + 1);
         }, delay);
@@ -2332,23 +1966,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           cursorColor: colorNumber(theme.cursor),
           palette: getTerminalAnsiPalette(resolvedTheme),
         });
-        // Enable grapheme clustering up front so emoji clusters render as whole
-        // ligatures from the first frame (see terminalGraphemeMode).
         enableGraphemeClustering(terminal);
-        // One ring epoch per model. Everything the faulted predecessor saw is
-        // gone; the replacement's own history starts at its construction grid.
         modelOpRingRef.current.beginEpoch(initialSize.cols, initialSize.rows);
         graphemeResetCarryRef.current = false;
         synchronizedOutputStateRef.current = { active: false, pending: '' };
         clearSynchronizedOutputRenderTimer();
         modelInstanceRef.current += 1;
-        // Fresh model: buffer rows from any previous find or command blocks
-        // are meaningless.
         osc133StateRef.current = emptyOsc133State();
         blockStoreRef.current.clear();
         placementStoreRef.current.clear();
-        // The buffer the annotations were resolved against is gone. Keeping
-        // them would leave anchors pointing into whatever replaces it.
         annotationsRef.current?.reset();
         selectedBlockIdRef.current = null;
         findScanRef.current?.cancel();
@@ -2374,25 +2000,19 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         terminalRef.current = terminal;
         rendererRef.current = renderer;
-        // A fresh renderer always owns a drawing buffer. A theme change or a
-        // model-fault recovery rebuilds one for every mounted pane, including the
-        // hidden ones, so the released state has to survive the rebuild or those
-        // panes silently re-take the surfaces they gave back.
+        // A theme change or fault recovery rebuilds every mounted pane, so the released
+        // surface state has to survive the rebuild.
         if (surfaceReleasedRef.current) renderer.releaseDrawingBuffer();
         const recoveryAttempt = recoveryAttemptRef.current;
         const recoveredModelFault = modelRecoveryPendingRef.current;
         recoveryAttemptRef.current = 0;
         setError(null);
-        // The bundled Nerd Font may not be loaded yet, so the first glyphs that
-        // need it rasterize blank. Once it loads, drop the stale glyph cache and
-        // repaint so terminal icons (eza --icons, powerline, devicons) appear.
+        // The bundled Nerd Font can load after the first glyphs rasterize blank.
         void ensureTerminalIconFont(fontSizeRef.current).then(() => {
           if (!active || rendererRef.current !== renderer) return;
           renderer.invalidateGlyphCache();
           renderSurface(true);
         });
-        // Live probe for the blank-on-resize watchdog: lets the diagnostics
-        // module read the current model fill vs the last paint's quad count.
         registerRenderProbe(diagKeyRef.current, () => {
           const model = terminalRef.current;
           if (!model) return null;
@@ -2404,12 +2024,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             modelPrintable: countModelPrintable(model),
             lastPaintAt: lastRenderAtRef.current,
             lastPaintQuads: lastPaintQuadsRef.current,
-            // Mirrors renderSurface's inactive-session bail: a pane that is
-            // not allowed to paint must not be judged blank by the watchdog.
             active: runtimeMetaRef.current ? runtimeMetaRef.current.isActiveSession : true,
-            // Geometry for the overflow detector / on-demand dump. Client
-            // dimensions are enough to identify stale PTY rows or columns;
-            // canvas placement is guaranteed structurally by CSS.
             session: runtimeMetaRef.current?.sessionId ?? undefined,
             isActivePane: runtimeMetaRef.current?.isActivePane ?? null,
             hasMeasuredSize: hasMeasuredSizeRef.current,
@@ -2419,8 +2034,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             clientHeight: activeContainer?.clientHeight ?? null,
           };
         }, () => {
-          // Watchdog repair: re-assert container-owned geometry after the model
-          // remains larger than the visible pane across several sweeps.
           fitRef.current();
         });
         const interceptKey = createTerminalKeyInterceptor((data) => onInputRef.current(data, 'user'));
@@ -2444,9 +2057,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           },
         });
         fit();
-        // `fit()` contains WASM traps and schedules a fresh epoch. Do not mark
-        // this model ready (or announce recovery) if its initial fit was the
-        // next fault in the chain.
+        // fit() contains WASM traps and schedules a fresh epoch: do not mark this model
+        // ready if its initial fit faulted.
         if (modelFaultDedupeRef.current?.rendererEpoch === rendererEpoch) return;
         if (recoveryAttempt > 0 || recoveredModelFault) {
           noteRecovery(diagKeyRef.current, {
@@ -2465,7 +2077,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           fit,
           openFind,
           focus: () => {
-            // Same find-bar/filter focus ownership rule as the imperative handle.
             if (filterInputRef.current) {
               if (document.activeElement !== filterInputRef.current) filterInputRef.current.focus();
               return true;
@@ -2603,9 +2214,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           rendererRef.current?.dispose();
           terminalRef.current?.free();
         } catch (reason) {
-          // If the invalid model also faults during disposal, the epoch
-          // replacement must still complete rather than leaking that error
-          // through React's effect cleanup.
           recordUiDiag({
             kind: 'ghostty_model_cleanup_fault',
             diagnosticFile: UI_DIAGNOSTICS_FILE,
@@ -2618,52 +2226,17 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         inputRef.current = null;
         rendererRef.current = null;
         terminalRef.current = null;
-        // The model this history belongs to is gone; hand its bytes back to GC
-        // rather than carrying up to ~1MB per discarded pane. A rebuild's
-        // beginEpoch would clear it anyway — this covers a real unmount.
         modelOpRingRef.current.clear();
-        // Release THIS canvas's GL context deterministically the moment it is
-        // discarded for good, instead of waiting on non-deterministic GC —
-        // browsers cap the number of simultaneously-live WebGL contexts
-        // (WKWebView's cap is low), and a lingering lost/dead context can
-        // starve new panes until the engine forcibly evicts the oldest one
-        // (a frozen pane or a hard UI freeze elsewhere). "Discarded for good"
-        // means canvasRef.current no longer points at this exact node: either
-        // the whole pane is unmounting (canvasRef.current is now null) or a
-        // rendererEpoch bump just replaced it with a fresh keyed <canvas>
-        // (context-loss recovery). A same-canvas rebuild (theme change reuses
-        // this node) must NOT hit this branch — losing it there would hand
-        // the very renderer just constructed a dead context, since a canvas
-        // keeps returning the same context object from getContext() for its
-        // own lifetime. This is the single owner of canvas-context release;
-        // there is no separate unmount-only effect for it.
+        // Release only when canvasRef no longer points at this node: a same-canvas rebuild
+        // would hand the new renderer a dead context. WKWebView's live-context pool is small.
         if (canvasRef.current !== canvas) {
           canvas.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
         }
       };
-    // Ghostty cells contain their resolved default RGB values, so theme
-    // changes require a fresh model. The pane runtime rehydrates it by
-    // reattaching, which restores the worker's terminal from a snapshot.
-    // rendererEpoch is a dependency for the same reason: a bump (scheduled by
-    // scheduleRecovery above after a lost context or a failed construction)
-    // must rebuild the model/renderer, and keying the <canvas> on it (see the
-    // JSX below) forces a fresh element and therefore a fresh getContext().
-    // fontSize is intentionally NOT a dependency: see the font-size effect
-    // below for why a size change must re-metric the existing renderer in
-    // place instead of rebuilding the model/renderer for every mounted pane.
+    // Ghostty cells hold resolved default RGB, so a theme change needs a fresh model.
+    // fontSize is not a dep: rebuilding every pane exhausts WKWebView's context pool.
     }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, setSurfaceReleased, write]);
 
-    // React to a font-size change without tearing down the WASM model or the
-    // WebGL renderer. Rebuilding on every font-size change (the previous
-    // behavior, when fontSize was in the mount effect's deps) tears down and
-    // reconstructs EVERY mounted pane (active + warm hidden), pressuring
-    // WKWebView's small live-WebGL-context pool badly enough to lose/fail
-    // contexts and permanently break panes — and it left hidden panes' canvases
-    // sized for the old font, since a hidden pane's fit() bails and never
-    // re-measures until revealed. Re-metricing in place avoids both: it costs
-    // one glyph-atlas invalidation instead of a full rebuild, and resize()
-    // re-asserts canvas geometry immediately even for panes that won't fit()
-    // again until they're shown.
     useEffect(() => {
       const renderer = rendererRef.current;
       if (!renderer) return;
@@ -2799,8 +2372,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return 0;
     };
 
-    // OSC 8 hyperlink URI at a viewport cell, resolved through the same
-    // active-vs-scrollback split every other buffer read in this file uses.
     const hyperlinkUriAtViewportCell = useCallback((row: number, col: number): string | null => {
       const terminal = terminalRef.current;
       if (!terminal) return null;
@@ -2825,8 +2396,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       setLinkCursorActive(Boolean(hoverLinkAtCell(cell) && acceleratorHeld));
     }, [hoverLinkAtCell]);
 
-    // Repaint only when the hovered annotation actually changes: this runs on
-    // every pointer move, and the projection behind it is not free.
     const syncAnnotationHover = useCallback((
       cell: { row: number; col: number } | null,
       altHeld: boolean,
@@ -2834,8 +2403,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const next = altHeld ? annotationAtCell(cell) : null;
       if (next === annotationHoverRef.current) return;
       annotationHoverRef.current = next;
-      // A pointer cursor on top of the brightened wash: the wash says "this is
-      // annotated", the cursor says "and you can open it".
       setAnnotationCursorActive(next !== null);
       renderSurface(true);
     }, [annotationAtCell, renderSurface]);
@@ -2871,12 +2438,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return homeDirRef.current;
     }, []);
 
-    // Does this viewport row continue the line started on the row above it?
-    // The row above it carries an authoritative wrap flag while it is on the
-    // active screen; scrollback rows expose none, so a completely full
-    // previous row is treated as wrapping. False joins are filtered
-    // downstream: path
-    // candidates must pass the existence check before anything links.
+    // A scrollback row exposes no wrap flag, so a completely full previous row is treated as wrapping.
     const isContinuationRow = useCallback((viewportRow: number): boolean => {
       const terminal = terminalRef.current;
       if (!terminal) return false;
@@ -2887,10 +2449,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return selectionLineAtBufferRow(bufferRow - 1, 0, terminal.cols).length === terminal.cols;
     }, [selectionLineAtBufferRow]);
 
-    // Analyze the word fragment under the pointer on its logical line (the
-    // hovered row joined with its soft-wrapped neighbors). Movement inside the
-    // cached fragment exits immediately; URLs resolve synchronously; file
-    // paths are validated asynchronously against the filesystem (cached).
     const detectHoverLink = useCallback((
       cell: { row: number; col: number } | null,
       options: { force?: boolean; repaint?: boolean } = {},
@@ -2905,9 +2463,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           return;
         }
       }
-      // A stale generation can still be the underline currently painted on the
-      // canvas. Treat it as visible until this revalidation and the following
-      // paint replace it.
       const hadUnderline = Boolean(current?.link);
       const clearHover = () => {
         hoverLinkRef.current = null;
@@ -2927,9 +2482,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         clearHover();
         return;
       }
-      // OSC 8 hyperlinks first: their visible label can contain spaces (e.g.
-      // "Learn more"), so the fragment/path detectors below would clip or
-      // miss them entirely if checked first.
+      // OSC 8 first: a hyperlink's visible label can contain spaces, which the fragment detectors would clip.
       const hyperlink = hyperlinkRangeAt(
         (i) => hyperlinkUriAtViewportCell(logical.firstRow + Math.floor(i / logical.cols), i % logical.cols),
         index,
@@ -2986,11 +2539,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       );
       if (candidates.length === 0) return;
 
-      // A write elsewhere in the terminal must not turn an already-validated
-      // path back into an asynchronous question. Re-read the candidate beneath
-      // the pointer and carry the resolution forward only when its target and
-      // text range are still identical. A positive filesystem cache answer is
-      // equally safe to promote synchronously.
       const previousPath = current?.link?.kind === 'path' ? current.link : null;
       for (const candidate of candidates) {
         const absolutePath = resolveDetectedPath(
@@ -3030,9 +2578,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           if (known !== true && !(await cachedPathExists(absolutePath))) continue;
           if (hoverLinkRef.current !== entry) return;
           if (hoverGenerationRef.current !== generation) {
-            // The model changed while validation was in flight. Re-read the
-            // current cell; the now-cached answer is promoted synchronously if
-            // this exact candidate survived the write.
             refreshHoverLinkRef.current?.();
             return;
           }
@@ -3066,9 +2611,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     }, [detectHoverLink]);
 
-    // Link under a cell for click handling: prefer the resolved hover state
-    // (paths require it — existence was already validated), fall back to a
-    // synchronous URL scan for clicks that arrive before any hover.
     const linkAtCell = useCallback((cell: { row: number; col: number } | null): DetectedTerminalLink | null => {
       refreshHoverLinkRef.current?.();
       const hovered = hoverLinkAtCell(cell);
@@ -3095,8 +2637,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           void openUrl(action.uri);
           break;
         case 'open-markdown':
-          // Markdown opens in an in-app tile bound to this pane's session when
-          // the host wired the callback; otherwise fall through to the OS app.
           if (onOpenMarkdownRef.current) {
             onOpenMarkdownRef.current(action.path, runtimeMetaRef.current?.sessionId ?? '');
             break;
@@ -3109,25 +2649,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     }, []);
 
-
     useEffect(() => {
       const handleModifierChange = (event: KeyboardEvent) => {
         if (event.key === 'Alt') {
-          // Alt is the annotation modifier, and holding it without moving the
-          // pointer is the normal way to reach for a wash. Light it up on the
-          // keypress rather than waiting for a move that may never come.
           altHeldRef.current = event.altKey;
           syncAnnotationHover(hoveredCellRef.current, event.altKey);
           return;
         }
         if (event.key !== 'Meta' && event.key !== 'Control') return;
         acceleratorHeldRef.current = event.metaKey || event.ctrlKey;
-        // A fit/scroll between the last pointer move and this keypress bumps
-        // hoverGeneration and discards the in-flight hover resolution; nothing
-        // re-detects until the pointer moves again. Re-detect when the
-        // accelerator engages so Cmd over an unmoved pointer always reflects
-        // the link actually under it (detectHoverLink exits immediately when
-        // the cached hover is still current).
         if (acceleratorHeldRef.current) detectHoverLink(hoveredCellRef.current);
         updateLinkCursor(hoveredCellRef.current, acceleratorHeldRef.current);
       };
@@ -3233,9 +2763,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           return true;
         }
       }
-      // Under DECSET 1003, passive motion is reported even with no physical
-      // button held. Xterm encodes that as button 3 + motion (35), not button
-      // 0 + motion (32), which would tell the application left-drag is active.
+      // Under DECSET 1003 passive motion is button 3 + motion (35); button 0 + motion (32)
+      // would tell the application a left-drag is active.
       const button = action === 'press' ? mouseButton(event.button) : activeButton ?? 3;
       onInputRef.current(applicationMouseInput(
         action,
@@ -3273,9 +2802,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         selectionRef.current = null;
         renderSurface(true);
       }
-      // Alt-clicking a wash reopens that annotation. It is the only way back to
-      // one already made — the wash is on the message, not in a list, so the
-      // message is where it has to be editable.
       if (annotationClick !== null) {
         onAnnotationActivateRef.current?.(annotationClick, {
           clientX: event.clientX,
@@ -3283,15 +2809,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         return;
       }
-      // An alt-drag over an annotatable message asks a different question than a
-      // copy: which message did the user point at, and where in it. The store
-      // answers with markdown offsets or refuses — a drag over the TUI's own
-      // chrome, a user turn, or a message outside the annotatable window
-      // resolves to nothing, and then this is an ordinary selection.
-      //
-      // A refusal is still reported. The two ways to get here look identical on
-      // screen — nothing happens — but mean opposite things: no window to align
-      // against at all, versus a window that does not contain this text.
       if (annotationDrag && selectionRef.current) {
         const store = annotationsRef.current;
         const access = messageRowAccess();
@@ -3326,12 +2843,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         openLink(link);
         return;
       }
-      // A plain click inside a completed command block selects the block;
-      // clicking its command line additionally highlights the command and
-      // arms Cmd+C with the exact command text from the pre-exec marker.
       if (wasClick && !text && !(event.metaKey || event.ctrlKey)) {
         const terminal = terminalRef.current;
-        // mousedown already cleared any previous block selection.
         let nextBlockId: number | null = null;
         const access = blockRowAccess();
         if (terminal && cell && access && blockStoreRef.current.hasBlocks()) {
@@ -3339,12 +2852,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           const block = blockStoreRef.current.blockAtAnchored(bufferRow, access);
           if (block) {
             nextBlockId = block.id;
-            // blockAtAnchored matched against the live buffer at a possibly
-            // non-zero delta (scrollback trimmed since the block was recorded).
-            // The command-line range below compares and draws against LIVE
-            // buffer rows, so it must shift the stored rows by the same delta —
-            // otherwise clicking trimmed output is misread as a command-line
-            // click and the box is drawn at stale rows.
+            // blockAtAnchored matched at a possibly non-zero delta, so shift the stored rows by
+            // it before comparing against live buffer rows.
             const delta = reanchorDelta(block, access) ?? 0;
             if (block.outputStartRow !== undefined && bufferRow < block.outputStartRow + delta && block.inputStart) {
               const lastCommandRow = block.outputStartRow - 1 + delta;
@@ -3365,12 +2874,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     };
 
-    // Finalize a drag that has no real release event to interpret (window
-    // lost focus, or the OS/browser canceled the implicit pointer capture,
-    // e.g. a context menu opening mid-drag). There is no cell to resolve a
-    // click, link, or command-block hit against here, so this only stops the
-    // drag and copies whatever was already selected — it must never leave
-    // selectingRef stuck true.
     const cancelSelectionDrag = () => {
       stopSelectionDrag();
       if (!selectingRef.current) return;
@@ -3388,21 +2891,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       if (text) void writeClipboardText(text);
     };
 
-    // Track an in-progress selection on the document rather than the terminal
-    // element. The drag must keep updating and finalize even when the pointer
-    // crosses a sibling overlay (e.g. a split divider sitting above the pane
-    // edge), which would otherwise steal the mousemove/mouseup and strand the
-    // selection without ever copying it.
     const startSelectionDrag = () => {
       stopSelectionDrag();
       const onMove = (event: MouseEvent) => {
         if (!selectingRef.current || !selectionRef.current) return;
-        // The button was released without a mouseup we observed (e.g. focus
-        // loss while over another window): finalize so we never get stuck.
-        // `buttons` itself can go stale in WebKit (the engine Tauri uses on
-        // macOS) after a release outside the webview, which is exactly why
-        // the blur/pointercancel listeners below exist as a second net that
-        // doesn't depend on this bit being accurate.
+        // `buttons` can go stale in WebKit after a release outside the webview.
         if ((event.buttons & 1) === 0) {
           void finishSelectionDrag(event);
           return;
@@ -3430,17 +2923,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const onUp = (event: MouseEvent) => {
         void finishSelectionDrag(event);
       };
-      // Belt-and-suspenders against a real mouseup never reaching this
-      // listener at all — e.g. the release happens outside the app's window
-      // entirely, or a descendant calls stopPropagation() on the native event
-      // before it bubbles to document. `blur` fires whenever the window loses
-      // focus mid-drag (alt-tab, clicking another app, a native dialog), and
-      // `pointercancel` fires when the browser/OS revokes the implicit
-      // pointer capture (e.g. a context menu opening mid-drag) — the same
-      // pattern already used for pane drags in SessionTerminalWorkspace's
-      // leafDrag.ts. Without this, a swallowed or missed release leaves
-      // selectingRef stuck true and the selection keeps growing on the next
-      // mouse movement, even with no button held.
+      // Second net: a release outside the window, or one a descendant stopPropagation()s,
+      // never reaches the document mouseup listener.
       const onCancel = () => {
         cancelSelectionDrag();
       };
@@ -3549,8 +3033,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             item.kind === 'file' && item.type.startsWith('image/')
           ));
           if (!hasImage) return;
-          // Browser paste events cannot send image bytes through a PTY. Both
-          // supported agent TUIs handle Ctrl+V by reading the native clipboard.
+          // Paste events cannot send image bytes through a PTY; both TUIs read the native clipboard on Ctrl+V.
           event.preventDefault();
           event.stopPropagation();
           onInputRef.current('\x16');
@@ -3623,8 +3106,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           const cell = cellFromPointer(event);
           if (!terminal || !cell) return;
           if (event.button === 2) {
-            // Right-click belongs to onContextMenu (or to a mouse-tracking
-            // TUI): it must not clear the selection or start a drag.
             sendTrackedMouse('press', event);
             return;
           }
@@ -3639,7 +3120,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           if (!opensUri && !event.altKey && sendTrackedMouse('press', event)) return;
           const row = bufferRowFromViewportRow(cell.row, terminal.getScrollbackLength(), viewportOffsetRef.current);
           if (event.detail === 3) {
-            // Triple click selects the visual row.
             selectionRef.current = { startRow: row, startCol: 0, endRow: row, endCol: terminal.cols };
             applicationSelectionAnchorRef.current = null;
             selectedBlockIdRef.current = null;
@@ -3653,13 +3133,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           selectedTextRef.current = null;
           applicationSelectionAnchorRef.current = null;
           selectedBlockIdRef.current = null;
-          // Alt claims the drag for annotation in a pane that has an annotation
-          // surface at all, whether or not there is currently a message to
-          // anchor to. Arming it only when a window exists made "nothing to
-          // annotate" the one case that could not explain itself: the release
-          // saw an ordinary selection and had nothing to report. The drag still
-          // falls through to a plain copy when it resolves to nothing — the
-          // only thing being claimed here is the right to say why.
           annotationDragRef.current = event.altKey && Boolean(annotationsRef.current);
           annotationClickRef.current = event.altKey ? annotationAtCell(cell) : null;
           selectingRef.current = true;
@@ -3670,10 +3143,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           startSelectionDrag();
         }}
         onMouseMove={(event) => {
-          // Pointer activity is intentionally sampled rather than sent for
-          // every pixel. The daemon's five-second quiet window only needs a
-          // recent proof of engagement; four samples a second keeps its edge
-          // accurate without turning ordinary mouse movement into wire spam.
+          // Sampled, not per pixel: the daemon's quiet window is five seconds.
           const pointerActivityAt = performance.now();
           if (pointerActivityAt - lastPointerActivityAtRef.current >= 250) {
             lastPointerActivityAtRef.current = pointerActivityAt;
@@ -3684,8 +3154,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             event.stopPropagation();
             return;
           }
-          // While selecting, the drag is owned by the document listeners in
-          // startSelectionDrag() so it survives crossing sibling overlays.
           if (selectingRef.current) return;
           const hoveredCell = cellFromPointer(event);
           hoveredCellRef.current = hoveredCell;
@@ -3712,11 +3180,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           syncAnnotationHover(null, false);
         }}
         onContextMenu={(event) => {
-          // Always suppress the webview's own menu inside the terminal.
           event.preventDefault();
           const terminal = terminalRef.current;
           if (!terminal) return;
-          // TUI apps that track the mouse own right-click.
           if (terminal.hasMouseTracking()) return;
           const cell = cellFromPointer(event);
           let blockId: number | null = null;
@@ -3725,8 +3191,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             const bufferRow = bufferRowFromViewportRow(cell.row, terminal.getScrollbackLength(), viewportOffsetRef.current);
             blockId = blockStoreRef.current.blockAtAnchored(bufferRow, access)?.id ?? null;
           }
-          // Right-clicking a block selects it (outline + arms ⌘C/⇧⌘C), same
-          // as a plain click, but without clearing an existing text selection.
           if (blockId !== null && selectedBlockIdRef.current !== blockId) {
             selectBlock(blockId);
           }
@@ -3743,8 +3207,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             event.stopPropagation();
             return;
           }
-          // A selection release is finalized by the document mouseup listener so
-          // it fires even when the pointer ends over a sibling overlay.
           if (selectingRef.current) return;
           recordPointerHitTest('mouseup', event, {
             phase: 'tracked-mouse-release',
@@ -3776,10 +3238,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           if (text) await writeClipboardText(text);
         }}
         onCopy={(event) => {
-          // In the packaged app plain Cmd+C never reaches keydown: the native
-          // Edit > Copy menu intercepts the key equivalent and WebKit fires
-          // this clipboard event instead. Serve terminal selections and
-          // selected blocks from here so both the shortcut and the menu work.
+          // In the packaged app the native Edit > Copy menu intercepts Cmd+C, and WebKit fires
+          // this clipboard event instead of keydown.
           const text = selectedTextRef.current ?? selectedBlockCopyText(true);
           if (!text) return;
           event.preventDefault();
@@ -3792,8 +3252,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         onKeyDown={(event) => {
           if (!event.metaKey || event.key.toLowerCase() !== 'c') return;
           if (event.shiftKey) {
-            // Styled-markdown copy of a text selection keeps priority; with a
-            // block selected and no text selection, copy just the command.
             const text = selectedMarkdown();
             if (text) {
               void writeClipboardText(text);
@@ -3803,8 +3261,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             }
             return;
           }
-          // Cmd+C: a text selection (e.g. a clicked command) wins; otherwise a
-          // selected block copies command + output.
           if (selectedTextRef.current) {
             void writeClipboardText(selectedTextRef.current);
             event.preventDefault();
@@ -3813,9 +3269,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           }
         }}
       >
-        {/* Keyed on rendererEpoch: a context-loss recovery bumps the epoch to force
-            a fresh DOM node (and therefore a fresh getContext('webgl2')) — a canvas
-            keeps returning the same dead context object for its own lifetime. */}
+        {/* Keyed on rendererEpoch: a lost context needs a fresh DOM node. */}
         <canvas ref={canvasRef} key={rendererEpoch} />
         {error && <div className="ghostty-terminal-error">{error}</div>}
       </div>

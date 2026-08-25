@@ -10,15 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// endpointStamp is the instant an endpoint row was written, in the encoding the
-// listing orders by. It is deliberately not protocol.TimestampNow(): that renders
-// time.Now() in the local zone with a trailing-zero-stripped fraction, and
-// created_at is ORDER BY'd as text, so two rows written either side of a DST
-// change or in different fraction widths came back in an order that was not
-// theirs. sortableTimeFormat is UTC and fixed-width, so text order is time order.
-//
-// The value stays an RFC3339 string on the same protocol.Timestamp wire field —
-// this narrows which RFC3339 spelling is written, it does not change the type.
+// Not protocol.TimestampNow(): created_at is ORDER BY'd as text, and local-zone
+// rendering with a stripped fraction ordered rows wrongly. UTC, fixed width.
 func endpointStamp() string { return time.Now().UTC().Format(sortableTimeFormat) }
 
 type EndpointRecord struct {

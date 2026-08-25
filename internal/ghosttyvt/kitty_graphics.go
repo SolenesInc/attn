@@ -1,10 +1,7 @@
 //go:build (darwin && arm64) || (linux && amd64) || (linux && arm64)
 
-// Kitty graphics observation: read-only readback of what ghostty's parser
-// already decided. Storage and image handles are borrowed from the terminal and
-// die on the next mutating call (vt_write, resize, reset), so every exported
-// method takes t.mu, copies into Go memory, and returns owned data. Nothing
-// borrowed escapes the lock.
+// Storage and image handles are borrowed from the terminal and die on the next
+// mutating call, so nothing borrowed escapes t.mu.
 package ghosttyvt
 
 /*
@@ -12,19 +9,17 @@ package ghosttyvt
 #include <string.h>
 #include <ghostty/vt.h>
 
-// Implemented in kitty_png.go. libghostty-vt calls it synchronously during
-// vt_write when a kitty transmission carries a PNG payload (f=100).
+// Implemented in kitty_png.go; called synchronously during vt_write for a
+// kitty transmission carrying a PNG payload (f=100).
 extern bool goDecodePNG(void* userdata, const GhosttyAllocator* allocator, const uint8_t* data, size_t data_len, GhosttySysImage* out);
 
-// Install the PNG decode hook. Process-global by design (ghostty_sys_set has no
-// per-terminal form), hence the sync.Once on the Go side.
 static GhosttyResult ghosttyvt_install_png_decoder(void) {
 	return ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG, (const void*)goDecodePNG);
 }
 
 // Borrowed image storage for the ACTIVE screen; NULL when kitty graphics are
-// compiled out of the library (GHOSTTY_NO_VALUE) or the screen has no storage.
-// Both degrade to "no images", never to an error: callers poll this per chunk.
+// compiled out (GHOSTTY_NO_VALUE) or the screen has no storage. Both degrade to
+// "no images", never to an error.
 static GhosttyKittyGraphics ghosttyvt_kitty_storage(GhosttyTerminal t) {
 	GhosttyKittyGraphics g = NULL;
 	if (ghostty_terminal_get(t, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &g) != GHOSTTY_SUCCESS) return NULL;
@@ -48,12 +43,9 @@ typedef struct {
 	GhosttyKittyGraphicsPlacementRenderInfo info;
 } ghosttyvt_kitty_placement;
 
-// Read everything about the iterator's current placement in one crossing: four
-// scalars via get_multi, then all of the geometry via render_info (which is
-// itself the batched form of pixel_size/grid_size/viewport_pos/source_rect).
-// Returns false only when the placement's own fields cannot be read; a
-// placement whose geometry is unavailable still comes back, with zeroed
-// geometry and the result code in render_rc.
+// Returns false only when the placement's own fields cannot be read; a placement
+// whose geometry is unavailable still comes back, with zeroed geometry and the
+// result code in render_rc.
 static bool ghosttyvt_kitty_placement_read(
 	GhosttyKittyGraphicsPlacementIterator it,
 	GhosttyKittyGraphics g,
@@ -96,7 +88,6 @@ typedef struct {
 	uint64_t generation;
 } ghosttyvt_kitty_image;
 
-// Look up one stored image and read its whole descriptor in a single crossing.
 // data stays borrowed from the terminal: the caller copies it out before
 // releasing the terminal lock.
 static bool ghosttyvt_kitty_image_read(GhosttyKittyGraphics g, uint32_t id, ghosttyvt_kitty_image* out) {
@@ -132,8 +123,7 @@ import (
 	"unsafe"
 )
 
-// pngDecoderOnce guards the process-global PNG decode hook. ghostty_sys_set has
-// no per-terminal form, so the install happens once, from the first New.
+// ghostty_sys_set has no per-terminal form, so the PNG hook installs once.
 var (
 	pngDecoderOnce sync.Once
 	pngDecoderRC   C.GhosttyResult
@@ -143,8 +133,7 @@ func installPNGDecoder() {
 	pngDecoderOnce.Do(func() { pngDecoderRC = C.ghosttyvt_install_png_decoder() })
 }
 
-// KittyImageFormat is a stored image's pixel layout; never PNG, which ghostty
-// decodes to RGBA before storing.
+// Never PNG: ghostty decodes PNG to RGBA before storing.
 type KittyImageFormat uint8
 
 const (
@@ -154,32 +143,27 @@ const (
 	KittyImageGray
 )
 
-// KittyPlacement is one placement in the active screen's storage, geometry
-// resolved at observation time (viewport-relative; scrolling moves placements
-// without changing the generation stamp). ImageGeneration is PROCESS-LOCAL, so
-// two terminals mint the same numbers for different pixels; internal/pty folds a
-// per-instance epoch in before it leaves the worker, and nothing here should.
+// ImageGeneration is PROCESS-LOCAL, so two terminals mint the same numbers for
+// different pixels; internal/pty folds a per-instance epoch in, nothing here.
 type KittyPlacement struct {
 	ImageID         uint32
 	PlacementID     uint32
-	Virtual         bool // unicode-placeholder placement; no cursor geometry
+	Virtual         bool
 	Z               int32
-	PixelWidth      uint32 // rendered size (source rect + aspect applied)
+	PixelWidth      uint32
 	PixelHeight     uint32
 	GridCols        uint32
 	GridRows        uint32
 	ViewportCol     int32 // top-left, viewport-relative; negative = scrolled up
 	ViewportRow     int32
-	ViewportVisible bool   // false: fully off-screen or virtual
-	SourceX         uint32 // resolved source rect in image pixels
+	ViewportVisible bool
+	SourceX         uint32
 	SourceY         uint32
 	SourceWidth     uint32
 	SourceHeight    uint32
-	ImageGeneration uint64 // per-image stamp; changes on any retransmission of the id
+	ImageGeneration uint64
 }
 
-// KittyImage is a decoded, uncompressed image copied out of the storage;
-// Generation is the same process-local stamp KittyPlacement carries.
 type KittyImage struct {
 	ID         uint32
 	Width      uint32
@@ -189,10 +173,8 @@ type KittyImage struct {
 	Data       []byte
 }
 
-// KittyGeneration is the ACTIVE screen storage's generation stamp. An unchanged
-// stamp guarantees identical placements and image data; the converse does not
-// hold (a nonzero stamp can be empty storage), so only a *changed* stamp means
-// "observe again". Used raw: it never leaves the process.
+// An unchanged stamp guarantees identical placements and image data; the
+// converse does not hold, so only a *changed* stamp means "observe again".
 func (t *Terminal) KittyGeneration() uint64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -202,9 +184,8 @@ func (t *Terminal) KittyGeneration() uint64 {
 	return uint64(C.ghosttyvt_kitty_generation(C.ghosttyvt_kitty_storage(t.term)))
 }
 
-// KittyPlacements snapshots the active screen's placements, copied out so they
-// survive later mutations. The iterator free is deferred in a closure, not by
-// value: populating it may replace the handle.
+// The iterator free is deferred in a closure, not by value: populating it may
+// replace the handle.
 func (t *Terminal) KittyPlacements() []KittyPlacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -252,8 +233,6 @@ func (t *Terminal) KittyPlacements() []KittyPlacement {
 	return out
 }
 
-// KittyImage looks up a stored image by ghostty's image id. ok is false when
-// no such image exists (or on the stub).
 func (t *Terminal) KittyImage(id uint32) (KittyImage, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -268,8 +247,6 @@ func (t *Terminal) KittyImage(id uint32) (KittyImage, bool) {
 	if !C.ghosttyvt_kitty_image_read(g, C.uint32_t(id), &rec) {
 		return KittyImage{}, false
 	}
-	// Both are documented as impossible for a stored image; "no image" beats
-	// bytes whose layout contradicts their format.
 	format, ok := kittyFormat(rec.format)
 	if !ok || rec.compression != C.GHOSTTY_KITTY_IMAGE_COMPRESSION_NONE {
 		return KittyImage{}, false

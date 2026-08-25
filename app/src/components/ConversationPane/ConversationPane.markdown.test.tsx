@@ -7,31 +7,17 @@ import { useConversationsStore } from '../../store/conversations';
 import mdTour from './__recordings__/md-tour.jsonl?raw';
 import mdLong from './__recordings__/md-long.jsonl?raw';
 
-// These tests are about STRUCTURE — what the parser made of the text — so the
-// lazy shiki import is intercepted with a mock that never answers: no highlight
-// state is ever written, and a replay of 1,364 deltas neither pays for
-// highlighting nor resolves promises outside act(). Markdown.highlight.test.tsx
-// is where highlighting itself is tested.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(() => new Promise<string>(() => {})),
 }));
 vi.mock('shiki', () => shikiMock);
 
-/**
- * The pane, driven by envelope streams RECORDED FROM REAL nisse SESSIONS.
- *
- * `__recordings__/*.jsonl` were captured off the real host's fd 3 against a
- * real model (2026-08-19): md-tour is 7,845 chars over 317 deltas in 13.8 s,
- * md-long 27,540 chars over 1,364 deltas in 65 s. Replaying them is the whole
- * point — an invented lorem stream has none of the half-open constructs that
- * make streaming markdown hard.
- */
+// `__recordings__/*.jsonl` captured off a real host's fd 3 (2026-08-19): md-tour
+// 7,845 chars / 317 deltas / 13.8 s, md-long 27,540 chars / 1,364 deltas / 65 s.
 
 const SESSION = 'sess-md';
 
-// Each test below replays a whole recording delta by delta — 317 or 1,364 of
-// them through the real pane. Vitest's 5s default is a fixture-size limit here,
-// and one these clear alone but not beside 278 other files on a loaded machine.
+// Vitest's 5s default is a fixture-size limit these replays clear alone but not beside 278 other files.
 const REPLAY_TIMEOUT_MS = 60_000;
 
 interface Recorded { at: number; envelope: { seq: number; kind: string; body: Record<string, unknown> } }
@@ -89,7 +75,6 @@ describe('ConversationPane markdown, replayed from real recordings', () => {
       const id = String(last!.envelope.body.id);
       const streamed = markdownHtml(id);
 
-      // Same message, rendered once from its final text: what a reload shows.
       useConversationsStore.setState({ conversations: {} });
       const snapshot = rows.find((row) => row.envelope.kind === 'conversation_snapshot')!;
       apply({
@@ -119,7 +104,6 @@ describe('ConversationPane markdown, replayed from real recordings', () => {
     expect(node.querySelectorAll('pre code').length).toBeGreaterThan(0);
     expect(node.querySelectorAll('a[href]').length).toBeGreaterThan(0);
     expect(node.querySelectorAll('ul li, ol li').length).toBeGreaterThan(0);
-    // Nothing that should have become structure is left standing as text.
     const visible = node.textContent ?? '';
     expect(visible).not.toContain('```');
     expect(visible).not.toContain('](');
@@ -134,7 +118,6 @@ describe('ConversationPane markdown, replayed from real recordings', () => {
       if (row.envelope.kind !== 'message_delta') continue;
       const node = document.querySelector(`[data-testid="conversation-message-${row.envelope.body.id}"]`);
       if (!node) continue;
-      // Text nodes only: a backtick inside <code> is content, not syntax.
       const clone = node.cloneNode(true) as HTMLElement;
       clone.querySelectorAll('code, pre').forEach((element) => element.remove());
       const visible = clone.textContent ?? '';
@@ -160,15 +143,10 @@ describe('ConversationPane markdown, replayed from real recordings', () => {
 
     apply({ at: 2, envelope: { seq: 3, kind: 'message_delta', body: { id: 'd1', text: 'B\n```\n' } } });
     expect(screen.queryByTestId('markdown-diagram-pending')).toBeNull();
-    // MermaidDiagram draws the source while it loads mermaid, then swaps in the
-    // SVG; either element means the diagram renderer has the block now.
     expect(document.querySelector('.markdown-mermaid-loading, .markdown-mermaid')).not.toBeNull();
   });
 
   it('reuse-as-is baseline: what the shared component leaks without the tail pass', { timeout: REPLAY_TIMEOUT_MS }, () => {
-    // The same recording rendered the way a straight reuse would: no streaming
-    // flag, so every prefix is parsed verbatim. This is the defect the tail
-    // completion exists to remove, kept as a receipt rather than a claim.
     const rows = recording('md-tour');
     const leaks = new Map<string, number>();
     let text = '';
@@ -208,15 +186,13 @@ describe('ConversationPane markdown, replayed from real recordings', () => {
     const sorted = samples.map((s) => s.ms).sort((a, b) => a - b);
     const at = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
     const big = samples.filter((s) => s.chars > 20_000).map((s) => s.ms).sort((a, b) => a - b);
-    // happy-dom is not a browser and this number is not a frame budget — it is
-    // the shape of the curve, reported so a regression is visible.
+    // happy-dom is not a browser and this number is not a frame budget.
     console.log(
       `[md-long] ${samples.length} deltas, ${chars} chars: `
       + `p50 ${at(0.5).toFixed(2)}ms p90 ${at(0.9).toFixed(2)}ms p99 ${at(0.99).toFixed(2)}ms max ${at(1).toFixed(2)}ms`
       + (big.length ? ` | above 20k chars p50 ${big[Math.floor(big.length / 2)].toFixed(2)}ms` : ''),
     );
-    // A tripwire, not a target: nothing healthy takes a third of a second to
-    // absorb one delta, and a re-parse regression would blow straight past it.
+    // A tripwire, not a target: a re-parse regression blows straight past it.
     expect(at(0.99)).toBeLessThan(300);
   });
 });

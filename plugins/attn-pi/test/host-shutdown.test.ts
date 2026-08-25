@@ -1,7 +1,5 @@
-// A clean nisse shutdown has to reach extensions: pi emits `session_shutdown`
-// from AgentSessionRuntime, and the host builds an AgentSession, whose
-// dispose() emits nothing (pi 0.83.0). This runs the real host against a
-// throwaway pi home holding one extension that records what it heard.
+// A clean nisse shutdown has to reach extensions: pi emits `session_shutdown` from
+// AgentSessionRuntime, and the host builds an AgentSession, whose dispose() emits nothing.
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

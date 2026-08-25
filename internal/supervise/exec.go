@@ -6,10 +6,6 @@ import (
 	"syscall"
 )
 
-// StartCommand starts a prepared command as a supervised process, sending its
-// stdout and stderr to log. A nil log is os/exec's own /dev/null, which is what
-// every child got before log capture existed. The caller owns everything about
-// the command except its output wiring and its exit reporting.
 func StartCommand(cmd *exec.Cmd, log io.Writer) (Process, error) {
 	cmd.Stdout = log
 	cmd.Stderr = log
@@ -23,8 +19,6 @@ type execProcess struct {
 	cmd *exec.Cmd
 }
 
-// Wait reports how the process ended, keeping the error text, the exit code and
-// the signal apart so a caller can render whichever it has.
 func (p *execProcess) Wait() Exit {
 	err := p.cmd.Wait()
 	exit := Exit{}

@@ -11,30 +11,20 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// The in-memory registry is the runtime cache; the SQLite store is the source
-// of truth. Mutations write through to the store; the registry is rebuilt from
-// the store at daemon start. Status is NOT persisted — it's recomputed from
-// member sessions on every load and on every state change.
-
 type workspaceEntry struct {
-	id        string
-	title     string
-	directory string
-	status    protocol.WorkspaceStatus
-	muted     bool
-	pinned    bool
-	// rank is the fractional sidebar-order key; the store is the durable
-	// authority. Empty until a workspace is seeded or loaded from store.
-	rank string
-	// sessionIDs in this workspace, used for status rollup.
+	id         string
+	title      string
+	directory  string
+	status     protocol.WorkspaceStatus
+	muted      bool
+	pinned     bool
+	rank       string
 	sessionIDs map[string]struct{}
 }
 
 type workspaceRegistry struct {
-	mu sync.RWMutex
-	// workspaces keyed by id.
-	workspaces map[string]*workspaceEntry
-	// sessionToWorkspace lets us find the owning workspace from a session id.
+	mu                 sync.RWMutex
+	workspaces         map[string]*workspaceEntry
 	sessionToWorkspace map[string]string
 }
 
@@ -45,13 +35,6 @@ func newWorkspaceRegistry() *workspaceRegistry {
 	}
 }
 
-// register inserts or updates a workspace. Returns the snapshot to broadcast
-// and a flag indicating whether this is a new registration vs an update.
-//
-// rank carries the durable sidebar-order key. Like muted/title it is NOT reset
-// from the incoming value when it is empty: a re-register that omits the rank
-// (or the caller passes the stored rank back) leaves a user reorder intact. The
-// caller seeds rank for brand-new workspaces before this runs.
 func (r *workspaceRegistry) register(id, title, directory, rank string, muted, pinned bool) (protocol.Workspace, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -75,9 +58,6 @@ func (r *workspaceRegistry) register(id, title, directory, rank string, muted, p
 	return snapshotEntry(entry), !existed
 }
 
-// rename updates a workspace's cached title. Returns the refreshed snapshot and
-// whether the workspace was found. The store is the durable authority; callers
-// persist the new title alongside this in-memory update.
 func (r *workspaceRegistry) rename(id, title string) (protocol.Workspace, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -139,7 +119,6 @@ func (r *workspaceRegistry) unregister(id string) (protocol.Workspace, bool) {
 	return snapshotEntry(entry), true
 }
 
-// associateSession binds a session to an already registered workspace.
 func (r *workspaceRegistry) associateSession(sessionID, workspaceID, title string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -216,8 +195,6 @@ func (r *workspaceRegistry) list() []protocol.Workspace {
 	return out
 }
 
-// applyStatus updates the cached status for a workspace and returns whether
-// it changed (i.e., whether a state-changed broadcast is needed).
 func (r *workspaceRegistry) applyStatus(id string, status protocol.WorkspaceStatus) (protocol.Workspace, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -232,9 +209,6 @@ func (r *workspaceRegistry) applyStatus(id string, status protocol.WorkspaceStat
 	return snapshotEntry(entry), true
 }
 
-// applyRank updates the cached rank for a workspace and returns the refreshed
-// snapshot plus whether the workspace was found. Mirrors applyStatus; the store
-// is the durable authority and the caller persists the same key.
 func (r *workspaceRegistry) applyRank(id, rank string) (protocol.Workspace, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -246,9 +220,8 @@ func (r *workspaceRegistry) applyRank(id, rank string) (protocol.Workspace, bool
 	return snapshotEntry(entry), true
 }
 
-// rankOf returns the cached rank for a workspace, or "" when it is unknown. An
-// empty string also doubles as the MIN/MAX sentinel for rankkey.Between, so an
-// unranked or missing neighbour resolves to the open bound naturally.
+// "" doubles as rankkey.Between's MIN/MAX sentinel, so an unranked or missing
+// neighbour resolves to the open bound.
 func (r *workspaceRegistry) rankOf(id string) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -258,9 +231,6 @@ func (r *workspaceRegistry) rankOf(id string) string {
 	return ""
 }
 
-// maxRank returns the greatest rank currently held by any workspace, or "" when
-// the registry is empty. Used to seed a brand-new workspace's rank above the
-// existing maximum so it appends to the bottom of the sidebar.
 func (r *workspaceRegistry) maxRank() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -285,24 +255,6 @@ func snapshotEntry(e *workspaceEntry) protocol.Workspace {
 	}
 }
 
-// rollupWorkspaceStatus returns the workspace status that summarizes the
-// supplied session states. Higher-priority states win:
-// working > waiting_input > pending_approval > unknown > scheduled > idle > recoverable > launching.
-// `unknown` sits just below the explicit attention states: a session whose
-// state could not be determined still wants a look, so it must out-prioritize
-// the quiet `scheduled`/`idle` peers and surface at the workspace level (at the
-// session level `unknown` is already an attention state — see
-// isAttentionSessionState — so a single-session workspace whose only session is
-// `unknown` would otherwise show an `idle` dot that disagrees with its session).
-// `scheduled` sits above `idle` because a parked-on-schedule session will
-// auto-resume — more informative than a settled idle peer — but below the
-// attention states since it needs no steering. `recoverable` is quiet like
-// `idle` (revive is automatic on open) but less informative than a settled idle
-// peer. `launching` sits below `recoverable` on purpose — it carries less
-// information than any settled state, so as soon
-// as one session reports a real state, that one wins over a peer that's still
-// booting. Only a truly empty slice (no member sessions) falls through to the
-// `idle` default.
 func rollupWorkspaceStatus(sessionStates []protocol.SessionState) protocol.WorkspaceStatus {
 	priority := map[protocol.SessionState]int{
 		protocol.SessionStateWorking:         8,
@@ -329,8 +281,6 @@ func rollupWorkspaceStatus(sessionStates []protocol.SessionState) protocol.Works
 	for _, s := range sessionStates {
 		p, ok := priority[s]
 		if !ok {
-			// Unrecognised state — skip; we fall back to `idle` if nothing
-			// scores higher.
 			continue
 		}
 		if p > bestPriority {
@@ -341,9 +291,6 @@ func rollupWorkspaceStatus(sessionStates []protocol.SessionState) protocol.Works
 	return best
 }
 
-// recomputeWorkspaceStatus reads current session states from the store,
-// rolls them up, and updates the cached workspace status. Returns the
-// updated workspace and whether the status changed.
 func (d *Daemon) recomputeWorkspaceStatus(workspaceID string) (protocol.Workspace, bool) {
 	if d.workspaces == nil || workspaceID == "" {
 		return protocol.Workspace{}, false
@@ -359,16 +306,6 @@ func (d *Daemon) recomputeWorkspaceStatus(workspaceID string) (protocol.Workspac
 	return d.workspaces.applyStatus(workspaceID, status)
 }
 
-// reseedWorkspaceStatuses recomputes every workspace's cached rollup from the
-// current store session states WITHOUT broadcasting. Startup recovery mutates
-// session states directly in the store (pruneSessionsWithoutPTY,
-// reconcileSessionsWithWorkerBackend) without going through the normal
-// per-session broadcast path, so the cached rollup seeded by
-// loadWorkspacesFromStore goes stale before the recovery barrier flushes
-// InitialState. Reseeding here keeps the workspace dot consistent with the
-// recovered session states in that first snapshot. No broadcast is needed:
-// clients are still parked behind the recovery barrier and read the corrected
-// status from InitialState. Mirrors the seed loop in loadWorkspacesFromStore.
 func (d *Daemon) reseedWorkspaceStatuses() {
 	if d.workspaces == nil {
 		return
@@ -378,10 +315,6 @@ func (d *Daemon) reseedWorkspaceStatuses() {
 	}
 }
 
-// projectWorkspaceEvent is the shared body of every projection that pushes one
-// workspace to clients. The registry is the authority for the snapshot: each
-// producer mutates it before publishing, and fan-out is synchronous, so reading
-// it here sees exactly what the producer just wrote.
 func (d *Daemon) projectWorkspaceEvent(event, workspaceID string) {
 	if d.workspaces == nil {
 		return
@@ -396,8 +329,6 @@ func (d *Daemon) projectWorkspaceEvent(event, workspaceID string) {
 	})
 }
 
-// projectWorkspaceUnregistered reads the departing workspace from the payload:
-// the registry entry is gone by the time this runs.
 func (d *Daemon) projectWorkspaceUnregistered(ev bus.Event) {
 	snapshot, ok := decodeFact[protocol.Workspace](d, ev)
 	if !ok {
@@ -409,9 +340,6 @@ func (d *Daemon) projectWorkspaceUnregistered(ev bus.Event) {
 	})
 }
 
-// recomputeAndBroadcastWorkspaceForSession is a convenience used after a
-// session state change: looks up the owning workspace, recomputes its status,
-// and broadcasts WorkspaceStateChanged if the rolled-up status changed.
 func (d *Daemon) recomputeAndBroadcastWorkspaceForSession(sessionID string) {
 	if d.workspaces == nil {
 		return
@@ -426,12 +354,8 @@ func (d *Daemon) recomputeAndBroadcastWorkspaceForSession(sessionID string) {
 	d.publishFact(FactWorkspaceStatusChanged, workspaceID, nil)
 }
 
-// resolveWorkspaceRank returns the rank key a (re)registered workspace should
-// carry. A re-register carries the stored key forward (so a user reorder
-// sticks, like title/muted). A brand-new workspace — or a pre-rank row that
-// somehow lost its key — is seeded above the current maximum so it appends to
-// the bottom of the sidebar. The store persists rank on INSERT only, so the
-// daemon owns this seed and must set it before the first AddWorkspace.
+// The store persists rank on INSERT only, so this seed must be set before
+// AddWorkspace or it is silently dropped.
 func (d *Daemon) resolveWorkspaceRank(existing *protocol.Workspace) string {
 	if existing != nil && existing.Rank != "" {
 		return existing.Rank
@@ -457,24 +381,15 @@ func (d *Daemon) handleRegisterWorkspace(client *wsClient, msg *protocol.Registe
 	existing := d.store.GetWorkspace(id)
 	muted := existing != nil && existing.Muted
 	pinned := existing != nil && existing.Pinned
-	// Preserve a user-applied rename across re-registration. A reconnect or
-	// retry can re-register the same workspace id with the old derived title;
-	// the only authoritative way to change a title is the rename_workspace
-	// command, so a non-empty stored title always wins here. Mirrors the
-	// session/workspace title guards in handleRegister.
 	if existing != nil && strings.TrimSpace(existing.Title) != "" {
 		title = existing.Title
 	}
 	rank := d.resolveWorkspaceRank(existing)
 	snapshot, isNew := d.workspaces.register(id, title, directory, rank, muted, pinned)
 	d.store.AddWorkspace(&snapshot)
-	// Make workspace directories available in the recent-locations picker.
 	d.store.UpsertRecentLocation(directory)
 	fact := FactWorkspaceRegistered
 	if !isNew {
-		// Re-register: pick up any new associations that occurred while it
-		// was registered, then publish a state-changed event so clients
-		// see the refreshed title/directory.
 		d.recomputeWorkspaceStatus(id)
 		fact = FactWorkspaceReregistered
 	}
@@ -564,16 +479,6 @@ func (d *Daemon) setWorkspacePinned(workspaceID string, pinned bool) (protocol.W
 	return snapshot, ""
 }
 
-// tearDownRemovedWorkspace runs the shared removal sequence for a workspace whose
-// registry entry was just unregistered. The caller owns the unregister + !removed
-// guard and any site-specific rationale, and passes the resulting snapshot. It drops
-// any pending compaction, snapshots context.md into the raw tier (the synchronous
-// data-safety floor, before the row delete), deletes the store row, enqueues the
-// zero-debounce final retrospective narrate (which derives IS_REMOVAL_PASS=true now
-// that the row is gone), prunes the workspace's tile-content subscriptions, and
-// broadcasts workspace_unregistered. The startup-reconciliation reaper deliberately
-// does NOT use this helper: it runs before the runner exists and omits the prune +
-// broadcast.
 func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
 	id := snapshot.ID
 	d.forgetWorkspaceContextCompaction(id)
@@ -581,17 +486,10 @@ func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
 	d.store.RemoveWorkspace(id)
 	d.enqueueFinalNarrateWorkspace(id)
 	d.pruneTileContentSubscriptionsForLayout(id, nil)
-	// The registry entry is already gone, so the departing workspace rides in
-	// the payload rather than being looked up at projection time.
+	// Rides in the payload: the registry entry is gone by projection time.
 	d.publishFact(FactWorkspaceUnregistered, id, snapshot)
 }
 
-// handleUnregisterWorkspace closes the workspace AND every session that
-// belongs to it. Sessions get a graceful SIGTERM through unregisterSession
-// (same path as the unix-socket "unregister" command), so transcripts flush
-// and PTYs drain. We broadcast session_unregistered for each closed session
-// before the workspace_unregistered, so clients can update their session
-// list before they discover the workspace is gone.
 func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.UnregisterWorkspaceMessage) {
 	id := strings.TrimSpace(msg.ID)
 	if id == "" {
@@ -602,9 +500,8 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		return
 	}
 
-	// Snapshot member sessions before tearing down — unregisterSession will
-	// mutate the in-memory association map, which would race the snapshot
-	// the registry hands out otherwise.
+	// Snapshot before tearing down: unregisterSession mutates the association map.
+	// session_unregistered must reach clients before workspace_unregistered.
 	memberIDs := d.workspaces.sessionIDs(id)
 	for _, sid := range memberIDs {
 		closed := d.unregisterSession(sid, syscall.SIGTERM)
@@ -615,16 +512,11 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	if !removed {
 		return
 	}
-	// Explicit unregister (workspace closed along with its sessions): tear down and
-	// write the removal-boundary retrospective.
 	d.tearDownRemovedWorkspace(snapshot)
 }
 
-// loadWorkspacesFromStore rebuilds the in-memory registry from SQLite at
-// daemon start. Order matters: we register every workspace first (so
-// associateSession has somewhere to land), then walk persisted sessions and
-// re-bind those that have a workspace_id. Status is recomputed last from the
-// loaded session states.
+// Every workspace must be registered before sessions are re-bound, or
+// associateSession has nowhere to land.
 func (d *Daemon) loadWorkspacesFromStore() []string {
 	if d.workspaces == nil {
 		d.workspaces = newWorkspaceRegistry()
@@ -635,24 +527,13 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 			continue
 		}
 		if len(d.store.SessionsInWorkspace(ws.ID)) == 0 {
-			// Older startup reconciliation paths could reap a session without
-			// removing its workspace. Preserve workspaces waiting for their
-			// first spawn: the layout pane is persisted before spawn_session
-			// creates the session row, and load can run after a daemon restart
-			// in that gap. Also preserve workspaces with visible sessionless
-			// content such as docked tiles.
 			_, registered := d.workspaces.snapshot(ws.ID)
 			if !registered &&
 				!ws.Pinned &&
 				!d.workspaceHasPendingSpawn(ws.ID) &&
 				!d.workspaceHasSessionlessContent(ws.ID) {
-				// loadWorkspacesFromStore runs during Start() before the compaction
-				// runner is constructed; forgetWorkspaceContextCompaction is nil-safe
-				// and the snapshot only reads the store and writes a file, so both are
-				// safe here with no runner. The final-narrate enqueue, however, needs
-				// the runner, so we DEFER it: collect the reaped id and return it for
-				// Start to enqueue once startJobQueue has run, so a startup-reaped
-				// workspace still gets its removal-boundary retrospective.
+				// This runs during Start() before the compaction runner exists, so
+				// the final-narrate enqueue is deferred to Start via `reaped`.
 				d.forgetWorkspaceContextCompaction(ws.ID)
 				d.snapshotWorkspaceContextOnRemove(ws.ID, ws.Title)
 				d.store.RemoveWorkspace(ws.ID)
@@ -670,8 +551,6 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 			d.workspaces.associateSession(session.ID, wsID, session.Label)
 		}
 	}
-	// Seed each workspace's status from its members. No broadcast — clients
-	// get the current rollup via InitialState.
 	for _, ws := range d.workspaces.list() {
 		d.recomputeWorkspaceStatus(ws.ID)
 	}
@@ -691,15 +570,10 @@ func (d *Daemon) workspaceHasPendingSpawn(workspaceID string) bool {
 	return false
 }
 
-// workspaceHasSessionlessContent is the single retention rule for a workspace
-// after its final session leaves. Only visible docked tiles keep it alive;
-// workspace context is deleted with the workspace.
 func (d *Daemon) workspaceHasSessionlessContent(workspaceID string) bool {
 	return d.workspaceLayoutHasTiles(workspaceID)
 }
 
-// listLocalWorkspaces returns a snapshot of the local workspaces that can be
-// targeted by local CLI operations such as `attn delegate --workspace`.
 func (d *Daemon) listLocalWorkspaces() []protocol.Workspace {
 	if d.workspaces == nil {
 		return nil
@@ -714,8 +588,6 @@ func (d *Daemon) listLocalWorkspaces() []protocol.Workspace {
 	return workspaces
 }
 
-// listWorkspaces returns a snapshot of the current local and remote workspaces
-// for app InitialState.
 func (d *Daemon) listWorkspaces() []protocol.Workspace {
 	workspaces := d.listLocalWorkspaces()
 	if d.hubManager != nil {
@@ -724,9 +596,6 @@ func (d *Daemon) listWorkspaces() []protocol.Workspace {
 	return workspaces
 }
 
-// associateSessionWithWorkspace binds a freshly spawned session to a workspace
-// and seeds the rollup status. Called from handleSpawnSession when the spawn
-// message carries workspace_id.
 func (d *Daemon) associateSessionWithWorkspace(sessionID, workspaceID string) {
 	if workspaceID == "" || d.workspaces == nil {
 		return
@@ -744,8 +613,6 @@ func (d *Daemon) associateSessionWithWorkspace(sessionID, workspaceID string) {
 	d.publishFact(FactWorkspaceSessionAssociated, workspaceID, nil)
 }
 
-// dissociateSessionFromWorkspace is called when a session is unregistered, so
-// the rolled-up workspace status no longer counts the gone session.
 func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 	if d.workspaces == nil {
 		return
@@ -755,10 +622,6 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 		return
 	}
 	if remaining == 0 {
-		// A workspace whose last session leaves normally tears down. Pinned
-		// workspaces and visible sessionless content keep it alive. This runs
-		// before the session pane is removed, so a retained tile is still
-		// visible in the stored layout.
 		snap, _ := d.workspaces.snapshot(workspaceID)
 		if snap.Pinned || d.workspaceHasSessionlessContent(workspaceID) {
 			d.recomputeWorkspaceStatus(workspaceID)
@@ -769,8 +632,6 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 		if !removed {
 			return
 		}
-		// Natural last-session departure (the common path): tear down and write the
-		// removal-boundary retrospective.
 		d.tearDownRemovedWorkspace(snapshot)
 		return
 	}
@@ -778,9 +639,6 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 	d.publishFact(FactWorkspaceSessionDissociated, workspaceID, nil)
 }
 
-// decorateSessionWithWorkspace refreshes WorkspaceID on a session about to be
-// broadcast when an in-memory association exists. The persisted value remains
-// authoritative during startup while the workspace registry is being rebuilt.
 func (d *Daemon) decorateSessionWithWorkspace(session *protocol.Session) {
 	if session == nil || d.workspaces == nil {
 		return
@@ -790,9 +648,6 @@ func (d *Daemon) decorateSessionWithWorkspace(session *protocol.Session) {
 	}
 }
 
-// decorateSessionWithWorkspaceMute exposes hidden workspace ownership to CLI
-// consumers such as a chief deciding where to delegate. False is omitted to
-// keep the common `attn list` output compact.
 func (d *Daemon) decorateSessionWithWorkspaceMute(session *protocol.Session) {
 	if session == nil || d.store == nil {
 		return

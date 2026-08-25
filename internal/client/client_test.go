@@ -13,18 +13,15 @@ import (
 )
 
 func TestClient_Register(t *testing.T) {
-	// Create temp socket
 	tmpDir := t.TempDir()
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
-	// Start mock server
 	listener, err := net.Listen("unix", sockPath)
 	if err != nil {
 		t.Fatalf("listen error: %v", err)
 	}
 	defer listener.Close()
 
-	// Handle one connection
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -32,11 +29,9 @@ func TestClient_Register(t *testing.T) {
 		}
 		defer conn.Close()
 
-		// Read message
 		buf := make([]byte, 4096)
 		n, _ := conn.Read(buf)
 
-		// Verify it's a register message
 		cmd, msg, err := protocol.ParseMessage(buf[:n])
 		if err != nil || cmd != protocol.CmdRegister {
 			return
@@ -46,12 +41,10 @@ func TestClient_Register(t *testing.T) {
 			return
 		}
 
-		// Send response
 		resp := protocol.Response{Ok: true}
 		json.NewEncoder(conn).Encode(resp)
 	}()
 
-	// Test client
 	c := New(sockPath)
 	err = c.Register("sess-123", "test-session", "/tmp")
 	if err != nil {
@@ -542,7 +535,6 @@ func TestClient_NotRunning(t *testing.T) {
 }
 
 func TestClient_ConnectError_IncludesProfileAndSocket(t *testing.T) {
-	// No ATTN_PROFILE set → profile defaults to "default".
 	os.Unsetenv("ATTN_PROFILE")
 	sockPath := filepath.Join(t.TempDir(), "missing.sock")
 	c := New(sockPath)
@@ -560,28 +552,21 @@ func TestClient_ConnectError_IncludesProfileAndSocket(t *testing.T) {
 }
 
 func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
-	// Simulate the user being in ATTN_PROFILE=dev but the default daemon is
-	// running. We fake a "default" daemon by listening on the default
-	// profile's socket path, and point dev at a missing socket.
-	//
-	// Unix socket paths on macOS are limited to ~104 chars, so we put the
-	// fake HOME under /tmp instead of using t.TempDir().
+	// Unix socket paths on macOS are limited to ~104 chars, so the fake HOME goes
+	// under /tmp rather than t.TempDir().
 	tmp, err := os.MkdirTemp("/tmp", "attn-client-")
 	if err != nil {
 		t.Fatalf("mkdtemp: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 
-	// Intentionally exempt from the toolhome seam: DataDirForProfile is
-	// deliberately HOME-based for cross-profile probing (read-only path
-	// construction, no writes through the tool-dotfile paths toolhome guards),
-	// so HOME is its only lever. See config.go's DataDirForProfile comments.
-	t.Setenv("HOME", tmp)            // so SocketPathForProfile("") → $tmp/.attn/attn.sock
-	t.Setenv("ATTN_PROFILE", "dev")  // current profile is dev
-	t.Setenv("ATTN_SOCKET_PATH", "") // don't let an env override mask the default resolution
+	// DataDirForProfile is HOME-based for cross-profile probing, so HOME is its
+	// only lever.
+	t.Setenv("HOME", tmp)
+	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_SOCKET_PATH", "")
 	config.ReloadForTesting()
 
-	// Create the "other" (default) socket directory and listen on it.
 	defaultDir := filepath.Join(tmp, ".attn")
 	if err := os.MkdirAll(defaultDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -593,7 +578,6 @@ func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
 	}
 	defer ln.Close()
 
-	// The dev profile's expected socket doesn't exist.
 	devSock := filepath.Join(tmp, ".attn-dev", "attn.sock")
 	c := New(devSock)
 	err = c.Register("id", "label", "/tmp")
@@ -613,14 +597,8 @@ func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
 }
 
 func TestClient_SocketPath(t *testing.T) {
-	// Set binary name for test
 	config.SetBinaryName("attn")
 
-	// DefaultSocketPath() = config.SocketPath(), which composes off
-	// ATTN_DATA_DIR; assert that composition directly instead of redirecting
-	// HOME (config's own tests pin the HOME-derived default formula without
-	// touching the go-test data-dir backstop — see
-	// TestDefaultAttnDir_SplitsByProfile in internal/config).
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
 	t.Setenv("ATTN_PROFILE", "")

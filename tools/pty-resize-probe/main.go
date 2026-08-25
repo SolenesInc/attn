@@ -1,21 +1,5 @@
-// Probe: spawn an agent binary in a raw PTY, capture every byte it emits,
-// and drive a configurable resize sequence. Answers the question "is the
-// agent actually emitting redraw bytes in response to SIGWINCH?" without
-// any terminal emulator between the PTY and the observer — so whatever the
-// probe sees is upstream of terminal rendering or attn's forwarding. When
-// a pane's content looks stale after a resize, run this to find out
-// whether the agent is silent or whether something downstream is losing
-// the bytes.
-//
-// Usage:
-//
-//	go run ./tools/pty-resize-probe              # defaults: claude, ./probe.log
-//	AGENT=codex go run ./tools/pty-resize-probe  # other agent
-//	LOG=/tmp/x.log go run ./tools/pty-resize-probe
-//
-// The scripted sequence below mirrors scenario-tr205 (wide→narrow grow/
-// shrink at ~400 ms spacing) because that's the flake it was first built
-// to diagnose. Edit the `seq` slice for other scenarios.
+// Spawns an agent in a raw PTY and drives a resize sequence, with no emulator between
+// the PTY and the observer. Configured with the AGENT and LOG env vars.
 package main
 
 import (

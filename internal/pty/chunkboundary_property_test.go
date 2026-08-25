@@ -8,32 +8,7 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Chunk-boundary invariance: what the Go scanners report must not depend on
-// where the read loop happened to cut the stream.
-//
-// This is the invariant behind shipped bug #737. A PTY read returns whatever the
-// kernel had, so an escape routinely straddles a boundary; a scanner that
-// decides differently on either side of one produces a stream the worker's
-// terminal and the client's terminal disagree about, and the two grids drift
-// apart silently from that byte on.
-//
-// The existing batteries already sweep every split point — but only of the
-// inputs somebody wrote down. That is the half these properties add: the inputs
-// themselves are generated, from a grammar of the fragments that make boundaries
-// interesting (a lone ESC, half an introducer, a marker prefix that diverges on
-// its last byte, a UTF-8 character with its continuation bytes elsewhere, the
-// C1 controls that abort a string), and rapid picks the boundaries. Nothing here
-// needs an oracle: the whole-input run IS the expected answer, and every
-// chunking of that input has to match it.
-
-// streamFragments are the pieces a generated stream is built from. Each one is
-// either a complete thing, or deliberately half of one, so concatenating a few
-// of them produces the sequences that only exist across a boundary: an ESC that
-// turns out to introduce nothing, a `133;` prefix that turns out to be a title,
-// an APC that is never terminated.
 var streamFragments = []string{
-	// Ordinary output, including the multi-byte characters whose continuation
-	// bytes must not be separated from their lead by an extraction.
 	"hello",
 	"a",
 	"",
@@ -78,11 +53,8 @@ var streamFragments = []string{
 	kittyST,
 }
 
-// drawStream builds an input out of fragments. Short on purpose: the boundary
-// cases live in the joins between fragments, not in volume, and every scanner
-// here has a tripwire measured in kilobytes or megabytes that a long generated
-// stream would start bumping into for reasons that have nothing to do with
-// chunking.
+// Short on purpose: every scanner here has a size tripwire a long stream would
+// start bumping into for reasons unrelated to chunking.
 func drawStream(t *rapid.T) string {
 	var b strings.Builder
 	for range rapid.IntRange(0, 8).Draw(t, "fragments") {
@@ -91,8 +63,6 @@ func drawStream(t *rapid.T) string {
 	return b.String()
 }
 
-// drawChunking cuts input at rapid-chosen offsets. The empty chunking (one
-// whole chunk) is included: a Feed of the whole input has to agree with itself.
 func drawChunking(t *rapid.T, input string) []string {
 	if len(input) < 2 {
 		return []string{input}
@@ -113,10 +83,6 @@ func drawChunking(t *rapid.T, input string) []string {
 	return append(chunks, input[prev:])
 }
 
-// TestFeedSegmenterIsChunkBoundaryInvariant is the property the worker's whole
-// extraction story rests on. The segmenter decides where a sequence begins and
-// ends, and it removes bytes from one side of the feed on the strength of that
-// decision; a decision that changes with the boundary is a grid divergence.
 func TestFeedSegmenterIsChunkBoundaryInvariant(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		input := drawStream(t)
@@ -133,9 +99,6 @@ func TestFeedSegmenterIsChunkBoundaryInvariant(t *testing.T) {
 			t.Fatalf("chunked as %q: holds %q, want %q", chunks, gotPending, wantPending)
 		}
 
-		// The invariant this file's header names: every byte is accounted for
-		// exactly once. Asserted on the chunked run, where a hold can drop or
-		// double one.
 		var rebuilt strings.Builder
 		for _, e := range gotEmissions {
 			rebuilt.WriteString(e.bytes)
@@ -147,16 +110,8 @@ func TestFeedSegmenterIsChunkBoundaryInvariant(t *testing.T) {
 	})
 }
 
-// TestOSCScannerIsChunkBoundaryInvariant is the same property for the read-only
-// scanner. It consumes nothing, so a boundary cannot corrupt the stream here —
-// but a sequence it fails to see across one is a window title that never
-// updates, or a notification that never fires.
-//
-// Bounded by oscScanMaxPending on purpose. Past that tripwire the scanner
-// abandons what it is holding, and where the abandon lands DOES depend on the
-// chunking: a whole-input Feed weighs the whole sequence at once, a chunked one
-// weighs it as it arrives. Generated streams stay two orders of magnitude below
-// it, which is also where every real title and notification sits.
+// Bounded by oscScanMaxPending: past that tripwire where the abandon lands DOES
+// depend on the chunking, so generated streams must stay well below it.
 func TestOSCScannerIsChunkBoundaryInvariant(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		input := drawStream(t)

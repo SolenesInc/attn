@@ -7,11 +7,8 @@ import (
 	"time"
 )
 
-// waitForKillReady polls the session's rendered screen until it contains the
-// readiness marker the spawned script emits right after installing its
-// signal traps. Without this, kill() could race the child's own startup and
-// send its signal before the trap is installed, which would make a shell
-// exit to the raw signal for the wrong reason and silently pass the test.
+// The marker is emitted right after the script installs its signal traps: without waiting,
+// kill() races the child's startup and the shell exits to the raw signal, silently passing.
 func waitForKillReady(t *testing.T, s *Session, marker string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -48,10 +45,6 @@ func spawnKillTestSession(t *testing.T, id, script string) *Session {
 	return s
 }
 
-// TestKill_SIGTERMIgnoringShellExitsViaSIGHUP covers a shell that ignores
-// SIGTERM (as interactive/login shells commonly do) but honors SIGHUP. This
-// fails on the pre-fix kill(), which rides the full waitTimeout to SIGKILL
-// (~8s elapsed, exit signal "killed") instead of escalating to SIGHUP.
 func TestKill_SIGTERMIgnoringShellExitsViaSIGHUP(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -79,10 +72,6 @@ func TestKill_SIGTERMIgnoringShellExitsViaSIGHUP(t *testing.T) {
 	}
 }
 
-// TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL covers a child that
-// ignores both SIGTERM and SIGHUP, so kill() must still fall back to SIGKILL
-// once waitTimeout expires. Catches a bug where SIGHUP escalation replaced
-// the SIGKILL backstop instead of supplementing it.
 func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -109,10 +98,6 @@ func TestKill_TERMAndHUPIgnoringChildFallsBackToSIGKILL(t *testing.T) {
 	}
 }
 
-// TestKill_CooperativeChildExitsOnSIGTERMBeforeGrace covers the common case:
-// a child that exits promptly on SIGTERM should not wait out
-// sigtermToHUPGrace. Catches a regression where kill always waits out the
-// grace period regardless of whether the child already exited.
 func TestKill_CooperativeChildExitsOnSIGTERMBeforeGrace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")

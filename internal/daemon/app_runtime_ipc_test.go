@@ -15,9 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// `attn app logs`, the invocation stream, and the invocation log's retention —
-// the three surfaces that answer "what has this app been doing".
-
 func appLogs(t *testing.T, d *Daemon, name string, lines int) protocol.Response {
 	t.Helper()
 	msg := &protocol.AppLogsMessage{Cmd: protocol.CmdAppLogs, Name: name}
@@ -38,10 +35,6 @@ func writeRuntimeLog(t *testing.T, d *Daemon, lines ...string) {
 	}
 }
 
-// One process, many apps, one log file. `attn app logs <name>` reads back the
-// tag the host writes, and `runtime` is how a reader sees the whole thing —
-// including the lines no app wrote, which is where a runtime that will not
-// start says why.
 func TestAppLogsFiltersByTagAndRuntimeShowsEverything(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -62,7 +55,6 @@ func TestAppLogsFiltersByTagAndRuntimeShowsEverything(t *testing.T) {
 		t.Fatalf("lines = %q, want %q", got, want)
 	}
 	for i := range want {
-		// The tag is stripped: it is attn's plumbing, not something the app printed.
 		if got[i] != want[i] {
 			t.Fatalf("line %d = %q, want %q", i, got[i], want[i])
 		}
@@ -83,16 +75,13 @@ func TestAppLogsFiltersByTagAndRuntimeShowsEverything(t *testing.T) {
 	}
 }
 
-// The tag is written in TypeScript and read in Go, so nothing but a test keeps
-// the two spellings the same. A drift here makes `attn app logs <name>` return
-// nothing at all, with no error to explain it.
+// The tag is written in TypeScript and read in Go; nothing but this test keeps the
+// spellings the same, and a drift makes `attn app logs <name>` return nothing.
 func TestAppLogTagMatchesTheHost(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "..", "apphost", "src", "index.ts"))
 	if err != nil {
 		t.Fatalf("read the app runtime host: %v", err)
 	}
-	// The Go side builds "[app <name>] " and "[runtime] "; the host has to write
-	// exactly those prefixes.
 	if !strings.Contains(string(source), "[app ${app}] ") {
 		t.Fatalf("the host does not write the per-app tag %q that `attn app logs` filters on", appRuntimeAppTag("<name>"))
 	}
@@ -101,9 +90,6 @@ func TestAppLogTagMatchesTheHost(t *testing.T) {
 	}
 }
 
-// A log file that does not exist is an empty answer, not an error: the runtime
-// writes it on its first start, and a caller asking before then is asking a
-// reasonable question.
 func TestAppLogsBeforeTheRuntimeEverRanIsEmptyNotAnError(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -115,13 +101,11 @@ func TestAppLogsBeforeTheRuntimeEverRanIsEmptyNotAnError(t *testing.T) {
 	if len(resp.AppLogsResult.Lines) != 0 {
 		t.Fatalf("lines = %q, want none", resp.AppLogsResult.Lines)
 	}
-	// The path is still named, which is the actionable half of an empty answer.
 	if resp.AppLogsResult.Path == "" {
 		t.Fatal("an empty answer did not say where the log would be")
 	}
 }
 
-// A limit someone can hit is a limit they must see.
 func TestAppLogsRefusesAnAskPastItsCeilingByName(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -138,8 +122,6 @@ func TestAppLogsRefusesAnAskPastItsCeilingByName(t *testing.T) {
 	}
 }
 
-// Truncation is reported rather than silent: a reader who sees exactly N lines
-// has to know whether that is all of them.
 func TestAppLogsSaysWhenItDroppedOlderLines(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -156,14 +138,11 @@ func TestAppLogsSaysWhenItDroppedOlderLines(t *testing.T) {
 	if !resp.AppLogsResult.Truncated {
 		t.Fatal("older lines were dropped without saying so")
 	}
-	// The newest, not the oldest: a tail is what a reader wants.
 	if got := resp.AppLogsResult.Lines; len(got) != 2 || got[0] != "four" || got[1] != "five" {
 		t.Fatalf("lines = %q, want the last two", got)
 	}
 }
 
-// `attn app dev` renders this stream. It has to reach a watcher as the handler
-// runs, not only when the developer next asks for status.
 func TestAppWatchStreamsInvocationsAsTheyHappen(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -184,7 +163,6 @@ func TestAppWatchStreamsInvocationsAsTheyHappen(t *testing.T) {
 	select {
 	case info := <-watcher.events:
 		if protocol.Deref(info.EventSubject) != "tk-2" {
-			// The auditor's invocation must not reach a watcher of greeter.
 			t.Fatalf("the stream carried %+v, want greeter's own invocation", info)
 		}
 		if info.Status != appInvocationStatusOK || info.Handler != apps.SubscriptionLabel("ticket.*") {
@@ -198,8 +176,6 @@ func TestAppWatchStreamsInvocationsAsTheyHappen(t *testing.T) {
 	}
 }
 
-// A slow watcher must not be able to slow down delivery. Dropping is the
-// deliberate choice: `attn app status` has the whole record.
 func TestASlowWatcherIsDroppedRatherThanBlockingDelivery(t *testing.T) {
 	d := newAppDaemon(t)
 	watcher := &appWatcher{app: "greeter", events: make(chan protocol.AppInvocationInfo)}
@@ -218,9 +194,6 @@ func TestASlowWatcherIsDroppedRatherThanBlockingDelivery(t *testing.T) {
 	}
 }
 
-// Retention trims by age across every app, including apps that no longer exist:
-// removing an app keeps its invocation history, and nothing else would ever
-// reap those rows.
 func TestInvocationRetentionTrimsByAgeAcrossEveryApp(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -263,18 +236,14 @@ func TestInvocationRetentionTrimsByAgeAcrossEveryApp(t *testing.T) {
 	}
 }
 
-// The age window cannot bound the table on its own — how many rows thirty days
-// holds is a property of what the app subscribed to, and the loudest fact in attn
-// runs three orders of magnitude above the quietest. The per-app cap is what
-// makes the size predictable, and it keeps the newest rows: the ones a reader
-// asking "what did it just do" is looking for.
+// The age window cannot bound the table on its own: how many rows thirty days holds
+// depends on what the app subscribed to.
 func TestInvocationRetentionCapsEachAppAtItsNewestRows(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
 	installApp(t, d, "loud", subscribing("ticket.*"))
 
 	const cap = 5
-	// Every row is inside the age window, so only the cap can remove anything.
 	for i := 0; i < cap+4; i++ {
 		if _, err := d.store.AppendAppInvocation(store.AppInvocation{
 			AppName: "loud", VersionID: 1, EventSeq: int64(i), EventName: "ticket.created",
@@ -299,7 +268,6 @@ func TestInvocationRetentionCapsEachAppAtItsNewestRows(t *testing.T) {
 	if len(rows) != cap {
 		t.Fatalf("kept %d rows, want %d", len(rows), cap)
 	}
-	// ListAppInvocations is newest first, so the survivors are seqs 8..4.
 	for i, row := range rows {
 		if want := int64(cap + 3 - i); row.EventSeq != want {
 			t.Fatalf("row %d is seq %d, want %d — the cap dropped the wrong end", i, row.EventSeq, want)
@@ -307,8 +275,6 @@ func TestInvocationRetentionCapsEachAppAtItsNewestRows(t *testing.T) {
 	}
 }
 
-// `attn app status` is where a reader looks when an app is doing nothing, so it
-// has to carry the stall clock — including when it fires.
 func TestAppStatusCarriesTheStallClockAndWhenItFires(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -340,17 +306,14 @@ func TestAppStatusCarriesTheStallClockAndWhenItFires(t *testing.T) {
 		t.Fatalf("disables at %q, want %q", stall.DisablesAt, want)
 	}
 
-	// A success clears it, and status says so by omission rather than by a stale
-	// entry nobody updated.
 	d.clearAppStall("greeter")
 	if again := appStatus(t, d, "greeter"); again.AppStatusResult.Stall != nil {
 		t.Fatalf("a recovered app still reports a stall: %+v", again.AppStatusResult.Stall)
 	}
 }
 
-// A reserved name cannot become an app, at the daemon as well as in the name
-// rule — `runtime` in particular, because `attn app logs runtime` already means
-// the shared process.
+// `runtime` in particular: `attn app logs runtime` already means the shared
+// process.
 func TestApplyRefusesAReservedAppName(t *testing.T) {
 	d := newAppDaemon(t)
 	for _, name := range apps.ReservedNames() {

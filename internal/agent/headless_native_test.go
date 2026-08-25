@@ -44,7 +44,6 @@ func TestClaudeHeadlessArgsUsesFileToolsAndDropsMCPPin(t *testing.T) {
 		WorkDir: "/tmp/scratch",
 	})
 
-	// Native file tools + unprompted-write permission.
 	assertContainsAll(t, "Claude native args", args,
 		"--print",
 		"--setting-sources",
@@ -59,12 +58,10 @@ func TestClaudeHeadlessArgsUsesFileToolsAndDropsMCPPin(t *testing.T) {
 		"json",
 		"claude-test",
 		"compact the context file",
-		// Hermetic MCP: --strict-mcp-config with NO --mcp-config loads zero MCP
-		// servers; without it the user's claude.ai account connectors attach and
-		// can sink the run (the 2026-07-02 classifier failure).
+		// Hermetic MCP: --strict-mcp-config with NO --mcp-config loads zero MCP servers;
+		// without it the user's claude.ai account connectors attach and can sink the run.
 		"--strict-mcp-config",
 	)
-	// The MCP keeper compaction pin must be gone.
 	assertContainsNone(t, "Claude native args", args,
 		"--mcp-config",
 		"--tools",
@@ -90,7 +87,6 @@ func TestClaudeHeadlessArgsAppendsJudgmentCapsAndSchema(t *testing.T) {
 		"--allowedTools", "Read,Grep,Glob",
 	)
 
-	// Unset caps must leave the argv untouched (the keeper path).
 	plain := claudeHeadlessArgs(HeadlessTaskRequest{Model: "sonnet", Prompt: "compact"})
 	assertContainsNone(t, "Claude uncapped args", plain,
 		"--max-turns", "--max-budget-usd", "--json-schema",
@@ -115,16 +111,13 @@ func TestClaudeHeadlessArgsReplacesSystemPromptWhenAsked(t *testing.T) {
 	})
 	assertContainsAll(t, "Claude system-prompt args", args,
 		"--system-prompt", "You are a terse classifier.")
-	// --system-prompt REPLACES; --append-system-prompt (the interactive-launch
-	// flag) adds. Emitting the wrong one loses the whole saving silently.
+	// --system-prompt REPLACES; --append-system-prompt (the interactive-launch flag)
+	// adds. Emitting the wrong one loses the whole saving silently.
 	assertContainsNone(t, "Claude system-prompt args", args, "--append-system-prompt")
-	// The prompt stays the trailing positional.
 	if args[len(args)-1] != "classify this" {
 		t.Fatalf("prompt must stay last, got %q:\n%v", args[len(args)-1], args)
 	}
 
-	// Unset leaves the CLI's own default in place, which is what every caller
-	// before this field expected.
 	plain := claudeHeadlessArgs(HeadlessTaskRequest{Model: "claude-test", Prompt: "compact"})
 	assertContainsNone(t, "Claude default system prompt", plain, "--system-prompt")
 
@@ -154,14 +147,12 @@ func TestCodexHeadlessArgsUsesWorkspaceWriteAndDropsMCPPin(t *testing.T) {
 		"--sandbox",
 		"workspace-write",
 		`approval_policy="never"`,
-		// non-file feature locks stay.
 		"features.apps=false",
 		"features.browser_use=false",
 		"features.standalone_web_search=false",
 		"gpt-test",
 		"compact the context file",
 	)
-	// Read-only sandbox, file/exec disables, and the MCP pin must all be gone.
 	assertContainsNone(t, "Codex native args", args,
 		"read-only",
 		"features.shell_tool=false",

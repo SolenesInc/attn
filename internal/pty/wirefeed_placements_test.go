@@ -2,23 +2,12 @@
 
 package pty
 
-// What a client is told about images, chunk by chunk.
-//
-// The rules under test are the whole contract: the full set or nothing, only
-// when something moved, the empty set when the last image goes, and — on the
-// sessions that will never have an image, which is all of them today — not so
-// much as one read of the placement set.
-
 import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// placementRecorder drives the feeder exactly as the read loop does — feed a
-// chunk, then take the changed set under the same stamp — and records what the
-// loop would have sent, plus how many times the feed path reached into ghostty
-// for placements at all.
 type placementRecorder struct {
 	feed     *wireFeeder
 	term     *ghosttyvt.Terminal
@@ -50,8 +39,6 @@ func (r *placementRecorder) write(chunk string) {
 	}
 }
 
-// last is the most recent update, and fails the test when the chunks produced
-// none — every caller here is asserting on something that was described.
 func (r *placementRecorder) last(t *testing.T) PlacementUpdate {
 	t.Helper()
 	if len(r.updates) == 0 {
@@ -60,9 +47,6 @@ func (r *placementRecorder) last(t *testing.T) PlacementUpdate {
 	return r.updates[len(r.updates)-1]
 }
 
-// The base case: an image is placed, and the client is told where it is with
-// the seq of the chunk that placed it. Without this the worker parses kitty for
-// nobody — the APC is stripped from the wire and nothing takes its place.
 func TestPlacementUpdateDescribesAPlacedImage(t *testing.T) {
 	rec := newPlacementRecorder(t, 20, 8, mirrorStorageLimit)
 
@@ -82,12 +66,8 @@ func TestPlacementUpdateDescribesAPlacedImage(t *testing.T) {
 	if got := update.Placements[0].ImageID; got != 40 {
 		t.Errorf("described image id = %d, want 40", got)
 	}
-	// Pixel size, not GridCols/GridRows. A placement transmitted without an
-	// explicit cell footprint carries zeros for those — kitty's "natural size" —
-	// until something makes ghostty resolve them, so on the real spawn path the
-	// FIRST description of an image reports 0x0 cells. The pixel dimensions are
-	// populated from the start on every path, and are what a renderer needs to
-	// size the image regardless.
+	// Ghostty reports 0x0 cells until something makes it resolve a placement's
+	// footprint, so assert pixel size, not GridCols/GridRows.
 	if got := update.Placements[0].PixelHeight; got != 32 {
 		t.Errorf("described height = %d px, want the 32 the image was transmitted at", got)
 	}
@@ -96,11 +76,6 @@ func TestPlacementUpdateDescribesAPlacedImage(t *testing.T) {
 	}
 }
 
-// Placements move under plain output. Nothing about a scroll touches kitty
-// state, so ghostty's stamp does not move and the observation has to be taken
-// because the chunk COULD have moved something — otherwise every image on
-// screen drifts away from where the client last drew it, and stays there until
-// the next transmission.
 func TestPlacementUpdateFollowsAScrollOnPlainOutput(t *testing.T) {
 	rec := newPlacementRecorder(t, 20, 8, mirrorStorageLimit)
 
@@ -129,10 +104,6 @@ func TestPlacementUpdateFollowsAScrollOnPlainOutput(t *testing.T) {
 	}
 }
 
-// The other half of that rule. Output that moves nothing must say nothing: a
-// session with an image on screen produces chunks continuously, and describing
-// the same set on every one of them is a message per chunk for the frontend to
-// receive, decode, and diff against what it already has.
 func TestPlacementUpdateIsSilentWhenNothingMoved(t *testing.T) {
 	rec := newPlacementRecorder(t, 40, 12, mirrorStorageLimit)
 
@@ -142,8 +113,6 @@ func TestPlacementUpdateIsSilentWhenNothingMoved(t *testing.T) {
 		t.Fatalf("updates after the image = %d, want 1", len(rec.updates))
 	}
 
-	// Text well below the image, on a screen with rows to spare: the grid takes
-	// it without scrolling, so nothing about the placement changes.
 	rec.write("\x1b[9;1Hstatus line")
 	rec.write("\x1b[10;1Hanother line")
 
@@ -152,10 +121,6 @@ func TestPlacementUpdateIsSilentWhenNothingMoved(t *testing.T) {
 	}
 }
 
-// The way out. A deleted image is described by an update carrying no
-// placements, which is why the set is always whole: "everything is gone" is an
-// ordinary set. Without it the client keeps drawing an image the terminal no
-// longer holds, with nothing to ever take it off the screen.
 func TestPlacementUpdateSendsTheEmptySetWhenTheLastImageGoes(t *testing.T) {
 	rec := newPlacementRecorder(t, 20, 8, mirrorStorageLimit)
 
@@ -175,11 +140,6 @@ func TestPlacementUpdateSendsTheEmptySetWhenTheLastImageGoes(t *testing.T) {
 	}
 }
 
-// The shipping configuration, and the reason the observation is gated on a
-// slice length rather than a terminal read. With a zero storage limit ghostty
-// refuses every transmission, so there is nothing to describe — and the feed
-// path must not pay a cgo crossing per chunk to rediscover that, on every
-// session, all day.
 func TestPlacementsCostNothingWhileKittyIsDisabled(t *testing.T) {
 	rec := newPlacementRecorder(t, 20, 8, 0)
 
@@ -195,11 +155,6 @@ func TestPlacementsCostNothingWhileKittyIsDisabled(t *testing.T) {
 	}
 }
 
-// Ghostty's kitty storage is per-screen and an observation reads the ACTIVE
-// one, so a screen switch turns the set over on its own — no flag, no
-// bookkeeping, and no way for the two to disagree. This pins that: entering the
-// alternate screen empties the described set, and leaving it brings the primary
-// screen's image back.
 func TestPlacementSetTurnsOverOnAScreenSwitch(t *testing.T) {
 	rec := newPlacementRecorder(t, 20, 8, mirrorStorageLimit)
 

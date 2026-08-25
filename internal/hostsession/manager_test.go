@@ -49,9 +49,6 @@ func (r *recorder) snapshot() ([]Event, []ExitInfo) {
 	return append([]Event(nil), r.events...), append([]ExitInfo(nil), r.exits...)
 }
 
-// writeScript stages an executable fake host. Fakes stand in for pi so these
-// tests assert the lifecycle contract — the envelope fd, the verb pipe, and the
-// process group — without an API key or a model.
 func writeScript(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "fake-host.sh")
@@ -81,10 +78,6 @@ func waitForExit(t *testing.T, rec *recorder) ExitInfo {
 	return exits[0]
 }
 
-// processGone reports whether a pid we do not own has left the process table.
-// The only observable for a grandchild's death is that its pid stops
-// answering signal 0, so this polls it against a deadline far past any real
-// teardown and fails loudly rather than passing on a guess.
 func processGone(pid int) bool {
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -98,9 +91,6 @@ func processGone(pid int) bool {
 
 func TestSpawnForwardsEnvelopesFromTheDedicatedFD(t *testing.T) {
 	manager, rec := newManager(t)
-	// Prints on stdout as well, to prove a chatty host cannot corrupt the
-	// envelope stream — pi loads the user's own extensions, and any of them
-	// may print.
 	script := writeScript(t, `
 echo "noise on stdout"
 echo '{"session_id":"s1","seq":1,"kind":"session_ready","body":{"model":"openai/x"}}' >&3
@@ -154,9 +144,6 @@ echo '{"session_id":"s1","seq":1,"kind":"run_settled","body":{}}' >&3
 	}
 }
 
-// Every delivery reaches the host as the verb it was asked for, with its text
-// intact. The verb name is the whole of what steer, follow-up and prompt differ
-// by on this side of the pipe: the host is what decides what each one means.
 func TestDeliveryReachesTheHostAsItsOwnVerb(t *testing.T) {
 	for _, how := range []Delivery{DeliveryPrompt, DeliverySteer, DeliveryFollowUp} {
 		t.Run(string(how), func(t *testing.T) {
@@ -172,7 +159,6 @@ done
 			if err := manager.Spawn(SpawnOptions{SessionID: "s1", Command: []string{script}}); err != nil {
 				t.Fatalf("spawn: %v", err)
 			}
-			// The host answers the verb, so waiting on its exit is waiting on delivery.
 			if err := manager.Deliver("s1", how, "hello host"); err != nil {
 				t.Fatalf("deliver: %v", err)
 			}
@@ -237,9 +223,6 @@ func TestDeliveryRejectsAnUnknownSession(t *testing.T) {
 	}
 }
 
-// The receipted bug this whole package exists for: a host that dies takes its
-// tool subprocesses with it. Here the host exits ON ITS OWN, so nothing kills
-// the group unless the manager sweeps it after the exit.
 func TestSelfExitSweepsOrphanedToolSubprocesses(t *testing.T) {
 	manager, rec := newManager(t)
 	script := writeScript(t, `
@@ -276,7 +259,6 @@ while true; do sleep 1; done
 	if err := manager.Spawn(SpawnOptions{SessionID: "s1", Command: []string{script}}); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
-	// Wait for the ready envelope so the child pid is known before the kill.
 	deadline := time.Now().Add(10 * time.Second)
 	var childPID int
 	for time.Now().Before(deadline) {

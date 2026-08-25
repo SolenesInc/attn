@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// attn's own messaging (`attn agent list` / `attn agent msg`) is the address
-// book; Claude Code's peer tools are a second, claude-only one keyed on the
-// working directory, so a launched agent never gets them.
 func TestClaudeBuildCommand_DeniesPeerMessagingTools(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:  "sess-1",
@@ -18,9 +15,8 @@ func TestClaudeBuildCommand_DeniesPeerMessagingTools(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("args = %#v, want --disallowed-tools", cmd.Args)
 	}
-	// One element per rule, the form the flag documents. A joined
-	// "ListAgents SendMessage" parses the same on 2.1.228, but a claude that
-	// tightened parsing would leave the deny inert with this test still green.
+	// One element per rule, the form the flag documents. A joined "ListAgents SendMessage"
+	// parses the same on 2.1.228, but tightened parsing would leave the deny inert.
 	if got := cmd.Args[i+1:]; len(got) != 2 || got[0] != "ListAgents" || got[1] != "SendMessage" {
 		t.Fatalf("--disallowed-tools = %#v, want two elements ListAgents, SendMessage", got)
 	}
@@ -54,7 +50,6 @@ func TestClaudeBuildCommand_PeerMessagingEnvRestoresTools(t *testing.T) {
 	}
 }
 
-// Only Claude Code has these tools; the other drivers must not grow the flag.
 func TestOtherDriversHaveNoPeerMessagingDeny(t *testing.T) {
 	for _, driver := range []Driver{&Codex{}, &Copilot{}} {
 		cmd := driver.BuildCommand(SpawnOpts{

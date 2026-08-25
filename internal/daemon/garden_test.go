@@ -16,8 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// gardenCall runs one seed handler over a pipe, the way an `attn seed`
-// invocation reaches the daemon.
 func gardenCall(t *testing.T, run func(net.Conn)) protocol.Response {
 	t.Helper()
 	client, server := net.Pipe()
@@ -33,20 +31,14 @@ func gardenCall(t *testing.T, run func(net.Conn)) protocol.Response {
 	return resp
 }
 
-// newGardenDaemon returns a home daemon with the garden's collections declared
-// and one session sitting in a workspace, which is what a planting is stamped
-// from.
 func newGardenDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
 	now := string(protocol.TimestampNow())
-	// The session's workspace is left off the stored record deliberately: the
-	// app puts a session in a workspace through the live registry, and the
-	// persisted column only leads while startup rebuilds that registry. A
-	// fixture that stamps the column instead hides every reader that never asks
-	// the registry.
+	// The workspace is left off the stored record on purpose: a fixture that stamps the
+	// column hides every reader that never asks the live registry.
 	d.store.Add(&protocol.Session{
 		ID: "sess-a", Label: "a",
 		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,
@@ -90,8 +82,6 @@ func setSeedResume(t *testing.T, d *Daemon, seedID, resumeID, cwd, agent string,
 	return gardenCall(t, func(c net.Conn) { d.handleSeedSetResume(c, &msg) })
 }
 
-// addGardenSession puts a second real session in the workspace, the way the app
-// does — through the registry, not the stored column.
 func addGardenSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
@@ -102,7 +92,6 @@ func addGardenSession(t *testing.T, d *Daemon, id string) {
 	d.workspaces.associateSession(id, "ws-1", id)
 }
 
-// move runs one lifecycle verb and fails the test if it was refused.
 func move(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, member string) protocol.Seed {
 	t.Helper()
 	resp := transition(t, d, session, seedID, verb, reason, member)
@@ -156,8 +145,6 @@ func show(t *testing.T, d *Daemon, seedID string) *protocol.SeedShowResult {
 	return resp.SeedShowResult
 }
 
-// The slice's acceptance, end to end: a seed lives its whole life through the
-// daemon, and every move is one push to the panel.
 func TestGarden_FullLifeIsVisibleAtEveryStep(t *testing.T) {
 	d := newGardenDaemon(t)
 	var pushed [][]protocol.Seed
@@ -193,8 +180,6 @@ func TestGarden_FullLifeIsVisibleAtEveryStep(t *testing.T) {
 		t.Fatalf("wither landed in %q", withered.Status)
 	}
 
-	// One planting, one note and four moves: six facts, six pushes, each
-	// carrying the state the panel must render at that moment.
 	if len(pushed) != 6 {
 		t.Fatalf("the life produced %d garden pushes, want one per change", len(pushed))
 	}
@@ -257,8 +242,6 @@ func TestSeedPlantRefusesPartialResumeIdentity(t *testing.T) {
 	}
 }
 
-// The showpiece refusal. Two real sessions, one seed: the second is told whose
-// it is and what to do instead — and there is no override flag, deliberately.
 func TestGarden_ASecondSessionCannotTakeALiveClaim(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-b")
@@ -278,14 +261,11 @@ func TestGarden_ASecondSessionCannotTakeALiveClaim(t *testing.T) {
 		}
 	}
 
-	// And the claim did not move: a refused tend must leave the seed exactly
-	// where the first session left it.
 	still := show(t, d, seed.ID).Seed
 	if still.TenderSession != "" || still.TenderMember != "trellis" {
 		t.Fatalf("the refused claim changed the tender: %+v", still)
 	}
 
-	// The way through is the first session letting go, not a flag.
 	move(t, d, "sess-a", seed.ID, garden.VerbPark, "", "trellis")
 	taken := move(t, d, "sess-b", seed.ID, garden.VerbTend, "", "alder")
 	if taken.TenderSession != "" || taken.TenderMember != "alder" {
@@ -293,9 +273,6 @@ func TestGarden_ASecondSessionCannotTakeALiveClaim(t *testing.T) {
 	}
 }
 
-// Two sessions tending at the same instant is the claim's real test: the write
-// is conditional on the revision that was read, so the loser re-reads and finds
-// a tender rather than overwriting one.
 func TestGarden_ConcurrentClaimsProduceOneTender(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-b")
@@ -337,8 +314,6 @@ func TestGarden_ConcurrentClaimsProduceOneTender(t *testing.T) {
 	}
 }
 
-// Notes are the log. They read newest first, they say what they withheld, and
-// show carries them because a log behind a verb nobody runs is not read.
 func TestGarden_LogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "with a log"})
@@ -372,7 +347,6 @@ func TestGarden_LogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 		t.Fatalf("the full log is %d of %d, want all %d", len(all.SeedNotesResult.Notes), all.SeedNotesResult.Total, len(bodies))
 	}
 
-	// A log belongs to its seed and to no other.
 	elsewhere := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "no log"})
 	if got := show(t, d, elsewhere.ID); len(got.Notes) != 0 || got.NotesTotal != 0 {
 		t.Fatalf("another seed's log leaked: %+v", got.Notes)
@@ -413,9 +387,6 @@ func TestGarden_LifecycleRefusalsNameWhatIsWrong(t *testing.T) {
 	}
 }
 
-// Every move publishes its own fact, named for what happened. A single
-// `garden.changed` would make a sync engine or a nudge diff documents to find
-// out what a name already says.
 func TestGarden_EveryMovePublishesItsOwnFact(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "facts"})
@@ -508,7 +479,6 @@ func TestGarden_PlantListShowRoundTrip(t *testing.T) {
 	if planted.StepSlug != "plant-and-see" {
 		t.Fatalf("step slug = %q, want plant-and-see", planted.StepSlug)
 	}
-	// The whole point of the one-line plant: the daemon knows who is asking.
 	if planted.PlanterSession != "sess-a" || planted.PlanterMember != "trellis" {
 		t.Fatalf("planter not recorded: %+v", planted)
 	}
@@ -536,15 +506,11 @@ func TestGarden_PlantListShowRoundTrip(t *testing.T) {
 	if shown.Rev < 1 || shown.CreatedAt == "" {
 		t.Fatalf("show did not carry the document's own revision and stamp: %+v", shown)
 	}
-	// Inert-but-present: these fields ship in slice 1 so later slices add
-	// behavior rather than schema.
 	if shown.Edges == nil || shown.Vars == nil || shown.Template || shown.Gate {
 		t.Fatalf("the designed schema is not whole on a fresh seed: %+v", shown)
 	}
 }
 
-// The garden is one space: a flag-free list answers with all of it, newest
-// first, whether or not the caller is in a session (ruled 2026-08-13).
 func TestGarden_ListReadsTheWholeGarden(t *testing.T) {
 	d := newGardenDaemon(t)
 	first := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "planted from a session"})
@@ -561,15 +527,12 @@ func TestGarden_ListReadsTheWholeGarden(t *testing.T) {
 		if len(got.Seeds) != 2 || got.Total != 2 {
 			t.Fatalf("ls %s returned %d of %d, want the whole garden: %+v", name, len(got.Seeds), got.Total, got.Seeds)
 		}
-		// Newest first, so a fresh planting is the first thing anybody reads.
 		if got.Seeds[0].ID != second.ID || got.Seeds[1].ID != first.ID {
 			t.Fatalf("ls %s is not newest first: %+v", name, got.Seeds)
 		}
 	}
 }
 
-// The push is bounded and the total is what keeps that honest, so the number on
-// the wire has to be the garden's and not the truncated list's length.
 func TestGarden_PushCarriesTheWholeGardensCount(t *testing.T) {
 	d := newGardenDaemon(t)
 	var totals []int
@@ -647,8 +610,6 @@ func TestGarden_OutpostRefusesEverySeedCommand(t *testing.T) {
 			t.Fatalf("seed %s answered on an outpost, want the fence", verb)
 		}
 		message := protocol.Deref(resp.Error)
-		// The fence, not a bespoke check: the refusal names the surface, this
-		// daemon, its home, the way out, and the plan.
 		for _, want := range []string{garden.Surface, home, "attn enrollment leave", enrollment.PlanPath} {
 			if !strings.Contains(message, want) {
 				t.Fatalf("seed %s refusal does not name %q:\n%s", verb, want, message)
@@ -656,7 +617,6 @@ func TestGarden_OutpostRefusesEverySeedCommand(t *testing.T) {
 		}
 	}
 
-	// And nothing about the garden reaches a client of an outpost either.
 	if seeds := initialStateEvent(t, d).Seeds; len(seeds) != 0 {
 		t.Fatalf("an outpost's initial_state carries %d seeds, want none", len(seeds))
 	}
@@ -674,8 +634,6 @@ func TestGarden_PlantingPushesTheGardenOnce(t *testing.T) {
 
 	planted := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "see it appear"})
 
-	// One planting is one fact is one garden push — the panel's whole contract
-	// is that a seed appears without anyone asking for it.
 	if pushes != 1 {
 		t.Fatalf("one planting produced %d garden pushes, want exactly 1", pushes)
 	}
@@ -689,8 +647,6 @@ func TestGarden_BulkPlantingCoalescesToOnePush(t *testing.T) {
 	var pushes int
 	d.gardenBroadcastHook = func([]protocol.Seed, int) { pushes++ }
 
-	// What planting a plot looks like from the outside: several seeds, one
-	// wire message.
 	d.coalesceSnapshots(func() {
 		for _, title := range []string{"a", "b", "c"} {
 			plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: title})
@@ -711,8 +667,6 @@ func TestGarden_SeedsReachInitialState(t *testing.T) {
 	}
 }
 
-// A seed id is the document id, so a collision would be a lost seed rather than
-// a refused write. Planting is create-only; this pins that.
 func TestGarden_PlantingIsCreateOnly(t *testing.T) {
 	d := newGardenDaemon(t)
 	schema, err := d.seedsCollection()
@@ -729,9 +683,6 @@ func TestGarden_PlantingIsCreateOnly(t *testing.T) {
 	}
 }
 
-// A minted id can land on one already planted. The planter did nothing wrong and
-// has nothing to fix, so the daemon mints again rather than answering a refusal
-// about a coin flip; only a mint source that keeps repeating itself is reported.
 func TestGarden_PlantingMintsAgainWhenAnIDIsTaken(t *testing.T) {
 	d := newGardenDaemon(t)
 	schema, err := d.seedsCollection()
@@ -756,8 +707,6 @@ func TestGarden_PlantingMintsAgainWhenAnIDIsTaken(t *testing.T) {
 		t.Fatalf("%d mints unused: the retry stopped early", len(minted))
 	}
 
-	// A mint that only ever repeats itself is a broken source, and the refusal
-	// says which rather than blaming the title.
 	d.gardenMintID = func() (string, error) { return "s-7k3f9m", nil }
 	resp := gardenCall(t, func(c net.Conn) {
 		d.handleSeedPlant(c, &protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: "no id left"})
@@ -774,7 +723,6 @@ func TestGarden_CollectionsAreDeclaredOnStartup(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)
 	d.ensureGardenCollections()
-	// Declaring twice is what a restart does.
 	d.ensureGardenCollections()
 
 	for _, collection := range []string{garden.CollectionSeeds, garden.CollectionNotes} {
@@ -815,10 +763,6 @@ func TestSeedPlantRecordsDiscoveredFromBeforeMinting(t *testing.T) {
 	}
 }
 
-// The force flag is the only way a caller can take a seed somebody else still
-// holds, so it has to survive the trip: CLI flag, wire field, and the Ask the
-// daemon hands the garden. A rule enforced in `internal/garden` and dropped on
-// the way in refuses every take-over, including the legitimate ones.
 func TestSeedTransitionCarriesForceAndRecordsTheTakeover(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-a")
@@ -849,7 +793,6 @@ func TestSeedTransitionCarriesForceAndRecordsTheTakeover(t *testing.T) {
 	if got := forced.SeedTransitionResult.Seed.Status; got != garden.StatusWithered {
 		t.Fatalf("status = %q, want withered", got)
 	}
-	// Every move but `tend` releases the claim, so the seed it took is nobody's.
 	if got := forced.SeedTransitionResult.Seed.TenderSession; got != "" {
 		t.Fatalf("tender session = %q, want the claim released", got)
 	}

@@ -2,10 +2,6 @@
 
 package pty
 
-// The feed path from the other end: what a subscriber actually receives when a
-// program emits an image. The mirror gate proves the bytes are equivalent; these
-// prove the read loop is wired to the rewritten ones.
-
 import (
 	"bytes"
 	"os"
@@ -18,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// wireSession starts a read loop over a socketpair with kitty live, and returns
-// the peer end to write program output into.
 func wireSession(t *testing.T, id string, cols, rows int, sub *collectingSubscriber) *os.File {
 	t.Helper()
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
@@ -36,7 +30,7 @@ func wireSession(t *testing.T, id string, cols, rows int, sub *collectingSubscri
 		cols:        uint16(cols),
 		rows:        uint16(rows),
 		ptmx:        ptmx,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() errors, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		ghostty:     term,
 		wireFeed:    newWireFeeder(term, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),
@@ -49,8 +43,6 @@ func wireSession(t *testing.T, id string, cols, rows int, sub *collectingSubscri
 	return peer
 }
 
-// collectingSubscriber records everything fanned out to one client, and the
-// reason it was dropped if it was.
 type collectingSubscriber struct {
 	mu       sync.Mutex
 	received []byte
@@ -87,9 +79,6 @@ func (c *collectingSubscriber) drop(reason string) {
 	}
 }
 
-// waitFor blocks until the collected stream satisfies want. The timeout is a
-// failure guard, never the thing being waited on: every wake-up is a real
-// fan-out.
 func (c *collectingSubscriber) waitFor(t *testing.T, what string, want func([]byte) bool) []byte {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
@@ -108,14 +97,10 @@ func (c *collectingSubscriber) waitFor(t *testing.T, what string, want func([]by
 	}
 }
 
-// The whole point of the phase, seen from a client: an image's bytes never
-// reach it, but the grid movement the image caused does.
 func TestReadLoopFansOutTheRewrittenStream(t *testing.T) {
 	sub := newCollectingSubscriber()
 	peer := wireSession(t, "wire-out", 20, 8, sub)
 
-	// stripped is the whole program output with the image cut out and nothing
-	// put in its place: exactly what the client receives if synthesis is lost.
 	const before, after = "\x1b[6;3Hhead", "tail"
 	stripped := before + after
 	if _, err := peer.Write([]byte(before + kittyPlaceRGB(20, 16, 96, "") + after)); err != nil {
@@ -132,26 +117,11 @@ func TestReadLoopFansOutTheRewrittenStream(t *testing.T) {
 	if !bytes.Contains(got, []byte("head")) {
 		t.Errorf("the text before the image was lost: %q", got)
 	}
-	// A six-row image below row 5 of an eight-row screen scrolls the screen; a
-	// client that received nothing in the APC's place would sit on the wrong row
-	// forever. Compared against the stripped stream byte for byte rather than by
-	// length or by "contains an escape": the program's own bytes already carry a
-	// cursor move, so any weaker test passes whether or not anything was
-	// substituted. The bytes that express the scroll are the feeder's business —
-	// that they reach the client is the read loop's.
 	if string(got) == stripped {
 		t.Errorf("nothing was substituted for the image; the client received the stripped stream %q", got)
 	}
 }
 
-// A chunk that ends mid-transmission has nothing to say on the wire, and a
-// zero-byte pty_output message is a message the client has to receive, buffer,
-// and decode to learn nothing. The seq is spent either way; downstream dedup is
-// `seq > last_seq`, which does not need the numbers to be dense.
-//
-// The seq-gap hook makes the split real: it fires once the read loop has taken
-// a chunk, and the loop is single-threaded, so anything written after it lands
-// in a later read.
 func TestReadLoopSkipsTheFanOutForAHeldEscape(t *testing.T) {
 	taken := make(chan struct{}, 8)
 	readLoopSeqGapHook = func() {
@@ -191,9 +161,6 @@ func TestReadLoopSkipsTheFanOutForAHeldEscape(t *testing.T) {
 	}
 }
 
-// The escape hatch, end to end: the client is dropped with the reason, which is
-// what reaches the frontend as pty_desync and sends it back for a fresh
-// snapshot.
 func TestReadLoopDropsSubscribersWhenLayoutCannotBeExpressed(t *testing.T) {
 	sub := newCollectingSubscriber()
 	peer := wireSession(t, "wire-resync", 20, 6, sub)
@@ -219,9 +186,6 @@ func TestReadLoopDropsSubscribersWhenLayoutCannotBeExpressed(t *testing.T) {
 	}
 }
 
-// forceResync is the plumbing under that drop: every subscriber hears the
-// reason exactly once and none is left attached, so nothing keeps streaming
-// into a client that is about to reattach.
 func TestForceResyncDropsEverySubscriber(t *testing.T) {
 	s := &Session{id: "resync", subscribers: make(map[string]*sessionSubscriber)}
 	var mu sync.Mutex
@@ -246,8 +210,6 @@ func TestForceResyncDropsEverySubscriber(t *testing.T) {
 		t.Errorf("%d subscribers still attached after a resync", left)
 	}
 
-	// A second resync has nobody to tell — the drop must not be re-delivered to
-	// a client that already went back for a snapshot.
 	s.forceResync("kitty_layout_anchor_clamped")
 	if len(reasons) != 2 {
 		t.Errorf("onDrop calls after a second resync = %v, want the same two", reasons)

@@ -14,17 +14,12 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The invariant: a denial that happened is a denial you can read later, even
-// when the relay report that normally carries it was lost.
-
 func ledgerLine(session, action, at string) string {
 	return fmt.Sprintf(
 		`{"session_id":%q,"tool_call_id":"c1","tool":"bash","action":%q,"reason":"outside the envelope","rule":"classifier-2a","at":%q}`,
 		session, action, at)
 }
 
-// writeSessionLedger puts a ledger where this daemon's sessions would have
-// written one, and points the daemon at it.
 func writeSessionLedger(t *testing.T, lines ...string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), automode.DenialLedgerFileName)
@@ -49,9 +44,6 @@ func listDenials(t *testing.T, d *Daemon) *protocol.AutoModeDenialsResult {
 	return resp.AutomodeDenialsResult
 }
 
-// The 2026-08-17 episode: the breaker said four calls were refused and the feed
-// held none of them, because the relay socket was gone. The record on disk is
-// what closes that gap.
 func TestDenialsFeedRecoversWhatTheRelayNeverDelivered(t *testing.T) {
 	d := newDaemonForTest(t)
 	writeSessionLedger(t,
@@ -71,8 +63,6 @@ func TestDenialsFeedRecoversWhatTheRelayNeverDelivered(t *testing.T) {
 	}
 }
 
-// The ordinary case is that the relay worked. Folding the ledger in must not
-// double what is already there — on this read or on any later one.
 func TestReconcileDoesNotDoubleWhatTheRelayDelivered(t *testing.T) {
 	d := newDaemonForTest(t)
 	at := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
@@ -91,10 +81,6 @@ func TestReconcileDoesNotDoubleWhatTheRelayDelivered(t *testing.T) {
 	}
 }
 
-// A record the store's own row cap has since trimmed must not come back on the
-// next read and be trimmed again on the one after, forever. The cursor is what
-// stops that, so it is what is pinned here: a record at or before it is already
-// imported, whether or not a row for it is still in the log.
 func TestReconcileImportsARecordOnlyOnce(t *testing.T) {
 	d := newDaemonForTest(t)
 	writeSessionLedger(t, ledgerLine("pi-1", "bash: curl https://one.example", "2026-08-18T10:00:00.000Z"))
@@ -112,9 +98,6 @@ func TestReconcileImportsARecordOnlyOnce(t *testing.T) {
 
 }
 
-// The row the import created is gone — trimmed by the log's own cap — and the
-// ledger still holds the record. The cursor alone decides, so it does not come
-// back.
 func TestReconcileLeavesARecordTheLogHasSinceTrimmed(t *testing.T) {
 	d := newDaemonForTest(t)
 	writeSessionLedger(t, ledgerLine("pi-1", "bash: curl https://one.example", "2026-08-18T10:00:00.000Z"))
@@ -126,8 +109,6 @@ func TestReconcileLeavesARecordTheLogHasSinceTrimmed(t *testing.T) {
 	}
 }
 
-// A ledger that clipped says so, and the reader is told rather than shown a
-// partial episode as if it were whole.
 func TestDenialsFeedNamesWhatTheLedgerLost(t *testing.T) {
 	d := newDaemonForTest(t)
 	writeSessionLedger(t,
@@ -149,8 +130,6 @@ func TestDenialsFeedNamesWhatTheLedgerLost(t *testing.T) {
 	}
 }
 
-// Nothing to reconcile is the common case, and it must cost nothing and say
-// nothing.
 func TestDenialsFeedIsSilentWithoutALedger(t *testing.T) {
 	d := newDaemonForTest(t)
 	t.Setenv(automode.DenialLedgerEnvVar, filepath.Join(t.TempDir(), automode.DenialLedgerFileName))

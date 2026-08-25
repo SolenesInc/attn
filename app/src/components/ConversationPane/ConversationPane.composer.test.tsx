@@ -16,8 +16,8 @@ function renderPane(sendAgentPrompt = vi.fn()) {
   return sendAgentPrompt;
 }
 
-// Envelopes land from the socket, outside React's event loop, so applying one
-// is an act() the same way a socket message is.
+// Envelopes land from the socket, outside React's event loop, so applying one is
+// an act() the same way a socket message is.
 function apply(kind: string, body: Record<string, unknown>, seq: number) {
   act(() => {
     useConversationsStore.getState().applyEnvelope(SESSION, seq, kind, body);
@@ -62,8 +62,6 @@ describe('ConversationPane', () => {
     expect(sendAgentPrompt).toHaveBeenCalledWith(SESSION, 'line one', 'prompt');
   });
 
-  // While the agent works, Enter is a steer: the message lands at the agent's
-  // next turn boundary instead of waiting for everything it had planned to do.
   it('sends a steer while a run is open and a prompt again after settle', () => {
     const sendAgentPrompt = renderPane();
     apply('session_ready', {}, 1);
@@ -85,8 +83,6 @@ describe('ConversationPane', () => {
     expect(sendAgentPrompt).toHaveBeenCalledWith(SESSION, 'second prompt', 'prompt');
   });
 
-  // The other queue, one button away: a follow-up waits for the run to finish
-  // rather than cutting into it.
   it('offers a follow-up only while a run is open', () => {
     const sendAgentPrompt = renderPane();
     apply('session_ready', {}, 1);
@@ -100,8 +96,6 @@ describe('ConversationPane', () => {
     expect(screen.getByTestId('conversation-input')).toHaveValue('');
   });
 
-  // Queued, then seen. The queue is the host's word for what pi has not read
-  // yet, so the strip clears when the agent reads it and not a moment before.
   it('shows what the agent has not read yet until it reads it', () => {
     renderPane();
     apply('session_ready', {}, 1);
@@ -119,9 +113,6 @@ describe('ConversationPane', () => {
     expect(screen.getByTestId('conversation-message-m1')).toHaveTextContent('look at x first');
   });
 
-  // The host's run_started is a round trip away, and a steer sent into that gap
-  // would reach a host with no run to steer — so the second Enter has to die
-  // here, with the second draft still in the box.
   it('shuts the composer only for the round trip that opens the run', () => {
     const sendAgentPrompt = renderPane();
     apply('session_ready', {}, 1);
@@ -136,14 +127,10 @@ describe('ConversationPane', () => {
     fireEvent.click(screen.getByTestId('conversation-send'));
     expect(sendAgentPrompt).toHaveBeenCalledTimes(1);
 
-    // The host's own run_started is the acknowledgement, and it reopens the
-    // composer as a steer box rather than leaving it shut for the whole run.
     apply('run_started', {}, 2);
     expect(screen.getByTestId('conversation-input')).not.toBeDisabled();
   });
 
-  // The daemon settles a prompt that reached no host, so the composer that shut
-  // itself at send time is not shut forever.
   it('reopens the composer when the daemon settles an undeliverable prompt', () => {
     renderPane();
     apply('session_ready', {}, 1);

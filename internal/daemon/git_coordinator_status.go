@@ -27,8 +27,6 @@ type gitStatusOptions struct {
 	includeStats bool
 }
 
-// runGitStatusCommandForDaemon is the low-level command hook used by the
-// daemon git coordinator's status implementation.
 var runGitStatusCommandForDaemon = runGitStatusCommand
 
 type diffStats struct {
@@ -36,20 +34,16 @@ type diffStats struct {
 	Deletions int
 }
 
-// walkUntrackedDir walks an untracked directory and returns all files,
-// filtering out gitignored files using git check-ignore
 func walkUntrackedDir(repoDir, dirPath string) []protocol.GitFileChange {
 	var files []protocol.GitFileChange
 	fullPath := filepath.Join(repoDir, dirPath)
 
-	// Collect all regular files in the directory
 	var filePaths []string
 	filepath.WalkDir(fullPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // Skip files we can't access
+			return nil
 		}
 		if !d.IsDir() {
-			// Convert to relative path from repo root
 			relPath, err := filepath.Rel(repoDir, path)
 			if err == nil {
 				filePaths = append(filePaths, relPath)
@@ -62,14 +56,11 @@ func walkUntrackedDir(repoDir, dirPath string) []protocol.GitFileChange {
 		return files
 	}
 
-	// Use git check-ignore to filter out ignored files
-	// Pass all paths at once for efficiency
 	ignoredOutput, err := attngit.OutputWithStdin(attngit.OpStatus, repoDir, strings.NewReader(strings.Join(filePaths, "\n")), "check-ignore", "--stdin")
 	if err != nil && len(ignoredOutput) == 0 && strings.Contains(err.Error(), "timed out") {
 		return files
 	}
 
-	// Build a set of ignored paths
 	ignoredSet := make(map[string]bool)
 	if len(ignoredOutput) > 0 {
 		for _, path := range strings.Split(strings.TrimSpace(string(ignoredOutput)), "\n") {
@@ -79,7 +70,6 @@ func walkUntrackedDir(repoDir, dirPath string) []protocol.GitFileChange {
 		}
 	}
 
-	// Create GitFileChange for non-ignored files
 	for _, path := range filePaths {
 		if !ignoredSet[path] {
 			files = append(files, protocol.GitFileChange{
@@ -92,8 +82,6 @@ func walkUntrackedDir(repoDir, dirPath string) []protocol.GitFileChange {
 	return files
 }
 
-// parseGitStatusPorcelain parses `git status --porcelain -z` output
-// Format: XY PATH\0 where X=index status, Y=worktree status
 func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, untracked []protocol.GitFileChange) {
 	entries := strings.Split(output, "\x00")
 
@@ -110,9 +98,7 @@ func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, u
 			continue
 		}
 
-		// Untracked files
 		if indexStatus == '?' && worktreeStatus == '?' {
-			// If path ends with /, it's a directory - expand it
 			if strings.HasSuffix(path, "/") {
 				files := walkUntrackedDir(repoDir, path)
 				untracked = append(untracked, files...)
@@ -125,7 +111,6 @@ func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, u
 			continue
 		}
 
-		// Staged changes (index has modification)
 		if indexStatus != ' ' && indexStatus != '?' {
 			status := statusCodeToString(indexStatus)
 			staged = append(staged, protocol.GitFileChange{
@@ -134,7 +119,6 @@ func parseGitStatusPorcelain(output string, repoDir string) (staged, unstaged, u
 			})
 		}
 
-		// Unstaged changes (worktree has modification)
 		if worktreeStatus != ' ' && worktreeStatus != '?' {
 			status := statusCodeToString(worktreeStatus)
 			unstaged = append(unstaged, protocol.GitFileChange{
@@ -164,8 +148,6 @@ func statusCodeToString(code byte) string {
 	}
 }
 
-// parseGitDiffNumstat parses `git diff --numstat` output
-// Format: ADDITIONS\tDELETIONS\tFILENAME
 func parseGitDiffNumstat(output string) map[string]diffStats {
 	result := make(map[string]diffStats)
 	lines := strings.Split(output, "\n")
@@ -176,7 +158,7 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 			continue
 		}
 
-		// Binary files show "-" for additions/deletions
+		// Binary files show "-" for additions/deletions.
 		additions, _ := strconv.ParseInt(parts[0], 10, 64)
 		deletions, _ := strconv.ParseInt(parts[1], 10, 64)
 		path := parts[2]
@@ -190,8 +172,6 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 	return result
 }
 
-// getGitStatus runs git commands and returns parsed status for one-shot
-// callers. Active subscriptions should go through gitCoordinator.Status.
 func getGitStatus(dir string) (*protocol.GitStatusUpdateMessage, error) {
 	return getGitStatusWithOptions(dir, gitStatusOptions{
 		mode:         gitStatusModeFull,
@@ -199,9 +179,7 @@ func getGitStatus(dir string) (*protocol.GitStatusUpdateMessage, error) {
 	})
 }
 
-// getGitStatusForSubscription is the coordinator-owned active-session status
-// implementation. Callers should use gitCoordinator.Status so concurrent
-// status requests for the same repo/mode share the same git process.
+// Callers use gitCoordinator.Status so concurrent requests for one repo/mode share a git process.
 func getGitStatusForSubscription(dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 	return getGitStatusWithOptions(dir, gitStatusOptions{
 		mode:         mode,
@@ -216,10 +194,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 		mode = gitStatusModeFull
 	}
 
-	// Get porcelain status
-	// --untracked-files=all expands brand-new untracked directories into
-	// their individual files; the default collapses each into a single
-	// "?? dir/" line which hides everything inside.
+	// The default collapses a brand-new untracked directory into one "?? dir/" line, hiding everything inside.
 	statusArgs := []string{"status", "--porcelain", "-z", "--untracked-files=all"}
 	if mode == gitStatusModeTrackedOnly {
 		statusArgs = []string{"status", "--porcelain", "-z", "--untracked-files=no"}
@@ -252,7 +227,6 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 
 	staged, unstaged, untracked := parseGitStatusPorcelain(string(statusOutput), dir)
 
-	// Get numstat for unstaged changes
 	if opts.includeStats && len(unstaged) > 0 {
 		numstatOutput, _ := attngit.Output(attngit.OpDiff, dir, "diff", "--numstat")
 		stats := parseGitDiffNumstat(string(numstatOutput))
@@ -265,7 +239,6 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 		}
 	}
 
-	// Get numstat for staged changes
 	if opts.includeStats && len(staged) > 0 {
 		numstatOutput, _ := attngit.Output(attngit.OpDiff, dir, "diff", "--numstat", "--cached")
 		stats := parseGitDiffNumstat(string(numstatOutput))
@@ -301,11 +274,10 @@ func isGitStatusTimeout(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "timed out")
 }
 
-// hashGitStatus returns a hash of the status for change detection
 func hashGitStatus(status *protocol.GitStatusUpdateMessage) string {
 	stableStatus := *status
 	stableStatus.DurationMs = nil
 	data, _ := json.Marshal(stableStatus)
 	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:8]) // First 8 bytes is enough
+	return hex.EncodeToString(hash[:8])
 }

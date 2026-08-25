@@ -1,17 +1,5 @@
-/**
- * GridView Test Harness
- *
- * Renders the real grid (unified WebGL renderer + ghostty models, mock PTY) so
- * Playwright can exercise the membership affordances end-to-end: hover a tile to
- * reveal its remove (×) button, remove it, then restore it from the "N hidden"
- * control. Membership state lives here, mirroring App, so removes/restores
- * actually reflow the grid.
- *
- * `?layout=fixed` uses a fixed 2×2 shape with four tiles. Removing one then
- * leaves the resolved shape at 2×2 (the dims do NOT change), which is the exact
- * scenario where the render-on-demand loop used to skip the repaint and leave
- * the removed tile's stale frame on screen ("only every other hide hides").
- */
+// `?layout=fixed` keeps the resolved shape at 2x2 after a remove, the case where the
+// render-on-demand loop used to skip the repaint and leave a stale frame on screen.
 import { useEffect, useMemo, useState } from 'react';
 import { GridView, type GridSessionTile } from '../../src/components/grid/GridView';
 import type { HarnessProps } from '../types';
@@ -54,9 +42,8 @@ export function GridViewHarness({ onReady }: HarnessProps) {
 
   useEffect(() => {
     const ready = setTimeout(() => onReady(), 400);
-    // Feed each tile a line of content so the screenshots are meaningful and we
-    // confirm the renderer actually paints. The dev-only global is installed by
-    // the pty bridge in DEV.
+    // Feed each tile a line of content so screenshots are meaningful. The dev-only
+    // global is installed by the pty bridge in DEV.
     const feed = setTimeout(() => {
       const emit = window.__TEST_EMIT_PTY_DATA;
       if (emit) {

@@ -7,8 +7,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
-// title builds an OSC 0 window-title sequence, the form both agents repaint
-// their spinner into.
 func title(text string) []byte {
 	return []byte("\x1b]0;" + text + "\x07")
 }
@@ -33,7 +31,6 @@ func TestNoObserverForAnAgentWithoutHarnessSignals(t *testing.T) {
 	if got := newHarnessSignalObserver(agentdriver.HarnessSignalsNone); got != nil {
 		t.Fatalf("got %+v, want nil", got)
 	}
-	// A nil observer must be safe to call so the read loop needs no extra guard.
 	var nilObserver *harnessSignalObserver
 	if got := nilObserver.Observe(title("⠐ x"), time.Now()); got != nil {
 		t.Fatalf("nil observer returned %+v", got)
@@ -48,10 +45,8 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 		claim   string
 		summary string
 	}{
-		// Claude cycles the running glyph and has changed which glyphs it cycles
-		// through: braille up to 2.1.227, half circles from 2.1.228. Both read as
-		// busy because busy is "a status symbol that is not the resting one",
-		// which is what survives the next change.
+		// Claude has changed which glyphs it cycles: braille up to 2.1.227, half circles from
+		// 2.1.228. Both read as busy, because busy is any status symbol that is not the resting one.
 		{name: "braille spinner is busy", title: "⠐ Run background sleep command", claim: claimBusy, summary: "Run background sleep command"},
 		{name: "another braille frame", title: "⠸ Editing files", claim: claimBusy, summary: "Editing files"},
 		{name: "2.1.228 half circle is busy", title: "◐ Run background sleep command", claim: claimBusy, summary: "Run background sleep command"},
@@ -64,8 +59,6 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 			if got.Source != SourceHeartbeat || got.Claim != tc.claim {
 				t.Fatalf("got %+v, want %s/%s", got, SourceHeartbeat, tc.claim)
 			}
-			// The title doubles as a live turn summary — a free sidebar label —
-			// minus the level glyph, which says nothing the claim does not.
 			if got.Detail != tc.summary {
 				t.Fatalf("detail %q, want %q", got.Detail, tc.summary)
 			}
@@ -76,14 +69,9 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 	}
 }
 
-// A title claude did not write says nothing about claude, and claiming a level
-// for it would let any subprocess that sets a title settle the session. It is
-// still reported: someone painted it, which is all the stuck tripwire asks.
 func TestClaudeReportsAForeignTitleAsLivenessOnly(t *testing.T) {
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
 	now := time.Now()
-	// A second past the keepalive: unchanged levels collapse, and unclassified
-	// is a level like any other.
 	for i, foreign := range []string{"victor@mac: ~", "htop"} {
 		got := onlySignal(t, observeAt(o, now.Add(time.Duration(i)*2*time.Second), title(foreign)))
 		if got.Claim != claimUnclassified {
@@ -92,7 +80,6 @@ func TestClaudeReportsAForeignTitleAsLivenessOnly(t *testing.T) {
 	}
 }
 
-// An empty title is not a paint: there is nothing to have witnessed.
 func TestClaudeIgnoresAnEmptyTitle(t *testing.T) {
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
 	if got := observeAt(o, time.Now(), title("")); got != nil {
@@ -100,9 +87,6 @@ func TestClaudeIgnoresAnEmptyTitle(t *testing.T) {
 	}
 }
 
-// Codex has no distinct idle glyph: busy is a spinner frame, anything else is
-// the bare working directory. A hijacked title therefore reads as not-busy,
-// which is safe under a freshness rule keyed on when busy frames last arrived.
 func TestCodexTitleHeartbeat(t *testing.T) {
 	now := time.Now()
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsCodex)
@@ -118,8 +102,6 @@ func TestCodexTitleHeartbeat(t *testing.T) {
 	}
 }
 
-// The level restates itself continuously — codex repaints about ten times a
-// second. Emitting every frame would drown out every other kind of evidence.
 func TestHeartbeatRateLimitsAnUnchangedLevel(t *testing.T) {
 	start := time.Now()
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
@@ -133,15 +115,12 @@ func TestHeartbeatRateLimitsAnUnchangedLevel(t *testing.T) {
 			t.Fatalf("repeat frame at +%dms produced %+v", (i+1)*10, got)
 		}
 	}
-	// Past the keepalive, "still busy" is news again: it is what distinguishes a
-	// running agent from one that stopped emitting.
 	at := start.Add(heartbeatKeepalive + time.Millisecond)
 	if got := observeAt(o, at, title("⠿ working")); len(got) != 1 {
 		t.Fatalf("keepalive frame produced %d observations", len(got))
 	}
 }
 
-// A change is never rate limited: busy -> not busy is the edge that matters.
 func TestHeartbeatAlwaysReportsAChange(t *testing.T) {
 	start := time.Now()
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
@@ -153,11 +132,6 @@ func TestHeartbeatAlwaysReportsAChange(t *testing.T) {
 	}
 }
 
-// The heartbeat speaks its own vocabulary rather than protocol state names, so
-// nothing may cache, dedup, or apply its claim as a state. Everything else names
-// a state — and, since the screen scrapers were deleted, everything else is also
-// entitled to apply one, because all that is left is the worker poll ending
-// `launching`.
 func TestOnlyTheHeartbeatSpeaksItsOwnVocabulary(t *testing.T) {
 	if SourceHeartbeat.ClaimsProtocolState() {
 		t.Fatalf("%s claims a level, not a state", SourceHeartbeat)
@@ -169,9 +143,6 @@ func TestOnlyTheHeartbeatSpeaksItsOwnVocabulary(t *testing.T) {
 	}
 }
 
-// The read loop hands over PTY chunks as they arrive, so a title routinely
-// straddles one. Splitting the whole exchange at every byte proves the level
-// survives without duplicating or losing a frame.
 func TestHeartbeatSurvivesEverySplitPoint(t *testing.T) {
 	const stream = "\x1b]0;⠐ working\x07output\x1b]0;✳ done\x07"
 	start := time.Now()
@@ -190,18 +161,12 @@ func TestHeartbeatSurvivesEverySplitPoint(t *testing.T) {
 	}
 }
 
-// The spinner frame changes several times a second while the level does not.
-// Carrying it in the detail made every keepalive emission a distinct row, so a
-// long turn consumed one trace slot per second and evicted every other kind of
-// evidence — the opposite of what the trace is for. The detail is the turn
-// summary, and it must be stable across frames.
 func TestHeartbeatDetailIsStableAcrossSpinnerFrames(t *testing.T) {
 	start := time.Now()
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
 
 	var details []string
 	for i, frame := range []string{"⠐", "⠸", "⠿", "⠇", "⠏"} {
-		// One keepalive apart, so every frame is emitted rather than throttled.
 		at := start.Add(time.Duration(i) * (heartbeatKeepalive + time.Millisecond))
 		got := onlySignal(t, observeAt(o, at, title(frame+" Run background sleep command")))
 		if got.Claim != claimBusy {
@@ -217,8 +182,6 @@ func TestHeartbeatDetailIsStableAcrossSpinnerFrames(t *testing.T) {
 	}
 }
 
-// A title that is only a spinner has no summary to report, and inventing one
-// (the glyph itself) would reintroduce the churn.
 func TestHeartbeatDetailIsEmptyForAGlyphOnlyTitle(t *testing.T) {
 	o := newHarnessSignalObserver(agentdriver.HarnessSignalsClaude)
 	if got := onlySignal(t, observeAt(o, time.Now(), title("⠐"))); got.Detail != "" {
@@ -226,10 +189,8 @@ func TestHeartbeatDetailIsEmptyForAGlyphOnlyTitle(t *testing.T) {
 	}
 }
 
-// Codex puts an approval in its title, which is the only leading approval edge
-// it emits: it has no notification escape and no approval hook. The titles here
-// are verbatim from a codex 0.145.0 session driven through a real PTY with
-// --ask-for-approval untrusted, across prompt → approve → resume.
+// Codex puts an approval in its title, the only leading approval edge it emits. The titles
+// here are verbatim from a codex 0.145.0 session with --ask-for-approval untrusted.
 func TestCodexTitleReportsAnApproval(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -239,9 +200,6 @@ func TestCodexTitleReportsAnApproval(t *testing.T) {
 	}{
 		{"running", "⠼ scratchpad", claimBusy, "scratchpad"},
 		{"approval prompt on screen", "[ . ] Action Required | scratchpad", claimApproval, "scratchpad"},
-		// Codex leaves the words in place and flips only the glyph, so an
-		// answered prompt still carries the marker. Reading it as an approval
-		// re-arms the edge on every repaint.
 		{"approval answered", "[ ! ] Action Required | scratchpad", claimNotBusy, "scratchpad"},
 		{"settled", "scratchpad", claimNotBusy, "scratchpad"},
 	} {
@@ -260,8 +218,6 @@ func TestCodexTitleReportsAnApproval(t *testing.T) {
 	}
 }
 
-// Claude's title has no approval marker — it announces approvals on the
-// Notification hook instead — so the marker must not leak across agents.
 func TestClaudeTitleHasNoApprovalMarker(t *testing.T) {
 	claim, _, _ := classifyClaudeTitle("[ . ] Action Required | whatever")
 	if claim != claimUnclassified {

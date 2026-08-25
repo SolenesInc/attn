@@ -4,16 +4,6 @@ import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import type { CriticalNotificationState } from './hooks/useDaemonSocket';
 
-// notifications_updated fires on every notification write and carries a fresh
-// critical-state object each time, so an unchanged pair still arrives with a new
-// identity. App holds it behind an equality guard so the identity below the
-// socket changes only when the pair does — the witness is the identity of the
-// criticalNotifications prop the Sidebar receives.
-//
-// This does not claim the header actions stop rebuilding. That memo has other
-// deps that are fresh on every render, so it rebuilds regardless; what is pinned
-// here is the one identity this code owns.
-
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
@@ -32,10 +22,8 @@ vi.mock('./components/GhosttyTerminal', async () => {
   return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
 });
 
-// Sidebar stub that records the critical-state identity it is handed on each
-// render. Reading identity rather than a render count is deliberate: App
-// re-renders on every broadcast regardless — the change signal an open panel
-// needs — so a render count cannot tell a repeat from a real change.
+// Reading identity rather than a render count is deliberate: App re-renders on every
+// broadcast, so a render count cannot tell a repeat from a real change.
 vi.mock('./components/Sidebar', () => ({
   EditorIcon: () => null,
   WorkflowIcon: () => null,

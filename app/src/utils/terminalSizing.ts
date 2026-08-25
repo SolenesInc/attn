@@ -1,10 +1,7 @@
 export type ResolvedTheme = 'dark' | 'light';
 
-// "Symbols Nerd Font Mono" is a bundled fallback (see index.html @font-face): it
-// sits after the real monospace faces so it only supplies Private Use Area icon
-// glyphs (eza --icons, powerline, devicons) that no system monospace font has.
-// Text still renders from Iosevka/Menlo; per-character canvas font fallback
-// reaches the symbols face only for codepoints the earlier faces lack.
+// "Symbols Nerd Font Mono" sits last so it only supplies the Private Use Area icon
+// glyphs no system monospace font has.
 export const FONT_FAMILY =
   'Iosevka, Menlo, Monaco, "Courier New", "Symbols Nerd Font Mono", monospace';
 export const TERMINAL_SCROLLBACK_BYTES = 8 * 1024 * 1024;

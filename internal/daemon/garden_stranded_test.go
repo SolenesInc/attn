@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// seedStrandedTicket writes one board ticket and moves it to the status a dead
-// session leaves behind.
 func seedStrandedTicket(t *testing.T, d *Daemon, id, title, description string, status store.TicketStatus, assignee string) {
 	t.Helper()
 	seedBacklogTicket(t, d, id, title, description, store.TicketStatusWorking, assignee)
@@ -36,10 +34,6 @@ func seedByTitle(t *testing.T, d *Daemon, title string) garden.Seed {
 	return garden.Seed{}
 }
 
-// The bug: a session dies mid-flight, its ticket is stamped crashed, and the
-// work is invisible from every garden surface. After the pass it is a seed —
-// growing, still held by the session that died, and offered to whoever picks it
-// up because that session is gone.
 func TestStrandedCrashedTicketBecomesATendedSeed(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
@@ -80,8 +74,7 @@ func TestStrandedCrashedTicketBecomesATendedSeed(t *testing.T) {
 	}
 }
 
-// The hold survives the migration with no code to move it: a seed's tender is
-// derived from session liveness, so the session coming back takes its work back.
+// A seed's tender is derived from session liveness, so no code moves the hold.
 func TestReplantedSeedReturnsToItsSessionWhenItRevives(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
@@ -100,9 +93,6 @@ func TestReplantedSeedReturnsToItsSessionWhenItRevives(t *testing.T) {
 	}
 }
 
-// Failed is a decision its agent already made, so the seed lands withered with
-// the reason on it: on the record, out of ready, replantable by anyone who
-// disagrees.
 func TestStrandedFailedTicketBecomesAWitheredSeed(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "gave-up", "Gave up", "could not do it", store.TicketStatusFailed, "sess-dead")
@@ -124,8 +114,6 @@ func TestStrandedFailedTicketBecomesAWitheredSeed(t *testing.T) {
 	}
 }
 
-// The reconciler's verdict is the whole decision-support for picking the work
-// back up, and it lives on a board nobody opens. It rides onto the seed.
 func TestReplantedSeedCarriesTheReconcileVerdict(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
@@ -146,8 +134,6 @@ func TestReplantedSeedCarriesTheReconcileVerdict(t *testing.T) {
 	}
 }
 
-// The pass runs on every boot, and the archive is what makes the second one
-// find nothing.
 func TestStrandedReplantIsIdempotent(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
@@ -160,8 +146,6 @@ func TestStrandedReplantIsIdempotent(t *testing.T) {
 	}
 }
 
-// Live work still drains itself, closed work is over, and an automation run's
-// ticket is daemon bookkeeping that already has its seed through the mirror.
 func TestStrandedReplantLeavesTheRestOfTheBoardAlone(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedBacklogTicket(t, d, "in-flight", "In flight", "being worked", store.TicketStatusWorking, "sess-a")
@@ -192,9 +176,6 @@ func TestStrandedReplantLeavesTheRestOfTheBoardAlone(t *testing.T) {
 	}
 }
 
-// The live seam. A session dies now, the reconciler classifies it, and the work
-// is in the garden before anyone reboots the daemon — carrying the verdict the
-// reconciler just wrote, which is only possible because the replant waits for it.
 func TestReconcilingADeathReplantsTheTicketIntoTheGarden(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")

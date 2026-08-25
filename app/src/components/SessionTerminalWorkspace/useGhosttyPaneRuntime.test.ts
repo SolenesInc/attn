@@ -405,10 +405,6 @@ describe('useGhosttyPaneRuntime', () => {
   });
 
   it('marks attach geometry provisional and skips the pre-attach resize for unmeasured terminals', async () => {
-    // A pane mounted while its session is inactive never measured its
-    // container, so attaching with its construction-default size must not
-    // claim PTY geometry authority (no remount_hydrate resize, and the
-    // attach reconcile skips daemon_known_attach downstream).
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent', agent: 'claude' },
     ], 'pane-session', router, { current: true }));
@@ -437,12 +433,8 @@ describe('useGhosttyPaneRuntime', () => {
   });
 
   it('forwards a genuinely small fit so the PTY matches a deep split (no bottom clip)', async () => {
-    // GhosttyTerminal.fit() is the geometry authority: it already suppresses
-    // transient/garbage measurements and deliberately emits a small grid when a
-    // pane is legitimately short (a deep stacked split, or a short window). The
-    // runtime must NOT re-apply the MIN_USABLE "suspicious" threshold here —
-    // dropping a real small fit strands the PTY taller than the pane and clips
-    // the bottom rows below the overflow:hidden edge.
+    // fit() is the geometry authority and deliberately emits a small grid for a short pane:
+    // re-applying MIN_USABLE here would strand the PTY taller than the pane and clip it.
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       {
         paneId: 'pane-session',

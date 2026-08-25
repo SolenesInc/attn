@@ -1,8 +1,5 @@
-// Sidebar control for choosing the grid's shape. A small grid-glyph button opens
-// a popover with an "Auto" chip and a square picker: hovering a cell highlights
-// the top-left→cursor rectangle (rows × cols), and clicking commits that shape.
-// Selecting any size also opens grid mode, so the picker doubles as the grid
-// launcher (there is otherwise no grid button — only ⌘G).
+// Sidebar control for choosing the grid's shape. Selecting any size also opens grid mode,
+// so the picker doubles as the grid launcher (there is otherwise no grid button, only ⌘G).
 import { useEffect, useRef, useState } from 'react';
 import {
   AUTO_LAYOUT,
@@ -24,8 +21,6 @@ function GridGlyph() {
 
 interface GridLayoutControlProps {
   layout: GridLayout;
-  // Commit a layout choice. Selecting from the picker both sets the shape and
-  // opens grid mode (the control doubles as the grid launcher).
   onSelect: (layout: GridLayout) => void;
   maxRows?: number;
   maxCols?: number;
@@ -42,7 +37,6 @@ export function GridLayoutControl({
   const [hover, setHover] = useState<{ rows: number; cols: number } | null>(null);
   const anchorRef = useRef<HTMLDivElement | null>(null);
 
-  // Close on outside click / Escape; reset hover when closing.
   useEffect(() => {
     if (!open) {
       setHover(null);
@@ -63,7 +57,6 @@ export function GridLayoutControl({
   }, [open]);
 
   const fixed = layout.mode === 'fixed' ? layout : null;
-  // What the picker highlights: the hovered rectangle, else the saved selection.
   const active = hover ?? (fixed ? { rows: fixed.rows, cols: fixed.cols } : null);
   const label = hover
     ? `${hover.rows} × ${hover.cols}`

@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// answerSchema is a tiny strict schema used across the sink tests.
 const answerSchema = `{"type":"object","additionalProperties":false,"required":["answer"],"properties":{"answer":{"type":"string"}}}`
 
 type rpcCallResult struct {
@@ -77,7 +76,6 @@ func TestToolsListAdvertisesSchema(t *testing.T) {
 	if len(listed.Result.Tools) != 1 || listed.Result.Tools[0].Name != "return_result" {
 		t.Fatalf("tools = %+v", listed.Result.Tools)
 	}
-	// inputSchema must equal the passed schema (semantically; compare normalized).
 	if !jsonEqual(t, listed.Result.Tools[0].InputSchema, json.RawMessage(answerSchema)) {
 		t.Fatalf("inputSchema = %s, want %s", listed.Result.Tools[0].InputSchema, answerSchema)
 	}
@@ -111,12 +109,9 @@ func TestInvalidPayloadIsInTurnErrorNoFile(t *testing.T) {
 	resultPath := filepath.Join(dir, "result.json")
 	lines := serve(t, answerSchema, resultPath, []string{
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
-		// "answer" must be a string; pass a number -> schema-invalid.
 		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"return_result","arguments":{"answer":7}}}`,
 	})
 	call := decodeCall(t, lines[1])
-	// Key invariant: NOT a JSON-RPC error (so the model can self-correct in-turn),
-	// but a successful response carrying isError:true.
 	if call.Error != nil {
 		t.Fatalf("validation surfaced as a JSON-RPC error (should be in-turn isError): %+v", call.Error)
 	}
@@ -127,8 +122,6 @@ func TestInvalidPayloadIsInTurnErrorNoFile(t *testing.T) {
 	if !strings.Contains(strings.ToLower(msg), "valid") {
 		t.Fatalf("error message does not describe a validation failure: %q", msg)
 	}
-	// The message should name the offending field (santhosh-tekuri lists the
-	// instance location), enabling self-correction.
 	if !strings.Contains(msg, "answer") {
 		t.Fatalf("error message does not name the offending field: %q", msg)
 	}

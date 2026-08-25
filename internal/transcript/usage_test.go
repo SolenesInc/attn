@@ -7,9 +7,8 @@ import (
 	"testing"
 )
 
-// These fixtures are redacted captures from Claude Code 2.1.233 and Codex
-// 0.147.0. Their record shapes and token counts are unchanged; only message,
-// tool, session, and filesystem content was replaced.
+// Redacted captures from Claude Code 2.1.233 and Codex 0.147.0: record shapes and
+// token counts unchanged, content replaced.
 func usageFixture(t *testing.T, name string) string {
 	t.Helper()
 	path := filepath.Join("testdata", "usage", name)

@@ -11,14 +11,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A delegated conversation agent reports by shelling out to `attn`, so the host
-// it runs in owes it the same identity a PTY agent gets. This was observed
-// missing: the agent's tools saw an empty ATTN_SESSION_ID and resolved `attn`
-// to whichever install happened to be on the login shell's PATH.
+// Observed missing on a delegated conversation agent: its tools saw an empty
+// ATTN_SESSION_ID and resolved `attn` off the login shell's PATH.
 
-// envDumpingHostCommand is a host that records its own environment and then
-// stays alive on stdin, so the spawn completes against a real process and the
-// environment asserted on is the one the kernel actually gave it.
 func envDumpingHostCommand(t *testing.T) (argv []string, dumpPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -54,9 +49,6 @@ func readHostEnv(t *testing.T, dumpPath string) map[string]string {
 }
 
 func TestConversationHostCarriesTheSessionIdentity(t *testing.T) {
-	// The attn that owns this daemon, standing in for an installed profile's
-	// bundled binary. ActiveAttnExecutable treats the wrapper as authoritative
-	// precisely because it names the running app.
 	activeAttnDir := t.TempDir()
 	activeAttn := filepath.Join(activeAttnDir, "attn")
 	if err := os.WriteFile(activeAttn, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
@@ -126,10 +118,8 @@ func TestConversationHostCarriesTheSessionIdentity(t *testing.T) {
 		}
 	}
 
-	// And the `attn` those tools find must be the one that spawned them. The
-	// login shell's PATH names whichever install the user happens to have on it,
-	// which for a session on a non-production profile is the wrong world
-	// entirely — a delegated agent would report into production.
+	// The `attn` those tools find must be the one that spawned them: the login shell's
+	// PATH would make a non-production session report into production.
 	entries := filepath.SplitList(env["PATH"])
 	if len(entries) == 0 || entries[0] != activeAttnDir {
 		t.Errorf("host PATH = %q, want the active attn's directory %q first", env["PATH"], activeAttnDir)

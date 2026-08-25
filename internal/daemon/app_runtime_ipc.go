@@ -14,21 +14,13 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// The runtime's IPC surface: `attn app logs`, `attn app runtime status`,
-// `attn app runtime restart`, and the invocation stream `attn app dev` renders.
-//
-// `runtime` is addressed here as itself rather than as an app, which is the
-// whole reason internal/apps refuses it as an app name: one word cannot mean
-// both the shared process and somebody's automation.
+// `runtime` is addressed here as itself, not as an app, which is why internal/apps
+// refuses it as an app name.
 
-// appLogDefaultLines is how many matching lines `attn app logs` returns when the
-// caller does not say. Enough to see a handler's last few runs and the error
-// that ended them; `--lines` asks for more.
 const appLogDefaultLines = 200
 
-// appLogMaxLines bounds one answer. The log is a file the runtime appends to for
-// as long as the daemon lives, and a request for all of it is a socket message
-// with no ceiling.
+// The runtime appends to this log for as long as the daemon lives, so a request
+// for all of it has no ceiling.
 const appLogMaxLines = 10000
 
 func (d *Daemon) handleAppLogs(conn net.Conn, msg *protocol.AppLogsMessage) {
@@ -77,18 +69,6 @@ func (d *Daemon) handleAppLogs(conn net.Conn, msg *protocol.AppLogsMessage) {
 	})
 }
 
-// readAppLog tails the shared runtime log, keeping the lines one app wrote.
-//
-// A log file that is not there is an empty answer, not an error: the runtime
-// writes it on its first start, and "no lines yet" is exactly what a caller
-// asking before then should hear.
-//
-// It reads the whole file rather than seeking from the end. The file is opened
-// O_APPEND and never truncated, so it does carry every restart — but nothing in
-// an app writes to it unless the app's own code prints, and a backwards scan
-// that has to respect line boundaries and a tag filter is a lot of machinery for
-// a diagnostic command. If a chatty app ever makes this cost real, the fix is
-// rotation on the writing side, not a cleverer reader.
 func readAppLog(path, app string, whole bool, limit int) ([]string, bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -103,8 +83,8 @@ func readAppLog(path, app string, whole bool, limit int) ([]string, bool, error)
 	kept := make([]string, 0, limit)
 	truncated := false
 	scanner := bufio.NewScanner(file)
-	// A handler can print a long line — a stack trace, a JSON body — and the
-	// default 64KB would end the scan on it rather than truncating the line.
+	// A handler can print a stack trace or a JSON body; the default 64KB would end
+	// the scan on it rather than truncating the line.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -154,10 +134,6 @@ func (d *Daemon) handleAppRuntimeStatus(conn net.Conn, _ *protocol.AppRuntimeSta
 	d.sendDocResponse(conn, protocol.Response{Ok: true, AppRuntimeStatusResult: &result})
 }
 
-// handleAppRuntimeRestart bounces the sidecar: kill what is running, start a
-// fresh generation. Stop-then-Ensure covers both cases the verb has to serve —
-// a healthy runtime gets restarted, and a parked one is revived, because Ensure
-// is also un-park.
 func (d *Daemon) handleAppRuntimeRestart(conn net.Conn, _ *protocol.AppRuntimeRestartMessage) {
 	was := string(supervise.PhaseStopped)
 	if snapshot, ok := d.appRuntimeSnapshot(); ok {
@@ -178,9 +154,6 @@ func (d *Daemon) handleAppRuntimeRestart(conn net.Conn, _ *protocol.AppRuntimeRe
 	})
 }
 
-// appRuntimeInfo renders a supervision snapshot for the wire, joined to the
-// connected process's pid — which the supervisor does not know, because it
-// supervises a process and the pid that matters is the one that said hello.
 func (d *Daemon) appRuntimeInfo(snapshot supervise.Snapshot) protocol.AppRuntimeInfo {
 	info := protocol.AppRuntimeInfo{
 		Phase:          string(snapshot.Phase),
@@ -211,16 +184,8 @@ func (d *Daemon) appRuntimeInfo(snapshot supervise.Snapshot) protocol.AppRuntime
 	return info
 }
 
-// ---------------------------------------------------------------------------
-// The invocation stream
-// ---------------------------------------------------------------------------
-
-// appWatcher is one open `app_watch` connection.
-//
-// Deliveries are dropped rather than queued when the buffer fills: this is a
-// developer watching their handlers run, and a slow reader must not be able to
-// slow down the delivery loop that feeds it. A watcher that misses a burst can
-// read the whole record back with `attn app status`.
+// Deliveries are dropped rather than queued when the buffer fills, so a slow reader cannot
+// slow the delivery loop; a missed burst reads back with `attn app status`.
 type appWatcher struct {
 	app    string
 	events chan protocol.AppInvocationInfo
@@ -241,8 +206,7 @@ func (d *Daemon) removeAppWatcher(watcher *appWatcher) {
 	delete(d.appWatchers, watcher)
 }
 
-// notifyAppWatchers fans one recorded invocation out to whoever is watching that
-// app. Called from the delivery path, so it must never block.
+// Called from the delivery path, so it must never block.
 func (d *Daemon) notifyAppWatchers(info protocol.AppInvocationInfo, app string) {
 	d.appWatcherMu.Lock()
 	watchers := make([]*appWatcher, 0, len(d.appWatchers))
@@ -270,15 +234,11 @@ func (d *Daemon) handleAppWatch(conn net.Conn, msg *protocol.AppWatchMessage) {
 	d.addAppWatcher(watcher)
 	defer d.removeAppWatcher(watcher)
 
-	// The caller learns the subscription is live before the first invocation, so
-	// `attn app dev` can say it is watching rather than sitting silent.
 	if err := json.NewEncoder(conn).Encode(protocol.Response{Ok: true}); err != nil {
 		return
 	}
 
-	// A client that goes away between invocations would otherwise sit here until
-	// the daemon stops. Reading from the connection is how that is noticed: the
-	// caller sends nothing, so any read that returns means the socket closed.
+	// The caller sends nothing, so any read that returns means the socket closed.
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -304,8 +264,6 @@ func (d *Daemon) handleAppWatch(conn net.Conn, msg *protocol.AppWatchMessage) {
 	}
 }
 
-// appInvocationForWire renders a recorded invocation, so the streamed shape and
-// the one `attn app status` returns cannot drift.
 func appInvocationForWire(id int64, inv store.AppInvocation) protocol.AppInvocationInfo {
 	info := protocol.AppInvocationInfo{
 		ID:        int(id),
@@ -318,10 +276,8 @@ func appInvocationForWire(id int64, inv store.AppInvocation) protocol.AppInvocat
 	if info.Kind == "" {
 		info.Kind = store.AppInvocationKindSubscription
 	}
-	// Fact identity belongs to a subscription. A command, a view crash, and a
-	// reconcile all borrowed the event columns before this kind existed; a reader
-	// that sees them filled in for those kinds cannot tell a real seq from a
-	// placeholder.
+	// Fact identity belongs to a subscription: other kinds borrow the event columns,
+	// and a reader could not tell a real seq from a placeholder.
 	if info.Kind == store.AppInvocationKindSubscription {
 		info.EventSeq = protocol.Ptr(int(inv.EventSeq))
 		info.EventName = protocol.Ptr(inv.EventName)
@@ -373,7 +329,6 @@ func appReconcileReasonForWire(reason appReconcileReason) *protocol.AppReconcile
 	return info
 }
 
-// appStallForWire renders the auto-disable clock, including when it fires.
 func (d *Daemon) appStallForWire(stall appStall) protocol.AppStallInfo {
 	info := protocol.AppStallInfo{
 		Kind:       stall.kind,

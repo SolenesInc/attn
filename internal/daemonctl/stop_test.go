@@ -12,29 +12,8 @@ import (
 	"time"
 )
 
-// TestStopHelperProcess is not a real test: it is re-exec'd as a subprocess
-// (the standard os/exec crash-test pattern, mirrored from
-// internal/config/datadir_backstop_test.go) to model a process that actually
-// holds the pid file's flock — something a same-process flock can never
-// model, since flock is per-open-file-description, not per-process, but two
-// different processes genuinely contend for it.
-//
-// Mode is selected via ATTN_STOP_TEST_HELPER_MODE:
-//   - "lock-self": opens/creates the pid file, takes the exclusive flock,
-//     writes its own pid, then blocks until killed.
-//   - "lock-write-pid": same, but writes the pid from
-//     ATTN_STOP_TEST_HELPER_WRITE_PID instead of its own (used to simulate
-//     the pid file naming an unrelated process — e.g. the test parent —
-//     while a *different* process holds the lock).
-//   - "lock-pause": opens/creates the pid file, takes the exclusive flock,
-//     signals readiness by creating ATTN_STOP_TEST_HELPER_READYPATH, then
-//     blocks WITHOUT ever writing pid-file content — models the window
-//     between a holder acquiring the flock and publishing its content
-//     (its own pid, or NonDaemonHolderSentinel), which pid-file-content
-//     polling can never observe since there's nothing new to see there.
-//
-// Run under plain `go test`, ATTN_STOP_TEST_HELPER_MODE is unset, so this
-// is a silent no-op.
+// Not a real test: re-exec'd as a subprocess so a *different* process holds the pid
+// file's flock. Unset ATTN_STOP_TEST_HELPER_MODE makes it a no-op.
 func TestStopHelperProcess(t *testing.T) {
 	mode := os.Getenv("ATTN_STOP_TEST_HELPER_MODE")
 	if mode == "" {
@@ -63,11 +42,8 @@ func TestStopHelperProcess(t *testing.T) {
 			fmt.Fprintln(os.Stderr, "helper: missing ATTN_STOP_TEST_HELPER_READYPATH")
 			os.Exit(1)
 		}
-		// Deliberately never writes pid-file content: this is the window
-		// between acquiring the flock and publishing content that
-		// pidHoldsPIDFile must guard against even though nothing observable
-		// changes in the pid file itself. The ready file is the only signal
-		// the parent test can poll for readiness here.
+		// Deliberately never writes pid-file content: this models the window between
+		// acquiring the flock and publishing it.
 		if err := os.WriteFile(readyPath, []byte("ready"), 0644); err != nil {
 			fmt.Fprintf(os.Stderr, "helper: write ready file: %v\n", err)
 			os.Exit(1)
@@ -97,21 +73,13 @@ func TestStopHelperProcess(t *testing.T) {
 		os.Exit(1)
 	}
 
-	// Block until killed. An untrapped SIGTERM terminates the process by
-	// default (Go does not install a handler unless the program calls
-	// signal.Notify), which is exactly what Stop's SIGTERM step relies on.
-	// A lone goroutine sleeping is not a runtime deadlock (unlike a bare
-	// `select {}`, which the Go scheduler detects as "all goroutines are
-	// asleep" and crashes on) — time.Sleep is backed by the runtime timer,
-	// so it just waits.
+	// time.Sleep waits on a runtime timer, so unlike a bare `select {}` the
+	// scheduler does not call it a deadlock.
 	time.Sleep(time.Hour)
 }
 
-// spawnStopHelper starts TestStopHelperProcess as a subprocess in the given
-// mode and reaps it as soon as it exits (a goroutine calling cmd.Wait()) so
-// a helper killed by Stop never lingers as a zombie that would make
-// processGoneWithin's kill(pid, 0) liveness probe see a "still there" zombie
-// pid instead of a truly gone process.
+// The subprocess is reaped as soon as it exits, so a helper killed by Stop never
+// lingers as a zombie that processGoneWithin's kill(pid, 0) reads as still alive.
 func spawnStopHelper(t *testing.T, pidPath string, mode string, extraEnv ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestStopHelperProcess$")
@@ -136,8 +104,6 @@ func spawnStopHelper(t *testing.T, pidPath string, mode string, extraEnv ...stri
 	return cmd
 }
 
-// waitForFlockHeld polls until some other process holds pidPath's exclusive
-// flock (a non-blocking acquire attempt fails), or fails the test on timeout.
 func waitForFlockHeld(t *testing.T, pidPath string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -160,8 +126,6 @@ func waitForFlockHeld(t *testing.T, pidPath string, timeout time.Duration) {
 	}
 }
 
-// waitForPIDFileContent polls until pidPath's contents equal want, or fails
-// the test on timeout.
 func waitForPIDFileContent(t *testing.T, pidPath string, want string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -177,7 +141,6 @@ func waitForPIDFileContent(t *testing.T, pidPath string, want string, timeout ti
 	}
 }
 
-// waitForFile polls until path exists, or fails the test on timeout.
 func waitForFile(t *testing.T, path string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -192,8 +155,6 @@ func waitForFile(t *testing.T, path string, timeout time.Duration) {
 	}
 }
 
-// isAlive reports whether pid still exists (kill(pid, 0) success or
-// EPERM — either means the process is there; ESRCH means gone).
 func isAlive(pid int) bool {
 	err := syscall.Kill(pid, 0)
 	return err == nil || err == syscall.EPERM
@@ -214,11 +175,6 @@ func TestStop_NoPidFile(t *testing.T) {
 	}
 }
 
-// TestStop_StalePidFile proves the must-catch safety property: a pid file
-// that names a genuinely live process, but whose flock nobody holds, must
-// never be signaled. This is the regression a broken liveness gate would
-// cause — killing an unrelated process that happened to recycle the stale
-// pid.
 func TestStop_StalePidFile(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -232,8 +188,6 @@ func TestStop_StalePidFile(t *testing.T) {
 		_, _ = helper.Process.Wait()
 	})
 
-	// Write the pid file WITHOUT holding the flock — this is what a
-	// crashed/SIGKILLed daemon leaves behind.
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(helper.Process.Pid)), 0644); err != nil {
 		t.Fatalf("write stale pid file: %v", err)
 	}
@@ -253,8 +207,6 @@ func TestStop_StalePidFile(t *testing.T) {
 	}
 }
 
-// TestStop_LiveHolder proves the happy path against a real *different*
-// process holding the flock, the way a live daemon does.
 func TestStop_LiveHolder(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -281,10 +233,6 @@ func TestStop_LiveHolder(t *testing.T) {
 	}
 }
 
-// TestStop_RefusesOwnProcessTree proves Stop refuses to signal a pid that
-// names the calling process itself, even though the lock is genuinely held
-// (by a different, spawned process) — the own-pid check must fire before
-// any signal is sent.
 func TestStop_RefusesOwnProcessTree(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -304,26 +252,12 @@ func TestStop_RefusesOwnProcessTree(t *testing.T) {
 	if result.Stopped {
 		t.Fatalf("Stop() = %+v, want Stopped=false", result)
 	}
-	// This process is still running to observe this assertion, so there's
-	// nothing further to prove about liveness — the point is simply that no
-	// signal was attempted, which the error path guarantees.
 }
 
-// TestStop_NonDaemonHolderSentinel is the must-catch regression for the
-// restore-vs-stop race figgyster flagged: a pid file seeded with the pid of
-// a genuinely live process (standing in for a stale daemon pid left behind
-// by a crash), whose flock is then taken by a non-daemon holder (standing in
-// for `attn db restore` via acquireDaemonLock) that overwrites the content
-// with NonDaemonHolderSentinel before blocking. Stop must see the sentinel,
-// not the pid that was there before the holder took the lock, and must
-// never signal it — even though the lock is genuinely held (EWOULDBLOCK),
-// which alone used to be treated as "safe to trust the pid on disk".
 func TestStop_NonDaemonHolderSentinel(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
 
-	// A live process whose pid stands in for a stale daemon pid left on
-	// disk by a crash — this is what Stop must NOT signal.
 	stalePidHolder := exec.Command("sleep", "30")
 	if err := stalePidHolder.Start(); err != nil {
 		t.Fatalf("start sleep helper: %v", err)
@@ -336,8 +270,6 @@ func TestStop_NonDaemonHolderSentinel(t *testing.T) {
 		t.Fatalf("seed stale pid file: %v", err)
 	}
 
-	// A non-daemon holder (e.g. `attn db restore`) takes the lock and
-	// stamps the sentinel over that stale pid, mirroring acquireDaemonLock.
 	spawnStopHelper(t, pidPath, "lock-write-pid", "ATTN_STOP_TEST_HELPER_WRITE_PID="+NonDaemonHolderSentinel)
 	waitForPIDFileContent(t, pidPath, NonDaemonHolderSentinel, 5*time.Second)
 	waitForFlockHeld(t, pidPath, 5*time.Second)
@@ -357,22 +289,11 @@ func TestStop_NonDaemonHolderSentinel(t *testing.T) {
 	}
 }
 
-// TestStop_AcquireBeforeContentWriteGap is the deterministic regression for
-// the ordering gap figgyster flagged: a holder that has acquired the flock
-// but has NOT YET written its content (its own pid, or
-// NonDaemonHolderSentinel) — held open indefinitely via the "lock-pause"
-// helper mode — must not let Stop trust whatever stale content was in the
-// pid file before the holder ever touched it. Content-ordering alone cannot
-// prove ownership here; only pidHoldsPIDFile's positive lsof-based proof
-// can, since the stale pid genuinely does not have the file open.
 func TestStop_AcquireBeforeContentWriteGap(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
 	readyPath := filepath.Join(dir, "ready")
 
-	// A live process whose pid stands in for a stale daemon pid already on
-	// disk — written BEFORE the new holder ever touches the file, exactly
-	// as a crashed daemon would leave it.
 	stalePidHolder := exec.Command("sleep", "30")
 	if err := stalePidHolder.Start(); err != nil {
 		t.Fatalf("start sleep helper: %v", err)
@@ -385,9 +306,6 @@ func TestStop_AcquireBeforeContentWriteGap(t *testing.T) {
 		t.Fatalf("seed stale pid file: %v", err)
 	}
 
-	// A new holder (e.g. `attn db restore`, mid acquireDaemonLock) takes the
-	// flock and is paused deliberately BEFORE it writes any content — the
-	// pid file still reads as the stale pid at this instant.
 	spawnStopHelper(t, pidPath, "lock-pause", "ATTN_STOP_TEST_HELPER_READYPATH="+readyPath)
 	waitForFile(t, readyPath, 5*time.Second)
 	waitForFlockHeld(t, pidPath, 5*time.Second)
@@ -407,10 +325,6 @@ func TestStop_AcquireBeforeContentWriteGap(t *testing.T) {
 	}
 }
 
-// TestStop_NonContentionFlockErrorFailsClosed proves a flock failure other
-// than EWOULDBLOCK (e.g. ENOLCK) is indeterminate and must not be treated as
-// "no one holds the lock, the pid is stale" — that would let Stop signal a
-// pid it has no actual proof is safe to signal.
 func TestStop_NonContentionFlockErrorFailsClosed(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -448,16 +362,12 @@ func TestStop_NonContentionFlockErrorFailsClosed(t *testing.T) {
 	}
 }
 
-// TestStop_MalformedPIDFile proves malformed content under a held lock is an
-// error, and (implicitly, since no pid could even be parsed) nothing was
-// signaled.
 func TestStop_MalformedPIDFile(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
 
 	helper := spawnStopHelper(t, pidPath, "lock-malformed")
 	waitForFlockHeld(t, pidPath, 5*time.Second)
-	// Wait for the write to actually land (helper flocks before writing).
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		data, err := os.ReadFile(pidPath)

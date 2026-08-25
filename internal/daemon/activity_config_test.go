@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// The one rule that separates this from every other agent-backed duty: there is
-// no default agent. Claude and Codex differ enough in speed, price, and which
-// account pays that picking one would be choosing how the user's money is spent.
 func TestActivityConfigRefusesToPickAnAgent(t *testing.T) {
 	for _, raw := range []string{"", "   ", `{}`, `{"model":"claude-haiku-4-5"}`, `{"agent":"  "}`} {
 		if _, err := parseActivityConfig(raw); !errors.Is(err, errActivityAgentUnset) {
@@ -24,8 +21,8 @@ func TestActivityConfigFillsInTheAgentsDefaults(t *testing.T) {
 	if claude.Model != activityClaudeDefaultModel {
 		t.Errorf("claude model = %q, want %q", claude.Model, activityClaudeDefaultModel)
 	}
-	// Effort is left unset on Claude on purpose: it measured inert on
-	// claude-haiku-4-5, so pinning one would be a setting that does nothing.
+	// Effort measured inert on claude-haiku-4-5, so pinning one would be a setting
+	// that does nothing.
 	if claude.Effort != "" {
 		t.Errorf("claude effort = %q, want unset", claude.Effort)
 	}
@@ -75,8 +72,6 @@ func TestActivityIntervalsDefaultAndClamp(t *testing.T) {
 		t.Errorf("defaults = %+v", defaults)
 	}
 
-	// Out of range is a settings-pane typo. Clamping keeps generating; rejecting
-	// would stop the feature over a stray zero.
 	clamped, err := parseActivityIntervals(`{"watching":1,"present":99999}`)
 	if err != nil {
 		t.Fatalf("out of range: %v", err)
@@ -93,8 +88,6 @@ func TestActivityIntervalsDefaultAndClamp(t *testing.T) {
 	}
 }
 
-// The one distinction that has to be right: away means generate nothing, and
-// zero is how every caller reads that.
 func TestActivityIntervalIsZeroWhenAway(t *testing.T) {
 	d := &Daemon{}
 	if got := d.activityInterval(PresenceAway); got != 0 {

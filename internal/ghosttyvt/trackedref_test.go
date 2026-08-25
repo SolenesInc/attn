@@ -8,10 +8,8 @@ import (
 	"testing"
 )
 
-// screenLines returns the terminal's full-screen text (scrollback + active
-// area) as one line per grid row, trailing whitespace trimmed. With
-// unwrap=false in the formatter options, PlainText emits one line per grid
-// row, so the slice index IS the SCREEN-space y coordinate.
+// PlainText emits one line per grid row (unwrap=false), so the slice index IS
+// the SCREEN-space y coordinate.
 func screenLines(t *Terminal) []string {
 	lines := strings.Split(t.PlainText(), "\n")
 	for i, l := range lines {
@@ -28,10 +26,6 @@ func feedLines(t *Terminal, from, to int) {
 	t.Write([]byte(b.String()))
 }
 
-// TestTrackedRefLeakAccounting verifies the live-ref counter that block-table
-// tests use to prove every retirement path frees its native refs: increments
-// on successful pins, decrements exactly once per ref no matter how many times
-// Free is called.
 func TestTrackedRefLeakAccounting(t *testing.T) {
 	base := LiveTrackedRefs()
 	term, err := New(80, 10, Options{ScrollbackBytes: 50})
@@ -49,7 +43,7 @@ func TestTrackedRefLeakAccounting(t *testing.T) {
 		t.Fatalf("after 2 pins: live=%d want %d", got, base+2)
 	}
 	r1.Free()
-	r1.Free() // idempotent: must not double-decrement
+	r1.Free()
 	if got := LiveTrackedRefs(); got != base+1 {
 		t.Fatalf("after freeing one ref (twice): live=%d want %d", got, base+1)
 	}
@@ -59,11 +53,6 @@ func TestTrackedRefLeakAccounting(t *testing.T) {
 	}
 }
 
-// TestSpikeTrackedRefFollowsScrollPruneReflow verifies the core primitive the
-// worker-side block tracker would rely on: a ref pinned at the cursor keeps
-// resolving to the same content row while the terminal scrolls, prunes
-// scrollback past the cap, and reflows on resize — and reports "no value"
-// (rather than a wrong position) once the row is pruned away.
 func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 	term, err := New(80, 10, Options{ScrollbackBytes: 50})
 	if err != nil {
@@ -73,9 +62,6 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 
 	feedLines(term, 0, 5)
 	term.Write([]byte("MARK-PROMPT $ echo hello\r\n"))
-	// Cursor now sits at the start of the line AFTER the mark; pin one row up
-	// by pinning before writing the mark instead.
-	// Re-do precisely: pin at cursor, then write the mark text on that row.
 	ref := term.TrackCursor()
 	if ref == nil {
 		t.Fatal("TrackCursor returned nil")
@@ -94,8 +80,6 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 		t.Fatalf("pin row mismatch: y=%d text=%q", y0, got)
 	}
 
-	// Scroll within the cap: the pinned row's SCREEN y must keep resolving to
-	// the same content (pruning may shift y down; content is the contract).
 	feedLines(term, 100, 130)
 	_, y1, ok := ref.ScreenPoint()
 	if !ok {
@@ -105,8 +89,6 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 		t.Fatalf("after scroll: y=%d text=%q", y1, got)
 	}
 
-	// Reflow: shrink width so long lines wrap; the ref must still resolve to
-	// the marked content.
 	term.Resize(40, 10)
 	_, y2, ok := ref.ScreenPoint()
 	if !ok {
@@ -116,10 +98,8 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 		t.Fatalf("after reflow: y=%d text=%q", y2, got)
 	}
 
-	// Prune past the cap: pruning is page-granular and lazy (probe: with
-	// cap=50 it fires between ~1k and ~5k rows), so feed enough to guarantee
-	// the marked page is discarded. The ref must cleanly report no value,
-	// never a wrong row.
+	// Pruning is page-granular and lazy (probe: with cap=50 it fires between
+	// ~1k and ~5k rows), so feed enough to guarantee the marked page is gone.
 	feedLines(term, 200, 8000)
 	if _, y3, ok := ref.ScreenPoint(); ok {
 		got := screenLines(term)[y3]
@@ -127,15 +107,10 @@ func TestSpikeTrackedRefFollowsScrollPruneReflow(t *testing.T) {
 	}
 }
 
-// TestSpikeScreenCoordsAlignAcrossRestore verifies the serialization contract's
-// coordinate premise: a SCREEN-space row resolved at serialize time is a valid
-// index into the terminal a client rebuilds by writing the VT dump — including
-// when scrollback was pruned at the cap before serializing (SCREEN space is
-// post-prune by construction, so no offset mapping is needed).
 func TestSpikeScreenCoordsAlignAcrossRestore(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		lines int // enough to overflow ScrollbackBytes=50 in the "pruned" case
+		lines int
 	}{
 		{name: "within_cap", lines: 20},
 		{name: "pruned_at_cap", lines: 8000},
@@ -158,12 +133,9 @@ func TestSpikeScreenCoordsAlignAcrossRestore(t *testing.T) {
 
 			_, y, ok := ref.ScreenPoint()
 			if tc.name == "pruned_at_cap" {
-				// The marked row scrolled past the cap; a real serializer
-				// drops this block. Assert the clean signal and move on.
 				if ok {
 					t.Fatalf("expected pruned ref to report no value, got y=%d", y)
 				}
-				// Instead align on a row that IS retained: pin the last line.
 				ref2 := src.TrackCursor()
 				defer ref2.Free()
 				src.Write([]byte("BLOCK-START late marker\r\n"))
@@ -195,7 +167,6 @@ func TestSpikeScreenCoordsAlignAcrossRestore(t *testing.T) {
 			if gotLines[y] != srcLines[y] {
 				t.Fatalf("row misalignment at y=%d: src=%q restored=%q", y, srcLines[y], gotLines[y])
 			}
-			// The alignment must hold globally, not just at the marker.
 			if len(gotLines) != len(srcLines) {
 				t.Fatalf("row count mismatch: src=%d restored=%d", len(srcLines), len(gotLines))
 			}
@@ -203,11 +174,6 @@ func TestSpikeScreenCoordsAlignAcrossRestore(t *testing.T) {
 	}
 }
 
-// TestSpikeTrackedRefResolvesWhileAltScreenActive verifies a primary-screen ref
-// still resolves (against the primary page list) while the alternate screen is
-// active — the serializer runs in exactly that state when a session is inside
-// vim/less at snapshot time — and that the resolved row aligns with the
-// restored terminal's primary screen after leaving alt.
 func TestSpikeTrackedRefResolvesWhileAltScreenActive(t *testing.T) {
 	src, err := New(80, 10, Options{ScrollbackBytes: 50})
 	if err != nil {
@@ -215,7 +181,7 @@ func TestSpikeTrackedRefResolvesWhileAltScreenActive(t *testing.T) {
 	}
 	defer src.Close()
 
-	feedLines(src, 0, 12) // some scrollback on primary
+	feedLines(src, 0, 12)
 	ref := src.TrackCursor()
 	if ref == nil {
 		t.Fatal("TrackCursor returned nil")
@@ -237,7 +203,6 @@ func TestSpikeTrackedRefResolvesWhileAltScreenActive(t *testing.T) {
 	}
 	defer restored.Close()
 
-	// Leave alt on both; primary content must align at the ref's row.
 	src.Write([]byte("\x1b[?1049l"))
 	restored.Write([]byte("\x1b[?1049l"))
 
@@ -254,11 +219,6 @@ func TestSpikeTrackedRefResolvesWhileAltScreenActive(t *testing.T) {
 	}
 }
 
-// TestTrackPointPinsAScreenRow covers the pin a worker makes when it adopts a
-// session after an in-place upgrade: the grid came back from a VT replay, so
-// every OSC 133 anchor has to be re-pinned from a row number alone. The
-// coordinate space must be the same one ScreenPoint reports, and the pin must
-// then follow its row like any other.
 func TestTrackPointPinsAScreenRow(t *testing.T) {
 	base := LiveTrackedRefs()
 	term := newT(t, 80, 10)
@@ -286,7 +246,6 @@ func TestTrackPointPinsAScreenRow(t *testing.T) {
 		t.Fatalf("ScreenPoint = (%d,%d,%v), want (3,%d,true)", x, y, ok, row)
 	}
 
-	// Scrolling more content in moves the row; the pin must move with it.
 	feedLines(term, 30, 40)
 	_, y, ok = ref.ScreenPoint()
 	if !ok {

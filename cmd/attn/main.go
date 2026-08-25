@@ -40,71 +40,37 @@ import (
 )
 
 var (
-	// Backward-compatible ldflags targets for builders that still inject
-	// build metadata into the main package instead of internal/buildinfo.
+	// Kept for builders that inject build metadata into the main package instead of internal/buildinfo.
 	version           = ""
 	buildTime         = ""
 	sourceFingerprint = ""
 	gitCommit         = ""
 )
 
-// hookInput represents the JSON input from agent hooks.
 type hookInput struct {
-	SessionID      string          `json:"session_id"`
-	TranscriptPath string          `json:"transcript_path"`
-	Prompt         string          `json:"prompt"`
-	ToolName       string          `json:"tool_name"`
-	ToolInput      json.RawMessage `json:"tool_input"`
-	// CWD is the agent's working directory, used to resolve a tool that
-	// reported a relative path. Both Claude and Codex send it on tool events.
-	CWD string `json:"cwd"`
-	// BackgroundTasks is reported by Claude Code on the Stop payload: the set
-	// of asynchronous tasks (background Workflows, background Bash) still
-	// outstanding when the turn yields. Agents that do not emit this field
-	// simply leave it empty.
-	BackgroundTasks []backgroundTask `json:"background_tasks"`
-	// SessionCrons is reported by Claude Code on the Stop payload: the set of
-	// pending scheduled wakeups (created via CronCreate or /loop) that will
-	// auto-resume this session later. It is present-but-empty when nothing is
-	// scheduled. Agents that do not emit this field simply leave it empty.
-	SessionCrons []sessionCron `json:"session_crons"`
-	// PermissionMode is the agent's resolved approval mode at the moment the
-	// hook fired. Claude reports it on every hook that follows a prompt.
-	PermissionMode string `json:"permission_mode"`
-	// Message and NotificationType come from Claude's Notification hook.
-	// NotificationType is the load-bearing half ("permission_prompt" when the
-	// agent is blocked on approval, "idle_prompt" after 60s of waiting);
-	// Message is its human-readable form.
-	Message          string `json:"message"`
-	NotificationType string `json:"notification_type"`
-	// AgentID names the subagent a tool event belongs to, and is empty for the
-	// main thread. Claude runs subagents concurrently with the conversation, so
-	// without it every tool a background subagent completes is indistinguishable
-	// from the main thread getting on with its turn.
-	AgentID string `json:"agent_id"`
-	// ErrorType and ErrorMessage come from Claude's StopFailure hook, which
-	// replaces Stop when the turn ends on an API error. ErrorType is the
-	// classification ("rate_limit", "billing_error", "overloaded", …);
-	// ErrorMessage is its human-readable form.
-	ErrorType    string `json:"error_type"`
-	ErrorMessage string `json:"error_message"`
-	// Trigger is "manual" or "auto" on Claude's PreCompact/PostCompact hooks.
-	Trigger string `json:"trigger"`
+	SessionID        string           `json:"session_id"`
+	TranscriptPath   string           `json:"transcript_path"`
+	Prompt           string           `json:"prompt"`
+	ToolName         string           `json:"tool_name"`
+	ToolInput        json.RawMessage  `json:"tool_input"`
+	CWD              string           `json:"cwd"`
+	BackgroundTasks  []backgroundTask `json:"background_tasks"`
+	SessionCrons     []sessionCron    `json:"session_crons"`
+	PermissionMode   string           `json:"permission_mode"`
+	Message          string           `json:"message"`
+	NotificationType string           `json:"notification_type"`
+	AgentID          string           `json:"agent_id"`
+	ErrorType        string           `json:"error_type"`
+	ErrorMessage     string           `json:"error_message"`
+	Trigger          string           `json:"trigger"`
 }
 
-// backgroundTask is one entry of hookInput.BackgroundTasks. Only Status is
-// load-bearing here; Type is kept for diagnostics.
 type backgroundTask struct {
 	Type   string `json:"type"`
 	Status string `json:"status"`
 }
 
-// sessionCron is one entry of hookInput.SessionCrons. Detection keys only on
-// presence (a non-empty list means the session is parked on a schedule); the
-// remaining fields are decoded for diagnostics and possible future rendering.
-// Verified against Claude Code 2.1.177: items carry exactly id/schedule
-// (raw 5-field cron in local time)/recurring/prompt, with no status field —
-// a fired or deleted cron drops out of the list entirely rather than lingering.
+// Verified against Claude Code 2.1.177: there is no status field — a fired or deleted cron drops out of the list.
 type sessionCron struct {
 	ID        string `json:"id"`
 	Schedule  string `json:"schedule"`
@@ -112,7 +78,6 @@ type sessionCron struct {
 	Prompt    string `json:"prompt"`
 }
 
-// todoWriteInput represents the tool_input for TodoWrite
 type todoWriteInput struct {
 	Todos []struct {
 		Content string `json:"content"`
@@ -168,29 +133,16 @@ func main() {
 		return
 	}
 
-	// `profile-env` is the self-recovery path: if ATTN_PROFILE is
-	// currently typo'd, the user needs `attn profile-env --unset` (or
-	// `profile-env <name>`) to fix their shell. Route it *before* the
-	// global validation so an invalid env value doesn't trap them.
 	if len(os.Args) >= 2 && os.Args[1] == "profile-env" {
 		runProfileEnv()
 		return
 	}
 
-	// Validate ATTN_PROFILE before we act on it. A typo'd profile would
-	// silently fall back to default, which is exactly the kind of mistake
-	// this whole feature exists to prevent.
 	if err := config.ValidateProfile(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	// A profile whose resolved paths belong to a different profile is a
-	// contradiction, not a configuration: refuse before any command can open
-	// that world. The `profile` group is exempt on purpose — it derives
-	// canonical resources and never honors the overrides, so it stays the
-	// surface that reports and cleans up the mess (`attn profile status`
-	// prints the same conflict as a warning).
 	if !isProfileGroupCommand(os.Args) {
 		if err := config.ValidateProfileRouting(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -287,8 +239,7 @@ func main() {
 		maybePrintProfileBanner()
 		runJournal()
 	case "vision-check":
-		// No banner: output must stay pure (stdout = answer only, or a single
-		// --json line) for machine consumption by the calling agent.
+		// No banner: stdout must stay pure for machine consumption by the caller.
 		runVisionCheck()
 	case "present":
 		maybePrintProfileBanner()
@@ -297,8 +248,7 @@ func main() {
 		maybePrintProfileBanner()
 		runWorkspace()
 	case "profile":
-		// No banner: `attn profile resolve --field …` must print only the
-		// value so the Makefile / harness can consume it cleanly.
+		// No banner: `attn profile resolve --field …` must print only the value for the Makefile / harness.
 		runProfile()
 	case "open":
 		maybePrintProfileBanner()
@@ -327,7 +277,6 @@ func main() {
 	case "_probe-tui":
 		runProbeTUI()
 	default:
-		// Check if it's a flag (starts with -)
 		if len(os.Args[1]) > 0 && os.Args[1][0] == '-' {
 			maybePrintProfileBanner()
 			runWrapper()
@@ -339,9 +288,6 @@ func main() {
 	}
 }
 
-// runWorkflowResultMCP serves the workflow engine's schema-validating result
-// sink (one return_result tool). The schema is passed as a file path (not inline
-// argv) to avoid shell/argv quoting traps for arbitrary JSON Schemas.
 func runWorkflowResultMCP(args []string) {
 	fs := flag.NewFlagSet("_workflow-result-mcp", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -375,16 +321,10 @@ func runWorkflowResultMCP(args []string) {
 	}
 }
 
-// maybePrintProfileBanner prints the profile banner to stderr when a
-// non-default ATTN_PROFILE is active. Skipped for hook commands (called
-// on every Claude action) and for silent CLI subcommands (ws-relay,
-// pty-worker) that have their own protocols on stderr.
 func maybePrintProfileBanner() {
 	config.PrintProfileBanner(os.Stderr)
 }
 
-// isProfileGroupCommand reports whether the invocation is `attn profile …`,
-// the diagnostic and cleanup surface exempt from the routing fence.
 func isProfileGroupCommand(args []string) bool {
 	return len(args) >= 2 && args[1] == "profile"
 }
@@ -466,8 +406,6 @@ func runPTYWorker() {
 	fs.StringVar(&externalCommandJSON, "external-command-json", "", "external plugin driver argv as JSON")
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
-	// An adopting worker takes its whole configuration from the handoff file the
-	// image it replaced left behind; these three are all argv carries.
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
 	fs.IntVar(&cfg.AdoptPtmxFD, "adopt-ptmx-fd", 0, "inherited pty master descriptor")
 	fs.IntVar(&cfg.AdoptListenerFD, "adopt-listener-fd", 0, "inherited unix listener descriptor")
@@ -539,9 +477,7 @@ func runPTYWorker() {
 		fmt.Fprintf(os.Stderr, "[pty-worker] "+format+"\n", args...)
 	}
 
-	// Belt-and-suspenders: the daemon already scrubs these before spawning the
-	// worker, but a worker spawned from any unscrubbed parent self-protects so
-	// the leaked per-session agent env never reaches the PTY it spawns.
+	// The daemon scrubs these too; a worker spawned from an unscrubbed parent self-protects.
 	if scrubbed := config.ScrubInheritedAgentSessionEnv(); len(scrubbed) > 0 {
 		cfg.Logf("scrubbed inherited agent session env before startup: %v", scrubbed)
 	}
@@ -569,9 +505,7 @@ func runDaemonCommand() {
 }
 
 func runDaemon() {
-	// Last check before the daemon takes a PID lock and migrates a database:
-	// the routing fence again, so a daemon can never boot into a data dir that
-	// belongs to another profile even if it is reached some other way.
+	// Routing fence again, before a PID lock and a DB migration: never boot into another profile's data dir.
 	if err := config.ValidateProfileRouting(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -583,9 +517,7 @@ func runDaemon() {
 	}
 
 	d := daemon.New(socketPath)
-	// Drop any per-session agent env (e.g. CLAUDE_CODE_SESSION_ID) inherited
-	// when attn was launched from inside an agent session, before Start() warms
-	// the login-shell env cache or spawns anything.
+	// Must precede Start(), which warms the login-shell env cache.
 	d.ScrubInheritedAgentSessionEnv()
 	if err := d.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
@@ -624,9 +556,6 @@ func runDaemonStop() {
 	fmt.Printf("daemon %s\n", result.Note)
 }
 
-// runClientToken prints this profile's client token — what a WebSocket client
-// must present in client_hello. Silent on stdout beyond the token itself: the
-// hub reads it over SSH to authenticate against a remote daemon.
 func runClientToken() {
 	token := config.ClientToken()
 	if token == "" {
@@ -762,9 +691,7 @@ func runDelegate() {
 	}
 	warnIfDaemonVersionMismatch()
 	c := client.New("")
-	// Print the caller-owned recovery key before crossing the transport. The
-	// daemon may durably accept the request even if this process never receives
-	// its response; this line is what makes that unknown outcome recoverable.
+	// Must print before crossing the transport: the daemon may durably accept the request even if the response never arrives.
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.options.RequestID)
 	operation, err := c.StartDelegation(args.sourceSessionID, args.brief, args.options)
 	if err != nil {
@@ -866,10 +793,6 @@ func hasHelpFlag(args []string) bool {
 	return false
 }
 
-// runTicket routes `attn ticket <command>`. Only the two read verbs still do
-// anything: `list` and `show` keep serving the archived store, because a done
-// ticket has no garden equivalent to point at. Every write verb is a signpost
-// naming the garden command that replaced it (cmd/attn/ticket_signpost.go).
 func runTicket() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeTicketHelp(os.Stdout)
@@ -890,8 +813,6 @@ func runTicket() {
 		}
 		runTicketShow(os.Args[3:])
 	case "status", "inbox", "attach", "attach-plan", "new", "comment", "subscribe", "unsubscribe", "take":
-		// A signpost answers --help too: an agent reaching for a retired verb
-		// needs to be told it is gone, not handed the help it was looking for.
 		signpostTicketVerb(os.Args[2])
 	default:
 		fmt.Fprintf(os.Stderr, "ticket: unknown command %q\n", os.Args[2])
@@ -908,11 +829,6 @@ type ticketStatusArgs struct {
 	JSON      bool
 }
 
-// parseTicketStatusArgs reads `ticket status <work-state> [flags]`. Go's flag
-// parser stops at the first positional, so a naive Parse would silently drop any
-// flag written after the work state — exactly the documented form. We interleave
-// instead: parse, peel one positional, repeat, so flags may sit on either side of
-// the state and the single positional is the work state regardless of order.
 func parseTicketStatusArgs(args []string) (ticketStatusArgs, error) {
 	var result ticketStatusArgs
 	fs := flag.NewFlagSet("ticket status", flag.ContinueOnError)
@@ -946,12 +862,6 @@ func parseTicketStatusArgs(args []string) (ticketStatusArgs, error) {
 	return result, nil
 }
 
-// runTicketStatus reports a work state, moving a ticket to the matching column.
-// The work state is the same vocabulary the agent reports to the chief
-// (in_progress, needs_input, ready_for_review, completed, failed). Without
-// --ticket, the daemon resolves which ticket from the calling session (the
-// agent's own bound ticket); with --ticket, it moves that ticket by id instead,
-// regardless of who is bound to it.
 func runTicketStatus(args []string) {
 	parsed, err := parseTicketStatusArgs(args)
 	if err != nil {
@@ -1093,9 +1003,6 @@ type ticketNewArgs struct {
 	JSON        bool
 }
 
-// parseTicketNewArgs reads `ticket new --title <t> [flags]`. --title is required;
-// the rest are optional. Like attach there is no positional, so a plain Parse
-// suffices.
 func parseTicketNewArgs(args []string) (ticketNewArgs, error) {
 	var result ticketNewArgs
 	fs := flag.NewFlagSet("ticket new", flag.ContinueOnError)
@@ -1123,10 +1030,6 @@ func parseTicketNewArgs(args []string) (ticketNewArgs, error) {
 	return result, nil
 }
 
-// runTicketNew mints a standalone, unbound backlog ticket in the Todo column —
-// distinct from delegation, which mints a working ticket bound to a spawned agent.
-// The daemon derives the slug from the title (or pins --id) and may auto-suffix on
-// collision, so the success line echoes the resolved id back.
 func runTicketNew(args []string) {
 	parsed, err := parseTicketNewArgs(args)
 	if err != nil {
@@ -1158,15 +1061,6 @@ type ticketCommentArgs struct {
 	JSON     bool
 }
 
-// parseTicketCommentArgs reads `ticket comment <ticket-id> --message <text> [flags]`.
-// The comment text is a flag value (--message / -m), not a trailing positional, so
-// flags compose in any order around the single id positional and the comment may
-// contain spaces and dashes without being mistaken for a flag (e.g. -m "--watch out
-// for X"). This mirrors `ticket status` (one positional, interleaved flags) and the
-// rest of the CLI, where freeform text is always a flag — a trailing-positional
-// comment would silently swallow a --session/--json written after it, since Go's
-// flag parser stops at the first positional. The id and a non-empty message are
-// both required.
 func parseTicketCommentArgs(args []string) (ticketCommentArgs, error) {
 	var result ticketCommentArgs
 	fs := flag.NewFlagSet("ticket comment", flag.ContinueOnError)
@@ -1176,8 +1070,6 @@ func parseTicketCommentArgs(args []string) (ticketCommentArgs, error) {
 	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
 	jsonOutput := fs.Bool("json", false, "print the result as JSON")
 
-	// Interleave parse: Go's flag parser stops at the first positional, so to allow
-	// flags on either side of the id we peel one positional at a time and re-parse.
 	var positionals []string
 	rest := args
 	for {
@@ -1192,8 +1084,6 @@ func parseTicketCommentArgs(args []string) (ticketCommentArgs, error) {
 		rest = rest[1:]
 	}
 	if len(positionals) != 1 {
-		// The most common mistake is writing the comment as a bare argument
-		// (`comment tk "looks good"`) instead of behind -m; point at the fix.
 		if len(positionals) > 1 && strings.TrimSpace(*message) == "" {
 			return result, fmt.Errorf("got %d arguments but no --message; the comment text goes behind -m, e.g. ticket comment %s -m \"<text>\"", len(positionals), positionals[0])
 		}
@@ -1209,12 +1099,6 @@ func parseTicketCommentArgs(args []string) (ticketCommentArgs, error) {
 	return result, nil
 }
 
-// runTicketList reads the board — the foundation for the cross-ticket verbs, since
-// an agent (typically the chief, coordinating) needs a ticket-id before it can
-// comment on a ticket it isn't assigned to. It is a global read, so unlike the other
-// ticket commands it does NOT require a session: --session / ATTN_SESSION_ID is
-// resolved best-effort and passed only for uniformity (the daemon ignores it). This
-// mirrors `attn list` for sessions.
 func runTicketList(args []string) {
 	fs := flag.NewFlagSet("ticket list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -1231,8 +1115,6 @@ func runTicketList(args []string) {
 		fmt.Fprintf(os.Stderr, "ticket list: unexpected arguments: %v\n", fs.Args())
 		os.Exit(2)
 	}
-	// Best-effort: a board read works without a session, so resolve quietly rather
-	// than erroring the way resolveDispatchSession does.
 	source := strings.TrimSpace(*sessionID)
 	if source == "" {
 		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
@@ -1249,9 +1131,6 @@ func runTicketList(args []string) {
 	printTicketBoard(tickets)
 }
 
-// printTicketBoard renders the board as one compact line per ticket: id, column,
-// assignee, title. The --json form carries the full rows (including description);
-// this human form is a scannable index. An unassigned ticket shows "-".
 func printTicketBoard(tickets []protocol.Ticket) {
 	if len(tickets) == 0 {
 		fmt.Println("no tickets")
@@ -1266,13 +1145,6 @@ func printTicketBoard(tickets []protocol.Ticket) {
 	}
 }
 
-// runTicketShow prints one ticket's full record — metadata, description, and the
-// complete activity thread with full bodies (comments, status changes, verdicts)
-// plus current artifacts. It is a non-consuming read: it never touches any session's
-// inbox cursor, so unlike `ticket inbox` it can be re-read at will. Like `ticket
-// list` it works without a session (a global read by id), so the session is
-// resolved best-effort — flag then ATTN_SESSION_ID — and passed along even if
-// empty rather than erroring via resolveDispatchSession.
 func runTicketShow(args []string) {
 	parsed, err := parseTicketIDArgs("ticket show", args)
 	if err != nil {
@@ -1296,9 +1168,6 @@ func runTicketShow(args []string) {
 	fprintTicketShow(os.Stdout, ticket)
 }
 
-// fprintTicketShow renders one ticket's full record in the same visual style as
-// fprintTicketInbox's activity lines — header block, full description, complete
-// activity thread with full bodies (no truncation), then artifacts.
 func fprintTicketShow(w io.Writer, t *protocol.Ticket) {
 	if t == nil {
 		fmt.Fprintln(w, "ticket not found")
@@ -1339,10 +1208,6 @@ func fprintTicketShow(w io.Writer, t *protocol.Ticket) {
 	}
 }
 
-// runTicketComment posts a one-shot comment from the calling session onto any
-// ticket by id — the agent-to-agent note channel. Commenting informs the ticket's
-// participants but does not subscribe the caller, so it is a way to chime in
-// without joining a ticket's future activity.
 func runTicketComment(args []string) {
 	parsed, err := parseTicketCommentArgs(args)
 	if err != nil {
@@ -1373,14 +1238,7 @@ func runTicketComment(args []string) {
 	}
 }
 
-// printTicketMutationCatchUp renders ticket activity the caller had not read, which
-// the daemon consumed on its behalf, and says whether the write still ran. Both
-// notices go to stderr so --json keeps stdout parseable. The retry sentence is
-// load-bearing: the events are marked read now, so the same command a second time
-// goes through, and an agent told only "did not run" stops there.
 func printTicketMutationCatchUp(command string, bundle *protocol.TicketEventBundle, applied, jsonOutput bool) {
-	// --json leaves the events in catch_up rather than rendering them, so the
-	// notice must not point at output that is not there.
 	where := "shown above"
 	if jsonOutput {
 		where = "in this result's catch_up"
@@ -1394,17 +1252,12 @@ func printTicketMutationCatchUp(command string, bundle *protocol.TicketEventBund
 	fmt.Fprintf(os.Stderr, "%s: unread ticket activity is %s and is now marked read; the requested update did NOT run — retry the same command to apply it.\n", command, where)
 }
 
-// ticketIDArgs is a single ticket-id positional plus the common session/json flags —
-// the shape of `ticket subscribe`/`ticket unsubscribe`, which name a ticket and act
-// as the calling session.
 type ticketIDArgs struct {
 	TicketID string
 	Session  string
 	JSON     bool
 }
 
-// parseTicketIDArgs reads `<command> <ticket-id> [--session <id>] [--json]`. Flags
-// may appear on either side of the id (interleave parse, like ticket status/comment).
 func parseTicketIDArgs(name string, args []string) (ticketIDArgs, error) {
 	var result ticketIDArgs
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -1434,10 +1287,6 @@ func parseTicketIDArgs(name string, args []string) (ticketIDArgs, error) {
 	return result, nil
 }
 
-// runTicketSubscribe opts the calling session into a ticket's notifications — a
-// standing interest in a ticket it isn't assigned to. Future activity then nudges it
-// and lands in its inbox; the first inbox after subscribing also delivers the
-// ticket's history (subscribing does not advance the cursor).
 func runTicketSubscribe(args []string) {
 	parsed, err := parseTicketIDArgs("ticket subscribe", args)
 	if err != nil {
@@ -1465,8 +1314,6 @@ func runTicketSubscribe(args []string) {
 	}
 }
 
-// runTicketUnsubscribe opts the calling session back out. It is idempotent —
-// unsubscribing when not subscribed still succeeds.
 func runTicketUnsubscribe(args []string) {
 	parsed, err := parseTicketIDArgs("ticket unsubscribe", args)
 	if err != nil {
@@ -1491,8 +1338,6 @@ func runTicketUnsubscribe(args []string) {
 	fmt.Printf("unsubscribed from ticket %s\n", result.TicketID)
 }
 
-// ticketTakeArgs is a ticket-id positional plus the common session/json flags and
-// the take-over guard `--confirm`.
 type ticketTakeArgs struct {
 	TicketID string
 	Session  string
@@ -1500,9 +1345,6 @@ type ticketTakeArgs struct {
 	JSON     bool
 }
 
-// parseTicketTakeArgs reads `ticket take <ticket-id> [--confirm] [--session <id>]
-// [--json]`. Flags may appear on either side of the id (interleave parse, like the
-// other ticket verbs).
 func parseTicketTakeArgs(args []string) (ticketTakeArgs, error) {
 	var result ticketTakeArgs
 	fs := flag.NewFlagSet("ticket take", flag.ContinueOnError)
@@ -1534,10 +1376,6 @@ func parseTicketTakeArgs(args []string) (ticketTakeArgs, error) {
 	return result, nil
 }
 
-// runTicketTake claims a ticket for the calling session, making it the assignee.
-// Taking a ticket already assigned to someone else needs --confirm, so an agent
-// cannot silently take over another's active work. Taking does not advance the
-// cursor, so the first inbox after taking delivers the ticket's history.
 func runTicketTake(args []string) {
 	parsed, err := parseTicketTakeArgs(args)
 	if err != nil {
@@ -1569,9 +1407,6 @@ func runTicketTake(args []string) {
 	}
 }
 
-// runTicketInbox reads (and consumes) this session's unread ticket events — the
-// chief's comments, status changes, and re-briefs it has not yet seen. Reading
-// advances the cursor, so a second call returns only what landed since.
 func runTicketInbox(args []string) {
 	fs := flag.NewFlagSet("ticket inbox", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -1608,17 +1443,8 @@ func runTicketInbox(args []string) {
 	printTicketInbox(result)
 }
 
-// ticketWatchInterval is how often `attn ticket inbox --watch` polls the consuming
-// inbox. A watch may consume unread activity before the daemon's shared nudge
-// countdown fires, but it is not required for delivery.
 const ticketWatchInterval = 3 * time.Second
 
-// runTicketInboxWatch blocks and prints new ticket activity as it lands. It polls
-// the consuming ticket-inbox: the daemon advances the session's per-ticket cursor
-// on each read, so each event prints exactly once and the client tracks no state.
-// Silent when nothing is new; exits cleanly on SIGINT/SIGTERM. A transient daemon
-// error is reported once per outage but does not end the watch. The poll loop lives
-// in watchTicketInbox so it can be tested without a daemon, signals, or a real ticker.
 func runTicketInboxWatch(source string, interval time.Duration, jsonOutput bool) {
 	if interval <= 0 {
 		interval = ticketWatchInterval
@@ -1633,12 +1459,7 @@ func runTicketInboxWatch(source string, interval time.Duration, jsonOutput bool)
 	}, os.Stdout, os.Stderr, jsonOutput)
 }
 
-// watchTicketInbox is the poll loop behind `attn ticket inbox --watch`. It prints new
-// bundles each tick and stays silent otherwise. A daemon error is reported once per
-// outage: a wrapping Monitor treats every printed line as new activity, so repeating
-// an unchanged error would nudge the chief every poll — the next success clears the
-// suppression so a recovered-then-failed daemon reports again. Returns when ctx is
-// cancelled (SIGINT/SIGTERM in production).
+// Report a daemon error once per outage: a wrapping Monitor treats every printed line as new activity.
 func watchTicketInbox(
 	ctx context.Context,
 	tick <-chan time.Time,
@@ -1678,10 +1499,6 @@ func printTicketInbox(result *protocol.TicketInboxResult) {
 	fprintTicketInbox(os.Stdout, result)
 }
 
-// fprintTicketInbox prints the unread bundles, with a leading user-presence
-// header line when the daemon has observed the user at the app recently: a
-// watching agent can eyeball this without --json, and it's the same signal
-// carried on the struct for --json callers.
 func fprintTicketInbox(w io.Writer, result *protocol.TicketInboxResult) {
 	if result == nil {
 		fmt.Fprintln(w, "no unread ticket activity")
@@ -1712,8 +1529,6 @@ func fprintTicketInbox(w io.Writer, result *protocol.TicketInboxResult) {
 	}
 }
 
-// humanizeDuration renders d as a coarse s/m/h age, rounding down to the
-// largest whole unit (e.g. "42s", "5m", "3h") for a one-line presence header.
 func humanizeDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0
@@ -1748,8 +1563,6 @@ to be told which garden command replaced it, or read `+"`attn skill --reference 
 `, ticketSignpostVerbList())
 }
 
-// runJournal routes `attn journal <command>`. Today there is only one
-// subcommand, `append`, mirroring the shape of runTicket for future growth.
 func runJournal() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeJournalHelp(os.Stdout)
@@ -1777,10 +1590,6 @@ type journalAppendArgs struct {
 	jsonOut   bool
 }
 
-// parseJournalAppendArgs reads `attn journal append (--entry <text> | --entry-file
-// <path>) [--date YYYY-MM-DD] [--session <id>] [--json]`. --entry/--entry-file
-// are mutually exclusive and one is required, mirroring delegate's
-// --brief/--brief-file handling.
 func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	fs := flag.NewFlagSet("journal append", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -1821,10 +1630,7 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	}, nil
 }
 
-// runJournalAppend is the contention-safe way an agent writes the daily journal:
-// it appends through the daemon's single serialized notebook.Store writer instead
-// of editing journal/<date>.md directly, which races the daemon keeper's own
-// writes to the same file (nearly always hitting "file modified since read").
+// Appends through the daemon's single serialized notebook writer; editing journal/<date>.md directly races the keeper.
 func runJournalAppend(args []string) {
 	parsed, err := parseJournalAppendArgs(args)
 	if err != nil {
@@ -1859,9 +1665,6 @@ The session defaults to ATTN_SESSION_ID.
 `)
 }
 
-// runPresent dispatches the `attn present` surface: opening a presentation (the
-// default form, no subcommand), validating a manifest locally, and reading back
-// reviewer feedback.
 func runPresent() {
 	if len(os.Args) >= 3 {
 		switch os.Args[2] {
@@ -1919,10 +1722,6 @@ func parsePresentOpenArgs(args []string) (presentOpenArgs, error) {
 	return result, nil
 }
 
-// runPresentOpen parses and validates the manifest locally first, for a fast and
-// friendly error, then hands the raw YAML to the daemon — the daemon re-parses
-// and pins it, since it is the single authority over what a presentation actually
-// reviewed.
 func runPresentOpen(args []string) {
 	parsed, err := parsePresentOpenArgs(args)
 	if err != nil {
@@ -1965,16 +1764,8 @@ func runPresentOpen(args []string) {
 	fmt.Printf("feedback will arrive via: attn present feedback %s\n", result.PresentationID)
 }
 
-// presentWaitInterval is how often `attn present --wait` polls for the round's
-// feedback, mirroring ticketWatchInterval.
 const presentWaitInterval = 3 * time.Second
 
-// runPresentOpenWait is the blocking shell behind `attn present --wait`: it prints
-// a status line to stderr so the caller can see it's blocking, then polls the
-// daemon for the round we just opened until the reviewer submits it or closes the
-// presentation without reviewing, printing the outcome to stdout. The poll loop
-// lives in waitForPresentFeedback so it can be tested without a daemon, signals,
-// or a real ticker.
 func runPresentOpenWait(result *protocol.PresentOpenResult, jsonOutput bool) {
 	fmt.Fprintf(os.Stderr, "waiting for review of round %d of %q...\n", result.Seq, result.Title)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -1994,12 +1785,6 @@ func runPresentOpenWait(result *protocol.PresentOpenResult, jsonOutput bool) {
 	}
 }
 
-// waitForPresentFeedback is the poll loop behind `attn present --wait`. It polls
-// fetch on tick, tolerating transient daemon errors the way watchTicketInbox
-// does (report and keep polling rather than exit), and returns once the round has
-// been submitted or the presentation has been closed without review, having
-// rendered the outcome to out exactly once. Returns ctx.Err() if ctx is cancelled
-// first (SIGINT/SIGTERM in production).
 func waitForPresentFeedback(
 	ctx context.Context,
 	tick <-chan time.Time,
@@ -2025,9 +1810,6 @@ func waitForPresentFeedback(
 				return nil
 			}
 			if result != nil && result.PresentationStatus == "closed" {
-				// The reviewer closed the presentation instead of reviewing this
-				// round — no handback is ever coming for a bare "not submitted
-				// yet" poll to catch, so stop here rather than polling forever.
 				if jsonOutput {
 					return fprintJSON(out, result)
 				}
@@ -2043,11 +1825,6 @@ func waitForPresentFeedback(
 	}
 }
 
-// runPresentValidate parses and validates a manifest locally, with no daemon
-// call — a fast loop for an agent iterating on a manifest before opening it.
-// When the manifest has annotations, it also resolves the frame's refs to
-// SHAs and checks each anchor locally, the same way the daemon would at open
-// time — a manifest with annotations that can't be checked is not validated.
 func runPresentValidate(args []string) {
 	fs := flag.NewFlagSet("present validate", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -2093,8 +1870,6 @@ func runPresentValidate(args []string) {
 	fmt.Printf("manifest ok: %s\n", m.Title)
 }
 
-// hasAnyAnnotations reports whether any file entry in the manifest carries
-// annotations.
 func hasAnyAnnotations(m *present.Manifest) bool {
 	for _, f := range m.Files {
 		if len(f.Annotations) > 0 {
@@ -2110,9 +1885,6 @@ type presentFeedbackArgs struct {
 	JSON           bool
 }
 
-// parsePresentFeedbackArgs reads `present feedback <presentation-id> [--round
-// <n>] [--json]`, interleaving flag and positional parsing like `ticket
-// comment` so flags may sit on either side of the id.
 func parsePresentFeedbackArgs(args []string) (presentFeedbackArgs, error) {
 	var result presentFeedbackArgs
 	fs := flag.NewFlagSet("present feedback", flag.ContinueOnError)
@@ -2161,8 +1933,6 @@ func runPresentFeedback(args []string) {
 	fmt.Print(result.Markdown)
 }
 
-// shortenID renders the first 7 characters of an id or SHA for compact display
-// (the CLI's actionable hints always echo the full id, never this form).
 func shortenID(id string) string {
 	if len(id) > 7 {
 		return id[:7]
@@ -2256,17 +2026,10 @@ commands:
 `)
 }
 
-// notebookGuideClient is the slice of the daemon client the launch-guidance
-// decision needs; narrowed so it can be faked in tests.
 type notebookGuideClient interface {
 	NotebookGuide(sessionID string) (*protocol.NotebookGuideResult, error)
 }
 
-// resolveChiefNotebookRoot returns the notebook root to use as chief-of-staff
-// launch guidance for sessionID, or "" when the session is not the chief or the
-// lookup fails — callers then fall back to the workspace-context checkout. A
-// lookup error is deliberately treated as "not chief" so a transient daemon
-// hiccup degrades to workspace guidance rather than failing the launch.
 func resolveChiefNotebookRoot(c notebookGuideClient, sessionID string) string {
 	guide, err := c.NotebookGuide(sessionID)
 	if err != nil || guide == nil || !guide.SessionIsChief {
@@ -2395,9 +2158,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if source == "" {
 		return delegateCLIArgs{}, errors.New("no source session; run inside attn or pass --source-session")
 	}
-	// --ticket and --confirm retired with tickets themselves: a delegation binds a
-	// seed and there is no ticket left to adopt. Both stay parseable so the answer
-	// is the signpost rather than "flag provided but not defined".
+	// Retired flags stay parseable so the answer is the signpost, not "flag provided but not defined".
 	if ticket := strings.TrimSpace(*ticketID); ticket != "" {
 		return delegateCLIArgs{}, fmt.Errorf(
 			"--ticket retired: plant the work and dispatch at it — `attn seed plant %q -m \"<brief>\"`, then `attn delegate --brief \"<brief>\" --plot <seed-id>`", ticket)
@@ -2468,11 +2229,6 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	}, nil
 }
 
-// parseOpenArgs parses the args for `attn open <file.md|seed-id> [--session <id>]`.
-// Go's flag parser stops at the first non-flag argument, so a naive Parse would
-// silently ignore `--session` when it trails the path. We parse interspersed
-// flags and positionals so the documented trailing form works exactly like the
-// flag-first form. Returns the raw path and the (untrimmed-of-env) session flag.
 func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error) {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -2488,7 +2244,6 @@ func parseOpenArgs(args []string) (rawPath string, sessionFlag string, err error
 		if len(rest) == 0 {
 			break
 		}
-		// Consume one positional, then keep parsing flags that follow it.
 		positionals = append(positionals, rest[0])
 		rest = rest[1:]
 	}
@@ -2506,10 +2261,6 @@ func isSeedOpenTarget(target string) bool {
 	return strings.HasPrefix(strings.TrimSpace(target), "s-")
 }
 
-// runOpen handles `attn open <file.md|seed-id> [--session <id>]`, docking a
-// document tile into a workspace. The session defaults to
-// ATTN_SESSION_ID (set inside attn-managed agents), then the daemon's currently
-// selected session.
 func runOpen() {
 	warnIfDaemonVersionMismatch()
 	rawPath, sessionFlag, err := parseOpenArgs(os.Args[2:])
@@ -2884,7 +2635,6 @@ func fprintJSON(w io.Writer, v interface{}) error {
 }
 
 func runWrapper() {
-	// If running inside the app, run the selected agent directly.
 	if os.Getenv("ATTN_INSIDE_APP") == "1" {
 		agentName := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_AGENT")))
 		if agentName == "" {
@@ -2894,7 +2644,6 @@ func runWrapper() {
 		return
 	}
 
-	// Otherwise, open the app via deep link
 	openAppWithDeepLink()
 }
 
@@ -2916,11 +2665,6 @@ func readInitialPromptFile(path string) (string, error) {
 	return string(content), nil
 }
 
-// parseDirectLaunchArgs parses the wrapper launch flags. attn understands only
-// -s, --resume, --yolo, --member, and the internal --initial-prompt-file flag;
-// any other argument is an error. We deliberately do not forward unrecognized args to the underlying agent — that implicit
-// passthrough was never used by attn itself and only created confusion (e.g.
-// `attn --help` printing the agent's help instead of attn's).
 func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 	parsed := directLaunchArgs{}
 	label := ""
@@ -2959,8 +2703,6 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 		}
 	}
 	if label == "" {
-		// A member's day is named after the member, written as a name; -s still
-		// overrides.
 		if parsed.member != "" {
 			label = crew.DisplayName(parsed.member)
 		} else {
@@ -3048,9 +2790,6 @@ func runAgentDirectly(requestedAgent string) {
 		sessionID = wrapper.GenerateSessionID()
 	}
 	if managedMode && parsed.member != "" {
-		// A daemon-owned launch is bound by the daemon before the spawn — `attn
-		// crew wake` claims the binding, and this process is what it spawned.
-		// Passing the name again here would race that claim against itself.
 		fmt.Fprintf(os.Stderr, "attn: --member names a member to launch as; a daemon-managed launch is already bound by `attn crew wake`\n")
 		os.Exit(1)
 	}
@@ -3058,8 +2797,6 @@ func runAgentDirectly(requestedAgent string) {
 		err := c.RegisterAsMember(sessionID, parsed.label, cwd, driver.Name(), parsed.member)
 		switch {
 		case err != nil && parsed.member != "":
-			// The binding IS the identity: a member launch that cannot bind does
-			// not run, or two trellises could exist the moment the daemon is down.
 			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
 			os.Exit(1)
 		case err != nil:
@@ -3098,11 +2835,6 @@ func runAgentDirectly(requestedAgent string) {
 
 	hasHooks := false
 	if agentdriver.EffectiveCapabilities(driver).HasWorkspaceContext {
-		// A chief-of-staff session gets Notebook guidance (its profile-wide
-		// durable home) in place of the workspace-context checkout. A fresh
-		// session is never the chief, so this only fires on relaunch/recovery of
-		// an already-chief session; otherwise (incl. a lookup error) we fall
-		// through to the workspace-context checkout.
 		if root := resolveChiefNotebookRoot(c, sessionID); root != "" {
 			opts.NotebookRoot = root
 		} else {
@@ -3114,40 +2846,19 @@ func runAgentDirectly(requestedAgent string) {
 			}
 		}
 	}
-	// A successful ready answer proves this daemon is the garden's home. Launch
-	// owns standing guidance; SessionStart refreshes live state.
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
 	}
-	// The crew priming rides the same injection. The daemon composes it from
-	// the member's own home and logs its size at that moment, so what a member
-	// was told and what the receipt says are the same bytes. A session that is
-	// nobody — most of them — gets an empty answer and no crew block.
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
 		opts.AwarenessDirs = prime.AwarenessDirs
 	}
-	// The daemon's worker exports ATTN_WORKFLOW_GUIDANCE_ENABLED when the
-	// workflows_enabled setting is on. This launch path is the worker process, so
-	// the env var (not a store read) carries the gate here.
 	opts.InjectWorkflowGuidance = consumeOneShotBoolEnv("ATTN_WORKFLOW_GUIDANCE_ENABLED")
-	// Likewise the worker exports ATTN_AUTO_APPROVE when the auto_approve_enabled
-	// setting is on, so the launched agent starts in its native auto-approve mode.
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	// Unattended daemon-owned launches may explicitly trust their configured
-	// working directory so the agent reaches the supplied prompt without a UI gate.
 	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
-	// ATTN_MODEL pins the launch's model (chief_model_<agent> for chief
-	// launches, delegate --model for delegations); ATTN_EFFORT pins the
-	// reasoning effort (delegate --effort).
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")
 	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
-	// ATTN_AUTO_COMPACT_WINDOW caps this launch's context window. The daemon
-	// owns the policy: chief_context_window_cap for chief launches,
-	// default_context_window_cap_<agent> for everything else; the worker exports
-	// the resolved value only when a cap applies. The old name is read as a
-	// fallback so a not-yet-restarted daemon still caps its chief through this
-	// newer wrapper binary.
+	// The old env name is read as a fallback so a not-yet-restarted daemon still caps its chief.
 	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
 	if window == "" {
 		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
@@ -3178,11 +2889,7 @@ func runAgentDirectly(requestedAgent string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	// If this wrapper was launched from inside another agent's session (e.g. a
-	// terminal that is itself a Claude Code session), drop that session's
-	// identity so the agent we launch gets a fresh one. Only the identity vars
-	// are scrubbed here: this path inherits the live shell env directly, so
-	// tuning vars the user exported in their profile must be left intact.
+	// Identity vars only: this path inherits the live shell env, so the user's exported tuning vars must survive.
 	config.ScrubAgentSessionIdentityEnv()
 	cmd.Env = mergeEnv(os.Environ(), driver.BuildEnv(opts))
 
@@ -3249,7 +2956,6 @@ func resolveWrapperPath() string {
 	return "attn"
 }
 
-// openAppWithDeepLink opens the Tauri app with a deep link to spawn a session
 func openAppWithDeepLink() {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -3257,7 +2963,6 @@ func openAppWithDeepLink() {
 		os.Exit(1)
 	}
 
-	// Parse -s flag for label
 	label := ""
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
@@ -3270,15 +2975,11 @@ func openAppWithDeepLink() {
 		label = filepath.Base(cwd)
 	}
 
-	// Build deep link URL. Scheme is profile-scoped so `attn` in a
-	// dev-scoped shell (ATTN_PROFILE=dev) opens attn-dev.app via its
-	// `attn-dev://` registration instead of the prod app.
 	deepLink := fmt.Sprintf("%s://spawn?cwd=%s&label=%s",
 		config.DeepLinkScheme(),
 		url.QueryEscape(cwd),
 		url.QueryEscape(label))
 
-	// Open via system handler
 	cmd := exec.Command("open", deepLink)
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
@@ -3297,7 +2998,6 @@ func startDaemonBackground() error {
 	cmd.Stderr = nil
 	cmd.Stdin = nil
 
-	// Detach from parent process
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid: true,
 	}
@@ -3312,28 +3012,19 @@ func runHookStop() {
 		os.Exit(1)
 	}
 
-	// Parse hook input from stdin to extract transcript path
 	var input hookInput
 	transcriptPath := ""
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err == nil {
 		transcriptPath = input.TranscriptPath
 	}
-	// Note: We gracefully handle stdin parse errors by sending stop without transcript
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	// Report what the payload says about whether the turn actually finished and let
-	// the daemon decide. A stop that yields with background work in flight or parks
-	// on a scheduled wakeup is not terminal, but that judgment (and the chief-of-
-	// staff exception to it) belongs where every other state source is arbitrated.
 	if err := c.SendStop(sessionID, transcriptPath, stopFacts(input)); err != nil {
 		fmt.Fprintf(os.Stderr, "error sending stop: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// stopFacts extracts the terminality facts from a Stop payload. Statuses are
-// passed through verbatim: they are the agent harness's strings, and the rule that
-// reads them lives in the daemon.
 func stopFacts(input hookInput) client.StopFacts {
 	facts := client.StopFacts{PendingSessionCrons: len(input.SessionCrons)}
 	for _, t := range input.BackgroundTasks {
@@ -3353,11 +3044,6 @@ func runHookSessionStart() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	// The SessionStart hook syncs the agent's native session ID back to attn for
-	// resume, then emits the launch-independent workspace-context fallback and
-	// the live garden tail. The launch path sets
-	// ATTN_WORKSPACE_CONTEXT_GUIDANCE / ATTN_CHIEF_GUIDANCE so only the workspace
-	// block is suppressed when guidance was already injected.
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
 
 	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, 40, 25*time.Millisecond)
@@ -3378,9 +3064,6 @@ type sessionStartClient interface {
 	SeedReady(sessionID, plot string, all bool) (*protocol.SeedReadyResult, error)
 }
 
-// sessionStartContexts builds the reset-safe context blocks independently of
-// either agent's hook envelope. A garden fence is non-fatal and contributes no
-// block.
 func sessionStartContexts(
 	c sessionStartClient,
 	sessionID string,
@@ -3401,9 +3084,6 @@ func sessionStartContexts(
 	return contexts, contextErr, primeErr
 }
 
-// workspaceContextSessionStartOutput checks out this session's workspace context
-// and wraps it as SessionStart hook JSON, used as the launch-independent fallback
-// path. Returns "" with no error when the session has no checkout.
 func workspaceContextSessionStartOutput(
 	c workspaceContextCheckoutClient,
 	sessionID string,
@@ -3418,9 +3098,6 @@ func workspaceContextSessionStartOutput(
 }
 
 func workspaceContextGuidanceProvidedAtLaunch() bool {
-	// Either marker means launch-time guidance was already injected, so the
-	// SessionStart hook must not also emit workspace-context guidance. A chief
-	// session is launched with chief guidance in place of workspace context.
 	return strings.TrimSpace(os.Getenv("ATTN_WORKSPACE_CONTEXT_GUIDANCE")) != "" ||
 		strings.TrimSpace(os.Getenv("ATTN_CHIEF_GUIDANCE")) != ""
 }
@@ -3469,11 +3146,6 @@ func runHookState() {
 	}
 }
 
-// runHookNotification handles Claude's Notification hook. The hook is the
-// harness saying out loud that it is blocked on the user — it fires ~6s after a
-// permission request and exactly 60s after a turn settles idle. It reports
-// evidence and never sets state: at that latency the session may already have
-// moved on, so the resolver weighs it against fresher sources.
 func runHookNotification() {
 	sessionID := hookSessionIDFromArgOrEnv(2)
 	if sessionID == "" {
@@ -3494,9 +3166,6 @@ func runHookNotification() {
 	}
 }
 
-// runHookStopFailure handles Claude's StopFailure hook, which replaces Stop when
-// a turn ends on an API error. None of the end-of-turn work applies — there is
-// no finished turn to classify or narrate — so this reports the error and stops.
 func runHookStopFailure() {
 	sessionID := hookSessionIDFromArgOrEnv(2)
 	if sessionID == "" {
@@ -3508,9 +3177,6 @@ func runHookStopFailure() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 	errorType := strings.TrimSpace(input.ErrorType)
 	if errorType == "" {
-		// The classification is the load-bearing half. Without it there is
-		// nothing to tell the user beyond "something went wrong", and the turn
-		// bracket the resolver already holds is the better description.
 		return
 	}
 
@@ -3521,9 +3187,6 @@ func runHookStopFailure() {
 	}
 }
 
-// runHookCompact handles Claude's PreCompact and PostCompact hooks, which
-// bracket the agent rewriting its own context. active distinguishes them: the
-// two hooks carry identical payloads, so the caller names the edge.
 func runHookCompact() {
 	sessionID := hookSessionIDFromArgOrEnv(2)
 	if sessionID == "" || len(os.Args) < 4 {
@@ -3542,11 +3205,6 @@ func runHookCompact() {
 	}
 }
 
-// runHookToolUse handles the catch-all PostToolUse hook for both agents. A
-// completed tool call means the agent is working again (this is what resets
-// pending_approval), and if that call wrote markdown, the same payload names
-// the file — so one hook does both rather than paying a second process spawn
-// on every tool call an agent makes.
 func runHookToolUse() {
 	sessionID := hookSessionIDFromArgOrEnv(2)
 	if sessionID == "" {
@@ -3558,13 +3216,7 @@ func runHookToolUse() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	// Only the main thread's tool calls report on the main thread's turn. A
-	// subagent runs concurrently with the conversation that spawned it, so its
-	// tool completions say nothing about whether the agent is still blocked —
-	// and reporting them as working retires the approval or question the user is
-	// being asked to answer, which is the one state that must survive until the
-	// user acts. The edits below are still worth recording: a subagent's writes
-	// are the session's writes.
+	// A subagent's completions must not report working: that would retire the approval the user is being asked to answer.
 	if strings.TrimSpace(input.AgentID) == "" {
 		if err := c.UpdateState(sessionID, protocol.StateWorking); err != nil {
 			fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
@@ -3572,16 +3224,14 @@ func runHookToolUse() {
 		}
 	}
 
-	// Recording an edit is a ranking nicety, not part of the state contract:
-	// a failure here must not fail the hook and stall the agent.
+	// A failure here must not fail the hook and stall the agent.
 	if edited := hooks.MarkdownEdits(input.ToolName, input.ToolInput, input.CWD); len(edited) > 0 {
 		if err := c.RecordFilesEdited(sessionID, edited); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not record edited files: %v\n", err)
 		}
 	}
 
-	// Same contract for files the agent handed the user: a daemon that is
-	// down, gated off, or too old to know the command must not fail the hook.
+	// Same: a daemon that is down or gated off must not fail the hook.
 	if sent := hooks.SentFiles(input.ToolName, input.ToolInput, input.CWD); len(sent) > 0 {
 		if err := c.OpenSentFiles(sessionID, sent); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not open sent files: %v\n", err)
@@ -3596,19 +3246,16 @@ func runHookTodo() {
 		os.Exit(1)
 	}
 
-	// Parse hook input from stdin
 	var input hookInput
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
-		return // Silently fail if no input
+		return
 	}
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	// Parse tool_input to extract todos
 	var todoInput todoWriteInput
 	if err := json.Unmarshal(input.ToolInput, &todoInput); err != nil {
-		return // Silently fail if parse error
+		return
 	}
 
-	// Format todos with status markers
 	var todos []string
 	for _, t := range todoInput.Todos {
 		var marker string
@@ -3629,9 +3276,6 @@ func runHookTodo() {
 	}
 }
 
-// runProbeTUI drives a deterministic agent-mimicking probe (internal/probetui)
-// on stdout, for harness scenarios that need a fake "agent" TUI without a
-// live model in the loop. Hidden command; not listed in writeHelp.
 func runProbeTUI() {
 	fs := flag.NewFlagSet("_probe-tui", flag.ExitOnError)
 	styleFlag := fs.String("style", "", "agent vocabulary to mirror: codex or claude")

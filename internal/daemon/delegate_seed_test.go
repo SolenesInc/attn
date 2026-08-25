@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// newGardenDelegationDaemon is a home daemon with the garden declared and a
-// delegating session in a workspace: the shape a real dispatch runs against.
 func newGardenDelegationDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string) {
 	t.Helper()
 	d := newEnrolledDaemon(t, "")
@@ -26,7 +24,6 @@ func newGardenDelegationDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string
 	return d, backend, sourceSessionID
 }
 
-// capturePrompt records what a delegated agent is actually launched with.
 func capturePrompt(t *testing.T, backend *fakeSpawnBackend, prompt *string) {
 	t.Helper()
 	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
@@ -45,8 +42,6 @@ func capturePrompt(t *testing.T, backend *fakeSpawnBackend, prompt *string) {
 	}
 }
 
-// The weight transfer: a delegation plants its own seed, the brief is the body,
-// the delegate tends it, and the delegate is told where its work lives.
 func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	var prompt string
@@ -83,12 +78,9 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	if seed.Status != garden.StatusGrowing {
 		t.Fatalf("status = %q, want growing — a tended seed is not still planted", seed.Status)
 	}
-	// The planter is who asked for the work, not who does it: the tender above
-	// is the delegate.
 	if seed.PlanterSession != sourceSessionID {
 		t.Fatalf("planter = %q, want the delegating session %q", seed.PlanterSession, sourceSessionID)
 	}
-	// A seed nobody is told about is a log nobody writes to.
 	if !strings.Contains(prompt, seedID) {
 		t.Fatalf("the delegate's prompt never names its seed %s:\n%s", seedID, prompt)
 	}
@@ -102,7 +94,6 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 			t.Fatalf("the delegate's prompt kept standing garden copy %q", removed)
 		}
 	}
-	// Nothing else is bound: a dispatch is a seed and nothing more now.
 	ticket, err := d.store.ActiveTicketForSession(result.SessionID)
 	if err != nil {
 		t.Fatalf("ActiveTicketForSession: %v", err)
@@ -112,9 +103,6 @@ func TestDelegationPlantsASeedTendedByItsDelegate(t *testing.T) {
 	}
 }
 
-// A delegation aimed at a crown reports to that crown and holds it. Nothing is
-// planted — the seed already exists — and the delegate is its tender, which is
-// what its launch prompt tells it.
 func TestDelegationAtACrownBindsItWithoutPlanting(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -154,10 +142,6 @@ func TestDelegationAtACrownBindsItWithoutPlanting(t *testing.T) {
 	}
 }
 
-// The bug this fix exists for: a seed whose tender's session was deleted was
-// still recorded as held, and the dispatch bound the new delegate to the seed
-// while leaving the claim on the ghost. Liveness decides — the same predicate
-// `ready` reads — so the dispatch takes the seed over.
 func TestDelegationAtASeedHeldByADeadSessionRebindsIt(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -183,9 +167,6 @@ func TestDelegationAtASeedHeldByADeadSessionRebindsIt(t *testing.T) {
 	}
 }
 
-// A seed a live session is working is not up for grabs. The refusal lands before
-// any worktree, workspace or session exists — the worst outcome is a launched
-// agent that does not hold the work it was launched for.
 func TestDelegationAtASeedHeldByALiveSessionRefusesBeforeAnythingIsCreated(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -228,8 +209,6 @@ func TestDelegationAtASeedHeldByALiveSessionRefusesBeforeAnythingIsCreated(t *te
 	}
 }
 
-// Dispatching at a seed you hold yourself is handing your own work over, not
-// stealing it, so it is never the refusal above.
 func TestDelegationAtASeedTheDelegatorHoldsHandsItOver(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -255,8 +234,6 @@ func TestDelegationAtASeedTheDelegatorHoldsHandsItOver(t *testing.T) {
 	}
 }
 
-// A closed seed has no open work to dispatch at, and the refusal says how to
-// reopen it rather than launching an agent at finished work.
 func TestDelegationAtAClosedSeedRefuses(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -277,7 +254,6 @@ func TestDelegationAtAClosedSeedRefuses(t *testing.T) {
 	}
 }
 
-// tendAs claims a seed for an arbitrary session id, through the real move.
 func tendAs(t *testing.T, d *Daemon, seedID, sessionID string) {
 	t.Helper()
 	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}); err != nil {
@@ -285,8 +261,6 @@ func tendAs(t *testing.T, d *Daemon, seedID, sessionID string) {
 	}
 }
 
-// Recovery runs the same delegation again against a reserved session. The
-// dispatch record is the binding, so it re-binds rather than planting twice.
 func TestDelegationRecoveryRebindsTheSameSeed(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -318,8 +292,6 @@ func TestDelegationRecoveryRebindsTheSameSeed(t *testing.T) {
 	}
 }
 
-// An outpost holds no garden. The delegation still launches, and the delegate is
-// never pointed at a seed that does not exist.
 func TestDelegationOnAnOutpostBindsNoSeedAndStillLaunches(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-"+strings.Repeat("a", 32))
 	t.Cleanup(d.stopEventBus)
@@ -349,7 +321,6 @@ func TestDelegationOnAnOutpostBindsNoSeedAndStillLaunches(t *testing.T) {
 	}
 }
 
-// plantForDelegation plants one seed through the real handler.
 func plantForDelegation(t *testing.T, d *Daemon, sessionID, title string) protocol.Seed {
 	t.Helper()
 	msg := protocol.SeedPlantMessage{
@@ -362,9 +333,6 @@ func plantForDelegation(t *testing.T, d *Daemon, sessionID, title string) protoc
 	return resp.SeedPlantResult.Seed
 }
 
-// Status reports become log notes: whatever moves the ticket of work that was
-// already ticket-bound at the cutover lands on its seed too, so the seed's log
-// is the whole thread.
 func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -396,10 +364,7 @@ func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 	if log.NotesTotal != 2 {
 		t.Fatalf("the seed's log holds %d entries, want one per report", log.NotesTotal)
 	}
-	// Both reports are on the log, each carrying its state and its comment. The
-	// pair is matched by content rather than by position: two writes inside one
-	// clock tick share a stamp, and the log's tiebreaker is the note id, so
-	// which of them reads as newest is not a property to assert on.
+	// Matched by content rather than position: two writes inside one clock tick share a stamp, and the log's tiebreaker is the note id.
 	for _, want := range []struct{ state, comment string }{
 		{"in_progress", "reading the store layer"},
 		{"ready_for_review", "PR #1 is up"},
@@ -417,7 +382,6 @@ func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 			t.Fatalf("no note reported %s with its comment; the log holds %+v", want.state, log.Notes)
 		}
 	}
-	// The column moved; the seed did not close. Harvesting stays deliberate.
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatalf("read the seed: %v", err)
@@ -427,8 +391,6 @@ func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 	}
 }
 
-// A completed report is still a note. It reads as what happened, and closing
-// the seed stays `attn seed harvest` with what got done in its own words.
 func TestCompletedReportDoesNotHarvestTheSeed(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -458,9 +420,6 @@ func TestCompletedReportDoesNotHarvestTheSeed(t *testing.T) {
 	}
 }
 
-// The by-id form is deliberately permissive so a peer can nudge any column for
-// awareness. That is not a report about the peer's own work, so it mirrors
-// nothing onto the peer's seed.
 func TestNudgingSomebodyElsesTicketMirrorsNothing(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -498,8 +457,6 @@ func TestNudgingSomebodyElsesTicketMirrorsNothing(t *testing.T) {
 	}
 }
 
-// Steering reaches the tender: a caller holding a seed id addresses whoever is
-// working on it, without reading the tender out of `attn seed show` first.
 func TestAgentMsgToASeedReachesItsTender(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -536,12 +493,7 @@ func TestAgentMsgToAnUntendedSeedRefusesByName(t *testing.T) {
 	}
 }
 
-// awaitSeedNotes runs work and returns once want notes have landed on seedID's
-// log. The status reply is written before the mirror runs — the agent is told
-// its column moved without waiting on bookkeeping — so a test that read the log
-// straight after the reply would race the write.
-//
-// The wait is on the note fact itself, the same signal the panel re-push rides.
+// Waits on the note fact itself: the status reply is written before the mirror runs, so reading the log straight after the reply would race the write.
 func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func()) {
 	t.Helper()
 	landed := make(chan struct{}, want+4)
@@ -561,12 +513,7 @@ func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func(
 	}
 }
 
-// awaitStatusHandled runs one status change and returns when the handler has
-// finished, not merely when it replied — the mirror runs after the reply, so a
-// test asserting that nothing was written needs the whole handler behind it.
-//
-// The signal is the server side of the pipe closing, which gardenCall's shape
-// already gives: the handler returns, the connection closes, the read ends.
+// Returns when the handler has finished, not when it replied — the mirror runs after the reply. The signal is the server side of the pipe closing.
 func awaitStatusHandled(t *testing.T, d *Daemon, msg *protocol.SetTicketStatusMessage) {
 	t.Helper()
 	client, server := net.Pipe()
@@ -580,9 +527,6 @@ func awaitStatusHandled(t *testing.T, d *Daemon, msg *protocol.SetTicketStatusMe
 	}
 }
 
-// The app reads "which seed does this session report to" off the session it is
-// already rendering, and the answer is the dispatch record — not the seed's
-// tender, which a crown-dispatched delegation never is.
 func TestBroadcastSessionCarriesTheSeedItReportsTo(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
@@ -604,18 +548,14 @@ func TestBroadcastSessionCarriesTheSeedItReportsTo(t *testing.T) {
 	if protocol.Deref(delegated.SeedID) != seedID {
 		t.Fatalf("delegated session seed_id = %v, want %s", delegated.SeedID, seedID)
 	}
-	// The session that dispatched it reports to nothing, and says so by omission.
 	source := d.sessionForBroadcast(d.store.Get(sourceSessionID))
 	if source.SeedID != nil {
 		t.Fatalf("dispatching session seed_id = %v, want unset", source.SeedID)
 	}
 }
 
-// The map every broadcast decorates from is written through as dispatches land,
-// so a session dispatched after the map was built still names its seed.
 func TestSeedDecorationSeesADispatchRecordedAfterTheFirstBroadcast(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
-	// A broadcast before anything is dispatched builds the (empty) map.
 	if s := d.sessionForBroadcast(d.store.Get(sourceSessionID)); s.SeedID != nil {
 		t.Fatalf("seed_id = %v before any dispatch, want unset", s.SeedID)
 	}
@@ -635,9 +575,6 @@ func TestSeedDecorationSeesADispatchRecordedAfterTheFirstBroadcast(t *testing.T)
 	}
 }
 
-// Lineage by construction: a delegate that delegates onward leaves a plot, not
-// an orphan. The child seed is born part-of the caller's own seed; the first
-// hop — a caller with no seed of its own — nests under nothing.
 func TestDelegationFromADelegateNestsItsSeedUnderTheCallers(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)

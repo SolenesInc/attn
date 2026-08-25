@@ -22,7 +22,6 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-// The reader lazy-imports shiki; intercept it so tests stay hermetic and fast.
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
     `<span style="--shiki-light:#000;--shiki-dark:#fff">${code}</span>`),
@@ -56,7 +55,6 @@ describe('MarkdownReader source anchoring', () => {
   });
 
   it('keeps raw-file line numbers for blocks after frontmatter (lineOffset plumbing)', () => {
-    // Lines 1-4 are the frontmatter block; the paragraph sits on raw line 6.
     const { container } = renderReader('---\ntitle: Plan\ntags: [a, b]\n---\n\nBody paragraph.\n');
 
     const paragraph = container.querySelector('p');
@@ -82,7 +80,6 @@ describe('MarkdownReader frontmatter card', () => {
     expect(screen.getByText('alpha')).toBeInTheDocument();
     expect(screen.getByText('beta')).toBeInTheDocument();
     expect(container.querySelector('.md-frontmatter')).toBeInTheDocument();
-    // remark-frontmatter swallows the yaml node: no stray '---' or key text in prose.
     expect(container.querySelector('.md-reader-card')?.textContent).not.toContain('---');
     expect(container.querySelectorAll('h2')).toHaveLength(0);
   });
@@ -138,7 +135,6 @@ describe('MarkdownReader link sanitization', () => {
     renderReader('## Deploy :rocket:\n');
 
     const heading = screen.getByRole('heading');
-    // Rendered text shows the emoji, but the id anchors like GitHub's.
     expect(heading).toHaveTextContent('Deploy 🚀');
     expect(heading.id).toBe('deploy-rocket');
   });
@@ -160,9 +156,7 @@ describe('MarkdownReader link sanitization', () => {
   });
 
   it('resolves fragment links inside the OWN tile when another tile has the same heading id', () => {
-    // Two tiles rendering the same document produce duplicate heading ids
-    // (sluggers dedup per document, not per DOM); the second tile's link must
-    // scroll ITS body, not silently die on the first tile's element.
+    // Sluggers dedup per document, not per DOM, so two tiles of one document produce duplicate heading ids.
     const content = '[Jump](#setup)\n\n## Setup\n';
     const { container } = render(
       <>
@@ -199,7 +193,6 @@ describe('MarkdownReader code blocks', () => {
   it('hydrates fenced code with shiki dual-theme spans', async () => {
     const { container } = renderReader('```ts\nconst x = 1;\n```\n');
 
-    // Paints plain text immediately.
     expect(container.querySelector('pre code')).toHaveTextContent('const x = 1;');
 
     await waitFor(() => {
@@ -233,7 +226,7 @@ describe('MarkdownReader code blocks', () => {
     const button = screen.getByRole('button', { name: 'Copy code' });
     vi.useFakeTimers();
     fireEvent.click(button);
-    await act(async () => {}); // flush the clipboard promise
+    await act(async () => {});
 
     expect(writeText).toHaveBeenCalledWith('const x = 1;');
     expect(screen.getByRole('button', { name: 'Copied!' })).toHaveAttribute('title', 'Copied!');
@@ -257,8 +250,6 @@ describe('MarkdownReader code blocks', () => {
     );
     await act(async () => {});
 
-    // Memoized: the parent re-render never reached react-markdown, so the
-    // highlighted block survived instead of flashing back to plain text.
     expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(1);
     expect(container.querySelector('code.md-shiki')).toBeInTheDocument();
   });
@@ -351,8 +342,6 @@ describe('MarkdownReader large Mermaid diagrams', () => {
     expect(document.querySelectorAll('[data-testid="mermaid-svg"]')).toHaveLength(1);
     expect(container.querySelector('.markdown-mermaid-placeholder')).toBeInTheDocument();
     expect(dialog).toHaveAttribute('data-md-chrome', '1');
-    // What matters is that the whole toolbar sits inside a chrome subtree the
-    // anchoring walker skips, not which element directly holds the button.
     expect(
       screen.getByRole('button', { name: 'Focus diagram' }).closest('[data-md-chrome="1"]'),
     ).not.toBeNull();
@@ -389,9 +378,7 @@ describe('MarkdownReader GitHub alerts', () => {
     expect(alert!.querySelector('.md-alert-title svg path')).toBeInTheDocument();
     expect(alert!.querySelector('.md-alert-title span')).toHaveTextContent(title);
     expect(alert).toHaveTextContent('Alert body text.');
-    // The marker line is stripped from the body.
     expect(alert!.textContent).not.toContain(`[!${marker}]`);
-    // No blockquote element remains for the alert.
     expect(container.querySelector('blockquote')).toBeNull();
   });
 
@@ -417,7 +404,6 @@ describe('MarkdownReader GitHub alerts', () => {
     const quotes = container.querySelectorAll('blockquote');
     expect(quotes).toHaveLength(2);
     expect(container.querySelector('.md-alert')).toBeNull();
-    // The pseudo-marker stays visible as regular text when not an alert.
     expect(quotes[1]).toHaveTextContent('[!NOTE] trailing words disqualify');
   });
 });
@@ -434,7 +420,6 @@ describe('MarkdownReader task lists', () => {
       expect(box).toBeDisabled();
     }
     expect(container.querySelectorAll('li.task-list-item')).toHaveLength(2);
-    // Task-list items still anchor individually.
     expect(container.querySelectorAll('li.task-list-item[data-source-line]')).toHaveLength(2);
   });
 });
@@ -451,8 +436,6 @@ describe('MarkdownReader tables', () => {
     expect(wrap).toHaveAttribute('data-source-line', '1');
     expect(wrap).toHaveAttribute('data-source-line-end', '3');
 
-    // The table sits inside the wrapper and does NOT duplicate the anchor
-    // (consumers count blocks by data-block-id).
     const tableEl = wrap!.querySelector('table');
     expect(tableEl).toBeInTheDocument();
     expect(tableEl).not.toHaveAttribute('data-block-id');
@@ -472,7 +455,6 @@ describe('MarkdownReader images + lightbox', () => {
     const { container } = renderReader('![diagram](docs/pic%20name.png)');
 
     const img = container.querySelector<HTMLImageElement>('img.md-reader-image')!;
-    // Resolved against the doc dir, percent-decoded, then convertFileSrc'd.
     expect(img).toHaveAttribute('src', 'asset://localhost//tmp/project/docs/pic name.png');
     expect(img).toHaveAttribute('alt', 'diagram');
     expect(img).toHaveAttribute('loading', 'lazy');
@@ -499,7 +481,6 @@ describe('MarkdownReader images + lightbox', () => {
     const { container } = renderReader('![the diagram](docs/pic.png)');
 
     fireEvent.click(container.querySelector('img.md-reader-image')!);
-    // Portal to document.body: it escapes the tile subtree.
     const lightbox = document.body.querySelector('.md-lightbox')!;
     expect(lightbox).toBeInTheDocument();
     expect(lightbox.parentElement).toBe(document.body);
@@ -509,15 +490,12 @@ describe('MarkdownReader images + lightbox', () => {
     );
     expect(lightbox.querySelector('.md-lightbox-caption')).toHaveTextContent('the diagram');
 
-    // Clicking the image itself does NOT close.
     fireEvent.click(lightbox.querySelector('.md-lightbox-img')!);
     expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
 
-    // Escape closes.
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(document.body.querySelector('.md-lightbox')).toBeNull();
 
-    // Reopen, backdrop click closes.
     fireEvent.click(container.querySelector('img.md-reader-image')!);
     fireEvent.click(document.body.querySelector('.md-lightbox')!);
     expect(document.body.querySelector('.md-lightbox')).toBeNull();
@@ -542,7 +520,6 @@ describe('MarkdownReader raw HTML sanitization', () => {
     const card = container.querySelector('.md-reader-card')!;
     expect(card.querySelector('script')).toBeNull();
     expect(card.querySelector('style')).toBeNull();
-    // Stripped WITH their content — nothing leaks into prose.
     expect(card.textContent).not.toContain('pwned');
     expect(card.textContent).not.toContain('display: none');
 
@@ -565,9 +542,7 @@ describe('MarkdownReader raw HTML sanitization', () => {
     expect(details).toBeInTheDocument();
     expect(details.open).toBe(true);
     expect(details.querySelector('summary')).toHaveTextContent('More');
-    // Markdown between the tags still renders as markdown (rehype-raw).
     expect(details.querySelector('strong')).toHaveTextContent('body');
-    // Sanitize runs before the anchoring pass, so raw HTML blocks anchor too.
     expect(details).toHaveAttribute('data-block-id');
     expect(details).toHaveAttribute('data-source-line', '1');
   });
@@ -580,7 +555,6 @@ describe('MarkdownReader raw HTML sanitization', () => {
     );
 
     const card = container.querySelector('.md-reader-card')!;
-    // No fetchable remote URL survives anywhere in the rendered DOM.
     expect(card.innerHTML).not.toContain('evil.example');
     expect(card.querySelector('video')).toBeNull();
     expect(card.querySelector('source')).toBeNull();
@@ -596,7 +570,6 @@ describe('MarkdownReader raw HTML sanitization', () => {
     const spoof = screen.getByText('spoof');
     expect(spoof).not.toHaveAttribute('data-block-id', 'b999-fake');
     expect(spoof).not.toHaveAttribute('data-source-line', '999');
-    // The real pass stamped it instead.
     expect(container.querySelector('[data-block-id="b0-p"], [data-block-id="b0-paragraph"]')).toBeInTheDocument();
   });
 });
@@ -610,7 +583,6 @@ describe('MarkdownReader content re-render gate', () => {
 
     const details = container.querySelector('details')!;
     expect(details.open).toBe(false);
-    // User toggles it open: DOM-owned state React knows nothing about.
     details.open = true;
 
     rerender(
@@ -662,7 +634,6 @@ describe('MarkdownReader prose transforms', () => {
     const { container } = renderReader(
       'He said "hello" -- ranges 3--5 work... :rocket:\n\nRun `bun --watch` with --verbose\n\n```sh\necho "raw" 3--5\n```\n',
     );
-    // Let the fenced block's async shiki hydration settle (avoids act noise).
     await act(async () => {});
 
     const text = container.querySelector('.md-reader-card')!.textContent!;
@@ -670,9 +641,7 @@ describe('MarkdownReader prose transforms', () => {
     expect(text).toContain('3–5');
     expect(text).toContain('…');
     expect(text).toContain('🚀');
-    // Bare -- between words is never rewritten (narrowed en-dash rule).
     expect(text).toContain('"hello" -- ranges'.replace('"hello"', '“hello”'));
-    // CLI flags survive, both in prose and in code.
     expect(text).toContain('--verbose');
     expect(container.querySelector(':not(pre) > code')).toHaveTextContent('bun --watch');
     expect(container.querySelector('pre code')).toHaveTextContent('echo "raw" 3--5');

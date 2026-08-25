@@ -16,8 +16,6 @@ func appendBus(t *testing.T, s *Store, name, subject string, at time.Time) int64
 	return seq
 }
 
-// The log hands out a strictly increasing seq and reads back forward from a
-// cursor in that order — the property every consumer's catch-up depends on.
 func TestBusEventLogIsOrderedAndReadableFromACursor(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -91,10 +89,6 @@ func TestBusBoundsTracksTheLiveWindow(t *testing.T) {
 	}
 }
 
-// A caller flips the kill switch a moment after reading the registration, and in
-// that gap the consumer can be unregistered — one operator disabling an app while
-// another removes it. The write must say it found nothing, or the caller reports
-// a state change that never happened.
 func TestSetBusConsumerEnabledReportsAVanishedConsumer(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -122,9 +116,6 @@ func TestSetBusConsumerEnabledReportsAVanishedConsumer(t *testing.T) {
 	}
 }
 
-// Re-registering an existing consumer refreshes its filter but must not rewind
-// its cursor or resurrect it after the kill switch — daemon restart re-registers
-// every consumer, and neither of those may be a side effect of starting up.
 func TestSaveBusConsumerPreservesCursorAndEnabled(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -139,8 +130,6 @@ func TestSaveBusConsumerPreservesCursorAndEnabled(t *testing.T) {
 		t.Fatalf("SetBusConsumerEnabled: %v", err)
 	}
 
-	// Restart: same consumer re-registers, this time with a narrower filter and
-	// the from-scratch defaults its constructor would pass.
 	if err := s.SaveBusConsumer(BusConsumer{Name: "wshub", Cursor: 0, Filter: "session.*", Enabled: true}, busBase.Add(3*time.Minute)); err != nil {
 		t.Fatalf("SaveBusConsumer (re-register): %v", err)
 	}
@@ -160,8 +149,6 @@ func TestSaveBusConsumerPreservesCursorAndEnabled(t *testing.T) {
 	}
 }
 
-// Deleting a registration ends its hold on the retention floor. An enabled row
-// pins regardless of whether a registry entry still serves it.
 func TestDeleteBusConsumerReleasesTheRetentionFloor(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -187,9 +174,6 @@ func TestDeleteBusConsumerReleasesTheRetentionFloor(t *testing.T) {
 	}
 }
 
-// Deleting a row that is not there is success: the caller is an uninstall path,
-// and an uninstall that fails the second time it runs is a worse surface than one
-// that says nothing.
 func TestDeleteBusConsumerMissingIsSuccess(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -230,8 +214,6 @@ func TestListBusConsumers(t *testing.T) {
 	}
 }
 
-// Retention needs BOTH conditions: old enough, and already read by every enabled
-// consumer. A lagging live consumer keeps its unread events alive.
 func TestTrimBusEventsHoldsTheLineForALaggingEnabledConsumer(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -245,7 +227,6 @@ func TestTrimBusEventsHoldsTheLineForALaggingEnabledConsumer(t *testing.T) {
 		t.Fatalf("SaveBusConsumer: %v", err)
 	}
 
-	// Everything is far older than the cutoff, so only the cursor floor decides.
 	n, err := s.TrimBusEvents(old.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("TrimBusEvents: %v", err)
@@ -262,8 +243,6 @@ func TestTrimBusEventsHoldsTheLineForALaggingEnabledConsumer(t *testing.T) {
 	}
 }
 
-// The age window is the other half: an event every consumer has read still
-// survives while it is inside the window.
 func TestTrimBusEventsKeepsEventsInsideTheWindow(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -282,8 +261,6 @@ func TestTrimBusEventsKeepsEventsInsideTheWindow(t *testing.T) {
 	}
 }
 
-// A disabled installed app keeps the facts above its frozen cursor. Re-enable
-// resumes from there, so trimming that backlog would silently lose history.
 func TestTrimBusEventsKeepsDisabledInstalledAppBacklog(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -311,8 +288,6 @@ func TestTrimBusEventsKeepsDisabledInstalledAppBacklog(t *testing.T) {
 	}
 }
 
-// A disabled app-shaped row with no registry entry serves no install and does
-// not pin retention. Uninstall normally deletes it; this keeps stale rows safe.
 func TestTrimBusEventsIgnoresDisabledOrphanedAppConsumer(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -332,7 +307,6 @@ func TestTrimBusEventsIgnoresDisabledOrphanedAppConsumer(t *testing.T) {
 	}
 }
 
-// With nothing registered, the age window alone governs.
 func TestTrimBusEventsWithNoConsumers(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })

@@ -8,10 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 )
 
-// TestStateObservationSurvivesWire is the contract the daemon's arbitration will
-// rest on: which observer spoke, why, and when it observed must cross the worker
-// RPC intact — including through JSON, since the daemon reads these off a socket
-// and not from the same process.
 func TestStateObservationSurvivesWire(t *testing.T) {
 	observedAt := time.Date(2026, 7, 25, 10, 30, 0, 123456789, time.UTC)
 	want := pty.Observation{
@@ -42,10 +38,6 @@ func TestStateObservationSurvivesWire(t *testing.T) {
 	}
 }
 
-// TestStateObservationFromLegacyWorker covers the version skew the additive
-// fields buy us: a worker predating them sends state alone, and the daemon must
-// still get a usable observation rather than an empty source it might mistake
-// for a real one.
 func TestStateObservationFromLegacyWorker(t *testing.T) {
 	state := "pending_approval"
 	arrived := time.Date(2026, 7, 25, 11, 0, 0, 0, time.UTC)

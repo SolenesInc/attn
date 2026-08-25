@@ -16,7 +16,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
-// Variant is one cell of the matrix.
 type Variant struct {
 	Prompt string `json:"prompt"`
 	Agent  string `json:"agent"`
@@ -32,21 +31,17 @@ func (v Variant) String() string {
 	return name
 }
 
-// Result is one generated line plus what it cost to get it.
 type Result struct {
-	Variant    Variant              `json:"variant"`
-	EntryID    string               `json:"entry_id"`
-	State      string               `json:"state"`
-	Line       string               `json:"line"`
-	Violations []activity.Violation `json:"violations,omitempty"`
-	LatencyMS  int64                `json:"latency_ms"`
-	CostUSD    float64              `json:"cost_usd"`
-	PromptChar int                  `json:"prompt_chars"`
-	Error      string               `json:"error,omitempty"`
-	// FailureOutput is the child's raw stderr/stdout tail. The Diagnostics
-	// bucket a driver returns is a keyword guess and can name the wrong cause,
-	// so the ground truth is kept beside it.
-	FailureOutput string `json:"failure_output,omitempty"`
+	Variant       Variant              `json:"variant"`
+	EntryID       string               `json:"entry_id"`
+	State         string               `json:"state"`
+	Line          string               `json:"line"`
+	Violations    []activity.Violation `json:"violations,omitempty"`
+	LatencyMS     int64                `json:"latency_ms"`
+	CostUSD       float64              `json:"cost_usd"`
+	PromptChar    int                  `json:"prompt_chars"`
+	Error         string               `json:"error,omitempty"`
+	FailureOutput string               `json:"failure_output,omitempty"`
 }
 
 func runMatrix(args []string) error {
@@ -155,9 +150,6 @@ func runMatrix(args []string) error {
 	return nil
 }
 
-// execute runs one cell through the real headless seam. Failures are recorded
-// rather than fatal: a model that errors on some inputs is a benchmark result,
-// not a reason to lose the rest of the matrix.
 func execute(variant Variant, template activity.Template, entry Entry) Result {
 	result := Result{Variant: variant, EntryID: entry.ID, State: entry.State}
 
@@ -201,27 +193,12 @@ func execute(variant Variant, template activity.Template, entry Entry) Result {
 		Model:           variant.Model,
 		ReasoningEffort: variant.Effort,
 		Prompt:          prompt.User,
-		// SystemPrompt REPLACES Claude Code's own, which is written for
-		// interactive coding and is most of what a run this small pays for.
-		// Measured on the control prompt: the default prefix bills ~24.8K tokens,
-		// this plus DisableTools' tool-definition drop bills ~2.3K.
+		// SystemPrompt REPLACES Claude Code's own. Measured on the control prompt: the
+		// default prefix bills ~24.8K tokens, this plus DisableTools bills ~2.3K.
 		SystemPrompt: prompt.System,
 		WorkDir:      workDir,
-		// Tool-less and bounded, matching what the daemon will run: an activity
-		// line has no business touching the filesystem, and an uncapped agent on
-		// a per-refresh schedule is an open-ended bill.
-		//
-		// DisableTools is load-bearing, not decorative: leaving AllowedTools empty
-		// without it re-enables the driver's native default tools, and the run
-		// then fails looking for MCP tools it was never given.
-		//
-		// No OutputSchema on purpose. The answer IS the final text — one line —
-		// and asking for it as a schema-validated object made Claude emit the
-		// correct line as text, then spend a second reasoning turn deciding to
-		// call StructuredOutput to repeat it. Measured: 14.2s/$0.0089 with the
-		// schema against 10.6s/$0.0059 without, same input. It also costs nothing
-		// on Codex, whose tool-free path has no schema support at all, so both
-		// agents now answer the same way.
+		// DisableTools is load-bearing: an empty AllowedTools without it re-enables the
+		// driver's default tools. No OutputSchema: measured 10.6s/$0.0059 vs 14.2s/$0.0089.
 		DisableTools: true,
 		MaxTurns:     2,
 		MaxBudgetUSD: "0.05",
@@ -239,9 +216,6 @@ func execute(variant Variant, template activity.Template, entry Entry) Result {
 	return result
 }
 
-// extractLine takes the child's final text. Both drivers answer that way now
-// that no schema is requested; StructuredOutput is still honored if some future
-// provider returns one unasked.
 func extractLine(taskResult agentdriver.HeadlessTaskResult) string {
 	if len(taskResult.StructuredOutput) > 0 {
 		var payload struct {
@@ -307,8 +281,6 @@ func splitList(raw string) []string {
 	return out
 }
 
-// splitListAllowEmpty always yields at least one element, so an unset --effort
-// still produces one variant using the provider default.
 func splitListAllowEmpty(raw string) []string {
 	out := splitList(raw)
 	if len(out) == 0 {

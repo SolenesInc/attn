@@ -1,12 +1,5 @@
-/**
- * useAnnotations — engine behavior over a real rendered reader DOM:
- * hydrate+paint, debounced generation-counted saves, empty→clear tombstone,
- * stale-save re-hydration, rebase-on-content-change re-persist, orphan
- * flagging, flush-on-unmount, and creation handler shapes.
- *
- * happy-dom has no CSS.highlights, so the painter runs in MarkPainter mode —
- * paint state is assertable as `[data-md-mark="<id>"]` spans.
- */
+// happy-dom has no CSS.highlights, so the painter runs in MarkPainter mode and
+// paint state is assertable as `[data-md-mark="<id>"]` spans.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
@@ -59,7 +52,6 @@ const DOC = [
 ].join('\n');
 const PATH = '/tmp/project/README.md';
 
-// ---- mock transport --------------------------------------------------------
 
 interface SaveCall {
   path: string;
@@ -92,7 +84,6 @@ function makeTransport(seed: { annotations: WireAnnotation[]; generation: number
   return { transport, calls, state };
 }
 
-// ---- harness ----------------------------------------------------------------
 
 function Harness({
   content,
@@ -122,11 +113,10 @@ async function mount(transport: MarkdownAnnotationsTransport | null, content = D
   const view = render(
     <Harness content={content} path={PATH} transport={transport} apiRef={apiRef} />,
   );
-  await flush(); // let hydration settle
+  await flush();
   return { ...view, apiRef };
 }
 
-/** Flush pending microtasks (hydration/save promise chains) inside act. */
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -193,7 +183,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ---- tests -------------------------------------------------------------------
 
 describe('useAnnotations', () => {
   it('passes a seed source through as the draft identity and typed authority', async () => {
@@ -228,7 +217,6 @@ describe('useAnnotations', () => {
     const mark = container.querySelector('[data-md-mark="stored-1"]');
     expect(mark).not.toBeNull();
     expect(mark!.textContent).toBe('target words');
-    // Hydration alone never writes back.
     expect(calls.save).toHaveLength(0);
     expect(calls.clear).toHaveLength(0);
   });
@@ -242,7 +230,7 @@ describe('useAnnotations', () => {
       api.handleSelectionChange(selectNeedle(container, 'target words'));
       api.submitComment('first');
     });
-    expect(calls.save).toHaveLength(0); // debounced, not immediate
+    expect(calls.save).toHaveLength(0);
     await advanceDebounce();
     expect(calls.save).toHaveLength(1);
     expect(calls.save[0]).toMatchObject({ path: PATH, generation: 8 });
@@ -257,7 +245,7 @@ describe('useAnnotations', () => {
     });
     await advanceDebounce();
     expect(calls.save).toHaveLength(2);
-    expect(calls.save[1].generation).toBe(9); // strictly increasing
+    expect(calls.save[1].generation).toBe(9);
     expect(calls.save[1].annotations).toHaveLength(2);
   });
 
@@ -321,13 +309,11 @@ describe('useAnnotations', () => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('doomed');
     });
-    // The authoritative draft the re-hydrate will find.
     state.seed = { annotations: [storedAnnotation('plain prose')], generation: 12 };
     await advanceDebounce();
 
-    expect(calls.get).toEqual([PATH, PATH]); // mount + stale re-hydrate
+    expect(calls.get).toEqual([PATH, PATH]);
     expect(apiRef.current!.annotations.map((a) => a.id)).toEqual(['stored-1']);
-    // Counter seeded past the tombstone: the next save must clear the bar.
     act(() => {
       apiRef.current!.deleteAnnotation('stored-1');
       apiRef.current!.addGlobalComment('after');
@@ -357,11 +343,9 @@ describe('useAnnotations', () => {
     expect(rebased.exact).toBe('target words');
     expect(rebased.startLine).toBeGreaterThan(original.startLine);
     expect(rebased.contentHash).not.toBe(original.contentHash);
-    // Still painted at the new position.
     const mark = view.container.querySelector('[data-md-mark="stored-1"]');
     expect(mark?.textContent).toBe('target words');
 
-    // The re-baselined record persists (plan §Anchoring).
     await advanceDebounce();
     expect(calls.save).toHaveLength(1);
     expect(calls.save[0].generation).toBe(2);
@@ -385,7 +369,7 @@ describe('useAnnotations', () => {
     await flush();
 
     const api = view.apiRef.current!;
-    expect(api.annotations).toHaveLength(1); // orphans stay listed + sendable
+    expect(api.annotations).toHaveLength(1);
     expect(api.orphans.get('stored-1')).toBe('text-not-found');
     expect(view.container.querySelector('[data-md-mark="stored-1"]')).toBeNull();
   });
@@ -429,12 +413,10 @@ describe('useAnnotations', () => {
       apiRef.current!.submitComment('too early');
     });
     await advanceDebounce();
-    expect(calls.save).toBe(0); // still un-hydrated: save suppressed
+    expect(calls.save).toBe(0);
 
     release();
     await flush();
-    // The annotation created before the slow hydrate resolved is merged into
-    // the (empty) authoritative draft, not wiped, and now persists.
     expect(apiRef.current!.annotations.map((a) => a.text)).toEqual(['too early']);
     await advanceDebounce();
     expect(calls.save).toBe(1);
@@ -452,7 +434,6 @@ describe('useAnnotations', () => {
       api.handleSelectionChange(selectNeedle(container, 'target words'));
       deletion = api.addDeletion();
     });
-    // Any label WITH a tip, so the snapshot behavior is visible.
     const label = QUICK_LABELS.find((l) => l.tip !== undefined)!;
     act(() => {
       api.handleSelectionChange(selectNeedle(container, 'plain prose'));
@@ -465,7 +446,6 @@ describe('useAnnotations', () => {
     expect(deletion!).toMatchObject({ type: 'deletion' });
     expect(deletion!.text).toBeUndefined();
     expect(deletion!.anchor?.exact).toBe('target words');
-    // Deletion paints with the deletion kind (strikethrough styling).
     expect(
       container.querySelector(`[data-md-mark="${deletion!.id}"]`)?.classList.contains('md-mark-deletion'),
     ).toBe(true);
@@ -474,17 +454,14 @@ describe('useAnnotations', () => {
       type: 'comment',
       quickLabelId: label.id,
       quickLabelTip: label.tip,
-      // Display text snapshotted at creation — the PR6 daemon formatter
-      // renders this without needing the frontend label table.
       quickLabelText: `${label.emoji} ${label.text}`,
     });
-    expect(quick!.text).toBeUndefined(); // structured, never baked into text
+    expect(quick!.text).toBeUndefined();
 
     expect(global!).toMatchObject({ type: 'global', text: 'whole-doc note' });
     expect(global!.anchor).toBeUndefined();
-    expect(container.querySelector(`[data-md-mark="${global!.id}"]`)).toBeNull(); // no paint
+    expect(container.querySelector(`[data-md-mark="${global!.id}"]`)).toBeNull();
 
-    // Creating from pending consumed the pending selection each time.
     let noPending: ReturnType<UseAnnotationsApi['handleSelectionChange']> = null;
     act(() => {
       noPending = api.handleSelectionChange(null);
@@ -493,7 +470,6 @@ describe('useAnnotations', () => {
     expect(apiRef.current!.pending).toBeNull();
     expect(apiRef.current!.annotations).toHaveLength(3);
 
-    // Empty global comments are refused.
     let refused: Annotation | null = null;
     act(() => {
       refused = api.addGlobalComment('   ');
@@ -523,16 +499,13 @@ describe('useAnnotations', () => {
   });
 
   it('a selection mouseup claims keyboard focus for the reader root (type-to-comment)', async () => {
-    // In macOS WebKit, mousedown on non-focusable content does NOT move
-    // focus, so after a drag-select the terminal's hidden input can remain
-    // document.activeElement — the toolbar's editable-element guard then
-    // swallows type-to-comment. The mouseup path must claim focus itself.
+    // In macOS WebKit, mousedown on non-focusable content does NOT move focus, so the
+    // mouseup path must claim focus itself or the toolbar swallows type-to-comment.
     const { transport } = makeTransport();
     const { container, apiRef } = await mount(transport);
     const root = container.firstElementChild as HTMLElement;
-    root.tabIndex = -1; // the real reader root sets tabIndex via MarkdownReader
+    root.tabIndex = -1;
 
-    // A decoy editable element holds focus, standing in for the terminal.
     const decoy = document.createElement('textarea');
     document.body.appendChild(decoy);
     decoy.focus();
@@ -568,7 +541,6 @@ describe('useAnnotations', () => {
     });
     expect(result).toBeNull();
 
-    // But a paintable code block CAN begin a whole-block selection.
     const codeDoc = 'Intro paragraph here.\n\n```js\nconst a = 1;\n```\n';
     const codeView = await mount(transport, codeDoc);
     const codeBlock = extractBlockTexts(codeDoc).find((b) => b.text.includes('const a'))!;
@@ -582,10 +554,6 @@ describe('useAnnotations', () => {
   });
 
   it('keeps saves locked after a failed hydration and retries until it succeeds', async () => {
-    // The failed-hydration wipe: if a failed hydrate unlocked saves, the
-    // first save would go out at generation 1, come back stale against any
-    // stored floor, and the stale re-hydrate would wipe the user's fresh
-    // annotations. Saves must stay suppressed until a hydrate SUCCEEDS.
     let failNext = true;
     const getCalls: number[] = [];
     const saves: SaveCall[] = [];
@@ -609,7 +577,6 @@ describe('useAnnotations', () => {
     expect(getCalls).toHaveLength(1);
     expect(warn).toHaveBeenCalled();
 
-    // Annotations created while un-hydrated must NOT produce a save.
     act(() => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('made during outage');
@@ -617,7 +584,6 @@ describe('useAnnotations', () => {
     await advanceDebounce();
     expect(saves).toHaveLength(0);
 
-    // The retry timer re-hydrates; success seeds the generation floor.
     failNext = false;
     await act(async () => {
       vi.advanceTimersByTime(ANNOTATION_HYDRATE_RETRY_MS);
@@ -630,18 +596,13 @@ describe('useAnnotations', () => {
     });
     await advanceDebounce();
     expect(saves).toHaveLength(1);
-    expect(saves[0].generation).toBe(10); // seeded past the stored floor of 9
-    // The outage-created comment survived the successful hydrate and is part
-    // of the persisted list — recovery must never erase it.
+    expect(saves[0].generation).toBe(10);
     const texts = saves[0].annotations.map((a) => a.text);
     expect(texts).toContain('made during outage');
     expect(texts).toContain('after recovery');
   });
 
   it('merges outage-created annotations into the successful hydrate and persists the union', async () => {
-    // Regression: initial `get` fails, the user annotates during the outage,
-    // then the retry succeeds with a non-empty daemon snapshot. The snapshot
-    // must not replace the local list — both must survive and be saved.
     let failNext = true;
     const saves: SaveCall[] = [];
     const transport: MarkdownAnnotationsTransport = {
@@ -666,7 +627,7 @@ describe('useAnnotations', () => {
       apiRef.current!.submitComment('made during outage');
     });
     await advanceDebounce();
-    expect(saves).toHaveLength(0); // still locked
+    expect(saves).toHaveLength(0);
 
     failNext = false;
     await act(async () => {
@@ -674,14 +635,12 @@ describe('useAnnotations', () => {
     });
     await flush();
 
-    // Both the daemon snapshot and the outage-created record are present.
     const texts = apiRef.current!.annotations.map((a) => a.text).sort();
     expect(texts).toEqual(['made during outage', 'stored comment']);
 
-    // The merge alone (no further edits) persists the union.
     await advanceDebounce();
     expect(saves).toHaveLength(1);
-    expect(saves[0].generation).toBe(5); // past the hydrated floor of 4
+    expect(saves[0].generation).toBe(5);
     const savedTexts = saves[0].annotations.map((a) => a.text).sort();
     expect(savedTexts).toEqual(['made during outage', 'stored comment']);
   });
@@ -742,14 +701,13 @@ describe('useAnnotations', () => {
     const b: MarkdownAnnotationsAutomationHandle = { getState: () => stateA };
     const offA = registerMarkdownAnnotationsAutomationHandle(a);
     const offB = registerMarkdownAnnotationsAutomationHandle(b);
-    expect(getMarkdownAnnotationsAutomationHandle()).toBe(b); // last-mounted wins
-    offA(); // closing tile A must not null tile B's live handle
+    expect(getMarkdownAnnotationsAutomationHandle()).toBe(b);
+    offA();
     expect(getMarkdownAnnotationsAutomationHandle()).toBe(b);
     offB();
     expect(getMarkdownAnnotationsAutomationHandle()).toBeNull();
   });
 
-  // ---- PR6 send-flow primitives (E16/E17) --------------------------------
 
   it('flushPendingSave persists an armed debounced edit immediately (E16)', async () => {
     const { transport, calls } = makeTransport({ annotations: [], generation: 0 });
@@ -759,7 +717,7 @@ describe('useAnnotations', () => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('last keystroke');
     });
-    expect(calls.save).toHaveLength(0); // debounce armed, not fired yet
+    expect(calls.save).toHaveLength(0);
 
     await act(async () => {
       await apiRef.current!.flushPendingSave();
@@ -767,7 +725,6 @@ describe('useAnnotations', () => {
     expect(calls.save).toHaveLength(1);
     expect(calls.save[0].annotations[0].text).toBe('last keystroke');
 
-    // Nothing pending: resolves as a no-op, no duplicate save.
     await act(async () => {
       await apiRef.current!.flushPendingSave();
     });
@@ -787,12 +744,9 @@ describe('useAnnotations', () => {
     });
     expect(apiRef.current!.annotations).toHaveLength(0);
     expect(container.querySelector('[data-md-mark]')).toBeNull();
-    // Local-only mirror: the daemon already tombstoned at delivery time.
     expect(calls.clear).toHaveLength(0);
     expect(calls.save).toHaveLength(0);
 
-    // The next edit's save counts up from the delivered floor, not the old
-    // hydrated generation.
     act(() => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'plain prose'));
       apiRef.current!.submitComment('after send');
@@ -803,14 +757,11 @@ describe('useAnnotations', () => {
   });
 
   it('a straggler stale save after a delivered clear cannot resurrect the draft (E17)', async () => {
-    // Hold the save's resolution so applyDeliveredClear lands mid-flight —
-    // the debounced-save-races-past-Send scenario.
     let resolveSave: ((r: { stale: boolean }) => void) | null = null;
     const calls = { get: 0 };
     const transport: MarkdownAnnotationsTransport = {
       getMarkdownAnnotations: async () => {
         calls.get += 1;
-        // Post-tombstone the daemon serves an empty draft.
         return { annotations: [], generation: calls.get === 1 ? 0 : 4 };
       },
       saveMarkdownAnnotations: () =>
@@ -826,30 +777,25 @@ describe('useAnnotations', () => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('raced comment');
     });
-    await advanceDebounce(); // save is now in flight, unresolved
+    await advanceDebounce();
     expect(resolveSave).not.toBeNull();
 
     act(() => {
-      apiRef.current!.applyDeliveredClear(3); // Send delivered while the save raced
+      apiRef.current!.applyDeliveredClear(3);
     });
     expect(apiRef.current!.annotations).toHaveLength(0);
 
-    // The daemon tombstoned past the straggler's generation → stale. The
-    // stale path re-hydrates, which returns the empty post-clear draft.
     await act(async () => {
       resolveSave!({ stale: true });
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(apiRef.current!.annotations).toHaveLength(0); // no resurrection
+    expect(apiRef.current!.annotations).toHaveLength(0);
     expect(container.querySelector('[data-md-mark]')).toBeNull();
   });
 
   it('flushPendingSave awaits a save that already left the debounce window', async () => {
-    // The debounce fired and the save request is mid-round-trip: a Send in
-    // that window must wait for it, or the daemon reads the draft WITHOUT the
-    // edit and the delivered clear tombstones the late save undelivered.
     let resolveSave: ((r: { stale: boolean }) => void) | null = null;
     const transport: MarkdownAnnotationsTransport = {
       getMarkdownAnnotations: async () => ({ annotations: [], generation: 0 }),
@@ -866,7 +812,7 @@ describe('useAnnotations', () => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('mid-flight edit');
     });
-    await advanceDebounce(); // save is now on the wire, unresolved
+    await advanceDebounce();
     expect(resolveSave).not.toBeNull();
 
     let flushed = false;
@@ -877,7 +823,7 @@ describe('useAnnotations', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(flushed).toBe(false); // still awaiting the in-flight save
+    expect(flushed).toBe(false);
 
     await act(async () => {
       resolveSave!({ stale: false });
@@ -888,10 +834,6 @@ describe('useAnnotations', () => {
   });
 
   it('applyDeliveredClear marks the hook hydrated and stops the failed-hydrate retry loop', async () => {
-    // Hydrate fails → saves are suppressed while the user can still annotate.
-    // A delivered Send's clear IS authoritative daemon state, so it must
-    // unblock persistence (and cancel the retry), or every later annotation
-    // is silently never saved for the life of the tile.
     const calls = { get: 0, save: [] as SaveCall[] };
     const transport: MarkdownAnnotationsTransport = {
       getMarkdownAnnotations: async () => {
@@ -909,7 +851,6 @@ describe('useAnnotations', () => {
     expect(calls.get).toBe(1);
     expect(apiRef.current!.isHydrated()).toBe(false);
 
-    // Annotating still works locally, but the save is suppressed (unhydrated).
     act(() => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'target words'));
       apiRef.current!.submitComment('pre-send note');
@@ -922,14 +863,12 @@ describe('useAnnotations', () => {
     });
     expect(apiRef.current!.isHydrated()).toBe(true);
 
-    // The failed-hydrate retry was cancelled: no further get fires.
     await act(async () => {
       vi.advanceTimersByTime(ANNOTATION_HYDRATE_RETRY_MS * 2);
     });
     await flush();
     expect(calls.get).toBe(1);
 
-    // Persistence is unblocked and counts up from the delivered floor.
     act(() => {
       apiRef.current!.handleSelectionChange(selectNeedle(container, 'plain prose'));
       apiRef.current!.submitComment('post-send note');

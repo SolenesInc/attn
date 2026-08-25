@@ -55,16 +55,11 @@ func TestReadMarkdownFile(t *testing.T) {
 	}
 }
 
-// setupMarkdownWorkspace registers a workspace with one session pane and returns
-// the daemon, a test client, the workspace id, and the session/pane ids.
 func setupMarkdownWorkspace(t *testing.T) (*Daemon, *wsClient, string) {
 	t.Helper()
 	return setupMarkdownWorkspaceOn(t, NewForTesting(filepath.Join(t.TempDir(), "test.sock")))
 }
 
-// setupMarkdownWorkspaceOn is setupMarkdownWorkspace against a daemon the caller
-// already built — the shape a synctest bubble needs, where the daemon is
-// constructed outside and everything it touches happens inside.
 func setupMarkdownWorkspaceOn(t *testing.T, d *Daemon) (*Daemon, *wsClient, string) {
 	t.Helper()
 	client := newWorkspaceProtocolTestClient()
@@ -316,16 +311,12 @@ func TestCollectChangedMarkdownTilesDetectsEdits(t *testing.T) {
 	d.wsHub.clients[client] = true
 	client.subscribeTileContent(workspaceID, markdownTileIDForPath(file))
 
-	// First pass: the freshly opened tile is reported as changed.
 	if changed := d.collectChangedMarkdownTiles(); len(changed) != 1 || changed[0].path != file {
 		t.Fatalf("first pass = %+v, want the new tile", changed)
 	}
-	// Second pass with no edit: nothing changed.
 	if changed := d.collectChangedMarkdownTiles(); len(changed) != 0 {
 		t.Fatalf("second pass = %+v, want no changes", changed)
 	}
-	// Same-size edit with the previous timestamp restored: the content hash must
-	// still detect the change.
 	info, err := os.Stat(file)
 	if err != nil {
 		t.Fatal(err)
@@ -345,7 +336,6 @@ func TestCollectChangedMarkdownTilesDetectsEdits(t *testing.T) {
 		t.Fatalf("after edit = %+v, want the tile reported changed", changed)
 	}
 
-	// Undock the tile: it drops out of the watch set entirely.
 	d.handleWorkspaceLayoutUndockTile(newWorkspaceProtocolTestClient(), &protocol.WorkspaceLayoutUndockTileMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutUndockTile,
 		WorkspaceID: workspaceID,
@@ -362,7 +352,6 @@ func TestOpenMarkdownTargetsSelectedSession(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Selected"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// No explicit session → daemon uses the currently selected session.
 	d.setSelectedSession("session-1")
 
 	clientConn, serverConn := net.Pipe()
@@ -528,8 +517,6 @@ func TestOpenMarkdownNormalizesPathBeforeDerivingTileID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Unnormalized spellings of the same file (as a file:// OSC-8 link might
-	// carry) land on the cleaned path's tile instead of docking duplicates.
 	for _, spelling := range []string{
 		file,
 		filepath.Join(dir, ".", "notes.md"),
@@ -558,7 +545,6 @@ func TestOpenMarkdownReusesLegacyFixedIDTile(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Legacy"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Layouts persisted before per-path ids hold the fixed id "tile-markdown".
 	if err := d.dockTile(workspaceID, "pane-1", "tile-markdown", string(workspacelayout.TileKindMarkdown), file, "session-0", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock legacy tile: %v", err)
 	}
@@ -591,8 +577,6 @@ func TestOpenMarkdownConcurrentDistinctPathsKeepAllTiles(t *testing.T) {
 		}
 	}
 
-	// Concurrent opens of different files must not lose tiles to a
-	// read-modify-write race on the layout snapshot.
 	var wg sync.WaitGroup
 	errs := make([]error, n)
 	for i, file := range files {
@@ -640,8 +624,6 @@ func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
 	}
 	layoutAfterFirst := d.store.GetWorkspaceLayout(workspaceID).Layout
 
-	// Opening the same file from another session reuses the tile (no re-dock,
-	// no duplicate) and rebinds it to the requester.
 	if _, gotTile, err := d.openMarkdownTile(file, "session-2"); err != nil || gotTile != tileID {
 		t.Fatalf("second open = (%q, %v), want reused tile %q", gotTile, err, tileID)
 	}
@@ -652,7 +634,6 @@ func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
 	if got := tileSessionBinding(t, d, workspaceID, tileID); got != "session-2" {
 		t.Fatalf("binding after reuse = %q, want session-2", got)
 	}
-	// The tile kept its place: same structure except for the session binding.
 	rebased, ok := workspacelayout.UpdateTileSessionID(layoutAfterFirst, tileID, "session-2")
 	if !ok {
 		t.Fatal("rebase helper failed")
@@ -719,10 +700,8 @@ func TestOpenMarkdownWSUnknownSessionFails(t *testing.T) {
 	}
 }
 
-// Boundary-bound: the sleep buys a real filesystem nanosecond, not a schedule.
-// The change detector compares the file's mtime, and a bubble's clock does not
-// reach the filesystem — fake time would advance while the second write landed
-// inside the same mtime tick as the first.
+// The sleep buys a real filesystem nanosecond: the change detector compares mtime,
+// and fake time would land both writes inside one mtime tick.
 func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 	d, client, workspaceID := setupMarkdownWorkspace(t)
 	d.wsHub.clients[client] = true
@@ -739,16 +718,13 @@ func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 		client.subscribeTileContent(workspaceID, markdownTileIDForPath(file))
 	}
 
-	// First pass reports both freshly opened tiles.
 	changed := d.collectChangedMarkdownTiles()
 	if len(changed) != 2 {
 		t.Fatalf("first pass = %+v, want both tiles", changed)
 	}
-	// Quiet pass reports nothing.
 	if changed := d.collectChangedMarkdownTiles(); len(changed) != 0 {
 		t.Fatalf("quiet pass = %+v, want no changes", changed)
 	}
-	// Editing one file reports only that tile.
 	time.Sleep(5 * time.Millisecond)
 	if err := os.WriteFile(second, []byte("v2 with more bytes"), 0o644); err != nil {
 		t.Fatal(err)
@@ -759,8 +735,6 @@ func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 	}
 }
 
-// Every route into a markdown tile passes through openMarkdownTile, so recents
-// are recorded there rather than by each caller.
 func TestOpenMarkdownRecordsRecentFile(t *testing.T) {
 	d, _, _ := setupMarkdownWorkspace(t)
 	file := filepath.Join(t.TempDir(), "notes.md")
@@ -786,9 +760,6 @@ func TestOpenMarkdownRecordsRecentFile(t *testing.T) {
 	}
 }
 
-// A remembered file that has since been deleted must not dock a broken tile,
-// and must drop out of recents — the opener never stats its list on summon, so
-// this failed open is where a dead entry gets cleaned up.
 func TestOpenMarkdownForgetsMissingFile(t *testing.T) {
 	d, _, workspaceID := setupMarkdownWorkspace(t)
 	file := filepath.Join(t.TempDir(), "notes.md")
@@ -808,7 +779,6 @@ func TestOpenMarkdownForgetsMissingFile(t *testing.T) {
 	if files := d.store.GetRecentFiles(10, ""); len(files) != 0 {
 		t.Fatalf("recent files = %+v, want the deleted file forgotten", files)
 	}
-	// The already-docked tile stays put: only the recents entry is pruned.
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
 	if leaves := workspacelayout.TileLeaves(snapshot.Layout); len(leaves) != 1 {
 		t.Fatalf("tile leaves = %+v, want the existing tile untouched", leaves)
@@ -858,7 +828,6 @@ func TestOpenSentFilesRoutesMarkdownAndDropsTheRest(t *testing.T) {
 			t.Fatalf("markdown %s not docked", f)
 		}
 	}
-	// Both markdown files docked and nothing else: html has no tile to land in.
 	if leaves := workspacelayout.TileLeaves(snapshot.Layout); len(leaves) != 2 {
 		t.Fatalf("tiles = %+v, want exactly the two markdown tiles", leaves)
 	}
@@ -890,8 +859,6 @@ func TestOpenSentFilesDisabledDoesNothing(t *testing.T) {
 }
 
 func TestOpenSentFilesUnresolvableSessionStaysOK(t *testing.T) {
-	// No workspace, no selected session: every path fails to open, and the
-	// hook on the other end must still see OK.
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	resp := openSentFiles(t, d, &protocol.OpenSentFilesMessage{
 		Cmd:   protocol.CmdOpenSentFiles,

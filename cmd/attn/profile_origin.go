@@ -14,17 +14,8 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// originFileName lives inside the profile's data dir so `attn profile clean`
-// removes it with everything else — a profile's provenance must not outlive the
-// profile.
 const originFileName = "origin.json"
 
-// profileOrigin records where a profile was installed from. Nothing else in attn
-// links a profile to the worktree that created it: the build fingerprint
-// identifies source *content*, not the checkout, so a throwaway profile spun up
-// for one branch is indistinguishable from a long-lived one once the agent that
-// made it is gone. Recording it at install time is what lets tooling later ask
-// "is this profile still mine?" and answer exactly instead of guessing.
 type profileOrigin struct {
 	Worktree   string `json:"worktree"`
 	Branch     string `json:"branch,omitempty"`
@@ -33,8 +24,6 @@ type profileOrigin struct {
 
 func originPath(dataDir string) string { return filepath.Join(dataDir, originFileName) }
 
-// writeProfileOrigin records provenance for a profile, creating the data dir if
-// the daemon has not yet done so (install can run before first launch).
 func writeProfileOrigin(dataDir string, origin profileOrigin) error {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
@@ -55,8 +44,6 @@ func writeProfileOrigin(dataDir string, origin profileOrigin) error {
 	return nil
 }
 
-// readProfileOrigin returns the recorded origin, or nil when the profile predates
-// origin recording or was never installed from a worktree.
 func readProfileOrigin(dataDir string) *profileOrigin {
 	data, err := os.ReadFile(originPath(dataDir))
 	if err != nil {
@@ -72,9 +59,6 @@ func readProfileOrigin(dataDir string) *profileOrigin {
 	return &origin
 }
 
-// runProfileSetOrigin implements `attn profile set-origin <name> [--worktree dir]`.
-// The Makefile calls it during `make install PROFILE=<name>`, which is the only
-// moment the worktree that created a profile is known for certain.
 func runProfileSetOrigin(args []string) {
 	name := ""
 	worktree := ""
@@ -107,8 +91,8 @@ func runProfileSetOrigin(args []string) {
 		profileFatal(err.Error())
 	}
 	if normalized == "" {
-		// The production profile is not a throwaway and must never be reported as
-		// belonging to a worktree, or the cleanup nudge would target ~/.attn.
+		// The production profile must never be reported as belonging to a worktree,
+		// or the cleanup nudge would target ~/.attn.
 		profileFatal("refusing to record an origin for the default (production) profile")
 	}
 	if worktree == "" {
@@ -146,14 +130,11 @@ func gitBranchAt(dir string) string {
 	}
 	branch := strings.TrimSpace(string(out))
 	if branch == "HEAD" {
-		return "" // detached; a bare SHA is not a useful label here
+		return ""
 	}
 	return branch
 }
 
-// profileListEntry is the machine-readable row behind `attn profile list --json`.
-// It carries what a caller needs to decide whether a profile is worth cleaning:
-// provenance, whether anything is installed, and what is currently running.
 type profileListEntry struct {
 	Profile       string         `json:"profile"`
 	Label         string         `json:"label"`
@@ -185,8 +166,7 @@ func newProfileListEntry(profile string, active string) profileListEntry {
 	}
 }
 
-// socketLive reports whether a daemon is actually accepting connections, rather
-// than whether a socket file was left on disk by one that died.
+// A stale socket file outlives the daemon that made it.
 func socketLive(path string) bool {
 	if path == "" {
 		return false
@@ -199,9 +179,7 @@ func socketLive(path string) bool {
 	return true
 }
 
-// countLiveWorkers counts registered pty-workers whose process is still up.
-// Registry entries outlive their processes, so the file count alone would
-// overstate what a clean has left to do.
+// Registry entries outlive their processes.
 func countLiveWorkers(dataDir string) int {
 	paths, err := filepath.Glob(filepath.Join(dataDir, "workers", "*", "registry", "*.json"))
 	if err != nil {

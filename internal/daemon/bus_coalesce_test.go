@@ -7,10 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A bulk operation publishes one fact per entity — that is what makes the facts
-// useful — but the wire has always seen one whole-list push per operation.
-// coalesceSnapshots is what keeps both true, so these pin the collapse.
-
 func TestCoalesceSnapshotsCollapsesRepeatedPushes(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	trace := wireRecorder(d)
@@ -30,9 +26,6 @@ func TestCoalesceSnapshotsKeepsDistinctSnapshotsSeparate(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	trace := wireRecorder(d)
 
-	// The order the wire sees is the order the snapshots were first touched, not
-	// the order the facts arrived: the repo mute below is published last but its
-	// list is the second one pushed only because a PR fact came first.
 	d.coalesceSnapshots(func() {
 		d.publishFact(FactPRHeatChanged, "pr-1", nil)
 		d.publishFact(FactPRHeatChanged, "pr-2", nil)
@@ -51,9 +44,6 @@ func TestCoalesceSnapshotsKeepsDistinctSnapshotsSeparate(t *testing.T) {
 	}
 }
 
-// A whole-list projection pushes its whole message per fact, even inside a bulk
-// block. The garden is a snapshot like every other list, so it collapses like
-// one.
 func TestCoalesceSnapshotsCollapsesTheGarden(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	var pushes int
@@ -74,9 +64,6 @@ func TestUncoalescedFactsPushOncePerFact(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	trace := wireRecorder(d)
 
-	// Outside a coalesce block each fact pushes immediately. This is the shape
-	// every single-entity mutation has, and it is why the collapse has to be
-	// opt-in at the bulk call site rather than always on.
 	d.publishFact(FactPRUpdated, "pr-1", nil)
 	d.publishFact(FactPRUpdated, "pr-2", nil)
 
@@ -89,9 +76,6 @@ func TestNestedCoalesceFlushesOnlyAtTheOuterBoundary(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	trace := wireRecorder(d)
 
-	// Bulk producers call each other — a repo mute walks its PRs, each of which
-	// is itself a mutation — so the depth counter, not the innermost block, has
-	// to decide when to flush.
 	d.coalesceSnapshots(func() {
 		d.publishFact(FactPRUpdated, "pr-1", nil)
 		d.coalesceSnapshots(func() {

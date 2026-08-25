@@ -1,4 +1,3 @@
-// internal/git/diff.go
 package git
 
 import (
@@ -7,7 +6,6 @@ import (
 	"strings"
 )
 
-// DiffFileInfo represents a file in the branch diff.
 type DiffFileInfo struct {
 	Path           string `json:"path"`
 	Status         string `json:"status"` // "added", "modified", "deleted", "renamed"
@@ -17,23 +15,15 @@ type DiffFileInfo struct {
 	HasUncommitted bool   `json:"has_uncommitted,omitempty"`
 }
 
-// GetBranchDiffFiles returns all files changed between baseRef and HEAD,
-// plus any uncommitted changes. This provides a PR-like view of all work
-// on the current branch.
 func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
-	// Map to track files and their info
 	fileMap := make(map[string]*DiffFileInfo)
 
-	// 1. Get committed changes: git diff --name-status baseRef...HEAD
 	statusOut, err := runGitOutput(OpDiff, repoDir, "diff", "--name-status", baseRef+"...HEAD")
 	if err != nil {
-		// If baseRef doesn't exist or there's no merge-base, this will fail
-		// That's OK - we'll fall back to just uncommitted changes
+		// A missing baseRef or merge-base is fine; fall back to uncommitted changes.
 		statusOut = []byte{}
 	}
 
-	// Parse --name-status output
-	// Format: "M\tfile.go" or "R100\told.go\tnew.go" for renames
 	if len(statusOut) > 0 {
 		lines := strings.Split(strings.TrimSpace(string(statusOut)), "\n")
 		for _, line := range lines {
@@ -46,14 +36,13 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 			}
 
 			statusCode := parts[0]
-			path := parts[len(parts)-1] // Last part is always the current path
+			path := parts[len(parts)-1]
 
 			info := &DiffFileInfo{
 				Path:   path,
 				Status: parseGitStatus(statusCode),
 			}
 
-			// Handle renames (R100 oldpath newpath)
 			if strings.HasPrefix(statusCode, "R") && len(parts) >= 3 {
 				info.OldPath = parts[1]
 			}
@@ -62,11 +51,8 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	// 2. Get line stats: git diff --numstat baseRef...HEAD
 	numstatOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", baseRef+"...HEAD") // Ignore errors, stats are optional
 
-	// Parse --numstat output
-	// Format: "10\t5\tfile.go" (additions deletions path)
 	if len(numstatOut) > 0 {
 		lines := strings.Split(strings.TrimSpace(string(numstatOut)), "\n")
 		for _, line := range lines {
@@ -79,10 +65,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 			}
 
 			path := parts[2]
-			// For renames, numstat shows: "adds\tdels\told => new" or "adds\tdels\t{old => new}/file"
-			// We need to extract the final path
 			if strings.Contains(path, " => ") {
-				// Handle rename format
 				path = extractRenamePath(path)
 			}
 
@@ -93,16 +76,13 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	// 3. Get uncommitted changes: git status --porcelain
-	// --untracked-files=all expands a brand-new untracked directory into
-	// its individual files; without it, git collapses the whole folder
-	// into a single "?? dir/" entry, which hides every file inside.
+	// --untracked-files=all expands a brand-new untracked directory into its files;
+	// without it git collapses the folder into one "?? dir/" entry, hiding every file.
 	porcelainOut, _ := runGitOutput(OpStatus, repoDir, "status", "--porcelain", "--untracked-files=all")
 
 	uncommittedFiles := make(map[string]bool)
 	if len(porcelainOut) > 0 {
-		// Don't TrimSpace the entire output - leading space is part of status code!
-		// Just trim trailing newline and split
+		// Don't TrimSpace the whole output: the leading space is part of the status code.
 		lines := strings.Split(strings.TrimRight(string(porcelainOut), "\n"), "\n")
 		for _, line := range lines {
 			if len(line) < 4 { // Need at least "XY " + 1 char path
@@ -122,11 +102,9 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 
 			uncommittedFiles[path] = true
 
-			// If this file is already in the committed diff, mark it
 			if info, ok := fileMap[path]; ok {
 				info.HasUncommitted = true
 			} else {
-				// New uncommitted file not in committed diff
 				info := &DiffFileInfo{
 					Path:           path,
 					Status:         parseGitPorcelainStatus(statusXY),
@@ -137,8 +115,6 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	// 4. Get line stats for uncommitted changes
-	// For files that are only uncommitted (not in committed diff)
 	if len(uncommittedFiles) > 0 {
 		unstatsOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat")
 
@@ -160,7 +136,6 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 			}
 		}
 
-		// Also get staged numstat
 		stagedStatsOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", "--cached")
 
 		if len(stagedStatsOut) > 0 {
@@ -175,7 +150,6 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 				}
 				path := parts[2]
 				if info, ok := fileMap[path]; ok {
-					// Add to existing counts (staged + unstaged)
 					adds, _ := strconv.Atoi(parts[0])
 					dels, _ := strconv.Atoi(parts[1])
 					info.Additions += adds
@@ -185,7 +159,6 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	// Convert map to slice and sort by path for consistent ordering
 	result := make([]DiffFileInfo, 0, len(fileMap))
 	for _, info := range fileMap {
 		result = append(result, *info)
@@ -197,9 +170,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 	return result, nil
 }
 
-// parseGitStatus converts git status codes to readable strings.
 func parseGitStatus(code string) string {
-	// Remove any numbers (for R100 -> R)
 	if len(code) > 0 {
 		switch code[0] {
 		case 'A':
@@ -216,16 +187,13 @@ func parseGitStatus(code string) string {
 			return "typechange"
 		}
 	}
-	return "modified" // Default
+	return "modified"
 }
 
-// parseGitPorcelainStatus converts git status porcelain format to readable strings.
 func parseGitPorcelainStatus(xy string) string {
 	if len(xy) < 2 {
 		return "modified"
 	}
-	// X is staged status, Y is unstaged
-	// Prioritize staged status if present
 	x, y := xy[0], xy[1]
 
 	if x == '?' && y == '?' {
@@ -243,13 +211,9 @@ func parseGitPorcelainStatus(xy string) string {
 	return "modified"
 }
 
-// extractRenamePath handles the various rename formats from git numstat.
-// Examples:
-//   - "old.go => new.go"
-//   - "{old => new}/file.go"
-//   - "dir/{old.go => new.go}"
+// Handles git numstat rename shapes: "old.go => new.go", "{old => new}/file.go",
+// and "dir/{old.go => new.go}".
 func extractRenamePath(path string) string {
-	// Simple case: "old.go => new.go"
 	if !strings.Contains(path, "{") {
 		parts := strings.Split(path, " => ")
 		if len(parts) == 2 {
@@ -258,8 +222,6 @@ func extractRenamePath(path string) string {
 		return path
 	}
 
-	// Brace case: "{old => new}/file.go" or "dir/{old.go => new.go}"
-	// Find the brace content and extract the new part
 	start := strings.Index(path, "{")
 	end := strings.Index(path, "}")
 	if start >= 0 && end > start {

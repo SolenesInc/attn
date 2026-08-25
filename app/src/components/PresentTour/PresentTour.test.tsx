@@ -4,17 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PresentTour, type PresentTourFile, type PresentTourProps } from './index';
 import type { ReviewComment } from '../../types/generated';
 
-// The real @pierre/diffs CodeView renders into a shadow-DOM custom element
-// (Shiki highlighting, its own virtualized scroller) that jsdom can't
-// exercise — see PresentRoot.test.tsx's module doc, which mocks PresentTour
-// entirely for that reason. This file instead mocks only CodeView (keeping
-// parseDiffFromFile and everything else in @pierre/diffs real), so PresentTour's
-// OWN annotation-grouping/outside-diff/N-P logic — the actual subject of this
-// slice — gets exercised for real, with a plain div standing in for the
-// library's rendering surface.
-// Mermaid diagrams are async, and the diagram-layout-change fix is exercised
-// against the mocked mermaid module below (jsdom cannot run real mermaid —
-// see Markdown.test.tsx's module doc for the same reasoning).
 const mermaidMock = vi.hoisted(() => ({
   render: vi.fn(async () => ({ svg: '<svg data-testid="mermaid-svg"></svg>' })),
   initialize: vi.fn(),
@@ -27,10 +16,6 @@ vi.mock('mermaid', () => ({
   },
 }));
 
-// Wraps the real `parseDiffFromFile` in a spy so the per-file item cache's
-// "never re-parses an unchanged file" claim is observable, without faking the
-// parser itself (everything else in @pierre/diffs stays real, same as the
-// react-entry mock below only replaces CodeView).
 const parseDiffFromFileSpy = vi.hoisted(() => ({ fn: null as ReturnType<typeof vi.fn> | null }));
 vi.mock('@pierre/diffs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@pierre/diffs')>();
@@ -39,13 +24,8 @@ vi.mock('@pierre/diffs', async (importOriginal) => {
   return { ...actual, parseDiffFromFile: spy };
 });
 
-// Every render's `items` array is captured here so tests can assert on the
-// `version` CodeView receives, without CodeView itself needing to be real.
 const codeViewRenders = vi.hoisted(() => ({ calls: [] as Array<Array<Record<string, unknown>>> }));
 
-// The latest full props object CodeView received, so scroll tests can invoke
-// `props.onScroll(scrollTop)` directly — the same callback PresentTour wires
-// up as `handleScroll` — without needing the real library's scroll machinery.
 const codeViewProps = vi.hoisted(() => ({ latest: null as Record<string, unknown> | null }));
 
 vi.mock('@pierre/diffs/react', async (importOriginal) => {
@@ -53,12 +33,8 @@ vi.mock('@pierre/diffs/react', async (importOriginal) => {
   const MockCodeView = forwardRef((props: Record<string, unknown>, ref) => {
     codeViewProps.latest = props;
     useImperativeHandle(ref, () => ({
-      // Derived from the mock's own rendered DOM (each `[data-item-id]` div
-      // below) rather than hardcoded — in jsdom `getBoundingClientRect()`
-      // returns all zeros, so the first item's `top` always lands at 0,
-      // which is <= handleScroll's 80px threshold and makes it `bestPath`.
-      // That's what lets these tests exercise the real bestPath/nearestPath
-      // loop instead of just the pre-loop early returns.
+      // Derived from the mock's own rendered DOM rather than hardcoded: in jsdom `getBoundingClientRect()`
+      // returns zeros, so the first item's top lands at 0, under handleScroll's 80px threshold.
       getInstance: () => ({
         getRenderedItems: () => {
           const container = document.querySelector('[data-testid="mock-codeview"]');
@@ -131,12 +107,8 @@ function baseProps(overrides: Partial<PresentTourProps> = {}): PresentTourProps 
   };
 }
 
-// A 10-line file with only line 10 changed. Verified against the real
-// @pierre/diffs parser: this produces one hunk with a visible additions range
-// of [6, 10] (a few lines of leading context plus the change) — lines 1-5 are
-// real file content but outside any hunk, giving a genuine "annotation
-// targets unchanged code far from the diff" case to test the fallback
-// against, rather than guessing at the library's context-line count.
+// A 10-line file with only line 10 changed. Verified against the real @pierre/diffs parser: one hunk
+// with a visible additions range of [6, 10], so lines 1-5 are real content outside any hunk.
 function tinyFile(path: string): PresentTourFile {
   const lines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`);
   const original = lines.join('\n') + '\n';
@@ -144,9 +116,7 @@ function tinyFile(path: string): PresentTourFile {
   return { path, diff: { loading: false, original, modified } };
 }
 
-// Same path shape as tinyFile, but not yet settled — this is what a file
-// looks like before its diff fetch resolves (or after a round reload puts it
-// back in flight). Used to exercise the pending/admission machinery directly.
+// Same path shape as tinyFile, but not yet settled — what a file looks like before its diff fetch resolves.
 function loadingFile(path: string): PresentTourFile {
   return { path, diff: { loading: true } };
 }
@@ -172,13 +142,6 @@ async function waitForSettled() {
   });
 }
 
-// CodeView now mounts as soon as there's at least one file (see
-// PresentTour's module doc) — a not-yet-admitted file's item is a zero-hunk
-// placeholder (see the items memo's pending branch), not the real diff. Tests
-// that need the REAL item (annotations, real hunks) must wait for admission;
-// this polls the latest captured `items` array (see codeViewRenders above)
-// until every requested path's item is no longer a placeholder. An error
-// item ('file' type) needs no admission, so it always counts as ready.
 async function awaitAllReady(paths: string[]) {
   await waitFor(() => {
     const latest = codeViewRenders.calls[codeViewRenders.calls.length - 1] ?? [];
@@ -187,7 +150,7 @@ async function awaitAllReady(paths: string[]) {
         | { type?: string; fileDiff?: { hunks: unknown[] } }
         | undefined;
       expect(item).toBeDefined();
-      if (item!.type === 'file') continue; // error card — renders immediately, no admission
+      if (item!.type === 'file') continue;
       expect((item!.fileDiff?.hunks ?? []).length).toBeGreaterThan(0);
     }
   });
@@ -282,9 +245,6 @@ describe('PresentTour annotations', () => {
   });
 
   it('re-anchors an out-of-hunk annotation to the nearest visible line, with a caption', async () => {
-    // line 1 is real file content but outside tinyFile's visible additions
-    // range ([6, 10]) — the annotation must still render, re-anchored to the
-    // nearest visible line (6).
     const comment = annotationComment({ id: 'annot:1', content: 'off in the weeds', line_start: 1, line_end: 1 });
     render(
       <PresentTour
@@ -340,7 +300,7 @@ describe('PresentTour annotations', () => {
     ];
     const commentsB = [
       annotationComment({ id: 'b1', filepath: 'src/b.ts', line_start: 8, line_end: 8, content: 'b1' }),
-      annotationComment({ id: 'b2', filepath: 'src/b.ts', line_start: 8, line_end: 8, content: 'b2' }), // shares b1's anchor
+      annotationComment({ id: 'b2', filepath: 'src/b.ts', line_start: 8, line_end: 8, content: 'b2' }),
     ];
     render(
       <PresentTour
@@ -385,10 +345,8 @@ describe('PresentTour annotations', () => {
 
     const latestItems = codeViewRenders.calls[codeViewRenders.calls.length - 1];
     const item = latestItems[0] as { annotations: Array<{ metadata: Record<string, unknown> }> };
-    // tinyFile's visible additions range starts at line 6 (see its doc comment).
     expect(item.annotations[0].metadata).toMatchObject({ kind: 'note', side: 'additions', lineNumber: 6 });
 
-    // Rendered exactly once — the header fallback did not also render it.
     expect(screen.getAllByText('a note about this file')).toHaveLength(1);
   });
 
@@ -439,7 +397,6 @@ describe('PresentTour summary fold', () => {
     const bodyEl = screen.getByTestId('present-tour-summary-body');
     expect(bodyEl).toHaveAttribute('aria-hidden', 'false');
     expect(bodyEl.textContent).toContain('The summary text');
-    // The toggle stays present and clickable while expanded.
     expect(screen.getByTestId('present-tour-summary-toggle')).toBeEnabled();
   });
 
@@ -455,9 +412,7 @@ describe('PresentTour summary fold', () => {
     expect(summaryEl).toHaveClass('collapsed');
     const bodyEl = screen.getByTestId('present-tour-summary-body');
     expect(bodyEl).toHaveAttribute('aria-hidden', 'true');
-    // Stays mounted (not removed) so the fold can animate.
     expect(bodyEl.textContent).toContain('The summary text');
-    // The toggle stays present and clickable while collapsed.
     expect(screen.getByTestId('present-tour-summary-toggle')).toBeEnabled();
   });
 
@@ -508,10 +463,8 @@ describe('PresentTour summary fold', () => {
     await waitForSettled();
 
     const summaryEl = screen.getByTestId('present-tour-summary');
-    // jsdom gives every element zero geometry (scrollTop/clientHeight/
-    // scrollHeight all 0), so scrollTop + clientHeight >= scrollHeight holds
-    // by default — this exercises the "no more content to scroll" case
-    // without needing to fake non-zero geometry.
+    // jsdom gives every element zero geometry, so scrollTop + clientHeight >= scrollHeight holds by
+    // default — this exercises the "no more content to scroll" case without faking geometry.
     fireEvent.wheel(summaryEl, { deltaY: -50 });
     expect(onSummaryVisibleChange).not.toHaveBeenCalled();
 
@@ -543,16 +496,6 @@ describe('PresentTour summary fold', () => {
   });
 });
 
-// Regression test for the root-cause bug: the takeover/cold-window-pin
-// listener effect used to have `[]` deps, so it ran once against
-// `containerRef.current === null` while the first render had zero manifest
-// files (the "Loading tour…" branch renders instead of CodeView, and
-// `tourMounted` was still false) and then never ran again once CodeView
-// actually mounted. Passive scroll tracking never armed, `handleScroll`
-// returned early forever, and neither the summary fold nor the cold-window
-// scroll pin ever worked outside tests (which, unlike the live app, usually
-// render with files already present). This must fail on the pre-fix `[]`
-// deps and pass once the effect depends on `tourMounted`.
 describe('PresentTour listener re-attach on deferred load (regression)', () => {
   it('arms passive scroll tracking once CodeView mounts after starting with zero manifest files', async () => {
     const onActivePathChange = vi.fn();
@@ -573,10 +516,6 @@ describe('PresentTour listener re-attach on deferred load (regression)', () => {
   });
 });
 
-// These exercise handleScroll's new explicit-only Summary semantics: passive
-// scroll tracking (the mock's onScroll callback, captured via codeViewProps)
-// never reports null, and it is suppressed both before the user's first real
-// gesture and while a programmatic scroll (rail/j-k) is still settling.
 describe('PresentTour summary fold vs scroll', () => {
   function latestOnScroll(): (scrollTop: number) => void {
     return codeViewProps.latest!.onScroll as (scrollTop: number) => void;
@@ -610,8 +549,6 @@ describe('PresentTour summary fold vs scroll', () => {
     );
     await waitForSettled();
 
-    // A real user gesture on the scroller (the takeover listeners live on
-    // containerRef, which is this mock's root div) enables passive tracking.
     fireEvent.wheel(screen.getByTestId('mock-codeview'));
     act(() => {
       latestOnScroll()(0);
@@ -630,12 +567,8 @@ describe('PresentTour summary fold vs scroll', () => {
     await waitForSettled();
 
     const container = screen.getByTestId('mock-codeview');
-    // Arm passive tracking first so an unsuppressed onScroll below would
-    // otherwise report — isolating the assertion to suppression, not to the
-    // pre-gesture guard covered by the previous test.
     fireEvent.wheel(container);
 
-    // Simulate the rail/j-k path: scrollToPath + an advanced scrollNonce.
     rerender(
       <PresentTour {...baseProps({ files, onActivePathChange, scrollToPath: 'src/bar.ts', scrollNonce: 1 })} />
     );
@@ -645,7 +578,6 @@ describe('PresentTour summary fold vs scroll', () => {
     });
     expect(onActivePathChange).not.toHaveBeenCalled();
 
-    // A real user gesture takes over immediately, even mid-settle.
     fireEvent.wheel(container);
     act(() => {
       latestOnScroll()(120);
@@ -669,9 +601,8 @@ describe('PresentTour summary fold vs scroll', () => {
     });
     expect(onActivePathChange).not.toHaveBeenCalled();
 
-    // Real ~250ms wait past the 200ms quiet window — fake timers fight this
-    // suite's use of testing-library's `waitFor` (see waitForSettled), so
-    // this is a genuine wall-clock wait rather than `vi.advanceTimersByTime`.
+    // Real ~250ms wait past the 200ms quiet window — fake timers fight this suite's use of `waitFor`,
+    // so this is a genuine wall-clock wait.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
@@ -683,10 +614,6 @@ describe('PresentTour summary fold vs scroll', () => {
   });
 });
 
-// Exercises the per-file item cache added to fix the perf bug: a keystroke or
-// a state change on ONE file must not re-parse or re-version every OTHER
-// file's item. `codeViewRenders.calls` captures every `items` array PresentTour
-// hands to CodeView; `parseDiffFromFileSpy` counts real parses.
 describe('PresentTour per-file item caching', () => {
   function openDraftOn(path: string, line = 6) {
     const onGutterUtilityClick = codeViewProps.latest!.options as { onGutterUtilityClick: (range: unknown, ctx: { item: { id: string } } ) => void };
@@ -724,7 +651,7 @@ describe('PresentTour per-file item caching', () => {
     expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountBefore);
     const itemsAfter = latestItemsByPath();
     for (const [path, before] of itemsBefore) {
-      expect(itemsAfter.get(path)).toBe(before); // same object reference — no rebuild at all
+      expect(itemsAfter.get(path)).toBe(before);
     }
     expect(textarea).toHaveValue('hello');
   });
@@ -747,7 +674,7 @@ describe('PresentTour per-file item caching', () => {
     );
     expect(itemsAfter.get('src/a.ts')).toBe(itemsBefore.get('src/a.ts'));
     expect(itemsAfter.get('src/c.ts')).toBe(itemsBefore.get('src/c.ts'));
-    expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountBefore); // cache hit — no re-parse
+    expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountBefore);
   });
 
   it('opening a draft bumps only its file', async () => {
@@ -798,18 +725,10 @@ describe('PresentTour per-file item caching', () => {
     const itemsAfter = latestItemsByPath();
     expect(itemsAfter.get('src/b.ts')).not.toBe(itemsBefore.get('src/b.ts'));
     expect(itemsAfter.get('src/a.ts')).toBe(itemsBefore.get('src/a.ts'));
-    expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountBefore); // only comment metadata changed, not file content
+    expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountBefore);
   });
 
   it('draft content survives an item rebuild (remount insurance)', async () => {
-    // CodeView's real virtualization can unmount an annotation slot (scroll
-    // far away and back) and remount it later against a fresh item — the
-    // mock's DOM-presence-follows-`items` behavior reproduces exactly that
-    // when a file temporarily leaves and re-enters `files`. This is the
-    // scenario draftContentsRef exists for (see its declaration): the
-    // CommentForm that remounts must re-seed from the ref, not lose the
-    // typed content, even though the draft's own React state (`drafts`) never
-    // depended on `files` and survives the round-trip regardless.
     const fileA = tinyFile('src/a.ts');
     const fileB = tinyFile('src/b.ts');
     const { rerender } = render(<PresentTour {...baseProps({ files: [fileA, fileB] })} />);
@@ -822,24 +741,15 @@ describe('PresentTour per-file item caching', () => {
     fireEvent.change(textarea, { target: { value: 'typed text' } });
     expect(textarea).toHaveValue('typed text');
 
-    // src/a.ts leaves the manifest — its rendered annotation slot (and
-    // CommentForm) unmounts entirely; its file-item cache entry is pruned.
     rerender(<PresentTour {...baseProps({ files: [fileB] })} />);
     expect(screen.queryByTestId('diff-comment-form')).toBeNull();
 
-    // src/a.ts returns — a brand new item/annotation/CommentForm mounts for
-    // it (guaranteed cache miss since the entry was pruned), seeded from
-    // draftContentsRef rather than any now-absent React state.
     rerender(<PresentTour {...baseProps({ files: [fileA, fileB] })} />);
     const remountedForm = await screen.findByTestId('diff-comment-form');
     expect(remountedForm.querySelector('textarea')).toHaveValue('typed text');
   });
 });
 
-// Exercises the progressive-load design itself (see the module doc's
-// "CodeView mounts as soon as..." paragraph): CodeView mounting before every
-// diff settles, placeholder items for not-yet-admitted files, and the
-// frame-budgeted readyPaths admission that swaps them for real items.
 describe('PresentTour progressive load', () => {
   function latestItemsByPath(): Map<string, Record<string, unknown>> {
     const latest = codeViewRenders.calls[codeViewRenders.calls.length - 1] ?? [];
@@ -878,9 +788,6 @@ describe('PresentTour progressive load', () => {
     const aAfter = after.get('src/a.ts') as { type: string; fileDiff: { hunks: unknown[] }; version: number };
     expect(aAfter.fileDiff.hunks.length).toBeGreaterThan(0);
     expect(aAfter.version).not.toBe((before.get('src/a.ts') as { version: number }).version);
-    // b and c never re-settled — their placeholder items must be the exact
-    // same objects, not just equivalent-looking ones (proves admission is
-    // per-file, not a blanket rebuild of every still-loading item).
     expect(after.get('src/b.ts')).toBe(bBefore);
     expect(after.get('src/c.ts')).toBe(cBefore);
   });
@@ -913,7 +820,7 @@ describe('PresentTour progressive load', () => {
     rerender(<PresentTour {...baseProps({ files, reviewedPaths: new Set(['src/a.ts']) })} />);
     const after = latestItemsByPath().get('src/b.ts');
 
-    expect(after).toBe(before); // same object — a's reviewed-toggle never touches b's pending item
+    expect(after).toBe(before);
   });
 
   it('renders an error card immediately, with no admission wait, alongside files still loading', async () => {
@@ -929,7 +836,6 @@ describe('PresentTour progressive load', () => {
     const errored = items.get('src/broken.ts') as { type: string; file: { contents: string } };
     expect(errored.type).toBe('file');
     expect(errored.file.contents).toBe('boom');
-    // its siblings are still bare placeholders — the error needed no wait for them.
     expect((items.get('src/a.ts') as { fileDiff: { hunks: unknown[] } }).fileDiff.hunks).toHaveLength(0);
   });
 
@@ -940,16 +846,12 @@ describe('PresentTour progressive load', () => {
     await awaitAllReady(['src/a.ts']);
     const parseCountAfterFirstSettle = parseDiffFromFileSpy.fn!.mock.calls.length;
 
-    // Round reload: the file goes back to loading — its item reverts to a
-    // placeholder regardless of its stale readyPaths membership (see the
-    // admission effect's comment on why that membership is kept, not cleared).
     rerender(<PresentTour {...baseProps({ files: [loadingFile('src/a.ts')] })} />);
     await waitFor(() => {
       const item = latestItemsByPath().get('src/a.ts') as { fileDiff: { hunks: unknown[] } };
       expect(item.fileDiff.hunks).toHaveLength(0);
     });
 
-    // Re-settles with the exact same (original, modified) pair.
     rerender(<PresentTour {...baseProps({ files: [file] })} />);
     await waitFor(() => {
       const item = latestItemsByPath().get('src/a.ts') as { fileDiff: { hunks: unknown[] } };
@@ -959,23 +861,12 @@ describe('PresentTour progressive load', () => {
     const realParseCallsAfter = parseDiffFromFileSpy.fn!.mock.calls.filter(
       (call) => (call[0] as { contents: string }).contents.length > 0
     );
-    expect(realParseCallsAfter).toHaveLength(1); // still just the original settle — parse cache reused, not rebuilt
-    // The reload's placeholder step is a fresh zero-hunk parse (its own cache
-    // entry was evicted when the file left the 'pending' signature on first
-    // settle) — one more call than after the first settle, but no SECOND real
-    // parse of the actual content.
+    expect(realParseCallsAfter).toHaveLength(1);
     expect(parseDiffFromFileSpy.fn!.mock.calls.length).toBe(parseCountAfterFirstSettle + 1);
   });
 });
 
 describe('PresentTour diagram layout invalidation', () => {
-  // CodeView caches item layout keyed by `version` (see the module doc in
-  // PresentTour/index.tsx): a mermaid diagram settling asynchronously grows
-  // an item's rendered height without CodeView ever learning about it unless
-  // something bumps `version`. These tests exercise the fix — a settling
-  // diagram (in a file note or an annotation body) must force a version bump,
-  // and a version bump must never itself remount the diagram (which would
-  // re-fire the async render and bump again, forever).
   const mermaidNote = '```mermaid\ngraph TD;\nA-->B;\n```';
 
   it('bumps the items version CodeView receives when a file-note diagram finishes rendering', async () => {
@@ -1035,9 +926,6 @@ describe('PresentTour diagram layout invalidation', () => {
       expect(latest[0].version).not.toBe(versionBefore);
     });
 
-    // mermaid.render is called once per mount of a given diagram; a version
-    // bump that remounted MermaidDiagram would call it again (and, since the
-    // mock always resolves, would bump the version again, and so on forever).
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
   });
 });

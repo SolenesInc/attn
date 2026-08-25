@@ -8,14 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Auto mode's app-only half: the read the settings section renders, the two
-// verbs that resolve a proposal, and the two that edit a pattern list directly.
-//
-// All five exist here and on no other transport. That is not an oversight to be
-// tidied up later by adding a CLI verb — it is the whole security design. An
-// agent reaches the unix socket; a human reaches the app. Only what a human
-// touches may change the policy a session runs under, and direct editing does
-// not weaken that: it happens at the same boundary promotion does.
+// Auto mode's app-only half: an agent reaches the unix socket, a human reaches the app, and
+// only a human may change the policy a session runs under. Do not add a CLI equivalent.
 
 func (d *Daemon) handleAutoModeGet(client *wsClient, msg *protocol.AutoModeGetMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
@@ -100,11 +94,6 @@ func (d *Daemon) handleAutoModeDiscard(client *wsClient, msg *protocol.AutoModeD
 	d.sendToClient(client, result)
 }
 
-// handleAutoModePatternAdd and handleAutoModePatternRemove are the human's
-// direct write into the allow and hard-deny lists. The store validates the
-// pattern and refuses removing a shipped hard deny; both failures come back as
-// this result's error so the section can print them beside the input that
-// caused them.
 func (d *Daemon) handleAutoModePatternAdd(client *wsClient, msg *protocol.AutoModePatternAddMessage) {
 	d.editAutoModePattern(client, protocol.CmdAutoModePatternAdd, msg.RequestID, msg.List, msg.Pattern,
 		d.store.AddAutoModePattern)

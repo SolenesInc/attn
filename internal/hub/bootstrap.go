@@ -25,43 +25,19 @@ const githubRepo = "victorarias/attn"
 const remoteDaemonReadyTimeout = 35 * time.Second
 const remoteHarnessRootMarker = "/.attn/harness/"
 
-// A bootstrap has two duties of very different size, so it has two budgets and
-// spends them in the order that matters: making the remote usable comes first
-// and never waits on the app runtime host behind it.
-//
-// remoteReadyBudget covers platform detection, the version checks, the attn
-// binary itself, enrollment, and the daemon start plus its
-// remoteDaemonReadyTimeout wait. appRuntimeShipBudget covers the sidecar, which
-// is a separate artifact roughly half again the size of the binary and gated on
-// its own content.
-//
-// Both are tripwires sized past the slowest link anyone would sync a remote
-// over — 5 Mbit/s, a bad tether — rather than around a measured happy path,
-// because a budget a healthy case can reach is the bug this pair replaced:
-//
-//	attn binary       58,934,608 B = 471.5 Mbit -> 94s at 5 Mbit/s
-//	app runtime host  93,694,096 B = 749.6 Mbit -> 150s at 5 Mbit/s
-//	daemon readiness  <= 35s (remoteDaemonReadyTimeout)
-//	sha256 of the runtime: 0.17s local, 0.38s remote; source build 0.13s
-//
-// Generosity costs nothing on the broken path: every ssh here carries
-// ConnectTimeout=10, so an unreachable remote fails in seconds either way.
+// Tripwires sized past the slowest link anyone would sync over — 5 Mbit/s, a bad
+// tether: 59MB binary = 94s, 94MB app runtime = 150s, daemon readiness <= 35s.
 const (
 	remoteReadyBudget    = 180 * time.Second
 	appRuntimeShipBudget = 300 * time.Second
 )
 
 type RemotePlatform struct {
-	GOOS         string
-	GOARCH       string
-	ArtifactName string
-	// RuntimeArtifactName is the app runtime host for this platform — the Bun
-	// sidecar every installed app's handlers execute in. It travels with the
-	// binary rather than being fetched on demand: a remote daemon that cannot
-	// start its runtime parks every app it hosts.
+	GOOS                string
+	GOARCH              string
+	ArtifactName        string
 	RuntimeArtifactName string
-	// BunTarget is what `bun build --compile --target=` calls this platform.
-	BunTarget string
+	BunTarget           string
 }
 
 type Bootstrapper struct {
@@ -71,9 +47,6 @@ type Bootstrapper struct {
 	version     string
 	versionErr  error
 
-	// The two phases EnsureRemoteReady orders and budgets. They are fields so a
-	// test can assert that order and those budgets — which is the whole content
-	// of EnsureRemoteReady — without a remote to talk to.
 	makeReady      func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error)
 	shipAppRuntime func(ctx context.Context, sshTarget, profile string, ready readyRemote) error
 }
@@ -88,19 +61,12 @@ func NewBootstrapper(logf func(format string, args ...interface{})) *Bootstrappe
 	return b
 }
 
-// readyRemote is what the first phase learned about the remote and the second
-// phase needs: where files go, and what to build for.
 type readyRemote struct {
 	platform          RemotePlatform
 	version           string
 	remoteInstallPath string
 }
 
-// EnsureRemoteReady installs the binary, records the remote's enrollment, and
-// leaves its daemon running. homeDaemonID is the id of the daemon doing the
-// dialing — the home this remote becomes an outpost of. It is empty when the
-// caller is not a home daemon itself, and then no enrollment is written: a
-// daemon that does not own a garden cannot tell another daemon it does.
 func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile, homeDaemonID string) error {
 	readyCtx, cancelReady := context.WithTimeout(ctx, remoteReadyBudget)
 	ready, err := b.makeReady(readyCtx, sshTarget, profile, homeDaemonID)
@@ -109,11 +75,8 @@ func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile
 		return err
 	}
 
-	// The sidecar ships only once the daemon is up, and out of its own budget.
-	// It is the larger artifact by half again, and a remote that cannot get one
-	// still runs sessions — only apps park — so shipping it must never be what
-	// stops a dead remote from being revived. Its failure is reported, not
-	// returned, for the same reason.
+	// A remote without a sidecar still runs sessions (only apps park), so this must
+	// never stop a dead remote from being revived. Its failure is reported, not returned.
 	shipCtx, cancelShip := context.WithTimeout(ctx, appRuntimeShipBudget)
 	defer cancelShip()
 	if err := b.shipAppRuntime(shipCtx, sshTarget, profile, ready); err != nil {
@@ -122,8 +85,6 @@ func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile
 	return nil
 }
 
-// makeRemoteReady installs the binary, records enrollment, and leaves the
-// daemon running — everything a remote needs to host sessions.
 func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
 	platform, err := b.detectRemotePlatform(ctx, sshTarget, profile)
 	if err != nil {
@@ -179,10 +140,8 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		binariesUpdated = true
 	}
 
-	// Enroll before the daemon starts, so a remote coming up for the first time
-	// already knows whose outpost it is. A remote enrolled to a different home
-	// refuses, and that refusal stops the sync — re-homing is the operator's
-	// decision to make, on that machine.
+	// Enroll before the daemon starts, so a first-time remote knows whose outpost it is.
+	// One enrolled to another home refuses: re-homing is the operator's decision.
 	if err := b.enrollRemote(ctx, sshTarget, profile, homeDaemonID); err != nil {
 		return ready, err
 	}
@@ -193,10 +152,8 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 	return ready, nil
 }
 
-// shipRemoteAppRuntime brings the remote's sidecar up to date with this hub's.
-// It is gated on content rather than on the binary having moved: the two are
-// built from different trees, so an apphost-only change leaves the attn binary
-// byte-identical.
+// Gated on content, not on the binary having moved: the two are built from different
+// trees, so an apphost-only change leaves the attn binary byte-identical.
 func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
 	updated, err := b.ensureRemoteAppRuntime(ctx, sshTarget, profile, ready.platform, ready.version, ready.remoteInstallPath)
 	if err != nil {
@@ -205,22 +162,11 @@ func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, prof
 	if !updated {
 		return nil
 	}
-	// The replacement is a new inode and a sidecar that is already up still holds
-	// the old one, so it has to be bounced to pick the new file up. Only when one
-	// is actually running: the runtime starts lazily on the first fact an app is
-	// due, and starting it from here would put a Bun process on a remote that may
-	// host no enabled app at all.
+	// A running sidecar still holds the old inode and must be bounced — but only if one
+	// is running, or this puts a Bun process on a remote hosting no enabled app.
 	return b.bounceRemoteAppRuntime(ctx, sshTarget, profile)
 }
 
-// bounceRemoteAppRuntime restarts the remote's sidecar when one is running, so
-// it picks up the file that just replaced it.
-//
-// A remote whose runtime has never started needs nothing and must not be
-// started from here, so this asks before it acts. Both halves are best-effort:
-// a remote too old to answer, or one that refuses the restart, keeps serving the
-// previous sidecar rather than failing the sync — the report is what a person
-// acts on.
 func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, profile string) error {
 	stdout, _, code, err := runSSHExit(ctx, sshTarget, profile, remoteAttnCommand(profile, "app", "runtime", "status", "--json"))
 	if err != nil || code != 0 {
@@ -244,17 +190,10 @@ func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, pr
 	return nil
 }
 
-// enrollmentRefusedExitCode is what `attn enrollment enroll` exits with when the
-// remote is already an outpost of a different home. Any other non-zero code is a
-// remote that could not answer the question — an older binary without the
-// command, a missing data dir — which is logged and does not block the sync,
-// because enrollment is a record, not a precondition for sessions.
+// What `attn enrollment enroll` exits with when the remote is already another home's
+// outpost. Any other non-zero code is logged and does not block the sync.
 const enrollmentRefusedExitCode = 3
 
-// withoutProfileBanner drops the `[attn profile=… socket=… port=…]` line every
-// remote `attn` command prints on stderr. The refusal below is shown to a person
-// whose endpoint just failed to sync; the remote's socket path is not part of
-// the answer.
 func withoutProfileBanner(message string) string {
 	lines := strings.Split(message, "\n")
 	kept := lines[:0]
@@ -333,10 +272,8 @@ func (b *Bootstrapper) detectRemotePlatform(ctx context.Context, sshTarget, prof
 	return remoteLinuxPlatform(fields[1])
 }
 
-// remoteLinuxPlatform maps a Linux `uname -m` onto the artifacts a remote needs.
-// The Go and Bun names for the same machine disagree (amd64 vs x64), and each is
-// the one its own toolchain accepts, so both are recorded here rather than
-// derived at the call site.
+// The Go and Bun names disagree (amd64 vs x64) and each toolchain accepts only its
+// own, so both are recorded here rather than derived at the call site.
 func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 	switch machine {
 	case "x86_64", "amd64":
@@ -455,29 +392,12 @@ func (b *Bootstrapper) downloadReleaseArtifact(ctx context.Context, version, art
 	return nil
 }
 
-// appRuntimeCacheDir is where prepared app runtime hosts live, keyed by what
-// produced them.
-//
-// A source build overwrites one file per platform instead of accumulating a copy
-// per attn build: the sidecar is built from apphost/, which no version or
-// daemon-binary fingerprint covers, so any such key would serve a stale runtime
-// after an apphost-only edit — and the artifact is ~90MB, so a key per build is
-// also a disk leak. A downloaded release artifact is immutable and does cache
-// per version.
-//
-// Rebuilding unconditionally is deliberate, and it is what makes the sidecar
-// correct after an apphost edit no key would notice. It is affordable because a
-// bootstrap is demand-driven — nothing puts one on a timer — and the whole pass
-// over this artifact is under a second: 0.13s to compile (bun embeds its
-// runtime rather than compiling it), 0.17s to hash locally, 0.38s to hash on the
-// far end. Measured on a 93,694,096-byte linux_arm64 host.
+// A source build overwrites one file per platform because no version or binary
+// fingerprint covers apphost/. Affordable: 0.13s compile, 0.17s hash, 0.38s remote.
 func appRuntimeCacheDir(key string) string {
 	return filepath.Join(config.DataDir(), "remotes", "app-runtime", key)
 }
 
-// ensureLocalAppRuntime produces the app runtime host for the remote's platform
-// and returns its local path. Source build first, published artifact second —
-// the same order, and for the same reason, as the attn binary beside it.
 func (b *Bootstrapper) ensureLocalAppRuntime(ctx context.Context, platform RemotePlatform, version string) (string, error) {
 	var reasons []string
 	if sourceCheckoutAvailable() {
@@ -529,20 +449,12 @@ func (b *Bootstrapper) buildAppRuntimeFromSource(ctx context.Context, platform R
 	return nil
 }
 
-// remoteAppRuntimePath is where the sidecar lands on the remote: beside the attn
-// binary that starts it, under the name that binary's profile resolves.
 func remoteAppRuntimePath(remoteInstallPath, profile string) string {
 	return filepath.Join(filepath.Dir(remoteInstallPath), apps.RuntimeHostBinaryNameForProfile(profile))
 }
 
-// ensureRemoteAppRuntime ships the app runtime host to the remote and reports
-// whether it changed. The gate is content: the artifact is ~90MB, and a hub that
-// syncs its endpoints on a timer would otherwise push it across the network on
-// every pass.
-//
-// Its error is the missing-sidecar report, so it names the remote path, the
-// platform, and what would make the upload possible — the daemon on the far end
-// can only say the file is not there.
+// Ships the sidecar and reports whether it changed. The gate is content: at ~90MB, a
+// hub syncing on a timer would otherwise push it every pass.
 func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, error) {
 	remotePath := remoteAppRuntimePath(remoteInstallPath, profile)
 
@@ -615,10 +527,6 @@ func fileSHA256(path string) (string, error) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
-// remoteSHA256Script hashes whatever pathExpr expands to in the remote shell —
-// a quoted literal, or a variable an earlier line resolved. A file that is not
-// there answers NOT_FOUND rather than failing: "no copy yet" is the first sync,
-// not an error.
 func remoteSHA256Script(pathExpr string) string {
 	return fmt.Sprintf(`
 if [ ! -f %[1]s ]; then
@@ -716,17 +624,13 @@ func (b *Bootstrapper) buildBinaryFromSource(ctx context.Context, platform Remot
 	if gc := buildinfo.GitCommit; gc != "" && gc != "unknown" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.GitCommit=" + gc
 	}
-	// The remote daemon's workers encode snapshots this app decodes, so the
-	// build it gets must carry the same format tag; without it every remote
-	// session attaches without its scrollback.
+	// The remote daemon's workers encode snapshots this app decodes, so its build must
+	// carry the same format tag or every remote session attaches without scrollback.
 	if sf := buildinfo.SnapshotFormat; sf != "" && sf != "unknown" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + sf
 	}
-	// The worker's server-authoritative terminal links libghostty-vt via cgo on
-	// Linux too (internal/ghosttyvt), so the cross-compile needs that target's
-	// native archive present. It is download-first (no zig for the archive
-	// itself), keyed by pin+patch, and installs under
-	// third_party/ghostty-vt/<goos>_<goarch>/. Ensure it before the go build.
+	// The worker links libghostty-vt via cgo on Linux too (internal/ghosttyvt), so
+	// the cross-compile needs that target's native archive present before the build.
 	if err := ensureNativeVTArchive(ctx, root, platform); err != nil {
 		return err
 	}
@@ -771,15 +675,9 @@ func (b *Bootstrapper) buildBinaryFromSource(ctx context.Context, platform Remot
 	return nil
 }
 
-// ensureNativeVTArchive fetches (or, on a locally-edited pin, source-builds) the
-// libghostty-vt archive for the cross-compile target so its cgo link resolves.
-// The download-first script is idempotent and a no-op once the archive is
-// present for the current key. It is scoped to the build target via
-// GHOSTTY_VT_GOOS/GOARCH so a Mac hub lays down the Linux archive, not its own.
 func ensureNativeVTArchive(ctx context.Context, root string, platform RemotePlatform) error {
 	script := filepath.Join(root, "scripts", "build-libghostty-vt.sh")
 	if _, err := os.Stat(script); err != nil {
-		// No script in this checkout (older source tree): nothing to ensure.
 		return nil
 	}
 	cmd := exec.CommandContext(ctx, "bash", script)
@@ -805,8 +703,6 @@ func resolveRemoteInstallPath(remoteHome, override, profile string) string {
 	return path
 }
 
-// resolveRemoteInstall asks the remote where $HOME is and returns the path the
-// attn binary installs to. Every file this bootstrap ships lands beside it.
 func (b *Bootstrapper) resolveRemoteInstall(ctx context.Context, sshTarget, profile string) (string, error) {
 	remoteHome, err := runSSH(ctx, sshTarget, profile, `printf '%s' "$HOME"`)
 	if err != nil {
@@ -823,10 +719,8 @@ func (b *Bootstrapper) installRemoteBinary(ctx context.Context, sshTarget, profi
 	return b.uploadRemoteFile(ctx, sshTarget, profile, localBinary, remoteInstallPath)
 }
 
-// uploadRemoteFile streams a local executable to the remote and installs it in
-// place. `install` unlinks the destination before writing it, so replacing a
-// binary that is running right now hands the new file a new inode instead of
-// failing with ETXTBSY — the running process keeps the old one until it exits.
+// Streams a local executable to the remote. `install` unlinks the destination first,
+// so replacing a running binary gets a new inode instead of failing with ETXTBSY.
 func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile, localPath, remotePath string) error {
 	remoteDir := filepath.Dir(remotePath)
 	remoteTmpPath := filepath.Join("/tmp", fmt.Sprintf("%s.%d.%d.tmp", filepath.Base(remotePath), os.Getpid(), time.Now().UnixNano()))
@@ -843,11 +737,8 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 		return fmt.Errorf("stat %s: %w", localPath, err)
 	}
 
-	// Every path out of here past this point removes the staging file. A dropped
-	// link mid-transfer leaves up to the whole artifact behind, the name carries
-	// a pid and a timestamp so retries never reuse it, and /tmp is RAM on a
-	// systemd remote — an upload that keeps failing must not also keep
-	// accumulating.
+	// Every path out of here removes the staging file: retries never reuse the name,
+	// and /tmp is RAM on a systemd remote.
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
@@ -867,9 +758,8 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 		return fmt.Errorf("copy %s over ssh: %s", filepath.Base(localPath), strings.TrimSpace(string(out)))
 	}
 
-	// ssh reports the far end's exit status, which says the shell ran — not that
-	// every byte arrived. A short file here would otherwise be installed and then
-	// refuse to exec, which is a much worse way to learn about it.
+	// ssh's exit status says the shell ran, not that every byte arrived; a short
+	// file would otherwise install and then refuse to exec.
 	probe, err := runSSH(
 		ctx,
 		sshTarget,
@@ -895,16 +785,10 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 	return err
 }
 
-// remoteAttnDirShell returns a shell expression that resolves to the
-// remote attn data dir for the given profile. The script picks the path up
-// from $ATTN_PROFILE (which remoteShellEnvScript exports), so it stays
-// self-contained when fed through `sh -lc`.
 func remoteAttnDirShell(profile string) string {
 	if strings.TrimSpace(profile) == "" {
 		return `"$HOME/.attn"`
 	}
-	// Even when we know the profile here, prefer reading $ATTN_PROFILE in the
-	// remote shell so the script and the env script stay consistent.
 	return `"$HOME/.attn-${ATTN_PROFILE}"`
 }
 
@@ -1044,8 +928,6 @@ func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget,
 	return fmt.Errorf("daemon did not become ready")
 }
 
-// startRemoteDaemonScript returns the shell script that launches the remote
-// daemon for a given profile. Pure string for testability.
 func startRemoteDaemonScript(profile string) string {
 	binName := remoteBinaryName(profile)
 	attnDir := remoteAttnDirShell(profile)
@@ -1073,10 +955,8 @@ func (b *Bootstrapper) startRemoteDaemon(ctx context.Context, sshTarget, profile
 	return err
 }
 
-// stopRemoteDaemonScript returns the shell script that stops the remote daemon
-// for a given profile. It deliberately leaves the PID file in place after
-// stopping the daemon — see the comment on the stale-cleanup branch in
-// ensureRemoteDaemonRunning for why unlinking it would be unsafe.
+// stopRemoteDaemonScript deliberately leaves the PID file in place — see
+// removeStaleRemoteSocketScript for why unlinking it would be unsafe.
 func stopRemoteDaemonScript(profile string) string {
 	port := config.WSPortForProfile(profile)
 	return remoteSocketConfigScript() + fmt.Sprintf(`
@@ -1123,16 +1003,8 @@ func (b *Bootstrapper) restartRemoteDaemon(ctx context.Context, sshTarget, profi
 	return b.startRemoteDaemon(ctx, sshTarget, profile)
 }
 
-// removeStaleRemoteSocketScript returns the shell script fragment used to
-// clear the way for a fresh remote daemon start. It deliberately unlinks
-// only the socket, never the PID path: the PID file's flock (not its
-// presence on disk) is the sole mutual-exclusion mechanism a remote daemon
-// and a concurrent `attn db restore` on that same host share. Unlinking the
-// PID path here — right before a subsequent daemon start reopens the
-// pathname with O_CREATE — would let a restore holding the old inode's
-// flock go uncontended against a new daemon's freshly created inode at the
-// same pathname. See internal/daemonctl/ensure.go's removeStaleSocketFiles
-// for the identical local-daemon invariant.
+// Unlinks ONLY the socket, never the PID path: that file's flock is the sole mutual
+// exclusion between a remote daemon and a concurrent `attn db restore`.
 func removeStaleRemoteSocketScript() string {
 	return remoteSocketConfigScript() + `rm -f "$socket_path"`
 }

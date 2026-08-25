@@ -2,9 +2,6 @@ package daemon
 
 import "github.com/victorarias/attn/internal/config"
 
-// spawnRoutingEnv is the daemon's exact filesystem and endpoint identity. It
-// is carried through both PTY runtimes and conversation hosts, then applied as
-// the final environment overlay in the child.
 func (d *Daemon) spawnRoutingEnv() []string {
 	return []string{
 		"ATTN_PROFILE=" + config.Profile(),

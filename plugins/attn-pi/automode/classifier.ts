@@ -1,6 +1,3 @@
-// The seam between the static tree and the model that judges what the tree
-// routes on. This file is the interface both sides agree on, plus the stub the
-// tests decide with; model-classifier.ts is the implementation.
 import type { ToolCall } from "./policy";
 import type { TranscriptEntry } from "./transcript";
 
@@ -18,11 +15,8 @@ export type ClassifierRequest = {
   signal?: AbortSignal;
 };
 
-/**
- * Which pass answered: 2a is the configured classifier, 2b the escalation
- * model. Carried so a denial can say who decided it; a classifier that does not
- * name a layer (the stub, a future one-pass judge) leaves it unset.
- */
+/** Which pass answered: 2a is the configured classifier, 2b the escalation model.
+ * A classifier that does not name a layer leaves it unset. */
 export type ClassifierLayer = "2a" | "2b";
 
 export type ClassifierVerdict =
@@ -31,11 +25,8 @@ export type ClassifierVerdict =
       verdict: "deny";
       reason: string;
       layer?: ClassifierLayer;
-      /**
-       * Nothing judged this call: every model the layer could reach failed to
-       * answer. The deny is auto mode failing closed, so the surfaces name it
-       * apart from a model that looked and refused.
-       */
+      /** Nothing judged this call: every model the layer could reach failed to answer,
+       * so the deny is auto mode failing closed rather than a model refusing. */
       unavailable?: boolean;
     }
   | { verdict: "uncertain"; reason?: string; layer?: ClassifierLayer };

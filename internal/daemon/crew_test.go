@@ -15,10 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// writeCrewHomes builds a copy of the real `~/.attn/crew` shape under a
-// daemon's data dir: three members, each with a charter and dated handoff
-// files, plus the loose CREW.md beside them. Copied by shape — the live
-// directory is never read.
 func writeCrewHomes(t *testing.T, dataRoot string) {
 	t.Helper()
 	root := filepath.Join(dataRoot, crew.HomesDirName)
@@ -43,8 +39,6 @@ func writeCrewHomes(t *testing.T, dataRoot string) {
 	}
 }
 
-// newCrewDaemon returns a home daemon whose roster was imported from homes on
-// disk, which is how every real daemon starts.
 func newCrewDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := newEnrolledDaemon(t, "")
@@ -66,7 +60,6 @@ func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
 	return resp.CrewListResult.Members
 }
 
-// addSession puts a live session in the store, the thing a binding names.
 func addSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
@@ -87,9 +80,6 @@ func memberByID(t *testing.T, members []protocol.CrewMember, id string) protocol
 	return protocol.CrewMember{}
 }
 
-// The slice's acceptance: homes on disk become a roster, a session launches
-// bound, the binding is what `agent list` and `peek` show, and it is released
-// when the day ends.
 func TestCrew_AMemberIsImportedBoundAndReleased(t *testing.T) {
 	d := newCrewDaemon(t)
 
@@ -101,7 +91,6 @@ func TestCrew_AMemberIsImportedBoundAndReleased(t *testing.T) {
 	if trellis.BindingSession != nil {
 		t.Fatalf("a freshly imported member is awake: %v", *trellis.BindingSession)
 	}
-	// Files stay canonical: the registry points at the home rather than copying it.
 	if _, err := os.Stat(trellis.CharterPath); err != nil {
 		t.Fatalf("charter path does not point at a real file: %v", err)
 	}
@@ -115,7 +104,6 @@ func TestCrew_AMemberIsImportedBoundAndReleased(t *testing.T) {
 		t.Fatalf("claim returned %q, want trellis", memberID)
 	}
 
-	// `agent list` and `agent peek` both say who this session is today.
 	session := d.sessionForBroadcast(d.store.Get("sess-trellis"))
 	if got := protocol.Deref(session.CrewMember); got != "trellis" {
 		t.Fatalf("broadcast session's crew_member = %q, want trellis", got)
@@ -127,15 +115,12 @@ func TestCrew_AMemberIsImportedBoundAndReleased(t *testing.T) {
 		t.Fatalf("roster binding = %q, want sess-trellis", got)
 	}
 
-	// The day ends: the binding is released and the member is asleep again.
 	d.forgetSession("sess-trellis")
 	if binding := memberByID(t, crewList(t, d), "trellis").BindingSession; binding != nil {
 		t.Fatalf("the binding survived its session: %v", *binding)
 	}
 }
 
-// Two agents with the same identity never run at once. The refusal names the
-// member and the session holding it, so the caller can go look.
 func TestCrew_SecondClaimOnALiveMemberIsRefusedByName(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-first")
@@ -153,16 +138,11 @@ func TestCrew_SecondClaimOnALiveMemberIsRefusedByName(t *testing.T) {
 			t.Errorf("refusal %q does not name %q", err, want)
 		}
 	}
-	// The first session keeps its identity: a refused claim writes nothing.
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "keel").BindingSession); got != "sess-first" {
 		t.Fatalf("binding after the refusal = %q, want sess-first", got)
 	}
 }
 
-// One session answers to one name. Binding a session that already holds a
-// member to a second member moves the identity rather than handing that session
-// both — otherwise "two agents with the same identity never run at once" holds
-// while one agent quietly runs as two.
 func TestCrew_ASessionTakingASecondNameDropsTheFirst(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-one")
@@ -181,15 +161,11 @@ func TestCrew_ASessionTakingASecondNameDropsTheFirst(t *testing.T) {
 	if got := protocol.Deref(memberByID(t, members, "keel").BindingSession); got != "" {
 		t.Errorf("keel is still bound to %q after the session became trellis", got)
 	}
-	// The session decorates as exactly one member, not whichever the roster
-	// order happened to reach first.
 	if got := d.crewMembersBySession()["sess-one"]; got != "trellis" {
 		t.Errorf("session decorates as %q, want trellis", got)
 	}
 }
 
-// A refused second name leaves the session the member it already was: the
-// release runs only once the claim is certain to land.
 func TestCrew_ARefusedSecondNameKeepsTheFirst(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-one")
@@ -209,17 +185,12 @@ func TestCrew_ARefusedSecondNameKeepsTheFirst(t *testing.T) {
 	}
 }
 
-// A binding naming a session the daemon no longer knows has let go on its own —
-// the same liveness rule the garden's tender uses — so a member whose day ended
-// without ceremony can be woken again.
 func TestCrew_ABindingWhoseSessionIsGoneDoesNotHold(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-crashed")
 	if _, err := d.claimCrewBinding("alder", "sess-crashed"); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	// The session vanishes without any release path running (a crash, a reap
-	// the daemon never saw).
 	d.store.Remove("sess-crashed")
 
 	if binding := memberByID(t, crewList(t, d), "alder").BindingSession; binding != nil {
@@ -231,8 +202,6 @@ func TestCrew_ABindingWhoseSessionIsGoneDoesNotHold(t *testing.T) {
 	}
 }
 
-// Re-claiming the binding a session already holds is idempotent: a client
-// re-announcing a live session must not lose its own identity to itself.
 func TestCrew_ReclaimingItsOwnBindingIsIdempotent(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-keel")
@@ -256,8 +225,6 @@ func TestCrew_ClaimingAnUnregisteredNameIsRefusedWithWhereToLook(t *testing.T) {
 	}
 }
 
-// Importing is create-only: a home rescanned at every startup never overwrites
-// the registry record, which is where a live binding lives.
 func TestCrew_ReimportingHomesLeavesLiveRecordsAlone(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-keel")
@@ -265,7 +232,7 @@ func TestCrew_ReimportingHomesLeavesLiveRecordsAlone(t *testing.T) {
 		t.Fatalf("claim: %v", err)
 	}
 
-	d.importCrewHomes() // the next daemon start
+	d.importCrewHomes()
 
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "keel").BindingSession); got != "sess-keel" {
 		t.Fatalf("re-import clobbered a live binding: binding = %q", got)
@@ -325,8 +292,6 @@ func TestCrew_ImportRefusesAStoredHomeFromAnotherProfile(t *testing.T) {
 	}
 }
 
-// A home the user adds by hand joins the roster at the next start; nothing has
-// to be registered through attn.
 func TestCrew_AHandAddedHomeJoinsTheRoster(t *testing.T) {
 	d := newCrewDaemon(t)
 	home := filepath.Join(d.dataRoot, crew.HomesDirName, "sable")
@@ -345,8 +310,6 @@ func TestCrew_AHandAddedHomeJoinsTheRoster(t *testing.T) {
 	memberByID(t, crewList(t, d), "sable")
 }
 
-// The crew has exactly one owner. An outpost holds no part of it: the read
-// refuses by name, and startup imports nothing.
 func TestCrew_AnOutpostIsFenced(t *testing.T) {
 	const home = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	d := newEnrolledDaemon(t, home)
@@ -375,9 +338,6 @@ func TestCrew_AnOutpostIsFenced(t *testing.T) {
 	}
 }
 
-// The garden touches the registry lightly. A member's free-string name becomes
-// its registry id so Tender.Is compares real addresses — and a name nobody
-// registered passes through, because tending never required a registry.
 func TestCrew_TenderNamesResolveWhereAMemberExists(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "sess-keel")
@@ -391,21 +351,15 @@ func TestCrew_TenderNamesResolveWhereAMemberExists(t *testing.T) {
 	if got := d.resolveTenderMember("some-worker", ""); got != "some-worker" {
 		t.Errorf("an unregistered name became %q; workers keep tending unbound", got)
 	}
-	// A bound session that named nobody IS its member — the invocation already
-	// said who it is.
 	if got := d.resolveTenderMember("", "sess-keel"); got != "keel" {
 		t.Errorf("a bound session resolved to %q, want keel", got)
 	}
-	// An unbound session that named nobody stays nobody: a worker in a pane is
-	// not silently given an identity.
 	addSession(t, d, "sess-worker")
 	if got := d.resolveTenderMember("", "sess-worker"); got != "" {
 		t.Errorf("an unbound session resolved to %q, want no member", got)
 	}
 }
 
-// An explicit unregistered --member still acts as that durable member identity;
-// registry lookup is normalization, not a requirement to claim work by name.
 func TestCrew_ExplicitUnregisteredMemberActsAsMember(t *testing.T) {
 	d := newGardenDaemon(t)
 	d.ensureCrewCollections()
@@ -413,7 +367,6 @@ func TestCrew_ExplicitUnregisteredMemberActsAsMember(t *testing.T) {
 	d.importCrewHomes()
 
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "work an unbound session picks up"})
-	// A free-string member nobody registered is stored as typed.
 	tended := move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "some-worker")
 	if tended.TenderMember != "some-worker" {
 		t.Fatalf("tender member = %q, want the free string as typed", tended.TenderMember)
@@ -421,8 +374,6 @@ func TestCrew_ExplicitUnregisteredMemberActsAsMember(t *testing.T) {
 	if tended.TenderSession != "" {
 		t.Fatalf("tender session = %q, want explicit member to act instead", tended.TenderSession)
 	}
-	// The claim still holds against another session: an unconfirmed take is
-	// refused by name, unchanged for tenders the registry knows nothing about.
 	addGardenSession(t, d, "sess-b")
 	resp := transition(t, d, "sess-b", seed.ID, garden.VerbTend, "", "")
 	if resp.Ok {
@@ -439,9 +390,6 @@ func TestCrew_ExplicitUnregisteredMemberActsAsMember(t *testing.T) {
 	}
 }
 
-// A registered member tending under a differently-typed name still holds its
-// own seed: resolution is what makes the claim an address rather than a
-// spelling.
 func TestCrew_AMemberHoldsItsSeedHoweverTheNameIsTyped(t *testing.T) {
 	d := newGardenDaemon(t)
 	d.ensureCrewCollections()
@@ -449,14 +397,10 @@ func TestCrew_AMemberHoldsItsSeedHoweverTheNameIsTyped(t *testing.T) {
 	d.importCrewHomes()
 
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "a member's work"})
-	// Tended from a terminal pane, which carries no session id — so the member
-	// name is the whole identity, and its spelling is what decides.
 	move(t, d, "", seed.ID, garden.VerbTend, "", "trellis")
 	if resp := transition(t, d, "", seed.ID, garden.VerbTend, "", "Trellis"); !resp.Ok {
 		t.Fatalf("a member could not re-tend its own seed under another spelling: %v", protocol.Deref(resp.Error))
 	}
-	// Somebody else is still refused: resolution widens who counts as the same
-	// person, never who may take the claim.
 	if resp := transition(t, d, "", seed.ID, garden.VerbTend, "", "keel"); resp.Ok {
 		t.Fatal("another member took a seed trellis holds")
 	}

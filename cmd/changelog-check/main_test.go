@@ -42,8 +42,8 @@ func TestValidateFragment(t *testing.T) {
 			wantErr: "field description not found",
 		},
 		{
-			// The compiler reads one document per file, so a second one used to
-			// pass this check and then never appear in the changelog.
+			// The compiler reads one document per file, so a second one used to pass this
+			// check and then never appear in the changelog.
 			name:    "two documents in one file",
 			yaml:    "kind: added\narea: queue\nchange: first\n---\nkind: fixed\narea: queue\nchange: second\n",
 			wantErr: "more than one YAML document",
@@ -94,11 +94,8 @@ func TestValidateDir(t *testing.T) {
 	}
 }
 
-// TestValidateDirRejectsNonRegularFiles pins the symlink guard: a fragment
-// that is a symlink (even to a valid target, and even with a .yaml name) must
-// be rejected without following it, so the release-time compile step can never
-// be pointed at a file outside changelog.d/. Directories are rejected the same
-// way.
+// A symlinked fragment is rejected without following it, so the release-time
+// compile step can never be pointed at a file outside changelog.d/.
 func TestValidateDirRejectsNonRegularFiles(t *testing.T) {
 	dir := t.TempDir()
 
@@ -124,9 +121,6 @@ func TestValidateDirRejectsNonRegularFiles(t *testing.T) {
 	}
 }
 
-// TestRepoFragments validates the real changelog.d in this checkout, so a bad
-// fragment fails `make test` on the branch that introduced it, not just the CI
-// gate job.
 func TestRepoFragments(t *testing.T) {
 	repo := filepath.Join("..", "..", "changelog.d")
 	if _, err := os.Stat(repo); err != nil {

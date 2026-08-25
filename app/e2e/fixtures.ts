@@ -9,7 +9,6 @@ import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './profileEnv'
 import { waitForDaemonSocket } from './daemonReadiness';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
 
-// Mock GitHub Server
 class MockGitHubServer {
   private server: http.Server;
   private requests: Array<{ method: string; path: string; body: any }> = [];
@@ -27,7 +26,6 @@ class MockGitHubServer {
 
         res.setHeader('Content-Type', 'application/json');
 
-        // Handle search
         if (req.url?.startsWith('/search/issues')) {
           const q = new URL(`http://x${req.url}`).searchParams.get('q') || '';
           const isAuthor = q.includes('author:@me');
@@ -49,13 +47,11 @@ class MockGitHubServer {
           return;
         }
 
-        // Handle approve (POST /repos/:owner/:repo/pulls/:number/reviews)
         if (req.url?.match(/\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/reviews$/) && req.method === 'POST') {
           res.end(JSON.stringify({ id: 1, state: 'APPROVED' }));
           return;
         }
 
-        // Handle merge (PUT /repos/:owner/:repo/pulls/:number/merge)
         if (req.url?.match(/\/repos\/[^/]+\/[^/]+\/pulls\/\d+\/merge$/) && req.method === 'PUT') {
           res.end(JSON.stringify({ merged: true }));
           return;
@@ -102,10 +98,8 @@ class MockGitHubServer {
   }
 }
 
-// Daemon port for the active ATTN_PROFILE (default profile keeps the historical
-// 19849; a named profile gets a disjoint per-profile band). The teardown kill
-// below interpolates this port, so it is automatically scoped to this run's own
-// daemon and never touches a peer agent's. See e2e/profileEnv.ts.
+// The teardown kill interpolates this port, so it must stay scoped to this run's
+// own daemon and never a peer agent's.
 const { daemonPort: TEST_DAEMON_PORT } = e2ePorts();
 const MOCK_GH_HOST = 'mock.github.local';
 const TEST_DAEMON_WS_URL = `ws://127.0.0.1:${TEST_DAEMON_PORT}/ws`;
@@ -117,18 +111,13 @@ async function killTestDaemons(): Promise<void> {
     });
     await new Promise((resolve) => setTimeout(resolve, 300));
   } catch {
-    // Ignore when no test daemons are running.
   }
 }
 
-// Create a bin directory with minimal agent stubs so the daemon reports agents
-// as available on CI machines that have no real agent CLIs installed.
-// Returns the bin dir path and a cleanup function.
 function createFakeAgentStubs(): { binDir: string; cleanup: () => void } {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-e2e-stubs-'));
   for (const name of ['claude', 'codex', 'copilot']) {
     const stubPath = path.join(binDir, name);
-    // Minimal stub: just sleep so the session appears alive briefly.
     fs.writeFileSync(stubPath, '#!/bin/sh\nsleep 600\n');
     fs.chmodSync(stubPath, 0o755);
   }
@@ -140,9 +129,8 @@ function createFakeAgentStubs(): { binDir: string; cleanup: () => void } {
   };
 }
 
-// Daemon temp dirs must stay SHORT: the worker PTY backend creates unix
-// sockets under <tempDir>/workers/<daemon-instance-id>/, and macOS caps
-// sun_path at 104 bytes. os.tmpdir() (/var/folders/...) is already too long.
+// macOS caps sun_path at 104 bytes and the worker backend puts its sockets under
+// <tempDir>/workers/<daemon-instance-id>/; os.tmpdir() is already too long.
 function makeDaemonTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join('/tmp', prefix));
 }
@@ -158,9 +146,7 @@ function daemonStartDebugInfo(tempDir: string, stdout: string, stderr: string): 
   return `stdout: ${stdout}\nstderr: ${stderr}\ndaemon log: ${daemonLog}`;
 }
 
-// Daemon launcher - creates isolated temp directory for DB and socket
 async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketPath: string; tempDir: string; stop: () => void }> {
-  // Create temp directory for test isolation
   const tempDir = makeDaemonTempDir('attn-e2e-');
   const socketPath = path.join(tempDir, 'attn.sock');
   const dbPath = path.join(tempDir, 'attn.db');
@@ -170,7 +156,6 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
   console.log(`[E2E] Test isolation: tempDir=${tempDir}, socket=${socketPath}, db=${dbPath}`);
   console.log(`[E2E] Using daemon binary: ${attnPath}`);
 
-  // Clean up any existing socket (shouldn't exist in temp dir, but just in case)
   if (fs.existsSync(socketPath)) {
     try {
       fs.unlinkSync(socketPath);
@@ -183,17 +168,16 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
     env: {
       ...process.env,
       PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
-      // The throwaway daemon is routed entirely by these explicit paths, so it
-      // must not also claim the surrounding shell's profile: a profile whose
-      // resolved paths are somebody else's is refused (ValidateProfileRouting).
+      // Routed entirely by these explicit paths, so it must not also claim the
+      // shell's profile: mismatched routing is refused (ValidateProfileRouting).
       ATTN_PROFILE: '',
       ATTN_DATA_DIR: tempDir,
       ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
-      ATTN_WS_PORT: TEST_DAEMON_PORT, // Use test port to avoid conflicts with production daemon
-      ATTN_SOCKET_PATH: socketPath, // Test isolation: separate socket
-      ATTN_DB_PATH: dbPath, // Test isolation: separate database
+      ATTN_WS_PORT: TEST_DAEMON_PORT,
+      ATTN_SOCKET_PATH: socketPath,
+      ATTN_DB_PATH: dbPath,
       ATTN_PTY_SKIP_STARTUP_PROBE: '1',
-      ATTN_MOCK_REVIEWER: '1', // Use mock reviewer for predictable E2E tests
+      ATTN_MOCK_REVIEWER: '1',
       ATTN_MOCK_GH_URL: ghUrl,
       ATTN_MOCK_GH_TOKEN: 'test-token',
       ATTN_MOCK_GH_HOST: MOCK_GH_HOST,
@@ -201,7 +185,6 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
     stdio: 'pipe',
   });
 
-  // Capture output for debugging
   let stdout = '';
   let stderr = '';
   proc.stdout?.on('data', (data) => {
@@ -226,7 +209,6 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
     stop() {
       proc.kill();
       stubs.cleanup();
-      // Clean up temp directory and all contents
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
         console.log(`[E2E] Cleaned up temp dir: ${tempDir}`);
@@ -268,7 +250,6 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       try {
         fs.unlinkSync(socketPath);
       } catch {
-        // best-effort cleanup
       }
     }
 
@@ -278,7 +259,6 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       env: {
         ...process.env,
         PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
-        // Same reason as the fixture daemon above: explicit paths, no profile.
         ATTN_PROFILE: '',
         ATTN_DATA_DIR: tempDir,
         ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
@@ -340,7 +320,6 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       try {
         fs.unlinkSync(socketPath);
       } catch {
-        // best-effort cleanup
       }
     }
   };
@@ -372,7 +351,6 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
   };
 }
 
-// Session injection helper
 async function injectTestSession(
   socketPath: string,
   session: {
@@ -417,7 +395,6 @@ async function injectTestSession(
   });
 }
 
-// Session state update helper
 async function updateSessionState(
   socketPath: string,
   id: string,
@@ -435,16 +412,13 @@ async function updateSessionState(
   });
 }
 
-// Create a temporary git repo with uncommitted changes for testing
 async function createTestGitRepo(): Promise<{ repoPath: string; cleanup: () => void }> {
   const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-test-repo-'));
 
-  // Initialize git repo
   execSync('git init', { cwd: repoPath, stdio: 'pipe' });
   execSync('git config user.email "test@test.com"', { cwd: repoPath, stdio: 'pipe' });
   execSync('git config user.name "Test User"', { cwd: repoPath, stdio: 'pipe' });
 
-  // Create initial commit with a larger file (50+ lines for scroll testing)
   const initialContent = `package main
 
 import "fmt"
@@ -496,7 +470,6 @@ func doSomething() {
   execSync('git add .', { cwd: repoPath, stdio: 'pipe' });
   execSync('git commit -m "Initial commit"', { cwd: repoPath, stdio: 'pipe' });
 
-  // Create uncommitted changes - modify line 40
   const modifiedContent = initialContent.replace(
     '// Line 40 - target for scroll test',
     '// Line 40 - MODIFIED for review'
@@ -515,7 +488,6 @@ func doSomething() {
   };
 }
 
-// Export fixtures
 type DaemonFixture = {
   start: () => Promise<{ wsUrl: string; socketPath: string }>;
   stop: () => Promise<void>;
@@ -556,13 +528,11 @@ export const test = base.extend<Fixtures>({
   mockGitHub: async ({}, use) => {
     const mock = new MockGitHubServer();
     await mock.start();
-    // Reset PRs before each test
     mock.reset();
     await use(mock);
     mock.close();
   },
 
-  // This fixture returns a function that test code calls AFTER adding PRs
   startDaemonWithPRs: async ({ mockGitHub }, use) => {
     let daemon: { proc: ChildProcess; socketPath: string; tempDir: string; stop: () => void } | null = null;
 
@@ -578,13 +548,11 @@ export const test = base.extend<Fixtures>({
 
     await use(startFn);
 
-    // Cleanup after test
     if (daemon) {
       daemon.stop();
     }
   },
 
-  // Session testing fixture with injection helpers
   daemon: async ({ mockGitHub }, use) => {
     const managed = createManagedDaemon(mockGitHub.url);
     let started = false;
@@ -632,38 +600,8 @@ export const test = base.extend<Fixtures>({
   },
 });
 
-/**
- * Wait until the mock PTY's startup banner has landed in a session's pane.
- *
- * The mock backend emits `attn mock pty: <id>` on a 30ms timer inside
- * `ptyAttach` (`src/pty/bridge.ts`). The pane is already registered by then —
- * `useGhosttyPaneRuntime` records `connect_terminal` *before* it calls
- * `ptyAttach` — so the banner reliably reaches the pane; the only question is
- * whether it arrives before or after the test's own first write.
- *
- * Tests that open a session and immediately write `[2J[H` + content
- * are racing that timer. Usually `expect.poll` notices `connect_terminal` on a
- * tick 100ms+ later, the banner has already landed, and the `[2J` wipes it. But
- * when the poll happens to catch it inside the 30ms window, the test writes
- * first and the banner then lands *at the cursor*, directly appended to the
- * test's own output. Two CI failures on 2026-07-20, both of which passed on a
- * re-run of the same commit:
- *
- *   terminal-interactions: "…/terminal-link" + "attn mock pty: s-link"
- *                          → link hit-test returned "…/terminal-linkattn"
- *   terminal-find:         "Case case CASE" + "attn mock pty: s-find-case"
- *                          → find counted 4 matches for "case" instead of 3
- *                            (the session id itself contains "case")
- *
- * Note that the screen assertions these tests make first — `.toContain(...)` on
- * the pane text — cannot catch this: they are satisfied by a screen that also
- * carries the banner. Only the *derived* assertion (a match count, an extracted
- * URL) sees the damage, which is why the failure looks unrelated to timing.
- *
- * Gating on the banner makes the subsequent `[2J[H` meaningful: it clears a
- * known screen instead of an arbitrary point in the startup race. Call this
- * after the pane is ready and before writing test output.
- */
+/** Wait for the mock PTY's banner: it lands on a 30ms timer and can otherwise
+ * append at a test's own cursor, breaking match counts and extracted URLs. */
 export async function waitForMockPtyBanner(
   page: import('@playwright/test').Page,
   sessionId: string,

@@ -12,10 +12,6 @@ function stateFor(doc: string, selection?: { anchor: number; head?: number }): E
   });
 }
 
-// The image field is private (only imageTargets/imageWidget are exported), so this
-// mirrors tableWidget.test.ts: read the field's contribution to the standard
-// decorations facet, resolvable from a bare EditorState since imageWidget()'s only
-// decoration source is a StateField.
 function replaceRangeCount(state: EditorState): number {
   let count = 0;
   for (const provider of state.facet(EditorView.decorations)) {

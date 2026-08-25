@@ -1,38 +1,13 @@
-/**
- * AnnotationPopover — the comment composer, ported from plannotator's
- * CommentPopover minus images/AskAI/drag/dialog-expand/jump-back pill.
- *
- * Contract (spec E10–E13):
- * - Cmd/Ctrl+Enter submits (guarded against IME composing); Escape closes
- *   via the centralized useEscapeStack (LIFO with every other overlay);
- *   empty text cannot submit.
- * - Capture-phase outside pointerdown closes ONLY while the textarea is
- *   clean; typed text blocks it (hasUnsavedContentRef).
- * - Draft text survives unmount via a module-level Map keyed by `draftKey`
- *   (`${documentUri}#<anchorKey>` / `${documentUri}#global`); cleared on
- *   submit, deleted
- *   when emptied.
- * - Anchored below the selection (rect.bottom + 8), flipped above when
- *   spaceBelow < 280; width min(384, vw−32); horizontally clamped.
- * - Textarea autofocus via ref-callback + setTimeout(0): in WKWebView, 0ms
- *   timers can fire ahead of the commit that mounts the textarea, so an
- *   effect keyed on mount alone may never focus it (donor-documented trap —
- *   we ARE in WKWebView).
- */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../../../hooks/useEscapeStack';
 
 export interface AnnotationPopoverProps {
-  /** Live anchor rect (selection or sidebar button); re-read on scroll/resize. */
   getAnchorRect: () => DOMRect | null;
-  /** Truncated quote shown in the header; empty for global comments. */
   quote: string;
   isGlobal: boolean;
-  /** Pre-filled text (type-to-comment seeding). */
   initialText?: string;
-  /** Persistence key for the module-level draft store. */
   draftKey: string;
   onSubmit: (text: string) => void;
   onClose: () => void;
@@ -42,11 +17,8 @@ const MAX_POPOVER_WIDTH = 384;
 const GAP = 8;
 const FLIP_SPACE = 280;
 
-// Module-level draft store: survives popover unmount so reopening the same
-// key restores in-progress text (donor draftStore pattern, text-only).
 const draftStore = new Map<string, string>();
 
-/** Test seam: inspect/clear the draft store. */
 export function peekAnnotationDraft(draftKey: string): string | undefined {
   return draftStore.get(draftKey);
 }
@@ -83,12 +55,10 @@ export function AnnotationPopover({
   const hasUnsavedContentRef = useRef(hasUnsavedContent);
   hasUnsavedContentRef.current = hasUnsavedContent;
 
-  // Key change (new selection) → reload that key's draft or the seed char.
   useEffect(() => {
     setText(draftStore.get(draftKey) ?? initialText);
   }, [draftKey, initialText]);
 
-  // Mirror text into the draft store so it outlives unmount; empty deletes.
   useEffect(() => {
     if (text.trim().length > 0) {
       draftStore.set(draftKey, text);
@@ -97,7 +67,6 @@ export function AnnotationPopover({
     }
   }, [draftKey, text]);
 
-  // Track the anchor on capture-phase scroll + resize.
   useEffect(() => {
     const update = () => {
       const rect = getAnchorRect();
@@ -129,7 +98,6 @@ export function AnnotationPopover({
     }, 0);
   }, []);
 
-  // Click-outside: closes ONLY when clean (capture phase).
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
@@ -153,8 +121,6 @@ export function AnnotationPopover({
     onSubmit(text);
   }, [draftKey, onSubmit, text]);
 
-  // Escape dismiss via the centralized stack (capture phase — fires before
-  // the textarea sees the key, and LIFO with any other open overlay).
   useEscapeStack(onClose, true);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -6,8 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// A --where bound is read as JSON when it parses as JSON, and as a string
-// otherwise, so the common cases need no quoting ceremony.
 func TestWhereReadsTheBoundAsJSONWhenItIsJSON(t *testing.T) {
 	for _, tc := range []struct {
 		expr  string
@@ -36,7 +34,6 @@ func TestWhereReadsTheBoundAsJSONWhenItIsJSON(t *testing.T) {
 	}
 }
 
-// ">=" must not be read as ">" with a value of "=5".
 func TestWhereMatchesTheLongestOperatorFirst(t *testing.T) {
 	got, err := parseDocWhere("attempts>=5")
 	if err != nil {
@@ -56,10 +53,8 @@ func TestWhereRejectsAnExpressionWithNoOperator(t *testing.T) {
 	}
 }
 
-// The flag parser consumes values by advancing the index from inside a closure.
-// Go 1.22 gave three-clause loops a per-iteration variable, so this pins that
-// the advance still carries to the next iteration — otherwise a flag's value
-// would be parsed again as if it were a flag.
+// The parser advances the loop index from inside a closure; Go 1.22's
+// per-iteration loop variable is what could silently break that.
 func TestQueryFlagsConsumeTheirValues(t *testing.T) {
 	query, opts := parseDocQueryFlags("query", "app/approval-gate", "requests", []string{
 		"--where", "status=pending",
@@ -85,8 +80,6 @@ func TestQueryFlagsConsumeTheirValues(t *testing.T) {
 	}
 }
 
-// --resume is a watch flag. A one-shot read that accepted it would silently
-// ignore it, and the caller would believe it had asked for something.
 func TestResumeBelongsToWatch(t *testing.T) {
 	_, opts := parseDocQueryFlags("watch", "app/a", "c", []string{"--resume"})
 	if !opts.resume {
@@ -94,7 +87,6 @@ func TestResumeBelongsToWatch(t *testing.T) {
 	}
 }
 
-// --desc before --sort still applies to the sort that follows.
 func TestDescBeforeSortStillReversesIt(t *testing.T) {
 	query, _ := parseDocQueryFlags("query", "app/a", "c", []string{"--desc", "--sort", "updated_at"})
 	if query.Sort == nil || query.Sort.Field != "updated_at" || query.Sort.Desc == nil || !*query.Sort.Desc {
@@ -102,7 +94,6 @@ func TestDescBeforeSortStillReversesIt(t *testing.T) {
 	}
 }
 
-// Repeating --where accumulates, which is how a range on the sort field pages.
 func TestWhereRepeatsToAccumulateFilters(t *testing.T) {
 	query, _ := parseDocQueryFlags("query", "app/a", "c", []string{
 		"--where", "status=pending", "--where", "attempts>=2",
@@ -115,8 +106,6 @@ func TestWhereRepeatsToAccumulateFilters(t *testing.T) {
 	}
 }
 
-// --after carries the cursor, which is the only correct way to page: a --where
-// on the sort field skips or repeats documents that share a sort value.
 func TestAfterFlagCarriesTheCursor(t *testing.T) {
 	query, _ := parseDocQueryFlags("query", "app/a", "c", []string{"--sort", "attempts", "--after", "b7"})
 	if query.After == nil || *query.After != "b7" {
@@ -124,8 +113,6 @@ func TestAfterFlagCarriesTheCursor(t *testing.T) {
 	}
 }
 
-// --expect is pulled out of the arguments before the positional ones are read,
-// so `put ns coll id body --expect 3` still finds its id and body.
 func TestExpectFlagLeavesThePositionalArgumentsAlone(t *testing.T) {
 	rest, expect := takeExpectFlag("put", []string{"r1", `{"a":1}`, "--expect", "3"}, true)
 	if len(rest) != 2 || rest[0] != "r1" || rest[1] != `{"a":1}` {
@@ -136,8 +123,6 @@ func TestExpectFlagLeavesThePositionalArgumentsAlone(t *testing.T) {
 	}
 }
 
-// "absent" is how the CLI spells the create-only expectation, so a caller never
-// has to know that the wire encodes it as revision zero.
 func TestExpectAbsentIsTheZeroRevision(t *testing.T) {
 	_, expect := takeExpectFlag("put", []string{"r1", `{"a":1}`, "--expect", "absent"}, true)
 	if expect == nil || int64(*expect) != docstore.ExpectAbsent {

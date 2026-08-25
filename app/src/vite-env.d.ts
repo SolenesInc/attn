@@ -11,8 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_ATTN_SOURCE_FINGERPRINT?: string;
   readonly VITE_ATTN_GIT_COMMIT?: string;
   readonly VITE_ATTN_BUILD_TIME?: string;
-  // Only for a bundle running outside Tauri, which cannot read the profile's
-  // client-token file. vite.config.ts fills it in from that file.
+  // Only for a bundle running outside Tauri; vite.config.ts fills it in from the
+  // profile's client-token file.
   readonly VITE_CLIENT_TOKEN?: string;
 }
 

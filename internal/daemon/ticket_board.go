@@ -10,13 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The board read side of the work tracker. Every read is an agent pulling over
-// its own socket: the app shows the garden, so nothing about a ticket is pushed
-// to a WebSocket client any more.
-
-// ticketRows lists the board through a filter as full wire records without the
-// activity thread, newest first. This is the agent's board read (ticket_list),
-// which carries the brief.
 func (d *Daemon) ticketRows(filter store.TicketListFilter) []protocol.Ticket {
 	if d.store == nil {
 		return nil
@@ -38,8 +31,6 @@ func (d *Daemon) ticketRows(filter store.TicketListFilter) []protocol.Ticket {
 	return out
 }
 
-// handleTicketList is the agent's board read. NOT identity-scoped: it returns
-// the whole board, so source_session_id is accepted but unused.
 func (d *Daemon) handleTicketList(conn net.Conn, msg *protocol.TicketListMessage) {
 	filter := store.TicketListFilter{}
 	if msg.Status != nil {
@@ -54,8 +45,7 @@ func (d *Daemon) handleTicketList(conn net.Conn, msg *protocol.TicketListMessage
 	})
 }
 
-// handleTicketShow is the agent's non-consuming full-record read: unlike
-// ticket_inbox it never advances the unread cursor, and it is not identity-scoped.
+// Unlike ticket_inbox, this never advances the unread cursor.
 func (d *Daemon) handleTicketShow(conn net.Conn, msg *protocol.TicketShowMessage) {
 	ticketID := strings.TrimSpace(msg.TicketID)
 	if ticketID == "" {
@@ -82,20 +72,14 @@ func (d *Daemon) handleTicketShow(conn net.Conn, msg *protocol.TicketShowMessage
 	})
 }
 
-// publishTicketFact publishes the fact a mutator caused. The ticket id is
-// required: a subject-less fact would be a snapshot invalidation. Nothing
-// projects these to the wire — see factsWithoutWire — but they stay the durable
-// record the read verbs and any subscribing app are served from.
+// Nothing projects these to the wire (see factsWithoutWire); they stay the durable record.
 func (d *Daemon) publishTicketFact(name, ticketID string) {
 	if strings.TrimSpace(ticketID) == "" {
-		// Keep the board correct, but make the producer's lost id visible.
 		d.logf("bus: %s published without a ticket id", name)
 	}
 	d.publishFact(name, ticketID, nil)
 }
 
-// afterTicketMutation runs the shared post-mutation fan-out: notify the other
-// participants (the assigned agent) and publish the fact. A no-op on error.
 func (d *Daemon) afterTicketMutation(ticketID string, err error) {
 	if err != nil {
 		return
@@ -104,8 +88,6 @@ func (d *Daemon) afterTicketMutation(ticketID string, err error) {
 	d.publishTicketFact(FactTicketChanged, ticketID)
 }
 
-// ticketToProtocol maps a store ticket to its wire shape; artifacts are hydrated
-// separately for full reads.
 func ticketToProtocol(t *store.Ticket) protocol.Ticket {
 	pt := protocol.Ticket{
 		ID:             t.ID,

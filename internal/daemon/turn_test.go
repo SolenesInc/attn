@@ -44,7 +44,6 @@ func owed(t *testing.T, d *Daemon, id string) bool {
 	return protocol.Deref(session.TurnOwed)
 }
 
-// The core rule: prompting an agent does not settle it. Only the user does.
 func TestTurnSurvivesTheAgentGoingBackToWork(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -59,21 +58,17 @@ func TestTurnSurvivesTheAgentGoingBackToWork(t *testing.T) {
 	}
 	openedAt := protocol.Deref(d.sessionForBroadcast(d.store.Get("s1")).TurnOpenedAt)
 
-	// The user prompts it. It is still theirs.
 	moveTo(d, "s1", protocol.StateWorking)
 	if !owed(t, d, "s1") {
 		t.Fatal("prompting the agent settled its turn; only the user settles")
 	}
 
-	// It stops again. The turn keeps the age it opened at, so the row does not
-	// move in the queue while the user works with it.
 	moveTo(d, "s1", protocol.StateWaitingInput)
 	if got := protocol.Deref(d.sessionForBroadcast(d.store.Get("s1")).TurnOpenedAt); got != openedAt {
 		t.Errorf("turn_opened_at = %q, want %q (unchanged across the run)", got, openedAt)
 	}
 }
 
-// A run you asked for that finished without a question is still yours to read.
 func TestAFinishedRunOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -89,10 +84,6 @@ func TestAFinishedRunOwesATurn(t *testing.T) {
 	}
 }
 
-// A session you launched and have not spoken to resolves to idle sitting at its
-// prompt. Nothing will ever happen in it until you type, so it owes a turn — the
-// same one a finished run owes, which is why the resolver need not distinguish
-// them.
 func TestASessionAtItsPromptOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -122,7 +113,6 @@ func TestSettleIsTheOnlyExit(t *testing.T) {
 		t.Fatal("settle did not close the turn")
 	}
 
-	// A later turn-opening state brings it back, at a new age.
 	moveTo(d, "s1", protocol.StateWorking)
 	if owed(t, d, "s1") {
 		t.Fatal("working re-opened a turn; only turn-opening states do")
@@ -133,8 +123,6 @@ func TestSettleIsTheOnlyExit(t *testing.T) {
 	}
 }
 
-// Settling an agent that is still running is the ordinary move — it is what
-// keeps an empty queue reachable while agents work.
 func TestSettleWhileWorking(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -170,8 +158,6 @@ func TestShellSessionsNeverOweATurn(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "shell1", protocol.SessionAgentShell, "ws1")
 
-	// A shell that somehow reaches a turn-opening state still never queues:
-	// nothing would ever settle a terminal pane.
 	moveTo(d, "shell1", protocol.StateWaitingInput)
 	if owed(t, d, "shell1") {
 		t.Fatal("a shell pane owes a turn")
@@ -219,8 +205,6 @@ func TestPinnedAndMutedWorkspacesAreFilteredAtRead(t *testing.T) {
 				t.Fatalf("a session in a %s workspace owes a turn", tc.name)
 			}
 
-			// The stamp was still taken, so lifting the exclusion surfaces what
-			// was outstanding at its true age rather than starting from nothing.
 			if d.store.TurnStamps("s1").OpenedAt.IsZero() {
 				t.Fatal("the exclusion suppressed the stamp; it must filter at read")
 			}
@@ -228,22 +212,10 @@ func TestPinnedAndMutedWorkspacesAreFilteredAtRead(t *testing.T) {
 	}
 }
 
-// A settle must survive the agent working on with no bracket open.
-//
-// This is the live failure that produced the resolver's settle window, stated
-// where it was felt. Claude repaints its title every ~1.92s while a `/compact`
-// runs, and a compaction runs between turns, so the previous turn's bracket is
-// closed and the title is the only evidence left. Reading a gap past the 1.5s
-// heartbeat TTL as a settle made the resolver publish idle whenever a frame aged
-// out and working when the next one landed — and every one of those idle edges
-// opens a turn. The session the user had just settled was back in the queue a
-// second later, with no way to get it out for as long as the compaction ran.
 func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentClaude, "ws1")
 
-	// A turn ran and ended: the bracket opened and closed, which is the state a
-	// compaction starts from.
 	d.recordBracketEvidence("s1", protocol.StateWorking)
 	d.recordBracketEvidence("s1", protocol.StateIdle)
 	moveTo(d, "s1", protocol.StateIdle)
@@ -256,8 +228,8 @@ func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T)
 		t.Fatal("settle did not close the turn")
 	}
 
-	// The compaction: title frames at the measured cadence, resolver ticks once
-	// a second, so the same frame is read at several ages.
+	// Claude repaints its title every ~1.92s while a `/compact` runs, past the 1.5s
+	// heartbeat TTL.
 	const repaint = 1920 * time.Millisecond
 	base := time.Now()
 	for tick := 1; tick <= 30; tick++ {

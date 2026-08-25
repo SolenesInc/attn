@@ -11,9 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/procreap"
 )
 
-// The registry is the crash-recovery net for plugin runtime processes: a record
-// appears at spawn and disappears once the process is reaped. The reap
-// semantics are procreap's to test; this covers the launcher's side.
+// The registry is the crash-recovery net for plugin runtime processes. The reap semantics
+// are procreap's to test; this covers the launcher's side.
 func TestExecLauncherWritesAndRemovesTheRegistryEntry(t *testing.T) {
 	pluginDir := t.TempDir()
 	script := filepath.Join(pluginDir, "driver.sh")

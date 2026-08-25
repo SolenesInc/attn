@@ -1,11 +1,3 @@
-// Garden search. Matching runs client-side over the pushed garden snapshot,
-// which already carries every seed's body, so a query never costs a round trip
-// and search has no loading state at all.
-//
-// One rule holds the design together: the query is the only filter state.
-// Every affordance in the panel — the closed toggle, the scope and lens hints —
-// writes into the query rather than keeping a flag beside it.
-//
 // See docs/plans/2026-08-20-garden-search.md.
 import type { Seed } from '../hooks/useDaemonSocket';
 
@@ -27,12 +19,8 @@ export interface ParsedQuery {
   partial: 'is' | 'tender' | null;
   /** Whether anything at all filters. */
   active: boolean;
-  /**
-   * Whether this is a search rather than a lens. Text or a tender searches the
-   * scope's whole subtree; a bare `is:` value only changes which of the seeds
-   * already on screen are shown. "Show me closed ones too" is not a search, and
-   * making it flatten the tree would answer a question nobody asked.
-   */
+  /** Whether this is a search rather than a lens: text or a tender searches the
+   * subtree, a bare `is:` only filters the seeds already on screen. */
   searches: boolean;
 }
 
@@ -62,7 +50,6 @@ export function parseQuery(raw: string): ParsedQuery {
     const name = op[1].toLowerCase() as 'is' | 'tender';
     const value = op[2].toLowerCase();
     if (!value) {
-      // `is:` with nothing after it filters nothing yet; it asks for the hint.
       if (last) q.partial = name;
       else q.unknown.push(token);
       return;
@@ -75,7 +62,6 @@ export function parseQuery(raw: string): ParsedQuery {
       q.is.push(value as IsValue);
       return;
     }
-    // A partially typed value is a hint, not an error, while it is being typed.
     if (last && IS_VALUES.some((v) => v.startsWith(value))) q.partial = 'is';
     else q.unknown.push(token);
   });
@@ -105,16 +91,8 @@ export interface SeedMatch {
   idHit: boolean;
 }
 
-/**
- * One seed, ready to be matched against.
- *
- * The lowercased text is built once per snapshot instead of once per
- * keystroke, which is what keeps the cost of a keystroke the cost of the scan.
- * Over a 1000-seed garden of delegation briefs the lowercasing is 0.7ms and
- * the scan that answers the query is 0.7ms, so folding the first into the
- * second would double every keystroke for nothing. Receipts, both engines, in
- * gardenSearch.bench.ts.
- */
+/** Lowercased text is built once per snapshot, not per keystroke: over 1000
+ * seeds lowercasing is 0.7ms and the scan 0.7ms. Receipts in gardenSearch.bench.ts. */
 export interface SearchEntry {
   seed: Seed;
   title: string;
@@ -156,13 +134,6 @@ export function buildIndex(seeds: Seed[], ctx: IndexContext): SearchEntry[] {
   });
 }
 
-/**
- * Does the status lens admit this seed.
- *
- * No `is:` value is itself a lens — the default one. The garden grows without
- * bound and most of what it holds is done, so closed seeds stay out until a
- * token asks for them.
- */
 export function satisfiesLens(entry: SearchEntry, is: IsValue[]): boolean {
   if (is.length === 0) return !entry.closed;
   return is.some((value) => satisfies(value, entry));
@@ -209,13 +180,8 @@ function rangesOf(haystack: string, terms: string[]): Range[] {
 
 const SNIPPET_WIDTH = 132;
 
-/**
- * A window of body text around the first hit, whitespace collapsed.
- *
- * The window is cut before the whitespace is collapsed: collapsing an 8KB
- * brief to show 132 characters of it is the kind of cost that only shows up
- * once a garden is big.
- */
+// The window is cut before whitespace is collapsed: collapsing an 8KB brief to
+// show 132 characters of it is cost that only shows up once a garden is big.
 function snippetOf(body: string, bodyLower: string, terms: string[]): { text: string; ranges: Range[] } | null {
   let at = -1;
   for (const term of terms) {
@@ -230,13 +196,6 @@ function snippetOf(body: string, bodyLower: string, terms: string[]): { text: st
   return { text, ranges: rangesOf(text, terms) };
 }
 
-/**
- * Does one seed answer the query, and how well.
- *
- * The status lens comes first because it is the cheapest test and the one that
- * removes the most rows: without an `is:` value, closed seeds are simply not in
- * the garden the reader is looking at.
- */
 export function matchEntry(entry: SearchEntry, q: ParsedQuery): SeedMatch | null {
   if (q.unknown.length > 0) return null;
   if (!satisfiesLens(entry, q.is)) return null;
@@ -272,19 +231,12 @@ export function matchEntry(entry: SearchEntry, q: ParsedQuery): SeedMatch | null
     seed: entry.seed,
     rank,
     titleRanges: titleHit || rank === 0 ? rangesOf(entry.title, q.terms) : [],
-    // The snippet earns its line only when the title does not already show why
-    // the row matched.
     snippet: rank === 40 ? snippetOf(entry.seed.body ?? '', entry.bodyLower, q.terms) : null,
     idHit,
   };
 }
 
-/**
- * Every entry in `pool` that answers the query, best first.
- *
- * Ties keep the pool's own order, which is the snapshot's newest-first — so a
- * query never reshuffles rows that are equally good answers.
- */
+/** Every entry in `pool` that answers the query, best first; ties keep pool order. */
 export function searchGarden(pool: SearchEntry[], q: ParsedQuery): SeedMatch[] {
   const matches: Array<{ match: SeedMatch; i: number }> = [];
   pool.forEach((entry, i) => {

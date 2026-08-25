@@ -42,9 +42,8 @@ func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMess
 	d.sendToClient(client, response)
 }
 
-// crewSleep asks a member to close its own day. The words are persisted before
-// delivery and use the agent-message doorbell, but carry no sender session:
-// this is Victor's request, not one agent speaking with his authority.
+// crewSleep asks a member to close its own day. The words carry no sender session:
+// this is the user's request, not one agent speaking with their authority.
 func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()

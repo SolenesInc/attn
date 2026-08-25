@@ -31,10 +31,8 @@ export type RelayDelegate = {
   suiteReportInputTaken(params: unknown): Promise<void>;
 };
 
-// One RelayConnection per suite that dials in. Mirrors attn-rpc.ts's
-// consume/route framing, but a request here is driver -> suite (its own id
-// space) while inbound requests are suite -> driver, dispatched to the
-// delegate.
+// One RelayConnection per suite that dials in. A request here is driver -> suite (its
+// own id space); inbound requests are suite -> driver, dispatched to the delegate.
 export class RelayConnection {
   private buffer = "";
   private nextID = 1;
@@ -172,9 +170,6 @@ export class RelayConnection {
   }
 }
 
-// Driver-owned unix socket that the pi-side suite dials into. One suite
-// connection per live pi run; the driver binds a connection to a RunState
-// once suite.hello arrives with a matching token.
 export class RelayServer {
   readonly socketPath: string;
   private readonly delegate: RelayDelegate;

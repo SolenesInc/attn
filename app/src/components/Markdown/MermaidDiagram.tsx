@@ -34,7 +34,6 @@ function resolveTheme(): MermaidTheme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'neutral' : 'dark';
 }
 
-/** Track the resolved theme, re-evaluating on data-theme changes or (when unset) OS scheme changes. */
 function useMermaidTheme(): MermaidTheme {
   const [theme, setTheme] = useState<MermaidTheme>(resolveTheme);
 
@@ -60,9 +59,6 @@ let renderCounter = 0;
 
 interface MermaidDiagramProps {
   code: string;
-  // Called after the diagram's rendered height may have changed — i.e. after
-  // the loading placeholder is replaced by the real SVG or an error fallback.
-  // A CodeView host uses this to know when its cached item layout is stale.
   onLayoutChange?: () => void;
   presentation?: 'static' | 'reader';
 }
@@ -165,10 +161,8 @@ function RenderedMermaidDiagram({
     };
   }, [code, theme]);
 
-  // Kept in a ref (not an effect dep) so a caller passing a fresh callback
-  // identity on every render — e.g. a parent re-rendered by an unrelated
-  // items-version bump — never re-fires this; only an actual svg/error
-  // transition (a genuine layout change) does.
+  // Kept in a ref, not an effect dep, so a fresh callback identity never
+  // re-fires this; only a real svg/error transition does.
   const onLayoutChangeRef = useRef(onLayoutChange);
   onLayoutChangeRef.current = onLayoutChange;
 
@@ -223,10 +217,6 @@ function RenderedMermaidDiagram({
   }, [focusState]);
 
   if (error) {
-    // mermaid's message quotes the line it choked on and points a caret under
-    // the column, so it is source rather than prose: in a paragraph the caret
-    // lands nowhere near what it accuses, and the fence syntax it quotes reads
-    // as text the agent wrote.
     const report = (
       <div className="markdown-mermaid-error-wrap">
         <p className="markdown-mermaid-error-note">Diagram failed to render</p>
@@ -329,9 +319,8 @@ function RenderedMermaidDiagram({
 
   return (
     <div className={`markdown-mermaid-frame ${isOversized ? 'markdown-mermaid-frame--oversized' : ''}`.trim()}>
-      {/* Every diagram gets the header, not only an oversized one: the frame is
-          what tells the reader this is a picture rather than prose, and a
-          picture that only sometimes has an edge is the unpolished case. */}
+      {/* Every diagram gets the header, not only an oversized one: the frame is what
+          tells the reader this is a picture rather than prose. */}
       <div className="markdown-mermaid-toolbar" data-md-chrome="1">
         <span className="markdown-mermaid-label">diagram</span>
         {isOversized && (

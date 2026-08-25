@@ -12,14 +12,10 @@ import (
 type shellPaneLaunch struct {
 	command *exec.Cmd
 	env     []string
-	// overlayDir is the startup overlay to remove when the session ends, "" when
-	// there is nothing to remove. A path, not a closure, so an in-place worker
-	// upgrade can hand the removal to the image that adopts the session.
+	// A path, not a closure, so an in-place worker upgrade can hand it over.
 	overlayDir string
 }
 
-// removeShellOverlay is the one way a startup overlay goes away, on the spawn
-// failure paths and at session end alike.
 func removeShellOverlay(dir string) {
 	if dir == "" {
 		return
@@ -29,9 +25,6 @@ func removeShellOverlay(dir string) {
 
 type shellStartupStrategy func(shellPath string, env []string) (shellPaneLaunch, error)
 
-// shellStartupStrategies lists shells whose startup contracts let attn restore
-// PATH after user configuration has run. Add a strategy here when supporting a
-// new shell; shells without one retain their normal login launch unchanged.
 var shellStartupStrategies = map[string]shellStartupStrategy{
 	"zsh":  prepareZshShellPaneLaunch,
 	"bash": preparePOSIXShellPaneLaunch,
@@ -39,12 +32,8 @@ var shellStartupStrategies = map[string]shellStartupStrategy{
 	"fish": prepareFishShellPaneLaunch,
 }
 
-// prepareShellPaneLaunch preserves the user's single interactive login shell
-// while restoring the launch PATH after its personal startup files when the
-// shell has a supported post-startup hook. A normal cmd.Env assignment is not
-// enough for those shells: login and interactive rc files run after exec and
-// may prepend an old attn installation. Other shells retain their prior -l
-// launch instead of being silently replaced with a different interpreter.
+// A plain cmd.Env is not enough: login and interactive rc files run after exec and may
+// prepend an old attn installation.
 func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
 	for _, name := range shellNames(shellPath) {
 		if strategy, ok := shellStartupStrategies[name]; ok {
@@ -74,8 +63,7 @@ func prepareFishShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch
 		return shellPaneLaunch{}, fmt.Errorf("launch environment is missing PATH")
 	}
 	return shellPaneLaunch{
-		// fish runs -C commands after config.fish, so this is the final startup
-		// action before it accepts terminal input.
+		// fish runs -C commands after config.fish, so this is the last startup action.
 		command: exec.Command(shellPath, "-l", "-C", "set -gx PATH "+shellQuote(path)),
 		env:     env,
 	}, nil
@@ -127,14 +115,8 @@ func prepareZshShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch,
 	}, nil
 }
 
-// OSC 133 shell integration for shells that do not emit the markers natively
-// (fish does; zsh and bash need help). The marks give attn instant
-// command-start/end state edges with exit codes (internal/pty/shell_signals.go)
-// and command blocks in the terminal UI. Both scripts live as files in the
-// startup overlay and are sourced behind a POSIX-safe interpreter guard, so a
-// different shell parsing the overlay (including the fake /bin/sh shells the
-// tests use) never sees the zsh/bash-only syntax. ATTN_NO_SHELL_INTEGRATION=1
-// is the user's opt-out.
+// Sourced from the startup overlay behind a POSIX-safe interpreter guard, so a different
+// shell parsing the overlay never sees zsh/bash-only syntax.
 const (
 	zshIntegrationFile  = "attn-osc133.zsh"
 	bashIntegrationFile = "attn-osc133.bash"
@@ -288,8 +270,7 @@ export PATH
 unset attn_startup_file
 `
 	if file == ".zshrc" {
-		// After the user's rc so their config cannot clobber the hooks. The
-		// guard stays POSIX: only real zsh ever parses the integration file.
+		// After the user's rc so their config cannot clobber the hooks; the guard stays POSIX.
 		content += `if [ -n "${ZSH_VERSION-}" ] && [ -z "${ATTN_NO_SHELL_INTEGRATION-}" ] && [ -r "$ATTN_SHELL_INIT_DIR/` + zshIntegrationFile + `" ]; then
   . "$ATTN_SHELL_INIT_DIR/` + zshIntegrationFile + `"
 fi
@@ -358,17 +339,8 @@ func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunc
 }
 
 func posixStartupOverlay(bash bool) string {
-	// bash (and shells built on its POSIX-mode startup, such as macOS's
-	// /bin/sh) cache the "~" home directory the first time it is looked up
-	// during shell startup and do not re-derive it after this script
-	// reassigns and exports HOME, even though $HOME itself reads back
-	// correctly. Left alone, the very first "~" reference in the user's own
-	// startup files - commonly a plain `source ~/.bashrc` - resolves
-	// against this overlay's ephemeral directory instead of the real home,
-	// producing a spurious "No such file or directory" before the user's
-	// startup can run. Forking one throwaway external command flushes that
-	// stale cache as a side effect, so run it before sourcing anything that
-	// might use "~".
+	// bash (and macOS's /bin/sh) cache "~"'s home during startup and never re-derive it after
+	// this script reassigns HOME; forking one throwaway external command flushes that cache.
 	const warmup = `if [ -x /usr/bin/true ]; then
   /usr/bin/true
 fi

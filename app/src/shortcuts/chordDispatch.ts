@@ -1,17 +1,7 @@
-// app/src/shortcuts/chordDispatch.ts
-// Shared chord-leader lookup for the two dispatch paths (window listener and
-// the terminal's Ghostty input handler). Reads bindings through the resolver so
-// rebinds/unbinds take effect everywhere at once.
-
 import { Combo, matchesShortcut, isChord } from './registry';
 import { resolvedShortcutEntries } from './resolver';
 import { ChordCandidate } from './chordState';
 
-/**
- * If `e` matches the leader of any bound chord, return that leader plus every
- * chord that shares it — so one leader can fan out to several follow keys
- * (⌘K D, ⌘K G). Returns null when no chord leader matches.
- */
 export function matchChordLeader(
   e: KeyboardEvent,
 ): { leader: Combo; candidates: ChordCandidate[] } | null {

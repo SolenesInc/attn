@@ -1,7 +1,5 @@
-/**
- * Anchor record and resolve/rebase result shapes. Pure data over strings — no
- * DOM, no React — and every offset is UTF-16 code units.
- */
+/** Anchor record and resolve/rebase result shapes. Every offset is UTF-16 code
+ * units. */
 
 export interface AnchorRecord {
   /** data-block-id of the OWNING (deepest containing) block. */
@@ -21,10 +19,8 @@ export interface AnchorRecord {
   contentHash: string;
 }
 
-/**
- * One stamped block's rendered text: exactly what the DOM's text nodes hold for
- * the block, chrome skipped. Normalization rule lives in extractBlocks.ts.
- */
+/** One stamped block's rendered text, chrome skipped; the normalization rule
+ * lives in extractBlocks.ts. */
 export interface BlockText {
   blockId: string;
   startLine: number;

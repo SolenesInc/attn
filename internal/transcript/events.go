@@ -18,11 +18,8 @@ import (
 const (
 	EventKindUser      = "user"
 	EventKindAssistant = "assistant"
-	// EventKindThinking is the agent's own reasoning: Claude "thinking" content
-	// blocks, Codex "agent_reasoning" payloads. It is where an agent states what
-	// it is trying to do, and there is roughly twice as much of it as assistant
-	// prose, so a consumer asking "what is this session doing right now" wants it.
-	// Consumers that only want what the user was shown should skip this kind.
+	// Roughly twice the volume of assistant prose; a consumer that wants only what
+	// the user saw must skip this kind.
 	EventKindThinking   = "thinking"
 	EventKindToolCall   = "tool_call"
 	EventKindToolResult = "tool_result"
@@ -45,9 +42,6 @@ var (
 	toolFailurePattern      = regexp.MustCompile(`(?i)(?:process|script|command) exited with (?:code )?[1-9][0-9]*|["']?exit_code["']?\s*[:=]\s*[1-9][0-9]*`)
 )
 
-// Event is attn's stable, provider-neutral transcript record. Cursor identifies
-// the event within its source record so a consumer can checkpoint after every
-// emitted event without skipping siblings decoded from the same JSONL line.
 type Event struct {
 	Cursor     string `json:"cursor"`
 	Timestamp  string `json:"timestamp,omitempty"`
@@ -59,24 +53,12 @@ type Event struct {
 	IsError    bool   `json:"is_error,omitempty"`
 }
 
-// EventPage is one bounded read of a transcript. NextCursor advances across
-// both emitted events and ignored provider noise so follow-mode polling never
-// repeatedly parses the same source records.
 type EventPage struct {
 	Events     []Event
 	NextCursor string
 	AtEnd      bool
 }
 
-// HeadCursor returns a cursor positioned after the last complete record, so a
-// later ReadEventPage returns only what was appended afterwards.
-//
-// It exists for consumers that want the transcript's future and not its past.
-// The alternative — reading from byte 0 and discarding — costs a full scan of a
-// file that reaches tens of megabytes, and produces nothing the caller wanted.
-//
-// A transcript with no complete record yet has nothing to seek past, and comes
-// back with the empty cursor, which reads from the beginning.
 func HeadCursor(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -91,11 +73,8 @@ func HeadCursor(path string) (string, error) {
 	if !hasCompleteRecord {
 		return "", nil
 	}
-	// Seek past the last complete record rather than to the file's end: a
-	// half-written final line must stay unread until its writer appends the
-	// newline, exactly as ReadEventPage treats it. The byte after the file's
-	// last newline is both — the end of the file when it ends cleanly, and the
-	// start of the partial line when it does not.
+	// Past the last complete record, not the file's end: a half-written final line
+	// must stay unread until its writer appends the newline.
 	info, err := f.Stat()
 	if err != nil {
 		return "", err
@@ -107,8 +86,6 @@ func HeadCursor(path string) (string, error) {
 	return encodeEventCursor(fingerprint, offset, 0), nil
 }
 
-// offsetAfterLastNewline returns one past the file's last newline, or 0 when it
-// holds none.
 func offsetAfterLastNewline(f *os.File, size int64) (int64, error) {
 	const chunkSize int64 = 4096
 	for searchEnd := size; searchEnd > 0; {
@@ -125,9 +102,6 @@ func offsetAfterLastNewline(f *os.File, size int64) (int64, error) {
 	return 0, nil
 }
 
-// ReadEventPage reads complete JSONL records strictly after cursor. It never
-// consumes a partially written final record, so a later call can decode it
-// exactly once after the writer appends its newline.
 func ReadEventPage(path, agent, cursor string, maxEvents int) (EventPage, error) {
 	if maxEvents <= 0 {
 		maxEvents = defaultEventPageSize
@@ -403,9 +377,6 @@ func isDuplicateAssistantEcho(parsed parsedEventLine, previous Event, hasPreviou
 		previous.Text == parsed.events[0].Text
 }
 
-// decodeEventRecord is the single stateful normalization step used by both
-// paged transcript reads and live followers. It owns provider parsing and
-// adjacent provider-echo suppression; callers only own how bytes are read.
 func decodeEventRecord(agent string, line []byte, previous Event, hasPrevious bool) ([]Event, Event, bool) {
 	parsed := parseEventLine(agent, line)
 	events := parsed.events
@@ -436,10 +407,8 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 		case "agent_message":
 			return textEvent(envelope.Timestamp, EventKindAssistant, "assistant", payload.Message)
 		case "agent_reasoning":
-			// Codex's readable reasoning summary. Its sibling "reasoning"
-			// response_item carries only encrypted_content and an empty summary,
-			// so this is the sole usable reasoning signal — and it is absent from
-			// some rollouts entirely. Never depend on it being present.
+			// The sibling "reasoning" response_item carries only encrypted_content, so
+			// this is the only usable signal — and some rollouts omit it entirely.
 			return textEvent(envelope.Timestamp, EventKindThinking, "assistant", payload.Text)
 		}
 		if strings.Contains(payload.Type, "error") || payload.Error != "" {
@@ -524,9 +493,6 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 				textParts = append(textParts, block.Text)
 			}
 		case "thinking":
-			// Emitted as its own event rather than folded into textParts: it is
-			// the agent's reasoning, not what the user was shown, and a consumer
-			// must be able to tell them apart.
 			if strings.TrimSpace(block.Thinking) != "" {
 				events = append(events, Event{
 					Timestamp: envelope.Timestamp,
@@ -692,9 +658,6 @@ func redactEvent(event *Event) {
 	event.Text = RedactText(strings.TrimSpace(event.Text))
 }
 
-// RedactText removes common credential forms from all human-readable event
-// fields. Structured tool payloads are additionally redacted by key before
-// rendering, while these patterns cover secrets embedded in plain output.
 func RedactText(text string) string {
 	if text == "" {
 		return ""

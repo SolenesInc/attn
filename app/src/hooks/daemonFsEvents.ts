@@ -1,11 +1,5 @@
-/**
- * Filesystem daemon events: `fs_changed` and the `fs_*_result` answers to the
- * filesystem commands the notebook, the markdown opener, and the file pickers
- * issue. Kept out of `useDaemonSocket.ts` so that grepping an `fs_` wire name
- * lands in a file about the filesystem rather than in the socket hook.
- *
- * The hook still owns the transport; this module owns the event bodies.
- */
+/** Filesystem daemon events: `fs_changed` and the `fs_*_result` answers. The socket
+ * hook still owns the transport; this module owns the event bodies. */
 
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
@@ -31,10 +25,8 @@ export interface FsEventContext {
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
 }
 
-/**
- * Handle one filesystem event. Returns false when the event is not one of ours,
- * so the caller can keep its own dispatch exhaustive.
- */
+/** Handle one filesystem event. Returns false when the event is not one of ours, so
+ * the caller can keep its own dispatch exhaustive. */
 export function handleFsDaemonEvent(event: FsEvent, ctx: FsEventContext): boolean {
   const { pending } = ctx;
   switch (event.event) {

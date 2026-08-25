@@ -39,10 +39,8 @@ func discoverPluginManifests(pluginDir string) ([]pluginManifest, []pluginManife
 	return plugins.Discover(pluginDir)
 }
 
-// pluginDirForSocket keeps plugin discovery in the same runtime root as the
-// daemon socket. App-managed daemon restarts route by socket path, so relying
-// only on an inherited ATTN_PROFILE can otherwise make a profile daemon start
-// against the default profile's plugins after a restart.
+// Plugin discovery stays in the same runtime root as the daemon socket: app-managed restarts
+// route by socket path, so an inherited ATTN_PROFILE would reach the wrong plugins.
 func pluginDirForSocket(socketPath string) string {
 	if override := strings.TrimSpace(os.Getenv("ATTN_PLUGIN_DIR")); override != "" {
 		return override
@@ -78,11 +76,6 @@ func (d *Daemon) ensurePluginSupervisor() *pluginSupervisor {
 			execPluginProcessLauncher{registryDir: plugins.RuntimeRegistryDir(filepath.Dir(d.socketPath))},
 			nil,
 			func(manifest pluginManifest, generation uint64) []string {
-				// ATTN_PLUGIN_DATA_ROOT is set for every entrypoint kind: where a
-				// plugin keeps its own state has nothing to do with how it was
-				// packaged, and a path that exists in the bundle but not in a
-				// checkout is absent from exactly the tests that would exercise it.
-				// The plugin creates the directory; the daemon only names it.
 				overrides := []string{
 					"ATTN_SOCKET_PATH=" + d.socketPath,
 					"ATTN_PLUGIN_NAME=" + manifest.Name,
@@ -106,24 +99,14 @@ func (d *Daemon) ensurePluginSupervisor() *pluginSupervisor {
 	return d.pluginSupervisor
 }
 
-// pluginLogDirForSocket keeps each plugin's captured stdout/stderr beside the
-// runtime root that owns the plugin, next to the pty workers' own log tree. It
-// deliberately sits outside the plugin discovery directory: anything under
-// there is scanned for manifests.
+// Deliberately outside the plugin discovery directory: anything under there is
+// scanned for manifests.
 func pluginLogDirForSocket(socketPath string) string {
 	return filepath.Join(filepath.Dir(socketPath), "plugin-log")
 }
 
-// notificationKindPluginParked marks a notification produced by a plugin the
-// supervisor gave up restarting.
 const notificationKindPluginParked = "plugin_parked"
 
-// notifyPluginParked is the supervisor's OnGiveUp sink: a plugin that crash-
-// looped past the give-up tripwire stops being retried, so the only way the
-// user learns about it is a loud line in the daemon log plus a durable
-// notification. Reinstalling the plugin, or restarting attn, re-enters
-// supervision — there is no per-plugin restart verb yet, so the copy must not
-// promise one.
 func (d *Daemon) notifyPluginParked(name string, snapshot pluginRuntimeSnapshot) {
 	detail := ""
 	if snapshot.LastExit != nil {
@@ -153,20 +136,8 @@ func pluginDataDirForSocket(socketPath, pluginName string) string {
 	return filepath.Join(filepath.Dir(socketPath), "plugin-data", pluginName)
 }
 
-// reapStrandedPluginRuntimes kills plugin runtimes a previous daemon left
-// behind. A runtime exits on its own when its daemon connection closes, so this
-// only catches the ones that could not — killed with SIGKILL, or wedged — and
-// the PID lock guarantees no live daemon owns them. It has to run before any
-// plugin starts: a stranded runtime still holds its relay socket open, and a
-// session already connected to one would keep reporting into a process that can
-// reach no daemon at all.
-//
-// Unlike profile clean, this daemon keeps its registry, so every record it just
-// acted on is retired. A process that survived SIGKILL keeps its record — that
-// one is still out there. An unreadable record is retired too, though nothing
-// was acted on: it names no pid anyone can signal, so keeping it would only
-// re-report the same undecodable file at every startup for the life of the
-// profile — which is the growth this retirement exists to stop.
+// Must run before any plugin starts: a stranded runtime still holds its relay
+// socket open. An unreadable record is retired too — it names no pid to signal.
 func (d *Daemon) reapStrandedPluginRuntimes() {
 	results := plugins.ReapRuntimeProcesses(filepath.Dir(d.socketPath))
 	if len(results) == 0 {
@@ -200,10 +171,6 @@ func (d *Daemon) startInstalledPlugins() {
 	for _, issue := range issues {
 		d.logf("plugin manifest skipped: %v", issue)
 	}
-	// Before any start, and over the runs rather than the catalog: at this point
-	// every run in the store is spoken for by nobody, and the ones whose plugin
-	// is missing from the catalog entirely are the ones nothing else will ever
-	// arm — a removed plugin, or a manifest that stopped loading.
 	d.armPluginDriverSilenceWatchForEveryRun()
 	for _, item := range catalog {
 		if !item.Installed {
@@ -307,9 +274,8 @@ func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {
 func (d *Daemon) pluginCommandEnv(extra ...string) []string {
 	env := append([]string(nil), os.Environ()...)
 	env = mergePluginEnvironment(env, d.cachedLoginShellEnv())
-	// Where a driver's agent writes its durable auto-mode denial record. The
-	// daemon names it because only the daemon knows which profile's data dir it
-	// is serving, and it is the same file reconcileAutoModeDenialLedger reads.
+	// The daemon names the driver's denial-ledger path because only it knows which
+	// profile's data dir it is serving; reconcileAutoModeDenialLedger reads the same.
 	env = mergePluginEnvironment(env, []string{automode.DenialLedgerEnvVar + "=" + autoModeDenialLedgerPath()})
 	env = mergePluginEnvironment(env, extra)
 	return env

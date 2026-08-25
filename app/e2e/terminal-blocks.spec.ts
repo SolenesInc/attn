@@ -3,13 +3,8 @@ import { test, expect, waitForMockPtyBanner } from './fixtures';
 const OSC = ']133;';
 const BEL = '';
 
-// A captured fish 4.x interactive lifecycle, reduced to its marker skeleton:
-// prompt-start (A), input-start (B), pre-exec with the percent-encoded
-// command line (C), and command-end with the exit code (D).
-//   row 0: prompt> echo hello
-//   row 1: hello
-//   row 2: world
-//   row 3: prompt>            (next prompt)
+// A captured fish 4.x interactive lifecycle: prompt-start (A), input-start (B),
+// pre-exec (C), command-end with the exit code (D).
 const BLOCK_STREAM = '[2J[H'
   + `${OSC}A;click_events=1${BEL}prompt> ${OSC}B${BEL}echo hello\r\n`
   + `${OSC}C;cmdline_url=echo%20hello${BEL}hello\r\nworld\r\n`
@@ -44,10 +39,8 @@ async function openTerminalSession(
   await page.locator(`[data-testid="session-${sessionId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${sessionId}"][data-pane-kind="agent"] .terminal-container`);
   await expect(terminal).toBeVisible();
-  // The container becomes visible before the Ghostty wasm terminal finishes
-  // initializing, and PTY data delivered before the pane handle registers is
-  // dropped by design (a real attach replays it; the e2e mock has no replay).
-  // Wait for the pane's connect_terminal signal before writing the stream.
+  // PTY data delivered before the pane handle registers is dropped by design, and
+  // the e2e mock has no replay — so wait for connect_terminal first.
   await expect
     .poll(
       async () => page.evaluate(
@@ -57,8 +50,8 @@ async function openTerminalSession(
       ),
     )
     .toBe(true);
-  // connect_terminal fires before ptyAttach, so the mock banner is still in
-  // flight here. Let it land before the caller clears the screen.
+  // connect_terminal fires before ptyAttach: let the mock banner land before the
+  // caller clears the screen.
   await waitForMockPtyBanner(page, sessionId);
   return terminal;
 }
@@ -102,7 +95,6 @@ test.describe('Ghostty terminal command blocks', () => {
     const rows = await writeBlockStream(page, terminal, 's-block-copy');
     await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
 
-    // A plain click on the block's output selects the whole block.
     await terminal.click({ position: { x: 30, y: rows.outputRowY } });
     await page.keyboard.press('Meta+c');
     await expect
@@ -121,9 +113,6 @@ test.describe('Ghostty terminal command blocks', () => {
     const rows = await writeBlockStream(page, terminal, 's-block-command');
     await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
 
-    // Click inside the command region of the prompt row; the command comes
-    // from the pre-exec marker, not from screen scraping, so it excludes the
-    // prompt decoration.
     await terminal.click({ position: { x: 100, y: rows.commandRowY } });
     await page.keyboard.press('Meta+c');
     await expect
@@ -137,12 +126,10 @@ test.describe('Ghostty terminal command blocks', () => {
     const rows = await writeBlockStream(page, terminal, 's-block-miss');
     await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
 
-    // Click well below the block (the empty area under the next prompt).
     const bounds = await terminal.boundingBox();
     expect(bounds).not.toBeNull();
     await terminal.click({ position: { x: 30, y: rows.outputRowY + bounds!.height / 2 } });
     await page.keyboard.press('Meta+c');
-    // Clipboard must stay untouched: poll a moment, expect the sentinel.
     await page.waitForTimeout(300);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('clipboard-sentinel');
   });
@@ -223,12 +210,10 @@ test.describe('Ghostty terminal command blocks', () => {
     await expect(results.locator('.ghostty-filter-line mark')).toHaveText('wor');
     await expect(page.locator('[data-testid="ghostty-filter-count"]')).toHaveText('1 line');
 
-    // A query matching nothing shows the empty state, not stale lines.
     await filterInput.fill('absent-needle');
     await expect(results.locator('.ghostty-filter-line')).toHaveCount(0);
     await expect(results.locator('.ghostty-filter-empty')).toBeVisible();
 
-    // Esc closes the filter and returns focus to the terminal.
     await filterInput.press('Escape');
     await expect(page.locator('[data-testid="ghostty-filter-panel"]')).not.toBeVisible();
   });
@@ -239,8 +224,6 @@ test.describe('Ghostty terminal command blocks', () => {
     const rows = await writeBlockStream(page, terminal, 's-block-triple');
     await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
 
-    // Triple click on the prompt row: distinct from the double-click word
-    // ('echo') and the block command ('echo hello').
     await terminal.click({ position: { x: 100, y: rows.commandRowY }, clickCount: 3 });
     await expect
       .poll(async () => page.evaluate(() => navigator.clipboard.readText()))

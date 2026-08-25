@@ -1,16 +1,5 @@
-/**
- * Smart punctuation + emoji shortcodes for the markdown reader.
- *
- * `transformText` is the single source of truth and must stay pure and stable:
- * annotation text-search reproduces rendered text from source bytes, i.e.
- * `transformText(sourceText) === renderedText`. Order is load-bearing — emoji
- * first, then smart punctuation. The plugin applies it to hast text nodes only,
- * so URLs (element properties) are untouched while link labels transform.
- *
- * The en-dash rule is narrowed on purpose: `--` becomes `–` ONLY between two
- * digits, so CLI flags such as `bun --watch` survive. Do NOT swap in
- * remark-smartypants, which rewrites `--` everywhere.
- */
+// Invariant: `transformText(sourceText) === renderedText`, which annotation text-search
+// depends on. Do NOT swap in remark-smartypants, which rewrites `--` everywhere.
 
 import type { Element, Root, RootContent } from "hast";
 import type { Text } from "hast";
@@ -55,13 +44,6 @@ export function replaceEmojiShortcodes(text: string): string {
   return text.replace(/:([a-z_]+):/g, (match, code: string) => EMOJI_MAP[code] ?? match);
 }
 
-/**
- * Exact chain, in order: ellipsis, em dash, narrowed en dash, curly quotes.
- * `prevChar` is the rendered character before `text`, empty at a block start.
- * hast splits prose at inline boundaries, so a quote at position 0 is not
- * necessarily an opener — it opens only when prevChar is empty or [\s([{],
- * which is what keeps `transformText(sourceSlice) === renderedText` true.
- */
 export function applySmartPunctuation(text: string, prevChar = ""): string {
   const opensAtStart = prevChar === "" || /[\s([{]/.test(prevChar);
   const openOrKeep = (match: string, pre: string, open: string): string =>
@@ -76,10 +58,6 @@ export function applySmartPunctuation(text: string, prevChar = ""): string {
     .replace(/'/g, "’"); // remaining singles close / apostrophe
 }
 
-/**
- * Emoji shortcodes then smart punctuation; pure and idempotent. `prevChar`
- * disambiguates a leading quote — see applySmartPunctuation.
- */
 export function transformText(text: string, prevChar = ""): string {
   return applySmartPunctuation(replaceEmojiShortcodes(text), prevChar);
 }
@@ -117,10 +95,6 @@ function isText(node: RootContent): node is Text {
   return node.type === "text";
 }
 
-/**
- * Last rendered character in a node, for quote context: skipped subtrees still
- * contribute their trailing character, and `<br>` counts as a newline.
- */
 function trailingTextChar(node: RootContent): string | null {
   if (isText(node)) {
     return node.value.length > 0 ? node.value.slice(-1) : null;
@@ -139,12 +113,6 @@ function trailingTextChar(node: RootContent): string | null {
   return null;
 }
 
-/**
- * Mutates text-node values in place, never element properties. The walk
- * threads the previous rendered character through the tree so a quote that
- * starts a text node curls the right way; block boundaries need no case of
- * their own, as mdast-util-to-hast emits `\n` nodes that reset the context.
- */
 export default function rehypeProseTransforms() {
   return (tree: Root): void => {
     const ctx = { prev: "" };

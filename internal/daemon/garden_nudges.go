@@ -18,9 +18,6 @@ var gardenRingEvents = map[garden.Verb]string{
 	garden.VerbWither: "withered", garden.VerbReplant: "replanted",
 }
 
-// handleSeedWatch adds or removes this session's explicit subscription. A
-// dispatch subscription is separate and automatic, so unwatch never severs the
-// relationship between a delegator and its delegate.
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
 	verb := "watch"
 	watching := !protocol.Deref(msg.Unwatch)
@@ -81,9 +78,8 @@ func (d *Daemon) consumeSeedBell(sessionID, seedID string) {
 	}
 }
 
-// ringSeedActivity finds the audience from the current graph. Watching an
-// ancestor covers descendants planted later because no subscription is copied
-// down the tree.
+// Watching an ancestor covers descendants planted later, because no subscription
+// is copied down the tree.
 func (d *Daemon) ringSeedActivity(seedID, eventKind string, excludedSessionIDs ...string) {
 	if d.store == nil {
 		return

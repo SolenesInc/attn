@@ -10,11 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The two bus handlers are the glue the app talks to, and their refusal branches
-// are the ones a user meets when something is already wrong. A refusal that says
-// nothing is worse than no command at all, so each is checked for the sentence
-// it sends back — not just for "success is false".
-
 func busTestClient() *wsClient {
 	return &wsClient{send: make(chan outboundMessage, 4)}
 }
@@ -55,16 +50,11 @@ func TestBusStatusGetAnswersTheAskingClient(t *testing.T) {
 	if result.Producers[0].Name != FactSessionStateChanged {
 		t.Errorf("producer = %q, want %q", result.Producers[0].Name, FactSessionStateChanged)
 	}
-	// Windows travel with the numbers: a rate is meaningless without the span it
-	// was measured over, and no surface should hardcode its own.
 	if result.RecentWindowSeconds <= 0 || result.BaselineWindowSeconds <= 0 || result.SurgeRatePerHour <= 0 {
 		t.Errorf("result does not carry the windows and the tripwire: %+v", result)
 	}
 }
 
-// A request id is how the app pairs an answer with the promise waiting for it.
-// Without one there is nothing to settle, so this fails loudly rather than
-// sending a result nobody can match.
 func TestBusStatusGetWithoutARequestIDIsACommandError(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	client := busTestClient()
@@ -105,7 +95,6 @@ func TestBusSetConsumerEnabledFlipsTheDatabaseBit(t *testing.T) {
 	if stored.Enabled {
 		t.Error("the row is still enabled; the kill switch must be the database bit itself")
 	}
-	// The cursor is kept: disabling stops delivery, it does not forget position.
 	if stored.Cursor != 7 {
 		t.Errorf("cursor = %d, want 7", stored.Cursor)
 	}

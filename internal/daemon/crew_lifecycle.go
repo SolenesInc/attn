@@ -14,75 +14,22 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// The crew lifecycle's daemon half: the tick that watches awake members, the
-// signals it reads, and the two things it can do about them.
-//
-// It is the presence system's second consumer. Session-activity generation asks
-// presence one question — generate now? — and this asks a different one, so it
-// reads the same tier and adds what that question needs: how long the user has
-// been gone (client_presence.go), and how old a session's prompt cache is.
-//
-// Idle systems must be idle. Cache pressure gates every action in
-// crew.Decide, so the ordinary tick on a quiet attended session reads the
-// roster, finds nothing near expiry, and sends nothing at all.
-
 const (
-	// crewLifecycleKind is the tick's job kind on the durable queue — one
-	// mechanism for every recurring duty, one durable record of when it fires.
-	crewLifecycleKind = "crew_lifecycle_tick"
-	// crewLifecycleInterval is how often the decision is remade. It must be well
-	// under the heartbeat lead so a member cannot slip from "fine" to "lapsed"
-	// between two ticks; the lead below is five of these.
+	crewLifecycleKind     = "crew_lifecycle_tick"
 	crewLifecycleInterval = 60 * time.Second
 	crewLifecycleTimeout  = 60 * time.Second
 )
 
-// Prompt-cache lifetimes, per harness. ASSUMPTIONS, not measurements: no API
-// reports a cache entry's remaining life, so what attn can know is when the
-// session last talked to the model, and the rest is the vendor's documented
-// policy. Both vendors refresh the entry for free on every read, which is what
-// makes "time since the last request" the quantity to compare against.
-//
-//   - claude 1h: Anthropic prompt caching is 5 minutes by default with a 1-hour
-//     option, and Claude Code takes the hour. Every crew member has run on
-//     Claude Code since the simulation started on 2026-08-06.
-//   - codex 30m: OpenAI, GPT-5.6 and later — "the 30-minute lifetime begins when
-//     the prefix is written and refreshes whenever the prefix is reused".
-//
-// An unnamed harness gets claude's hour rather than the shortest assumption
-// available, and the arithmetic is why: assuming too short heartbeats a member
-// every few minutes all day (twelve an hour, ~$1.80/h at the plan's ~$0.15 a
-// heartbeat), while assuming too long costs one lapsed cache (~$3.00) once. The
-// cheap mistake is the long one. `crew.cache_ttl_seconds.<agent>` overrides.
+// Assumed prompt-cache lifetimes, per vendor policy — no API reports one. An unnamed
+// harness gets the hour: too short costs ~$1.80/h in heartbeats, too long one ~$3.00.
 const (
 	crewCacheTTLClaude  = 3600
 	crewCacheTTLCodex   = 1800
 	crewCacheTTLDefault = 3600
 )
 
-// crewContextBudgetDefault is how much context a member's day gets before attn
-// asks it to hand off, and crewContextHandoffMargin is the room that number
-// leaves for the closing itself.
-//
-// Receipt, measured 2026-08-19 over every Claude Code transcript on this machine
-// — 265 real auto-compactions between 2026-08-05 and 2026-08-19, Claude Code
-// 2.1.214 through 2.1.235, across opus-5, fable-5 and opus-4-8:
-//
-//   - The harness compacted at 185,578 tokens at the very lowest, and the
-//     current cluster sits at ~267,000. The threshold is NOT a fixed fraction of
-//     anything and it MOVED with a patch release — ~186k on 2.1.215 and earlier,
-//     ~267k from 2.1.216 — so it is not a number attn can predict. What attn can
-//     do is stay under the lowest it has ever seen.
-//   - Writing the letter and filing it cost 312, 363, 1,099, 7,525 and 16,916
-//     tokens across the five prompted handoffs in the record. 25,000 covers the
-//     worst of them by 1.5x.
-//   - 185,578 - 25,000 = 160,578, and 160,000 is also comfortably under the
-//     200,000-token context window of the smallest model attn launches, so the
-//     budget can never sit above a member's ceiling.
-//
-// The incident this exists for: Trellis auto-compacted on 2026-08-19 at
-// preTokens=267,749, and the last occupancy attn could read from its transcript
-// before that was 266,998 — the signal tracks the compaction point to 0.3%.
+// Receipt, measured 2026-08-19 over 265 real Claude Code auto-compactions: the lowest
+// compaction was 185,578 tokens and the worst handoff letter 16,916.
 const (
 	crewContextBudgetDefault   = 160000
 	crewContextHandoffMargin   = 25000
@@ -90,30 +37,12 @@ const (
 	crewContextBudgetMaxTokens = 2000000
 )
 
-// crewHeartbeatLeadDefault is how far ahead of the estimated expiry attn acts.
-// It absorbs the tick interval plus a nudge's trip to the model and back, so it
-// is a tripwire rather than a tuning: five ticks, where one would already do.
 const crewHeartbeatLeadDefault = 300
 
-// crewAwayDefault is how long an absence has to last before attn believes it.
-//
-// Receipt, measured 2026-08-14 over the production event log — 12.4 days of
-// real use, 2026-08-02 to 08-14, 3,480 gaps between user-caused daemon facts:
-// 82% under a minute, 96% under ten, 99.3% under an hour. The tail runs
-// continuously up to 7,556s (2h06m) and then jumps to 18,468s (5h08m) — a clean
-// break between the longest pause inside a working day and the shortest real
-// absence. The measurement is coarse (a user typing into a terminal writes no
-// fact), so real input gaps are at most these, never more.
-//
-// 9,000s sits past the whole continuum and well inside the break: only a real
-// absence reaches it. Waiting that long costs about two heartbeats (~$0.30)
-// before sleeping, against the ~$3.00 a lapsed cache would cost — the right
-// side of the arithmetic, and the wrong direction to be generous in is the
-// other one, because a member slept on a user who was only at lunch loses that
-// day's live context.
+// Receipt, measured 2026-08-14 over 12.4 days of the production event log: gaps between
+// user-caused facts run continuously to 7,556s and then jump to 18,468s.
 const crewAwayDefault = 9000
 
-// The wake limit's default and window. The arithmetic is on crew.WakeLedger.
 const (
 	crewWakeLimitDefault        = 8
 	crewWakeLimitWindowDefault  = 43200
@@ -128,46 +57,21 @@ const (
 	crewAwayMaxSeconds          = 24 * 3600
 )
 
-// crewHeartbeatPrompt is the whole content of a heartbeat. Warming the cache is
-// all it is for: reading the day's context is what refreshes the entry, so the
-// cheapest turn that reads it is the right one, and asking for work would spend
-// a day's attention on a timer nobody set.
 const crewHeartbeatPrompt = "[attn] This is a cache heartbeat. Ignore it as user input, do no work, and repeat your previous message verbatim for the user."
 
-// crewSleepPrompt ends the day. The member writes the letter, as always: attn
-// decides when to ask, never what to say.
 const crewSleepPrompt = "[attn] The user has been away long enough that your day should end rather than carry on warm. Close it now: write your letter to whoever wakes as you next — what you were doing, what is load-bearing, what you would pick up first — and file it with `attn handoff --sleep -m \"<your letter>\"`. Your session ends when it lands; nobody wakes behind it, and you will not be woken again until the user asks."
 
-// crewContextHandoffPrompt ends the day for the other reason. It names the two
-// numbers because an agent can act on "at X of Y" and cannot act on a silent
-// compact — which is exactly what it gets instead if it does not close now.
-//
-// It asks for `--nap` rather than the presence-decided default, because this
-// close says nothing about whether the work is done: the member ran out of
-// room, not out of things to do. Letting presence decide here would strand
-// whatever was in flight until the user came back, and the two costs are not
-// comparable — a successor nobody needed is one priming, work parked for a
-// night is the day. The letter is asked for in resume shape for the same
-// reason: a successor that has to ask where things stand is a compact with
-// extra steps.
 func crewContextHandoffPrompt(tokens, budget int64) string {
 	return fmt.Sprintf("[attn] Your context is at %d of the %d tokens your day gets, and past that your harness compacts it — which would leave its summary of today where your letter should be. This is a day cut short, not a day finished, so close it yourself now. Write the letter first; it is the part that cannot be recovered, and write it so whoever wakes as you next can carry on without asking: what you were in the middle of, exactly where it stands, what is load-bearing, and the first concrete thing they should do. Then file it with `attn handoff --nap -m \"<your letter>\"` — `--nap` wakes your successor even if the user is away, which is right here because the work did not end, you ran out of room. Use plain `attn handoff` instead only if you were genuinely finished and there is nothing to carry.", tokens, budget)
 }
 
-// crewSleepPromptGrace is how long attn waits for a prompted handoff before
-// asking again. A member mid-thought may take minutes to close, and re-asking
-// every tick would bury the first ask under copies of itself.
 const crewSleepPromptGrace = 10 * time.Minute
 
-// crewLifecycleMemo is what the tick remembers between fires, so a nudge that
-// did not visibly land is not sent again on the next one. In memory on purpose:
-// it bounds one episode, and a daemon that restarted has already lost the
-// session it describes.
 type crewLifecycleMemo struct {
 	mu       sync.Mutex
-	acted    map[string]time.Time // session id -> when a heartbeat was last taken
-	asked    map[string]time.Time // session id -> when its handoff was last prompted
-	full     map[string]bool      // session id -> its context was already called full
+	acted    map[string]time.Time
+	asked    map[string]time.Time
+	full     map[string]bool
 	episodes map[string]uint64
 }
 
@@ -207,10 +111,6 @@ func (m *crewLifecycleMemo) mayAct(table map[string]time.Time, sessionID string,
 	return true
 }
 
-// mayAskContextFull answers once per session and then stays quiet, however long
-// the day runs on: a member mid-letter re-nudged about the same full context
-// reads it as a second, different instruction rather than a repeat of the first.
-// A new session gets a new id and is armed by construction.
 func (m *crewLifecycleMemo) mayAskContextFull(sessionID string) (uint64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -222,9 +122,6 @@ func (m *crewLifecycleMemo) mayAskContextFull(sessionID string) (uint64, bool) {
 	return m.episodes[sessionID], true
 }
 
-// rearmContextFull is called on every tick where the context is back under
-// budget, which means the harness compacted anyway and the session has room
-// again. Without it a compacted session could never be asked a second time.
 func (m *crewLifecycleMemo) rearmContextFull(sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -240,10 +137,6 @@ func (m *crewLifecycleMemo) forget(sessionID string) {
 	delete(m.episodes, sessionID)
 }
 
-// Settings.
-
-// crewBoolSetting reads a default-ON switch: blank is on, only an explicit
-// "false" turns it off.
 func (d *Daemon) crewBoolSetting(name string) bool {
 	if d.store == nil {
 		return true
@@ -251,10 +144,6 @@ func (d *Daemon) crewBoolSetting(name string) bool {
 	return !strings.EqualFold(strings.TrimSpace(d.store.GetSetting(name)), "false")
 }
 
-// crewSeconds reads a bounded duration setting, saying so when a stored value
-// is outside its bounds rather than falling back silently — a limit somebody
-// can hit is a limit they must see, and a typo'd setting that quietly reverts
-// looks exactly like a feature that does not work.
 func (d *Daemon) crewSeconds(name string, fallback, min, max int) time.Duration {
 	seconds := fallback
 	if d.store != nil {
@@ -270,7 +159,6 @@ func (d *Daemon) crewSeconds(name string, fallback, min, max int) time.Duration 
 	return time.Duration(seconds) * time.Second
 }
 
-// crewCacheTTL is the assumed prompt-cache lifetime for one session's harness.
 func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	fallback := crewCacheTTLDefault
@@ -288,16 +176,6 @@ func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 	return d.crewSeconds(SettingCrewCacheTTLSeconds, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 }
 
-// crewContextPressure reads how full one member's context is, against the budget
-// its day gets. Absent (zero Tokens, so never full) for a harness attn cannot
-// parse and for a session that has not spoken since the daemon started watching
-// it — one turn of blindness, never a guess.
-//
-// The budget is the setting, lowered to fit whenever a window IS known: codex
-// states its model's window on every token_count, and a session launched with a
-// context-window cap has one attn set itself. A member whose window is smaller
-// than the budget would otherwise never be asked at all — the harness would
-// compact it first, which is the failure this exists to prevent.
 func (d *Daemon) crewContextPressure(session *protocol.Session) crew.ContextPressure {
 	occupancy, ok := d.sessionContextOccupancy(session.ID)
 	if !ok {
@@ -313,9 +191,6 @@ func (d *Daemon) crewContextPressure(session *protocol.Session) crew.ContextPres
 	return crew.ContextPressure{Tokens: occupancy.Tokens, Budget: budget}
 }
 
-// crewContextWindow is the session's context window when something states one,
-// 0 otherwise. Claude's transcript never does, which is why the budget is an
-// absolute number rather than a fraction of a window.
 func (d *Daemon) crewContextWindow(session *protocol.Session, occupancy transcript.ContextObservation) int64 {
 	if cap := d.launchContextWindowCap(session.ID, string(session.Agent), d.isChiefOfStaffSession(session.ID)); cap > 0 {
 		return int64(cap)
@@ -345,9 +220,6 @@ func (d *Daemon) crewAwayLimit() time.Duration {
 	return d.crewSeconds(SettingCrewAwaySeconds, crewAwayDefault, crewAwayMinSeconds, crewAwayMaxSeconds)
 }
 
-// crewWakeLedger is the limit as configured, without a member's stamps. Zero is
-// a legitimate value — it turns autonomous wakes off — so it is not bounded
-// away from below.
 func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	limit := crewWakeLimitDefault
 	if d.store != nil {
@@ -361,9 +233,6 @@ func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	}
 }
 
-// Signals.
-
-// crewCacheState estimates cache age from the last positive request receipt.
 func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.CacheState {
 	state := crew.CacheState{TTL: d.crewCacheTTL(string(session.Agent))}
 	switch session.State {
@@ -378,26 +247,14 @@ func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.C
 	return state
 }
 
-// crewSessionReachable reports whether a prompt typed here would be read at
-// all, which is the doorbell's own rule: everything except an approval, whose
-// selector would read the paste as its answer.
 func crewSessionReachable(session *protocol.Session) bool {
 	return sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State)
 }
 
-// crewSessionMidTurn reports that the member is talking to the model right now.
-// The heartbeat and the sleep ask both stay off a turn: a member mid-turn has
-// the freshest cache in the roster, and an absence keeps until the turn ends.
-// The context ask does not, so it is the one action that types into a working
-// session — the doorbell's screen guard is what keeps that safe.
 func crewSessionMidTurn(session *protocol.Session) bool {
 	return session.State == protocol.SessionStateWorking
 }
 
-// The tick.
-
-// registerCrewLifecycleCron arms the tick. Home-only, like every crew surface:
-// an outpost holds no roster to watch.
 func (d *Daemon) registerCrewLifecycleCron(runner *jobs.Runner) {
 	if err := runner.RegisterCron(
 		crewLifecycleKind,
@@ -414,9 +271,6 @@ func (d *Daemon) crewLifecycleHandler(_ context.Context, _ *jobs.Job) (any, erro
 	return nil, nil
 }
 
-// crewLifecycleTick decides and acts for every awake member. It writes nothing
-// and sends nothing when nothing is near expiry, which is the ordinary case and
-// the reason this is safe to run every minute for as long as the daemon lives.
 func (d *Daemon) crewLifecycleTick(now time.Time) {
 	if d.store == nil {
 		return
@@ -478,9 +332,6 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	}
 }
 
-// actOnCrewMember carries out one decision. Every path is rate-limited against
-// the memo: a nudge that does not visibly land must not be re-sent every minute
-// for as long as the condition holds.
 func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action crew.Action, cache crew.CacheState, pressure crew.ContextPressure, contextEpisode uint64, now time.Time) {
 	switch action {
 	case crew.ActionHeartbeat:
@@ -537,25 +388,11 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID string, action cr
 	}
 }
 
-// crewMemo lazily builds the tick's memory. Lazily because every daemon
-// constructor would otherwise have to know about it, and the tick is the only
-// caller.
 func (d *Daemon) crewMemo() *crewLifecycleMemo {
 	d.crewMemoOnce.Do(func() { d.crewLifecycleState = newCrewLifecycleMemo() })
 	return d.crewLifecycleState
 }
 
-// The wake limit.
-
-// chargeAutonomousWake books one wake nobody asked for against a member's
-// allowance, refusing loudly past the limit. Called on every wake the user did
-// not ask for — the nap that runs while they are away today, message-triggered
-// wakes when crew addressing lands — and never on a wake from the sidebar or
-// the CLI, which is the user asking.
-//
-// The stamps are written before the wake rather than after it, so a wake that
-// fails still counts: a loop that fails eight times has spent eight primings
-// exactly like a loop that succeeded.
 func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
 	ledger := d.crewWakeLedger()
 	var refusal error
@@ -582,9 +419,6 @@ func parseWakeStamps(raw []string) []time.Time {
 	for _, value := range raw {
 		at, err := time.Parse(time.RFC3339, value)
 		if err != nil {
-			// An unreadable stamp is not evidence a wake did not happen, so it is
-			// dropped rather than counted: the alternative is a member locked out by
-			// one bad row it cannot clear.
 			continue
 		}
 		stamps = append(stamps, at)

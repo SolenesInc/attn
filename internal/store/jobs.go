@@ -8,24 +8,14 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// SQLite persistence for the durable job queue (internal/jobs). JobRecord is a
-// store-local row type, not internal/jobs.Job; the daemon owns the mapping so
-// this package stays a leaf.
-
-// sortableTimeFormat encodes stamps kept in TEXT columns and compared there
-// (jobs, notifications feed): text order must be time order, so the fraction is
-// fixed-width. RFC3339Nano strips trailing zeros and broke that — "…:00Z" sorts
-// above "…:00.5Z" — delaying whole-second scheduled_at claims; migration 94
-// rewrote the stored stamps. Always format from a UTC time.
+// TEXT stamps are compared as text, so the fraction must be fixed-width and the time UTC.
+// RFC3339Nano strips trailing zeros, which delayed whole-second claims until migration 94.
 const sortableTimeFormat = docstore.TimeFormat
 
-// rowScanner is satisfied by both *sql.Row and *sql.Rows.
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// JobRecord is one durable job row. Payload and Result are opaque JSON text;
-// only the enqueued handler interprets them.
 type JobRecord struct {
 	ID          string
 	Kind        string
@@ -46,12 +36,10 @@ type JobRecord struct {
 const jobColumns = `id, kind, unique_key, priority, payload, result, state, attempts,
 	max_attempts, scheduled_at, last_error, requeued, created_at, updated_at`
 
-// execer is satisfied by both *sql.DB and *sql.Tx.
 type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// UpsertJob inserts or fully replaces a job row by id.
 func (s *Store) UpsertJob(rec JobRecord) error {
 	if s.db == nil {
 		return fmt.Errorf("store: no database")
@@ -59,7 +47,6 @@ func (s *Store) UpsertJob(rec JobRecord) error {
 	return upsertJob(s.db, rec)
 }
 
-// upsertJob is UpsertJob's write, against whichever executor the caller has.
 func upsertJob(ex execer, rec JobRecord) error {
 	_, err := ex.Exec(
 		`INSERT INTO jobs (`+jobColumns+`)
@@ -89,8 +76,6 @@ func upsertJob(ex execer, rec JobRecord) error {
 	return nil
 }
 
-// GetJob returns the row for id; the bool is false with a nil error when no
-// such row exists.
 func (s *Store) GetJob(id string) (*JobRecord, bool, error) {
 	if s.db == nil {
 		return nil, false, fmt.Errorf("store: no database")
@@ -106,8 +91,8 @@ func (s *Store) GetJob(id string) (*JobRecord, bool, error) {
 	return rec, true, nil
 }
 
-// GetJobByUniqueKey returns the row a kind coalesces onto for uniqueKey. An
-// empty key matches nothing — treating "" as a key would collapse distinct jobs.
+// GetJobByUniqueKey returns the row a kind coalesces onto. An empty key matches
+// nothing — treating "" as a key would collapse distinct jobs.
 func (s *Store) GetJobByUniqueKey(kind, uniqueKey string) (*JobRecord, bool, error) {
 	if s.db == nil {
 		return nil, false, fmt.Errorf("store: no database")
@@ -126,7 +111,6 @@ func (s *Store) GetJobByUniqueKey(kind, uniqueKey string) (*JobRecord, bool, err
 	return rec, true, nil
 }
 
-// DeleteJob removes a job row. A missing row is not an error (already gone).
 func (s *Store) DeleteJob(id string) error {
 	if s.db == nil {
 		return fmt.Errorf("store: no database")
@@ -137,7 +121,6 @@ func (s *Store) DeleteJob(id string) error {
 	return nil
 }
 
-// ListJobs returns every job row, newest-updated first.
 func (s *Store) ListJobs() ([]JobRecord, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("store: no database")
@@ -149,10 +132,6 @@ func (s *Store) ListJobs() ([]JobRecord, error) {
 	return collectJobRows(rows, "list jobs")
 }
 
-// EligibleJobs returns at most limit jobs claimable at now, in dispatch order:
-// priority desc, scheduled asc, created asc. Queued and failed rows are both
-// claimable (an elapsed-backoff failure is a retry); the attempt cap is the
-// queue's job.
 func (s *Store) EligibleJobs(now time.Time, limit int) ([]JobRecord, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("store: no database")
@@ -169,8 +148,6 @@ func (s *Store) EligibleJobs(now time.Time, limit int) ([]JobRecord, error) {
 	return collectJobRows(rows, "eligible jobs")
 }
 
-// RecoverRunningJobs resets jobs left in "running" back to "queued" at now: a
-// running row at startup means a crash interrupted it mid-run.
 func (s *Store) RecoverRunningJobs(now time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
@@ -188,8 +165,7 @@ func (s *Store) RecoverRunningJobs(now time.Time) (int, error) {
 	return int(n), nil
 }
 
-// TrimDoneJobs deletes "done" rows older than cutoff. Dead jobs stay: a failure
-// notification points at them.
+// Dead jobs stay: a failure notification points at them.
 func (s *Store) TrimDoneJobs(cutoff time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")

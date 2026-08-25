@@ -56,9 +56,6 @@ func TestOSCScannerReadsSeveralInOneChunk(t *testing.T) {
 		scannedOSC{777, "notify;App;msg"})
 }
 
-// The read loop hands over whatever the PTY returned, so a sequence routinely
-// straddles a chunk boundary. Splitting one at every byte is the only honest way
-// to prove it survives.
 func TestOSCScannerSurvivesEverySplitPoint(t *testing.T) {
 	const stream = "before\x1b]0;⠀ running\x07after\x1b]777;notify;Claude Code;waiting\x07tail"
 	want := []scannedOSC{{0, "⠀ running"}, {777, "notify;Claude Code;waiting"}}
@@ -94,18 +91,12 @@ func TestOSCScannerSkipsNonNumericIntroducers(t *testing.T) {
 	}
 }
 
-// A stray ESC inside an OSC means the producer abandoned the sequence. Scanning
-// past it looking for a terminator that will never come would swallow every
-// later sequence in the stream.
 func TestOSCScannerRecoversFromAnAbandonedSequence(t *testing.T) {
 	assertScanned(t,
 		scanAll("\x1b]0;broken\x1b[0m\x1b]0;good\x07"),
 		scannedOSC{0, "good"})
 }
 
-// A producer that never terminates an OSC must not make the scanner buffer the
-// rest of the session. Past the cap it gives up on that sequence and keeps
-// scanning, so a later well-formed one is still seen.
 func TestOSCScannerAbandonsAnOversizedSequence(t *testing.T) {
 	flood := "\x1b]0;" + strings.Repeat("x", oscScanMaxPending+64)
 	assertScanned(t,
@@ -123,8 +114,6 @@ func TestOSCScannerRejectsAnAbsurdCode(t *testing.T) {
 	}
 }
 
-// OSC 133 rides the same stream and is parsed elsewhere; this scanner must
-// report it without disturbing anything, since it only reads.
 func TestOSCScannerSeesOSC133WithoutConsumingIt(t *testing.T) {
 	chunk := []byte("\x1b]133;A\x07prompt")
 	before := string(chunk)

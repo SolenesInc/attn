@@ -7,12 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The session ↔ identity mapping is used in both directions and in three places
-// (observers, delivery target, attention clock). These pin the round trip, which
-// is the property that keeps them from silently disagreeing: an identity a session
-// observes through must resolve back to that session, or its events are computed
-// and then delivered to nobody.
-
 func TestTicketIdentityRoundTripsForOrdinarySession(t *testing.T) {
 	d, _ := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "worker", "Worker")
@@ -40,8 +34,6 @@ func TestTicketIdentityRoundTripsForChiefSession(t *testing.T) {
 	if len(observers) != 2 {
 		t.Fatalf("chief observers = %+v, want its session identity plus the durable role", observers)
 	}
-	// Every identity the chief reads through must resolve back to the chief
-	// session, and must carry the session as author and delivery target.
 	for _, obs := range observers {
 		if got := d.ticketSessionForIdentity(obs.ID); got != "chief" {
 			t.Fatalf("inverse of %q = %q, want chief", obs.ID, got)
@@ -54,14 +46,11 @@ func TestTicketIdentityRoundTripsForChiefSession(t *testing.T) {
 	if observers[1].ID != roleIdentity {
 		t.Fatalf("second observer = %q, want %q", observers[1].ID, roleIdentity)
 	}
-	// The interruption clock follows the role, so a transfer does not reset it.
 	if got := d.ticketAttentionKey("chief"); got != roleIdentity {
 		t.Fatalf("attention key = %q, want %q", got, roleIdentity)
 	}
 }
 
-// The role identity outlives the session filling it: after a transfer it resolves
-// to the new session, and the old session goes back to being ordinary.
 func TestTicketIdentityFollowsRoleTransfer(t *testing.T) {
 	d, _ := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief-a", "Chief A")
@@ -89,8 +78,6 @@ func TestTicketIdentityFollowsRoleTransfer(t *testing.T) {
 	}
 }
 
-// An identity nobody currently fills resolves to no session — the notifier must
-// skip it rather than nudge a phantom.
 func TestTicketIdentityUnfilledRoleHasNoSession(t *testing.T) {
 	d, _ := newChiefOfStaffTestDaemon(t)
 	if got := d.ticketSessionForIdentity(store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)); got != "" {

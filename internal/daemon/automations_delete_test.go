@@ -9,13 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestAutomationDeleteHappyPath pins A2's soft-delete side effects: a
-// pending run is cancelled with reason definition_deleted (the same
-// mechanism automationSetEnabled's disable path uses, with its own reason),
-// the definition is soft-deleted (filtered out of
-// GetAutomationDefinition), a change broadcast fires, and the run itself
-// remains listable/inspectable — delete never touches run/occurrence/ticket
-// rows or on-disk artifacts.
 func TestAutomationDeleteHappyPath(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -62,7 +55,6 @@ func TestAutomationDeleteHappyPath(t *testing.T) {
 	}
 }
 
-// TestAutomationDeleteNotFound pins the not-found error for an unknown id.
 func TestAutomationDeleteNotFound(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -71,8 +63,6 @@ func TestAutomationDeleteNotFound(t *testing.T) {
 	}
 }
 
-// TestAutomationDeleteAlreadyDeleted pins the not-found error for a second
-// delete of the same id.
 func TestAutomationDeleteAlreadyDeleted(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -89,12 +79,6 @@ func TestAutomationDeleteAlreadyDeleted(t *testing.T) {
 	}
 }
 
-// TestAutomationDeleteThenReapplyResurrects pins A2's resurrection path:
-// re-applying the same definition id after a delete brings it back live,
-// old runs from before the delete remain listable, and the binding is
-// fresh (mirrors the A1 contract-rotation tests' assertion style — a
-// resurrection is always treated as a contract change, per automationApply's
-// "always rotate when resurrecting a soft-deleted definition" rule).
 func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -134,14 +118,11 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 		t.Fatalf("resurrected definition should be visible again, got %#v err=%v", reloadedDef, err)
 	}
 
-	// The old run from before the delete is still listable.
 	runs, err := s.ListAutomationRuns(def1.ID)
 	if err != nil || len(runs) != 1 || runs[0].ID != run1.ID {
 		t.Fatalf("expected the pre-delete run to remain listable, got %#v err=%v", runs, err)
 	}
 
-	// The binding is fresh: a post-resurrection claim under the same
-	// continuity key gets a new reservation, not run1's old one.
 	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, `{"prompt":"v1"}`, now.Add(24*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", TicketID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
 	if err != nil {
 		t.Fatal(err)
@@ -154,11 +135,6 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	}
 }
 
-// TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors pins
-// three of automationDelete's five store mutations that no other test
-// exercises: DeactivateAutomationReviewRequestEdges, DeleteAutomationContinuityBindings,
-// and FenceAutomationProviderCursors. None of the three has a direct getter,
-// so each is asserted through its own observable effect.
 func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -169,9 +145,7 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 		t.Fatal(err)
 	}
 
-	// Establish an active, unaccepted GitHub review-request edge. observedAt must be
-	// after automationApply's own enable fence (set from the real wall clock),
-	// or this observation would be rejected before ever creating the edge.
+	// observedAt must be after automationApply's own enable fence (set from the real wall clock), or the observation is rejected before the edge exists.
 	const subject = "github.com/owner/repo#42"
 	observedAt := time.Now()
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, observedAt); err != nil {
@@ -184,8 +158,6 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 		t.Fatalf("fixture setup: review request needs claim = %v err=%v, want true", needsClaim, err)
 	}
 
-	// Establish a continuity binding — the state DeleteAutomationContinuityBindings
-	// exists to clear.
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, `{}`, observedAt, store.AutomationRunReservation{
 		RunID: "run-origin", OccurrenceID: "occ-origin", TicketID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
 	})
@@ -207,10 +179,6 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 		t.Fatalf("expected delete to clear the continuity binding, bound=%v err=%v", bound, err)
 	}
 
-	// FenceAutomationProviderCursors: a stale observation from before the
-	// delete must not reactivate the edge just retired.
-	// Reusing observedAt (rather than a fresh, later timestamp) proves the
-	// block is the delete's own fence and not merely the earlier host cursor.
 	stale, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, observedAt)
 	if err != nil || len(stale) != 0 {
 		t.Fatalf("pre-delete observation crossed the delete's fence: candidates=%#v err=%v", stale, err)

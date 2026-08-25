@@ -75,7 +75,7 @@ describe("DeltaCoalescer", () => {
 
     for (const piece of ["Hel", "lo ", "wor", "ld"]) deltas.push("m1", piece);
     expect(flushed).toEqual([]);
-    expect(clock.pending()).toBe(1); // one window for four deltas, not four
+    expect(clock.pending()).toBe(1);
 
     clock.tick();
     expect(flushed).toEqual([["m1", "Hello world"]]);
@@ -166,8 +166,6 @@ describe("PiEventMapper", () => {
     const { emitted, mapper } = harness();
 
     mapper.handle({ type: "queue_update", steering: ["stop and look at x"], followUp: [] });
-    // pi removes the entry and re-announces the queue immediately before the
-    // user message that is the agent reading it — queued, then seen.
     mapper.handle({ type: "queue_update", steering: [], followUp: [] });
     mapper.handle({ type: "message_start", message: { role: "user", content: "stop and look at x" } });
     mapper.handle({ type: "message_end", message: { role: "user", content: "stop and look at x" } });
@@ -236,8 +234,6 @@ describe("PiEventMapper", () => {
     mapper.handle({ type: "message_update", assistantMessageEvent: { type: "toolcall_delta", delta: '{"a":' } });
     clock.tick();
 
-    // Not even a message_start: a message opens when it has text, and neither
-    // of these is text.
     expect(emitted.map((e) => e.kind)).toEqual([]);
   });
 
@@ -261,9 +257,7 @@ describe("PiEventMapper", () => {
   test("keeps a tool result out of the transcript — its card is the record", () => {
     const { emitted, mapper } = harness();
 
-    // pi puts a tool's whole output back in front of the model as a message of
-    // its own. Drawing it would inline every byte the card exists to fetch on
-    // demand, and say the same thing twice.
+    // pi puts a tool's whole output back in front of the model as a message of its own; drawing it would inline every byte the card fetches on demand.
     mapper.handle({ type: "message_start", message: { role: "toolResult", content: "1\n2\n3\n" } });
     mapper.handle({ type: "message_end", message: { role: "toolResult", content: "1\n2\n3\n" } });
 
@@ -282,7 +276,6 @@ describe("PiEventMapper", () => {
   test("draws a message that never streamed but has text", () => {
     const { emitted, mapper } = harness();
 
-    // A user message is the case: pi delivers it whole, with no deltas.
     mapper.handle({ type: "message_start", message: { role: "user", content: "look at x" } });
     mapper.handle({ type: "message_end", message: { role: "user", content: "look at x" } });
 
@@ -347,8 +340,6 @@ describe("tool events", () => {
       summary: "src/main.ts",
       files: ["src/main.ts"],
     });
-    // The finish repeats the label the start established: `tool_execution_end`
-    // carries no arguments, so a card drawn from it alone would lose them.
     expect(emitted[1].body).toEqual({
       call_id: "call-1",
       name: "read",
@@ -447,13 +438,11 @@ describe("toolSummary and toolFiles", () => {
     expect(toolSummary("grep", { pattern: "TODO", path: "internal" })).toBe("TODO in internal");
     expect(toolSummary("grep", { pattern: "TODO" })).toBe("TODO");
     expect(toolSummary("ls", {})).toBe(".");
-    // An unknown tool falls through to its first string argument.
     expect(toolSummary("mcp__jira__issue", { count: 3, key: "ASTERISK-1" })).toBe("ASTERISK-1");
     expect(toolSummary("mcp__jira__issue", { count: 3 })).toBe("");
 
     expect(toolFiles("edit", { path: "a.ts" })).toEqual(["a.ts"]);
     expect(toolFiles("write", { path: "b.ts" })).toEqual(["b.ts"]);
-    // A search root is not a file the agent touched.
     expect(toolFiles("grep", { pattern: "x", path: "internal" })).toEqual([]);
     expect(toolFiles("ls", { path: "internal" })).toEqual([]);
   });

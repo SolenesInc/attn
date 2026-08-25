@@ -3,17 +3,6 @@ import { act, render } from '@testing-library/react';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
-// Home is a stop or a wait, and which one it is depends entirely on how the user
-// got there. Landing on home because the queue ran dry arms the wait: the next
-// turn to open takes the user to it. Walking home — ⌘0, the sidebar's Home —
-// leaves it off, because choosing to be somewhere means staying there.
-//
-// The state machine lives in App and is only observable through what it does to
-// the selection, so these drive the real thing: the daemon's turn_owed flips,
-// App's own handover reacts, and the assertions are on which session App
-// selected. setActiveSession is the store's, so the mock store below tracks it
-// the way the real one does — the follow only ends because selecting a session
-// takes the user off home.
 
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
@@ -24,7 +13,6 @@ const { mockSetActiveSession } = vi.hoisted(() => ({
   mockSetActiveSession: vi.fn(),
 }));
 
-// The daemon's view of the two agents, mutated per step and re-broadcast.
 let turnOwed: Record<string, boolean>;
 let activeSessionId: string | null;
 
@@ -50,8 +38,6 @@ vi.mock('./components/Sidebar', () => ({
 }));
 
 vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-// Grid is a real destination in these tests (the user looks around and comes
-// back); the view itself measures a canvas font, which happy-dom has none of.
 vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
@@ -116,12 +102,6 @@ function workspacePayload() {
   }));
 }
 
-/**
- * One daemon broadcast: the workspace payload again (a fresh object, so App
- * re-renders and the mocked stores are read anew) plus the settings that carry
- * the queue arrangement. Everything the daemon changed between steps — turn_owed,
- * the selection the app made itself — is picked up here.
- */
 function broadcast() {
   act(() => {
     socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
@@ -138,12 +118,10 @@ function workTheQueueDownToHome() {
   render(<App />);
   broadcast();
 
-  // The user is on the last owed turn...
   act(() => { mockSetActiveSession('s1'); });
   broadcast();
   expect(activeSessionId).toBe('s1');
 
-  // ...and it settles under them. Nothing else is owed, so home it is.
   turnOwed.s1 = false;
   broadcast();
   expect(activeSessionId).toBeNull();
@@ -157,8 +135,6 @@ describe('waiting at home for the next turn', () => {
     turnOwed = { s1: true, s2: false };
     activeSessionId = null;
 
-    // The real store owns the selection, so the mock does too: App's handover and
-    // the follow both act by calling setActiveSession, and the view follows it.
     mockSetActiveSession.mockImplementation((id: string | null) => { activeSessionId = id; });
 
     mockUseSessionStore.mockImplementation(() => ({
@@ -246,8 +222,6 @@ describe('waiting at home for the next turn', () => {
   it('takes the user to the next turn that opens after the queue ran dry', () => {
     workTheQueueDownToHome();
 
-    // The wait is armed by that arrival, so the next agent to want the user
-    // comes and gets them.
     turnOwed.s2 = true;
     broadcast();
 
@@ -260,8 +234,6 @@ describe('waiting at home for the next turn', () => {
     act(() => { mockSetActiveSession('s1'); });
     broadcast();
 
-    // ⌘0 while the turn on s1 is still owed: a deliberate stop, not a queue that
-    // ran out.
     const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
     act(() => { shortcuts.onGoToDashboard(); });
     broadcast();
@@ -278,9 +250,6 @@ describe('waiting at home for the next turn', () => {
   it('ends the wait when the user leaves home, however they come back', () => {
     workTheQueueDownToHome();
 
-    // Waiting, then off to grid for a look around and back again. Home reached
-    // that way was chosen, so the wait that armed on the way in does not survive
-    // the round trip.
     const shortcuts = shortcutHandlers<{ onToggleGridMode?: () => void }>();
     act(() => { shortcuts.onToggleGridMode?.(); });
     broadcast();
@@ -298,8 +267,6 @@ describe('waiting at home for the next turn', () => {
   it('hands over the oldest owed turn when several opened while home waited', () => {
     workTheQueueDownToHome();
 
-    // s1's turn is the older of the two, so it is the one the wait ends on —
-    // queue order, the same order the band and ⌘J use.
     turnOwed.s1 = true;
     turnOwed.s2 = true;
     broadcast();

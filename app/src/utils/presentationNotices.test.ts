@@ -7,13 +7,6 @@ import {
 } from './presentationNotices';
 import type { Presentation } from '../types/generated';
 
-// Pure-logic coverage for the presentation-notice list that feeds the pane
-// header chip (HeaderPresentationChip in components/PresentationChip.tsx).
-// App.tsx has no dedicated render-level test suite for this (see
-// App.sessionlessWorkspace.test.tsx / App.worktreeCleanup.test.tsx for the
-// render-level tests that do exist, none of which touch it), so this
-// exercises the extracted reducer/lookup functions directly rather than
-// standing up a full App render + mocked WebSocket.
 
 function makePresentation(overrides: Partial<Presentation> = {}): Presentation {
   return {

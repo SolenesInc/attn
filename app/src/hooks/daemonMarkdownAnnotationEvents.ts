@@ -1,13 +1,11 @@
-/** Markdown-annotation daemon event decoding (`markdown_annotations_*_result`). */
 
 import { takeKeyedRequest, type PendingKeyedRequests } from './daemonPendingRequests';
 
-/** `<op>:<uri>` — one in-flight request per document per operation. */
+// `<op>:<uri>` — one in-flight request per document per operation.
 export function markdownAnnotationKey(op: string, documentUri: string): string {
   return `${op}:${documentUri}`;
 }
 
-/** The event shapes this module reads, loosely typed off the wire union. */
 type MarkdownAnnotationEvent = {
   event: string;
   request_id?: unknown;
@@ -20,10 +18,6 @@ type MarkdownAnnotationEvent = {
   annotations?: unknown;
 };
 
-/**
- * Handle one markdown-annotation event. Returns false when the event is not one
- * of ours, so the caller can keep its own dispatch exhaustive.
- */
 export function handleMarkdownAnnotationDaemonEvent(
   event: MarkdownAnnotationEvent,
   pending: PendingKeyedRequests,
@@ -41,11 +35,9 @@ export function handleMarkdownAnnotationDaemonEvent(
       const key = markdownAnnotationKey(op, String(event.document_uri ?? ''));
       const waiter = takeKeyedRequest(pending, key, event.request_id);
       if (!waiter) {
-        return true; // superseded or timed out — drop the late result
+        return true;
       }
       if (op === 'save' && !event.success && event.stale) {
-        // Stale generation (tombstone / newer writer) is a protocol outcome the
-        // client handles, not an error.
         waiter.resolve({ stale: true });
       } else if (!event.success) {
         waiter.reject(new Error(event.error || `markdown_annotations_${op} failed`));
@@ -68,13 +60,11 @@ export function handleMarkdownAnnotationDaemonEvent(
       const key = markdownAnnotationKey('submit', String(event.document_uri ?? ''));
       const waiter = takeKeyedRequest(pending, key, event.request_id);
       if (!waiter) {
-        return true; // superseded or timed out — drop the late result
+        return true;
       }
       if (event.success || event.status === 'skipped_pending_approval') {
-        // skipped_pending_approval resolves (success:false) so the UI can
-        // message it distinctly from a hard failure; a delivered result may
-        // still carry `error` (delivery succeeded, draft clear failed) — never
-        // re-deliver in that case.
+        // A delivered result may still carry `error` (delivery succeeded, draft
+        // clear failed) — never re-deliver in that case.
         waiter.resolve({
           status: typeof event.status === 'string' && event.status !== '' ? event.status : 'delivered',
           ...(typeof event.generation === 'number' ? { generation: event.generation } : {}),

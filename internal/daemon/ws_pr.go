@@ -72,8 +72,6 @@ func (d *Daemon) handleMuteRepoWS(msg *protocol.MuteRepoMessage) {
 
 	d.store.ToggleMuteRepo(msg.Repo)
 
-	// One coalesced push per wire message, in the order the old direct calls
-	// made them: the PRs that went hot, then the repo list.
 	d.coalesceSnapshots(func() {
 		if wasMuted {
 			for _, pr := range d.store.ListPRsByRepo(msg.Repo) {
@@ -138,7 +136,6 @@ func (d *Daemon) handlePRVisitedWS(msg *protocol.PRVisitedMessage) {
 	d.store.MarkPRVisited(msg.ID)
 	d.coalesceSnapshots(func() {
 		d.publishFact(FactPRVisited, msg.ID, nil)
-		// Visiting one PR warms every PR in its repo, so each of those changed too.
 		if _, repo, _, err := protocol.ParsePRID(msg.ID); err == nil {
 			for _, pr := range d.store.ListPRs("") {
 				if pr.Repo == repo {
@@ -155,16 +152,6 @@ func (d *Daemon) handlePRVisitedWS(msg *protocol.PRVisitedMessage) {
 	})
 }
 
-// publishPRSetChanges recovers per-PR facts from a bulk replacement of the PR
-// set. A poll or refresh overwrites the whole list, so nothing in the call
-// itself says which PRs moved — the diff around it does, and one fact per moved
-// PR is what a consumer can act on.
-//
-// The wire push is unchanged in shape: every pr.* fact projects to the same
-// whole-list prs_updated, coalesced here so a refresh that touched twenty PRs
-// still sends one message. It does change in frequency: a poll that found
-// nothing new now publishes nothing and therefore sends nothing, where before
-// it re-pushed the identical list to every client on every tick.
 func (d *Daemon) publishPRSetChanges(before, after []*protocol.PR) {
 	beforeByID := make(map[string]*protocol.PR, len(before))
 	for _, pr := range before {
@@ -176,8 +163,7 @@ func (d *Daemon) publishPRSetChanges(before, after []*protocol.PR) {
 	}
 
 	d.coalesceSnapshots(func() {
-		// Slice order, not map order: the facts land in the durable log, and a
-		// consumer replaying them should see the same sequence the daemon saw.
+		// Slice order, not map order: a consumer replaying the durable log must see the sequence the daemon saw.
 		for _, pr := range after {
 			previous, existed := beforeByID[pr.ID]
 			switch {

@@ -9,11 +9,6 @@ import (
 )
 
 func TestDBPath_DefaultsToAttnDir(t *testing.T) {
-	// DBPath() = filepath.Join(attnDir(), "attn.db") when unoverridden; assert
-	// that composition against the ATTN_DATA_DIR-scoped data dir rather than
-	// the real $HOME (attnDir()'s HOME-derivation formula itself is covered
-	// by TestDefaultAttnDir_SplitsByProfile without touching go test's
-	// data-dir backstop).
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
 	os.Unsetenv("ATTN_DB_PATH")
@@ -152,7 +147,6 @@ func TestDBPath_ConfigFileOverridesDefault(t *testing.T) {
 	os.Unsetenv("ATTN_DB_PATH")
 	os.Unsetenv("ATTN_PROFILE")
 
-	// Create temp config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	configContent := `{"db_path": "/from/config/file.db"}`
@@ -163,7 +157,6 @@ func TestDBPath_ConfigFileOverridesDefault(t *testing.T) {
 	os.Setenv("ATTN_CONFIG_PATH", configPath)
 	defer os.Unsetenv("ATTN_CONFIG_PATH")
 
-	// Force reload config
 	reloadConfig()
 
 	path := DBPath()
@@ -174,7 +167,6 @@ func TestDBPath_ConfigFileOverridesDefault(t *testing.T) {
 }
 
 func TestDBPath_EnvVarOverridesConfigFile(t *testing.T) {
-	// Create temp config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	configContent := `{"db_path": "/from/config/file.db"}`
@@ -187,12 +179,10 @@ func TestDBPath_EnvVarOverridesConfigFile(t *testing.T) {
 	defer os.Unsetenv("ATTN_CONFIG_PATH")
 	defer os.Unsetenv("ATTN_DB_PATH")
 
-	// Force reload config
 	reloadConfig()
 
 	path := DBPath()
 
-	// Env var should win over config file
 	if path != "/from/env/var.db" {
 		t.Errorf("DBPath() = %q, want %q (env var should override config file)", path, "/from/env/var.db")
 	}
@@ -202,7 +192,6 @@ func TestSocketPath_ConfigFileOverridesDefault(t *testing.T) {
 	os.Unsetenv("ATTN_SOCKET_PATH")
 	os.Unsetenv("ATTN_PROFILE")
 
-	// Create temp config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	configContent := `{"socket_path": "/from/config/file.sock"}`
@@ -213,7 +202,6 @@ func TestSocketPath_ConfigFileOverridesDefault(t *testing.T) {
 	os.Setenv("ATTN_CONFIG_PATH", configPath)
 	defer os.Unsetenv("ATTN_CONFIG_PATH")
 
-	// Force reload config
 	reloadConfig()
 
 	path := SocketPath()
@@ -222,8 +210,6 @@ func TestSocketPath_ConfigFileOverridesDefault(t *testing.T) {
 		t.Errorf("SocketPath() = %q, want %q", path, "/from/config/file.sock")
 	}
 }
-
-// --- Profile-aware behavior ---------------------------------------------------
 
 func TestProfile_EmptyWhenUnset(t *testing.T) {
 	os.Unsetenv("ATTN_PROFILE")
@@ -270,11 +256,8 @@ func TestValidateProfile_RejectsBadNames(t *testing.T) {
 	}
 }
 
-// TestDefaultAttnDir_SplitsByProfile pins the HOME-derivation formula
-// attnDir() falls back to when ATTN_DATA_DIR is unset. It calls the pure
-// defaultAttnDir helper directly (no env var, no I/O) instead of exercising
-// attnDir()/DataDir(), which the go-test backstop refuses to resolve without
-// an explicit ATTN_DATA_DIR override.
+// Calls the pure defaultAttnDir helper directly, because the go-test backstop refuses
+// to resolve attnDir()/DataDir() without an explicit ATTN_DATA_DIR override.
 func TestDefaultAttnDir_SplitsByProfile(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
@@ -286,9 +269,6 @@ func TestDefaultAttnDir_SplitsByProfile(t *testing.T) {
 	}
 }
 
-// TestAttnDir_DerivedPathsAllInheritDataDir asserts every attnDir()-derived
-// path (socket, DB, log) composes off the same base, regardless of profile —
-// the property that lets ATTN_DATA_DIR override every derived path at once.
 func TestAttnDir_DerivedPathsAllInheritDataDir(t *testing.T) {
 	wantDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", wantDir)
@@ -319,7 +299,7 @@ func TestWSPort_ProfileDefaults(t *testing.T) {
 	cases := map[string]string{
 		"":      "9849",
 		"dev":   "29849",
-		"alpha": "", // hashed, just check it's in the right range
+		"alpha": "",
 	}
 	for profile, want := range cases {
 		t.Run("profile="+profile, func(t *testing.T) {
@@ -333,7 +313,6 @@ func TestWSPort_ProfileDefaults(t *testing.T) {
 				t.Errorf("WSPort() = %q, want %q", got, want)
 			}
 			if profile == "alpha" {
-				// Hash-derived; must differ from default + dev, be inside [20000,29848].
 				if got == "9849" || got == "29849" {
 					t.Errorf("hashed port for %q collided: %q", profile, got)
 				}
@@ -382,8 +361,7 @@ func TestDeepLinkScheme(t *testing.T) {
 }
 
 func TestValidateProfileName_PureFunction(t *testing.T) {
-	// Does NOT read the environment; only validates the argument.
-	t.Setenv("ATTN_PROFILE", "has space") // invalid env, but argument is fine
+	t.Setenv("ATTN_PROFILE", "has space")
 	if err := ValidateProfileName("dev"); err != nil {
 		t.Errorf("ValidateProfileName(dev) unexpectedly errored: %v", err)
 	}
@@ -441,8 +419,7 @@ func TestPprofAddr(t *testing.T) {
 	}
 }
 
-// TestProfileDerivation_DefaultAndDev pins the default/dev literals so the
-// single-source-of-truth helpers stay wire-compatible with the values currently
+// Pins the default/dev literals so the helpers stay wire-compatible with the values
 // hardcoded in profile.rs, harnessProfile.mjs, and the tauri configs.
 func TestProfileDerivation_DefaultAndDev(t *testing.T) {
 	cases := []struct {
@@ -469,9 +446,6 @@ func TestProfileDerivation_DefaultAndDev(t *testing.T) {
 	}
 }
 
-// TestE2EPorts_BandsAreDisjoint verifies the e2e harness ports for a named
-// profile fall in their reserved bands and never collide with prod (9849), dev
-// (29849), the real-profile band [20000,29848], or the default e2e ports.
 func TestE2EPorts_BandsAreDisjoint(t *testing.T) {
 	if got := E2EDaemonPortForProfile(""); got != "19849" {
 		t.Errorf("E2EDaemonPortForProfile(\"\") = %q, want 19849", got)
@@ -494,8 +468,6 @@ func TestE2EPorts_BandsAreDisjoint(t *testing.T) {
 		if vPort < 31000 || vPort > 31999 {
 			t.Errorf("e2e vite port for %q = %d, want [31000,31999]", profile, vPort)
 		}
-		// Disjoint from real daemon ports and each other's band by construction,
-		// but assert the cross-band invariants explicitly.
 		realPort, _ := strconv.Atoi(WSPortForProfile(profile)) // [20000,29848]
 		for _, reserved := range []int{9849, 29849, 1420, 1421, 19849, realPort} {
 			if dPort == reserved || vPort == reserved {
@@ -505,14 +477,9 @@ func TestE2EPorts_BandsAreDisjoint(t *testing.T) {
 	}
 }
 
-// TestE2EPorts_NeverCollideWithRealDaemon is the cross-entrypoint safety
-// invariant: a throwaway e2e daemon (any profile) can never bind a port a *real*
-// daemon (any profile) uses, so running e2e never hijacks or is hijacked by a
-// live daemon. Guaranteed by disjoint bands; asserted here so a future band edit
-// that breaks it fails loudly.
 func TestE2EPorts_NeverCollideWithRealDaemon(t *testing.T) {
 	profiles := []string{"", "dev", "agent7", "agent8", "ci-1", "alpha"}
-	realPorts := map[string]string{} // port -> profile that owns it
+	realPorts := map[string]string{}
 	for _, p := range profiles {
 		realPorts[WSPortForProfile(p)] = p
 	}

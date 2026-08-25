@@ -3,9 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Markdown } from './index';
 
-// jsdom cannot run real mermaid (it needs a canvas/layout engine), so the
-// diagram-rendering path is mocked here; the mermaid renderer itself is
-// exercised manually / by the Playwright harness.
 const mermaidMock = vi.hoisted(() => ({
   render: vi.fn(async () => ({ svg: '<svg data-testid="mermaid-svg"></svg>' })),
   initialize: vi.fn(),
@@ -123,9 +120,6 @@ describe('Markdown', () => {
 
   it('does not re-fire onDiagramLayoutChange on an unrelated parent re-render', async () => {
     const onDiagramLayoutChange = vi.fn();
-    // Simulates PresentTour re-rendering Markdown with a fresh callback
-    // identity after a version-bump-driven re-render — the callback identity
-    // churns, but the diagram itself is not remounted and does not re-settle.
     function Harness() {
       const [tick, setTick] = useState(0);
       return (
@@ -148,8 +142,6 @@ describe('Markdown', () => {
 
     fireEvent.click(screen.getByText('bump'));
     expect(screen.getByTestId('tick').textContent).toBe('1');
-    // The mermaid diagram already settled and the parent re-render carries no
-    // new content, so no additional layout-change notification should fire.
     expect(onDiagramLayoutChange).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,11 +1,5 @@
-// What a fit tells the daemon about the pane's size in PIXELS.
-//
-// The grid alone does not let an image emitter size an image; it divides the
-// pane's pixel area by the grid to get a cell. The renderer's cell metrics are
-// CSS pixels — the canvas is styled `cols * cellWidth` and backed by that times
-// devicePixelRatio — while the PTY's ws_xpixel/ws_ypixel are device pixels, so
-// the fit is where the two units meet. A fit that reported CSS pixels on a
-// retina display would tell every emitter the pane is half its real size.
+// Renderer cell metrics are CSS pixels; the PTY's ws_xpixel/ws_ypixel are device
+// pixels. Reporting CSS pixels halves the reported pane size on retina.
 import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,7 +34,6 @@ const mocks = vi.hoisted(() => {
   });
 
   class MockRenderer {
-    // CSS pixels, as the real renderer reports them.
     readonly cellWidth = 9;
     readonly cellHeight = 23;
     readonly dpr = rendererConfig.dpr;
@@ -86,8 +79,7 @@ vi.mock('../utils/terminalPerf', () => ({ registerTerminalPerfGetter: () => () =
 import { GhosttyTerminal, type GhosttyTerminalHandle } from './GhosttyTerminal';
 
 // The suite-wide ResizeObserver stub is a vi.fn(), which `new` does not build
-// into an observer the component can hold — the pane never reaches onReady
-// behind it. A real class is what the other GhosttyTerminal render tests use.
+// into an observer the component can hold, so the pane never reaches onReady.
 beforeEach(() => {
   globalThis.ResizeObserver = class {
     observe() {}
@@ -129,8 +121,6 @@ describe('GhosttyTerminal fit pixel geometry', () => {
   });
 
   it('reports CSS pixels unchanged on a 1x display', async () => {
-    // The same arithmetic with nothing to scale — the guard against a fit that
-    // hardcoded a doubling rather than reading the ratio.
     const onResize = await fitOnce(1);
 
     expect(onResize).toHaveBeenLastCalledWith(FIT_COLS, FIT_ROWS, expect.objectContaining({

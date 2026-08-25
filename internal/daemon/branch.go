@@ -1,4 +1,3 @@
-// internal/daemon/branch.go
 package daemon
 
 import (
@@ -8,12 +7,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// doCreateWorktreeFromBranch creates a worktree from an existing branch
 func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
 	mainRepo := git.ResolveMainRepoPath(msg.MainRepo)
 	branch := msg.Branch
 
-	// For remote branches (origin/xxx), extract local name for path and tracking
 	localBranch := branch
 	isRemote := strings.HasPrefix(branch, "origin/")
 	if isRemote {
@@ -23,7 +20,6 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 	requestedPath := protocol.Deref(msg.Path)
 	path := requestedPath
 	if path == "" {
-		// Use local branch name for cleaner worktree path
 		path = git.GenerateWorktreePath(mainRepo, localBranch)
 	}
 	path = git.ExpandPath(path)
@@ -44,7 +40,6 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 	}
 
 	if isRemote {
-		// Create worktree with local branch tracking remote
 		createdBranch, err := git.CreateWorktreeFromRemoteBranch(mainRepo, branch, path)
 		if err != nil {
 			return "", err
@@ -62,8 +57,6 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 	}
 	return path, nil
 }
-
-// WebSocket handlers
 
 func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protocol.CreateWorktreeFromBranchMessage) {
 	go func() {
@@ -106,7 +99,6 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 	go func() {
 		repo := git.CanonicalizePath(msg.Repo)
 
-		// Get current branch and commit
 		currentBranch, err := git.GetCurrentBranch(repo)
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
@@ -118,16 +110,13 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			return
 		}
 
-		// Get current commit hash and time
 		commitHash, commitTime := git.GetHeadCommitInfo(repo)
 
-		// Get default branch
 		defaultBranch, _ := d.coordinator().DefaultBranch(repo)
 		if defaultBranch == "" {
 			defaultBranch = "main"
 		}
 
-		// Get worktrees
 		worktrees := d.doListWorktrees(repo)
 
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
@@ -206,7 +195,6 @@ func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMe
 			TargetPath: protocol.Ptr(msg.TargetPath),
 		}
 
-		// Ensure the repo exists (clone if needed)
 		cloned, err := git.EnsureRepo(msg.CloneURL, msg.TargetPath)
 		if err != nil {
 			result.Success = protocol.Ptr(false)
@@ -217,7 +205,6 @@ func (d *Daemon) handleEnsureRepoWS(client *wsClient, msg *protocol.EnsureRepoMe
 			return
 		}
 
-		// Fetch remotes (whether repo was cloned or already existed)
 		if err := git.FetchRemotes(msg.TargetPath); err != nil {
 			result.Success = protocol.Ptr(false)
 			result.Error = protocol.Ptr("repo exists but fetch failed: " + err.Error())

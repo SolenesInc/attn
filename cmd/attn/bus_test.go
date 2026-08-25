@@ -11,11 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 )
 
-// The human rendering is the whole product for anyone on a terminal, and it is
-// the one place that decides what to leave out. A cap nobody can see is the
-// failure mode: these check that what is dropped is still counted out loud, and
-// that the JSON drops nothing at all.
-
 var busRenderNow = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 
 func renderBusStatus(s bus.Status) string {
@@ -54,8 +49,6 @@ func TestBusStatusRenderingCountsWhatItLeavesOut(t *testing.T) {
 	if strings.Contains(out, "quiet.14") {
 		t.Fatalf("the table should stop at %d rows:\n%s", busProducerLines, out)
 	}
-	// A silent truncation reads as "that is everything". The tail has to be
-	// counted, with the share it accounts for and the way to see it.
 	for _, want := range []string{"and 1 quieter class", "10 event", "--json"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not state what it dropped (%q missing):\n%s", want, out)
@@ -97,7 +90,6 @@ func TestBusStatusRenderingMarksALoudProducerAndPrintsTheFindings(t *testing.T) 
 	if quiet := producerRow(t, out, "pr.updated"); strings.Contains(quiet, "!") {
 		t.Errorf("a quiet producer must not be marked: %q", quiet)
 	}
-	// The findings are the daemon's sentences, printed as-is and led by severity.
 	if !strings.Contains(out, "ERROR: consumer notifier is 41,141 events behind") {
 		t.Errorf("the lagging finding is missing:\n%s", out)
 	}
@@ -106,7 +98,6 @@ func TestBusStatusRenderingMarksALoudProducerAndPrintsTheFindings(t *testing.T) 
 	}
 }
 
-// An empty log is what a fresh install has, and the command opens on it.
 func TestBusStatusRenderingOnAnEmptyLog(t *testing.T) {
 	out := renderBusStatus(bus.Status{RetentionWindow: 30 * 24 * time.Hour})
 	if out == "" {
@@ -117,9 +108,6 @@ func TestBusStatusRenderingOnAnEmptyLog(t *testing.T) {
 	}
 }
 
-// --json is the scripting surface, so it carries every window a decision could
-// be made on — including which one tripped, which the human view only says in
-// prose.
 func TestBusStatusJSONCarriesBothSustainedWindows(t *testing.T) {
 	report := busStatusReport(busStatusFixture(bus.Producer{
 		Name: "session.state.changed", Events: 1000, Share: 1, Subjects: 4,
@@ -156,8 +144,8 @@ func TestBusStatusJSONCarriesBothSustainedWindows(t *testing.T) {
 	}
 }
 
-// The table row for a fact, matched on the name starting the line so the marker
-// column and the health sentences below cannot stand in for it.
+// Matched on the name starting the line, so the marker column and the health
+// sentences below cannot stand in for the row.
 func producerRow(t *testing.T, out, name string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
@@ -169,9 +157,6 @@ func producerRow(t *testing.T, out, name string) string {
 	return ""
 }
 
-// Holding the retention floor is normal and holding it past the tripwire is an
-// outage. The table has to read differently for the two, or someone acting on
-// the warning opens the CLI and cannot tell which consumer it meant.
 func TestBusStatusRenderingSeparatesANormalFloorFromAnAlarmingOne(t *testing.T) {
 	s := busStatusFixture()
 	s.PinAlarmAge = time.Hour
@@ -193,8 +178,6 @@ func TestBusStatusRenderingSeparatesANormalFloorFromAnAlarmingOne(t *testing.T) 
 	}
 }
 
-// A script acting on the crossing needs the limit beside the value, and needs to
-// tell "holding nothing" from "not measured" — which is what the flag is for.
 func TestBusStatusJSONCarriesTheTripwireAndWhatIsHeld(t *testing.T) {
 	s := busStatusFixture()
 	s.PinAlarmAge = 90 * time.Minute

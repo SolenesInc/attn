@@ -7,10 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/procreap"
 )
 
-// The registry is the crash-recovery net: it must exist exactly while the
-// process might, so a record appears at spawn and disappears once the host is
-// fully gone. The reap semantics themselves are procreap's to test; this
-// covers the manager's side of the contract.
 func TestSpawnWritesAndExitRemovesTheRegistryEntry(t *testing.T) {
 	manager, rec := newManager(t)
 	dataDir := t.TempDir()

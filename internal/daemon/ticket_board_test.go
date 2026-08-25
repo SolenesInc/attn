@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// readTicketResult decodes the single ws event the board handler sent to a client.
 func readTicketResult(t *testing.T, ch chan outboundMessage, target any) {
 	t.Helper()
 	select {
@@ -80,8 +79,6 @@ func artifactNames(artifacts []protocol.TicketArtifact) []string {
 	return names
 }
 
-// The SDK snapshot's board is the non-archived set, and each row is SLIM — the
-// brief, the history thread and the artifacts belong to a read by id.
 func TestAppTicketRowsBareNonArchived(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := time.Now()
@@ -108,9 +105,6 @@ func TestAppTicketRowsBareNonArchived(t *testing.T) {
 	}
 }
 
-// The SDK's row carries the board and not the brief. The brief is the bulk of a
-// ticket and an app reading current state does not render one from a row — it
-// is fetched by id.
 func TestAppTicketRowCarriesTheBoardAndNotTheBrief(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := time.Now()
@@ -150,7 +144,6 @@ func TestAppTicketRowCarriesTheBoardAndNotTheBrief(t *testing.T) {
 	if strings.Contains(string(raw), "delegation brief") {
 		t.Fatalf("the brief reached the board row: %s", raw)
 	}
-	// What a row does carry.
 	for field, want := range map[string]any{
 		"id":            "store-migration",
 		"title":         "Migrate the store",
@@ -168,8 +161,6 @@ func TestAppTicketRowCarriesTheBoardAndNotTheBrief(t *testing.T) {
 	}
 }
 
-// Slimming the SDK's rows must not reach the agent's board read: an agent lists
-// tickets to find work, and the brief is the work.
 func TestTicketListRowsStillCarryTheBrief(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	if _, err := d.store.CreateTicket(store.Ticket{

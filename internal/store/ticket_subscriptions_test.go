@@ -6,11 +6,8 @@ import (
 	"time"
 )
 
-// A subscription is the third participation source: an identity that is neither the
-// assignee nor an author becomes a participant by subscribing — reached by the
-// notifier (TicketParticipants) and served the ticket's events (UnreadTicketEvents),
-// including the backlog, since subscribing does not advance the cursor. Unsubscribing
-// fully reverses both.
+// An identity that is neither assignee nor author becomes a participant by subscribing,
+// and is served the backlog too, since subscribing does not advance the cursor.
 func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -25,7 +22,6 @@ func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 		t.Fatalf("SetTicketStatus: %v", err)
 	}
 
-	// A watcher with no prior tie to the ticket sees nothing yet.
 	if got, err := s.UnreadTicketEvents("watcher"); err != nil || len(got) != 0 {
 		t.Fatalf("pre-subscribe unread = %d (err %v), want 0", len(got), err)
 	}
@@ -34,7 +30,6 @@ func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 		t.Fatalf("AddTicketSubscription: %v", err)
 	}
 
-	// Now a participant: in the notifier's set...
 	parts, err := s.TicketParticipants("tk")
 	if err != nil {
 		t.Fatalf("TicketParticipants: %v", err)
@@ -42,7 +37,6 @@ func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 	if !contains(parts, "watcher") {
 		t.Fatalf("participants = %v, want to include watcher", parts)
 	}
-	// ...and served the ticket's history (it authored none of these events).
 	unread, err := s.UnreadTicketEvents("watcher")
 	if err != nil {
 		t.Fatalf("UnreadTicketEvents: %v", err)
@@ -56,7 +50,6 @@ func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 		}
 	}
 
-	// Unsubscribing reverses both halves.
 	if err := s.RemoveTicketSubscription("watcher", "tk"); err != nil {
 		t.Fatalf("RemoveTicketSubscription: %v", err)
 	}
@@ -68,8 +61,6 @@ func TestTicketSubscriptionMakesParticipant(t *testing.T) {
 	}
 }
 
-// Subscribe is idempotent and guards the ticket id; unsubscribe is a tolerant
-// removal that never errors on a missing subscription.
 func TestSubscribeIdempotentAndValidatesTicket(t *testing.T) {
 	s := New()
 	t.Cleanup(func() { _ = s.Close() })
@@ -82,7 +73,6 @@ func TestSubscribeIdempotentAndValidatesTicket(t *testing.T) {
 	if err := s.AddTicketSubscription("watcher", "tk", now); err != nil {
 		t.Fatalf("first subscribe: %v", err)
 	}
-	// Re-subscribing is a no-op, not an error or a duplicate.
 	if err := s.AddTicketSubscription("watcher", "tk", now); err != nil {
 		t.Fatalf("second subscribe: %v", err)
 	}
@@ -90,12 +80,10 @@ func TestSubscribeIdempotentAndValidatesTicket(t *testing.T) {
 		t.Fatalf("IsTicketSubscribed = (%v, %v), want (true, nil)", ok, err)
 	}
 
-	// Subscribing to a phantom ticket is a clear error, not a silent dropped row.
 	if err := s.AddTicketSubscription("watcher", "ghost", now); !errors.Is(err, ErrTicketNotFound) {
 		t.Fatalf("subscribe to missing ticket = %v, want ErrTicketNotFound", err)
 	}
 
-	// Unsubscribing twice — and from something never subscribed — both succeed.
 	if err := s.RemoveTicketSubscription("watcher", "tk"); err != nil {
 		t.Fatalf("first unsubscribe: %v", err)
 	}

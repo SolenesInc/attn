@@ -1,17 +1,3 @@
-/**
- * One fuzzy re-anchor per content change, then re-baseline. Runs only when the
- * content hash changed. Two tiers, the first with ≥1 candidate winning:
- * (a) every occurrence of `exact` across all blocks, re-attributed to the
- * deepest stamped owner and scored as one pool; (b) whitespace-normalized
- * search (`\s+ → ' '`), the only lossy tier.
- *
- * `blockId` is an ordinal reassigned on every edit, so it never accepts a
- * candidate on its own. Scoring is Levenshtein similarity over the 32-char
- * context windows plus source-line proximity; the winner must clear a
- * confidence floor AND lead the runner-up, so indistinguishable copies orphan
- * as ambiguous rather than paint whichever sorts first. It is then
- * RE-BASELINED against `newContent`, so fuzz never compounds across edits.
- */
 
 import { buildAnchor, CONTEXT_CHARS } from './create';
 import { extractBlockTexts, ownerBlockFor } from './extractBlocks';
@@ -19,7 +5,6 @@ import { fnv1a32 } from './hash';
 import type { AnchorRecord, BlockText, RebaseResult, RebaseTier } from './types';
 
 interface Candidate {
-  /** Owning block (deepest stamped element containing the range). */
   block: BlockText;
   start: number;
   end: number;
@@ -81,7 +66,6 @@ function occurrences(haystack: string, needle: string): number[] {
   }
 }
 
-/** Re-attribute to the deepest owner and dedupe by (ownerBlockId, ownerStart). */
 function dedupeToOwners(blocks: BlockText[], raw: Candidate[]): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
@@ -106,10 +90,7 @@ function documentCandidates(blocks: BlockText[], anchor: AnchorRecord): Candidat
   return dedupeToOwners(blocks, raw);
 }
 
-/**
- * Whitespace-collapse `text`, mapping each normalized offset back to its raw
- * one (a whitespace run maps to its first index); `map[len]` is the sentinel.
- */
+// A whitespace run maps to its first index; `map[len]` is the sentinel.
 function normalizeWithMap(text: string): { normalized: string; map: number[] } {
   let normalized = '';
   const map: number[] = [];
@@ -174,11 +155,8 @@ function pickWinner(candidates: Candidate[], anchor: AnchorRecord): Candidate | 
   return 'ambiguous';
 }
 
-/**
- * Re-anchor against `newContent`: a re-baselined record the caller persists,
- * or an orphan — never a silent wrong-text match. `preExtracted`, when given,
- * must be `extractBlockTexts(newContent)`.
- */
+// `preExtracted`, when given, must be `extractBlockTexts(newContent)`. `blockId` is
+// an ordinal reassigned on every edit, so it never accepts a candidate on its own.
 export function rebaseAnchor(
   anchor: AnchorRecord,
   newContent: string,

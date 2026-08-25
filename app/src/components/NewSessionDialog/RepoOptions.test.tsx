@@ -80,7 +80,6 @@ describe('RepoOptions', () => {
     const input = screen.getByTestId('repo-new-worktree-input') as HTMLInputElement;
     expect(input).toHaveFocus();
     expect(input.value).toMatch(/^[a-z]+-[a-z]+$/);
-    // No destination is armed, so Enter cannot open one by accident.
     expect(screen.getByTestId('repo-option-0')).not.toHaveClass('selected');
   });
 
@@ -194,12 +193,6 @@ describe('RepoOptions', () => {
   });
 
   it('rerolls and retries when the generated name collides with a branch RepoInfo never saw', async () => {
-    // `takenBranchNames` is built from `repoInfo.currentBranch` and
-    // `repoInfo.worktrees` alone, so it has no visibility into an ordinary
-    // local branch that was never checked out into a worktree. Git rejects
-    // `worktree add -b` on that branch the same way it would on a taken one;
-    // the component must recover by rerolling rather than surfacing the raw
-    // git failure.
     const onCreateWorktree = vi.fn();
     let firstAttempt: string | undefined;
     onCreateWorktree.mockImplementation(async (branchName: string) => {
@@ -231,9 +224,6 @@ describe('RepoOptions', () => {
   });
 
   it('surfaces the collision instead of rerolling when the user typed the name', async () => {
-    // A typed name is a deliberate choice. Rerolling it would build an
-    // unrelated worktree and silently discard what the user asked for, so the
-    // "already exists" failure has to reach them unchanged.
     const onError = vi.fn();
     const onCreateWorktree = vi.fn(async (branchName: string) => {
       throw new Error(`git worktree add failed: fatal: a branch named '${branchName}' already exists`);
@@ -260,14 +250,11 @@ describe('RepoOptions', () => {
     expect(onCreateWorktree).toHaveBeenCalledTimes(1);
     expect(onCreateWorktree).toHaveBeenCalledWith('feature', 'origin/main');
     expect(onError.mock.calls[0][0]).toMatch(/a branch named 'feature' already exists/);
-    // The typed name survives so the user can correct it.
     expect((screen.getByTestId('repo-new-worktree-input') as HTMLInputElement).value).toBe('feature');
     consoleError.mockRestore();
   });
 
   it('still rerolls after the user types and then presses the reroll button', async () => {
-    // Reroll hands ownership back to the generator, so the collision recovery
-    // applies again even though the field was user-edited in between.
     const onCreateWorktree = vi.fn();
     let firstAttempt: string | undefined;
     onCreateWorktree.mockImplementation(async (branchName: string) => {
@@ -451,7 +438,6 @@ describe('RepoOptions', () => {
       />,
     );
 
-    // Up off the top of the destination list lands back in the create form.
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'ArrowUp' });
     fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'ArrowUp' });
     expect(screen.getByTestId('repo-new-worktree-input')).toHaveFocus();

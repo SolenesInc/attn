@@ -81,9 +81,8 @@ func shouldEnableDebugCapture(agent string) bool {
 	raw := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_DEBUG_PTY_CAPTURE")))
 	switch raw {
 	case "", "0", "false", "off", "no", "disabled":
-		// Off by default: capture retains up to debugCaptureMaxEvents base64
-		// chunks (~16-22 MiB) in every worker subprocess for its whole lifetime.
-		// It is a debugging aid and must be explicitly opted into.
+		// Off by default: capture retains up to debugCaptureMaxEvents base64 chunks
+		// (~16-22 MiB) in every worker subprocess for its whole lifetime.
 		return false
 	case "1", "true", "on", "yes", "all":
 		return true

@@ -9,18 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// Answering a query takes three reads — the declaration, the cursor anchor, and
-// the SELECT — and the statement is compiled from the first two. While those
-// were three separate transactions, a write landing in between produced answers
-// that matched no state the collection was ever in, and reported no error:
-//
-//	anchor deleted mid-read       -> silently empty page, not "cannot page after"
-//	anchor gained a sort value    -> the page handed back the anchor itself
-//	a field's declared type moved -> the filter silently matched nothing
-//
-// ReadQuery does all three inside one transaction. These tests pin each of the
-// three outcomes, and then the invariant underneath them.
-
 func readIDs(t *testing.T, s *Store, q docstore.Query) ([]string, error) {
 	t.Helper()
 	read, found, err := s.ReadQuery(q)
@@ -46,9 +34,6 @@ func pagedByAttempts(after string) docstore.Query {
 	}
 }
 
-// A cursor naming a document that is gone is an error with a way forward, not an
-// empty page. An empty page is indistinguishable from "you have reached the end"
-// and silently truncates whatever the caller was walking.
 func TestPagingAfterADeletedAnchorSaysSoRatherThanEmptyingThePage(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"attempts":1}`,
@@ -68,7 +53,6 @@ func TestPagingAfterADeletedAnchorSaysSoRatherThanEmptyingThePage(t *testing.T) 
 	}
 }
 
-// The anchor is a position in the order, so a page after it never contains it.
 func TestAPageNeverContainsItsOwnAnchor(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{}`,
@@ -76,8 +60,6 @@ func TestAPageNeverContainsItsOwnAnchor(t *testing.T) {
 		"c": `{"attempts":7}`,
 	})
 
-	// The anchor with no value for the sort field sorts first, so the page after
-	// it is everything else.
 	got, err := readIDs(t, s, pagedByAttempts("a"))
 	if err != nil {
 		t.Fatalf("page after a null-valued anchor: %v", err)
@@ -86,8 +68,6 @@ func TestAPageNeverContainsItsOwnAnchor(t *testing.T) {
 		t.Fatalf("page after a null-valued anchor is %v, want %v", got, want)
 	}
 
-	// Once it has a value it sorts between b and c, and the page after it shrinks
-	// to c. The anchor appears in neither answer.
 	if _, err := s.PutDocument(requestsDecl(t, s), "a", []byte(`{"attempts":5}`), base.Add(time.Hour), nil); err != nil {
 		t.Fatalf("put: %v", err)
 	}
@@ -100,9 +80,6 @@ func TestAPageNeverContainsItsOwnAnchor(t *testing.T) {
 	}
 }
 
-// A filter bound under one declared type must never be compared against a column
-// that has since been redeclared as another. The affinity changes underneath the
-// same column name, so the comparison silently stops matching instead of failing.
 func TestAFilterIsBoundUnderTheDeclarationItRunsAgainst(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{"attempts":1}`,
@@ -142,16 +119,6 @@ func TestAFilterIsBoundUnderTheDeclarationItRunsAgainst(t *testing.T) {
 	}
 }
 
-// The invariant the three tests above are instances of, run as the race it
-// protects against: a reader and a writer going at the same collection at once.
-//
-// The writer flips one document between exactly two states, so every answer a
-// reader can legitimately get is enumerable — the page after a null-valued
-// anchor, or the page after that same anchor once it has a value. Any other
-// answer describes a collection that never existed, which is what a read spread
-// across several transactions produces. There is no timing here and nothing to
-// wait for: the assertion holds for every interleaving, so the test only has to
-// run enough of them.
 func TestAQueryNeverSeesACollectionThatNeverExisted(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{
 		"a": `{}`,
@@ -181,9 +148,6 @@ func TestAQueryNeverSeesACollectionThatNeverExisted(t *testing.T) {
 		}
 	}()
 
-	// "a" has no value for attempts, so it sorts first and the page after it is
-	// everything else; with a value it sorts between b and c and the page is just
-	// c. Nothing else is a state this collection passes through.
 	legal := [][]string{{"b", "c"}, {"c"}}
 	for i := 0; i < reads; i++ {
 		got, err := readIDs(t, s, pagedByAttempts("a"))

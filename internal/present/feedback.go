@@ -7,9 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// FeedbackComment is a single inline review comment anchored to a line range
-// within one side (old/new) of a file, ready to be rendered back to the
-// authoring agent as markdown.
 type FeedbackComment struct {
 	Filepath  string
 	LineStart int
@@ -18,16 +15,6 @@ type FeedbackComment struct {
 	Content   string
 }
 
-// RenderFeedback renders a round's review comments as markdown for the
-// authoring agent to read via `attn present feedback`. Comments are grouped by
-// file, keeping the input order both across files and within a file. Each
-// comment is preceded by a fenced quote of the referenced lines, fetched from
-// git at the round's pinned base/head SHA (side "old" reads baseSHA, "new"
-// reads headSHA) — but a quote is best-effort: if git fails or the lines are
-// out of range, the quote is silently omitted rather than failing the whole
-// render. verdict is "" (unsubmitted), "approved", or "feedback" — "approved"
-// adds a bold verdict line right after the submitted line; "feedback" and ""
-// leave the rendered shape exactly as it was before verdicts existed.
 func RenderFeedback(repoPath, title string, seq int, baseSHA, headSHA string, submittedAt string, verdict string, comments []FeedbackComment) string {
 	var b strings.Builder
 
@@ -100,8 +87,6 @@ func RenderFeedback(repoPath, title string, seq int, baseSHA, headSHA string, su
 	return b.String()
 }
 
-// sliceLines returns the 1-indexed, inclusive line range [start, end] joined
-// with newlines, or "" if the range is invalid or entirely out of bounds.
 func sliceLines(lines []string, start, end int) string {
 	if start < 1 || end < start || start > len(lines) {
 		return ""

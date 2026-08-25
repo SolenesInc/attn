@@ -30,7 +30,6 @@ func TestLogger_WritesToFile(t *testing.T) {
 }
 
 func TestLogger_RespectsDebugLevel(t *testing.T) {
-	// Unset DEBUG to ensure test isolation
 	originalDebug := os.Getenv("DEBUG")
 	os.Unsetenv("DEBUG")
 	defer func() {
@@ -48,7 +47,6 @@ func TestLogger_RespectsDebugLevel(t *testing.T) {
 	}
 	defer logger.Close()
 
-	// Debug disabled by default
 	logger.Debug("debug message")
 
 	content, err := os.ReadFile(logPath)
@@ -62,7 +60,6 @@ func TestLogger_RespectsDebugLevel(t *testing.T) {
 }
 
 func TestLogger_DebugEnabled(t *testing.T) {
-	// Set DEBUG for this test
 	originalDebug := os.Getenv("DEBUG")
 	os.Setenv("DEBUG", "debug")
 	defer func() {
@@ -82,7 +79,6 @@ func TestLogger_DebugEnabled(t *testing.T) {
 	}
 	defer logger.Close()
 
-	// Debug should be enabled now
 	logger.Debug("debug message")
 
 	content, err := os.ReadFile(logPath)

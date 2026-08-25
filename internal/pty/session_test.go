@@ -107,15 +107,11 @@ func TestDetectTerminalQueries(t *testing.T) {
 		t.Fatalf("detectTerminalQueries() = %+v, want da1BeforeCPR=true for DA1-first chunk", reversed)
 	}
 
-	// A chunk asking the same OSC color repeatedly must be counted, not just
-	// detected — an under-count leaves later queries in the same chunk
-	// unanswered.
 	repeated := detectTerminalQueries([]byte("\x1b]11;?\x07\x1b]11;?\x07\x1b]11;?\x07"))
 	if repeated.osc11 != 3 {
 		t.Fatalf("detectTerminalQueries() osc11 = %d, want 3", repeated.osc11)
 	}
 
-	// An OSC color SET (no "?") must never be detected as a query.
 	set := detectTerminalQueries([]byte("\x1b]11;#000000\x1b\\"))
 	if set.osc11 != 0 {
 		t.Fatalf("detectTerminalQueries() osc11 = %d, want 0 for a color SET", set.osc11)

@@ -2,14 +2,8 @@ import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'rea
 import { PENDING_DIAGRAM_LANGUAGE } from './streaming';
 import './Markdown.css';
 
-/**
- * Chrome around a fenced code block: a header naming the language, a copy
- * button, and one border holding both to the code.
- *
- * It lives on `pre` rather than `code` because react-markdown renders the
- * `<pre>` itself — a `code` component cannot reach outside it. A diagram fence
- * is not code and never gets framed here; MermaidDiagram carries its own.
- */
+/** Chrome around a fenced code block. It lives on `pre` because react-markdown renders
+ * the `<pre>` itself — a `code` component cannot reach outside it. */
 
 function fenceLanguage(className: string | undefined): string | undefined {
   const found = /language-([\w-]+)/.exec(className ?? '');

@@ -1,4 +1,3 @@
-// internal/store/worktree_test.go
 package store
 
 import (
@@ -17,10 +16,8 @@ func TestWorktreeStore(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	// Add
 	store.AddWorktree(wt)
 
-	// Get
 	got := store.GetWorktree(wt.Path)
 	if got == nil {
 		t.Fatal("expected worktree, got nil")
@@ -29,13 +26,11 @@ func TestWorktreeStore(t *testing.T) {
 		t.Errorf("expected branch %s, got %s", wt.Branch, got.Branch)
 	}
 
-	// List by repo
 	list := store.ListWorktreesByRepo(wt.MainRepo)
 	if len(list) != 1 {
 		t.Errorf("expected 1 worktree, got %d", len(list))
 	}
 
-	// Remove
 	store.RemoveWorktree(wt.Path)
 	got = store.GetWorktree(wt.Path)
 	if got != nil {

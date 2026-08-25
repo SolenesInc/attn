@@ -25,27 +25,23 @@ func newRegistryFromClient(client github.GitHubClient) *github.ClientRegistry {
 	return registry
 }
 
-// Classifier is an interface for classifying session state
 type Classifier interface {
 	Classify(text string, timeout time.Duration) (string, error)
 }
 
-// FakeClassifier allows controlling classification results in tests
 type FakeClassifier struct {
 	mu           sync.Mutex
 	defaultState string
-	responses    map[string]string // keyed by session ID or text hash
+	responses    map[string]string
 	calls        []ClassifyCall
 }
 
-// ClassifyCall records a call to Classify
 type ClassifyCall struct {
 	Text    string
 	Timeout time.Duration
 	Time    time.Time
 }
 
-// NewFakeClassifier creates a fake classifier that returns the default state
 func NewFakeClassifier(defaultState string) *FakeClassifier {
 	return &FakeClassifier{
 		defaultState: defaultState,
@@ -53,14 +49,12 @@ func NewFakeClassifier(defaultState string) *FakeClassifier {
 	}
 }
 
-// SetResponse sets a specific response for text containing the given substring
 func (f *FakeClassifier) SetResponse(substring, state string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.responses[substring] = state
 }
 
-// Classify returns the configured state for the text
 func (f *FakeClassifier) Classify(text string, timeout time.Duration) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -71,7 +65,6 @@ func (f *FakeClassifier) Classify(text string, timeout time.Duration) (string, e
 		Time:    time.Now(),
 	})
 
-	// Check for specific responses
 	for substring, state := range f.responses {
 		if contains(text, substring) {
 			return state, nil
@@ -81,7 +74,6 @@ func (f *FakeClassifier) Classify(text string, timeout time.Duration) (string, e
 	return f.defaultState, nil
 }
 
-// Calls returns all recorded calls
 func (f *FakeClassifier) Calls() []ClassifyCall {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -90,7 +82,6 @@ func (f *FakeClassifier) Calls() []ClassifyCall {
 	return result
 }
 
-// Reset clears all recorded calls
 func (f *FakeClassifier) Reset() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -110,25 +101,21 @@ func findSubstring(text, substr string) bool {
 	return false
 }
 
-// BroadcastRecorder captures all WebSocket broadcasts for verification
 type BroadcastRecorder struct {
 	mu     sync.Mutex
 	events []*protocol.WebSocketEvent
 }
 
-// NewBroadcastRecorder creates a new broadcast recorder
 func NewBroadcastRecorder() *BroadcastRecorder {
 	return &BroadcastRecorder{}
 }
 
-// Record adds an event to the recorder
 func (r *BroadcastRecorder) Record(event *protocol.WebSocketEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, event)
 }
 
-// Events returns all recorded events
 func (r *BroadcastRecorder) Events() []*protocol.WebSocketEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -137,7 +124,6 @@ func (r *BroadcastRecorder) Events() []*protocol.WebSocketEvent {
 	return result
 }
 
-// EventsOfType returns events matching the given type
 func (r *BroadcastRecorder) EventsOfType(eventType string) []*protocol.WebSocketEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -150,7 +136,6 @@ func (r *BroadcastRecorder) EventsOfType(eventType string) []*protocol.WebSocket
 	return result
 }
 
-// WaitForEvent waits for an event of the given type with timeout
 func (r *BroadcastRecorder) WaitForEvent(eventType string, timeout time.Duration) *protocol.WebSocketEvent {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -163,28 +148,18 @@ func (r *BroadcastRecorder) WaitForEvent(eventType string, timeout time.Duration
 	return nil
 }
 
-// Clear removes all recorded events
 func (r *BroadcastRecorder) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = nil
 }
 
-// Count returns the number of recorded events
 func (r *BroadcastRecorder) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.events)
 }
 
-// WireTrace is the complete record of what a daemon put on the WebSocket, in
-// order, from every hub send path.
-//
-// BroadcastRecorder is the older and narrower instrument: it holds typed events
-// and only sees hub.Broadcast. WireTrace holds bytes and sees everything, which
-// is what a migration needs — the question "does this refactor change what
-// clients receive?" is a question about bytes, and it is unanswerable from a
-// recorder that a fifth of the send sites bypass.
 type WireTrace struct {
 	mu       sync.Mutex
 	payloads [][]byte
@@ -196,7 +171,6 @@ func (t *WireTrace) record(payload []byte) {
 	t.payloads = append(t.payloads, append([]byte(nil), payload...))
 }
 
-// Payloads returns every payload sent so far, in send order.
 func (t *WireTrace) Payloads() [][]byte {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -207,9 +181,6 @@ func (t *WireTrace) Payloads() [][]byte {
 	return out
 }
 
-// EventNames returns the `event` field of each payload, in send order. A payload
-// that is not a JSON object with an `event` string is reported as "?" rather than
-// dropped, so a trace comparison cannot silently lose traffic it failed to parse.
 func (t *WireTrace) EventNames() []string {
 	payloads := t.Payloads()
 	names := make([]string, 0, len(payloads))
@@ -226,21 +197,18 @@ func (t *WireTrace) EventNames() []string {
 	return names
 }
 
-// Clear drops everything recorded so far.
 func (t *WireTrace) Clear() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.payloads = nil
 }
 
-// Count returns how many payloads have been sent.
 func (t *WireTrace) Count() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return len(t.payloads)
 }
 
-// TestHarness wraps a daemon with test utilities
 type TestHarness struct {
 	Daemon     *Daemon
 	Classifier *FakeClassifier
@@ -250,7 +218,6 @@ type TestHarness struct {
 	SockPath   string
 }
 
-// TestHarnessBuilder builds test harnesses with various configurations
 type TestHarnessBuilder struct {
 	socketPath      string
 	defaultState    string
@@ -258,34 +225,29 @@ type TestHarnessBuilder struct {
 	recordBroadcast bool
 }
 
-// NewTestHarnessBuilder creates a new builder
 func NewTestHarnessBuilder(socketPath string) *TestHarnessBuilder {
 	return &TestHarnessBuilder{
 		socketPath:      socketPath,
-		defaultState:    protocol.StateWaitingInput, // Safe default
+		defaultState:    protocol.StateWaitingInput,
 		recordBroadcast: true,
 	}
 }
 
-// WithDefaultClassifierState sets the default classifier state
 func (b *TestHarnessBuilder) WithDefaultClassifierState(state string) *TestHarnessBuilder {
 	b.defaultState = state
 	return b
 }
 
-// WithGitHubClient sets a custom GitHub client
 func (b *TestHarnessBuilder) WithGitHubClient(client github.GitHubClient) *TestHarnessBuilder {
 	b.ghClient = client
 	return b
 }
 
-// WithoutBroadcastRecording disables broadcast recording
 func (b *TestHarnessBuilder) WithoutBroadcastRecording() *TestHarnessBuilder {
 	b.recordBroadcast = false
 	return b
 }
 
-// Build creates the test harness
 func (b *TestHarnessBuilder) Build() *TestHarness {
 	classifier := NewFakeClassifier(b.defaultState)
 	recorder := NewBroadcastRecorder()
@@ -297,15 +259,11 @@ func (b *TestHarnessBuilder) Build() *TestHarness {
 	hub := newWSHub()
 	manager := pty.NewManager(nil)
 
-	// Set up broadcast listener if recording is enabled
 	if b.recordBroadcast {
 		hub.broadcastListener = func(event *protocol.WebSocketEvent) {
 			recorder.Record(event)
 		}
 	}
-	// The wire trace is always on: it is the only complete record of hub output,
-	// and a test that opts out of it cannot tell a migrated broadcast from a
-	// deleted one.
 	hub.wireTap = wire.record
 
 	d := &Daemon{
@@ -338,10 +296,8 @@ func (b *TestHarnessBuilder) Build() *TestHarness {
 	}
 }
 
-// Start starts the daemon and waits for the socket to be ready
 func (h *TestHarness) Start() {
 	go h.Daemon.Start()
-	// Poll for socket readiness instead of fixed sleep
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("unix", h.SockPath, 10*time.Millisecond)
@@ -353,7 +309,6 @@ func (h *TestHarness) Start() {
 	}
 }
 
-// Stop stops the daemon
 func (h *TestHarness) Stop() {
 	h.Daemon.Stop()
 }

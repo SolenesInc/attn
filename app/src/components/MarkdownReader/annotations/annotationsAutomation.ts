@@ -1,15 +1,5 @@
-/**
- * Module-level registry so the UI automation bridge can read annotation state
- * without a reference into a conditionally-mounted MarkdownReader (same
- * pattern as components/grid/gridAutomation.ts). The annotations hook
- * registers a handle while mounted and unregisters exactly its own handle on
- * unmount; the bridge reads through getMarkdownAnnotationsAutomationHandle().
- *
- * With multiple markdown tiles open the LAST mounted reader wins — a harness
- * affordance, not a product surface (harness scenarios drive one tile). The
- * registry is a stack, not a single slot, so closing one tile never blinds
- * the bridge to another tile that is still open.
- */
+/** Module-level registry so the UI automation bridge can read annotation state without a
+ * reference into a conditionally-mounted MarkdownReader. A stack; last mounted reader wins. */
 
 import type { OrphanReason } from '../anchoring';
 

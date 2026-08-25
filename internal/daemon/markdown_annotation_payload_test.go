@@ -22,11 +22,8 @@ func fileAnnotationSource(path string) annotationDocumentSource {
 	return annotationDocumentSource{kind: annotationSourceFile, path: path}
 }
 
-// Mixed document: sorting by position, range + single-line labels, deletion
-// fence, quick label with tip, global last, label summary, closing line.
 func TestFormatMarkdownAnnotationPayloadMixed(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
-		// Deliberately scrambled creation order to prove position sorting.
 		{ID: "del", Type: "deletion", Anchor: mdAnchor(30, 30, 0, "old paragraph"), CreatedAt: 1},
 		{ID: "glob", Type: "global", Text: protocol.Ptr("a global comment"), CreatedAt: 2},
 		{ID: "range", Type: "comment", Anchor: mdAnchor(12, 18, 4, "the selected text"), Text: protocol.Ptr("the reviewer's comment"), CreatedAt: 3},
@@ -67,8 +64,6 @@ func TestFormatMarkdownAnnotationPayloadMixed(t *testing.T) {
 	}
 }
 
-// A single annotation uses the singular "1 piece of feedback" and skips the
-// label summary entirely (no quick labels).
 func TestFormatMarkdownAnnotationPayloadSingularNoSummary(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "c", Type: "comment", Anchor: mdAnchor(7, 7, 0, "text"), Text: protocol.Ptr("note"), CreatedAt: 1},
@@ -90,8 +85,6 @@ func TestFormatMarkdownAnnotationPayloadSingularNoSummary(t *testing.T) {
 	}
 }
 
-// Orphaned ids keep their last-known line as "(~line N, moved)" and are still
-// included in the payload.
 func TestFormatMarkdownAnnotationPayloadOrphaned(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "orph", Type: "comment", Anchor: mdAnchor(7, 9, 0, "moved text"), Text: protocol.Ptr("still relevant"), CreatedAt: 1},
@@ -103,16 +96,13 @@ func TestFormatMarkdownAnnotationPayloadOrphaned(t *testing.T) {
 	}
 }
 
-// Quick-label behavior: the tip repeats on every occurrence, a tip-less label
-// emits no quote line, a missing quick_label_text falls back to the raw id,
-// and the label summary groups by display text in first-appearance order.
 func TestFormatMarkdownAnnotationPayloadQuickLabels(t *testing.T) {
 	tip := protocol.Ptr("nice")
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "a", Type: "comment", Anchor: mdAnchor(1, 1, 0, "one"),
 			QuickLabelID: protocol.Ptr("looks-good"), QuickLabelText: protocol.Ptr("👍 Looks good"), QuickLabelTip: tip, CreatedAt: 1},
 		{ID: "b", Type: "comment", Anchor: mdAnchor(2, 2, 0, "two"),
-			QuickLabelID: protocol.Ptr("confusing"), CreatedAt: 2}, // no text -> raw id; no tip -> no quote line
+			QuickLabelID: protocol.Ptr("confusing"), CreatedAt: 2},
 		{ID: "c", Type: "comment", Anchor: mdAnchor(3, 3, 0, "three"),
 			QuickLabelID: protocol.Ptr("looks-good"), QuickLabelText: protocol.Ptr("👍 Looks good"), QuickLabelTip: tip, CreatedAt: 3},
 	}
@@ -143,8 +133,6 @@ func TestFormatMarkdownAnnotationPayloadQuickLabels(t *testing.T) {
 	}
 }
 
-// Anchored items sort by (start_line, start) — same line orders by start
-// offset, never by creation order.
 func TestFormatMarkdownAnnotationPayloadSortWithinLine(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "later", Type: "comment", Anchor: mdAnchor(4, 4, 20, "tail"), Text: protocol.Ptr("second"), CreatedAt: 1},
@@ -157,8 +145,6 @@ func TestFormatMarkdownAnnotationPayloadSortWithinLine(t *testing.T) {
 	}
 }
 
-// Defensive: an anchored-type annotation with a nil anchor (corrupt JSON blob)
-// formats without a line label instead of panicking.
 func TestFormatMarkdownAnnotationPayloadNilAnchor(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "x", Type: "comment", Text: protocol.Ptr("dangling"), CreatedAt: 1},

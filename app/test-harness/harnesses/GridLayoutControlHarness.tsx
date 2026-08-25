@@ -1,10 +1,5 @@
-/**
- * GridLayoutControl Test Harness
- *
- * Renders the sidebar grid layout picker in isolation (real CSS, no daemon) so
- * Playwright can screenshot the popover, the hover highlight, and the active
- * states. ?mode=fixed starts with a saved 2×3 selection; default starts on Auto.
- */
+/** Renders the sidebar grid layout picker in isolation (real CSS, no daemon) so Playwright
+ * can screenshot it. ?mode=fixed starts with a saved 2×3 selection; default starts on Auto. */
 import { useEffect, useState } from 'react';
 import { GridLayoutControl } from '../../src/components/grid/GridLayoutControl';
 import { AUTO_LAYOUT, type GridLayout } from '../../src/components/grid/gridLayout';

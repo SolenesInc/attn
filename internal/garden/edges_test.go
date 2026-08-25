@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// seedWith is the shorthand every table below builds rows from: an open,
-// unheld, workspace-less seed that a case then bends.
 func seedWith(id string, edges ...Edge) Seed {
 	return Seed{ID: id, Title: id, Status: StatusPlanted, Edges: edges}
 }
@@ -34,12 +32,8 @@ func equal(got, want []string) bool {
 	return true
 }
 
-// noSession is the liveness answer for a garden whose tenders name no session.
 func noSession(string) bool { return false }
 
-// Ready is the whole point of edges: what can be tended right now, answered at
-// query time so harvesting a blocker frees its dependent with nobody clearing
-// anything.
 func TestReady(t *testing.T) {
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
@@ -178,8 +172,6 @@ func TestReady(t *testing.T) {
 	}
 }
 
-// A cycle is a property of the graph, not of the pair being linked, so the
-// refusal has to walk it — and say enough that the caller can undo it.
 func TestLinkRefusals(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -327,8 +319,6 @@ func hasEdge(seed Seed, kind, to string) bool {
 	return false
 }
 
-// Link must not mutate the garden it was handed: the daemon writes back only the
-// seed it gets, and an in-place append would silently edit the read set.
 func TestLinkLeavesTheGardenAlone(t *testing.T) {
 	seeds := []Seed{seedWith("s-a", blocks("s-x")), seedWith("s-b")}
 	if _, _, err := Link(seeds, "s-a", EdgeBlocks, "s-b"); err != nil {
@@ -353,8 +343,6 @@ func TestUnlink(t *testing.T) {
 		t.Fatalf("Unlink edited the garden it read: %v", seeds[0].Edges)
 	}
 
-	// An unlink that silently does nothing reads as a removal that happened, so
-	// the refusal has to say what the seed is actually linked to.
 	_, err = Unlink(seeds, "s-b", EdgeBlocks, "s-c")
 	if err == nil {
 		t.Fatal("unlinking an edge that is not there succeeded")
@@ -370,7 +358,6 @@ func TestParseEdgeKind(t *testing.T) {
 	if kind, err := ParseEdgeKind(" BLOCKS "); err != nil || kind != EdgeBlocks {
 		t.Fatalf("ParseEdgeKind(BLOCKS) = %q, %v", kind, err)
 	}
-	// A kind the schema knows but nothing links yet must not read as a typo.
 	_, err := ParseEdgeKind(EdgeRelatesTo)
 	if err == nil || !strings.Contains(err.Error(), "real edge kind") {
 		t.Fatalf("relates-to refusal = %v", err)
@@ -381,9 +368,6 @@ func TestParseEdgeKind(t *testing.T) {
 	}
 }
 
-// Tree is what `attn seed ls` renders: parents before children, and
-// nothing dropped — a scoped list holds children whose crown is out of scope,
-// and a garden that already stored a cycle still has to render.
 func TestTree(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -464,8 +448,6 @@ func TestInPlot(t *testing.T) {
 	}
 }
 
-// `show` answers both directions, because an edge is stored on one side only and
-// the seed being read is as often the other one.
 func TestRelations(t *testing.T) {
 	seeds := []Seed{
 		seedWith("s-a", blocks("s-b")),

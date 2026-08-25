@@ -1,8 +1,5 @@
-// ⌘B/⌘I/⌘E toggle bold/italic/inline-code marks in the Notebook's live markdown editor.
-// "Already formatted" is detected from the markdown parser's syntax tree, not by
-// scanning characters around the cursor, so toggling emphasis inside a bold run wraps
-// (adds `*…*`) rather than mistaking the enclosing StrongEmphasis for a match — Emphasis
-// and StrongEmphasis are distinct Lezer node types.
+// Emphasis and StrongEmphasis are distinct Lezer node types, so toggling emphasis
+// inside a bold run wraps rather than matching the enclosing run.
 
 import { EditorSelection, Prec, type EditorState, type Extension, type TransactionSpec } from '@codemirror/state';
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
@@ -23,9 +20,6 @@ const CONFIGS: Record<InlineMarkType, MarkConfig> = {
   code: { nodeName: 'InlineCode', markNodeName: 'CodeMark', marker: '`' },
 };
 
-// Walk up from `node` looking for an ancestor named `nodeName` whose span fully
-// contains [from, to]. Because Emphasis and StrongEmphasis are separate node types,
-// a lookup for one never matches the other.
 function findEnclosing(node: SyntaxNode, nodeName: string, from: number, to: number): SyntaxNode | null {
   let cur: SyntaxNode | null = node;
   while (cur) {
@@ -35,8 +29,6 @@ function findEnclosing(node: SyntaxNode, nodeName: string, from: number, to: num
   return null;
 }
 
-// Map a position through two deletions (the open/close mark ranges), both expressed
-// in the original document's coordinates and applied as one local change set.
 function afterDeletions(
   pos: number,
   openFrom: number,
@@ -50,25 +42,18 @@ function afterDeletions(
   return result;
 }
 
-// Toggle `type` across every selection range via changeByRange, so multi-cursor
-// selections all flip together. Returns null when the selection is empty of ranges
-// (never happens in practice — EditorSelection always has at least one — but keeps
-// the contract honest for callers).
 export function toggleInlineFormat(state: EditorState, type: InlineMarkType): TransactionSpec | null {
   const config = CONFIGS[type];
   if (state.selection.ranges.length === 0) return null;
 
   return state.changeByRange((range) => {
-    // The tree is available synchronously for the selection's vicinity; fall back to
-    // whatever's already parsed if the budget is exhausted rather than blocking.
     const tree = ensureSyntaxTree(state, range.to, 50) ?? syntaxTree(state);
     const resolved = tree.resolveInner(range.from, 1);
     const enclosing = findEnclosing(resolved, config.nodeName, range.from, range.to);
     const marks = enclosing?.getChildren(config.markNodeName) ?? [];
 
     if (enclosing && marks.length >= 2) {
-      // Unwrap: delete the mark nodes using their actual ranges (inline code can be
-      // fenced with more than one backtick), keep the text between them.
+      // Inline code can be fenced with several backticks, so use the marks' actual ranges.
       const open = marks[0];
       const close = marks[marks.length - 1];
       const changes = [
@@ -80,7 +65,6 @@ export function toggleInlineFormat(state: EditorState, type: InlineMarkType): Tr
     }
 
     if (!range.empty) {
-      // Wrap a nonempty selection: markers land outside it, selection stays on the text.
       const changes = [
         { from: range.from, insert: config.marker },
         { from: range.to, insert: config.marker },
@@ -96,8 +80,6 @@ export function toggleInlineFormat(state: EditorState, type: InlineMarkType): Tr
 
     const word = state.wordAt(range.head);
     if (word) {
-      // Empty selection on a word: wrap the whole word, keep the cursor at its
-      // original position (now shifted past the opening marker).
       const changes = [
         { from: word.from, insert: config.marker },
         { from: word.to, insert: config.marker },
@@ -105,8 +87,6 @@ export function toggleInlineFormat(state: EditorState, type: InlineMarkType): Tr
       return { changes, range: EditorSelection.cursor(range.head + config.marker.length) };
     }
 
-    // Empty selection, no word under it (whitespace or an empty line): insert the
-    // marker pair and place the cursor between them.
     const pair = config.marker + config.marker;
     return {
       changes: { from: range.head, insert: pair },
@@ -124,18 +104,13 @@ function toggleCommand(type: InlineMarkType) {
   };
 }
 
-// Explicit Cmd- (not Mod-) bindings: CodeMirror resolves Mod- via navigator.platform
-// sniffing, which is wrong on non-macOS browsers (e.g. Linux CI). This app is
-// macOS-only, so Cmd is always the correct key.
+// Explicit Cmd- (not Mod-): CodeMirror resolves Mod- by sniffing navigator.platform, wrong on Linux CI.
 export function formattingKeymap(): Extension {
   const bindings: KeyBinding[] = [
     { key: 'Cmd-b', run: toggleCommand('strong') },
     { key: 'Cmd-i', run: toggleCommand('emphasis') },
     { key: 'Cmd-e', run: toggleCommand('code') },
   ];
-  // Prec.high: basicSetup's defaultKeymap binds Mod-i to selectParentSyntax with
-  // preventDefault, which at equal precedence runs first (basicSetup is earlier in
-  // LiveMarkdownEditor's extension array) and swallows Cmd-i entirely — it expands the
-  // selection instead of toggling italics. Prec.high makes these bindings win.
+  // basicSetup's defaultKeymap binds Mod-i to selectParentSyntax with preventDefault and runs first at equal precedence.
   return Prec.high(keymap.of(bindings));
 }

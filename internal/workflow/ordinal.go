@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// segKind classifies a single structural segment of an ordinal path.
 type segKind int
 
 const (
@@ -15,8 +14,6 @@ const (
 	segParallelSlot
 	segPipelineItem
 	segStage
-	// segCallsite is the lexical call-site of an agent() call plus a
-	// per-(prefix,callsite) loop counter disambiguating repeated invocations.
 	segCallsite
 )
 
@@ -39,8 +36,8 @@ func (k segKind) prefix() string {
 
 type segment struct {
 	kind  segKind
-	index int    // slot/item/stage/phase-seq index; loop counter for callsite
-	site  string // for segCallsite only: the stable lexical call-site id
+	index int
+	site  string
 }
 
 func (s segment) String() string {
@@ -50,14 +47,10 @@ func (s segment) String() string {
 	return s.kind.prefix() + strconv.Itoa(s.index)
 }
 
-// OrdinalPath is an immutable snapshot of the structural descent to one agent()
-// call: the same logical call yields the same path on every re-run, independent
-// of promise-resolution timing.
 type OrdinalPath struct {
 	segs []segment
 }
 
-// String is the canonical "/"-joined encoding used as the journal key.
 func (p OrdinalPath) String() string {
 	if len(p.segs) == 0 {
 		return ""
@@ -80,14 +73,9 @@ func (p OrdinalPath) clone() OrdinalPath {
 type pathStack struct {
 	segs []segment
 
-	// callCounter disambiguates repeated invocations of a call-site, keyed by
-	// (current-prefix | callsite). Snapshotted/restored around each push/pop so
-	// counters are lexically scoped to their subtree.
 	callCounter map[string]int
 
-	phaseSeq int
-	// phaseTitle is DISPLAY-only; NEVER part of the ordinal, so renaming a phase
-	// cannot invalidate a cached call.
+	phaseSeq   int
 	phaseTitle string
 }
 
@@ -101,11 +89,8 @@ func (ps *pathStack) prefix() string {
 	return OrdinalPath{segs: ps.segs}.String()
 }
 
-// pushPop restores the stack (segments + callCounter) to its pre-push state.
 type pushPop func()
 
-// push appends a structural marker and snapshots the counter scope; the returned
-// closure pops and restores, scoping counters to the subtree.
 func (ps *pathStack) push(kind segKind, index int) pushPop {
 	savedLen := len(ps.segs)
 	savedCounters := make(map[string]int, len(ps.callCounter))
@@ -119,16 +104,12 @@ func (ps *pathStack) push(kind segKind, index int) pushPop {
 	}
 }
 
-// replace swaps in a new descent path — stage/slot closures re-establishing
-// their captured path at async resolution time — and returns a restoring closure.
 func (ps *pathStack) replace(newSegs []segment) pushPop {
 	savedSegs := ps.segs
 	savedCounters := ps.callCounter
 	cp := make([]segment, len(newSegs))
 	copy(cp, newSegs)
 	ps.segs = cp
-	// Fresh scope: the captured path identifies the subtree, so calls inside the
-	// callback count from 0.
 	ps.callCounter = map[string]int{}
 	return func() {
 		ps.segs = savedSegs
@@ -142,9 +123,6 @@ func (ps *pathStack) snapshot() []segment {
 	return cp
 }
 
-// stackState is a deep copy of the descent context, carried by the
-// AsyncContextTracker across await boundaries so a post-await ordinal is a pure
-// function of structural position, not resolution timing.
 type stackState struct {
 	segs       []segment
 	counters   map[string]int
@@ -177,8 +155,6 @@ func (ps *pathStack) restoreState(s stackState) {
 	ps.phaseTitle = s.phaseTitle
 }
 
-// ordinalFor reads the current path SYNCHRONOUSLY and appends the call-site
-// segment — the single point where an agent() call's ordinal is fixed.
 func (ps *pathStack) ordinalFor(site string) OrdinalPath {
 	key := ps.prefix() + "|" + site
 	counter := ps.callCounter[key]
@@ -190,8 +166,6 @@ func (ps *pathStack) ordinalFor(site string) OrdinalPath {
 	return OrdinalPath{segs: segs}
 }
 
-// setPhase sets the leading phase segment to the next sequence number; the title
-// is display-only, NOT part of the ordinal.
 func (ps *pathStack) setPhase(title string) {
 	ps.phaseSeq++
 	seq := ps.phaseSeq
@@ -203,7 +177,6 @@ func (ps *pathStack) setPhase(title string) {
 	ps.segs = append([]segment{{kind: segPhase, index: seq}}, ps.segs...)
 }
 
-// currentPhase returns the display title in effect, read synchronously at dispatch.
 func (ps *pathStack) currentPhase() string {
 	return ps.phaseTitle
 }

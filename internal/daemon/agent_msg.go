@@ -16,29 +16,19 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// agent_msg persists and delivers attributed input between sessions.
-
 const (
-	// The inbound guard's three tripwires. A healthy exchange never feels them:
-	// agents converse in sentences over seconds, not in identical text eight
-	// times a half-minute, and a target that has not read fifty messages is not
-	// going to be helped by a fifty-first.
 	agentMessageDedupeWindow = 10 * time.Second
 	agentMessageRateWindow   = 30 * time.Second
 	agentMessageRateLimit    = 8
 	agentMessageQueueCap     = 50
 )
 
-// errDoorbellNotTaken is a delivery whose target never picked it up.
 var errDoorbellNotTaken = errors.New("doorbell typed but the target did not take it")
 
 // An initial-prompt delivery owns the prompt until its submit hook. Anything
 // behind it must queue rather than paste into priming or a trust dialog.
 var errAgentMessageInitialPromptPending = errors.New("target is still taking its initial prompt")
 
-// agentMessageGuardVerdict is empty when a message is accepted. Otherwise it is
-// the sentence the sender is told: which limit it hit, that limit's value, and
-// what it asked for. An agent can act on that; "refused" alone it cannot.
 func agentMessageGuardVerdict(counts store.AgentMessageGuardCounts) string {
 	switch {
 	case counts.DuplicateFromSender:
@@ -198,9 +188,6 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	d.replyAgentMsg(conn, result)
 }
 
-// agentMessageMember resolves only the durable-name half of an address. A
-// registered member wins over a coincidental session-id prefix; a direct
-// session address still works on an outpost, where the crew lookup is fenced.
 func (d *Daemon) agentMessageMember(address string) (crew.Member, bool, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return crew.Member{}, false, err
@@ -223,9 +210,6 @@ func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {
 	})
 }
 
-// agentMessageQueuedDetail says what the sender should expect next, which is
-// not the same sentence in both cases: an approval clears on its own, a dead
-// session does not, and a sender that waits for a reply from one is stuck.
 func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, errAgentMessageInitialPromptPending) {
 		return "queued (target is waking and still reading its priming — lands immediately after its first prompt starts)"
@@ -255,8 +239,6 @@ type agentMessageDeliveryFlight struct {
 	err  error
 }
 
-// deliverAgentMessage coalesces live sends and state-change drains by durable
-// message id so only one call crosses the session-input boundary.
 func (d *Daemon) deliverAgentMessage(record store.AgentMessage) error {
 	d.agentMessageMu.Lock()
 	if d.agentMessageDeliveries == nil {
@@ -280,8 +262,6 @@ func (d *Daemon) deliverAgentMessage(record store.AgentMessage) error {
 	return err
 }
 
-// deliverAgentMessageOnce types one message into its target, confirms the
-// target took it, and stamps the row.
 func (d *Daemon) deliverAgentMessageOnce(record store.AgentMessage) error {
 	queued, err := d.store.AgentMessageQueued(record.ID)
 	if err != nil {
@@ -357,8 +337,6 @@ func (d *Daemon) forgetPostInitialPrompt(sessionID string) {
 	delete(d.postInitialPrompt, sessionID)
 }
 
-// initialPromptPending is the anti-splice gate for agent messages and ticket
-// countdowns while a new member day is still taking its first prompt.
 func (d *Daemon) initialPromptPending(sessionID string) bool {
 	d.agentMessageMu.Lock()
 	defer d.agentMessageMu.Unlock()
@@ -378,17 +356,12 @@ func (d *Daemon) runPostInitialPrompt(sessionID, state string) {
 		if after != nil {
 			after()
 		}
-		// Messages addressed while the member was taking priming and its greeting
-		// queued behind this gate. This hook is their first reliable drain signal.
 		d.drainAgentMessagesAfterStateChange(sessionID, state)
 	}
 }
 
-// noteInitialAgentMessageSubmitted is the receipt for a message carried as a
-// new member day's initial prompt. Worker state is not enough: a freshly
-// spawned Claude session reports `working` while still sitting at its trust
-// dialog. A hook's working evidence comes from UserPromptSubmit or a tool event,
-// both on the far side of that dialog and therefore prove the prompt was read.
+// Worker state is not enough: a freshly spawned Claude session reports `working`
+// while still at its trust dialog, and hook evidence lands past that dialog.
 func (d *Daemon) noteInitialAgentMessageSubmitted(sessionID, state string) {
 	if state != protocol.StateWorking {
 		return
@@ -401,15 +374,9 @@ func (d *Daemon) noteInitialAgentMessageSubmitted(sessionID, state string) {
 		return
 	}
 	_ = d.stampAgentMessageDelivered(sessionID, messageID)
-	// Another sender can address this now-live member while its initial prompt
-	// is still blocked on priming. Keep the queue armed and drain anything behind
-	// the initial message now that the prompt-submit receipt opened the gate.
 	d.drainAgentMessagesAfterStateChange(sessionID, state)
 }
 
-// rollbackInitialAgentMessage is reached only when the wake itself failed. No
-// process owns the planned session, so its queued row cannot ever deliver and
-// is removed rather than becoming an orphan that claims otherwise forever.
 func (d *Daemon) rollbackInitialAgentMessage(sessionID, messageID string) {
 	d.agentMessageMu.Lock()
 	if d.agentMessageInitialPrompt[sessionID] == messageID {
@@ -422,9 +389,6 @@ func (d *Daemon) rollbackInitialAgentMessage(sessionID, messageID string) {
 	d.forgetQueuedAgentMessages(sessionID)
 }
 
-// composeAgentMessage builds what the target actually reads. Agent-originated
-// deliveries get the daemon's attribution and consent boundary. A senderless
-// record is an internal user-origin request whose content is already complete.
 func (d *Daemon) composeAgentMessage(sender *protocol.Session, record store.AgentMessage) string {
 	if strings.TrimSpace(record.SenderSessionID) == "" {
 		return record.Content
@@ -441,9 +405,6 @@ func (d *Daemon) composeAgentMessage(sender *protocol.Session, record store.Agen
    reply: attn agent msg %s "..."`, origin, record.Content, shortID)
 }
 
-// sessionOriginName is where the sender is working, for a reader deciding how
-// much a message is worth: the workspace it lives in, or its own name when the
-// workspace has none.
 func (d *Daemon) sessionOriginName(session *protocol.Session) string {
 	if workspace := d.store.GetWorkspace(session.WorkspaceID); workspace != nil && strings.TrimSpace(workspace.Title) != "" {
 		return workspace.Title
@@ -458,8 +419,6 @@ func sessionDisplayName(session *protocol.Session) string {
 	return shortSessionID(session.ID)
 }
 
-// shortSessionID is the id as `attn agent list` prints it — the form a receiver
-// can paste straight back into a reply.
 func shortSessionID(id string) string {
 	if len(id) <= agentShortIDLength {
 		return id
@@ -467,11 +426,8 @@ func shortSessionID(id string) string {
 	return id[:agentShortIDLength]
 }
 
-// noteQueuedAgentMessage remembers that a target owes a delivery, so the state
-// -change drain can decide in a map lookup. An idle daemon must stay idle: a
-// state report arrives about once a second per session, and querying the
-// database each time for messages that are almost never there is exactly the
-// background burn attn refuses to ship.
+// noteQueuedAgentMessage keeps the state-change drain a map lookup: state reports
+// arrive about once a second per session, and a DB query each time is idle burn.
 func (d *Daemon) noteQueuedAgentMessage(targetSessionID string) {
 	d.agentMessageMu.Lock()
 	defer d.agentMessageMu.Unlock()
@@ -504,9 +460,7 @@ func (d *Daemon) seedQueuedAgentMessages() {
 }
 
 // drainAgentMessagesAfterStateChange is the retry rail. Nothing else re-arms a
-// blocked delivery: the doorbell refuses and returns, so without this a message
-// sent to a session waiting on an approval would sit queued until someone sent
-// another one.
+// blocked delivery, so a message to a session awaiting approval would sit queued.
 func (d *Daemon) drainAgentMessagesAfterStateChange(sessionID, state string) {
 	if d.initialPromptPending(sessionID) || !sessionInputPhaseAllows(sessionInputAtTurnBoundary, protocol.SessionState(state)) || !d.hasQueuedAgentMessages(sessionID) {
 		return
@@ -517,9 +471,6 @@ func (d *Daemon) drainAgentMessagesAfterStateChange(sessionID, state string) {
 	go d.drainQueuedAgentMessages(sessionID)
 }
 
-// drainQueuedAgentMessages delivers a target's backlog oldest first, stopping
-// at the first message that will not land — the target went back to blocked,
-// and the next state change will bring the drain around again.
 func (d *Daemon) drainQueuedAgentMessages(sessionID string) {
 	if !d.beginAgentMessageDrain(sessionID) {
 		return
@@ -578,12 +529,6 @@ func (d *Daemon) forgetQueuedAgentMessages(sessionID string) {
 	delete(d.queuedAgentMessages, sessionID)
 }
 
-// seedTenderSession resolves a seed to the session tending it — how a caller
-// holding a seed id reaches whoever is working on it without reading the tender
-// out of `attn seed show` first.
-//
-// An untended seed refuses by name rather than delivering nowhere: there is
-// nobody to reach, and the log is where words for a seed nobody holds go.
 func (d *Daemon) seedTenderSession(seedID string) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err

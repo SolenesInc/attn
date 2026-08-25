@@ -1,9 +1,3 @@
-// Package bus is attn's durable event bus, carrying domain facts (name,
-// subject, small payload — never byte streams like PTY output or attach
-// traffic). Durable consumers get strict seq order, at-least-once delivery from
-// a persisted cursor; ephemeral subscribers start at head with no cursor.
-// MUST NOT import internal/daemon (the daemon imports this package and adapts
-// internal/store to the Store seam).
 // See docs/plans/2026-08-01-ext-a1-event-bus.md.
 package bus
 
@@ -19,27 +13,17 @@ import (
 )
 
 const (
-	// DefaultRetention is the trim age window, floored by enabled-consumer cursors.
-	// RetentionEnv moves it, which is the only way to watch a trim do anything.
-	DefaultRetention = 30 * 24 * time.Hour
-	// DefaultTrimInterval is how often retention runs.
+	DefaultRetention    = 30 * 24 * time.Hour
 	DefaultTrimInterval = time.Hour
-	// DefaultBatchSize bounds one read of the forward stream.
-	DefaultBatchSize = 200
-	// DefaultPollInterval bounds how long a missed publish notification, or an
-	// externally flipped enabled bit, can go unnoticed.
+	DefaultBatchSize    = 200
 	DefaultPollInterval = 5 * time.Second
-	// DefaultRetryBase / DefaultRetryCap bound the capped-exponential retry of a
-	// failing handler.
-	DefaultRetryBase = time.Second
-	DefaultRetryCap  = 2 * time.Minute
+	DefaultRetryBase    = time.Second
+	DefaultRetryCap     = 2 * time.Minute
 )
 
-// LogFunc is the daemon's injected logger shape. All runtime logging goes
-// through it — never log.Printf, whose stderr is discarded in the background.
+// LogFunc must never be log.Printf: the daemon's background stderr is discarded.
 type LogFunc func(format string, args ...interface{})
 
-// Event is one fact on the log.
 type Event struct {
 	Seq       int64
 	Name      string
@@ -49,7 +33,6 @@ type Event struct {
 	CreatedAt time.Time
 }
 
-// Decode unmarshals the payload into v. A fact with no payload leaves v untouched.
 func (e Event) Decode(v any) error {
 	if len(e.Payload) == 0 {
 		return nil
@@ -57,7 +40,6 @@ func (e Event) Decode(v any) error {
 	return json.Unmarshal(e.Payload, v)
 }
 
-// Consumer is a durable consumer's persisted registration and position.
 type Consumer struct {
 	Name          string
 	Cursor        int64
@@ -67,39 +49,25 @@ type Consumer struct {
 	UpdatedAt     time.Time
 }
 
-// Store is the persistence seam; the daemon adapts internal/store to it so
-// neither package imports the other.
 type Store interface {
 	Append(e Event, now time.Time) (int64, error)
 	Since(cursor int64, limit int) ([]Event, error)
 	Bounds() (earliest, head int64, err error)
 	GetConsumer(name string) (Consumer, bool, error)
 	SaveConsumer(c Consumer, now time.Time) error
-	// DeleteConsumer removes a registration. Deleting one that is not there is
-	// success: Unregister is an uninstall path and must be re-runnable.
 	DeleteConsumer(name string) error
 	SetCursor(name string, cursor int64, now time.Time) error
 	ListConsumers() ([]Consumer, error)
 	Trim(cutoff time.Time) (int, error)
-	// Compact keeps only the newest fact per subject among the named ones, at or
-	// below floor.
 	Compact(names []string, floor int64) (int, error)
-	// Producers reports every fact class with its totals and its counts at or
-	// after each cutoff, loudest first. It also carries the log's row count and
-	// bytes, summed across classes — one pass answers both questions.
 	Producers(cutoffs []time.Time) ([]ProducerRow, error)
-	// EventTimeAt stamps the first event at or above seq, for age questions.
 	EventTimeAt(seq int64) (time.Time, bool, error)
-	// PendingBytes sums what the log holds above a cursor — the size of one
-	// consumer's backlog, and the cost of the pin it is holding.
 	PendingBytes(above int64) (int64, error)
 }
 
-// Handler receives one event. An error stalls the consumer with backoff and
-// redelivers the event; handlers must tolerate redelivery.
+// An error stalls the consumer and redelivers the event; handlers must tolerate redelivery.
 type Handler func(ctx context.Context, ev Event) error
 
-// Gap describes the history missing below a durable consumer's cursor.
 type Gap struct {
 	Cursor   int64
 	Earliest int64
@@ -107,12 +75,9 @@ type Gap struct {
 	Missed   int64
 }
 
-// PreDrain runs after the consumer registration and log bounds are read, before
-// each event batch is selected. It may durably move the cursor; the bus re-reads
-// the registration after it returns.
+// PreDrain may durably move the cursor; the bus re-reads the registration after it returns.
 type PreDrain func(ctx context.Context, consumer Consumer, gap *Gap) error
 
-// Options configures a Bus; zero durations fall back to the package defaults.
 type Options struct {
 	Store        Store
 	Log          LogFunc
@@ -123,16 +88,10 @@ type Options struct {
 	PollInterval time.Duration
 	RetryBase    time.Duration
 	RetryCap     time.Duration
-	// PinAlarmAge is how long an enabled consumer may pin the retention floor
-	// before the snapshot reports it; zero falls back to DefaultPinAlarmAge and
-	// a negative value turns the finding off entirely.
-	PinAlarmAge time.Duration
-	// Compactable names fact classes that are pure invalidations, so retention
-	// may keep only the newest per subject (see compact for the cost).
-	Compactable []string
+	PinAlarmAge  time.Duration
+	Compactable  []string
 }
 
-// Bus is the event bus. The zero value is not usable; construct with New.
 type Bus struct {
 	store Store
 	log   LogFunc
@@ -148,31 +107,17 @@ type Bus struct {
 
 	compactable []string
 
-	// publishMu serializes append + ephemeral fan-out so ephemeral subscribers
-	// observe events in seq order.
 	publishMu sync.Mutex
-	// marked says the announce mark was placed from a real log head. An unset
-	// mark reads as "announce the whole log", so announcing is held back until it
-	// is placed.
-	marked bool
-	// announced is the highest seq fanned out to ephemeral subscribers, guarded
-	// by publishMu; both Publish and Announce read the log forward from it.
+	marked    bool
 	announced int64
 
-	// mu guards the consumer sets and the lifecycle bits below. Runtime
-	// registration does its two store reads under it: registering is a rare
-	// lifecycle event, and the alternative is a window where a consumer is in the
-	// set with no row behind it, or has a row with nobody serving it.
 	mu        sync.Mutex
 	durables  []*durable
 	ephemeral map[int]*ephemeralSub
 	nextSubID int
 	started   bool
-	// stopped is set before Stop cancels, so a registration racing shutdown does
-	// not add to wg while Stop is already waiting on it.
-	stopped bool
-	// retiring holds the names Unregister is between removing and deleting the row
-	// for. See Register for what taking one of them back early would cost.
+	// stopped is set before Stop cancels, so a registration racing shutdown does not add to wg.
+	stopped  bool
 	retiring map[string]struct{}
 
 	ctx    context.Context
@@ -187,33 +132,19 @@ type durable struct {
 
 	wake chan struct{}
 
-	// ctx is a child of the bus context, so Stop cancels every consumer and
-	// Unregister cancels exactly one. Both of the delivery loop's waits — the
-	// retry sleep and the idle select — watch it, which is what lets an
-	// unregister interrupt a loop parked behind the two-minute retry cap instead
-	// of waiting it out.
-	ctx    context.Context
-	cancel context.CancelFunc
-	// done is closed when this consumer's delivery loop returns; Unregister waits
-	// on it before deleting the row. launched says a loop was ever started, and
-	// is guarded by the bus mutex — a consumer registered before Start and
-	// unregistered before it has no loop to wait for.
+	ctx      context.Context
+	cancel   context.CancelFunc
 	done     chan struct{}
 	launched bool
 
 	mu sync.Mutex
-	// filter is under the same lock as the position because SetFilter changes it
-	// while the delivery loop is reading it — an app's subscriptions move when a
-	// new version is applied, and the loop must not be racing the change.
+	// filter shares the position's lock: SetFilter changes it while the delivery loop reads it.
 	filter   Filter
 	cursor   int64
 	enabled  bool
 	stalled  string
 	failures int
-	// retired is set by Unregister before the row goes. It drops a late result
-	// from a handler that was in flight — a cursor advance or a failure record
-	// against a registration that no longer exists is a no-op, not an error.
-	retired bool
+	retired  bool
 }
 
 type ephemeralSub struct {
@@ -221,8 +152,6 @@ type ephemeralSub struct {
 	fn     func(Event)
 }
 
-// New builds a Bus. A nil Store yields a bus that fans out publishes without
-// durability, mirroring the store's nil-db convention.
 func New(opts Options) *Bus {
 	b := &Bus{
 		store:        opts.Store,
@@ -234,13 +163,10 @@ func New(opts Options) *Bus {
 		pollInterval: nonZeroDuration(opts.PollInterval, DefaultPollInterval),
 		retryBase:    nonZeroDuration(opts.RetryBase, DefaultRetryBase),
 		retryCap:     nonZeroDuration(opts.RetryCap, DefaultRetryCap),
-		// Unlike the other windows, a negative value here is meaningful: it is the
-		// escape hatch that turns the finding off, so it must survive rather than
-		// fall back the way an unset zero does.
-		pinAlarmAge: pinAlarmAgeOrDefault(opts.PinAlarmAge),
-		compactable: append([]string(nil), opts.Compactable...),
-		ephemeral:   map[int]*ephemeralSub{},
-		retiring:    map[string]struct{}{},
+		pinAlarmAge:  pinAlarmAgeOrDefault(opts.PinAlarmAge),
+		compactable:  append([]string(nil), opts.Compactable...),
+		ephemeral:    map[int]*ephemeralSub{},
+		retiring:     map[string]struct{}{},
 	}
 	if b.now == nil {
 		b.now = time.Now
@@ -249,22 +175,17 @@ func New(opts Options) *Bus {
 		b.log = func(string, ...interface{}) {}
 	}
 	b.ctx, b.cancel = context.WithCancel(context.Background())
-	// Mark at construction, not Start: a never-started Bus still publishes and
-	// announces, and an unplaced mark would replay the whole log on first write.
+	// Mark at construction, not Start: an unplaced mark replays the whole log on first write.
 	if b.store != nil {
 		b.markHead()
 	}
 	return b
 }
 
-// Publish appends a fact and returns its seq. Payload may be nil or any
-// JSON-marshalable value. The write is synchronous: the caller learns the fact
-// is durable.
 func (b *Bus) Publish(name, subject string, payload any) (int64, error) {
 	return b.publish(Event{Name: name, Subject: subject}, payload)
 }
 
-// PublishFrom is Publish with an explicit source label for diagnosis.
 func (b *Bus) PublishFrom(source, name, subject string, payload any) (int64, error) {
 	return b.publish(Event{Name: name, Subject: subject, Source: source}, payload)
 }
@@ -286,7 +207,6 @@ func (b *Bus) publish(ev Event, payload any) (int64, error) {
 	now := b.now()
 	ev.CreatedAt = now
 
-	// No store: degrade to fan-out rather than silence.
 	if b.store == nil {
 		b.fanoutEphemeral(ev)
 		return 0, nil
@@ -294,25 +214,18 @@ func (b *Bus) publish(ev Event, payload any) (int64, error) {
 
 	seq, err := b.store.Append(ev, now)
 	if err != nil {
-		// A failed append must not silence the wire; the caller still learns
-		// durability was lost.
+		// A failed append must not silence the wire.
 		b.fanoutEphemeral(ev)
 		return 0, fmt.Errorf("bus: appending %s: %w", ev.Name, err)
 	}
 	ev.Seq = seq
 
-	// Fan out by reading the log forward, not by delivering the event in hand: a
-	// fact appended by somebody else's transaction may sit below this seq still
-	// unannounced, and delivering this one first would break seq order.
+	// Read the log forward rather than deliver the event in hand: a fact appended by another transaction may sit below this seq unannounced.
 	b.announceLocked(&ev)
 	b.wakeDurables()
 	return seq, nil
 }
 
-// Announce fans out facts appended to the log outside Publish (store
-// transactions that commit a change and its fact together). Idempotent and
-// order-correct: callers just call it after their commit, and a missed announce
-// is repaired by the next one.
 func (b *Bus) Announce() {
 	if b.store == nil {
 		return
@@ -323,10 +236,6 @@ func (b *Bus) Announce() {
 	b.wakeDurables()
 }
 
-// markHead sets the announce mark to the log's head and reports whether it
-// succeeded. Until it does the bus must not announce at all — an unset mark
-// would replay the whole log. announceLocked retries it after a failed
-// construction-time call.
 func (b *Bus) markHead() bool {
 	_, head, err := b.store.Bounds()
 	if err != nil {
@@ -338,9 +247,6 @@ func (b *Bus) markHead() bool {
 	return true
 }
 
-// announceLocked delivers everything above the announce mark. fallback is the
-// event the caller just appended, delivered directly if the log cannot be read
-// — losing durability must not also silence the wire.
 func (b *Bus) announceLocked(fallback *Event) {
 	if !b.marked && !b.markHead() {
 		if fallback != nil {
@@ -399,18 +305,10 @@ func (b *Bus) wakeDurables() {
 	}
 }
 
-// Register adds a durable consumer, before or after Start: called after, it
-// persists the registration and starts the delivery loop immediately — an app
-// installed while the daemon runs must not wait for a restart. A new consumer
-// begins at head; an existing one keeps its cursor and enabled bit — a restart
-// must neither rewind a consumer nor resurrect a killed one. A registration
-// that fails to persist leaves nothing behind, so the caller can retry.
 func (b *Bus) Register(name string, filter Filter, h Handler) error {
 	return b.register(name, filter, nil, h)
 }
 
-// RegisterWithPreDrain adds a durable consumer whose owner must settle work at
-// the cursor boundary before ordinary fact delivery begins.
 func (b *Bus) RegisterWithPreDrain(name string, filter Filter, pre PreDrain, h Handler) error {
 	if pre == nil {
 		return fmt.Errorf("bus: consumer %s needs a pre-drain hook", name)
@@ -433,19 +331,12 @@ func (b *Bus) register(name string, filter Filter, pre PreDrain, h Handler) erro
 			return fmt.Errorf("bus: consumer %s already registered", name)
 		}
 	}
-	// A name being unregistered is claimed until its row is gone. Taking it back
-	// inside that window would resume the outgoing consumer's cursor from a row
-	// that is about to be deleted under the new loop — which then drains against a
-	// registration that disappeared and retries that error forever. Same zombie the
-	// delete-last ordering exists to prevent, through the side door.
+	// A name being unregistered stays claimed until its row is gone: resuming a cursor from a row about to be deleted leaves a loop retrying a vanished registration forever.
 	if _, retiring := b.retiring[name]; retiring {
 		return fmt.Errorf("bus: consumer %s is being unregistered; retry once it is gone", name)
 	}
 	d := b.newDurable(name, filter, pre, h)
 
-	// Before Start, the registration is all there is to do: Start persists every
-	// consumer and launches its loop. The same is true for a bus with no store,
-	// which never delivers durably at all.
 	if !b.started || b.store == nil {
 		b.durables = append(b.durables, d)
 		return nil
@@ -465,28 +356,7 @@ func (b *Bus) register(name string, filter Filter, pre PreDrain, h Handler) erro
 	return nil
 }
 
-// Unregister stops a consumer's delivery loop and deletes its persisted row. It
-// is the way out of Register, and the reason it exists at all: an abandoned
-// enabled row holds the retention floor down forever, against a consumer nobody
-// serves.
-//
-// It is idempotent. A name this process never registered — an orphan row left by
-// an earlier daemon — is still deleted, and a name that does not exist at all is
-// success. The caller is an uninstall path, and an uninstall that fails the
-// second time it runs is a worse surface than one that says nothing.
-//
-// The order is cancel, wait for the loop to exit, then delete the row, and it is
-// load-bearing in both directions. Deleting first would leave the live loop's
-// next drain reading a registration that disappeared — an error path that records
-// a failure and retries forever, a zombie. Returning before the loop exits would
-// hand the caller a consumer that is still delivering. The wait is unbounded for
-// the same reason Stop's is: a handler that ignores its cancelled context is a
-// bug in the handler, and a retired consumer's late cursor advance is already
-// dropped, so waiting costs nothing a correct handler will notice.
-//
-// The name stays claimed for the whole of it, so a Register that arrives while the
-// loop is winding down is refused rather than served from a row about to be
-// deleted underneath it.
+// Cancel, wait for the loop to exit, then delete the row: deleting first leaves a live loop retrying a vanished registration forever.
 func (b *Bus) Unregister(name string) error {
 	b.mu.Lock()
 	var (
@@ -504,8 +374,6 @@ func (b *Bus) Unregister(name string) error {
 	}
 	b.retiring[name] = struct{}{}
 	b.mu.Unlock()
-	// Released whatever happens, including a failed delete: a surviving row is the
-	// ordinary resume-from-cursor case, and the caller already has the error.
 	defer func() {
 		b.mu.Lock()
 		delete(b.retiring, name)
@@ -529,20 +397,7 @@ func (b *Bus) Unregister(name string) error {
 	return nil
 }
 
-// SetFilter changes what a registered consumer receives, keeping its cursor and
-// its enabled bit.
-//
-// It exists because a consumer's subscriptions can outlive neither the consumer
-// nor its position: an app declares its event patterns in its manifest, and
-// applying a new version can change them. Unregister-then-Register would express
-// the same intent and delete the cursor on the way through — the app would resume
-// at head and silently skip everything published while it was being updated.
-// Register refuses a name it already serves, so this is the only way to say "same
-// consumer, different subscriptions".
-//
-// A name that is not registered here is an error rather than a silent no-op: the
-// caller believes it is changing a live consumer's behavior, and learning
-// otherwise from later missing deliveries is the worst way to find out.
+// Unregister-then-Register would delete the cursor, silently skipping everything published meanwhile.
 func (b *Bus) SetFilter(name string, filter Filter) error {
 	b.mu.Lock()
 	var found *durable
@@ -557,12 +412,7 @@ func (b *Bus) SetFilter(name string, filter Filter) error {
 	if found == nil {
 		return fmt.Errorf("bus: consumer %s is not registered, so its filter cannot be changed", name)
 	}
-	// Persist first, then swap what the loop reads. The other order would have the
-	// loop filtering by a rule no restart would reproduce if the write failed.
-	//
-	// Before Start there is nothing persisted to correct: Register only holds the
-	// consumer in memory, and Start writes every one of them with the filter it
-	// carries at that moment — which is this one.
+	// Persist first, then swap what the loop reads: the other order leaves the loop filtering by a rule no restart would reproduce.
 	if b.store != nil && started {
 		existing, ok, err := b.store.GetConsumer(name)
 		if err != nil {
@@ -584,11 +434,6 @@ func (b *Bus) SetFilter(name string, filter Filter) error {
 	return nil
 }
 
-// Registered reports whether this process serves a consumer under name.
-//
-// It is how a caller chooses between Register and SetFilter without guessing
-// from an error string: those two are not interchangeable — one mints a cursor,
-// the other preserves it — and picking the wrong one is silent.
 func (b *Bus) Registered(name string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -600,8 +445,6 @@ func (b *Bus) Registered(name string) bool {
 	return false
 }
 
-// newDurable builds a consumer and its cancel scope. Callers that also touch the
-// consumer set hold b.mu; the bus context it reads is fixed at construction.
 func (b *Bus) newDurable(name string, filter Filter, pre PreDrain, h Handler) *durable {
 	ctx, cancel := context.WithCancel(b.ctx)
 	return &durable{
@@ -617,10 +460,7 @@ func (b *Bus) newDurable(name string, filter Filter, pre PreDrain, h Handler) *d
 	}
 }
 
-// launchLocked starts d's delivery loop. Caller holds b.mu, which is what keeps
-// the WaitGroup increment ordered against Stop: Stop sets stopped under the same
-// lock before it waits, so a registration racing shutdown gets no loop rather
-// than adding to a WaitGroup somebody is already waiting on.
+// Caller holds b.mu, which orders the WaitGroup increment against Stop.
 func (b *Bus) launchLocked(d *durable) {
 	if b.stopped || b.ctx.Err() != nil {
 		close(d.done)
@@ -635,10 +475,7 @@ func (b *Bus) launchLocked(d *durable) {
 	}()
 }
 
-// Subscribe adds an ephemeral subscriber and returns its cancel function. The
-// function runs inline on the publishing goroutine — it must be cheap and must
-// not publish back onto the bus (publishMu is held: deadlock). Seq is 0 when
-// the fact could not be made durable; a subscriber that cares must check.
+// fn runs inline on the publishing goroutine holding publishMu: it must be cheap and must not publish back onto the bus (deadlock).
 func (b *Bus) Subscribe(filter Filter, fn func(Event)) func() {
 	if fn == nil {
 		return func() {}
@@ -656,8 +493,6 @@ func (b *Bus) Subscribe(filter Filter, fn func(Event)) func() {
 	}
 }
 
-// Start persists every registration and launches one delivery loop per durable
-// consumer, plus the retention loop.
 func (b *Bus) Start() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -693,7 +528,6 @@ func (b *Bus) Start() error {
 	return nil
 }
 
-// initConsumer creates or reconciles the persisted registration for d.
 func (b *Bus) initConsumer(d *durable, head int64) error {
 	existing, ok, err := b.store.GetConsumer(d.name)
 	if err != nil {
@@ -712,7 +546,6 @@ func (b *Bus) initConsumer(d *durable, head int64) error {
 		d.setPosition(head, true)
 		return nil
 	}
-	// SaveConsumer refreshes the filter but preserves cursor and enabled.
 	if err := b.store.SaveConsumer(Consumer{
 		Name:    d.name,
 		Cursor:  existing.Cursor,
@@ -725,9 +558,6 @@ func (b *Bus) initConsumer(d *durable, head int64) error {
 	return nil
 }
 
-// Stop cancels delivery and waits for the loops to exit. In-flight handlers see
-// a cancelled context; their cursor is not advanced, so an interrupted event is
-// redelivered on the next start.
 func (b *Bus) Stop() {
 	b.mu.Lock()
 	b.stopped = true
@@ -737,9 +567,6 @@ func (b *Bus) Stop() {
 	b.wg.Wait()
 }
 
-// deliver is one durable consumer's loop. Every wait watches the consumer's own
-// context, a child of the bus context: Stop reaches all of them, Unregister
-// reaches this one, and neither has to wait out a retry sleep to be noticed.
 func (b *Bus) deliver(d *durable) {
 	ticker := time.NewTicker(b.pollInterval)
 	defer ticker.Stop()
@@ -777,11 +604,9 @@ func (b *Bus) deliver(d *durable) {
 	}
 }
 
-// drain reads forward from the consumer's cursor until the log is exhausted.
 func (b *Bus) drain(d *durable) error {
 	prepare := func() (bool, error) {
-		// The enabled bit is the kill switch and lives only in the database;
-		// re-read it, never cache it for the process lifetime.
+		// The enabled bit is the kill switch and lives only in the database; never cache it.
 		rec, ok, err := b.store.GetConsumer(d.name)
 		if err != nil {
 			return false, fmt.Errorf("reading registration: %w", err)
@@ -834,8 +659,6 @@ func (b *Bus) drain(d *durable) error {
 		}
 	}
 
-	// A lagging consumer never leaves the loop below, so the kill switch is
-	// re-read on the poll interval, not once per drain.
 	lastCheck := b.now()
 	killed := func() (bool, error) {
 		if b.now().Sub(lastCheck) < b.pollInterval {
@@ -888,7 +711,6 @@ func (b *Bus) drain(d *durable) error {
 				return nil
 			}
 			if !d.matches(ev.Name) {
-				// Unwanted events still advance the cursor, batched into one write.
 				skipped = ev.Seq
 				continue
 			}
@@ -907,8 +729,6 @@ func (b *Bus) drain(d *durable) error {
 			if err := b.advance(d, ev.Seq); err != nil {
 				return err
 			}
-			// A successful delivery ends the failure streak, so a lagging consumer
-			// does not ratchet to the retry cap on transient failures.
 			d.clearFailure()
 		}
 		if skipped != 0 {
@@ -919,8 +739,6 @@ func (b *Bus) drain(d *durable) error {
 	}
 }
 
-// reconcileGap handles a cursor below the oldest surviving event: resume at
-// head, with a logged gap.
 func (b *Bus) reconcileGap(d *durable, gap Gap) error {
 	b.log("bus: consumer %s resumed at head %d; %d event(s) were trimmed before its cursor %d",
 		d.name, gap.Head, gap.Missed, gap.Cursor)
@@ -928,10 +746,7 @@ func (b *Bus) reconcileGap(d *durable, gap Gap) error {
 }
 
 func (b *Bus) advance(d *durable, seq int64) error {
-	// A handler that was in flight when Unregister landed may still be returning
-	// here. Its registration is gone, so there is no cursor to move: dropping the
-	// write is the correct outcome, and reporting it as an error would turn a
-	// clean uninstall into a stall on a consumer nobody serves.
+	// A handler in flight when Unregister landed has no cursor to move; erroring would stall a consumer nobody serves.
 	if d.isRetired() {
 		return nil
 	}
@@ -942,14 +757,9 @@ func (b *Bus) advance(d *durable, seq int64) error {
 	return nil
 }
 
-// retain runs the bus's own periodic duties: reclaim what retention allows,
-// then say so when a producer is writing far more than any healthy one does.
 func (b *Bus) retain() {
 	ticker := time.NewTicker(b.trimInterval)
 	defer ticker.Stop()
-	// Report before the first tick, not an hour into the run: a producer already
-	// past the ceiling is past it at startup, and a daemon restarted more often
-	// than trimInterval would otherwise never say so.
 	b.ReportLoudProducers()
 	for {
 		select {
@@ -962,14 +772,6 @@ func (b *Bus) retain() {
 	}
 }
 
-// ReportLoudProducers writes one loud log line per fact class over the tripwire,
-// and nothing at all otherwise.
-//
-// This is the half of bus observability that does not wait to be looked at. The
-// producer bug this exists for wrote two thirds of the log for a week and was
-// found by accident during unrelated work; a page nobody opens would not have
-// caught it either. Each line names the fact, the rate, the ceiling it crossed,
-// and the window — everything needed to act on it without reading this code.
 func (b *Bus) ReportLoudProducers() {
 	if b.store == nil {
 		return
@@ -986,9 +788,6 @@ func (b *Bus) ReportLoudProducers() {
 	}
 }
 
-// Trim runs one retention pass (age window plus compaction) and reports how
-// many events it removed and whether either half failed — a caller must be able
-// to tell "removed 0" from "never ran".
 func (b *Bus) Trim() (int, error) {
 	if b.store == nil {
 		return 0, nil
@@ -1014,13 +813,8 @@ func (b *Bus) Trim() (int, error) {
 	return removed + compacted, failed
 }
 
-// compact keeps at most one fact per subject for every compactable name,
-// bounding the log by the data it describes rather than by write frequency.
-// For these names durable delivery is at-least-once PER CHANGED SUBJECT, not
-// per write. Compaction honors the same cursor floor as trimming: an enabled
-// consumer and a disabled installed app must never lose an unread fact, and
-// compacting above the floor would punch holes that reconcileGap misreads as
-// trimmed history.
+// Compacting above the cursor floor punches holes that reconcileGap misreads as trimmed history.
+// floor punches holes that reconcileGap misreads as trimmed history.
 func (b *Bus) compact() (int, error) {
 	if len(b.compactable) == 0 {
 		return 0, nil
@@ -1041,8 +835,6 @@ func (b *Bus) compact() (int, error) {
 	return n, nil
 }
 
-// consumerFloor is the lowest position every enabled consumer and every
-// installed app consumer has passed; with none it is the log head.
 func (b *Bus) consumerFloor() (int64, error) {
 	rows, err := b.store.ListConsumers()
 	if err != nil {
@@ -1110,9 +902,7 @@ func (d *durable) setEnabled(enabled bool) {
 	d.mu.Unlock()
 }
 
-// retire marks the consumer unregistered, which is what makes a late result from
-// an in-flight handler a no-op rather than an error or a failure streak against a
-// registration that no longer exists.
+// retire makes a late result from an in-flight handler a no-op rather than a failure.
 func (d *durable) retire() {
 	d.mu.Lock()
 	d.retired = true
@@ -1154,7 +944,6 @@ func (d *durable) stallReason() string {
 	return d.stalled
 }
 
-// backoff is capped exponential, matching internal/jobs' schedule.
 func backoff(base, ceiling time.Duration, attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
@@ -1172,8 +961,6 @@ func backoff(base, ceiling time.Duration, attempt int) time.Duration {
 	return d
 }
 
-// pinAlarmAgeOrDefault keeps a negative age as the off switch, where every other
-// window reads a non-positive value as "unset, use the default".
 func pinAlarmAgeOrDefault(v time.Duration) time.Duration {
 	if v == 0 {
 		return DefaultPinAlarmAge
@@ -1181,20 +968,9 @@ func pinAlarmAgeOrDefault(v time.Duration) time.Duration {
 	return v
 }
 
-// RetentionEnv overrides the trim age window. Thirty days is unreachable in any
-// run anyone can watch, so without this the only observable behavior of
-// retention is that it never removes anything: a trim against a fresh database
-// removes zero rows whatever the cursor floor says, and what a consumer resuming
-// below `earliest` does could not be produced outside a unit test.
-//
-// A duration ("1s", "5m"). There is no off switch — retention is a window, not a
-// finding — so a non-positive value is refused like an unparseable one.
 const RetentionEnv = "ATTN_BUS_RETENTION"
 
-// RetentionFromEnv resolves the trim window for one process. It lives beside
-// PinAlarmAgeFromEnv and for the same reason: the daemon that trims hourly and
-// the CLI that runs a pass by hand read one database, and a window they disagree
-// about makes `attn bus trim` remove rows the daemon would have kept.
+// The daemon's hourly pass and `attn bus trim` read one database; a window they disagree about makes the CLI remove rows the daemon would have kept.
 func RetentionFromEnv(log LogFunc) time.Duration {
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -1218,19 +994,9 @@ func RetentionFromEnv(log LogFunc) time.Duration {
 	return window
 }
 
-// PinAlarmAgeEnv overrides the retention-pin tripwire, so the condition can be
-// produced and watched end to end without waiting an hour for it. A duration
-// ("90s", "4m", "2h"); 0 turns the finding off.
 const PinAlarmAgeEnv = "ATTN_BUS_PIN_ALARM_AGE"
 
-// PinAlarmAgeFromEnv resolves the tripwire for one process. It lives here, and
-// not in whichever process happens to want it, because the daemon that raises the
-// alarm and the CLI that reads the same database must draw the line in the same
-// place — a table that says a consumer is fine while a notification says it is not
-// is worse than either surface alone.
-//
-// An unparseable value is refused loudly rather than quietly ignored: a limit
-// nobody can see is worse than no limit.
+// The daemon raising the alarm and the CLI reading the same database must draw the line in the same place.
 func PinAlarmAgeFromEnv(log LogFunc) time.Duration {
 	if log == nil {
 		log = func(string, ...interface{}) {}
@@ -1248,8 +1014,7 @@ func PinAlarmAgeFromEnv(log LogFunc) time.Duration {
 	if age <= 0 {
 		log("bus: %s=%q — the retention-pin alarm is off; a stuck consumer will grow the log unannounced",
 			PinAlarmAgeEnv, raw)
-		// Negative is the off switch inside the bus; zero would read as "unset" and
-		// restore the default.
+		// Negative is the off switch inside the bus; zero would read as "unset".
 		return -1
 	}
 	log("bus: retention-pin alarm set to %s by %s (default %s)", age, PinAlarmAgeEnv, DefaultPinAlarmAge)

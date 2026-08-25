@@ -5,8 +5,6 @@ import { fileURLToPath } from 'url';
 
 const E2E_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-// Resolve the attn binary the e2e harness drives. ATTN_E2E_BIN wins; otherwise
-// the repo-root ./attn built by `go build -o ./attn ./cmd/attn`.
 export function resolveAttnBinaryPath(): string {
   const candidates = [
     process.env.ATTN_E2E_BIN,
@@ -25,10 +23,6 @@ export function resolveAttnBinaryPath(): string {
   );
 }
 
-// The client token the throwaway daemon and the bundle under test share. The
-// daemon takes it from ATTN_CLIENT_TOKEN instead of minting one, and Vite hands
-// the same value to the browser, which cannot read the daemon's temp data dir.
-// A fixed string is fine: this daemon lives for one run on a per-profile port.
 export const E2E_CLIENT_TOKEN = 'e2e-client-token';
 
 export interface E2EPorts {
@@ -37,15 +31,8 @@ export interface E2EPorts {
   vitePort: string;
 }
 
-// e2ePorts derives the throwaway-daemon + Vite ports for the active ATTN_PROFILE
-// from the single profile authority (`attn profile resolve`).
-//
-// The default profile keeps the historical fixed ports (19849 / 1421) so
-// existing local and CI runs are byte-for-byte unchanged and need no attn
-// binary at config-load time. A named profile gets disjoint per-profile bands
-// ([30000,30999] daemon / [31000,31999] Vite) so multiple agents can run e2e
-// concurrently without colliding — and because the per-run teardown kill is
-// scoped to ATTN_WS_PORT=<daemonPort>, one agent never kills a peer's daemon.
+// Default profile keeps fixed ports (19849 / 1421) so a run needs no attn binary
+// at config-load time; a named profile gets a disjoint band so agents can't collide.
 export function e2ePorts(): E2EPorts {
   const profile = (process.env.ATTN_PROFILE ?? '').trim();
   if (profile === '') {

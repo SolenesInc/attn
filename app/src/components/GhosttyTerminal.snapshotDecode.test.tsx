@@ -110,10 +110,8 @@ vi.mock('../utils/terminalPerf', () => ({
 
 import { GhosttyTerminal } from './GhosttyTerminal';
 
-// Bytes a worker of another build encoded reach a decoder that rejects them.
-// Treating that as a model fault replaced the model, remounted the pane,
-// reattached, and was served the same bytes — 421 faults in six seconds on the
-// build that shipped it. See docs/plans/2026-08-16-snapshot-format-skew.md.
+// Treating a foreign-build snapshot as a model fault remounts, reattaches and is
+// served the same bytes: 421 faults in six seconds.
 describe('GhosttyTerminal snapshot decode', () => {
   beforeEach(() => {
     mocks.createTerminalCalls.length = 0;
@@ -160,7 +158,6 @@ describe('GhosttyTerminal snapshot decode', () => {
       expect(rejected[0].bytes).toBe(4);
       expect(rejected[0].error).toBe('ghostty_snapshot_decoder_ready failed');
       expect(mocks.noteModelFaultCalls).toHaveLength(0);
-      // No new epoch: one model built, and it still takes writes.
       expect(mocks.createTerminalCalls).toHaveLength(1);
       await act(async () => {
         await handle.write('live output after the refused restore');

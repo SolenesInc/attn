@@ -1,5 +1,4 @@
-// @types/node isn't a direct dependency of this package (only a transitive peer
-// of vite/vitest), matching terminalOsc133.parity.test.ts's pattern.
+// @types/node isn't a direct dependency of this package.
 // @ts-expect-error -- see above
 import { readFileSync } from 'node:fs';
 import type { ReactElement } from 'react';
@@ -15,16 +14,11 @@ import {
   TextInput,
 } from '@victorarias/attn-app';
 
-// The SDK's components emit class names; the stylesheet that gives them meaning
-// lives here, in attn's build. Nothing links the two at compile time, and the
-// failure is silent — a view renders, looks foreign, and no test notices.
-//
-// So this renders every component in every state that changes its classes, and
-// fails on one the stylesheet does not define.
+// Nothing links an SDK component's class names to attn's stylesheet at compile time,
+// and the failure is silent: the view renders and looks foreign.
 
-// Read rather than imported: vitest stubs a CSS import, and this test is about
-// the file's contents. Relative to the vitest root (app/); import.meta.url is
-// not a file: URL here.
+// Read rather than imported: vitest stubs a CSS import. Relative to the vitest root
+// (app/); import.meta.url is not a file: URL here.
 const css: string = readFileSync('src/components/appViews/appSdkComponents.css', 'utf8');
 
 const defined = new Set(
@@ -72,8 +66,6 @@ describe('the SDK component slice', () => {
   }
 
   it('covers every class the stylesheet defines', () => {
-    // The other direction: a rule left behind when a component stops emitting
-    // its class is dead weight nobody would ever notice.
     const rendered = new Set(cases.flatMap(([, ui]) => classesRendered(ui)));
     expect([...defined].filter((cls) => !rendered.has(cls)).sort()).toEqual([]);
   });

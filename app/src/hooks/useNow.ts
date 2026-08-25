@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react';
 
-/**
- * A wall clock that re-renders on an interval.
- *
- * Ages shown against a timestamp — how long a turn has been owed, say — are
- * read from a clock rather than from a prop, so a row outstanding for an hour
- * does not keep claiming it arrived a minute ago whenever the daemon goes quiet.
- */
+/** A wall clock that re-renders on an interval, so an age shown against a timestamp keeps
+ * counting while the daemon is quiet rather than reading from a prop. */
 export function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

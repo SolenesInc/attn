@@ -12,17 +12,8 @@ interface SnoozeMenuProps {
 
 const VIEWPORT_MARGIN = 8;
 
-/**
- * The durations a turn can be deferred by.
- *
- * Each row says the concrete time it resolves to as well as the duration: "Until
- * Monday" is a promise about when you will be interrupted, and a menu that will
- * not name the moment is one you have to test before you trust it.
- *
- * `now` is frozen when the menu opens, so the instant the user sees beside a row
- * is the instant that gets sent — a menu left open across a minute boundary must
- * not send something a minute later than it showed.
- */
+/** The durations a turn can be deferred by. `now` is frozen when the menu opens, so the
+ * instant shown beside a row is the instant that gets sent. */
 export function SnoozeMenu({ sessionLabel, anchor, onSnooze, onClose }: SnoozeMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(anchor);

@@ -17,57 +17,25 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// Handoff and the nap: how a member's day ends and the next one starts, as one
-// motion. The member writes the letter; attn files it append-only, then
-// replaces the day's session with a fresh one primed by that letter.
-//
-// The nap is a replacement, not a resume. Measured 2026-08-14: `claude
-// --session-id <id>` refuses a second launch under an id it has already used
-// ("Session ID … is already in use"), which is why the daemon's existing reload
-// (internal/daemon/reload.go) is resume-preserving — and resuming is the one
-// thing the nap must not do, because the whole point is that the member's
-// letter, not a transcript or a compaction summary, is the thread into the new
-// day. So the new day is a new session, spawned into the same workspace with
-// the same launch params, and the old one is closed behind it.
-//
-// The binding does not blink. It moves from the old session to the new one in a
-// single registry write against the revision it was read at: there is no moment
-// where the member is unbound, so no other wake can slip into a gap and produce
-// a second copy. Every refusal path leaves the old session running and still
-// holding the binding — a member is never torn down with its letter unfiled,
-// and a letter already on disk is never undone by what fails after it.
+// Measured 2026-08-14: `claude --session-id <id>` refuses a second launch under an id
+// it already used, so the resume-preserving reload cannot serve the nap.
 
-// crewNapPrompt is what the successor is asked first. It differs from the cold
-// wake's prompt in what it can assume: the letter it is holding was written
-// minutes ago by the session it replaced, so there is a live thread to pick up
-// rather than a night's worth of drift to verify.
 const crewNapPrompt = "Your predecessor just closed their day and left you the letter above. Pick the thread up: orient from it, verify anything load-bearing that may have moved, then tell Victor in a few lines who you are, where things stand, and what you are doing next."
 
-// transferCrewBinding moves a member's binding from one session to another in
-// one write, so the registry never shows the member unbound. It refuses unless
-// `from` is the binding it is asked to move, which is what makes it safe to
-// call from the nap's rollback: a binding that has since moved on is not
-// quietly stolen back.
 func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != from {
 			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", crew.DisplayName(member.ID), shortSessionID(from))
 		}
 		member.BindingSession = to
-		// The filed-letter fields are deliberately left alone. They name the
-		// session that wrote the letter, and `FiledLetterFor` only answers the
-		// session they name — so they go inert the moment the day changes, and a
-		// rollback that puts the binding back finds them still true. Clearing them
-		// here would erase, on the way in, exactly what the way out needs.
+		// The filed-letter fields are left alone: a rollback that puts the binding
+		// back finds them still true.
 		return true, nil
 	})
 	if err != nil {
 		return err
 	}
 	if err := d.migrateCrewTicketIdentity(memberID, from, to); err != nil {
-		// The migration is one SQL transaction. Put the registry back when it
-		// refuses so the caller never sees a moved identity without its ticket
-		// state; a concurrent successor wins the CAS and is left untouched.
 		_, rollbackErr := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 			if member.BindingSession != to {
 				return false, nil
@@ -85,8 +53,6 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 	return nil
 }
 
-// crewMemberForSession answers which member a session is living, judged the
-// same way every other crew read judges it.
 func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, false
@@ -106,14 +72,6 @@ func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
 	return crew.Member{}, false
 }
 
-// crewHandoff files the letter and runs the nap. The letter is filed first and
-// is never rolled back: it is the member's honest closure, and a nap that could
-// not run is a day that did not start, not a letter that was not written.
-//
-// retry is the way out of exactly that state. Writing the letter and turning the
-// day over are one motion but two acts, and only the second one can fail. A
-// retry runs the turnover against the letter already on disk: no second file, no
-// overwrite, append-only untouched.
 func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, err
@@ -130,11 +88,6 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 		return nil, err
 	}
 
-	// A retry is retrying a turnover, so it asks for one. Letting presence decide
-	// here would quietly change what --retry means: the member ran it to get the
-	// successor its letter was written for, and an absence would answer a
-	// different question than the one it asked. Sleeping instead is still one
-	// word away, and it is the member's word: `attn handoff --retry --sleep`.
 	if retry && close == "" {
 		close = protocol.CrewDayCloseNap
 	}
@@ -148,8 +101,6 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	}
 	newSessionID, err := d.crewNap(member, sessionID)
 	if err != nil {
-		// The letter is filed and the day's session is untouched: say why nobody
-		// was woken and leave the member awake where it is.
 		d.logf("crew: %s's letter is filed but the nap did not run: %v", crew.DisplayName(member.ID), err)
 		result.NapError = protocol.Ptr(err.Error())
 		return result, nil
@@ -159,11 +110,6 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 	return result, nil
 }
 
-// crewDayEndsHere decides what a filed letter does to the day. The caller may
-// say — a member closing on the user's own ask can insist on either — and when
-// it does not, presence decides: a day that closes while nobody is there does
-// not start another one, because a fresh day nobody uses is warmth bought for
-// nobody and the whole point of sleeping through an absence.
 func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) bool {
 	switch close {
 	case protocol.CrewDayCloseSleep:
@@ -174,11 +120,6 @@ func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) boo
 	return d.UserAwayFor(now) >= d.crewAwayLimit()
 }
 
-// crewLetterForHandoff settles which letter this handoff turns the day over
-// with: the one being written now, or the one this day already filed. The two
-// paths never share an exit — each refusal names the other by its verb, because
-// "a letter is already filed under that name" is the same sentence for a retry
-// and for a correction and the caller cannot tell which it is in.
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string, retry bool) (string, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
@@ -206,8 +147,6 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string
 	path, err := crew.FileHandoff(member.HomeDir, member.ID, note, time.Now())
 	if err != nil {
 		if errors.Is(err, crew.ErrHandoffExists) && hasFiled {
-			// The one collision that is not a correction: this day wrote that letter
-			// minutes ago and the turnover behind it failed.
 			return "", fmt.Errorf("%s's letter for this minute is already filed at %s — if the turnover is what failed, `attn handoff --retry` runs it against that letter; if this is a correction, file it as its own letter a minute from now", crew.DisplayName(member.ID), filed)
 		}
 		return "", err
@@ -217,10 +156,8 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string
 	return path, nil
 }
 
-// recordCrewLetter remembers which letter this day filed, so a failed turnover
-// has something to retry against. Best-effort by design: the letter is on disk
-// either way, and a registry write that fails must not undo a filing or fail the
-// nap that is about to run.
+// Best-effort: the letter is on disk either way, and a failed registry write
+// must not fail the nap.
 func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != sessionID {
@@ -234,10 +171,6 @@ func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
 	}
 }
 
-// crewNap starts the member's next day in place of the one that just ended: a
-// fresh session in the same workspace, carrying the closed day's launch params,
-// primed by the letter that was just filed. The old session is closed only once
-// the new one is running.
 func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
 		return "", err
@@ -249,10 +182,8 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error
 	if session == nil {
 		return "", fmt.Errorf("session %s is no longer here", shortSessionID(oldSessionID))
 	}
-	// A turnover the user is not around for is a wake nobody asked for, and it
-	// is bounded like any other. Checked before anything is spawned, so a member
-	// past its allowance keeps the day it has rather than losing it to a wake
-	// that then refuses.
+	// Checked before anything is spawned, so a member past its allowance keeps the
+	// day it has rather than losing it to a refused wake.
 	now := time.Now()
 	if d.UserAwayFor(now) >= d.crewAwayLimit() {
 		if err := d.chargeAutonomousWake(member.ID, now); err != nil {
@@ -267,9 +198,8 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error
 	spawnMsg.Cwd = launchDir
 	newSessionID := spawnMsg.ID
 
-	// Moved before the spawn for the same reason the wake claims before it
-	// spawns: the launching wrapper asks `crew_prime` for what to inject, and
-	// the binding is what answers. One write, so the member is never unbound.
+	// Before the spawn: the launching wrapper asks `crew_prime` for what to inject,
+	// and the binding is what answers. One write, so the member is never unbound.
 	if err := d.transferCrewBinding(member.ID, oldSessionID, newSessionID); err != nil {
 		return "", err
 	}
@@ -298,21 +228,13 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string) (string, error
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 
-	// The new day is running, so the old one can end. Closing it releases
-	// nothing the member still needs: the binding already names the new session,
-	// and releaseCrewBindingIfSession only clears a binding pointing at the id
-	// being closed.
+	// releaseCrewBindingIfSession only clears a binding pointing at the id being
+	// closed, so this releases nothing the member still needs.
 	d.closeNappedSession(oldSessionID)
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
 
-// crewNapSpawn builds the successor's launch. The closed day's launch intent is
-// the authority for how the member runs — yolo, executable, effort, approval
-// route — so a member woken unattended does not silently come back attended at
-// the first nap. Model selection is refreshed from the member and current
-// daemon settings, so changing either takes effect on the next day.
-// Never a resume: a fresh conversation is the point.
 func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*protocol.SpawnSessionMessage, internalSpawnPolicy) {
 	cols, rows := d.crewSessionGeometry(session.ID)
 	var spawnMsg *protocol.SpawnSessionMessage
@@ -335,8 +257,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
 	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)
-	// A resume would carry the closed day's transcript into the new one, which
-	// is the compaction nap this design exists to replace.
+	// A resume would carry the closed day's transcript into the new one.
 	spawnMsg.ResumeSessionID = nil
 	spawnMsg.ResumeConversationFile = nil
 	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {
@@ -348,9 +269,6 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	return spawnMsg, policy
 }
 
-// crewSessionGeometry reads the closing day's terminal size so the successor
-// comes back the same shape. The 80x24 fallback is the same one every spawn
-// path uses when no live worker can be asked.
 func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	cols, rows := 80, 24
 	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
@@ -370,10 +288,6 @@ func (d *Daemon) crewSessionGeometry(sessionID string) (int, int) {
 	return cols, rows
 }
 
-// closeNappedSession ends the day that just handed off. It is the app's own
-// close path minus the client detach: terminate, forget, drop the pane, and say
-// so on the wire, so the sidebar shows one member living one day rather than a
-// dead pane beside a live one.
 func (d *Daemon) closeNappedSession(sessionID string) {
 	session := d.unregisterSession(sessionID, syscall.SIGTERM)
 	if session == nil {
@@ -384,8 +298,6 @@ func (d *Daemon) closeNappedSession(sessionID string) {
 	d.removeWorkspaceLayoutPaneForSession(session.ID)
 	d.publishFact(FactSessionTerminated, session.ID, nil)
 }
-
-// IPC handlers.
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {
 	result, err := d.crewHandoff(strings.TrimSpace(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close))

@@ -13,10 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// serveWorkerHello answers every connection until the listener closes, replying
-// to a hello with the given snapshot format and to anything else with ok. It
-// stands in for a worker built against some libghostty-vt. Serving repeatedly
-// is what lets a test force a second handshake.
 func serveWorkerHello(listener net.Listener, daemonInstanceID, sessionID string, format func() string) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
@@ -60,8 +56,6 @@ func serveWorkerHello(listener net.Listener, daemonInstanceID, sessionID string,
 	return done
 }
 
-// terminalBuildHarness is a WorkerBackend wired to a fake worker whose answer
-// the test can change between handshakes.
 type terminalBuildHarness struct {
 	backend   *WorkerBackend
 	sessionID string
@@ -108,9 +102,8 @@ func newTerminalBuildHarness(t *testing.T, sessionID, format string) *terminalBu
 		return h.format
 	})
 	t.Cleanup(func() {
-		// The backend's end of the persistent control connection first: closing
-		// the listener does not close a connection it already accepted, so the
-		// fake's reader would block forever.
+		// The backend's end of the control connection first: closing the listener does
+		// not close a connection it already accepted, so the fake's reader would block.
 		backend.mu.RLock()
 		session := backend.sessions[sessionID]
 		backend.mu.RUnlock()
@@ -137,8 +130,6 @@ func newTerminalBuildHarness(t *testing.T, sessionID, format string) *terminalBu
 	return h
 }
 
-// handshake forces one fresh connection, which is what carries a hello: the
-// persistent control connection is reused otherwise.
 func (h *terminalBuildHarness) handshake(t *testing.T) {
 	t.Helper()
 	h.backend.mu.RLock()
@@ -181,15 +172,11 @@ func TestWorkerBackendRecordsTheFormatItsWorkerReports(t *testing.T) {
 	if got := h.reports(); len(got) != 1 || got[0] != h.sessionID {
 		t.Fatalf("OnTerminalBuild fired %v, want exactly one call for %s", got, h.sessionID)
 	}
-	// The format travels with the call: the daemon acts on it before the
-	// session is readable back from the map.
 	if got := h.reportedFormatsCopy(); len(got) != 1 || got[0] != "0123456789ab" {
 		t.Fatalf("OnTerminalBuild carried %v, want [\"0123456789ab\"]", got)
 	}
 }
 
-// Every control RPC opens a connection and every connection carries a hello, so
-// an unconditional callback would turn ordinary typing into a session re-push.
 func TestWorkerBackendReportsOnlyWhenTheFormatMoves(t *testing.T) {
 	h := newTerminalBuildHarness(t, "sess-terminal-build-repeat", "0123456789ab")
 	h.handshake(t)
@@ -200,7 +187,6 @@ func TestWorkerBackendReportsOnlyWhenTheFormatMoves(t *testing.T) {
 		t.Fatalf("OnTerminalBuild fired %v across three handshakes, want one", got)
 	}
 
-	// A reload replaces the process, and the replacement can answer differently.
 	h.setFormat("ba9876543210")
 	h.handshake(t)
 
@@ -212,8 +198,6 @@ func TestWorkerBackendReportsOnlyWhenTheFormatMoves(t *testing.T) {
 	}
 }
 
-// A worker built before the field exists reports nothing, and that silence is a
-// verdict: the daemon needs it to reach the wire, so the callback must fire.
 func TestWorkerBackendTreatsASilentWorkerAsAnAnswer(t *testing.T) {
 	h := newTerminalBuildHarness(t, "sess-terminal-build-silent", "")
 	h.handshake(t)
@@ -227,8 +211,7 @@ func TestWorkerBackendTreatsASilentWorkerAsAnAnswer(t *testing.T) {
 	}
 }
 
-// A session the backend has never reached has no verdict at all, and the lookup
-// must not fall back to the registry read + probe RPC getSession would do: this
+// The lookup must not fall back to getSession's registry read + probe RPC: it
 // runs on every session broadcast.
 func TestWorkerBackendHasNoVerdictForAnUnknownSession(t *testing.T) {
 	backend, err := NewWorker(WorkerBackendConfig{

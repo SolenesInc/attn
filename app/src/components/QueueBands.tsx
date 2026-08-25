@@ -24,12 +24,10 @@ export interface QueueBandSessionView {
   turnSnoozedUntil?: string;
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
-  /** The crew member whose day this session is, when it is one. */
   crewMember?: string;
   automation?: AutomationProvenanceValue;
 }
 
-/** One registered crew member, as the sidebar draws it. */
 export interface CrewMemberView {
   id: string;
   /** The session living this member's day. Absent means asleep. */
@@ -38,47 +36,21 @@ export interface CrewMemberView {
 
 interface QueueBandsProps {
   bands: QueueBandsModel<QueueBandSessionView>;
-  /**
-   * The whole roster. Members are permanent rows: an awake one renders from its
-   * live session (bands.crew), a sleeping one from this list alone, so nobody
-   * has to go and find a member that is not running.
-   */
+  /** Members are permanent rows: an awake one renders from its live session, a sleeping one from this list. */
   crew?: CrewMemberView[];
   /** Start a sleeping member's day. Resolves once its session exists. */
   onWakeCrewMember?: (member: string) => void;
-  /** Ask an awake member to close its day and sleep. */
   onSleepCrewMember?: (member: string) => void;
   selectedId: string | null;
   onSelectSession: (id: string) => void;
   onSettleTurn: (id: string) => void;
-  /**
-   * Sessions whose terminal tile is on screen. A band row draws the auto-settle
-   * countdown only for the ones that are NOT, since a visible tile already
-   * carries it and two copies of the same countdown read as two events.
-   */
+  /** Sessions whose terminal tile is on screen; a band row draws the auto-settle countdown only for the others. */
   onScreenSessionIds?: ReadonlySet<string>;
-  /**
-   * Pinning one agent out of the queue, and releasing it again.
-   *
-   * A gesture aimed at a row acts on that row: pinning here takes the single
-   * agent out and leaves its workspace and every sibling in. Pinning the whole
-   * workspace is still reachable — from its group header in the tree, and from
-   * ⌘K — but it is a different act and it is no longer what this button does.
-   */
+  /** Pinning takes this agent out and leaves its workspace and every sibling in. */
   onPinSession?: (sessionId: string, pinned: boolean) => void;
-  /**
-   * The per-session menu — chief of staff, close, reload — which the workspace
-   * tree row owns when the queue is off. Queue mode does not draw that row for
-   * these agents, so without it here everything on that menu would be out of
-   * reach for anything in a band.
-   */
+  /** The per-session menu — chief of staff, close, reload — which the workspace tree row owns when the queue is off. */
   onOpenActions?: (session: { id: string; label: string; chiefOfStaff?: boolean }, event: ReactMouseEvent) => void;
-  /**
-   * Open the duration menu for a row. Offered on turns and on settled rows
-   * alike: deferring a run before it finishes — so the turn it would open never
-   * opens — is the case snooze exists for, and that row is by definition not in
-   * the turns band yet.
-   */
+  /** Open the duration menu for a row. Offered on settled rows too: deferring a run before it finishes is why snooze exists. */
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
 }
 
@@ -120,16 +92,7 @@ function QueueRowView({
       data-state={session.state}
       data-workspace-id={row.workspaceId}
     >
-      {/*
-        Opening the session is a real button so it is reachable by Tab and
-        pressed by Enter or Space, not a click handler on the row. It fills the
-        row from behind rather than wrapping its contents, which keeps a click
-        anywhere on the row opening the session and leaves every other child a
-        direct child of .session-item — the row's flex layout and the `>`
-        selectors that style it are untouched. The settle, pin, and actions
-        controls are lifted above it so they stay independently clickable and
-        do not sit inside an interactive ancestor.
-      */}
+      {/* A real button, so the row is reachable by Tab and pressed by Enter or Space; the settle, pin and actions controls sit above it so they stay independently clickable. */}
       <button
         type="button"
         className="queue-row-select"
@@ -138,14 +101,7 @@ function QueueRowView({
         onClick={onSelect}
       />
       <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
-      {/*
-        No workspace name in a band row: the row is about the agent, the label
-        needs every column the sidebar has, and the pin button's tooltip still
-        says which workspace the row would leave the queue by. The age anchors
-        to the right edge; the hover controls float above it (see .queue-row-
-        controls) rather than reserving row width for buttons that are usually
-        invisible.
-      */}
+      {/* No workspace name in a band row: the label needs every column, and the pin button's tooltip names the workspace. */}
       <span className="sidebar-session-identity">
         <SessionLabel label={session.label} />
         <AutomationProvenance provenance={session.automation} density="compact" />
@@ -253,22 +209,8 @@ function QueueRowView({
   );
 }
 
-/**
- * The sidebar's standing order: the chief in its own anchored slot, the turns
- * the user owes oldest first, the settled rest, then the agents pinned out of
- * the queue one at a time.
- *
- * An agent appears in exactly one of these, which is what lets its position
- * carry meaning. Rows carry their live state in every band, because none of them
- * is about whether an agent is running — an agent you steered is still yours
- * until you settle it, a settled one may well be working, and a pinned one is
- * usually the one you are working in.
- *
- * Pinned sits last so the queue and the draining of it stay at the top of the
- * eye's path; the pinned workspaces render as groups below it, and muted below
- * those. Both kinds of pinned thing are places you go and get work rather than a
- * list handed to you, which is why they neighbour each other.
- */
+// The sidebar's standing order: the chief anchored, the turns the user owes oldest first,
+// the settled rest, then the pinned. An agent appears in exactly one, so position carries meaning.
 export function QueueBands({
   bands,
   crew,
@@ -328,17 +270,11 @@ export function QueueBands({
             <span>Settled</span>
           </div>
           {bands.settled.map((row) => (
-            // No settle button: it is already settled, and offering the act
-            // again would suggest there is something here to discharge.
             <QueueRowView
               key={row.session.id}
               row={row}
               selected={selectedId === row.session.id}
               onSelect={() => onSelectSession(row.session.id)}
-              // Snooze is offered here too: deferring an agent that is still
-              // running, so the turn it would open on finishing never opens, is
-              // the reach the verb was designed for — and that agent is settled,
-              // not owed.
               onSnooze={snoozeHandler(row.session)}
               onPin={onPinSession && (() => onPinSession(row.session.id, true))}
               onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
@@ -353,13 +289,7 @@ export function QueueBands({
             <span>Pinned</span>
             <span className="queue-band-count">{bands.pinned.length + crewRows.length}</span>
           </div>
-          {/*
-            The crew, first and permanent. A member is pin-shaped — it stepped
-            out of the queue the same way a pinned agent did — but it is not a
-            pin: nobody put it here and there is no unpin. The rail down its left
-            edge is what says so at a glance, and a sleeping member keeps its row
-            so waking it is one click rather than a hunt.
-          */}
+          {/* A member is pin-shaped but is not a pin: nobody put it here and there is no unpin. */}
           {crewRows.map((crewRow) => (
             <CrewRowView
               key={crewRow.member}
@@ -377,9 +307,6 @@ export function QueueBands({
             />
           ))}
           {bands.pinned.map((row) => (
-            // No settle and no snooze: both are ways of answering "whose turn is
-            // it", and a pinned agent has stepped out of that question entirely.
-            // Unpinning is the only act here, and it is the way back in.
             <QueueRowView
               key={row.session.id}
               row={row}
@@ -396,13 +323,8 @@ export function QueueBands({
   );
 }
 
-/**
- * The roster and the live days, merged into one permanent row per member, in
- * member-id order. A member with a live day carries its session; one without
- * carries none and is asleep. The roster is the authority on who exists — a
- * bound session whose member left the roster still gets a row, because the
- * session is real and dropping it would hide a running agent.
- */
+// The roster is the authority on who exists, but a bound session whose member left the
+// roster still gets a row: dropping it would hide a running agent.
 function buildCrewRows(
   crew: CrewMemberView[] | undefined,
   awake: QueueRow<QueueBandSessionView>[],
@@ -418,16 +340,8 @@ function buildCrewRows(
     .map((member) => ({ member, row: byMember.get(member) }));
 }
 
-/**
- * One crew member's row. Awake, it is the session's row with the crew rail;
- * asleep, it is the member itself with one act on it — wake — and no state to
- * report, because there is nothing running to have a state.
- *
- * Waking takes two clicks. Both of the row's asleep targets — the fill button
- * and the sun — arm on the first and wake on the second, and they share one
- * armed state, so arming from the row and confirming on the sun is the same
- * gesture. The daemon still hears one `crew_wake`, on the confirm.
- */
+// Waking takes two clicks. Both asleep targets — the fill button and the sun — arm on the
+// first and wake on the second, sharing one armed state; the daemon hears one `crew_wake`.
 function CrewRowView({
   member,
   row,
@@ -448,8 +362,7 @@ function CrewRowView({
   const awake = Boolean(row);
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
-  // An awake member arrives with the daemon's label; a sleeping one has no
-  // session to carry one, so the display rule names it here.
+  // An awake member arrives with the daemon's label; a sleeping one has none, so the display rule names it here.
   const name = crewDisplayName(member);
   const label = row?.session.label || name;
   const wakeLabel = armed ? `Wake ${name} — click again to confirm` : `Wake ${name}`;
@@ -474,8 +387,7 @@ function CrewRowView({
       {awake ? (
         <StateIndicator state={row!.session.state} size="md" seed={row!.session.id} reason={row!.session.state_reason} />
       ) : (
-        // No state to draw: nothing is running. The hollow ring is the same size
-        // as an indicator so every crew row's label starts on the same column.
+        // The hollow ring is the same size as an indicator, so every crew row's label starts on the same column.
         <span className="crew-asleep-dot" aria-hidden="true" />
       )}
       <SessionLabel label={label} />
@@ -547,20 +459,8 @@ interface QueueSnoozedSectionProps {
   onWakeTurn: (id: string) => void;
 }
 
-/**
- * Deferred agents, collapsed at the foot of the sidebar above the muted
- * workspaces.
- *
- * Not a band. The bands answer "whose turn is it"; this answers "what did I put
- * off", which is a different question with a different lifetime — every row here
- * leaves on its own, at a time the user named. It sits with muted rather than
- * with settled because both are the quiet end of the sidebar, and it sits above
- * muted because *not yet* is nearer to your attention than *not ever*.
- *
- * Collapsed by default, with a count. A snooze surfaces itself when it wakes, so
- * the section is for checking on a promise or breaking it early — neither of
- * which is worth standing room.
- */
+// Deferred agents, collapsed at the foot of the sidebar. Not a band: the bands answer
+// "whose turn is it", this answers "what did I put off".
 export function QueueSnoozedSection({
   rows,
   selectedId,
@@ -587,8 +487,7 @@ export function QueueSnoozedSection({
       {expanded && (
         <div className="muted-sessions-list">
           {rows.map((row) => (
-            // No settle: a snoozed turn is already closed. Waking is the only
-            // act, and it is the undo rather than a second way to dismiss.
+            // A snoozed turn is already closed: waking is the undo, not a second way to dismiss.
             <QueueRowView
               key={row.session.id}
               row={row}

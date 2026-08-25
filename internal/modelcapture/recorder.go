@@ -1,5 +1,3 @@
-// Package modelcapture persists opt-in, profile-local terminal viewport
-// observations for evaluating and training small local models.
 package modelcapture
 
 import (
@@ -81,8 +79,6 @@ func (r *Recorder) Dir() string {
 	return r.dir
 }
 
-// Due reports whether a snapshot is worth fetching. State changes are sampled
-// immediately; otherwise each session is sampled at most once per interval.
 func (r *Recorder) Due(sessionID, daemonState string, now time.Time, interval time.Duration) (string, bool) {
 	if r == nil || strings.TrimSpace(sessionID) == "" {
 		return "", false
@@ -105,9 +101,6 @@ func (r *Recorder) Due(sessionID, daemonState string, now time.Time, interval ti
 	return "", false
 }
 
-// Record persists obs unless both its viewport and daemon state match the last
-// sampled observation for this session. A deduplicated observation still
-// advances the interval clock so an unchanged prompt is not fetched every poll.
 func (r *Recorder) Record(obs Observation, maxBytes int64) (bool, error) {
 	if r == nil {
 		return false, errors.New("nil model capture recorder")
@@ -246,9 +239,7 @@ func prepareAppendLocked(dir string, at time.Time, maxBytes, appendBytes int64) 
 	target := maxBytes - appendBytes
 	protectedPath := activePath
 	if activeSize+appendBytes > maxBytes {
-		// The current segment cannot accept this complete JSONL record while the
-		// corpus stays bounded. Close it by advancing to a sibling segment; it is
-		// then eligible for oldest-first pruning like every other capture file.
+		// A JSONL record is never split, so a segment that cannot take a whole one is closed.
 		protectedPath = ""
 		activePath = nextPath
 	}

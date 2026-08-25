@@ -25,8 +25,6 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
 
   useEscapeStack(onClose, true);
 
-  // Select-all on mount: typing replaces the whole name, ArrowRight collapses to
-  // the end to append, ArrowLeft to the start — all native input behavior.
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
@@ -34,7 +32,6 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
     input.select();
   }, []);
 
-  // Keep the popover on-screen by clamping against the viewport once measured.
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -50,8 +47,7 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
     setPosition({ top, left });
   }, [anchor]);
 
-  // Dismiss on outside click. Deferred a tick so the click that opened the
-  // popover doesn't immediately close it.
+  // Deferred a tick so the click that opened the popover doesn't close it.
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {

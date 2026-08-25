@@ -15,14 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/apps"
 )
 
-// These tests run the real toolchain. Faking bun and tsc would test the shape of
-// two exec.Command calls and nothing that matters here — the proofs this stage
-// owes are "a declared subscription with no handler is a compiler error carrying
-// a line" and "a module whose top level throws still applies", and neither
-// survives a fake.
-//
-// CI installs bun for the daemon job precisely so these run there. A machine
-// without it skips, loudly.
 func requireToolchain(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("bun"); err != nil {
@@ -30,7 +22,6 @@ func requireToolchain(t *testing.T) {
 	}
 }
 
-// buildEnv is one app directory plus the artifact store an apply writes into.
 type buildEnv struct {
 	dir   string
 	store string
@@ -44,14 +35,10 @@ func newBuildEnv(t *testing.T, name string) buildEnv {
 	if _, err := Scaffold(ScaffoldOptions{Dir: env.dir}); err != nil {
 		t.Fatalf("scaffold: %v", err)
 	}
-	// One shared TypeScript install per test binary rather than one per test: the
-	// install is network-bound and identical every time.
 	env.store = sharedToolchainStore(t, env.store)
 	return env
 }
 
-// sharedToolchainStore points a test's artifact store at a per-test directory but
-// links the toolchain into it, so the compiler is installed once for the package.
 func sharedToolchainStore(t *testing.T, store string) string {
 	t.Helper()
 	if err := os.MkdirAll(store, 0o755); err != nil {
@@ -64,8 +51,6 @@ func sharedToolchainStore(t *testing.T, store string) string {
 	return store
 }
 
-// packageToolchainDir installs the pinned TypeScript once for the whole test
-// binary, in a directory that outlives individual tests.
 var packageToolchain string
 
 func packageToolchainDir(t *testing.T) string {
@@ -119,10 +104,6 @@ func (e buildEnv) edit(t *testing.T, rel, old, new string) {
 	}
 }
 
-// dropScaffoldView returns the app to a subscription-only shape. The scaffold
-// ships a working view and the command it calls, which is what an author should
-// get; these tests are about what a build does with the views they add
-// themselves, or with none at all.
 func (e buildEnv) dropScaffoldView(t *testing.T) {
 	t.Helper()
 	e.editManifest(t, "\n[[views]]\n", "\n[views_removed_by_test]\n#")
@@ -144,8 +125,6 @@ func (e buildEnv) dropScaffoldView(t *testing.T) {
 	}
 }
 
-// viewArtifact is the built view with this name, by name rather than by
-// position: the scaffold ships one of its own, so an index says nothing.
 func viewArtifact(t *testing.T, res Result, name string) ViewSize {
 	t.Helper()
 	for _, v := range res.ViewBytes {
@@ -157,8 +136,6 @@ func viewArtifact(t *testing.T, res Result, name string) ViewSize {
 	return ViewSize{}
 }
 
-// The scaffold's bar: `new` then `apply`, untouched. A scaffold that needs an
-// edit first is a broken scaffold, and this is the whole assertion.
 func TestScaffoldAppliesWithNoEdits(t *testing.T) {
 	env := newBuildEnv(t, "hello-app")
 
@@ -190,15 +167,9 @@ func TestScaffoldWritesClaudeMDAsASymlinkToAgentsMD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AGENTS.md: %v", err)
 	}
-	// It has to be a brief, not a placeholder: the claim is that an agent can
-	// write an app from this file alone, so the things it cannot omit are the
-	// commands, the contract that binds manifest to code, and the rule that
-	// apply does not run what you wrote.
 	for _, want := range []string{
 		"attn app apply", "attn app rollback", "satisfies Handlers", "never runs your code",
 		"ctx.collections",
-		// Slice 5: a view is half of what an app is now, so the brief teaches all
-		// of it — where a view sits, how it reads, how it acts, what it draws with.
 		"useQuery", "useCommand", "params", "EmptyState",
 	} {
 		if !strings.Contains(string(agents), want) {
@@ -223,7 +194,6 @@ func TestScaffoldRefusesADirectoryNameThatIsNotAnAppName(t *testing.T) {
 	if err == nil {
 		t.Fatal("Scaffold accepted an illegal name")
 	}
-	// Where the name came from matters: the author never typed it.
 	if !strings.Contains(err.Error(), "--name") {
 		t.Errorf("error %q does not say how to choose another name", err)
 	}
@@ -243,8 +213,6 @@ func TestGeneratedTypesCarryTheAppsIdentityAndItsSubscriptions(t *testing.T) {
 		`"delegation.*": (event: AppEvent, ctx: Ctx)`,
 		`"session.state.changed": (event: AppEvent, ctx: Ctx)`,
 		`"decisions": Collection`,
-		// A command lives in its own group, keyed by its bare name: the kind is
-		// structure, so nothing has to keep the two sets of keys apart.
 		`  commands: {`,
 		`"approve": (payload: unknown, ctx: Ctx) => unknown`,
 		`"reject": (payload: unknown, ctx: Ctx) => unknown`,
@@ -256,9 +224,6 @@ func TestGeneratedTypesCarryTheAppsIdentityAndItsSubscriptions(t *testing.T) {
 	}
 }
 
-// tscError matches the compiler's own `file(line,col): error TSxxxx:` form. The
-// assertion is on that shape, not on non-zero exit: an apply that says only
-// "typecheck failed" is an apply an agent cannot act on.
 var tscError = regexp.MustCompile(`src/index\.ts\((\d+),(\d+)\): error TS\d+:`)
 
 func TestBuild_DeclaredSubscriptionWithNoHandlerIsACompilerError(t *testing.T) {
@@ -278,8 +243,6 @@ func TestBuild_DeclaredSubscriptionWithNoHandlerIsACompilerError(t *testing.T) {
 	}
 }
 
-// The same arrow, for the other group: a button a view could press
-// with nothing behind it is a compile error at apply, not a 404 at click time.
 func TestBuild_DeclaredCommandWithNoHandlerIsACompilerError(t *testing.T) {
 	env := newBuildEnv(t, "uncommanded-app")
 	env.editManifest(t, "[[commands]]\nname = \"forget\"", "[[commands]]\nname = \"remember\"\n\n[[commands]]\nname = \"forget\"")
@@ -297,9 +260,6 @@ func TestBuild_DeclaredCommandWithNoHandlerIsACompilerError(t *testing.T) {
 	}
 }
 
-// The other direction, which is what grouping by kind buys: a handler under a
-// kind nothing declared is an excess property, so a command a view could never
-// reach cannot be exported by accident either.
 func TestBuild_UndeclaredCommandHandlerIsACompilerError(t *testing.T) {
 	env := newBuildEnv(t, "overcommanded-app")
 	env.edit(t, "src/index.ts", "commands: { forget },", "commands: { forget, remember: forget },")
@@ -319,8 +279,6 @@ func TestBuild_UndeclaredCommandHandlerIsACompilerError(t *testing.T) {
 
 func TestBuild_DeclaredReconcileWithNoHandlerIsACompilerError(t *testing.T) {
 	env := newBuildEnv(t, "unreconciled-app")
-	// The scaffold declares reconcile and implements it, so this drops the
-	// handler rather than adding the declaration.
 	env.edit(t, "src/index.ts", "\n  reconcile,", "")
 
 	_, err := env.build(t)
@@ -366,9 +324,6 @@ func TestBuild_WrongShapedHandlerIsACompilerError(t *testing.T) {
 	}
 }
 
-// The rule the whole slice is arranged around. The entrypoint writes a file and
-// then throws at module top level: if any step of apply imported it, the file
-// would be there and the apply would have failed.
 func TestBuild_NeverEvaluatesAppCode(t *testing.T) {
 	env := newBuildEnv(t, "exploding-app")
 	sentinel := filepath.Join(t.TempDir(), "evaluated")
@@ -406,9 +361,6 @@ func TestBuild_IdenticalContentIsTheSameVersion(t *testing.T) {
 	}
 }
 
-// A manifest edit that leaves the bundle byte-identical still has to be a new
-// version: the generated types are erased at build time, so the bundle cannot see
-// the change, and reusing the row would freeze the previous declaration onto it.
 func TestBuild_ManifestOnlyChangeIsANewVersion(t *testing.T) {
 	env := newBuildEnv(t, "redeclared-app")
 	first := env.mustBuild(t)
@@ -442,8 +394,6 @@ func TestBuild_CodeChangeIsANewVersion(t *testing.T) {
 	}
 }
 
-// A failed build leaves the artifact store exactly as it found it — no partial
-// directory, no staging left behind.
 func TestBuild_FailureLeavesTheStoreUntouched(t *testing.T) {
 	env := newBuildEnv(t, "broken-app")
 	good := env.mustBuild(t)
@@ -470,13 +420,8 @@ func TestBuild_FailureLeavesTheStoreUntouched(t *testing.T) {
 	}
 }
 
-// The view fixtures below import nothing that has to resolve. A view's real
-// imports are the SDK's, and the SDK is a package this slice does not build yet
-// — so these prove the build step (browser target, whole import graph, one
-// artifact per view, hash over all of them) with source that stands alone.
 const viewHelperMarker = "helper-from-the-import-graph"
 
-// addView writes a view's source and declares it in the manifest.
 func (e buildEnv) addView(t *testing.T, name, source string) {
 	t.Helper()
 	path := filepath.Join(e.dir, "src", "views", name+".tsx")
@@ -497,8 +442,6 @@ func (e buildEnv) addView(t *testing.T, name, source string) {
 	}
 }
 
-// The artifact layout the whole stage rests on: one module per declared view,
-// beside the handler bundle, in the same content-addressed version directory.
 func TestBuild_EachViewIsItsOwnArtifactBesideTheBundle(t *testing.T) {
 	env := newBuildEnv(t, "viewed-app")
 	env.dropScaffoldView(t)
@@ -527,8 +470,6 @@ func TestBuild_EachViewIsItsOwnArtifactBesideTheBundle(t *testing.T) {
 	}
 }
 
-// The entrypoint is where the build starts, not what it contains: a view's local
-// imports land inside its one artifact, so one view is one file is one URL.
 func TestBuild_ViewCarriesItsWholeImportGraph(t *testing.T) {
 	env := newBuildEnv(t, "graph-app")
 	if err := os.MkdirAll(filepath.Join(env.dir, "src", "lib"), 0o755); err != nil {
@@ -551,8 +492,6 @@ func TestBuild_ViewCarriesItsWholeImportGraph(t *testing.T) {
 	}
 }
 
-// The SDK specifiers stay external, so the module the frontend imports resolves
-// them against attn's own React rather than carrying a second copy.
 func TestBuild_ViewLeavesTheSDKSpecifierUnresolved(t *testing.T) {
 	env := newBuildEnv(t, "external-app")
 	env.addView(t, "approvals",
@@ -564,19 +503,12 @@ func TestBuild_ViewLeavesTheSDKSpecifierUnresolved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The artifact is minified, so `from` and the specifier may or may not have a
-	// space between them; what matters is that the specifier survived as one.
 	if !regexp.MustCompile(`from\s*"` + regexp.QuoteMeta(SDKModule) + `"`).MatchString(string(built)) {
 		t.Errorf("the SDK import was resolved into the artifact:\n%s", built)
 	}
 }
 
-// The JSX runtime a view links against, which is a landmine rather than a
-// preference: React's production build exports `jsxDEV` as `undefined`, so a
-// view built in bun's default mode resolves cleanly against attn's frontend and
-// then throws on its first element in the packaged app — where no test looks.
-// `--production` is the only thing that selects the other runtime; the app
-// tsconfig's `"jsx": "react-jsx"` does not, and neither does a NODE_ENV define.
+// React's production build exports `jsxDEV` as `undefined`; `--production` is the only thing that selects the other runtime (tsconfig's "jsx": "react-jsx" and a NODE_ENV define do not).
 func TestBuild_ViewLinksAgainstTheProductionJSXRuntime(t *testing.T) {
 	env := newBuildEnv(t, "jsx-app")
 	env.addView(t, "approvals", "export default function Approvals() { return <div>ok</div> }\n")
@@ -595,9 +527,6 @@ func TestBuild_ViewLinksAgainstTheProductionJSXRuntime(t *testing.T) {
 	}
 }
 
-// A view-only edit has to mint a new version. The declaration and the handler
-// bundle are both untouched by it, so a hash over those alone would reuse a row
-// whose artifacts had moved under it.
 func TestBuild_ViewOnlyEditIsANewVersion(t *testing.T) {
 	env := newBuildEnv(t, "reviewed-app")
 	env.addView(t, "approvals", "export default function Approvals(): string { return \"before\" }\n")
@@ -617,10 +546,6 @@ func TestBuild_ViewOnlyEditIsANewVersion(t *testing.T) {
 	}
 }
 
-// The digest is over a set of named artifacts, not a list: reordering two
-// [[views]] blocks changes nothing about what the version holds, so it must not
-// mint a new one. The claim rests on one sort inside versionHash, which is
-// exactly the kind of line a later refactor drops while the claim quietly dies.
 func TestVersionHash_DoesNotDependOnViewOrder(t *testing.T) {
 	declaration := `{"name":"ordered","attn_app_api":1}`
 	bundle := []byte("export default {}\n")
@@ -633,9 +558,6 @@ func TestVersionHash_DoesNotDependOnViewOrder(t *testing.T) {
 		t.Fatalf("reordering the views moved the hash: %s then %s", forward, backward)
 	}
 
-	// The names are hashed too, so two views cannot swap contents unnoticed —
-	// which is what stops the ordering rule from collapsing the whole digest into
-	// "some bytes, in some order".
 	swapped := VersionHash(declaration, bundle, []ViewArtifact{
 		{Name: approvals.Name, Content: history.Content},
 		{Name: history.Name, Content: approvals.Content},
@@ -645,8 +567,6 @@ func TestVersionHash_DoesNotDependOnViewOrder(t *testing.T) {
 	}
 }
 
-// An app with no views hashes exactly as it did before views existed, so
-// re-applying an app built by an older attn lands on the row it already had.
 func TestBuild_ViewlessAppHashesAsItDidBeforeViews(t *testing.T) {
 	env := newBuildEnv(t, "unchanged-app")
 	env.dropScaffoldView(t)
@@ -665,9 +585,6 @@ func TestBuild_ViewlessAppHashesAsItDidBeforeViews(t *testing.T) {
 	}
 }
 
-// A view is something that runs, so an app that declares one and no
-// subscriptions builds and applies — a tile that only reads the document store
-// is a legitimate whole app.
 func TestBuild_AppWithAViewAndNoSubscriptionsBuilds(t *testing.T) {
 	env := newBuildEnv(t, "board-app")
 	env.dropScaffoldView(t)
@@ -685,8 +602,6 @@ func TestBuild_AppWithAViewAndNoSubscriptionsBuilds(t *testing.T) {
 	}
 }
 
-// A broken view fails the apply with the bundler's own words, and leaves the
-// store as it found it — the same guarantee the handler bundle already had.
 func TestBuild_BrokenViewFailsTheWholeApply(t *testing.T) {
 	env := newBuildEnv(t, "brokenview-app")
 	env.addView(t, "approvals", "import { missing } from \"./nowhere\"\nexport default function A(): unknown { return missing }\n")
@@ -705,9 +620,6 @@ func TestBuild_BrokenViewFailsTheWholeApply(t *testing.T) {
 	}
 }
 
-// Codegen must not touch a file it is not changing: `attn app dev` watches this
-// directory, and a rewrite with the same bytes would wake the watcher that
-// triggered it.
 func TestWriteGenerated_LeavesUnchangedFilesAlone(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "quiet-app")
 	if _, err := Scaffold(ScaffoldOptions{Dir: dir}); err != nil {
@@ -734,14 +646,6 @@ func TestWriteGenerated_LeavesUnchangedFilesAlone(t *testing.T) {
 	}
 }
 
-// The proof the SDK-as-a-package slice owes: an app can write React, and the
-// only specifier it needs is the SDK's own.
-//
-// The typecheck rather than a whole apply, because bundling a view is the next
-// slice's work — a handler bundle carries no SDK JavaScript by design, and the
-// materialized package has none to give it. What is proven here is the half this
-// slice owns: hooks, JSX and a view's props resolve, with no npm install and no
-// `react` anywhere in the app.
 func TestTypecheck_AnEntrypointWritingReactResolvesTheSDKAlone(t *testing.T) {
 	env := newBuildEnv(t, "tsx-app")
 	env.editManifest(t, `entrypoint = "src/index.ts"`, `entrypoint = "src/index.tsx"`)
@@ -778,8 +682,6 @@ export default function Approvals({ params, tileId }: ViewProps): ReactNode {
 	}
 }
 
-// The other half of "one React": an app cannot reach React except through the
-// SDK, so there is no way to end up with a second instance.
 func TestBuild_ImportingReactDirectlyIsACompilerError(t *testing.T) {
 	env := newBuildEnv(t, "two-reacts-app")
 	env.edit(t, "src/index.ts", `import type { Ctx, Handlers } from "./generated"`,

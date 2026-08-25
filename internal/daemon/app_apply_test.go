@@ -13,16 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The daemon's half of an apply: record the version, move the pointer, publish
-// the fact — and refuse anything it cannot verify, having changed nothing.
-//
-// The build itself is the caller's and is covered in internal/appbuild. What is
-// pinned here is the seam between them: the daemon derives the artifact's
-// location and re-hashes what it finds, so a version row can never name content
-// the daemon has not read.
-
-// appApplyDaemon is a daemon with its own artifact store, so one test's
-// content-addressed directories cannot be another's.
 func appApplyDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := newDaemonForTest(t)
@@ -30,16 +20,11 @@ func appApplyDaemon(t *testing.T) *Daemon {
 	return d
 }
 
-// stageArtifact writes a built bundle where the daemon will look for it, and
-// returns the hash that names it.
 func stageArtifact(t *testing.T, d *Daemon, name, declaration, bundle string) string {
 	t.Helper()
 	return stageArtifacts(t, d, name, declaration, bundle, nil)
 }
 
-// stageArtifacts is stageArtifact for a version that also holds views: every
-// artifact goes where the daemon derives its path, and the hash covers all of
-// them.
 func stageArtifacts(t *testing.T, d *Daemon, name, declaration, bundle string, views []appbuild.ViewArtifact) string {
 	t.Helper()
 	hash := appbuild.VersionHash(declaration, []byte(bundle), views)
@@ -66,8 +51,6 @@ func declarationFor(name, note string) string {
 	return fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts","note":%q}`, name, note)
 }
 
-// declarationWithView is the frozen snapshot of an app that declares one view —
-// the shape the daemon reads back to know which artifacts a version is made of.
 func declarationWithView(name, view string) string {
 	return fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts","views":[{"name":%q,"kind":"tile","title":"Pending","entrypoint":"src/views/%s.tsx"}]}`,
 		name, view, view)
@@ -91,7 +74,6 @@ func appRollback(t *testing.T, d *Daemon, name string, versionID int) protocol.R
 	return docCall(t, func(c net.Conn) { d.handleAppRollback(c, msg) })
 }
 
-// applyOK stages a bundle and applies it, failing the test on refusal.
 func applyOK(t *testing.T, d *Daemon, name, declaration, bundle string) *protocol.AppApplyResult {
 	t.Helper()
 	hash := stageArtifact(t, d, name, declaration, bundle)
@@ -159,8 +141,6 @@ func TestAppApplyRecordsTheVersionAndPublishesTheFact(t *testing.T) {
 	}
 }
 
-// Byte-identical content is the same version. The row count is the assertion
-// that matters: a dev loop rebuilding identical output must not grow history.
 func TestAppApplyByteIdenticalReusesTheVersionRow(t *testing.T) {
 	d := appApplyDaemon(t)
 	declaration := declarationFor("approval-gate", "first")
@@ -181,8 +161,6 @@ func TestAppApplyByteIdenticalReusesTheVersionRow(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("versions = %d, want 1", count)
 	}
-	// The pointer did not move, so there is nothing to tell the runtime about:
-	// a fact here would have it drain and reload for no reason.
 	if facts := versionChangedFacts(t, d); len(facts) != 1 {
 		t.Fatalf("facts = %d, want the one from the first apply", len(facts))
 	}
@@ -209,15 +187,11 @@ func TestAppApplyChangedContentMintsAVersionAndFlips(t *testing.T) {
 	}
 }
 
-// A hash that does not describe the bytes on disk is refused, and nothing is
-// recorded: a version row that names content the daemon never read would make
-// the whole content-addressed scheme decorative.
 func TestAppApplyRefusesAnArtifactThatDoesNotMatchItsHash(t *testing.T) {
 	d := appApplyDaemon(t)
 	declaration := declarationFor("approval-gate", "first")
 	hash := stageArtifact(t, d, "approval-gate", declaration, "export default {}\n")
 
-	// Same hash, different bytes underneath it.
 	if err := os.WriteFile(appbuild.ArtifactPath(d.appsDir, "approval-gate", hash), []byte("tampered\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -248,9 +222,6 @@ func TestAppApplyRefusesAMissingArtifact(t *testing.T) {
 	}
 }
 
-// A version is every artifact it holds. The daemon reads the views its
-// declaration names and hashes them with the bundle, so a version whose views
-// moved cannot be recorded under a hash that describes the old ones.
 func TestAppApplyHashesTheViewsToo(t *testing.T) {
 	d := appApplyDaemon(t)
 	declaration := declarationWithView("approval-gate", "approvals")
@@ -261,8 +232,6 @@ func TestAppApplyHashesTheViewsToo(t *testing.T) {
 		t.Fatalf("apply refused a correctly built version: %s", protocol.Deref(resp.Error))
 	}
 
-	// The same bundle and declaration with a different view is a different
-	// version, and claiming the old hash for it is refused.
 	edited := []appbuild.ViewArtifact{{Name: "approvals", Content: []byte("export default function B(){}\n")}}
 	if same := appbuild.VersionHash(declaration, []byte("export default {}\n"), edited); same == hash {
 		t.Fatal("editing only a view left the version hash unchanged")
@@ -280,9 +249,6 @@ func TestAppApplyHashesTheViewsToo(t *testing.T) {
 	}
 }
 
-// A declared view with no artifact is refused by name: the daemon cannot check a
-// hash over content it does not have, and recording the version anyway would
-// leave a row naming a view nothing can serve.
 func TestAppApplyRefusesADeclaredViewWithNoArtifact(t *testing.T) {
 	d := appApplyDaemon(t)
 	declaration := declarationWithView("approval-gate", "approvals")
@@ -372,9 +338,6 @@ func TestAppRollbackToANamedVersion(t *testing.T) {
 		t.Fatalf("rolled back to %d, want %d", resp.AppRollbackResult.VersionID, first.VersionID)
 	}
 
-	// An explicit rollback is a pointer move like any other, so it records what it
-	// replaced: bare rollback now goes back to the version that was serving a
-	// moment ago, even though that means moving to a higher id.
 	resp = appRollback(t, d, "approval-gate", 0)
 	if !resp.Ok {
 		t.Fatalf("rollback: %v", protocol.Deref(resp.Error))
@@ -385,9 +348,6 @@ func TestAppRollbackToANamedVersion(t *testing.T) {
 	}
 }
 
-// The bug this pointer exists for: an operator who rolled a broken version off
-// and then applied a fix has the broken version sitting one id below the
-// pointer. Bare rollback must return to what was running, not to what broke.
 func TestAppRollbackSkipsAVersionThatWasRolledOff(t *testing.T) {
 	d := appApplyDaemon(t)
 	good := applyOK(t, d, "approval-gate", declarationFor("approval-gate", "good"), "export default {}\n")
@@ -413,9 +373,6 @@ func TestAppRollbackSkipsAVersionThatWasRolledOff(t *testing.T) {
 	}
 }
 
-// Each bare rollback walks one step further back, and the oldest version on the
-// history is the bottom: rolling back again refuses and lists the versions
-// rather than wrapping around onto something the operator already rejected.
 func TestAppRollbackWalksOneStepFurtherBackEachTime(t *testing.T) {
 	d := appApplyDaemon(t)
 	first := applyOK(t, d, "approval-gate", declarationFor("approval-gate", "first"), "export default {}\n")
@@ -445,9 +402,6 @@ func TestAppRollbackWalksOneStepFurtherBackEachTime(t *testing.T) {
 	}
 }
 
-// Applying starts the history again from where the walk stopped, so the way back
-// from a fix is what was actually running when it was applied — not the versions
-// the walk already went past.
 func TestAppApplyRestartsTheRollbackWalk(t *testing.T) {
 	d := appApplyDaemon(t)
 	first := applyOK(t, d, "approval-gate", declarationFor("approval-gate", "first"), "export default {}\n")
@@ -475,17 +429,12 @@ func TestAppApplyRestartsTheRollbackWalk(t *testing.T) {
 	if p := resp.AppRollbackResult.PreviousVersionID; p == nil || *p != fixed.VersionID {
 		t.Fatalf("previous = %v, want %d", p, fixed.VersionID)
 	}
-	// One step is all the restarted history has: the versions below belong to the
-	// walk that was left behind.
 	if resp := appRollback(t, d, "approval-gate", 0); resp.Ok {
 		t.Fatalf("a second rollback off the fix moved to %d, want the bottom to refuse",
 			resp.AppRollbackResult.VersionID)
 	}
 }
 
-// An app on its first version has nothing below it on its serving history, and
-// the numerically previous id is not a substitute. The refusal has to name the
-// situation and list the versions, because that is all the caller gets.
 func TestAppRollbackAtTheBottomOfTheHistoryRefusesLoudly(t *testing.T) {
 	d := appApplyDaemon(t)
 	only := applyOK(t, d, "approval-gate", declarationFor("approval-gate", "first"), "export default {}\n")
@@ -503,9 +452,6 @@ func TestAppRollbackAtTheBottomOfTheHistoryRefusesLoudly(t *testing.T) {
 	}
 }
 
-// Re-applying byte-identical content moves nothing, so it must not overwrite the
-// predecessor with the current version — that would strand an app on its newest
-// version with nowhere to roll back to after an idle dev loop.
 func TestAppRollbackSurvivesAReapplyOfTheCurrentVersion(t *testing.T) {
 	d := appApplyDaemon(t)
 	first := applyOK(t, d, "approval-gate", declarationFor("approval-gate", "first"), "export default {}\n")
@@ -531,7 +477,6 @@ func TestAppRollbackRefusesAVersionThatIsNotTheApps(t *testing.T) {
 		t.Fatal("rollback accepted another app's version")
 	}
 	msg := protocol.Deref(resp.Error)
-	// Naming what does exist is the point: the reader's next move is picking one.
 	if !strings.Contains(msg, fmt.Sprint(mine.VersionID)) || !strings.Contains(msg, "current") {
 		t.Errorf("error does not list this app's versions: %s", msg)
 	}

@@ -1,19 +1,5 @@
-// Running one handler: load the version's bundle, find the handler the daemon
-// named, and call it with a context scoped to the app.
-//
-// Two rules shape this file.
-//
-// The daemon decides which handler runs. It holds the frozen declaration and the
-// same pattern-matching the bus filter uses, so resolving an event name to a
-// subscription here would be a second implementation of a rule that already
-// exists — free to drift, and drifting silently.
-//
-// A version is a path. Versions are content-addressed, so every distinct build
-// lives at its own absolute path and `import()` caches by path: a new version is
-// a fresh module by construction, and an in-flight dispatch keeps running the one
-// it started on. Nothing unloads, nothing is invalidated, and a stale bundle
-// cannot be served — the failure mode a reload-by-name cache exists to fight
-// simply has no way to occur here.
+// Running one handler: load the version's bundle, find the handler the daemon named,
+// and call it with a context scoped to the app. The daemon decides which handler runs.
 
 import { pathToFileURL } from "node:url"
 import { RpcConnection } from "./rpc.ts"
@@ -90,14 +76,8 @@ export interface ReconcileParams {
 /** A handler of either kind: the first argument is the fact or the payload. */
 type Handler = (arg: unknown, ctx: unknown) => unknown
 
-/**
- * What an app's entrypoint default-exports: one map per kind of handler.
- *
- * The kind is structure rather than a naming convention, and this is where that
- * pays: which map to index in is decided by which method the daemon called, so
- * a command and a subscription of the same name are two different handlers and
- * no key can be ambiguous.
- */
+// What an app's entrypoint default-exports: one map per kind of handler, so a command
+// and a subscription of the same name are two different handlers.
 type Bundle = {
   subscriptions?: Record<string, Handler>
   commands?: Record<string, Handler>
@@ -106,29 +86,16 @@ type Bundle = {
 
 type HandlerKind = "subscriptions" | "commands"
 
-/**
- * Bundles already imported, by absolute path. It only ever grows, which is
- * correct for the lifetime of one runtime: a version that ran is a version that
- * can run again on a rollback, and the entries are small. A runtime restart is
- * what empties it, and the supervisor provides those.
- */
+// Bundles already imported, by absolute path. It only ever grows; a runtime restart is
+// what empties it.
 const modules = new Map<string, Promise<Bundle>>()
 
-/**
- * Which app each loaded bundle belongs to. It is how an error that escaped every
- * handler is traced back to whose code it came from: a rejection can surface long
- * after the dispatch that started it returned, so "which app is running" names an
- * innocent, while the stack still carries the content-addressed bundle path.
- */
+// Which app each loaded bundle belongs to: how an error that escaped every handler is
+// traced back to whose code it came from.
 const appByArtifact = new Map<string, string>()
 
-/**
- * The app whose bundle appears in this stack, if any.
- *
- * Empty when nothing matches — a rejection from the host's own code, or a reason
- * that is not an Error and carries no stack at all. Nothing is charged then;
- * guessing is worse than not knowing.
- */
+// The app whose bundle appears in this stack, if any. Empty when nothing matches;
+// nothing is charged then.
 export function appForStack(stack: string): string {
   for (const [artifact, app] of appByArtifact) {
     if (stack.includes(artifact)) return app
@@ -142,8 +109,7 @@ async function loadBundle(artifact: string): Promise<Bundle> {
     pending = importBundle(artifact)
     modules.set(artifact, pending)
     // A bundle that fails to import must not be remembered as broken forever: the
-    // artifact may be mid-write, or the disk may have had a bad moment, and the
-    // bus is going to retry this delivery.
+    // artifact may be mid-write, and the bus is going to retry this delivery.
     pending.catch(() => modules.delete(artifact))
   }
   return pending
@@ -176,9 +142,8 @@ function collectionsFor(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const name of declared) {
-    // Every call carries the dispatch id and the collection, and no namespace:
-    // the daemon resolves which app is asking from its own record of the dispatch
-    // in flight, so an app cannot name a namespace at all, let alone another's.
+    // Every call carries the dispatch id and no namespace: the daemon resolves which app
+    // is asking, so an app cannot name a namespace at all, let alone another's.
     const call = (op: string, params: Record<string, unknown>) =>
       conn.call(`app.collection.${op}`, { dispatch, collection: name, ...params })
     out[name] = {
@@ -208,14 +173,8 @@ function contextFor(
   }
 }
 
-/**
- * Runs one dispatch and describes what happened.
- *
- * A handler that throws produces `{ok: false, error}` — a normal answer, not an
- * RPC failure. The distinction is what lets the daemon tell an app's fault from
- * the runtime's: only a transport error or a dead process reaches the daemon as
- * an RPC failure, and only those are the runtime's to answer for.
- */
+// Runs one dispatch and describes what happened. A handler that throws produces
+// `{ok: false, error}`; only transport errors reach the daemon as an RPC failure.
 export async function runDispatch(
   conn: RpcConnection,
   params: DispatchParams,
@@ -238,15 +197,8 @@ export async function runDispatch(
   }
 
   const ctx = contextFor(conn, params)
-  // Announced before the call, because a handler that never yields would keep any
-  // later announcement from ever being written. This is the daemon's only witness
-  // of which handler is on the event loop, and it needs it exactly when this
-  // process has stopped answering everything else.
-  //
-  // Both halves matter. Without the second, an entry outlives the handler and
-  // names it for a freeze it is no longer part of; the daemon would have to guess
-  // when a handler left, and the only signal it could guess from — the loop still
-  // turning — says nothing about a handler that yielded and never settled.
+  // Announced before the call, because a handler that never yields would keep any later
+  // announcement from being written; the `left` half keeps an entry from outliving it.
   const scope = { dispatch: params.dispatch, app: params.app }
   conn.notify("app_runtime.entered", scope)
   try {
@@ -259,15 +211,8 @@ export async function runDispatch(
   }
 }
 
-/**
- * Runs one command a view invoked, and describes what happened.
- *
- * It is runDispatch with a different argument and an answer that carries a
- * value. Everything that makes a handler run — the module cache keyed by the
- * content-addressed artifact, the app-scoped collections, the entered/left
- * announcements that let the daemon name whoever froze the shared loop — is the
- * same code, reading a different group of the same default export.
- */
+// Runs one command a view invoked. It is runDispatch with a different argument and an
+// answer that carries a value, reading a different group of the same default export.
 export async function runCommand(
   conn: RpcConnection,
   params: CommandParams,
@@ -294,9 +239,8 @@ export async function runCommand(
   conn.notify("app_runtime.entered", scope)
   try {
     const payload = await handler(params.payload, ctx)
-    // undefined is "returned nothing", and JSON has no word for it: leaving the
-    // field off is what tells the caller that apart from a handler that
-    // deliberately returned null.
+    // undefined is "returned nothing", and JSON has no word for it: leaving the field
+    // off distinguishes it from a handler that deliberately returned null.
     return payload === undefined ? { ok: true } : { ok: true, payload }
   } catch (err) {
     return { ok: false, error: describeFailure(err) }
@@ -341,13 +285,8 @@ export async function runReconcile(
   }
 }
 
-/**
- * What to say when the manifest declared something the bundle does not export.
- *
- * The generated Handlers type makes this a compile error at apply time, so
- * reaching it means the bundle is out of step with the declaration it was
- * stored beside — worth naming exactly, because nothing else in the system can.
- */
+// What to say when the manifest declared something the bundle does not export. The
+// generated Handlers type makes this a compile error at apply time.
 function missingHandler(
   bundle: Bundle,
   kind: HandlerKind,

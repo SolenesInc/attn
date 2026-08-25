@@ -18,8 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// installActivityRunner wires the activity executor onto a fast in-test queue and
-// turns the feature on with a Claude config the fake executable satisfies.
 func installActivityRunner(t *testing.T, d *Daemon) {
 	t.Helper()
 	d.store.SetSetting(SettingActivityEnabled, "true")
@@ -42,8 +40,6 @@ func installActivityRunner(t *testing.T, d *Daemon) {
 	d.jobQueue = runner
 }
 
-// watchingClient puts the daemon in the watching tier, which is what every test
-// that expects a run needs — away is a hard stop.
 func watchingClient(d *Daemon) {
 	d.wsHub.clients[&wsClient{presence: clientPresence{
 		Visible:          true,
@@ -62,7 +58,6 @@ func addActivitySession(t *testing.T, d *Daemon, id string, state protocol.Sessi
 	})
 }
 
-// writeActivityTranscript writes a Claude JSONL transcript and returns its path.
 func writeActivityTranscript(t *testing.T, texts ...string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "transcript.jsonl")
@@ -100,8 +95,6 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 	watchingClient(d)
 
 	transcriptPath := writeActivityTranscript(t, "I am going to run the frontend tests now")
-	// Seed a cursor so the run reads a delta rather than taking the cold-start
-	// path, then append the event the line should be about.
 	d.store.UpdateSessionActivity("session-1", "reading the plan", time.Now(), seedActivityCursor(t, transcriptPath))
 	appendActivityTranscript(t, transcriptPath, "the suite is running")
 
@@ -115,8 +108,6 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 	waitForTaskState(t, d, sessionActivityKind, "session-1", jobs.StateDone)
 
 	stored := d.store.GetSessionActivity("session-1")
-	// The trailing period is sanitized away: a dashboard row is a fragment, not
-	// a sentence.
 	if stored.Line != "running the frontend test suite" {
 		t.Errorf("line = %q", stored.Line)
 	}
@@ -124,8 +115,6 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 		t.Error("cursor was not advanced, so the next run would re-read this window")
 	}
 
-	// The run must be tool-less and bounded, and must split its prompt so the
-	// invariant half replaces the CLI's own system prompt.
 	if !seen.DisableTools {
 		t.Error("the run was allowed tools; an activity line has no business touching the filesystem")
 	}
@@ -138,7 +127,6 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 	if !strings.Contains(seen.Prompt, "the suite is running") {
 		t.Errorf("prompt does not carry the new events:\n%s", seen.Prompt)
 	}
-	// The previous line is the anchor that makes a near-empty window useful.
 	if !strings.Contains(seen.Prompt, "reading the plan") {
 		t.Errorf("prompt does not carry the previous line:\n%s", seen.Prompt)
 	}
@@ -147,9 +135,6 @@ func TestActivityExecutorStoresTheGeneratedLine(t *testing.T) {
 	}
 }
 
-// A transcript that has not moved has nothing new to say, and the line already
-// there is still true. Spending a run on it is the waste the whole design exists
-// to avoid.
 func TestActivityExecutorSkipsAnUnmovedTranscript(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -176,9 +161,6 @@ func TestActivityExecutorSkipsAnUnmovedTranscript(t *testing.T) {
 	}
 }
 
-// Cold start must not scan a transcript that can reach tens of megabytes to
-// produce a first line, and must not summarize a session's whole history as if
-// it were the present.
 func TestActivityExecutorSeedsRatherThanScanningOnColdStart(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -208,9 +190,6 @@ func TestActivityExecutorSeedsRatherThanScanningOnColdStart(t *testing.T) {
 	}
 }
 
-// Claude compaction rewrites the transcript, which invalidates the stored
-// cursor. That is normal, not exceptional: re-seed and skip one generation
-// rather than failing the job forever against a cursor that will never validate.
 func TestActivityExecutorReseedsAfterTheTranscriptIsRewritten(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -221,8 +200,6 @@ func TestActivityExecutorReseedsAfterTheTranscriptIsRewritten(t *testing.T) {
 	stale := seedActivityCursor(t, transcriptPath)
 	d.store.UpdateSessionActivity("session-1", "running the test suite", time.Now(), stale)
 
-	// Compaction: same path, entirely new content, so the cursor's fingerprint
-	// no longer matches.
 	if err := os.Remove(transcriptPath); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -245,7 +222,6 @@ func TestActivityExecutorReseedsAfterTheTranscriptIsRewritten(t *testing.T) {
 	}
 }
 
-// A blank answer must never overwrite a line that is still true.
 func TestActivityExecutorKeepsThePreviousLineWhenNothingUsableCameBack(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -268,13 +244,10 @@ func TestActivityExecutorKeepsThePreviousLineWhenNothingUsableCameBack(t *testin
 	}
 }
 
-// away multiplies the bill by zero, including for a job that was already queued
-// when the user walked away.
 func TestActivityExecutorGeneratesNothingWhenAway(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
 	installActivityRunner(t, d)
-	// No client reports presence: the tier is away.
 
 	transcriptPath := writeActivityTranscript(t, "first")
 	d.store.UpdateSessionActivity("session-1", "running the test suite", time.Now(), seedActivityCursor(t, transcriptPath))
@@ -289,8 +262,6 @@ func TestActivityExecutorGeneratesNothingWhenAway(t *testing.T) {
 	waitForTaskState(t, d, sessionActivityKind, "session-1", jobs.StateDone)
 }
 
-// Enqueue is where the cheap refusals live: nothing should reach the queue when
-// the feature is off or the user is away.
 func TestEnqueueSessionActivityRefusesBeforeQueueing(t *testing.T) {
 	newDaemon := func(t *testing.T) (*Daemon, string) {
 		d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -328,8 +299,6 @@ func TestEnqueueSessionActivityRefusesBeforeQueueing(t *testing.T) {
 	})
 }
 
-// The scan tick fires far more often than any tier interval, so it is the
-// interval — not the tick — that has to hold a session back.
 func TestActivityScanRespectsTheTierInterval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -338,8 +307,6 @@ func TestActivityScanRespectsTheTierInterval(t *testing.T) {
 	d.store.SetSetting(SettingActivityIntervals, `{"watching":120,"present":300}`)
 
 	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first", "second")
-	// Inside the window, and the transcript HAS moved since the line was
-	// generated — so only the interval can hold this session back.
 	generatedInsideWindow := time.Now().Add(-10 * time.Second)
 	d.store.UpdateSessionActivity("session-1", "running the test suite", generatedInsideWindow, "v1:abc:1:0")
 	touchFile(t, transcriptPath, time.Now())
@@ -349,8 +316,6 @@ func TestActivityScanRespectsTheTierInterval(t *testing.T) {
 	}
 	assertNoActivityJob(t, d, "session-1")
 
-	// Past the interval, with the transcript written since, the same scan
-	// enqueues.
 	generatedAt := time.Now().Add(-5 * time.Minute)
 	d.store.UpdateSessionActivity("session-1", "running the test suite", generatedAt, "v1:abc:1:0")
 	touchFile(t, transcriptPath, generatedAt.Add(time.Minute))
@@ -362,9 +327,6 @@ func TestActivityScanRespectsTheTierInterval(t *testing.T) {
 	}
 }
 
-// A transcript that has not moved costs nothing however long the interval has
-// been elapsed: the existing line is still true. This is what keeps blocked and
-// finished sessions free with the dashboard open all day.
 func TestActivityScanSkipsASessionThatHasNotWritten(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -374,7 +336,6 @@ func TestActivityScanSkipsASessionThatHasNotWritten(t *testing.T) {
 	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
 	generatedAt := time.Now().Add(-time.Hour)
 	d.store.UpdateSessionActivity("session-1", "running the test suite", generatedAt, "v1:abc:1:0")
-	// Written before the line was generated: nothing new to say.
 	touchFile(t, transcriptPath, generatedAt.Add(-time.Minute))
 
 	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
@@ -383,11 +344,6 @@ func TestActivityScanSkipsASessionThatHasNotWritten(t *testing.T) {
 	assertNoActivityJob(t, d, "session-1")
 }
 
-// A run that fails, times out, or answers with nothing leaves the stored line —
-// and its stamp — untouched. Measured against the line alone, every one of those
-// outcomes is invisible and the scan re-runs the session on every 30s tick, at a
-// rate the user never configured, with the queue resetting the attempt count each
-// time so backoff and the dead-job notification never arrive.
 func TestActivityScanHoldsAFailedRunToTheInterval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -397,8 +353,6 @@ func TestActivityScanHoldsAFailedRunToTheInterval(t *testing.T) {
 
 	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
 	touchFile(t, transcriptPath, time.Now())
-	// No stored line at all: the failed run never produced one. Only the run
-	// record can hold this session back.
 	d.noteSessionActivityRun("session-1", func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now().Add(-10 * time.Second)
 		run.SpentAt = time.Now().Add(-10 * time.Second)
@@ -409,7 +363,6 @@ func TestActivityScanHoldsAFailedRunToTheInterval(t *testing.T) {
 	}
 	assertNoActivityJob(t, d, "session-1")
 
-	// Past the interval it tries again — this is a rate limit, not a giving up.
 	d.noteSessionActivityRun("session-1", func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now().Add(-10 * time.Minute)
 		run.SpentAt = time.Now().Add(-10 * time.Minute)
@@ -422,9 +375,6 @@ func TestActivityScanHoldsAFailedRunToTheInterval(t *testing.T) {
 	}
 }
 
-// A pass that spends nothing — a cold-start seed, an empty window — still counts
-// as having looked. Otherwise the seed leaves no stamp anywhere, the transcript
-// still reads as moved, and the very next tick queues the same session again.
 func TestActivityScanTreatsASpendlessPassAsHavingLooked(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -434,7 +384,6 @@ func TestActivityScanTreatsASpendlessPassAsHavingLooked(t *testing.T) {
 	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
 	looked := time.Now()
 	touchFile(t, transcriptPath, looked.Add(-time.Minute))
-	// Looked just now and spent nothing, which is what a seed leaves behind.
 	d.noteSessionActivityRun("session-1", func(run *sessionActivityRun) { run.ObservedAt = looked })
 
 	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
@@ -442,8 +391,6 @@ func TestActivityScanTreatsASpendlessPassAsHavingLooked(t *testing.T) {
 	}
 	assertNoActivityJob(t, d, "session-1")
 
-	// And it is not a permanent block: the moment the session writes again, the
-	// seed's own stamp is what the movement is measured against.
 	touchFile(t, transcriptPath, looked.Add(time.Minute))
 	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
 		t.Fatalf("scan: %v", err)
@@ -453,9 +400,6 @@ func TestActivityScanTreatsASpendlessPassAsHavingLooked(t *testing.T) {
 	}
 }
 
-// The scan asks every session where its transcript is on every tick, and on
-// Codex answering means walking ~/.codex/sessions and opening rollouts. The
-// answer is remembered, and only two things unfix it.
 func TestActivityTranscriptPathIsRememberedUntilItMoves(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -466,22 +410,16 @@ func TestActivityTranscriptPathIsRememberedUntilItMoves(t *testing.T) {
 		t.Fatalf("resolved %q, want %q", got, transcriptPath)
 	}
 
-	// Move the whole search root out from under the finder. A re-resolve would
-	// now come back empty; the remembered path is still there and still stats.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	if got := d.sessionActivityTranscript(session); got != transcriptPath {
 		t.Errorf("resolved %q after the finder went blind, want the remembered %q", got, transcriptPath)
 	}
 
-	// A session that resumes writes to a NEW file while the old one sits on disk
-	// statting perfectly well, so the resume id is what invalidates it.
 	d.store.SetResumeSessionID("session-1", "resume-2")
 	if got := d.sessionActivityTranscript(session); got != "" {
 		t.Errorf("resolved %q after the session resumed, want a fresh resolve (which finds nothing here)", got)
 	}
 
-	// And a transcript that goes away is re-resolved too, rather than handed back
-	// as a path nothing can read.
 	restored := discoverableTranscript(t, d, "session-1", "resume-2", "first")
 	if got := d.sessionActivityTranscript(session); got != restored {
 		t.Fatalf("resolved %q, want %q", got, restored)
@@ -494,9 +432,6 @@ func TestActivityTranscriptPathIsRememberedUntilItMoves(t *testing.T) {
 	}
 }
 
-// The run takes seconds, and a user who switches the feature off during them has
-// already had every line cleared. Writing this one now would strand it on home
-// with nothing left to clear it.
 func TestActivityExecutorWritesNothingAfterTheFeatureIsTurnedOff(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -520,9 +455,6 @@ func TestActivityExecutorWritesNothingAfterTheFeatureIsTurnedOff(t *testing.T) {
 	}
 }
 
-// A generation spends seconds outside the store lock. If /new lands in that
-// window, the old transcript's answer must not restore the activity that the
-// conversation transition cleared.
 func TestActivityExecutorWritesNothingAfterTheConversationChanges(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -553,9 +485,6 @@ func TestActivityExecutorWritesNothingAfterTheConversationChanges(t *testing.T) 
 	}
 }
 
-// A feature that is on, configured, and silently failing is indistinguishable
-// from a broken one. The failure rides back on activity_status, which is the
-// only place a terminal can see it.
 func TestActivityStatusReportsWhyASessionStoppedMoving(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -574,13 +503,11 @@ func TestActivityStatusReportsWhyASessionStoppedMoving(t *testing.T) {
 	if got.Error == nil || !strings.Contains(*got.Error, "not logged in") {
 		t.Errorf("session error = %v, want the failure that stopped it", got.Error)
 	}
-	// The last good line is still worth showing; the failure says why it stopped.
 	if protocol.Deref(got.Activity) != "running the test suite" {
 		t.Errorf("activity = %q, want the last good line kept beside the failure", protocol.Deref(got.Activity))
 	}
 }
 
-// away is a hard stop for the tick too, not just for a job already queued.
 func TestActivityScanGeneratesNothingWhenAway(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -594,8 +521,6 @@ func TestActivityScanGeneratesNothingWhenAway(t *testing.T) {
 	assertNoActivityJob(t, d, "session-1")
 }
 
-// Reaching a state that wants the user is the moment the line matters most, so
-// it does not wait out the interval it would otherwise sit inside.
 func TestOpeningATurnRefreshesTheActivityLineImmediately(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -603,7 +528,6 @@ func TestOpeningATurnRefreshesTheActivityLineImmediately(t *testing.T) {
 	watchingClient(d)
 
 	discoverableTranscript(t, d, "session-1", "session-1", "first")
-	// Well inside the watching interval: the scan would refuse this session.
 	d.store.UpdateSessionActivity("session-1", "running the test suite", time.Now(), "v1:abc:1:0")
 
 	if !d.applyState(sessionStateChange{
@@ -661,8 +585,6 @@ func assertNoActivityJob(t *testing.T, d *Daemon, sessionID string) {
 	}
 }
 
-// discoverableTranscript writes a transcript where the Claude finder looks, so
-// the scan and enqueue paths resolve it exactly as they do in production.
 func discoverableTranscript(t *testing.T, d *Daemon, sessionID, nativeID string, texts ...string) string {
 	t.Helper()
 	home := t.TempDir()
@@ -693,8 +615,6 @@ func seedActivityCursor(t *testing.T, path string) string {
 	return cursor
 }
 
-// --- the CLI surface: activity_status and clear_session_activity ---
-
 func socketRoundTrip(t *testing.T, d *Daemon, msg any) protocol.Response {
 	t.Helper()
 	server, conn := net.Pipe()
@@ -711,8 +631,6 @@ func socketRoundTrip(t *testing.T, d *Daemon, msg any) protocol.Response {
 	return resp
 }
 
-// The tier is the answer to "why is nothing appearing" far more often than
-// anything else, and from a terminal there is no other way to see it.
 func TestActivityStatusReportsTheTierAndEveryLine(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -741,9 +659,6 @@ func TestActivityStatusReportsTheTierAndEveryLine(t *testing.T) {
 	}
 }
 
-// An enabled feature with no agent chosen produces nothing and says nothing on
-// the dashboard. Naming it here is the difference between "attn is broken" and
-// "finish setting it up".
 func TestActivityStatusNamesAnUnfinishedSetup(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.store.SetSetting(SettingActivityEnabled, "true")
@@ -757,9 +672,6 @@ func TestActivityStatusNamesAnUnfinishedSetup(t *testing.T) {
 	}
 }
 
-// A session that has finished never writes again, so its wrong line would stay
-// wrong forever. Clearing drops the cursor too, so the next line comes from what
-// happens next rather than the window that produced the wrong one.
 func TestClearSessionActivityForgetsTheLineAndTheCursor(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateIdle)
@@ -776,8 +688,6 @@ func TestClearSessionActivityForgetsTheLineAndTheCursor(t *testing.T) {
 	}
 }
 
-// Switching the feature off has to take its output with it: a switch that stops
-// the spending but leaves home asserting stale work is the worst of both.
 func TestDisablingActivityClearsEveryLine(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(d.stopEventBus)

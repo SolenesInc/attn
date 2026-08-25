@@ -1,9 +1,5 @@
-// Owns terminal models and on-demand scheduling; GridRenderer alone draws.
-//
-// In grid mode the models are fed from the live PTY stream (see GridView): bytes
-// arrive via writeBytes(); the grid is a pure sink and OBSERVER — it
-// processes terminal responses but never echoes them back to the PTY (that would
-// inject phantom input into the user's session).
+// The grid is an OBSERVER of the PTY stream: it drains terminal responses and
+// must never echo them back, which would inject phantom input into the session.
 import type { Ghostty, GhosttyTerminal } from '../../ghostty';
 import type { UISessionState } from '../../types/sessionState';
 import type { GridRenderer, GridRenderStats, Rect, TileFrame } from './GridRenderer';
@@ -15,18 +11,11 @@ const ZOOM_MS = 300;
 const ATTENTION_RATE = 5; // per second toward target
 const STATS_WINDOW_MS = 1000;
 
-// While a tile waits for its seed snapshot, live firehose chunks are buffered so
-// none are lost and none double-paint over the snapshot. Seeding is one
-// websocket round-trip (~ms), so this only fills for genuinely active sessions;
-// the cap bounds memory if a session floods. On overflow the OLDEST chunk is
-// dropped — it is the most likely to predate the snapshot watermark and be
-// discarded by dedup anyway.
 const MAX_SEED_BUFFER = 512;
 
 type TerminalConfig = Parameters<Ghostty['createTerminal']>[2];
 
-// Identity + presentation hint for one tile. `id` is the session's PTY runtimeId
-// — the same id PTY output events are keyed by, so writeBytes() routes by it.
+// `id` is the session's PTY runtimeId: the key PTY output events arrive under.
 export interface GridTileSpec {
   id: string;
   attention: boolean;
@@ -44,7 +33,6 @@ export interface TerminalGridStats extends GridRenderStats {
   renderIdleMs: number;
 }
 
-// Per-tile state for testing/introspection (no pixels required).
 export interface GridTileSummary {
   id: string;
   attention: number;
@@ -62,13 +50,8 @@ interface Tile {
   attention: number;
   attentionTarget: number;
   hidden: boolean;
-  // Seeding/seq state. A tile is 'live' by default (live firehose applies
-  // immediately, preserving the pre-seeding behavior). GridView flips it to
-  // 'seeding' while it fetches the snapshot; writeBytes then buffers into
-  // `pending` until seedTile/cancelSeeding drains it. `lastSeq` is the sequence
-  // watermark: live chunks with seq <= lastSeq are already baked into the
-  // snapshot and dropped. -1 means "no watermark yet" (apply everything).
   phase: 'seeding' | 'live';
+  // lastSeq: -1 means no watermark yet, so everything applies.
   lastSeq: number;
   pending: Array<{ data: Uint8Array; seq: number | undefined }>;
 }
@@ -103,11 +86,9 @@ export class TerminalGrid {
   private started = false;
   private lastNow = 0;
 
-  // reflow animation
   private reflowFrom = new Map<string, Rect>();
   private reflowStart = -1;
 
-  // zoom animation
   private zoomId: string | null = null;
   private zoomFrom = 0;
   private zoomTarget = 0;
@@ -141,17 +122,13 @@ export class TerminalGrid {
 
   setLayout(rows: number, cols: number): void {
     if (rows === this.layout.rows && cols === this.layout.cols) return;
-    // Snapshot current placement so tiles slide from where they are.
     this.beginReflow();
     this.layout = { rows, cols };
     this.visualDirty = true;
     this.requestFrame();
   }
 
-  // Snapshot every tile's resting rect under the CURRENT layout and start the
-  // reflow clock, so the next layout/membership change animates from where tiles
-  // are and — critically — forces the render-on-demand loop to paint. Call this
-  // BEFORE mutating this.layout or this.tiles.
+  // Call this BEFORE mutating this.layout or this.tiles.
   private beginReflow(): void {
     this.reflowFrom.clear();
     this.tiles.forEach((tile, i) => {
@@ -160,18 +137,10 @@ export class TerminalGrid {
     this.reflowStart = performance.now();
   }
 
-  // Reconcile the live tile set against `specs` (in placement order). Existing
-  // models are preserved by id; new sessions get a fresh model; gone sessions are
-  // freed. Attention targets are refreshed every sync.
   syncTiles(specs: GridTileSpec[]): void {
     const nextIds = new Set(specs.map((s) => s.id));
-    // A change to the tile set (removal, restore, reorder) must animate the
-    // survivors into their new slots AND force at least one render: the rAF loop
-    // is render-on-demand and a pure membership change with an unchanged grid
-    // shape dirties nothing, so without this the removed tile's stale frame stays
-    // on screen until the next dirtying event (e.g. another removal). Snapshot
-    // from the current placement before we mutate the tile list. Skip the initial
-    // mount (no prior tiles to slide from).
+    // The rAF loop is render-on-demand: a membership change under an unchanged
+    // grid shape dirties nothing, leaving the removed tile's frame on screen.
     const membershipChanged =
       this.tiles.length > 0 &&
       (specs.length !== this.tiles.length || specs.some((s, i) => this.tiles[i]?.id !== s.id));
@@ -215,12 +184,8 @@ export class TerminalGrid {
     if (this.visualDirty || membershipChanged) this.requestFrame();
   }
 
-  // Feed live PTY bytes into one tile's model. `seq` is the firehose sequence
-  // number (undefined for seq-less events like resets/replays, which can't be
-  // proven stale and so always apply). While seeding, bytes are buffered; once
-  // live, chunks at or below the seed watermark are dropped as already-painted.
-  // OBSERVER: responses are drained, never echoed — the real pane answers
-  // terminal queries.
+  // An undefined `seq` (resets, replays) cannot be proven stale, so it always
+  // applies.
   writeBytes(id: string, data: Uint8Array, seq?: number): void {
     const tile = this.tileIndex.get(id);
     if (!tile) return;
@@ -232,9 +197,6 @@ export class TerminalGrid {
     this.applyBytes(tile, data, seq);
   }
 
-  // Mark a tile as awaiting its seed snapshot. Subsequent writeBytes buffer
-  // instead of painting, so the snapshot lands on an empty model and no live
-  // bytes are lost or double-applied. Idempotent.
   beginSeeding(id: string): void {
     const tile = this.tileIndex.get(id);
     if (!tile || tile.phase === 'seeding') return;
@@ -243,10 +205,8 @@ export class TerminalGrid {
     tile.pending = [];
   }
 
-  // Paint a session's current screen into a tile, then go live. The model is
-  // resized to the snapshot geometry first (the snapshot is an absolute repaint
-  // at the session's real cols/rows; a mismatched model would clamp it). Buffered
-  // chunks newer than `lastSeq` are then flushed in order.
+  // The snapshot is an absolute repaint at the session's real cols/rows, so the
+  // model must be resized first or it clamps the paint.
   seedTile(id: string, snapshot: Uint8Array, lastSeq: number, cols?: number, rows?: number): void {
     const tile = this.tileIndex.get(id);
     if (!tile || tile.phase !== 'seeding') return;
@@ -259,9 +219,6 @@ export class TerminalGrid {
     this.flushPending(tile);
   }
 
-  // Abandon seeding (snapshot unavailable: disconnected, session gone, or an
-  // old worker). Go live and flush whatever buffered, best-effort — there is no
-  // watermark to dedup against, matching the pre-seeding apply-everything path.
   cancelSeeding(id: string): void {
     const tile = this.tileIndex.get(id);
     if (!tile || tile.phase !== 'seeding') return;
@@ -269,8 +226,6 @@ export class TerminalGrid {
     this.flushPending(tile);
   }
 
-  // Track a session's live geometry (from firehose local_resize) so the tile
-  // model keeps matching the source and the layout math scales it correctly.
   resizeTile(id: string, cols: number, rows: number): void {
     const tile = this.tileIndex.get(id);
     if (!tile || cols <= 0 || rows <= 0) return;
@@ -321,8 +276,6 @@ export class TerminalGrid {
     return tile?.model ?? null;
   }
 
-  // --- introspection (testing / automation; no pixels required) -------------
-
   getStats(): TerminalGridStats | null {
     return this.lastStats ? this.summarizeStats(performance.now()) : null;
   }
@@ -344,18 +297,14 @@ export class TerminalGrid {
     }));
   }
 
-  // The visible screen text of one tile's model, for content assertions.
   getTileText(id: string): string | null {
     const tile = this.tileIndex.get(id);
     if (!tile) return null;
     return this.modelText(tile.model);
   }
 
-  // Pointer (client coords) -> the resting tile at that point, with its
-  // container-space rect. Unlike hitTest (which reads the last animated frame),
-  // this recomputes the static grid placement on demand, so it is correct for the
-  // non-animating overview — where hover affordances like the per-tile remove
-  // button live — and is deterministic without a running render loop.
+  // Recomputes the static placement, so unlike hitTest it is correct without a
+  // running render loop.
   tileAt(clientX: number, clientY: number): { id: string; rect: Rect } | null {
     const box = this.container.getBoundingClientRect();
     const x = clientX - box.left;
@@ -371,7 +320,6 @@ export class TerminalGrid {
     return null;
   }
 
-  // Pointer (client coords) -> tile id, using the last rendered frame placement.
   hitTest(clientX: number, clientY: number): string | null {
     const box = this.container.getBoundingClientRect();
     const x = clientX - box.left;
@@ -394,7 +342,6 @@ export class TerminalGrid {
     this.requestFrame();
   }
 
-  // Repaint presentation state changed outside the terminal models.
   invalidate(): void {
     this.visualDirty = true;
     this.requestFrame();
@@ -410,8 +357,6 @@ export class TerminalGrid {
     this.renderer.dispose();
   }
 
-  // --- internals -----------------------------------------------------------
-
   private cancelZoom(): void {
     this.zoomId = null;
     this.zoomT = 0;
@@ -426,8 +371,6 @@ export class TerminalGrid {
     });
   }
 
-  // Write to the model with seq dedup, advancing the watermark. A seq-bearing
-  // chunk at or below lastSeq is already on screen, so it is dropped.
   private applyBytes(tile: Tile, data: Uint8Array, seq: number | undefined): void {
     if (seq !== undefined && tile.lastSeq >= 0 && seq <= tile.lastSeq) return;
     tile.model.write(data);
@@ -437,8 +380,6 @@ export class TerminalGrid {
     this.requestFrame();
   }
 
-  // Drain the seed buffer through applyBytes (which dedups against lastSeq), then
-  // clear it. Order is preserved.
   private flushPending(tile: Tile): void {
     const pending = tile.pending;
     tile.pending = [];
@@ -478,7 +419,6 @@ export class TerminalGrid {
     const dt = Math.min(0.1, (now - this.lastNow) / 1000);
     this.lastNow = now;
 
-    // Attention eases to a static resting emphasis, then stops.
     let attentionAnimating = false;
     let attentionChanged = false;
     for (const tile of this.tiles) {
@@ -498,7 +438,6 @@ export class TerminalGrid {
       if (tile.attention !== tile.attentionTarget) attentionAnimating = true;
     }
 
-    // Advance zoom clock.
     let zoomChanged = false;
     if (this.zoomStart >= 0) {
       const t = clamp01((now - this.zoomStart) / ZOOM_MS);
@@ -547,7 +486,6 @@ export class TerminalGrid {
         const from = this.reflowFrom.get(tile.id);
         if (from) {
           rect = lerpRect(from, base.rect, reflowT);
-          // approximate scale from width ratio so glyphs track the box
           const native = tileCols * this.metrics.cellWidth;
           scale = rect.w / native;
         }
@@ -579,9 +517,6 @@ export class TerminalGrid {
     });
   }
 
-  // `nativeCols`/`nativeRows` are the tile model's geometry (which may differ
-  // per tile once seeded to the session's real screen size), so each tile scales
-  // to fit its slot without distortion.
   private baseRect(index: number, layout: Layout, nativeCols: number, nativeRows: number): { rect: Rect; scale: number } {
     const { rows, cols } = layout;
     const W = this.container.clientWidth;

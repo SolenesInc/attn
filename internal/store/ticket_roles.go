@@ -11,8 +11,6 @@ const (
 	ticketRoleIdentityPrefix = "role:"
 )
 
-// TicketRoleIdentity returns the durable notification identity for a profile
-// role. Sessions come and go; cursors keyed by this identity do not.
 func TicketRoleIdentity(role string) string {
 	role = strings.TrimSpace(role)
 	if role == "" {
@@ -21,7 +19,6 @@ func TicketRoleIdentity(role string) string {
 	return ticketRoleIdentityPrefix + role
 }
 
-// IsTicketRoleOwner reports whether role durably owns ticketID.
 func (s *Store) IsTicketRoleOwner(role, ticketID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -39,9 +36,6 @@ func (s *Store) IsTicketRoleOwner(role, ticketID string) (bool, error) {
 	return err == nil, err
 }
 
-// TicketAssigneesOwnedByRole returns current assignees for non-archived tickets
-// owned by role. It powers the delegated-from-chief session decoration without
-// tying that decoration to the current chief session's authorship.
 func (s *Store) TicketAssigneesOwnedByRole(role string) map[string]bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

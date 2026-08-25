@@ -1,9 +1,4 @@
-// Pure detection helpers for clickable links and file paths in terminal rows.
-//
-// Detection is hover-lazy (modeled on Warp's link detection): callers only ever
-// analyze the word fragment under the pointer, cache the fragment range, and
-// re-detect when the pointer enters a different fragment. Nothing here scans
-// scrollback or runs per-write.
+// Detection is hover-lazy: nothing scans scrollback or runs per-write.
 
 export const URL_RE = /\b(?:https?:\/\/|file:\/\/|mailto:|ftp:\/\/|ssh:\/\/|git:\/\/|tel:|magnet:|gemini:\/\/|gopher:\/\/|news:)[^\s<>()]+/g;
 
@@ -27,11 +22,8 @@ export function urlAtColumn(line: string, col: number): UrlAtColumn | null {
   return null;
 }
 
-// An OSC 8 hyperlink's visible label can contain spaces or arbitrary text, so
-// its range can't be derived from the line text (unlike urlAtColumn/fragmentAtColumn).
-// uriAtIndex resolves the hidden URI at a logical index; the range is the run
-// of indices around `index` that resolve to the SAME uri — this stops the
-// scan at a boundary between two adjacent but distinct links.
+// An OSC 8 label can contain arbitrary text, so its range comes from the hidden
+// URI: the run of indices around `index` resolving to the SAME uri.
 export function hyperlinkRangeAt(
   uriAtIndex: (index: number) => string | null,
   index: number,
@@ -46,9 +38,6 @@ export function hyperlinkRangeAt(
   return { uri, startCol, endCol };
 }
 
-// A fragment is the run of non-whitespace characters around a column — the
-// unit of hover caching. Pointer movement inside one fragment must cost
-// nothing, so the boundary must be derivable from the line text alone.
 export function fragmentAtColumn(line: string, col: number): ColumnRange | null {
   const character = line[col];
   if (!character || /\s/.test(character)) return null;
@@ -71,24 +60,19 @@ const LINE_COL_RE = /:(\d{1,7})(?:[:.](\d{1,7}))?:?$/;
 
 function looksLikePath(text: string): boolean {
   if (!text || text.includes('://')) return false;
-  // `//host/...` is a URL remainder (scheme stripped at a mid-fragment start),
-  // not a filesystem path.
+  // `//host/...` is a URL remainder (scheme stripped at a mid-fragment start), not a path.
   if (text.startsWith('//')) return false;
   if (text.includes('/')) return true;
   if (text.startsWith('~')) return true;
   return /\.[A-Za-z0-9_]{1,8}$/.test(text);
 }
 
-// Candidate paths inside a hovered fragment, most-specific first, capped.
-// "(src/a.go:12:3)" yields src/a.go with line 12 / column 3; the column range
-// covers the visible path text (including the :line:col suffix) for underlining.
 export function pathCandidatesForFragment(fragment: string, fragmentStartCol: number): PathCandidate[] {
   const candidates: PathCandidate[] = [];
   const pushFrom = (offset: number) => {
     let core = fragment.slice(offset);
     const noise = core.match(TRAILING_NOISE_RE);
     if (noise) core = core.slice(0, core.length - noise[0].length);
-    // A trailing period is far more often sentence punctuation than a path char.
     while (core.endsWith('.')) core = core.slice(0, -1);
     if (!core) return;
     const startCol = fragmentStartCol + offset;
@@ -109,9 +93,6 @@ export function pathCandidatesForFragment(fragment: string, fragmentStartCol: nu
   let lead = 0;
   while (lead < fragment.length - 1 && LEADING_WRAPPERS.includes(fragment[lead])) lead += 1;
   pushFrom(lead);
-  // Paths often start mid-fragment after a non-path character — `Read(/abs/x`,
-  // `--file=/etc/x`, `path=~/y` — where the prefix is not a strippable wrapper.
-  // Add the first such start as a fallback candidate.
   for (let i = lead + 1; i < fragment.length; i += 1) {
     const character = fragment[i];
     if ((character === '/' || character === '~') && !/[A-Za-z0-9._~-]/.test(fragment[i - 1])) {
@@ -122,8 +103,6 @@ export function pathCandidatesForFragment(fragment: string, fragmentStartCol: nu
   return candidates.filter((candidate) => looksLikePath(candidate.path)).slice(0, 4);
 }
 
-// Resolve a detected path to an absolute path without touching the filesystem.
-// Existence checks are the caller's job (they are async and cached).
 export function resolveDetectedPath(path: string, cwd?: string, home?: string): string | null {
   let resolved: string;
   if (path.startsWith('/')) {
@@ -138,7 +117,6 @@ export function resolveDetectedPath(path: string, cwd?: string, home?: string): 
     if (!cwd) return null;
     resolved = `${cwd.replace(/\/$/, '')}/${path}`;
   }
-  // Normalize ./ and ../ segments so openPath receives a clean path.
   const segments: string[] = [];
   for (const segment of resolved.split('/')) {
     if (segment === '' || segment === '.') continue;
@@ -154,16 +132,12 @@ export function resolveDetectedPath(path: string, cwd?: string, home?: string): 
 
 export interface DetectedTerminalLink extends ColumnRange {
   kind: 'url' | 'path';
-  // url
   uri?: string;
-  // path
   absolutePath?: string;
   line?: number;
   column?: number;
 }
 
-// Markdown files cmd+clicked in a terminal open in attn's markdown tile
-// instead of the OS default app.
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown)$/i.test(path);
 }
@@ -173,10 +147,6 @@ export type TerminalLinkOpenAction =
   | { action: 'open-path'; path: string }
   | { action: 'open-markdown'; path: string };
 
-// Decide how a clicked terminal link opens. file:// URIs behave like detected
-// path links (Claude Code emits them via OSC 8 when citing source files).
-// Markdown paths route to the in-app markdown tile; every other path opens in
-// the OS default app.
 export function terminalLinkOpenAction(
   link: Pick<DetectedTerminalLink, 'kind' | 'uri' | 'absolutePath'>,
 ): TerminalLinkOpenAction | null {
@@ -199,32 +169,21 @@ export function terminalLinkOpenAction(
   return null;
 }
 
-// --- Cross-wrap logical lines ---
-//
-// A path or URL can soft-wrap across visual rows. Joining the rows of a
-// wrapped group into one logical line lets the single-line detectors above
-// work unchanged: every row is padded to the grid width, so logical index i
-// maps exactly to (firstRow + floor(i / cols), i % cols) and back.
-
+// Every row is padded to the grid width, so logical index i maps exactly to
+// (firstRow + floor(i / cols), i % cols) and back.
 export interface LogicalLine {
-  // Joined text; every row but the last padded with spaces to `cols`.
   text: string;
-  // First joined viewport row.
   firstRow: number;
   rowCount: number;
   cols: number;
 }
 
-// A path spanning more rows than this would be hundreds of characters long;
-// the cap bounds hover work, not correctness for realistic content.
+// The cap bounds hover work, not correctness: a path spanning more rows would be
+// hundreds of characters long.
 export const MAX_WRAP_JOIN_ROWS = 6;
 
-// Join the soft-wrapped row group containing `row` into a logical line.
-// isContinuationRow(r) answers "does row r continue the line started on row
-// r-1", which is the opposite direction from ghostty's own wrap flag. Rows
-// outside [0, rowCount) are
-// never touched; groups larger than the cap keep the rows nearest the start
-// of the budget (paths begin above the hovered row more often than below).
+// isContinuationRow(r) answers "does row r continue the line started on row r-1"
+// — the opposite direction from ghostty's own wrap flag.
 export function logicalLineAt(
   rowTextAt: (viewportRow: number) => string,
   isContinuationRow: (viewportRow: number) => boolean,
@@ -250,8 +209,7 @@ export function logicalIndexForCell(line: LogicalLine, row: number, col: number)
   return (row - line.firstRow) * line.cols + col;
 }
 
-// Selection-semantics span over viewport rows: rows strictly between startRow
-// and endRow cover the full grid width (matches WebGlOverlay).
+// Rows strictly between startRow and endRow cover the full grid width (matches WebGlOverlay).
 export interface LogicalSpan {
   startRow: number;
   startCol: number;

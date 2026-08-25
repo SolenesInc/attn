@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// fakeBindingStore is the one sanctioned mock-only fake in this package
-// (per AGENTS.md's "no mock-only tests except the one sanctioned
-// ResolveContinuation fake"): it exists purely to drive ResolveContinuation's
-// three branches without a real store.
+// The one mock-only fake AGENTS.md sanctions in this package, for
+// ResolveContinuation three branches alone.
 type fakeBindingStore struct {
 	binding       *Binding
 	ticketExists  bool
@@ -57,14 +55,6 @@ func TestResolveContinuationActiveBindingWithLiveTicketContinues(t *testing.T) {
 	}
 }
 
-// TestResolveContinuationOwnBindingIsFreshWithoutRelease pins the fix for the
-// hazard where a run's own claim already created the active binding (pointing
-// at this run's own reserved, not-yet-created ticket) before
-// ResolveContinuation runs: TicketExists on that ticket is false purely
-// because it hasn't been created yet, not because it was swept. Releasing
-// here would silently break singleton/per_subject continuity on every first
-// occurrence, since the very next occurrence would find no binding and start
-// a new one instead of continuing this one's still-being-born thread.
 func TestResolveContinuationOwnBindingIsFreshWithoutRelease(t *testing.T) {
 	binding := &Binding{TicketID: "own-ticket", SessionID: "s1", WorkspaceID: "w1", PaneID: "p1"}
 	fake := &fakeBindingStore{binding: binding, ticketExists: false}

@@ -20,11 +20,6 @@ func (d *Daemon) chiefOfStaffSessionID() string {
 	return strings.TrimSpace(d.store.GetProfileRole(profileRoleChiefOfStaff))
 }
 
-// isChiefOfStaffSession reports whether sessionID currently holds the
-// profile-wide chief-of-staff role. The chief is protected from being closed:
-// the close handlers consult this so an accidental ⌘W or close action cannot
-// tear down the orchestrator session. To close it deliberately, unset the chief
-// role first (set_chief_of_staff false).
 func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -33,8 +28,6 @@ func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	return d.chiefOfStaffSessionID() == sessionID
 }
 
-// chiefOfStaffProtectedError is the shared message returned to clients that try
-// to close the chief-of-staff session.
 const chiefOfStaffProtectedError = "chief of staff is protected from closing; unset the chief role first"
 
 func (d *Daemon) decorateChiefOfStaffWithSessionID(session *protocol.Session, chiefOfStaffSessionID string) {
@@ -48,17 +41,10 @@ func (d *Daemon) decorateChiefOfStaffWithSessionID(session *protocol.Session, ch
 	session.ChiefOfStaff = nil
 }
 
-// delegatedFromChiefSessionIDs returns the set of session IDs that the chief of
-// staff delegated, so a single broadcast can decorate every session without one
-// store lookup per session.
 func (d *Daemon) delegatedFromChiefSessionIDs() map[string]bool {
 	if d.store == nil {
 		return nil
 	}
-	// Two eras, one set: a delegation dispatched after tickets retired records
-	// the chief on its dispatch record, and one still bound to a ticket the chief
-	// owns is still on the board. The union is what keeps the badge from
-	// disappearing at the cutover and from vanishing off in-flight work.
 	delegated := d.store.TicketAssigneesOwnedByRole(store.TicketRoleChiefOfStaff)
 	if delegated == nil {
 		delegated = map[string]bool{}
@@ -69,9 +55,8 @@ func (d *Daemon) delegatedFromChiefSessionIDs() map[string]bool {
 	return delegated
 }
 
-// decorateDelegatedFromChief marks a session that was delegated from the chief
-// of staff. Mirrors decorateChiefOfStaffWithSessionID: the field is set only
-// when true and cleared otherwise so it round-trips as an omitted boolean.
+// Set only when true and cleared otherwise, so it round-trips as an omitted
+// boolean.
 func (d *Daemon) decorateDelegatedFromChief(session *protocol.Session, delegatedFromChief map[string]bool) {
 	if session == nil {
 		return
@@ -124,20 +109,8 @@ func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
 	return true
 }
 
-// maybeAssignChiefOnSpawn assigns the chief-of-staff role at a session's first
-// launch when the spawn requested it (the "create as chief" toggle). This is the
-// only way the very first launch injects chief guidance: ChiefGuidance is gated
-// on the role at launch time, and the post-launch promote path (reload) cannot
-// resume a zero-turn session. Setting the role here — before ptyBackend.Spawn —
-// lets the agent's async notebook-guide query (which can fire before the session
-// row exists) observe chief=true and pull the guidance, because both the role
-// check and the notebook-root resolution are independent of the sessions table.
-//
-// It is intentionally conservative: it assigns only on a genuine first launch
-// (existingSession == nil, never a reload/respawn) of a guidance-capable built-in
-// or plugin agent and only when no chief exists yet. A create-as-chief request while a chief is already
-// live is logged and ignored, never a silent role transfer. Returns whether it
-// assigned the role so the caller can roll it back if the launch then fails.
+// The role must be set BEFORE ptyBackend.Spawn: the agent's notebook-guide query can fire
+// before the session row exists, and it is what pulls the chief guidance in.
 func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool, existingSession *protocol.Session) bool {
 	if !requested || existingSession != nil || d.store == nil {
 		return false
@@ -253,15 +226,8 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	abortPrepared = false
 
 	d.publishFact(FactSessionChiefRoleChanged, sessionID, nil)
-	// Reload the agent(s) whose chief status actually changed so the new status reaches
-	// the system prompt: ChiefGuidance is injected only at agent-launch, so a live
-	// promotion/demotion must re-run the launch path. The reload is destructive
-	// (kill + resume-respawn), so fire it ONLY on a real role change — a redundant
-	// toggle (re-assigning the current chief, or demoting a session that wasn't chief,
-	// which ClearProfileRole no-ops) must not kill+respawn an innocent agent.
-	// Plugin replacements are preflighted and completed before the success result;
-	// built-in replacements remain resume-preserving and asynchronous. The behavior
-	// is symmetric — assign injects the guidance, demote drops it.
+	// ChiefGuidance is injected only at agent-launch, so a live promotion re-runs it. The
+	// reload is destructive, so fire it ONLY on a real role change.
 	if roleChanged {
 		newChiefSessionID := ""
 		if msg.ChiefOfStaff {
@@ -271,10 +237,6 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		if !preparedSessions[sessionID] {
 			go d.reloadSessionAgent(sessionID)
 		}
-		// A role transfer (promote B while A still held it) demotes A via the
-		// single-holder upsert. Reload A too so the displaced chief drops the guidance
-		// now, not whenever it next restarts. Different id → different reload lock, so
-		// this runs concurrently with the promotion reload.
 		if msg.ChiefOfStaff && previousSessionID != "" && !preparedSessions[previousSessionID] {
 			go d.reloadSessionAgent(previousSessionID)
 		}
@@ -282,8 +244,6 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)
 }
 
-// retargetChiefTicketDelivery moves only the live delivery target. Durable role
-// ownership and its cursors do not move, copy, or advance.
 func (d *Daemon) retargetChiefTicketDelivery(previousSessionID, newSessionID string) {
 	if previousSessionID != "" {
 		d.refreshTicketUnread(previousSessionID)

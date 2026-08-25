@@ -273,8 +273,6 @@ func TestSnapshotsStartingConnectedBackoffAndStopped(t *testing.T) {
 	}
 }
 
-// A child that keeps dying is parked after the configured number of restarts,
-// and parking is announced once — the daemon turns that into a notification.
 func TestParksAfterGiveUpTripwireAndAnnouncesOnce(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -322,10 +320,6 @@ func TestParksAfterGiveUpTripwireAndAnnouncesOnce(t *testing.T) {
 	}
 }
 
-// Stop-then-Ensure is what every "restart" verb is built from, and it has to
-// hand back a full restart budget. A revived child that still carries the
-// attempts that parked it would park again on its first exit, which makes the
-// way back from parked a door that opens once.
 func TestStopClearsTheRestartBudget(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -354,8 +348,6 @@ func TestStopClearsTheRestartBudget(t *testing.T) {
 	}
 	waitFor(t, func() bool { return launcher.count() == 3 })
 
-	// The proof that the budget really came back: one exit puts it in backoff
-	// rather than straight back into the park.
 	launcher.handle(2).exit(Exit{Error: "boom"})
 	waitFor(t, func() bool {
 		snapshot, _ := supervisor.Snapshot("fixture")
@@ -363,8 +355,6 @@ func TestStopClearsTheRestartBudget(t *testing.T) {
 	})
 }
 
-// Parking is reversible: the consumer's ordinary "this should be running" call
-// revives the child with a clean restart budget.
 func TestEnsureRevivesParkedChild(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -394,10 +384,6 @@ func TestEnsureRevivesParkedChild(t *testing.T) {
 	}
 }
 
-// And parking is only reversible deliberately. A caller that runs per unit of
-// traffic — the app runtime's dispatch path — must leave a parked child parked,
-// or the tripwire it crossed cannot hold: traffic would hand it a fresh restart
-// budget over and over, and every parking on the way would be announced again.
 func TestEnsureUnlessParkedLeavesAParkedChildAlone(t *testing.T) {
 	clock := newFakeClock()
 	launcher := &fakeLauncher{}
@@ -427,8 +413,6 @@ func TestEnsureUnlessParkedLeavesAParkedChildAlone(t *testing.T) {
 		return snapshot.Phase == PhaseParked
 	})
 
-	// Traffic keeps arriving. None of it restarts anything, and none of it
-	// announces a second parking.
 	for range 5 {
 		if err := supervisor.EnsureUnlessParked("fixture", launcher.start); !errors.Is(err, ErrParked) {
 			t.Fatalf("EnsureUnlessParked on a parked child = %v, want ErrParked", err)
@@ -445,7 +429,6 @@ func TestEnsureUnlessParkedLeavesAParkedChildAlone(t *testing.T) {
 		t.Fatalf("OnGiveUp calls = %d, want 1 — one parking is one announcement", announced)
 	}
 
-	// The deliberate way back still works.
 	if err := supervisor.Ensure("fixture", launcher.start); err != nil {
 		t.Fatalf("Ensure on parked child: %v", err)
 	}
@@ -473,8 +456,6 @@ func TestNeverParksWithNegativeGiveUpAfter(t *testing.T) {
 	}
 }
 
-// The child's own output lands in an append-only per-child file that survives
-// restarts, so a crash loop leaves every generation's output behind.
 func TestCapturesChildOutputPerChildAcrossRestarts(t *testing.T) {
 	clock := newFakeClock()
 	logDir := filepath.Join(t.TempDir(), "logs")
@@ -525,8 +506,6 @@ func TestStartsWithoutLogWriterWhenCaptureIsOff(t *testing.T) {
 	}
 }
 
-// A child name doubles as a log file name, so a name that could write outside
-// the log directory is refused by name rather than sanitized silently.
 func TestEnsureRefusesUnusableNames(t *testing.T) {
 	supervisor := New(Options{Clock: newFakeClock()})
 	launcher := &fakeLauncher{}

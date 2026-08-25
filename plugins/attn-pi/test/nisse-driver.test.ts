@@ -5,12 +5,6 @@ import { join } from "node:path";
 import { NisseDriver, defaultNisseModel, nisseAgentName } from "../src/nisse-driver";
 import type { DriverSpawnParams } from "../src/types";
 
-/**
- * The `nisse` launcher. What it decides is small — the model, and whether the
- * launch carries a first message — but both are the whole of what a delegated
- * conversation session is: an agent handed a brief instead of an empty pane.
- */
-
 class FakeRPC {
   readonly requests: Array<{ method: string; params: any }> = [];
 
@@ -63,9 +57,8 @@ describe("NisseDriver", () => {
   });
 
   test("a launch with no brief sets no prompt variable at all", async () => {
-    // Absent rather than empty: the host treats "set" as "there is something to
-    // say", so an empty string would make every ordinary session look like a
-    // delegation whose brief went missing.
+    // Absent rather than empty: the host treats "set" as "there is something to say", so an
+    // empty string would make every ordinary session look like a delegation.
     for (const prompt of [undefined, "", "   "]) {
       const result = await newDriver().spawn(params({ initial_prompt: prompt }));
       expect(result.env).toEqual({ ATTN_NISSE_MODEL: defaultNisseModel });

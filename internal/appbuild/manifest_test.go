@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/apps"
 )
 
-// validManifest is the shape everything here mutates one field of.
 func validManifest(t *testing.T, extra string) string {
 	t.Helper()
 	return fmt.Sprintf(`
@@ -45,12 +44,6 @@ func TestParseManifest_Valid(t *testing.T) {
 	}
 }
 
-// The manifest's idea of a legal app name has to be internal/apps' idea, because
-// the same string is the registry key, the bus consumer and the document
-// namespace. This is a differential test rather than a list of expectations: a
-// parser that grew its own regexp would have to match apps.ValidateName on every
-// one of these to stay green, and the fixtures cover each way the two rules
-// could plausibly differ.
 func TestParseManifest_NameRuleIsTheRegistrys(t *testing.T) {
 	names := []string{
 		"approval-gate", "a", "9lives", "standup-digest-v2",
@@ -81,8 +74,6 @@ func TestParseManifest_BadNameNamesTheRuleAndTheName(t *testing.T) {
 	}
 }
 
-// An unknown table must be a loud refusal, not a shrug: an app that declares
-// capabilities the runtime cannot honor would otherwise install and half-work.
 func TestParseManifest_UnknownTableNamesItAndWhatIsSupported(t *testing.T) {
 	text := validManifest(t, `
 [[tiles]]
@@ -135,9 +126,6 @@ func TestParseManifest_ReconcileDefaultsFalseAndFreezesTrue(t *testing.T) {
 	}
 }
 
-// A key attn does not understand inside a table it does is named in full, not
-// reported as its enclosing table: "collections" is supported, and saying so
-// would send the reader looking for the wrong mistake.
 func TestParseManifest_UnknownKeyInsideAKnownTableIsNamedInFull(t *testing.T) {
 	text := validManifest(t, "\nretention = \"30d\"\n")
 	_, err := ParseManifest(text)
@@ -155,7 +143,6 @@ func TestParseManifest_APIVersionGate(t *testing.T) {
 		t.Fatal("ParseManifest accepted a manifest from a newer attn")
 	}
 	msg := err.Error()
-	// Both numbers, because the reader has to know which side is behind.
 	if !strings.Contains(msg, fmt.Sprint(APIVersion+1)) || !strings.Contains(msg, fmt.Sprint(APIVersion)) {
 		t.Errorf("error %q does not name both the manifest's version and attn's", msg)
 	}
@@ -198,7 +185,6 @@ entrypoint = "src/index.ts"
 	})
 }
 
-// viewBlock is the declaration everything below mutates one field of.
 const viewBlock = `
 [[views]]
 name = "approvals"
@@ -227,8 +213,6 @@ func TestParseManifest_Views(t *testing.T) {
 	}
 }
 
-// kind is optional and the declaration records the resolved value, so a default
-// that changes in a later api version cannot rewrite what an old version meant.
 func TestParseManifest_ViewKindDefaultsToTileAndIsFrozenResolved(t *testing.T) {
 	m, err := ParseManifest(validManifest(t, strings.Replace(viewBlock, "kind = \"tile\"\n", "", 1)))
 	if err != nil {
@@ -246,9 +230,6 @@ func TestParseManifest_ViewKindDefaultsToTileAndIsFrozenResolved(t *testing.T) {
 	}
 }
 
-// A kind attn cannot mount is refused at apply, naming the kinds it does mount.
-// Installing it would give the app a view nothing renders — half-loaded, with
-// nothing saying so.
 func TestParseManifest_UnmountableViewKindIsRefused(t *testing.T) {
 	_, err := ParseManifest(validManifest(t, strings.Replace(viewBlock, `kind = "tile"`, `kind = "panel"`, 1)))
 	if err == nil {
@@ -290,8 +271,6 @@ func TestParseManifest_ViewRefusals(t *testing.T) {
 	})
 }
 
-// The view name rule is internal/apps', because the same string is a file name
-// in the version directory and a segment of the `app:<app>/<view>` tile kind.
 func TestParseManifest_ViewNameRuleIsTheRegistrys(t *testing.T) {
 	names := []string{
 		"approvals", "a", "9lives", "pending-v2",
@@ -318,8 +297,6 @@ func TestParseManifest_ViewParams(t *testing.T) {
 		t.Fatalf("params = %+v", m.Views[0].Params)
 	}
 
-	// A params block with nothing to put on the field is a picker asking for an
-	// unlabelled string, which is a question the user cannot answer.
 	unlabelled := viewBlock + `params = { placeholder = "victorarias/attn" }` + "\n"
 	_, err = ParseManifest(validManifest(t, unlabelled))
 	if err == nil || !strings.Contains(err.Error(), "label") {
@@ -327,9 +304,6 @@ func TestParseManifest_ViewParams(t *testing.T) {
 	}
 }
 
-// The relaxation A5 makes to A4's rule: a view is something that runs, so an app
-// that is all view and no handler is a whole app. What stays refused is a
-// manifest declaring neither.
 func TestParseManifest_AViewCountsAsSomethingThatRuns(t *testing.T) {
 	text := `
 name = "board"
@@ -353,13 +327,11 @@ entrypoint = "src/index.ts"
 	if err == nil || !strings.Contains(err.Error(), "nothing would ever run it") {
 		t.Fatalf("err = %v, want a refusal explaining the app could never run", err)
 	}
-	// The refusal has to name both ways in, or it teaches half the rule.
 	if !strings.Contains(err.Error(), "[[views]]") || !strings.Contains(err.Error(), "[[subscribe]]") {
 		t.Errorf("error %q does not name both ways an app can run", err)
 	}
 }
 
-// commandBlock is what a view's button is bound to.
 const commandBlock = `
 [[commands]]
 name = "approve"
@@ -404,9 +376,6 @@ func TestParseManifest_CommandRefusals(t *testing.T) {
 	}
 }
 
-// A command is invoked from a view. An app that declares one and has neither a
-// view nor a subscription could never run it, and the refusal says which of the
-// two is missing rather than repeating the generic "nothing would run it".
 func TestParseManifest_ACommandAloneIsNotSomethingThatRuns(t *testing.T) {
 	text := `
 name = "board"
@@ -422,8 +391,6 @@ entrypoint = "src/index.ts"
 	}
 }
 
-// The daemon holds the frozen declaration and nothing else, so what an app
-// answers is read back out of it — same rule as the views beside it.
 func TestDeclaredCommands(t *testing.T) {
 	m, err := ParseManifest(validManifest(t, viewBlock+commandBlock))
 	if err != nil {
@@ -442,8 +409,6 @@ func TestDeclaredCommands(t *testing.T) {
 	}
 }
 
-// The daemon holds a version's declaration and nothing else, so reading the
-// views back out of it is what tells it which artifacts the version is made of.
 func TestDeclaredViewNames(t *testing.T) {
 	m, err := ParseManifest(validManifest(t, viewBlock))
 	if err != nil {
@@ -458,15 +423,11 @@ func TestDeclaredViewNames(t *testing.T) {
 		t.Fatalf("DeclaredViewNames() = %v, %v", names, err)
 	}
 
-	// A view name is a path segment by the time it is a file, so a declaration
-	// carrying one that is not a name is refused rather than joined into a path.
 	if _, err := DeclaredViewNames(`{"name":"x","views":[{"name":"../../etc/passwd"}]}`); err == nil {
 		t.Fatal("DeclaredViewNames accepted a name that is not a view name")
 	}
 }
 
-// A collection name the document store would refuse at write time is refused
-// here, at apply, with the app's real namespace in the message.
 func TestParseManifest_CollectionsAreCheckedAgainstTheStore(t *testing.T) {
 	text := strings.Replace(validManifest(t, ""), `name = "decisions"`, `name = "Decisions!"`, 1)
 	_, err := ParseManifest(text)
@@ -477,9 +438,6 @@ func TestParseManifest_CollectionsAreCheckedAgainstTheStore(t *testing.T) {
 		t.Errorf("error %q does not name the collection", err)
 	}
 
-	// The field check runs against the app's real namespace, which is what proves
-	// the parser asked the store about the collection this app will actually
-	// write to rather than a placeholder.
 	reserved := strings.Replace(validManifest(t, ""), `fields = ["status", "requested_by"]`, `fields = ["created_at"]`, 1)
 	err = nil
 	if _, err = ParseManifest(reserved); err == nil {
@@ -533,8 +491,6 @@ func TestLoadManifest_NoManifestSaysWhatToDo(t *testing.T) {
 	}
 }
 
-// The frozen snapshot is what a version row carries, so it has to survive the
-// round trip with the fields the runtime will read back.
 func TestManifest_DeclarationRoundTrips(t *testing.T) {
 	text := strings.Replace(validManifest(t, ""), `entrypoint = "src/index.ts"`, "entrypoint = \"src/index.ts\"\nreconcile = true", 1)
 	m, err := ParseManifest(text)

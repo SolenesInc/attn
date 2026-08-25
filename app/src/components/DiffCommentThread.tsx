@@ -1,14 +1,3 @@
-/**
- * DiffCommentThread — review-comment UI rendered into a @pierre/diffs native
- * line-annotation slot.
- *
- * The library renders whatever `renderAnnotation` returns as a slotted
- * (light-DOM) child of the diff custom element, so this component is styled by
- * the app's normal CSS (see DiffView.css), not the diff's shadow styles.
- *
- * One thread groups every comment sharing the same (side, line) anchor, plus an
- * optional in-progress draft form for a brand new comment on that anchor.
- */
 import { useEffect, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { ReviewComment } from '../types/generated';
@@ -34,7 +23,6 @@ function CommentForm({ initialValue, saveLabel, onChange, onSave, onCancel }: Co
   const [value, setValue] = useState(initialValue);
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Focus the textarea and place the caret at the end when it opens.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -59,9 +47,7 @@ function CommentForm({ initialValue, saveLabel, onChange, onSave, onCancel }: Co
           setValue(e.target.value);
           onChange?.(e.target.value);
         }}
-        // Keep keystrokes from reaching the panel's global shortcut handlers.
-        // Escape is handled by the parent via the escape stack (capture phase),
-        // so it never reaches here.
+        // Keep keystrokes from reaching the panel's global shortcut handlers. Escape never reaches here: the parent handles it on the escape stack (capture phase).
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -102,9 +88,7 @@ export interface DiffCommentThreadProps {
   /** Small muted note rendered above the thread (e.g. flagging that this
    * anchor was re-positioned from a line outside the visible diff). */
   caption?: string;
-  /** When present, renders a "Reply" affordance at the bottom of a read-only
-   * thread that has no draft or in-progress edit — lets a reader answer an
-   * author annotation without the gutter "+" control. */
+  /** Renders a "Reply" affordance on a read-only thread with no draft or edit. */
   onReply?: () => void;
   /** Forwarded to every comment body's mermaid diagrams — see Markdown's
    * onDiagramLayoutChange for why a CodeView host needs this. */

@@ -8,45 +8,25 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-// sessionStateCause is a package-private sum type. Each variant identifies one
-// valid store commit rule and one valid set of post-commit effects.
 type sessionStateCause interface {
 	isSessionStateCause()
 }
 
-// liveSignal is the worker poll reporting the state a worker was spawned into —
-// what takes a session out of `launching`, and the only claim from outside the
-// resolver that still commits; see pty.Source.AppliesState.
 type liveSignal struct{}
 
-// resolverObservation is the resolver's verdict on its tick: all evidence re-read
-// at once, so it can move a session no source spoke about. No timestamp.
 type resolverObservation struct{}
 
-// pluginReport carries the active driver run cursor used for ordered state CAS.
 type pluginReport struct {
 	runID string
 	seq   uint64
 }
 
-// startupRecovery rewrites persisted state before clients cross the recovery
-// barrier. It deliberately produces no per-session effects or broadcasts.
 type startupRecovery struct{}
 
-// hostExitRecovery is a conversation session whose headless host is gone while
-// the daemon is still running. It moves the session to `recoverable`, which the
-// resolver does not own, so the exit evidence the same death recorded cannot
-// then settle it to something that reads as finished.
-//
-// It broadcasts, unlike startupRecovery: a client is watching this session right
-// now and its whole picture of "can I type here?" comes off the state.
 type hostExitRecovery struct{}
 
-// pluginDriverSilent is the daemon withdrawing a declaration whose driver has
-// stopped speaking for it. It commits through UpdateState rather than the run
-// cursor on purpose: the daemon is not reporting on the driver's behalf, and
-// advancing the cursor would make the driver's own next report — at its N+1 —
-// the one that gets discarded.
+// Commits through UpdateState, not the run cursor: advancing the cursor would
+// make the driver's own next report the one that gets discarded.
 type pluginDriverSilent struct{}
 
 func (liveSignal) isSessionStateCause()          {}
@@ -61,21 +41,15 @@ type sessionStateChange struct {
 	state            string
 	cause            sessionStateCause
 	requestStartedAt time.Time
-	// origin describes the evidence behind the change for the diagnostic trace;
-	// optional (zero traces under the cause name) and never affects the commit.
-	origin stateOrigin
+	origin           stateOrigin
 }
 
-// stateOrigin is where a state claim came from, as distinct from the commit
-// rule it travels under; several sources share one cause.
 type stateOrigin struct {
 	source     string
 	detail     string
 	observedAt time.Time
 }
 
-// stateEffectProfile is internal policy derived from a closed cause. Callers do
-// not assemble these flags themselves.
 type stateEffectProfile struct {
 	touch     bool
 	syncNudge bool
@@ -95,7 +69,6 @@ func stateEffectProfileFor(cause sessionStateCause) (stateEffectProfile, bool) {
 	case hostExitRecovery:
 		return stateEffectProfile{syncNudge: true, broadcast: true}, true
 	case pluginDriverSilent:
-		// No touch: nothing was seen from the session, which is the whole point.
 		return stateEffectProfile{syncNudge: true, broadcast: true}, true
 	default:
 		return stateEffectProfile{}, false
@@ -121,9 +94,6 @@ func sessionStateCauseName(cause sessionStateCause) string {
 	}
 }
 
-// applyState is the daemon's only persisted session-state transition door.
-// Cause-specific guards remain at the caller; once a transition reaches this
-// method, it owns the atomic store mutation and every accepted-state effect.
 func (d *Daemon) applyState(change sessionStateChange) bool {
 	if d.store == nil {
 		return false
@@ -135,7 +105,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		return false
 	}
 
-	// Unconditional: every state write must be ordered against a timer that may
+	// Every state write must be ordered against the auto-settle fire timer.
 	d.autoSettleFireMu.Lock()
 	var inputLane *sessionInputLane
 	if profile.syncNudge {
@@ -159,17 +129,13 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	}
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
-	// The one place a turn ever opens; runs for every cause and the store guards
-	// re-opens. A snooze suppresses only this — the state is still committed and
-	// broadcast — and a state that breaks through clears the snooze in the check.
+	// A snooze suppresses only the turn open: the state is still committed and
+	// broadcast.
 	if attention.OpensTurn(protocol.SessionState(change.state)) &&
 		!d.snoozeSuppressesTurn(change.sessionID, protocol.SessionState(change.state)) {
 		d.store.OpenTurnIfClosed(change.sessionID, time.Now())
-		// Reaching a state that wants the user is the moment the activity line
-		// matters most, so it breaks through the tier's interval. It does NOT
-		// break through `away` — enqueueSessionActivity still refuses there, and
-		// that asymmetry is the whole cost model: generating for an empty room
-		// would have cost nearly half of always-on.
+		// Breaks through the tier's interval but NOT `away`: measured, generating
+		// for an empty room would cost nearly half of always-on.
 		d.enqueueSessionActivity(change.sessionID)
 	}
 
@@ -179,14 +145,12 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if profile.syncNudge {
 		d.syncNudgeForState(change.sessionID, change.state)
 	}
-	// After the turn open above, so a state that both opens a turn and is
-	// `working` is never seen half-applied; runs for every cause.
+	// After the turn open above, or a state that opens a turn and is `working`
+	// is seen half-applied.
 	d.syncAutoSettle(change.sessionID, change.state)
 	if profile.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
-	// Last, and only for a target that owes one: a message that could not be
-	// typed when it was sent has no other rail back.
 	d.drainAgentMessagesAfterStateChange(change.sessionID, change.state)
 	return true
 }

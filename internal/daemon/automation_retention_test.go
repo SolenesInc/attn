@@ -23,9 +23,6 @@ func automationResolvedLocationJSON(t *testing.T, mainRepo, worktree string) str
 	return string(resolved)
 }
 
-// claimTerminalAutomationRun claims and immediately delivers a manual run
-// under def, backdating created_at/delivered_at to observedAt so retention
-// age math is exact and deterministic in tests.
 func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.AutomationDefinition, requestID string, observedAt time.Time, resolvedLocationJSON string) *store.AutomationRun {
 	t.Helper()
 	run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, observedAt, store.AutomationRunReservation{
@@ -44,12 +41,6 @@ func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.Automat
 	return reloaded
 }
 
-// TestAutomationRetentionSweepCountBoundary pins A3's keep-window boundary:
-// with N total terminal runs and keep=N, none are candidates (the Nth-oldest
-// is protected); adding one older run past that (N+1 total) makes exactly
-// that oldest one prunable, the newest N stay protected. Mirrors the
-// 199/200/201 boundary from the brief, shrunk via ATTN_AUTOMATION_RETENTION_KEEP
-// so the test doesn't need to mint 201 real runs.
 func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "3")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -63,8 +54,6 @@ func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
 	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	sweepAt := base.Add(48 * time.Hour)
 
-	// Three runs, oldest-to-newest: none should ever be pruned while there
-	// are only `keep` of them.
 	r1 := claimTerminalAutomationRun(t, s, def, "r1", base.Add(1*time.Minute), "{}")
 	r2 := claimTerminalAutomationRun(t, s, def, "r2", base.Add(2*time.Minute), "{}")
 	r3 := claimTerminalAutomationRun(t, s, def, "r3", base.Add(3*time.Minute), "{}")
@@ -75,8 +64,6 @@ func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
 		}
 	}
 
-	// A fourth, OLDER run pushes the count past keep=3: it becomes the sole
-	// candidate, the newest 3 remain protected.
 	r0 := claimTerminalAutomationRun(t, s, def, "r0", base, "{}")
 	d.automationRetentionSweepPass(sweepAt)
 	if got, err := s.GetAutomationRun(r0.ID); err != nil || got != nil {
@@ -89,11 +76,6 @@ func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed pins that a
-// cancelled run (e.g. withdrawn before delivery) shares failed's retention
-// window rather than being either exempt or protected indefinitely — the v2
-// state model treats delivered/failed/cancelled as equally terminal for
-// retention purposes (see store.ListPrunableAutomationRuns).
 func TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -122,9 +104,6 @@ func TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepPendingRunsNeverPruned pins that a pending run
-// is never a candidate regardless of age or the keep window (ListPrunableAutomationRuns
-// only considers delivered/failed runs).
 func TestAutomationRetentionSweepPendingRunsNeverPruned(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -150,9 +129,6 @@ func TestAutomationRetentionSweepPendingRunsNeverPruned(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepYoungRunsNeverPruned pins the age floor: a
-// terminal run younger than the min-age threshold is never a candidate even
-// with keep=0.
 func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -166,7 +142,6 @@ func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	run := claimTerminalAutomationRun(t, s, def, "young-1", now, "{}")
 
-	// Sweep at the same instant the run was delivered: age is 0 < 1h floor.
 	d.automationRetentionSweepPass(now)
 
 	if got, err := s.GetAutomationRun(run.ID); err != nil || got == nil {
@@ -174,10 +149,6 @@ func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepDirtyWorktreeBlocksPruning pins that a
-// candidate run whose worktree has uncommitted changes is skipped entirely
-// (row, artifact, and worktree all survive) — dirty evidence is never
-// deleted.
 func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -214,9 +185,6 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepCleanWorktreeRemovesEverything pins the
-// success path: a candidate run with a clean (or absent) worktree has its
-// worktree, occurrence artifact, and run+occurrence rows all removed.
 func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -262,10 +230,6 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepLiveSessionSkipped pins that a candidate run
-// whose session still exists in the store is skipped, regardless of age or
-// the keep window — the run must not be pruned out from under a live
-// session.
 func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -290,11 +254,6 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	}
 }
 
-// TestAutomationRetentionSweepReachesSoftDeletedDefinitions pins that the
-// sweep still prunes a soft-deleted definition's old runs.
-// ListAutomationDefinitionIDsIncludingDeleted exists solely for this: a
-// retired automation must not accumulate worktrees forever just because it
-// was deleted rather than left enabled.
 func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")

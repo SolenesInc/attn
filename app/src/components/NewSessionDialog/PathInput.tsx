@@ -36,7 +36,6 @@ export function PathInput({
     }
   }, [autoFocus]);
 
-  // Measure text width to position ghost text
   useLayoutEffect(() => {
     if (measureRef.current) {
       setGhostOffset(measureRef.current.offsetWidth);
@@ -49,13 +48,9 @@ export function PathInput({
       onTabComplete(completionValue);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      // Decision logic:
-      // - If user has intentionally selected (typed or arrowed), accept ghost text as completion
-      // - If user just Tabbed (hasSelectedSinceTab=false), confirm the current value
-      // - Fall back to completionValue (highlighted row) when input is empty
       const pathToSelect = (ghostText && ghostText.startsWith(value) && hasSelectedSinceTab)
-        ? ghostText  // User intentionally selected, accept ghost as completion
-        : (value || completionValue);  // User just Tabbed or input empty, use value or highlighted row
+        ? ghostText
+        : (value || completionValue);
       if (pathToSelect) {
         onSelect(pathToSelect);
         onSubmit();
@@ -63,7 +58,6 @@ export function PathInput({
     }
   }, [completionValue, ghostText, hasSelectedSinceTab, onChange, onSelect, onSubmit, onTabComplete, value]);
 
-  // Calculate ghost text to show (portion not yet typed)
   const visibleGhost = ghostText.startsWith(value)
     ? ghostText.slice(value.length)
     : '';

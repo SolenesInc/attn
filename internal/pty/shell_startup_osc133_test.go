@@ -11,11 +11,6 @@ import (
 	creackpty "github.com/creack/pty"
 )
 
-// Drives a real interactive shell through the startup overlay on a real PTY
-// and returns both the arbiter's observations and the raw byte stream, so a
-// test can assert the whole chain the poll cannot cover: command-start/end
-// state edges with the command line and exit code, and the block table
-// grouping the same stream into command blocks.
 func runShellIntegrationScenario(t *testing.T, shellPath string, env []string, commands string) ([]Observation, []byte) {
 	t.Helper()
 	if testing.Short() {
@@ -94,9 +89,6 @@ func requireObservation(t *testing.T, observations []Observation, claim, detail 
 	t.Fatalf("no %s/%q observation in %+v", claim, detail, observations)
 }
 
-// blocksFromStream runs a raw shell byte stream through the production
-// segmenter and block table — the same pieces the worker wires in
-// newBlockFeeder — with pure position refs standing in for the tracked grid.
 func blocksFromStream(t *testing.T, stream []byte) []AttachBlockData {
 	t.Helper()
 	freed := 0
@@ -114,9 +106,6 @@ func blocksFromStream(t *testing.T, stream []byte) []AttachBlockData {
 	return table.SnapshotBlocks()
 }
 
-// requireCompletedBlock asserts the stream produced a completed command block
-// carrying the given command text and exit code — the block contract the
-// injected integrations promise.
 func requireCompletedBlock(t *testing.T, blocks []AttachBlockData, command string, exitCode int32) {
 	t.Helper()
 	for _, b := range blocks {
@@ -143,15 +132,11 @@ func TestZshIntegrationEmitsCommandEdgesAndBlocks(t *testing.T) {
 		"TERM=xterm-256color",
 	}, integrationProbeCommands)
 
-	// The preexec hook marks the start of every command with its cmdline…
 	requireObservation(t, observations, claimBusy, "command started: /bin/echo attn-integration-probe")
 	requireObservation(t, observations, claimBusy, "command started: false")
-	// …and the precmd hook closes it with the real exit code.
 	requireObservation(t, observations, claimNotBusy, "command exited 0")
 	requireObservation(t, observations, claimNotBusy, "command exited 1")
 
-	// The same stream through the production block table: commands become
-	// completed blocks with command text and exit code.
 	blocks := blocksFromStream(t, stream)
 	requireCompletedBlock(t, blocks, "/bin/echo attn-integration-probe", 0)
 	requireCompletedBlock(t, blocks, "false", 1)
@@ -169,8 +154,6 @@ func TestBashIntegrationEmitsCommandEdgesAndBlocks(t *testing.T) {
 		"TERM=xterm-256color",
 	}, integrationProbeCommands)
 
-	// The DEBUG-trap pre-exec works on every bash, macOS's 3.2 included, and
-	// carries the command line.
 	requireObservation(t, observations, claimBusy, "command started: /bin/echo attn-integration-probe")
 	requireObservation(t, observations, claimBusy, "command started: false")
 	requireObservation(t, observations, claimNotBusy, "command exited 0")
@@ -181,8 +164,6 @@ func TestBashIntegrationEmitsCommandEdgesAndBlocks(t *testing.T) {
 	requireCompletedBlock(t, blocks, "false", 1)
 }
 
-// A DEBUG trap the user already owns is off limits: the integration must
-// leave it running and degrade to the PS0 fallback instead of clobbering it.
 func TestBashIntegrationLeavesAUserDebugTrapAlone(t *testing.T) {
 	root := t.TempDir()
 	userHome := filepath.Join(root, "home")
@@ -202,14 +183,10 @@ func TestBashIntegrationLeavesAUserDebugTrapAlone(t *testing.T) {
 		"ATTN_TEST_TRAP_LOG=" + trapLog,
 	}, integrationProbeCommands)
 
-	// The user's trap kept firing after startup…
 	logged, err := os.ReadFile(trapLog)
 	if err != nil || len(logged) == 0 {
 		t.Fatalf("user DEBUG trap did not survive integration: err=%v log=%q", err, logged)
 	}
-	// …and the integration never took the trap for itself: no cmdline-carrying
-	// C marks, which only the trap can produce. (PS0, where bash has it, still
-	// emits a bare C; exit codes still arrive via D.)
 	for _, obs := range observations {
 		if strings.HasPrefix(obs.Detail, "command started: ") {
 			t.Fatalf("cmdline mark emitted despite user-owned DEBUG trap: %+v", obs)
@@ -218,8 +195,6 @@ func TestBashIntegrationLeavesAUserDebugTrapAlone(t *testing.T) {
 	requireObservation(t, observations, claimNotBusy, "command exited 1")
 }
 
-// The user's opt-out: with ATTN_NO_SHELL_INTEGRATION set, the overlay never
-// sources the integration and no marks are emitted.
 func TestShellIntegrationOptOutEmitsNoMarks(t *testing.T) {
 	root := t.TempDir()
 	userZdotdir := filepath.Join(root, "user-zdotdir")

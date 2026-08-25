@@ -32,39 +32,30 @@ func (c *Client) GitHTTPSAuthorizationHeader() string {
 	return GitHTTPSAuthorizationHeader(c.token)
 }
 
-// ErrRateLimited is returned when GitHub rate limit is exceeded
 var ErrRateLimited = errors.New("GitHub rate limit exceeded")
 
-// ErrSelfRateLimited is returned when our self-imposed rate limit is exceeded
 var ErrSelfRateLimited = errors.New("self-imposed rate limit exceeded")
 
-// ErrNoToken is returned when no GitHub token is available
 var ErrNoToken = errors.New("no GitHub token available")
 
-// RateLimitInfo contains rate limit state for a resource
 type RateLimitInfo struct {
-	Resource  string    // "core" or "search"
-	Remaining int       // Requests remaining
-	ResetAt   time.Time // When the limit resets
+	Resource  string
+	Remaining int
+	ResetAt   time.Time
 }
 
-// Client is an HTTP client for the GitHub API
 type Client struct {
 	host       string
 	baseURL    string
 	token      string
 	httpClient *http.Client
 
-	// Rate limit tracking (GitHub's limits)
 	rateLimitsMu sync.RWMutex
-	rateLimits   map[string]*RateLimitInfo // keyed by resource ("core", "search")
+	rateLimits   map[string]*RateLimitInfo
 
-	// Self-imposed rate limiter to prevent accidental API spam
-	// Allows 1 request per second with burst of 60
 	selfLimiter *rate.Limiter
 }
 
-// NewClient creates a new GitHub API client with an explicit base URL and token.
 func NewClient(baseURL, token string) (*Client, error) {
 	if baseURL == "" {
 		baseURL = "https://api.github.com"
@@ -81,8 +72,7 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 	if token == "" {
 		return nil, ErrNoToken
 	}
-	// SAFETY: Refuse to use real GitHub API with test token
-	// This prevents accidental real API calls in tests
+	// SAFETY: never let a test token reach the real GitHub API.
 	if token == "test-token" && baseURL == "https://api.github.com" {
 		return nil, fmt.Errorf("refusing to use real GitHub API with test token - use a mock server URL")
 	}
@@ -95,9 +85,7 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 			Timeout: 30 * time.Second,
 		},
 		rateLimits: make(map[string]*RateLimitInfo),
-		// Self-imposed rate limiter: 1 request/second average, burst of 60
-		// This prevents accidental API spam (e.g., reconnection storms)
-		// while still allowing normal usage patterns like app launch with many PRs
+		// 1 request/second average, burst 60: absorbs an app launch with many PRs
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
 	}, nil
 }
@@ -120,14 +108,11 @@ func hostFromAPIURL(baseURL string) string {
 	return host
 }
 
-// IsAvailable returns true if the client has a valid token
 func (c *Client) IsAvailable() bool {
 	return c.token != ""
 }
 
-// doRequest performs an HTTP request with proper GitHub headers
 func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error) {
-	// Check self-imposed rate limit first
 	if !c.selfLimiter.Allow() {
 		return nil, ErrSelfRateLimited
 	}
@@ -161,7 +146,6 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	}
 	defer resp.Body.Close()
 
-	// Parse rate limit headers
 	c.parseRateLimitHeaders(resp)
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -169,7 +153,6 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	// Check for rate limit error
 	if resp.StatusCode == 403 || resp.StatusCode == 429 {
 		if remaining := resp.Header.Get("X-RateLimit-Remaining"); remaining == "0" {
 			return nil, fmt.Errorf("%w: %s", ErrRateLimited, string(respBody))
@@ -183,18 +166,17 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	return respBody, nil
 }
 
-// parseRateLimitHeaders extracts rate limit info from response headers
 func (c *Client) parseRateLimitHeaders(resp *http.Response) {
 	resource := resp.Header.Get("X-RateLimit-Resource")
 	if resource == "" {
-		resource = "core" // Default to core if not specified
+		resource = "core"
 	}
 
 	remainingStr := resp.Header.Get("X-RateLimit-Remaining")
 	resetStr := resp.Header.Get("X-RateLimit-Reset")
 
 	if remainingStr == "" || resetStr == "" {
-		return // No rate limit headers
+		return
 	}
 
 	remaining, err := strconv.Atoi(remainingStr)
@@ -216,8 +198,6 @@ func (c *Client) parseRateLimitHeaders(resp *http.Response) {
 	c.rateLimitsMu.Unlock()
 }
 
-// IsRateLimited checks if a resource is rate limited
-// Returns true if limited and the time when the limit resets
 func (c *Client) IsRateLimited(resource string) (bool, time.Time) {
 	c.rateLimitsMu.RLock()
 	defer c.rateLimitsMu.RUnlock()
@@ -227,8 +207,6 @@ func (c *Client) IsRateLimited(resource string) (bool, time.Time) {
 		return false, time.Time{}
 	}
 
-	// Check if we're below threshold (5 requests remaining)
-	// and the reset time hasn't passed yet
 	if info.Remaining < 5 && time.Now().Before(info.ResetAt) {
 		return true, info.ResetAt
 	}
@@ -236,13 +214,11 @@ func (c *Client) IsRateLimited(resource string) (bool, time.Time) {
 	return false, time.Time{}
 }
 
-// GetRateLimit returns the current rate limit info for a resource
 func (c *Client) GetRateLimit(resource string) *RateLimitInfo {
 	c.rateLimitsMu.RLock()
 	defer c.rateLimitsMu.RUnlock()
 
 	if info, ok := c.rateLimits[resource]; ok {
-		// Return a copy to avoid race conditions
 		return &RateLimitInfo{
 			Resource:  info.Resource,
 			Remaining: info.Remaining,
@@ -252,7 +228,6 @@ func (c *Client) GetRateLimit(resource string) *RateLimitInfo {
 	return nil
 }
 
-// searchResult represents GitHub search API response
 type searchResult struct {
 	TotalCount int          `json:"total_count"`
 	Items      []searchItem `json:"items"`
@@ -264,17 +239,15 @@ type searchItem struct {
 	HTMLURL       string `json:"html_url"`
 	Draft         bool   `json:"draft"`
 	RepositoryURL string `json:"repository_url"`
-	Comments      int    `json:"comments"` // Comment count for change detection
+	Comments      int    `json:"comments"`
 	User          *struct {
-		Login string `json:"login"` // PR author username
+		Login string `json:"login"`
 	} `json:"user"`
 	PullRequest *struct {
-		URL string `json:"url"` // PR API URL to fetch head SHA
+		URL string `json:"url"`
 	} `json:"pull_request"`
 }
 
-// extractRepoFromURL extracts "owner/repo" from repository_url
-// e.g., "https://api.github.com/repos/owner/repo" -> "owner/repo"
 func extractRepoFromURL(repoURL string) string {
 	re := regexp.MustCompile(`/repos/([^/]+/[^/]+)$`)
 	matches := re.FindStringSubmatch(repoURL)
@@ -284,7 +257,6 @@ func extractRepoFromURL(repoURL string) string {
 	return ""
 }
 
-// SearchAuthoredPRs searches for open PRs authored by the authenticated user
 func (c *Client) SearchAuthoredPRs() ([]*protocol.PR, error) {
 	query := url.QueryEscape("is:pr is:open author:@me")
 	path := fmt.Sprintf("/search/issues?q=%s&per_page=50", query)
@@ -301,7 +273,6 @@ func (c *Client) SearchAuthoredPRs() ([]*protocol.PR, error) {
 
 	var prs []*protocol.PR
 	for _, item := range result.Items {
-		// Skip drafts
 		if item.Draft {
 			continue
 		}
@@ -331,7 +302,6 @@ func (c *Client) SearchAuthoredPRs() ([]*protocol.PR, error) {
 	return prs, nil
 }
 
-// SearchReviewRequestedPRs searches for open PRs where authenticated user is requested reviewer
 func (c *Client) SearchReviewRequestedPRs() ([]*protocol.PR, error) {
 	query := url.QueryEscape("is:pr is:open review-requested:@me")
 	path := fmt.Sprintf("/search/issues?q=%s&per_page=50", query)
@@ -377,8 +347,6 @@ func (c *Client) SearchReviewRequestedPRs() ([]*protocol.PR, error) {
 	return prs, nil
 }
 
-// SearchReviewedByMePRs searches for open PRs where authenticated user has submitted a review
-// This catches PRs the user has approved (no longer in review-requested:@me)
 func (c *Client) SearchReviewedByMePRs() ([]*protocol.PR, error) {
 	query := url.QueryEscape("is:pr is:open reviewed-by:@me")
 	path := fmt.Sprintf("/search/issues?q=%s&per_page=50", query)
@@ -418,18 +386,16 @@ func (c *Client) SearchReviewedByMePRs() ([]*protocol.PR, error) {
 			LastUpdated:  string(protocol.TimestampNow()),
 			LastPolled:   string(protocol.TimestampNow()),
 			CommentCount: protocol.Ptr(item.Comments),
-			ApprovedByMe: true, // Will be refined based on actual review state
+			ApprovedByMe: true,
 		})
 	}
 
 	return prs, nil
 }
 
-// FetchAll fetches all PRs (authored + review requests + reviewed-by-me)
 func (c *Client) FetchAll() ([]*protocol.PR, error) {
 	prMap := make(map[string]*protocol.PR)
 
-	// 1. Authored PRs
 	authored, err := c.SearchAuthoredPRs()
 	if err != nil {
 		return nil, fmt.Errorf("fetch authored: %w", err)
@@ -438,7 +404,6 @@ func (c *Client) FetchAll() ([]*protocol.PR, error) {
 		prMap[pr.ID] = pr
 	}
 
-	// 2. Review-requested PRs (user needs to review)
 	reviewRequested, err := c.SearchReviewRequestedPRs()
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
@@ -447,14 +412,12 @@ func (c *Client) FetchAll() ([]*protocol.PR, error) {
 	for _, pr := range reviewRequested {
 		reviewRequestedSet[pr.ID] = true
 		if existing, ok := prMap[pr.ID]; ok {
-			// Already in map (authored), keep author role
 			existing.CommentCount = pr.CommentCount
 		} else {
 			prMap[pr.ID] = pr
 		}
 	}
 
-	// 3. Reviewed-by-me PRs (user has already reviewed, may have approved)
 	reviewedByMe, err := c.SearchReviewedByMePRs()
 	if err != nil {
 		// Non-fatal: reviewed-by-me is enhancement, not critical
@@ -462,20 +425,16 @@ func (c *Client) FetchAll() ([]*protocol.PR, error) {
 	}
 	for _, pr := range reviewedByMe {
 		if existing, ok := prMap[pr.ID]; ok {
-			// Already in map - just update comment count
 			existing.CommentCount = pr.CommentCount
-			// If not in review-requested, user has completed their review
 			if !reviewRequestedSet[pr.ID] && existing.Role == protocol.PRRoleReviewer {
 				existing.ApprovedByMe = true
 			}
 		} else {
-			// PR only in reviewed-by-me = user approved and is no longer requested
 			pr.ApprovedByMe = true
 			prMap[pr.ID] = pr
 		}
 	}
 
-	// Convert map to slice
 	var allPRs []*protocol.PR
 	for _, pr := range prMap {
 		allPRs = append(allPRs, pr)
@@ -484,18 +443,15 @@ func (c *Client) FetchAll() ([]*protocol.PR, error) {
 	return allPRs, nil
 }
 
-// PRDetails contains detailed PR status
 type PRDetails struct {
 	Mergeable      *bool
 	MergeableState string
 	CIStatus       string
 	ReviewStatus   string
-	HeadSHA        string // Current commit SHA for change detection
-	HeadBranch     string // Branch name (for worktree creation)
+	HeadSHA        string
+	HeadBranch     string
 }
 
-// PullRequestSnapshot is the single-read provider payload used to pin a manual
-// automation review before any durable run is claimed.
 type PullRequestSnapshot struct {
 	Number         int
 	URL            string
@@ -512,8 +468,6 @@ type PullRequestSnapshot struct {
 	BaseRepository string
 }
 
-// FetchPullRequestSnapshot performs exactly one read-only PR GET. It does not
-// fetch reviews, checks, comments, or any other mutable collaboration surface.
 func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequestSnapshot, error) {
 	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
 	if err != nil {
@@ -555,10 +509,7 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 	}, nil
 }
 
-// FetchPRState fetches a PR's definitive lifecycle state in a single GET to
-// /repos/{repo}/pulls/{number}: state ("open"/"closed"), whether it was
-// merged, and its title. Deliberately not built on FetchPRDetails, which
-// makes extra review-related calls — this is one targeted request.
+// Deliberately not built on FetchPRDetails, which makes extra review calls.
 func (c *Client) FetchPRState(repo string, number int) (state string, merged bool, title string, err error) {
 	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
 	if err != nil {
@@ -575,9 +526,7 @@ func (c *Client) FetchPRState(repo string, number int) (state string, merged boo
 	return prData.State, prData.Merged, prData.Title, nil
 }
 
-// FetchPRDetails fetches detailed status for a PR
 func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
-	// Fetch PR details
 	prPath := fmt.Sprintf("/repos/%s/pulls/%d", repo, number)
 	prBody, err := c.doRequest("GET", prPath, nil)
 	if err != nil {
@@ -603,25 +552,19 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 		HeadBranch:     prData.Head.Ref,
 	}
 
-	// Derive CI status from mergeable_state (no extra API call needed)
-	// This is more accurate than check-runs because it accounts for:
-	// - Required status checks from branch protection/rulesets
-	// - Merge conflicts
-	// - All blocking conditions GitHub enforces
 	switch prData.MergeableState {
 	case "clean":
-		details.CIStatus = "success" // Ready to merge
+		details.CIStatus = "success"
 	case "blocked":
-		details.CIStatus = "pending" // Required checks not passed
+		details.CIStatus = "pending"
 	case "dirty":
-		details.CIStatus = "failure" // Merge conflicts
+		details.CIStatus = "failure"
 	case "unstable":
-		details.CIStatus = "pending" // CI failing but not blocking
+		details.CIStatus = "pending"
 	default:
 		details.CIStatus = "none"
 	}
 
-	// Fetch review status
 	reviewPath := fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number)
 	reviewBody, err := c.doRequest("GET", reviewPath, nil)
 	if err == nil {
@@ -666,7 +609,6 @@ func computeReviewStatus(reviews []struct {
 	return "pending"
 }
 
-// ApprovePR approves a pull request by submitting an approval review
 func (c *Client) ApprovePR(repo string, number int) error {
 	path := fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number)
 	body := map[string]string{
@@ -681,9 +623,7 @@ func (c *Client) ApprovePR(repo string, number int) error {
 	return nil
 }
 
-// MergePR merges a pull request using the specified merge method
 func (c *Client) MergePR(repo string, number int, method string) error {
-	// Validate merge method
 	validMethods := map[string]bool{
 		"squash": true,
 		"merge":  true,
@@ -706,7 +646,6 @@ func (c *Client) MergePR(repo string, number int, method string) error {
 	return nil
 }
 
-// Host returns the host associated with this client.
 func (c *Client) Host() string {
 	return c.host
 }

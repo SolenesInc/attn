@@ -6,27 +6,10 @@ import { PresentTour } from '../PresentTour';
 import type { PresentTourProps } from '../PresentTour';
 import type { PresentationRound } from '../../types/generated';
 
-// PresentTour renders the @pierre/diffs CodeView (shadow DOM + Shiki + a real
-// virtualized scroll container), which jsdom cannot exercise — real browser
-// coverage for the tour itself lives in the Playwright component harness
-// (see app/test-harness). These tests cover PresentRoot's data flow: fetching
-// every manifest file's diff up front, keyboard/rail navigation, and the
-// comment-draft lifecycle — mirrors the DiffDetailPanel.test.tsx idiom. The
-// mock captures its full props so tests can invoke onAddComment etc. directly
-// and assert on what PresentRoot passes down.
-//
-// onAnnotationAnchorsChange is reported here from `comments`/`annotationCommentIds`
-// directly (in props order, one anchor per annotation comment id) rather than
-// from PresentTour's own line-grouping logic — that grouping is real
-// production logic covered separately in PresentTour.test.tsx; this mock only
-// needs to exercise PresentRoot's N/P hop-state wiring.
 vi.mock('../PresentTour', () => ({
   PresentTour: vi.fn(({ summary, summaryVisible, onSummaryVisibleChange, files, comments, annotationCommentIds, onAnnotationAnchorsChange, reviewedPaths, onToggleReviewed }: PresentTourProps) => {
     useEffect(() => {
       if (!onAnnotationAnchorsChange) return;
-      // One anchor per (filepath, line_start) group, not per thread entry —
-      // mirrors PresentTour's real grouping (multiple annotation comments on
-      // the same line share one rendered thread and one N/P stop).
       const seen = new Set<string>();
       const anchors: { path: string; anchorKey: string }[] = [];
       for (const c of comments) {
@@ -63,9 +46,6 @@ vi.mock('../PresentTour', () => ({
   }),
 }));
 
-// PresentRoot hides the present window on a successful submit via
-// getCurrentWindow().hide() (mirrors the app's Tauri-window close-on-submit
-// convention). jsdom has no real Tauri window, so this stands in for it.
 const mockHide = vi.fn();
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ hide: mockHide }),
@@ -78,12 +58,6 @@ function latestTourProps(): PresentTourProps {
   return props as unknown as PresentTourProps;
 }
 
-// PresentRoot owns its own useDaemonSocket connection (it is a standalone
-// Tauri window, not a component fed daemon functions via props), so
-// createMockDaemon/setupDefaultResponses (the DiffDetailPanel-style idiom)
-// don't apply here — there's no daemon-function prop surface to inject into.
-// Instead this mirrors useDaemonSocket.test.tsx's FakeWebSocket, which is the
-// sibling test for a component that talks to a real WebSocket.
 class FakeWebSocket {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -122,15 +96,10 @@ class FakeWebSocket {
   }
 }
 
-// A generous timeout: under full-suite parallel load these real-timer/microtask
-// waits can be slower than testing-library's 1000ms default, independent of
-// this component's own logic.
+// Generous: under full-suite parallel load these waits outrun testing-library's
+// 1000ms default for reasons outside this component.
 const WAIT_OPTS = { timeout: 5000 };
 
-// Tests that chain several sequential waitFor calls can, in aggregate, exceed
-// vitest's 5000ms default per-test timeout under full-suite contention even
-// though each individual waitFor stays within WAIT_OPTS. Applied as the third
-// `it(...)` argument on those multi-step tests.
 const TEST_TIMEOUT = 15000;
 
 async function waitForOpenSocket(): Promise<FakeWebSocket> {
@@ -148,7 +117,6 @@ function setSearch(search: string) {
   window.history.replaceState({}, '', `/?${search}`);
 }
 
-/** Renders PresentRoot and drives it through a loaded round, returning the socket for further interaction. */
 async function loadRound(options?: {
   round?: typeof round;
   repoHeadSha?: string;
@@ -185,7 +153,6 @@ async function loadRound(options?: {
   return ws;
 }
 
-/** The `request_id` of the most recently sent `get_file_diff` for `path`. */
 function latestFileDiffRequestId(ws: FakeWebSocket, path: string): string {
   const sent = ws.sent.map((entry) => JSON.parse(entry)).filter((m) => m.cmd === 'get_file_diff' && m.path === path);
   const last = sent[sent.length - 1];
@@ -193,12 +160,6 @@ function latestFileDiffRequestId(ws: FakeWebSocket, path: string): string {
   return last.request_id;
 }
 
-/**
- * Resolves a `get_file_diff` for `path` with the given content, echoing the
- * most recently sent request's id back — as the real daemon does. Results are
- * correlated by request_id only (see `file_diff_result` in useDaemonSocket.ts),
- * so this must echo a real id or the promise never resolves.
- */
 function emitFileDiff(ws: FakeWebSocket, path: string, original: string, modified: string) {
   const requestId = latestFileDiffRequestId(ws, path);
   act(() => {
@@ -261,9 +222,6 @@ const roundWithAnnotations = {
   },
 };
 
-// changed_files always lists every changed path — tour files included — so
-// this covers both the "Other" derivation (src/extra.ts, not in the
-// manifest) and the "no changed_files" fallback (roundWithSkip above has none).
 const roundWithChangedFiles = {
   ...roundWithSkip,
   changed_files: [
@@ -298,10 +256,6 @@ describe('PresentRoot', () => {
     FakeWebSocket.instances = [];
     globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
 
-    // Track every setTimeout (including useDaemonSocket's reconnect backoff)
-    // so afterEach can kill stragglers before the next test's FakeWebSocket
-    // gets polluted by a reconnect firing mid-test — mirrors
-    // useDaemonSocket.test.tsx's timer-tracking idiom.
     originalSetTimeout = globalThis.setTimeout;
     originalClearTimeout = globalThis.clearTimeout;
     pendingTimeouts = new Set();
@@ -319,23 +273,16 @@ describe('PresentRoot', () => {
       return originalClearTimeout(timeoutId);
     }) as typeof globalThis.clearTimeout;
 
-    // Mirrors the static #loading-screen div in index.html that every window
-    // boots behind until React takes over.
     const loadingScreen = document.createElement('div');
     loadingScreen.id = 'loading-screen';
     document.body.appendChild(loadingScreen);
 
-    // usePresentReviewedMarks persists to localStorage; isolate every test.
     window.localStorage.clear();
   });
 
   afterEach(() => {
-    // Unmount explicitly, while setTimeout is still our tracked wrapper: the
-    // socket's onclose-triggered reconnect scheduling runs during unmount, and
-    // needs to land in pendingTimeouts below rather than escape as a real,
-    // untracked 1000ms timer that later fires mid a subsequent test and
-    // injects a stray FakeWebSocket instance (this is what made "moves the
-    // selection..."/other later tests intermittently see the wrong socket).
+// Unmount while setTimeout is still the tracked wrapper, or the reconnect
+// scheduled during unmount escapes as a real timer into a later test.
     cleanup();
     for (const timeoutId of pendingTimeouts) {
       originalClearTimeout(timeoutId);
@@ -486,7 +433,6 @@ describe('PresentRoot', () => {
     const noComments = screen.getByText('src/foo.test.ts').closest('li');
     expect(noComments?.querySelector('.present-root-file-comment-chip')).toBeNull();
 
-    // A local, not-yet-submitted draft bumps the chip too.
     await act(async () => {
       latestTourProps().onAddComment('src/foo.test.ts', 1, 1, 'draft comment');
     });
@@ -498,9 +444,6 @@ describe('PresentRoot', () => {
   it('the pinned Summary row scrolls to the top and a file row click still works afterward', async () => {
     await loadRound();
 
-    // The summary is the round's initial stop (see the on-load-default test
-    // below), so clicking a file first, then back to Summary, exercises the
-    // row's own click-to-scroll-to-top behavior independent of that default.
     fireEvent.click(screen.getByText('src/foo.ts'));
     await waitFor(() => {
       expect(screen.getByText('src/foo.ts').closest('li')).toHaveClass('selected');
@@ -576,8 +519,6 @@ describe('PresentRoot', () => {
       expect(screen.getByTestId('tour-file-src/foo.test.ts').textContent).toContain('test old');
     }, WAIT_OPTS);
 
-    // No further get_file_diff calls fire from re-renders (comment drafts,
-    // rail clicks, etc.) — the fetch-all effect must not loop.
     await act(async () => {
       await Promise.resolve();
     });
@@ -606,8 +547,6 @@ describe('PresentRoot', () => {
   it('moves the selection with j/k keyboard shortcuts', async () => {
     await loadRound();
 
-    // The round opens on the pinned Summary stop; j from there lands on the
-    // first file.
     await waitFor(() => {
       expect(screen.getByTestId('present-root-summary-row')).toHaveClass('selected');
     }, WAIT_OPTS);
@@ -641,8 +580,6 @@ describe('PresentRoot', () => {
       expect(screen.getByTestId('present-root-summary-row')).toHaveClass('selected');
     }, WAIT_OPTS);
 
-    // k while already on the summary is a no-op — there is nothing lower to
-    // reach.
     const propsBeforeExtraK = latestTourProps();
     const nonceBeforeExtraK = propsBeforeExtraK.scrollNonce;
     fireEvent.keyDown(window, { key: 'k' });
@@ -753,7 +690,6 @@ describe('PresentRoot', () => {
     await waitFor(() => {
       expect(screen.getByText('git show failed')).toBeInTheDocument();
     }, WAIT_OPTS);
-    // The window itself stays rendered — not replaced by a full-page error.
     expect(screen.getByText('My presentation')).toBeInTheDocument();
   });
 
@@ -765,7 +701,6 @@ describe('PresentRoot', () => {
     expect(screen.getByText('src/vendor.ts')).toBeInTheDocument();
     expect(screen.getByText('src/generated.ts').closest('li')).toHaveClass('present-root-file-skipped');
 
-    // Skipped rows are real document entries — clicking one still scrolls to it.
     fireEvent.click(screen.getByText('src/generated.ts'));
     await waitFor(() => {
       expect(screen.getByText('src/generated.ts').closest('li')).toHaveClass('selected');
@@ -785,7 +720,6 @@ describe('PresentRoot', () => {
       expect(screen.getByText('src/extra.ts')).toBeInTheDocument();
       expect(screen.getByText('Skipped · 2')).toBeInTheDocument();
 
-      // Tour, Other, Skipped appear in that order (alphabetical within Other).
       const paths = screen
         .getAllByText(/^src\//)
         .map((el) => el.textContent)
@@ -825,7 +759,6 @@ describe('PresentRoot', () => {
 
     it('counts progress over tour + other only, excluding skipped', async () => {
       await loadRound({ round: roundWithChangedFiles });
-      // 2 tour files + 1 other file = 3; the 2 skipped files don't count.
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('0/3');
     });
 
@@ -848,10 +781,6 @@ describe('PresentRoot', () => {
     it('j leaving a skipped file does not auto-mark it, even though j still walks through it', async () => {
       await loadRound({ round: roundWithChangedFiles });
 
-      // Doc order: src/foo.ts, src/foo.test.ts, src/extra.ts, src/generated.ts (skip), src/vendor.ts (skip).
-      // The round opens on the Summary stop, so the first j only steps onto
-      // src/foo.ts; five j-presses in total land on src/vendor.ts, having
-      // left src/generated.ts along the way.
       for (let i = 0; i < 5; i++) {
         fireEvent.keyDown(window, { key: 'j' });
       }
@@ -859,8 +788,6 @@ describe('PresentRoot', () => {
         expect(screen.getByText('src/vendor.ts').closest('li')).toHaveClass('selected');
       }, WAIT_OPTS);
 
-      // tour(2) + other(1) all got auto-marked while leaving them; the two
-      // skipped files never do, regardless of how many were walked past.
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('3/3');
       expect(screen.getByText('src/generated.ts').closest('li')).not.toHaveClass('reviewed');
       expect(screen.getByText('src/vendor.ts').closest('li')).not.toHaveClass('reviewed');
@@ -1005,7 +932,6 @@ describe('PresentRoot', () => {
     }, WAIT_OPTS);
     expect(screen.getByText('Submit review')).toBeInTheDocument();
 
-    // A successful submit bumps refreshSignal, which re-fetches the round.
     await waitFor(() => {
       const sent = ws.sent.map((entry) => JSON.parse(entry));
       const refetches = sent.filter((m) => m.cmd === 'get_presentation_round');
@@ -1122,19 +1048,10 @@ describe('PresentRoot', () => {
 
     fireEvent.click(screen.getByText('src/foo.test.ts'));
 
-    // Unlike the old single-selection pane, the tour renders every file at
-    // once — navigating the rail must not drop comments on other files.
     expect(latestTourProps().comments.some((c) => c.content === 'on foo.ts')).toBe(true);
     void ws;
   }, TEST_TIMEOUT);
 
-  // Wire-level counterpart to PresentRoot.roundGuard.test.tsx's mocked-hook
-  // version: this drives the REAL useDaemonSocket against a FakeWebSocket, so
-  // it also covers the request_id correlation fix in useDaemonSocket.ts
-  // itself (get_file_diff/file_diff_result used to correlate by path alone,
-  // so a second in-flight request for the same path clobbered the first's
-  // pending promise, and a stale round's late reply could resolve the new
-  // round's promise with the wrong content).
   it('does not apply a stale round’s late file_diff_result to a newer round for the same path', async () => {
     const ws = await loadRound();
 
@@ -1143,8 +1060,6 @@ describe('PresentRoot', () => {
     }, WAIT_OPTS);
     const round1RequestId = latestFileDiffRequestId(ws, 'src/foo.ts');
 
-    // Leave round-1's src/foo.ts request unresolved and transition to round-2
-    // via presentation_updated (same file path in both rounds).
     act(() => {
       ws.emit({ event: 'presentation_updated', presentation: { id: 'pres-1' } });
     });
@@ -1172,7 +1087,6 @@ describe('PresentRoot', () => {
     const round2RequestId = latestFileDiffRequestId(ws, 'src/foo.ts');
     expect(round2RequestId).not.toBe(round1RequestId);
 
-    // The stale round-1 reply arrives late, echoing round-1's own request id.
     act(() => {
       ws.emit({
         event: 'file_diff_result',
@@ -1189,7 +1103,6 @@ describe('PresentRoot', () => {
     });
     expect(screen.getByTestId('tour-file-src/foo.ts').textContent).not.toContain('STALE round-1');
 
-    // Round-2's own reply, echoing round-2's request id, applies normally.
     act(() => {
       ws.emit({
         event: 'file_diff_result',
@@ -1225,8 +1138,6 @@ describe('PresentRoot', () => {
     it('r toggles reviewed on the active file', async () => {
       await loadRound();
 
-      // The round opens on the Summary stop, where r is a no-op (no active
-      // file); step onto the first file first.
       fireEvent.keyDown(window, { key: 'j' });
       await waitFor(() => {
         expect(screen.getByText('src/foo.ts').closest('li')).toHaveClass('selected');
@@ -1249,8 +1160,6 @@ describe('PresentRoot', () => {
 
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('0/2');
 
-      // The round opens on the Summary stop; the first j only steps onto
-      // src/foo.ts (leaving the summary, which is never marked).
       fireEvent.keyDown(window, { key: 'j' });
       await waitFor(() => {
         expect(screen.getByText('src/foo.ts').closest('li')).toHaveClass('selected');
@@ -1261,7 +1170,6 @@ describe('PresentRoot', () => {
       await waitFor(() => {
         expect(screen.getByText('src/foo.test.ts').closest('li')).toHaveClass('selected');
       }, WAIT_OPTS);
-      // Leaving src/foo.ts via j marks it reviewed; arriving at src/foo.test.ts does not.
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('1/2');
       expect(screen.getByText('src/foo.ts').closest('li')).toHaveClass('reviewed');
       expect(screen.getByText('src/foo.test.ts').closest('li')).not.toHaveClass('reviewed');
@@ -1270,7 +1178,6 @@ describe('PresentRoot', () => {
       await waitFor(() => {
         expect(screen.getByText('src/foo.ts').closest('li')).toHaveClass('selected');
       }, WAIT_OPTS);
-      // k never marks anything, and the earlier j-mark on foo.ts persists.
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('1/2');
     });
 
@@ -1285,8 +1192,6 @@ describe('PresentRoot', () => {
       fireEvent.keyDown(input, { key: 'j' });
       fireEvent.keyDown(input, { key: 's' });
 
-      // Nothing moved (still the default Summary stop), nothing got marked,
-      // and the submit dialog never opened.
       expect(screen.getByTestId('present-root-summary-row')).toHaveClass('selected');
       expect(screen.getByTestId('present-root-rail-count').textContent).toBe('0/2');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -1316,7 +1221,6 @@ describe('PresentRoot', () => {
       await waitFor(() => {
         expect(screen.getByTestId('present-root-submit-coverage').textContent).toContain('src/foo.test.ts');
       }, WAIT_OPTS);
-      // Submit stays enabled — coverage is advisory only, never a gate.
       expect(screen.getByRole('button', { name: 'Submit feedback' })).not.toBeDisabled();
     });
 
@@ -1368,10 +1272,6 @@ describe('PresentRoot', () => {
 
       const props = latestTourProps();
       const contents = props.comments.map((c) => c.content);
-      // Both thread entries on the line-4-5 annotation, then the single-entry
-      // line-2 annotation, then the reviewer reply — annotations precede
-      // reviewer comments regardless of manifest order, because they're all
-      // read from the same fixed per-file loop.
       expect(contents).toEqual(['why this line?', 'first note', 'second note', 'a reviewer reply']);
 
       const annotationComments = props.comments.filter((c) => c.author === 'agent');
@@ -1409,7 +1309,6 @@ describe('PresentRoot', () => {
         ],
       });
 
-      // 3 annotation thread entries + 1 reviewer comment, one merged chip.
       const row = screen.getByText('src/foo.ts').closest('li');
       expect(row?.querySelector('.present-root-file-comment-chip')?.textContent).toBe('4');
     });
@@ -1426,11 +1325,6 @@ describe('PresentRoot', () => {
     it('n/p hop across every annotation anchor in document order and wrap', async () => {
       await loadRound({ round: roundWithAnnotations });
 
-      // The mock's effect reports anchors asynchronously (one per annotation,
-      // not per thread entry: both line-4-5 entries share one anchor key), so
-      // retry the first 'n' press until PresentRoot's annotationAnchors state
-      // has actually landed — extra presses beforehand are harmless no-ops
-      // (hop() bails out while the anchor list is still empty).
       await waitFor(() => {
         fireEvent.keyDown(window, { key: 'n' });
         expect(latestTourProps().scrollToAnnotation).toMatchObject({ path: 'src/foo.ts', anchorKey: 'src/foo.ts:additions:2' });
@@ -1443,13 +1337,11 @@ describe('PresentRoot', () => {
       }, WAIT_OPTS);
       expect(latestTourProps().annotationScrollNonce).toBeGreaterThan(nonceAfterFirst ?? 0);
 
-      // Wraps back to the first anchor.
       fireEvent.keyDown(window, { key: 'n' });
       await waitFor(() => {
         expect(latestTourProps().scrollToAnnotation).toMatchObject({ path: 'src/foo.ts', anchorKey: 'src/foo.ts:additions:2' });
       }, WAIT_OPTS);
 
-      // p steps backward, wrapping to the last anchor.
       fireEvent.keyDown(window, { key: 'p' });
       await waitFor(() => {
         expect(latestTourProps().scrollToAnnotation).toMatchObject({ path: 'src/foo.ts', anchorKey: 'src/foo.ts:additions:4' });

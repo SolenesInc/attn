@@ -32,8 +32,6 @@ func TestRecorderKeepsOrderPerSession(t *testing.T) {
 	}
 }
 
-// The ring exists to bound memory on a long-lived daemon, so overflow must drop
-// the oldest and keep the newest — the newest is what explains the color now.
 func TestRecorderEvictsOldestOnOverflow(t *testing.T) {
 	r := New(3)
 	for _, claim := range []string{"one", "two", "three", "four", "five"} {
@@ -73,9 +71,6 @@ func TestRecorderForgetDropsSession(t *testing.T) {
 	}
 }
 
-// A nil recorder is the zero-configuration path (tests, a daemon built without
-// tracing); every call must be a no-op rather than a panic, so call sites need
-// no guard.
 func TestNilRecorderIsInert(t *testing.T) {
 	var r *Recorder
 	r.Record("s", Observation{Claim: "working"})
@@ -97,8 +92,6 @@ func TestNewClampsNonPositiveCapacity(t *testing.T) {
 	}
 }
 
-// A source that reports only ObservedAt must still get a RecordedAt, because the
-// gap between the two is the diagnostic for a delayed observation.
 func TestRecordDefaultsTimestamps(t *testing.T) {
 	r := New(4)
 	observed := time.Now().Add(-2 * time.Second)
@@ -146,8 +139,6 @@ func TestLogLineCarriesTheWholeObservation(t *testing.T) {
 	}
 }
 
-// A skip carries no claim; the line must stay parseable rather than emitting an
-// empty key.
 func TestLogLineRendersMissingFieldsAsDashes(t *testing.T) {
 	line := Observation{Outcome: OutcomeSkipped}.LogLine("sess-1")
 	if !strings.Contains(line, "source=- claim=- outcome=skipped") {
@@ -158,9 +149,6 @@ func TestLogLineRendersMissingFieldsAsDashes(t *testing.T) {
 	}
 }
 
-// SessionCount is how a leaked ring is caught: the daemon gates ring creation on
-// a live session row, and a ring for an id nothing will ever forget would grow
-// the map for the daemon's lifetime.
 func TestRecorderSessionCountTracksRings(t *testing.T) {
 	r := New(4)
 	if got := r.SessionCount(); got != 0 {

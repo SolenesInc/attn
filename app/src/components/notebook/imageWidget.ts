@@ -1,9 +1,5 @@
-// An image that is the entire content of its line renders as a block widget, its
-// source revealed when a selection touches the line (tableWidget's reveal rule).
-//
-// CM constraint shaping this file: decorations affecting vertical layout MUST come
-// from a StateField via `EditorView.decorations.from(...)` — the view plugin runs
-// after layout and may not introduce them. Hence its own field, as tableWidget has.
+// CM constraint: decorations affecting vertical layout MUST come from a StateField via
+// `EditorView.decorations.from(...)`; the view plugin runs after layout. Hence its own field.
 
 import { ensureSyntaxTree } from '@codemirror/language';
 import { type EditorState, type Extension, type Range, StateField } from '@codemirror/state';
@@ -18,23 +14,15 @@ export interface ImageTarget {
 }
 
 export interface ImageWidgetOptions {
-  // Resolve a raw notebook-relative src to a displayable one; absent, null, or a
-  // rejection all render the broken placeholder.
   resolveSrc?: (src: string) => Promise<string | null>;
 }
 
-// Srcs the browser loads directly (explicit scheme or protocol-relative); anything
-// else is notebook-relative and goes through options.resolveSrc.
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 function isDirectSrc(src: string): boolean {
   return SCHEME.test(src) || src.startsWith('//');
 }
 
-// Pull { alt, src } out of an Image node. Lezer builds Image like Link, children
-// being [LinkMark, ...alt..., LinkMark(']'), LinkMark('('), URL, Title?, LinkMark];
-// there is no label node, so alt is the slice between the opening mark's end and
-// the second-to-last LinkMark. Null for `![alt][ref]`, which has no URL child.
 function parseImageNode(node: SyntaxNode, state: EditorState): { alt: string; src: string } | null {
   const url = node.getChild('URL');
   if (!url) return null;
@@ -42,7 +30,7 @@ function parseImageNode(node: SyntaxNode, state: EditorState): { alt: string; sr
   for (let child = node.firstChild; child && child.from < url.from; child = child.nextSibling) {
     if (child.name === 'LinkMark') marks.push(child);
   }
-  if (marks.length < 3) return null; // need at least: opening ![, closing ], opening (
+  if (marks.length < 3) return null;
   const open = marks[0];
   const closeBracket = marks[marks.length - 2];
   return {
@@ -51,8 +39,6 @@ function parseImageNode(node: SyntaxNode, state: EditorState): { alt: string; sr
   };
 }
 
-// Images qualifying for widget rendering: an Image that is the ENTIRE content of
-// its line. Mid-paragraph images, trailing text, and two on one line stay raw.
 export function imageTargets(state: EditorState): ImageTarget[] {
   const tree = ensureSyntaxTree(state, state.doc.length, 50);
   if (!tree) return [];
@@ -60,7 +46,7 @@ export function imageTargets(state: EditorState): ImageTarget[] {
   tree.iterate({
     enter: (node) => {
       if (node.name !== 'Image') return;
-      if (node.to > state.doc.lineAt(node.from).to) return; // spans a line break
+      if (node.to > state.doc.lineAt(node.from).to) return;
       const line = state.doc.lineAt(node.from);
       const before = state.doc.sliceString(line.from, node.from).trim();
       const after = state.doc.sliceString(node.to, line.to).trim();
@@ -77,7 +63,6 @@ class ImageWidget extends WidgetType {
   constructor(
     readonly target: ImageTarget,
     private readonly resolveSrc: ImageWidgetOptions['resolveSrc'],
-    // Shared across widget instances, so a reveal toggle never re-fetches a src.
     private readonly cache: Map<string, Promise<string | null>>,
   ) {
     super();
@@ -87,7 +72,6 @@ class ImageWidget extends WidgetType {
     return this.target.alt === other.target.alt && this.target.src === other.target.src;
   }
 
-  // Space reserved before the image loads, so the first layout doesn't jump.
   get estimatedHeight() {
     return 220;
   }
@@ -102,12 +86,8 @@ class ImageWidget extends WidgetType {
     const container = document.createElement('div');
     container.className = 'cm-md-image';
 
-    // Move the cursor onto the widget's line explicitly; CM's click-to-cursor over
-    // a replaced block range may not land inside it.
-    //
-    // eq() is position-blind, so an edit above does not recreate this DOM — which
-    // means it outlives the lineFrom it was built with. Read the position via
-    // posAtDOM at click time, or a stale handler jumps to where the image WAS.
+    // eq() is position-blind, so this DOM outlives the lineFrom it was built with — read the
+    // position via posAtDOM at click time.
     container.addEventListener('mousedown', (event) => event.preventDefault());
     container.addEventListener('click', (event) => {
       event.preventDefault();
@@ -135,7 +115,6 @@ class ImageWidget extends WidgetType {
       const img = document.createElement('img');
       img.alt = alt;
       img.src = resolvedSrc;
-      // A resolved src can still fail to decode; show broken, not a blank box.
       img.addEventListener('error', renderBroken);
       container.appendChild(img);
     };
@@ -145,8 +124,8 @@ class ImageWidget extends WidgetType {
       return container;
     }
 
-    // Hand the raw src to resolveSrc, the ONE place that resolves it: resolving
-    // here too would double-apply and mis-clamp a `..` before baseDir is known.
+    // resolveSrc is the ONE place a raw src is resolved: resolving here too would
+    // double-apply and mis-clamp a `..` before baseDir is known.
     if (!this.resolveSrc) {
       renderBroken();
       return container;
@@ -158,7 +137,6 @@ class ImageWidget extends WidgetType {
       this.cache.set(src, pending);
     }
     pending.then((resolved) => {
-      // The widget's DOM may already be torn down by the time this resolves.
       if (!container.isConnected) return;
       if (resolved) renderImg(resolved);
       else renderBroken();
@@ -228,7 +206,7 @@ export function imageWidget(options: ImageWidgetOptions = {}): Extension {
     create: (state) => imageDecorations(state, options.resolveSrc, cache),
     update(value, tr) {
       if (tr.docChanged || tr.selection) {
-        // As tableField does: an unready tree keeps the previous set, not empty.
+        // An unready tree keeps the previous set, not empty.
         const tree = ensureSyntaxTree(tr.state, tr.state.doc.length, 50);
         if (!tree) return value.map(tr.changes);
         return imageDecorations(tr.state, options.resolveSrc, cache);

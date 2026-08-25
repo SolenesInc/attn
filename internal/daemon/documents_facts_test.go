@@ -9,12 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// The document store's facts are a contract: apps read this log, and a
-// consumer that parses `document.changed` must keep working across releases.
-// These pin the name, the subject's shape, the payload, and — the part that is
-// not visible from either side alone — that the fact and the write it describes
-// are one commit.
-
 func factsOf(t *testing.T, d *Daemon) []store.BusEvent {
 	t.Helper()
 	events, err := d.store.BusEventsSince(0, 1000)
@@ -35,8 +29,6 @@ func docFacts(t *testing.T, d *Daemon, name string) []store.BusEvent {
 	return out
 }
 
-// The wire contract of a document write's fact, asserted literally rather than
-// through what it happens to wake up.
 func TestAWriteAppendsTheDocumentChangedFact(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -76,15 +68,11 @@ func TestAWriteAppendsTheDocumentChangedFact(t *testing.T) {
 		t.Fatal("a write was announced as a removal")
 	}
 
-	// The write's reported position is where its fact landed, which is what
-	// makes a caller able to tell whether a later read already includes it.
 	if resp.DocPutResult.Seq != int(fact.Seq) {
 		t.Fatalf("the put reported seq %d, the fact is at %d", resp.DocPutResult.Seq, fact.Seq)
 	}
 }
 
-// A removal is the same fact with deleted set, so a consumer can tell one from
-// the other without reading the store to find nothing there.
 func TestARemovalIsAnnouncedAsADeletion(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -110,8 +98,6 @@ func TestARemovalIsAnnouncedAsADeletion(t *testing.T) {
 	}
 }
 
-// The behavior that must survive the move to a composite write: a write that
-// changed nothing wakes nobody, because it appended nothing.
 func TestAWriteThatChangedNothingAppendsNoFact(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -138,9 +124,6 @@ func TestAWriteThatChangedNothingAppendsNoFact(t *testing.T) {
 	}
 }
 
-// Undefining a collection announces the collection, not a document. The old
-// code reached for document.changed with an empty id, which is a subject no
-// consumer can address and no compaction can group.
 func TestUndefiningACollectionAnnouncesTheCollection(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -182,10 +165,6 @@ func TestUndefiningACollectionAnnouncesTheCollection(t *testing.T) {
 	}
 }
 
-// A failure the caller has to branch on carries a code, so nobody matches on
-// message text. The conflict's code brings the structured detail with it: what
-// the caller expected, what is actually there, and whether anything is there
-// at all — enough to retry without a second round trip.
 func TestARefusedWriteCarriesAConflictCode(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -220,9 +199,6 @@ func TestARefusedWriteCarriesAConflictCode(t *testing.T) {
 	}
 }
 
-// The other two codes a caller branches on. Reading an undeclared collection is
-// a different problem from writing a query the declaration cannot answer, and
-// the difference must be readable without parsing prose.
 func TestDocumentFailuresCarryTheirOwnCodes(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -257,8 +233,6 @@ func TestDocumentFailuresCarryTheirOwnCodes(t *testing.T) {
 	}
 }
 
-// doc_count answers "how many" without paying for the bodies, and it answers the
-// same question the query would: it compiles the caller's own filters.
 func TestCountingMatchesWithoutFetchingThem(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)
@@ -290,8 +264,6 @@ func TestCountingMatchesWithoutFetchingThem(t *testing.T) {
 		t.Fatalf("counted %d pending, want 2", got.Count)
 	}
 
-	// A limit decides which matches come back, never how many there are — a
-	// count that respected it would answer a question nobody asked.
 	limited := testQuery()
 	limited.Limit = protocol.Ptr(1)
 	if got := count(limited); got.Count != 3 {
@@ -303,8 +275,6 @@ func TestCountingMatchesWithoutFetchingThem(t *testing.T) {
 	}
 }
 
-// Every read says where it stands, so a caller that just wrote can tell whether
-// the answer already includes its write.
 func TestReadsReportThePositionTheyWereTrueAt(t *testing.T) {
 	d := newDaemonForTest(t)
 	defineTestCollection(t, d)

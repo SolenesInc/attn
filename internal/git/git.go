@@ -1,4 +1,3 @@
-// internal/git/git.go
 package git
 
 import (
@@ -15,31 +14,25 @@ func CanonicalizePath(path string) string {
 	return filepath.Clean(expanded)
 }
 
-// BranchInfo contains git branch and worktree information for a directory
 type BranchInfo struct {
-	Branch     string // Current branch name, or short SHA if detached
-	IsWorktree bool   // True if directory is a git worktree (not main repo)
-	MainRepo   string // Path to main repo if IsWorktree, empty otherwise
+	Branch     string
+	IsWorktree bool
+	MainRepo   string
 }
 
-// GetBranchInfo returns branch information for a directory.
-// Returns empty BranchInfo (no error) if not a git repo.
 func GetBranchInfo(dir string) (*BranchInfo, error) {
 	info := &BranchInfo{}
 
-	// Check if it's a git repo
 	if !isGitRepo(dir) {
 		return info, nil
 	}
 
-	// Get current branch
 	branch, err := getCurrentBranch(dir)
 	if err != nil {
 		return info, nil
 	}
 	info.Branch = branch
 
-	// Check if worktree
 	mainRepo, isWT := getWorktreeInfo(dir)
 	info.IsWorktree = isWT
 	info.MainRepo = mainRepo
@@ -53,13 +46,11 @@ func isGitRepo(dir string) bool {
 }
 
 func getCurrentBranch(dir string) (string, error) {
-	// Try symbolic-ref first (works for normal branches)
 	out, err := runGitOutput(OpMetadata, dir, "symbolic-ref", "--short", "HEAD")
 	if err == nil {
 		return strings.TrimSpace(string(out)), nil
 	}
 
-	// Fallback to rev-parse for detached HEAD (returns short SHA)
 	out, err = runGitOutput(OpMetadata, dir, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return "", err
@@ -67,7 +58,6 @@ func getCurrentBranch(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// GetRepoRoot returns the worktree root for dir when it is inside a git worktree.
 func GetRepoRoot(dir string) (string, error) {
 	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -85,9 +75,6 @@ func sameDirectory(left string, right string) bool {
 	return os.SameFile(leftInfo, rightInfo)
 }
 
-// ResolvePickerRepoTarget returns the main repo path to use for the location picker
-// when dir is exactly a repo root or worktree root. Subdirectories inside a repo
-// return ok=false so the picker can open them directly instead of rewriting them.
 func ResolvePickerRepoTarget(dir string) (repoRoot string, ok bool, err error) {
 	resolvedDir := CanonicalizePath(dir)
 	worktreeRoot, err := GetRepoRoot(resolvedDir)
@@ -103,7 +90,6 @@ func ResolvePickerRepoTarget(dir string) (repoRoot string, ok bool, err error) {
 	return resolvedDir, true, nil
 }
 
-// GetHeadCommit returns the full SHA of the HEAD commit
 func GetHeadCommit(dir string) (string, error) {
 	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "HEAD")
 	if err != nil {
@@ -113,18 +99,13 @@ func GetHeadCommit(dir string) (string, error) {
 }
 
 func getWorktreeInfo(dir string) (mainRepo string, isWorktree bool) {
-	// Get the git dir
 	out, err := runGitOutput(OpMetadata, dir, "rev-parse", "--git-dir")
 	if err != nil {
 		return "", false
 	}
 	gitDir := strings.TrimSpace(string(out))
 
-	// If git dir contains "worktrees", it's a worktree
 	if strings.Contains(gitDir, "worktrees") {
-		// Extract main repo path from gitdir file
-		// Worktree git dir is like: /path/to/main/.git/worktrees/name
-		// Main repo is: /path/to/main
 		parts := strings.Split(gitDir, ".git/worktrees")
 		if len(parts) > 0 {
 			mainRepo = strings.TrimSuffix(parts[0], "/")

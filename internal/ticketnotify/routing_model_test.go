@@ -12,24 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Differential test for ticket routing: who hears about a ticket, and how many
-// times. The example-based harness above proves the mechanics on cases someone
-// thought of; this proves the RULE against an independent statement of it over a
-// long randomized sequence of operations.
-//
-// The failure mode that motivates it is asymmetric. Double delivery is noisy and
-// self-reporting — an agent gets nudged twice and someone notices. Silent
-// NON-delivery is the expensive one: a worker reports, no participant is routed,
-// and the work stalls with no error in any log. Example tests structurally cannot
-// find that, because they only cover the cases already imagined.
-//
-// The model owns the routing rule ONLY — participation, per-(identity, ticket)
-// cursors, self-author exclusion, and the merge across an observer's identities.
-// It deliberately does NOT model event emission: after each mutation it reloads
-// the event log from the store and treats it as ground truth for "what happened".
-// So a store change that emits a different event does not fail this test; a store
-// change that routes an event to the wrong set of identities does.
-
 const (
 	modelWorker    = "worker-session"
 	modelDelegator = "delegator-session"
@@ -38,11 +20,10 @@ const (
 
 var modelChiefRole = store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)
 
-// routingModel is the participation and cursor rule, written once as sets.
 type routingModel struct {
-	assignee   map[string]string          // ticket -> current assignee
-	roleOwners map[string]map[string]bool // ticket -> owning roles
-	subs       map[string]map[string]bool // ticket -> subscribed identities
+	assignee   map[string]string
+	roleOwners map[string]map[string]bool
+	subs       map[string]map[string]bool
 	cursors    map[string]map[string]int64
 	events     []store.TicketEvent
 }
@@ -56,10 +37,6 @@ func newRoutingModel() *routingModel {
 	}
 }
 
-// participates restates the four participation sources independently of the SQL:
-// current assignment, non-comment event authorship, explicit subscription, and
-// durable role ownership. A created event on a role-owned ticket is audit
-// provenance for the session that minted it, not participation.
 func (m *routingModel) participates(identity, ticket string) bool {
 	if identity == "" || ticket == "" {
 		return false
@@ -119,7 +96,6 @@ func (m *routingModel) cursor(identity, ticket string) int64 {
 	return m.cursors[identity][ticket]
 }
 
-// setCursor mirrors the store's monotonic (MAX) cursor write.
 func (m *routingModel) setCursor(identity, ticket string, seq int64) {
 	if m.cursors[identity] == nil {
 		m.cursors[identity] = map[string]int64{}
@@ -129,10 +105,6 @@ func (m *routingModel) setCursor(identity, ticket string, seq int64) {
 	}
 }
 
-// unread is what a single identity would be delivered right now, without
-// consuming. authorID is the identity whose own activity is excluded — it differs
-// from the cursor identity for a durable role, whose events are authored by
-// whichever session currently fills it.
 func (m *routingModel) unread(cursorID, authorID string) []int64 {
 	var seqs []int64
 	for _, e := range m.events {
@@ -148,10 +120,6 @@ func (m *routingModel) unread(cursorID, authorID string) []int64 {
 	return seqs
 }
 
-// consumeAll is the model's ConsumeAll: each identity's queue is drained and its
-// own cursor advanced, and the union is deduplicated by event seq — the property
-// that keeps a chief holding both its session identity and the durable role
-// identity on one ticket from being told twice.
 func (m *routingModel) consumeAll(observers []Observer) []int64 {
 	seen := map[int64]bool{}
 	for _, obs := range observers {
@@ -188,15 +156,12 @@ func (m *routingModel) eventBySeq(seq int64) store.TicketEvent {
 	return store.TicketEvent{}
 }
 
-// world drives the real store and the model in lockstep.
 type world struct {
-	t       *testing.T
-	s       *store.Store
-	m       *routingModel
-	now     time.Time
-	tickets []string
-	// chiefSession is whichever session currently fills the chief role. Rotating
-	// it must not disturb the role identity's cursor.
+	t            *testing.T
+	s            *store.Store
+	m            *routingModel
+	now          time.Time
+	tickets      []string
 	chiefSession string
 }
 
@@ -217,8 +182,6 @@ func (w *world) tick() time.Time {
 	return w.now
 }
 
-// syncEvents reloads the real log. The model predicts routing, not emission, so
-// the store is authoritative about which events exist.
 func (w *world) syncEvents() {
 	w.t.Helper()
 	events, err := w.s.TicketEventsSince(0)
@@ -228,8 +191,6 @@ func (w *world) syncEvents() {
 	w.m.events = events
 }
 
-// chiefObservers is the two-identity view a chief session reads through: its own
-// session identity plus the durable role, whose cursor outlives the session.
 func (w *world) chiefObservers() []Observer {
 	return []Observer{
 		{ID: w.chiefSession, AuthorID: w.chiefSession, DeliveryID: w.chiefSession},
@@ -246,9 +207,6 @@ func (w *world) observerSets() map[string][]Observer {
 	}
 }
 
-// createDelegation mints a ticket the way delegation does: an assignee at birth,
-// the chief role as durable owner, and the delegator subscribed so it is reachable
-// from the ticket's first event.
 func (w *world) createDelegation(id, assignee, author, ownerRole string, subscribers []string) {
 	w.t.Helper()
 	if _, err := w.s.CreateTicketWithSubscribers(
@@ -268,8 +226,6 @@ func (w *world) createDelegation(id, assignee, author, ownerRole string, subscri
 		}
 	}
 	w.syncEvents()
-	// A ticket born assigned hands the brief over out of band, so the store marks
-	// the created event consumed for the assignee.
 	if assignee != "" {
 		for _, e := range w.m.events {
 			if e.TicketID == id && e.Kind == store.TicketEventCreated {
@@ -331,10 +287,6 @@ func (w *world) unsubscribe(identity, ticket string) {
 	delete(w.m.subs[ticket], identity)
 }
 
-// checkParticipants asserts the store's identities-for-a-ticket answer equals the
-// model's. This is also the inverse-consistency check: TicketParticipants and
-// UnreadTicketEvents are documented as exact inverses over one rule, and the
-// delivery assertions below exercise the other direction of the same view.
 func (w *world) checkParticipants(step string) {
 	w.t.Helper()
 	for _, ticket := range w.tickets {
@@ -349,9 +301,6 @@ func (w *world) checkParticipants(step string) {
 	}
 }
 
-// checkUnread asserts every observer set's pending queue matches the model
-// WITHOUT consuming, so a divergence is caught at the step that caused it rather
-// than after cursors have moved.
 func (w *world) checkUnread(step string) {
 	w.t.Helper()
 	for name, observers := range w.observerSets() {
@@ -387,9 +336,6 @@ func (w *world) checkUnread(step string) {
 	}
 }
 
-// consumeAndCheck drains one observer set through the real ConsumeAll and asserts
-// the delivered multiset — flattened, so a duplicate across the observer's two
-// identities would show up as a repeated seq — equals the model's.
 func (w *world) consumeAndCheck(step, name string) {
 	w.t.Helper()
 	observers := w.observerSets()[name]
@@ -411,7 +357,6 @@ func (w *world) consumeAndCheck(step, name string) {
 	if !slices.Equal(got, want) {
 		w.t.Fatalf("%s: %s consumed %v, model says %v", step, name, got, want)
 	}
-	// Delivered exactly once: the flattened list carries no repeats.
 	for i := 1; i < len(got); i++ {
 		if got[i] == got[i-1] {
 			w.t.Fatalf("%s: %s was delivered seq %d twice", step, name, got[i])
@@ -419,11 +364,6 @@ func (w *world) consumeAndCheck(step, name string) {
 	}
 }
 
-// TestRoutingMatchesModel drives a long deterministic pseudo-random sequence of
-// ticket operations and asserts, after every single step, that the real stack's
-// participant set and delivery queues agree with the independent model. Any
-// divergence — an identity that stops being reached, an event delivered twice —
-// fails at the step that introduced it.
 func TestRoutingMatchesModel(t *testing.T) {
 	w := newWorld(t)
 	rng := rand.New(rand.NewSource(20260729))
@@ -437,7 +377,6 @@ func TestRoutingMatchesModel(t *testing.T) {
 	}
 	setNames := []string{"chief", "worker", "delegator", "bystander"}
 
-	// Seed one delegation so the first steps have something to act on.
 	w.createDelegation("seed", modelWorker, w.chiefSession, store.TicketRoleChiefOfStaff, []string{modelDelegator})
 
 	const steps = 400
@@ -448,13 +387,9 @@ func TestRoutingMatchesModel(t *testing.T) {
 
 		switch rng.Intn(10) {
 		case 0:
-			// A delegation: assignee at birth, chief role owns it, delegator subscribed.
 			id := fmt.Sprintf("deleg-%d", i)
 			w.createDelegation(id, modelWorker, w.chiefSession, store.TicketRoleChiefOfStaff, []string{modelDelegator})
 		case 1:
-			// A plain backlog ticket: unassigned, no role owner, no subscribers. Its
-			// creator participates through authorship, since the created-event
-			// carve-out only applies to role-owned tickets.
 			id := fmt.Sprintf("backlog-%d", i)
 			w.createDelegation(id, "", actor, "", nil)
 		case 2:
@@ -470,9 +405,6 @@ func TestRoutingMatchesModel(t *testing.T) {
 		case 7:
 			w.unsubscribe(actor, ticket)
 		case 8:
-			// The chief role moves to a different session. The role identity — and
-			// therefore its cursor — is unchanged; only the session that authors and
-			// receives on the role's behalf differs.
 			w.chiefSession = fmt.Sprintf("chief-session-%d", i)
 			actors[3] = w.chiefSession
 		case 9:
@@ -483,8 +415,6 @@ func TestRoutingMatchesModel(t *testing.T) {
 		w.checkUnread(step)
 	}
 
-	// Drain everything at the end: after a full drain nothing is left unread for
-	// anyone, which is the "no event is stranded" half of the contract.
 	for _, name := range setNames {
 		w.consumeAndCheck("drain", name)
 	}
@@ -501,8 +431,6 @@ func TestRoutingMatchesModel(t *testing.T) {
 	}
 }
 
-// TestRoutingCommenterIsNotEnrolled pins the one-shot comment carve-out directly:
-// commenting reaches a ticket's participants without joining its future activity.
 func TestRoutingCommenterIsNotEnrolled(t *testing.T) {
 	w := newWorld(t)
 	w.createDelegation("alpha", modelWorker, w.chiefSession, store.TicketRoleChiefOfStaff, []string{modelDelegator})
@@ -513,13 +441,11 @@ func TestRoutingCommenterIsNotEnrolled(t *testing.T) {
 		t.Fatalf("a one-shot commenter was enrolled: %v", got)
 	}
 
-	// Later activity does not reach it.
 	w.status("alpha", store.TicketStatusInReview, modelWorker, "ready")
 	if n, err := Unread(w.s, Observer{ID: modelBystander}); err != nil || n != 0 {
 		t.Fatalf("bystander unread = %d (err %v), want 0", n, err)
 	}
 
-	// An explicit subscription is the opt-in, and it delivers the backlog.
 	w.subscribe(modelBystander, "alpha")
 	w.checkParticipants("after subscribe")
 	n, err := Unread(w.s, Observer{ID: modelBystander})
@@ -531,9 +457,6 @@ func TestRoutingCommenterIsNotEnrolled(t *testing.T) {
 	}
 }
 
-// TestRoutingRoleTransferKeepsCursor pins the durable-role property: the role's
-// awareness survives the session filling it, and the incoming session is not
-// replayed the ticket's history through its own identity.
 func TestRoutingRoleTransferKeepsCursor(t *testing.T) {
 	w := newWorld(t)
 	w.createDelegation("alpha", modelWorker, w.chiefSession, store.TicketRoleChiefOfStaff, []string{modelDelegator})
@@ -541,23 +464,17 @@ func TestRoutingRoleTransferKeepsCursor(t *testing.T) {
 
 	w.consumeAndCheck("first chief", "chief")
 
-	// The role moves to a new session. Its cursor is the role's, not the session's.
 	w.chiefSession = "chief-session-2"
 
 	if n, err := UnreadAny(w.s, w.chiefObservers()); err != nil || n != 0 {
 		t.Fatalf("new chief session unread = %d (err %v), want 0 — history was replayed", n, err)
 	}
 
-	// New activity still reaches the role, now delivered to the new session.
 	w.status("alpha", store.TicketStatusInReview, modelWorker, "ready")
 	w.checkUnread("after role transfer")
 	w.consumeAndCheck("second chief", "chief")
 }
 
-// TestRoutingDelegatorHearsWithoutOwningTheTicket is the property PR #702 added:
-// an ordinary session that delegates is routed the ticket's activity through an
-// explicit subscription, without taking durable role ownership (which drives the
-// sidebar's delegated-from-chief decoration) and without being its assignee.
 func TestRoutingDelegatorHearsWithoutOwningTheTicket(t *testing.T) {
 	w := newWorld(t)
 	w.createDelegation("alpha", modelWorker, modelDelegator, "", []string{modelDelegator, modelChiefRole})
@@ -574,7 +491,6 @@ func TestRoutingDelegatorHearsWithoutOwningTheTicket(t *testing.T) {
 	w.checkParticipants("ordinary delegation")
 	w.checkUnread("ordinary delegation")
 
-	// Worker, delegator, and chief are each routed, each exactly once.
 	for _, name := range []string{"delegator", "chief"} {
 		w.consumeAndCheck("ordinary delegation", name)
 	}

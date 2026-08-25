@@ -19,14 +19,9 @@ func TestNewIDIsStorableAndQualifiable(t *testing.T) {
 		if err := ValidateID(id); err != nil {
 			t.Fatalf("NewID minted %q, which ValidateID rejects: %v", id, err)
 		}
-		// The docstore is where a seed id has to survive: it is the document id.
 		if err := docstore.ValidateDocumentID(id); err != nil {
 			t.Fatalf("NewID minted %q, which the document store refuses: %v", id, err)
 		}
-		// Fully-qualified-ready: `<daemon-id>/<local-id>` is minted only at a
-		// boundary, and a local id carrying a slash would make the two forms
-		// ambiguous. The docstore charset already forbids it; assert it here so a
-		// change to the alphabet cannot quietly break the arc's pre-commitment.
 		if strings.Contains(id, "/") {
 			t.Fatalf("NewID minted %q, which contains the qualified-form separator", id)
 		}
@@ -69,9 +64,6 @@ func TestStepSlug(t *testing.T) {
 	}
 }
 
-// The slug is derived from arbitrary agent-written titles, so its shape is a
-// property rather than a list of examples: whatever goes in, what comes out has
-// to be a usable name.
 func TestStepSlugShapeHolds(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		title := rapid.String().Draw(t, "title")
@@ -107,7 +99,6 @@ func TestValidatePlantNamesEveryRefusal(t *testing.T) {
 	if err == nil {
 		t.Fatal("an over-long title was accepted")
 	}
-	// The rule the guide states: name the limit, its value, and the ask.
 	for _, want := range []string{"401", "400"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("title refusal %q does not carry %q", err, want)
@@ -134,8 +125,6 @@ func TestEncodeAlwaysWritesEveryDeclaredField(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("stored body is not an object: %v", err)
 	}
-	// A declared field missing from a body is a document a query cannot see: a
-	// filter on a field no body carries matches nothing.
 	for _, field := range SeedsSchema().Fields {
 		if _, ok := body[field.Name]; !ok {
 			t.Fatalf("declared field %q is absent from an encoded seed: %s", field.Name, raw)

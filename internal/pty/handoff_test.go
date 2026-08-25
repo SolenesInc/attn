@@ -8,16 +8,8 @@ import (
 	"time"
 )
 
-// The PTY half of an in-place worker upgrade. A real upgrade execve's between
-// the two halves; these tests run them in one process with two Managers, which
-// is the same boundary minus the exec: the second manager gets nothing but the
-// HandoffState and an inherited descriptor. What the exec itself adds — the pid
-// surviving, the fd surviving — is measured outside attn, in the spikes cited
-// in docs/plans/2026-08-22-worker-inplace-upgrade.md.
-
-// echoChild prints a banner, then echoes every line it is given. It gives the
-// test both directions: output to compare across the swap, and input to prove
-// the child is still reachable afterwards.
+// These run both halves in one process; the exec itself is measured in
+// docs/plans/2026-08-22-worker-inplace-upgrade.md.
 const echoChild = `printf 'banner one\r\n'; while read line; do printf 'got %s\r\n' "$line"; done`
 
 type collector struct {
@@ -74,7 +66,6 @@ func (c *collector) firstSeq(t *testing.T) uint32 {
 	return c.seqs[0]
 }
 
-// spawnEchoSession starts the echo child and waits for its banner.
 func spawnEchoSession(t *testing.T, id string) (*Manager, *collector) {
 	t.Helper()
 	m := NewManager(nil)
@@ -136,7 +127,7 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handoff() error: %v", err)
 	}
-	t.Cleanup(before.Shutdown) // the session already left this manager
+	t.Cleanup(before.Shutdown)
 	if state.ChildPID != beforePID {
 		t.Errorf("handoff child pid = %d, want %d", state.ChildPID, beforePID)
 	}
@@ -173,18 +164,14 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 	}
 	afterSub.waitFor(t, "got second")
 
-	// The stream continues rather than restarting: a client that reconnects
-	// dedups on seq > last_seq, so a seq it already saw would be dropped.
 	if got := afterSub.firstSeq(t); got <= state.LastSeq {
 		t.Errorf("first seq after the adopt = %d, want > %d (the handoff watermark)", got, state.LastSeq)
 	}
 }
 
 func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
-	// The whole reason the upgrade re-execs instead of starting a new process:
-	// keeping the pid keeps the child OURS, so waiting on it still yields a
-	// status. Nothing on Unix gives a non-parent the exit status of a process
-	// it did not spawn.
+	// Only the spawning process gets a child's exit status on Unix, so the adopt
+	// must keep the pid.
 	const id = "handoff-exit"
 	before, _ := spawnEchoSession(t, id)
 	state, err := before.Handoff(id)
@@ -200,8 +187,6 @@ func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
 		t.Fatalf("Adopt() error: %v", err)
 	}
 
-	// EOF ends the read loop and the shell exits — which only happens if the
-	// PTY write side still works after the adopt.
 	if err := after.Input(id, []byte("\x04")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
@@ -216,14 +201,8 @@ func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
 }
 
 func TestHandoffCarriesCommandBlocks(t *testing.T) {
-	// A VT replay rebuilds no OSC 133 state, so the blocks travel as rows and
-	// the adopting image re-pins them. Without that, every command block in the
-	// pane disappears at the upgrade.
 	const id = "handoff-blocks"
 	m := NewManager(nil)
-	// The trailing marker is the signal the test waits on: the read loop applies
-	// a chunk's bytes before it fans them out, so a subscriber that has seen
-	// READY has a terminal where every marker before it is already in the table.
 	script := `printf '\033]133;A\007$ \033]133;B\007echo hi\r\n\033]133;C\007hi\r\n\033]133;D;0\007'; ` +
 		`printf '\033]133;A\007$ \033]133;B\007READY'; sleep 30`
 	if err := m.Spawn(SpawnOptions{

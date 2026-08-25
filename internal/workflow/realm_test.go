@@ -15,7 +15,6 @@ func newTestEngine(opts ...func(*Config)) *Engine {
 	return New(cfg)
 }
 
-// runScript is a small helper that runs a script and returns the result.
 func runScript(t *testing.T, eng *Engine, script string, args any) RunResult {
 	t.Helper()
 	res, _ := eng.Run(context.Background(), script, args)
@@ -27,7 +26,7 @@ func TestDeterminismBans(t *testing.T) {
 		name       string
 		script     string
 		wantErr    bool
-		wantSubstr []string // substrings that must appear in the actionable error
+		wantSubstr []string
 	}{
 		{
 			name:       "Date.now throws",
@@ -48,9 +47,8 @@ func TestDeterminismBans(t *testing.T) {
 			wantSubstr: []string{"new Date()", "explicit argument"},
 		},
 		{
-			// Date() as a plain function call (no `new`) ALWAYS reads the wall clock
-			// and ignores its args per spec, so it must throw with or without args —
-			// new.target distinguishes it from a deterministic new Date(arg).
+			// Date() as a plain function call ALWAYS reads the wall clock and ignores its args per spec, so
+			// it must throw with or without args; new.target distinguishes it from a deterministic new Date(arg).
 			name:       "argless Date() function call throws",
 			script:     `return Date();`,
 			wantErr:    true,
@@ -108,7 +106,6 @@ func TestDeterminismBans(t *testing.T) {
 }
 
 func TestRealmDenyByDefault(t *testing.T) {
-	// goja ships none of these; confirm the realm exposes only our surface.
 	absent := []string{"fs", "require", "setTimeout", "setInterval", "process", "console", "global", "performance", "crypto", "module"}
 	for _, name := range absent {
 		t.Run(name+"_undefined", func(t *testing.T) {
@@ -123,7 +120,6 @@ func TestRealmDenyByDefault(t *testing.T) {
 		})
 	}
 
-	// The host surface IS present.
 	present := []string{"agent", "parallel", "pipeline", "phase", "log", "args", "workflow"}
 	for _, name := range present {
 		t.Run(name+"_present", func(t *testing.T) {

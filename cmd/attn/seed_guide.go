@@ -6,13 +6,6 @@ import (
 	"os"
 )
 
-// `attn seed guide` is where the craft lives. The launch-injected garden block
-// carries the rules an agent follows without asking; everything that takes
-// judgment rather than obedience is here, on demand, so the always-on block
-// stays light and there is one place to keep the craft current. The text is
-// transplanted from the attn skill's garden and delegated-agent references,
-// which now point here.
-
 func runSeedGuide(args []string) {
 	if len(args) > 0 {
 		fmt.Fprintf(os.Stderr, "seed guide: takes no arguments\n")

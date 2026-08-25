@@ -7,11 +7,8 @@ import (
 	"time"
 )
 
-// EnsureRemoteReady is two phases, an order, and two budgets. These pin all
-// three: shipping the ~93.7MB sidecar used to run first and out of the same
-// budget as everything else, so a remote whose daemon was down and whose link
-// was slow spent its whole budget on the upload and never reached the step that
-// would have revived it.
+// EnsureRemoteReady is two phases with two budgets: shipping the ~93.7MB sidecar out of
+// one shared budget spent everything on the upload and never reached the reviving step.
 
 func TestEnsureRemoteReadyRevivesTheDaemonBeforeShippingTheSidecar(t *testing.T) {
 	b := NewBootstrapper(nil)
@@ -57,10 +54,8 @@ func TestEnsureRemoteReadySkipsTheSidecarWhenTheRemoteNeverBecameReady(t *testin
 	}
 }
 
-// The sidecar's budget must be its own. Deriving it from the ready phase's
-// context — or sharing one deadline across both — is the shape of the bug: the
-// upload inherits whatever the daemon start left over, which on a slow link is
-// nothing.
+// The sidecar's budget must be its own: derived from the ready phase's context, the
+// upload inherits whatever the daemon start left over, which on a slow link is nothing.
 func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	b := NewBootstrapper(nil)
 	var readyDeadline, shipDeadline time.Time
@@ -83,8 +78,8 @@ func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	if readyDeadline.IsZero() || shipDeadline.IsZero() {
 		t.Fatal("both phases must run under a deadline")
 	}
-	// Cancelling the ready phase must not reach the ship phase: if it does, the
-	// two share a lineage and the sidecar is spending the daemon's budget.
+	// Cancelling the ready phase must not reach the ship phase; if it does, the two share a
+	// lineage and the sidecar is spending the daemon's budget.
 	if shipCtxErr != nil {
 		t.Fatalf("ship phase context was already %v; it is not independent of the ready phase", shipCtxErr)
 	}
@@ -96,8 +91,6 @@ func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	}
 }
 
-// A remote that cannot be given a sidecar still runs sessions, so the sync
-// succeeds and the failure is reported instead of returned.
 func TestEnsureRemoteReadySurvivesASidecarThatCannotBeShipped(t *testing.T) {
 	var logged []string
 	b := NewBootstrapper(func(format string, args ...interface{}) {
@@ -119,14 +112,8 @@ func TestEnsureRemoteReadySurvivesASidecarThatCannotBeShipped(t *testing.T) {
 	}
 }
 
-// The budgets are tripwires, not fits: a healthy sync must never be near them.
-// The receipts they are sized from live beside their declaration.
-//
-// What this fails on is a budget that stops covering the sizes recorded *here* —
-// it does not measure the artifacts, so it cannot notice one growing on its own.
-// That is deliberate and it is where the tripwire lands: a sidecar that outgrows
-// its budget has to update these constants to make this test pass, and updating
-// them is the moment someone reads the arithmetic below.
+// The budgets are tripwires, not fits; the receipts they are sized from live beside
+// their declaration.
 func TestRemoteBudgetsCoverTheArtifactsTheyCarry(t *testing.T) {
 	const slowLinkBitsPerSecond = 5_000_000
 	const attnBinaryBytes = 58_934_608

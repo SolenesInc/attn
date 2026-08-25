@@ -32,10 +32,6 @@ func onlyObservation(t *testing.T, d *Daemon, sessionID string) statetrace.Obser
 	return got[0]
 }
 
-// The worker poll is the one PTY source that still commits a state, and it is
-// what ends `launching`. Its row has to say applied and name the source: the
-// cause it travels under is shared, so the cause alone cannot tell it from
-// anything else.
 func TestTraceRecordsTheAppliedWorkerPollWithItsSource(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-applied"
@@ -67,10 +63,6 @@ func TestTraceRecordsTheAppliedWorkerPollWithItsSource(t *testing.T) {
 	}
 }
 
-// An id with no store row can never be read back — `attn state explain` needs a
-// row — and can never be cleaned up, because cleanup hangs off session removal.
-// Ringing one would leak a map entry per stale id for the daemon's lifetime, so
-// these observations are log-only.
 func TestTraceDoesNotRingAnUnknownSession(t *testing.T) {
 	d := newTraceDaemon(t)
 
@@ -81,9 +73,6 @@ func TestTraceDoesNotRingAnUnknownSession(t *testing.T) {
 	}
 }
 
-// The stale-worker race: a session is removed while one of its state updates is
-// still in flight. The late observation must not resurrect a ring for an id that
-// will never be removed again.
 func TestTraceDoesNotResurrectARingAfterRemoval(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-raced"
@@ -91,7 +80,6 @@ func TestTraceDoesNotResurrectARingAfterRemoval(t *testing.T) {
 	d.handlePTYState(id, heartbeatObs("not_busy", "test", time.Now()))
 
 	d.dropSessionRecord(id)
-	// The worker event the daemon was already holding when the row went away.
 	d.handlePTYState(id, heartbeatObs("busy", "test", time.Now()))
 
 	if got := traceOf(t, d, id); got != nil {
@@ -109,9 +97,6 @@ func TestTraceRecordsHookSource(t *testing.T) {
 
 	d.handleState(&syncConn{}, &protocol.StateMessage{ID: id, State: protocol.StateWorking})
 
-	// Observed, not applied: a hook files what it saw and the resolver decides
-	// what it means. A trace that showed this as applied would be describing a
-	// writer that no longer exists.
 	got := onlyObservation(t, d, id)
 	if got.Source != stateSourceHook || got.Outcome != statetrace.OutcomeObserved {
 		t.Fatalf("got %+v", got)
@@ -121,8 +106,6 @@ func TestTraceRecordsHookSource(t *testing.T) {
 	}
 }
 
-// A change with no origin still has to be attributable, or the internal
-// transitions (startup recovery) become blanks in the middle of a trace.
 func TestTraceFallsBackToTheCauseNameAsSource(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-cause"
@@ -167,17 +150,7 @@ func TestTraceIsDroppedWhenTheSessionRecordGoes(t *testing.T) {
 	}
 }
 
-// The interleaving the store-row gate has to survive: a writer passes the
-// liveness check, the session is removed and its ring forgotten, and only then
-// does the writer reach the append. If the check and the append are not atomic,
-// the writer creates a ring for an id nothing will ever forget again — one
-// leaked map entry per race, for the daemon's lifetime.
-//
-// The hook fires inside the recorder's lock, which is exactly where the removal
-// must be attempted for the race to be real.
-// Boundary-bound for the same reason as the evidence twin: the removal blocks on
-// the recorder's lock inside forgetStateTrace, and a bubble cannot observe a
-// goroutine waiting for a mutex.
+// The removal blocks on the recorder's lock, and a synctest bubble cannot observe a goroutine waiting for a mutex.
 func TestTraceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-racing"
@@ -190,15 +163,10 @@ func TestTraceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 			return
 		}
 		once.Do(func() {
-			// Remove the session from under the in-flight writer. This blocks on
-			// the recorder's lock inside forgetStateTrace, which is what proves
-			// the two operations are serialized rather than interleaved.
 			go func() {
 				defer close(removalDone)
 				d.dropSessionRecord(id)
 			}()
-			// Give the removal a chance to get as far as it can before the write
-			// proceeds. Without RecordIf's lock it would complete here.
 			time.Sleep(20 * time.Millisecond)
 		})
 	}
@@ -225,9 +193,6 @@ func TestStateExplainResultRendersTheRing(t *testing.T) {
 	if result.SessionID != id || result.Agent != string(protocol.SessionAgentClaude) {
 		t.Fatalf("identity wrong: %+v", result)
 	}
-	// The rendered state is the session's, not the claim in the ring: a source
-	// that speaks is not a source that wrote, which is most of what the ring is
-	// for reading.
 	if result.State != protocol.StateWaitingInput {
 		t.Fatalf("state %q, want the session's current state", result.State)
 	}
@@ -256,9 +221,6 @@ func heartbeatObs(claim, detail string, at time.Time) pty.Observation {
 	return pty.Observation{Source: pty.SourceHeartbeat, Claim: claim, Detail: detail, At: at}
 }
 
-// The harness signals speak "busy"/"not_busy", not protocol states. They are
-// recorded as evidence for a later resolver to weigh and must never be offered
-// to applyState, where "busy" is not even a valid state.
 func TestTraceRecordsHarnessSignalsAsEvidenceOnly(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-evidence"
@@ -271,8 +233,6 @@ func TestTraceRecordsHarnessSignalsAsEvidenceOnly(t *testing.T) {
 	if got.Outcome != statetrace.OutcomeObserved {
 		t.Fatalf("outcome %q, want observed", got.Outcome)
 	}
-	// No cause: the observation never entered the commit path, so attributing one
-	// would imply the store saw and refused it.
 	if got.Cause != "" || got.Reason != "" {
 		t.Fatalf("evidence must carry no cause or reason: %+v", got)
 	}
@@ -290,9 +250,6 @@ func TestTraceRecordsHarnessSignalsAsEvidenceOnly(t *testing.T) {
 	}
 }
 
-// A busy heartbeat repeats once a second for the length of a turn. Without
-// collapsing, a long turn would push every other observation out of the ring and
-// make `attn state explain` useless exactly when it is needed.
 func TestTraceCollapsesRepeatedEvidence(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-repeats"
@@ -307,24 +264,16 @@ func TestTraceCollapsesRepeatedEvidence(t *testing.T) {
 	if got.Repeats != 4 {
 		t.Fatalf("Repeats %d, want 4 (5 observations collapsed into 1)", got.Repeats)
 	}
-	// The surviving row must report the latest sighting, not the first: freshness
-	// is the only thing a heartbeat contributes.
 	if want := start.Add(4 * time.Second); !got.ObservedAt.Equal(want) {
 		t.Fatalf("ObservedAt %s, want the newest %s", got.ObservedAt, want)
 	}
 
-	// A different claim is news and starts its own row.
 	d.handlePTYState(id, heartbeatObs("not_busy", "✳ done", time.Now()))
 	if all := traceOf(t, d, id); len(all) != 2 || all[1].Repeats != 0 {
 		t.Fatalf("a changed claim must open a new row: %+v", all)
 	}
 }
 
-// The contract phase 1a is judged on: a long busy turn must not consume one ring
-// slot per second. The heartbeat re-emits its unchanged level once a keepalive,
-// and the spinner frame differs on every one of those emissions — if the frame
-// reaches the trace, each row is distinct, Repeats never increments, and 256
-// seconds of work evicts every other kind of evidence from the ring.
 func TestTraceCollapsesHeartbeatsAcrossSpinnerFrames(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-spinner-frames"
@@ -334,10 +283,6 @@ func TestTraceCollapsesHeartbeatsAcrossSpinnerFrames(t *testing.T) {
 	frames := []string{"⠐", "⠸", "⠿", "⠇", "⠏", "⠋", "⠙"}
 	for i, frame := range frames {
 		at := start.Add(time.Duration(i) * time.Second)
-		// What the observer produces for that frame. It strips the glyph, so the
-		// summary is identical across frames — see
-		// TestHeartbeatDetailIsStableAcrossSpinnerFrames for the proof that it
-		// does, and the sub-case below for what happens when it does not.
 		_ = frame
 		d.handlePTYState(id, heartbeatObs("busy", "Run background sleep command", at))
 	}
@@ -352,20 +297,15 @@ func TestTraceCollapsesHeartbeatsAcrossSpinnerFrames(t *testing.T) {
 	if got.Detail != "Run background sleep command" {
 		t.Fatalf("detail %q, want the frame-free summary", got.Detail)
 	}
-	// The surviving row reports the latest sighting: freshness is the only thing
-	// a repeated heartbeat contributes.
 	if want := start.Add(time.Duration(len(frames)-1) * time.Second); !got.ObservedAt.Equal(want) {
 		t.Fatalf("ObservedAt %s, want the newest %s", got.ObservedAt, want)
 	}
 
-	// A genuinely different summary is news and opens its own row.
 	d.handlePTYState(id, heartbeatObs("busy", "Editing files", start.Add(30*time.Second)))
 	if all := traceOf(t, d, id); len(all) != 2 {
 		t.Fatalf("a changed summary must open a new row: %+v", all)
 	}
 
-	// And the failure this guards against: had the glyph reached the detail,
-	// every frame would be a distinct row rather than a repeat.
 	withFrames := newTraceDaemon(t)
 	framed := "sess-spinner-unstripped"
 	addCharacterizationSession(t, withFrames, framed, protocol.SessionAgentClaude, protocol.SessionStateWorking)
@@ -379,8 +319,6 @@ func TestTraceCollapsesHeartbeatsAcrossSpinnerFrames(t *testing.T) {
 	}
 }
 
-// callHandler runs a conn-taking daemon handler against a pipe and returns the
-// response it wrote.
 func callHandler(t *testing.T, call func(net.Conn)) protocol.Response {
 	t.Helper()
 	server, client := net.Pipe()
@@ -399,9 +337,7 @@ func callHandler(t *testing.T, call func(net.Conn)) protocol.Response {
 	return resp
 }
 
-// Claude's Notification hook is the harness saying out loud that it is blocked
-// on the user, and it says which kind. It lands ~6s late, so it is recorded as
-// evidence and must not move the session.
+// The Notification hook lands ~6s late, so it is evidence and must not move the session.
 func TestTraceRecordsTheNotificationHookAsEvidence(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-hook-notify"
@@ -425,8 +361,6 @@ func TestTraceRecordsTheNotificationHookAsEvidence(t *testing.T) {
 	if got.Source != stateSourceHookNotify {
 		t.Fatalf("source %q, want %q", got.Source, stateSourceHookNotify)
 	}
-	// The type is the load-bearing half: it separates "blocked on approval" from
-	// "waiting on a reply" without parsing an English sentence.
 	if got.Claim != "permission_prompt" || got.Detail != "Claude needs your permission" {
 		t.Fatalf("got %+v", got)
 	}
@@ -451,9 +385,6 @@ func TestNotificationHookRequiresAType(t *testing.T) {
 	}
 }
 
-// The permission mode rides along on the state hook because attn's own launch
-// flags are not authoritative: a user's global agent settings can put a guardian
-// in the loop for a session attn launched without asking for one.
 func TestTraceRecordsThePermissionModeReportedByTheStateHook(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-perm-mode"
@@ -477,7 +408,6 @@ func TestTraceRecordsThePermissionModeReportedByTheStateHook(t *testing.T) {
 	if got[0].Outcome != statetrace.OutcomeObserved {
 		t.Fatalf("the mode is evidence, not a state: outcome %q", got[0].Outcome)
 	}
-	// The state the hook reported is filed beside it, as evidence like the mode.
 	if got[1].Source != stateSourceHook || got[1].Outcome != statetrace.OutcomeObserved {
 		t.Fatalf("second observation %+v, want the hook's state as evidence", got[1])
 	}
@@ -486,8 +416,6 @@ func TestTraceRecordsThePermissionModeReportedByTheStateHook(t *testing.T) {
 	}
 }
 
-// Codex reports no permission mode. An absent one must not open a row that says
-// the reviewer is unknown — that is indistinguishable from a real claim.
 func TestStateHookWithoutAPermissionModeRecordsOnlyTheState(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-no-perm-mode"

@@ -1,10 +1,3 @@
-// Package hostsession owns the daemon's headless agent hosts: one child
-// process per attn session, envelopes out on fd 3, verbs in on stdin, its own
-// stdout/stderr to a log file.
-//
-// Invariant: a host is spawned as a process-group leader and every teardown
-// path ends in a group sweep — hard-killing the host alone orphans its tool
-// subprocesses (reproduced 3x against pi 0.83.0, 2026-08-04).
 package hostsession
 
 import (
@@ -22,52 +15,37 @@ import (
 	"github.com/victorarias/attn/internal/procreap"
 )
 
-// Event is one host envelope: the daemon acts on session/seq/kind, forwards Body.
 type Event struct {
-	SessionID string
-	Seq       int
-	Kind      string
-	Body      map[string]interface{}
-	// LifecycleID matches the run this host was spawned for, for the same
-	// reason ExitInfo carries one: a superseded host that is still draining
-	// must not be able to describe the session that replaced it.
-	LifecycleID string
-}
-
-// ExitInfo reports a host that is gone, after its group has been swept.
-type ExitInfo struct {
-	SessionID string
-	ExitCode  int
-	Signal    string
-	// LifecycleID matches the spawning run, so a late exit from a superseded
-	// host cannot retire the session that replaced it.
-	LifecycleID string
-}
-
-// SpawnOptions configures Spawn.
-type SpawnOptions struct {
 	SessionID   string
+	Seq         int
+	Kind        string
+	Body        map[string]interface{}
 	LifecycleID string
-	Command     []string
-	Env         []string
-	CWD         string
-	// LogPath collects the host's own stdout/stderr, kept off the envelope fd.
-	LogPath string
-	// RegistryPath is where the host's durable record lives (see registry.go).
-	// Written right after spawn, removed once the host is fully gone, and read
-	// by `attn profile clean` to reap hosts a dead daemon left behind. Empty
-	// means no record is kept.
+}
+
+type ExitInfo struct {
+	SessionID   string
+	ExitCode    int
+	Signal      string
+	LifecycleID string
+}
+
+type SpawnOptions struct {
+	SessionID    string
+	LifecycleID  string
+	Command      []string
+	Env          []string
+	CWD          string
+	LogPath      string
 	RegistryPath string
 }
 
-// terminationGrace bounds cooperative teardown after SIGTERM before the group
-// is killed outright. Measured: 3 ms SIGTERM-to-exit (pi 0.83.0, idle and
-// mid-run, 2026-08-05); 3 s is a tripwire — reaching it means wedged, not busy.
+// terminationGrace: measured 3 ms SIGTERM-to-exit (pi 0.83.0, idle and mid-run,
+// 2026-08-05); 3 s is a tripwire — reaching it means wedged, not busy.
 const terminationGrace = 3 * time.Second
 
-// envelopeDrainGrace bounds waiting out a dead host's envelope stream: the exit
-// must not be announced before the last envelope, but a tool child that
-// inherited fd 3 can hold the pipe open forever; 2 s means something holds it.
+// envelopeDrainGrace: a tool child that inherited fd 3 can hold the pipe open
+// forever; 2 s means something holds it.
 const envelopeDrainGrace = 2 * time.Second
 
 type host struct {
@@ -79,17 +57,12 @@ type host struct {
 	stdin        *os.File
 	envelopes    *os.File
 	logFile      *os.File
-	// reaped closes when the process is gone; exited once teardown is complete —
-	// drained and deregistered, so a caller that gets a nil error from Kill can
-	// spawn the same session id again. Kill escalates on the first, returns on
-	// the second.
-	reaped   chan struct{}
-	exited   chan struct{}
-	drained  chan struct{}
-	killOnce sync.Once
+	reaped       chan struct{}
+	exited       chan struct{}
+	drained      chan struct{}
+	killOnce     sync.Once
 }
 
-// Manager spawns and tears down the daemon's host processes.
 type Manager struct {
 	logf    func(format string, args ...interface{})
 	onEvent func(Event)
@@ -99,7 +72,6 @@ type Manager struct {
 	hosts map[string]*host
 }
 
-// New builds a Manager; nil callbacks are replaced with no-ops.
 func New(logf func(format string, args ...interface{}), onEvent func(Event), onExit func(ExitInfo)) *Manager {
 	if logf == nil {
 		logf = func(string, ...interface{}) {}
@@ -113,10 +85,8 @@ func New(logf func(format string, args ...interface{}), onEvent func(Event), onE
 	return &Manager{logf: logf, onEvent: onEvent, onExit: onExit, hosts: make(map[string]*host)}
 }
 
-// ErrNotFound reports a session id with no live host.
 var ErrNotFound = errors.New("host session not found")
 
-// Spawn starts a host for the session as a process-group leader.
 func (m *Manager) Spawn(opts SpawnOptions) error {
 	if opts.SessionID == "" {
 		return errors.New("host spawn needs a session id")
@@ -155,9 +125,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 	cmd.Stdin = stdinR
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	// ExtraFiles[0] is the child's fd 3 — the envelope stream.
 	cmd.ExtraFiles = []*os.File{envelopeW}
-	// The child leads its own process group so teardown can sweep it as a unit.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := cmd.Start(); err != nil {
@@ -185,10 +153,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		exited:       make(chan struct{}),
 		drained:      make(chan struct{}),
 	}
-	// The durable record must exist before anything can observe the host: a
-	// daemon that dies right after this line has already left the trace `attn
-	// profile clean` reaps by. A failed write is logged, not fatal — the host
-	// is healthy, only the crash-recovery net has a hole the log names.
 	if opts.RegistryPath != "" {
 		entry := procreap.NewEntry(opts.SessionID, cmd.Process.Pid, cmd.Process.Pid, opts.Command)
 		if err := procreap.WriteEntry(opts.RegistryPath, entry); err != nil {
@@ -219,10 +183,8 @@ func openLog(path string) (*os.File, error) {
 	return file, nil
 }
 
-// maxEnvelopeBytes bounds one line off the envelope fd. Receipt: the largest
-// body is one assistant message; pi 0.83.0's largest catalog maxTokens is
-// 2,000,000 ≈ 8 MB at 4 bytes/token, so 64 MB is 8x past it. Exceeding it is a
-// protocol violation — the host is torn down naming the limit, never truncated.
+// maxEnvelopeBytes receipt: pi 0.83.0's largest catalog maxTokens is 2,000,000 ≈ 8 MB at
+// 4 bytes/token, so 64 MB is 8x past it.
 const maxEnvelopeBytes = 64 << 20
 
 func (m *Manager) readEnvelopes(h *host, r *os.File) {
@@ -252,7 +214,6 @@ func (m *Manager) readEnvelopes(h *host, r *os.File) {
 		if envelope.Body == nil {
 			envelope.Body = map[string]interface{}{}
 		}
-		// The daemon trusts the process it spawned, not the stamped session id.
 		if envelope.SessionID != "" && envelope.SessionID != h.sessionID {
 			m.logf("host session %s: envelope claims session %s; using the spawned one", h.sessionID, envelope.SessionID)
 		}
@@ -274,9 +235,8 @@ func (m *Manager) readEnvelopes(h *host, r *os.File) {
 	}
 }
 
-// monitor reaps the host and sweeps its process group on EVERY exit path — the
-// sweep that catches pi orphaning its tool subprocesses. Post-reap is safe: a
-// pgid is held until its last member leaves; an empty group is a harmless ESRCH.
+// The group sweep on every exit path is what catches pi orphaning its tool
+// subprocesses. Post-reap is safe: an empty group is a harmless ESRCH.
 func (m *Manager) monitor(h *host) {
 	waitErr := h.cmd.Wait()
 	if err := syscall.Kill(-h.pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
@@ -286,7 +246,6 @@ func (m *Manager) monitor(h *host) {
 	h.stdin.Close()
 	h.logFile.Close()
 
-	// Drain before announcing the exit; see envelopeDrainGrace for the bound.
 	select {
 	case <-h.drained:
 	case <-time.After(envelopeDrainGrace):
@@ -302,8 +261,6 @@ func (m *Manager) monitor(h *host) {
 	}
 	m.mu.Unlock()
 
-	// The process and its group are gone; retire the durable record so the
-	// registry only ever names hosts that may still be running.
 	if h.registryPath != "" {
 		if err := procreap.RemoveEntry(h.registryPath); err != nil {
 			m.logf("host session %s: removing host registry entry failed: %v", h.sessionID, err)
@@ -330,30 +287,18 @@ func exitStatus(cmd *exec.Cmd, waitErr error) (int, string) {
 	return state.ExitCode(), ""
 }
 
-// Delivery is when a host should let its agent read a message.
 type Delivery string
 
 const (
-	// DeliveryPrompt is the first word of a run. A host refuses it mid-run.
-	DeliveryPrompt Delivery = "prompt"
-	// DeliverySteer lands at the agent's next turn boundary, interrupting the
-	// run in progress. This is what a doorbell uses.
-	DeliverySteer Delivery = "steer"
-	// DeliveryFollowUp lands only when the run would otherwise settle, so it
-	// queues behind the work instead of cutting into it.
+	DeliveryPrompt   Delivery = "prompt"
+	DeliverySteer    Delivery = "steer"
 	DeliveryFollowUp Delivery = "follow_up"
 )
 
-// Deliver sends one message to a live host, to be read at `how`.
-//
-// The host, not this manager, decides what a steer means on a session with no
-// run open: it starts one. So a caller never has to know what the agent is
-// doing to reach it.
 func (m *Manager) Deliver(sessionID string, how Delivery, text string) error {
 	return m.DeliverWithInput(sessionID, how, text, "")
 }
 
-// DeliverWithInput sends input with the identity the host echoes when taken.
 func (m *Manager) DeliverWithInput(sessionID string, how Delivery, text, inputID string) error {
 	switch how {
 	case DeliveryPrompt, DeliverySteer, DeliveryFollowUp:
@@ -367,16 +312,6 @@ func (m *Manager) DeliverWithInput(sessionID string, how Delivery, text, inputID
 	return m.send(sessionID, verb)
 }
 
-// ToolDetail asks a host for what an expanded tool card shows.
-//
-// The answer does not come back here: it arrives as another envelope on the
-// host's own stream, addressed by the same call id, and reaches every client
-// through the ordinary forwarding path. Two clients with the same card open
-// therefore cost one fetch, and neither has a request to time out.
-//
-// `full` asks for pi's untruncated output file rather than the clipped result
-// it handed the model; it means nothing for a call that produced no such file,
-// and the host answers with what it has.
 func (m *Manager) ToolDetail(sessionID, callID string, full bool) error {
 	if callID == "" {
 		return errors.New("tool detail needs a call id")
@@ -384,25 +319,10 @@ func (m *Manager) ToolDetail(sessionID, callID string, full bool) error {
 	return m.send(sessionID, map[string]interface{}{"verb": "tool_detail", "call_id": callID, "full": full})
 }
 
-// Snapshot asks a host for the whole conversation as it stands.
-//
-// The answer comes back the same way a tool detail's does: as an envelope on the
-// host's own stream, reaching every client. That is deliberate — a snapshot is
-// the conversation's version of the terminal's restore dump, and the point of
-// broadcasting it is that two clients attaching to one session are provably
-// looking at the same transcript rather than two independently assembled ones.
 func (m *Manager) Snapshot(sessionID string) error {
 	return m.send(sessionID, map[string]interface{}{"verb": "snapshot"})
 }
 
-// History asks a host for the page of transcript items older than `before`.
-//
-// The answer travels the same broadcast path a snapshot does, addressed by the
-// anchor rather than by a request — so a second window sitting at the same place
-// in the conversation is served by one read, and a client holding a different
-// anchor drops the page. A host that holds nothing before the anchor answers an
-// empty page rather than nothing at all, which is how a client learns it has
-// reached the start of what this host can serve.
 func (m *Manager) History(sessionID, before string) error {
 	if before == "" {
 		return errors.New("history needs a before cursor")
@@ -410,11 +330,6 @@ func (m *Manager) History(sessionID, before string) error {
 	return m.send(sessionID, map[string]interface{}{"verb": "history", "before": before})
 }
 
-// SetModel switches the model a host's agent runs on, from its next run.
-//
-// The host answers with a `model_changed` envelope carrying the model actually
-// in force — including when the switch was refused — so nothing here has to
-// guess whether it landed, and every client sees the same answer.
 func (m *Manager) SetModel(sessionID, model string) error {
 	if model == "" {
 		return errors.New("set model needs a model")
@@ -422,10 +337,6 @@ func (m *Manager) SetModel(sessionID, model string) error {
 	return m.send(sessionID, map[string]interface{}{"verb": "set_model", "model": model})
 }
 
-// ClearQueue drops everything the agent has been sent and not yet read.
-//
-// The host answers with the agent's own queue state, so the strip a client is
-// drawing empties on the agent's word rather than on this call returning.
 func (m *Manager) ClearQueue(sessionID string) error {
 	return m.send(sessionID, map[string]interface{}{"verb": "clear_queue"})
 }
@@ -447,7 +358,6 @@ func (m *Manager) send(sessionID string, verb map[string]interface{}) error {
 	return nil
 }
 
-// Has reports whether a live host exists for the session.
 func (m *Manager) Has(sessionID string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -455,7 +365,6 @@ func (m *Manager) Has(sessionID string) bool {
 	return ok
 }
 
-// SessionIDs lists the sessions with live hosts.
 func (m *Manager) SessionIDs() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -466,11 +375,8 @@ func (m *Manager) SessionIDs() []string {
 	return ids
 }
 
-// Kill tears a host down; nil error means the group is gone and the session id
-// can be respawned. The SIGTERM is load-bearing: pi's tool subprocesses lead
-// their OWN process groups (measured 2026-08-05), so only pi's dispose on
-// SIGTERM reaches them — the group kill is the backstop, and a host wedged past
-// the grace can still strand a detached tool child (accepted residual).
+// Kill returns nil only when the group is gone. The SIGTERM is load-bearing: pi's tool
+// subprocesses lead their OWN process groups (measured 2026-08-05).
 func (m *Manager) Kill(sessionID string) error {
 	m.mu.Lock()
 	h, ok := m.hosts[sessionID]
@@ -502,7 +408,6 @@ func (m *Manager) Kill(sessionID string) error {
 	return nil
 }
 
-// Shutdown tears down every live host so none outlives the daemon.
 func (m *Manager) Shutdown() {
 	for _, id := range m.SessionIDs() {
 		if err := m.Kill(id); err != nil && !errors.Is(err, ErrNotFound) {

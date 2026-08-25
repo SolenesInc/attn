@@ -8,23 +8,9 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// turn_opened_at, turn_settled_at, automation_provider_cursors.observed_at and
-// the created_at columns that order the delegation, workspace and pane listings
-// are TEXT, so every comparison SQL makes on them is a text comparison and the
-// stored encoding is the whole definition of "before". Rows a second apart
-// cannot tell a working encoding from a broken one; what has to be right is what
-// happens inside one second.
-//
-// Every fixture here therefore uses sub-second offsets whose
-// trailing-zero-stripped encodings sort in an order that is not their own. Two
-// shapes do it, and both are in raggedOffsets: a whole second, which under
-// RFC3339Nano sorts above every stamp inside itself because 'Z' is 0x5A and '.'
-// and the digits are below it; and a fraction that another fraction extends
-// (".1234" against ".12345"), where the shorter one's 'Z' again lands above the
-// longer one's next digit.
+// These stamp columns are TEXT, so every SQL comparison is a text comparison; these
+// offsets encode in an order that is not their own ('Z' is 0x5A, above '.' and digits).
 
-// raggedOffsets are ids in chronological order with the sub-second offsets that
-// separate them, all inside one second.
 var raggedOffsets = []struct {
 	id     string
 	offset time.Duration
@@ -45,18 +31,8 @@ func chronologicalRaggedIDs() []string {
 	return out
 }
 
-// The turn guard, and the reason this change exists. A turn that was settled is
-// closed, and the next attention-wanting state has to open a new one — that is
-// the loop the whole queue rests on. The guard asks it as
-// `turn_opened_at <= turn_settled_at`, in text, so a settle landing in the same
-// second as the open it closes read as "a turn is already open" and
-// OpenTurnIfClosed returned false. Nothing logged it: the session simply stopped
-// appearing in the queue until some later turn happened to open.
-//
-// The whole-second case is the one that reaches users. A day-named snooze
-// ("tomorrow", "Saturday", "Monday") resolves to an exact second — the client
-// zeroes the milliseconds — and the woken turn is stamped with that deadline, so
-// a whole-second turn_opened_at is what every such wake produces.
+// The guard asks `turn_opened_at <= turn_settled_at` in text, so a settle in the same
+// second as its open reads as still-open and the session drops out of the queue.
 func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -81,8 +57,6 @@ func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 					stamps.SettledAt, stamps.OpenedAt)
 			}
 
-			// The load-bearing assert: the turn is settled, so the next
-			// attention-wanting state must open a new one.
 			if !s.OpenTurnIfClosed("s1", turnBase().Add(c.settled+time.Millisecond)) {
 				t.Fatalf("no turn opened after a settle in the same second; the session is silently out of the queue")
 			}
@@ -90,15 +64,8 @@ func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 	}
 }
 
-// turn_snoozed_until is matched for equality (`turn_snoozed_until = ?`), not
-// ordered, so changing the encoding cannot misorder it — it can only stop a
-// stored deadline from matching the one a fired timer re-formats. That is what
-// makes the migration load-bearing here rather than the format: a snooze written
-// before it, in the old encoding, has to still be wakeable after it.
-//
-// A whole second is the case that matters, because every day-named snooze
-// resolves to one — the client zeroes the milliseconds — and it is exactly where
-// the two encodings disagree ("…:00Z" against "…:00.000000000Z").
+// turn_snoozed_until is matched for equality, and a whole second is where the two
+// encodings disagree ("…:00Z" against "…:00.000000000Z").
 func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -117,7 +84,6 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
 
-	// Sanity: without the rewrite the timer cannot cash the deadline it holds.
 	if s.WakeTurnAt("s1", until) {
 		t.Fatalf("the planted stamp already matches; this test would pass without the migration")
 	}
@@ -133,14 +99,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	}
 }
 
-// The review-request cursor advance is guarded in SQL —
-// `DO UPDATE SET observed_at=excluded.observed_at WHERE excluded.observed_at >=
-// automation_provider_cursors.observed_at` — and it is the only observed_at
-// comparison the store makes. A poll loop produces observations inside one
-// second, and a later one that fails to advance the cursor leaves the fence
-// standing on a stale instant.
-//
-// The schedule cursor deliberately is not the subject here: its upsert carries no
+// The schedule cursor is deliberately not the subject: its upsert carries no
 // WHERE, so it advances whatever the encoding does and proves nothing.
 func TestAReviewRequestCursorAdvancesWithinASecond(t *testing.T) {
 	s := newTurnStore(t)
@@ -174,10 +133,6 @@ func TestAReviewRequestCursorAdvancesWithinASecond(t *testing.T) {
 	}
 }
 
-// PendingDelegationOperations feeds the daemon's recovery of delegations it
-// still owes work for, in `ORDER BY created_at`. A burst of claims inside one
-// second is the ordinary case — a chief fires several delegations at once — and
-// they have to come back in the order they were claimed.
 func TestPendingDelegationOperationsAreInClaimOrderWithinASecond(t *testing.T) {
 	s := newTurnStore(t)
 
@@ -201,10 +156,6 @@ func TestPendingDelegationOperationsAreInClaimOrderWithinASecond(t *testing.T) {
 	}
 }
 
-// ListWorkflowRuns promises newest-first, in `ORDER BY created_at DESC`. Its
-// stamps come from the CLI through protocol.TimestampNow(), so the store
-// normalizes them on write — this is the assert that the normalizing happens at
-// all, rather than the column inheriting whatever spelling a caller chose.
 func TestWorkflowRunsAreNewestFirstWithinASecond(t *testing.T) {
 	s := newTurnStore(t)
 
@@ -231,10 +182,6 @@ func TestWorkflowRunsAreNewestFirstWithinASecond(t *testing.T) {
 	}
 }
 
-// Migration 95 rewrites what earlier versions stored. Its input is the encoding
-// they wrote, so the test writes that encoding rather than describing it: the
-// stamps go in the way an older store would have written them, the migration
-// runs, and the guard and the order that were wrong come back right.
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -251,12 +198,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		}
 	}
 
-	// Roll the stamps back to the encoding migration 95 exists to replace: a turn
-	// opened on a whole second and settled half a second later, and delegation
-	// rows whose fractions extend one another. One value the migration cannot read
-	// is planted too, which it must leave alone rather than turn into year 1, and
-	// turn_snoozed_until stays '' — a session that is not snoozed holds a sentinel,
-	// not a stamp that failed to parse.
+	// An unsnoozed session holds '' as a sentinel, not a stamp that failed to parse.
 	if _, err := s.db.Exec(
 		`UPDATE sessions SET turn_opened_at = ?, turn_settled_at = ? WHERE id = 's1'`,
 		turnBase().Format(time.RFC3339Nano),
@@ -278,8 +220,6 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
 
-	// Sanity: the planted state is the broken one, so a pass here would mean the
-	// test proves nothing.
 	if s.OpenTurnIfClosed("s1", turnBase().Add(time.Second)) {
 		t.Fatalf("the planted turn stamps already reopen correctly; this test would pass without the migration")
 	}
@@ -289,8 +229,6 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 	assertMigration95Applied(t, s)
 
-	// Re-running finds nothing left to do and changes nothing: the rewrite is a
-	// decode and re-encode, so an already-converted stamp yields itself.
 	before := stampDigest(t, s)
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
 		t.Fatalf("unrecord migration 95 again: %v", err)
@@ -303,9 +241,6 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 }
 
-// assertMigration95Applied is the post-migration state: the settled turn reopens,
-// the delegation listing is in claim order, the stamp that does not decode is
-// untouched, and the unsnoozed sentinel is still the sentinel.
 func assertMigration95Applied(t *testing.T, s *Store) {
 	t.Helper()
 
@@ -343,8 +278,6 @@ func assertMigration95Applied(t *testing.T, s *Store) {
 	}
 }
 
-// stampDigest is every stamp migration 95 touches, in a stable order, so a
-// second run can be compared byte for byte against the first.
 func stampDigest(t *testing.T, s *Store) string {
 	t.Helper()
 	var digest string

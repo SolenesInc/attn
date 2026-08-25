@@ -5,10 +5,7 @@ import { ConversationPane } from './index';
 import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
 import { useConversationsStore } from '../../store/conversations';
 
-// @pierre/diffs renders through a custom element with its own shadow root and a
-// Shiki highlighter — a real browser's job, covered by the packaged-app
-// scenario. Here the question is only whether the card hands it the patch pi
-// produced, so stand in for it with something assertable.
+// @pierre/diffs needs a real browser (custom element, shadow root, Shiki), so stand in for it here.
 vi.mock('@pierre/diffs/react', () => ({
   PatchDiff: ({ patch }: { patch: string }) => <div data-testid="patch-diff">{patch}</div>,
 }));
@@ -76,17 +73,13 @@ describe('ConversationPane tool cards', () => {
     expect(sendAgentToolDetail).toHaveBeenCalledWith(SESSION, 'c1', false);
     expect(screen.getByTestId('conversation-tool-waiting')).toBeInTheDocument();
 
-    // Closing and reopening must not re-ask: the answer is already on its way
-    // or already here.
     fireEvent.click(screen.getByTestId('conversation-tool-toggle'));
     fireEvent.click(screen.getByTestId('conversation-tool-toggle'));
     expect(sendAgentToolDetail).toHaveBeenCalledTimes(1);
   });
 
-  // React may invoke a state updater more than once, so the read has to be
-  // decided in the click handler and not inside the setter. StrictMode is how
-  // that replay is reproducible: with the decision inside the updater, one
-  // click asks the host twice.
+    // React may invoke a state updater more than once, so the read has to be decided in the click
+    // handler, not inside the setter; StrictMode is how that replay is reproducible.
   it('asks once even when React replays the state update', () => {
     const { sendAgentToolDetail } = renderPane({}, { strict: true });
     apply('session_ready', {}, 1);
@@ -183,8 +176,6 @@ describe('ConversationPane tool cards', () => {
 
     fireEvent.click(screen.getByTestId('conversation-queue-clear'));
     expect(sendAgentClearQueue).toHaveBeenCalledWith(SESSION);
-    // Still shown: the strip is pi's answer about pi's queues, and nothing has
-    // come back yet.
     expect(screen.getAllByTestId('conversation-queued')).toHaveLength(2);
 
     apply('queue_update', { steering: [], followUp: [] }, 4);

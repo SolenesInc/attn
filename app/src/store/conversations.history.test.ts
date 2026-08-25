@@ -1,16 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useConversationsStore, selectConversation, conversationItemKey } from './conversations';
 
-/**
- * Slice 5: what the app does with a conversation longer than one window.
- *
- * A snapshot is broadcast and REPLACES — that is the bargain the host's
- * transcript makes with every client. What changes here is that a snapshot no
- * longer carries the whole conversation, so replacing blindly would mean any
- * window attaching shortens what every other window is showing. The epoch is
- * what makes the difference decidable, and most of this file is about that.
- */
-
 const SESSION = 'sess-history';
 
 function apply(kind: string, body: Record<string, unknown>, seq: number) {
@@ -59,22 +49,16 @@ describe('conversation snapshots that are only a window', () => {
     }, 2);
     expect(keys()).toEqual(['message:m1', 'message:m2', 'message:m3', 'message:m4']);
 
-    // Another window attaches. The host answers with its newest window, which
-    // starts at m3 — everything this client paged in is still valid.
     apply('conversation_snapshot', {
       epoch: 'e1', items: [message('m3'), message('m4'), message('m5')], has_more: true, running: false,
     }, 3);
 
     expect(keys()).toEqual(['message:m1', 'message:m2', 'message:m3', 'message:m4', 'message:m5']);
-    // The client reached the start of the conversation by paging; the
-    // snapshot's own has_more is about the window's start, not the transcript's.
     expect(read().hasMoreBefore).toBe(false);
   });
 
   it('replaces when the transcript was rebuilt by another host', () => {
     apply('conversation_snapshot', { epoch: 'e1', items: [message('m1'), message('m2')], has_more: false, running: false }, 1);
-    // A revived host read pi's session file and minted its own ids: nothing it
-    // sends can be spliced onto what came from the dead one.
     apply('session_ready', { state: 'idle' }, 1);
     apply('conversation_snapshot', { epoch: 'e2', items: [message('h1')], has_more: true, running: false }, 2);
 
@@ -113,8 +97,6 @@ describe('paging older history in', () => {
     expect(read().loadingHistory).toBe(false);
   });
 
-  // Pages are broadcast, so a window scrolled somewhere else sees every page
-  // anyone asked for. Taking one would put a gap in this transcript.
   it('ignores a page anchored anywhere but this client oldest item', () => {
     apply('conversation_page', {
       epoch: 'e1', before: 'message:m6', items: [message('m4')], has_more: true,
@@ -143,8 +125,6 @@ describe('paging older history in', () => {
     expect(read().hasMoreBefore).toBe(false);
   });
 
-  // A host that died under a page request leaves a spinner nothing will ever
-  // answer.
   it('stops waiting for a page when the host goes away', () => {
     useConversationsStore.getState().historyRequested(SESSION);
     useConversationsStore.getState().hostExited(SESSION);
@@ -195,8 +175,6 @@ describe('notices and the model', () => {
     expect(read().model).toBe('anthropic/claude');
   });
 
-  // A refusal reaches the app as the model still in force; a host that answered
-  // with nothing must not blank the picker.
   it('keeps the model it has when a change carries none', () => {
     apply('session_ready', { state: 'idle', model: 'openai/gpt-5.6-luna', models: ['openai/gpt-5.6-luna'] }, 1);
     apply('model_changed', { error: 'no credentials for anthropic' }, 2);

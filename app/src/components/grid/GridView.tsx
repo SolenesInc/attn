@@ -1,11 +1,3 @@
-// Grid mode host: every live session as a terminal tile in ONE WebGL context.
-// It observes only — it taps the PTY firehose and never attaches or resizes, so
-// it can never claim PTY geometry. A zoomed tile takes keyboard input, forwarded
-// with ptyWrite, which claims no geometry either.
-//
-// A new tile is seeded from getScreenSnapshot and the live firehose is deduped
-// against the snapshot's sequence watermark, or it would stay blank until the
-// session next emits.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTerminalInput } from '../../ghostty';
 import { loadGhostty } from '../../ghostty/wasm';
@@ -31,7 +23,6 @@ import './grid.css';
 
 export interface GridSessionTile {
   runtimeId: string;
-  // The runtimeId changes across restarts; this does not.
   sessionId: string;
   title: string;
   attention: boolean;
@@ -40,16 +31,12 @@ export interface GridSessionTile {
 
 interface GridViewProps {
   tiles: GridSessionTile[];
-  // Resolved upstream; App slices `tiles` to fit, so tiles.length <= rows*cols.
   layout: { rows: number; cols: number };
-  // Live sessions that did not fit the fixed shape; always 0 in Auto mode.
   offBoardCount?: number;
-  // Optional so the grid still runs without membership wiring (tests).
   hiddenSessions?: HiddenGridSession[];
   onRemoveTile?: (sessionId: string) => void;
   onRestoreTile?: (sessionId: string) => void;
   resolvedTheme: Parameters<typeof getTerminalTheme>[0];
-  // Optional: without it the grid is live-fill only (tests, no daemon socket).
   getScreenSnapshot?: (runtimeId: string) => Promise<ScreenSnapshotResult | null>;
 }
 
@@ -81,7 +68,6 @@ export function GridView({
   const tilesRef = useRef(tiles);
   tilesRef.current = tiles;
 
-  // runtimeId -> sessionId, for the hover-remove button (tile id == runtimeId).
   const sessionIdByRuntime = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of tiles) map.set(t.runtimeId, t.sessionId);
@@ -90,18 +76,14 @@ export function GridView({
 
   // rect is container-space, aligning with the canvas tiles.
   const [removeTarget, setRemoveTarget] = useState<{ sessionId: string; rect: Rect } | null>(null);
-  // Read from a ref so the mount/sync effects don't re-run on a shape change.
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
-  // A generation per live runtime id: seeds each exactly once per appearance and
-  // invalidates a fetch still in flight when the tile was removed and re-added.
   const seedGenRef = useRef<Map<string, number>>(new Map());
   const seedCounterRef = useRef(0);
   const getSnapshotRef = useRef(getScreenSnapshot);
   getSnapshotRef.current = getScreenSnapshot;
 
-  // Ref-stable (everything read from refs) so both effects share one instance.
   const reconcileSeeding = useRef((grid: TerminalGrid) => {
     const liveIds = new Set(tilesRef.current.map((t) => t.runtimeId));
     for (const id of [...seedGenRef.current.keys()]) {
@@ -112,11 +94,10 @@ export function GridView({
       if (seedGenRef.current.has(id)) continue;
       const gen = (seedCounterRef.current += 1);
       seedGenRef.current.set(id, gen);
-      if (!fetchSnapshot) continue; // no daemon socket: live-fill only
+      if (!fetchSnapshot) continue;
       grid.beginSeeding(id);
       fetchSnapshot(id)
         .then((result) => {
-          // Superseded by a remove+re-add, or torn down mid-flight.
           if (seedGenRef.current.get(id) !== gen) return;
           if (gridRef.current !== grid || !grid.hasTile(id)) return;
           if (!result) {
@@ -132,14 +113,11 @@ export function GridView({
     }
   }).current;
 
-  // The tiles array is rebuilt every parent render; this fires only on changes.
   const signature = useMemo(
     () => tiles.map((t) => `${t.runtimeId}:${t.state}:${t.attention ? 1 : 0}`).join('|'),
     [tiles],
   );
 
-  // One renderer + terminal grid per theme; unmount releases the single WebGL
-  // context deterministically.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -174,8 +152,7 @@ export function GridView({
       resizeObserver = new ResizeObserver(() => grid.invalidate());
       resizeObserver.observe(stage);
 
-      // Drop blank icon glyphs cached before the Nerd Font loaded; the grid can
-      // open before that completes on a cold start.
+      // The grid can open before the Nerd Font loads, caching blank icon glyphs.
       void ensureTerminalIconFont(FONT_SIZE).then(() => {
         if (!disposed) {
           renderer.invalidateGlyphCache();
@@ -183,8 +160,6 @@ export function GridView({
         }
       });
 
-      // With no tile zoomed there is no target, so overview keystrokes are
-      // swallowed rather than leaked.
       const forward = (data: string) => {
         const id = gridRef.current?.zoomedId();
         if (id) void ptyWrite({ id, data });
@@ -235,7 +210,6 @@ export function GridView({
       });
     });
 
-    // One firehose listener for the grid's lifetime; untiled sessions are ignored.
     void listenPtyEvents((evt) => {
       const grid = gridRef.current;
       if (!grid) return;
@@ -245,7 +219,6 @@ export function GridView({
           grid.writeBytes(p.id, typeof p.data === 'string' ? b64ToBytes(p.data) : p.data, p.seq);
         }
       } else if (p.event === 'local_resize') {
-        // The snapshot and subsequent output are geometry-dependent.
         if (grid.hasTile(p.id)) grid.resizeTile(p.id, p.cols, p.rows);
       } else if (p.event === 'reset') {
         if (grid.hasTile(p.id)) grid.writeBytes(p.id, RESET_BYTES);
@@ -261,7 +234,6 @@ export function GridView({
       disposeInput?.();
       unlisten?.();
       resizeObserver?.disconnect();
-      // A rebuilt terminal grid must re-seed its fresh, blank tile models.
       seedGenRef.current.clear();
       const grid = gridRef.current;
       gridRef.current = null;
@@ -270,8 +242,6 @@ export function GridView({
     };
   }, [resolvedTheme, reconcileSeeding]);
 
-  // setLayout here keeps the reflow snapshot aligned when a tile change also
-  // shifts the Auto shape.
   useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
@@ -281,13 +251,10 @@ export function GridView({
     reconcileSeeding(grid);
   }, [signature, reconcileSeeding]);
 
-  // setLayout is idempotent on unchanged dims, so overlapping with the sync
-  // effect above is a safe no-op.
   useEffect(() => {
     gridRef.current?.setLayout(layout.rows, layout.cols);
   }, [layout.rows, layout.cols]);
 
-  // Click toggles zoom; Esc exits zoom.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -312,15 +279,13 @@ export function GridView({
     const id = grid.hitTest(e.clientX, e.clientY);
     if (id) {
       grid.zoomTo(id);
-      setRemoveTarget(null); // a zoomed tile shows no remove button
-      // The zoomed tile only receives keys while the stage owns focus.
+      setRemoveTarget(null);
       stageRef.current?.focus({ preventScroll: true });
     }
   };
 
-  // Overview only: while zoomed the rect would be mid-morph. The handlers live
-  // on .grid-view, not the stage, so moving onto the × button — a .grid-view
-  // child — fires no mouseleave and cannot flicker it.
+  // Handlers live on .grid-view, not the stage: the × button is a child, so
+  // moving onto it fires no mouseleave and cannot flicker it.
   const updateRemoveTarget = (e: React.MouseEvent) => {
     const grid = gridRef.current;
     if (!grid || !onRemoveTile || grid.isZoomed()) {

@@ -10,13 +10,8 @@ export interface AppViewProps {
 
 export type AppViewComponent = ComponentType<AppViewProps>;
 
-// How long a bundle fetch may hang before the tile says so.
-//
-// The tripwire is the fetch, not the network: the daemon serving it is on this
-// machine, and every artifact it serves is a file it already has on disk. 10s is
-// borrowed from A4's appRuntimeConnectWait — the same shape of wait against the
-// same daemon — and is far past anything a local read does. A view that trips it
-// is a daemon that is gone or wedged, which is what the message says.
+// 10s, borrowed from A4's appRuntimeConnectWait — far past anything a local
+// bundle read does. The tripwire is the fetch, not the network.
 export const APP_VIEW_LOAD_TIMEOUT_MS = 10_000;
 
 export class AppViewLoadError extends Error {
@@ -28,16 +23,8 @@ export class AppViewLoadError extends Error {
   }
 }
 
-/**
- * Imports a built view and returns its component.
- *
- * A plain dynamic import of the daemon's URL, on purpose. The module is an ES
- * module whose SDK imports are bare specifiers, and only a real import resolves
- * those against index.html's import map — which is the whole one-React design.
- *
- * The import cannot be cancelled, so the timeout races it rather than aborting
- * it: a late resolution is dropped, and the tile has already said what happened.
- */
+/** A plain dynamic import on purpose: only a real import resolves the module's
+ * bare SDK specifiers against index.html's import map. */
 export async function loadAppView(url: string, timeoutMs = APP_VIEW_LOAD_TIMEOUT_MS): Promise<AppViewComponent> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const module = await Promise.race([
@@ -61,9 +48,6 @@ export async function loadAppView(url: string, timeoutMs = APP_VIEW_LOAD_TIMEOUT
 
   const component = (module as { default?: unknown }).default;
   if (typeof component !== 'function') {
-    // The binding, by name: an author who exported the component under its own
-    // name rather than as the default gets told exactly that, and the list of
-    // what the module did export is the shortest way to see it.
     const exported = Object.keys(module as object).filter((k) => k !== 'default');
     throw new AppViewLoadError(
       'This view exports no component.',
@@ -74,9 +58,8 @@ export async function loadAppView(url: string, timeoutMs = APP_VIEW_LOAD_TIMEOUT
   return component as AppViewComponent;
 }
 
-// What a crash report leads with. WebKit's `stack` is frames only — no message
-// line, unlike V8 — so a report built from the stack alone names the line that
-// threw and never what was thrown, which is the half the author needs first.
+// WebKit's `stack` is frames only — no message line, unlike V8 — so a report built
+// from the stack alone never names what was thrown.
 export function errorText(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const headline = `${error.name}: ${error.message}`;

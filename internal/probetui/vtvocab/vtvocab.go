@@ -1,19 +1,7 @@
-// Package vtvocab scans raw terminal byte streams and counts the VT feature
-// families used by internal/probetui's mirror tests: private mode
-// sets/resets, alt-screen transitions, cursor addressing, OSC codes,
-// terminal queries issued by the child, cursor save/restore, and the
-// leftover CSI/ESC finals that don't fit a named bucket.
-//
-// This is a single linear scan, not a full VT parser: unrecognized CSI/ESC
-// finals fall into "other" buckets keyed by final byte so nothing is
-// silently dropped; DCS sequences are bucketed as XTGETTCAP-style child
-// queries. Ported from the agent-mirror capture tool's analyzer.
 package vtvocab
 
 import "strings"
 
-// Stats counts one phase's worth of VT feature usage. Field JSON tags match
-// the agent-mirror capture tool's analysis.json shape.
 type Stats struct {
 	TotalBytes int64 `json:"totalBytes"`
 
@@ -33,7 +21,6 @@ type Stats struct {
 
 	OSCByCode map[string]int `json:"oscByCode"`
 
-	// Queries issued BY the child process.
 	DA1QueryFromChild      int            `json:"da1QueryFromChild"`
 	CPRQueryFromChild      int            `json:"cprQueryFromChild"`
 	DECRQMFromChild        int            `json:"decrqmFromChild"`
@@ -67,7 +54,6 @@ func newStats() *Stats {
 
 var altScreenModes = map[string]bool{"47": true, "1047": true, "1049": true}
 
-// Analyze scans raw and returns the VT feature counts observed in it.
 func Analyze(raw []byte) Stats {
 	s := newStats()
 
@@ -86,7 +72,6 @@ func Analyze(raw []byte) Stats {
 			continue
 		}
 
-		// ESC at i. Need at least one more byte to classify.
 		if i+1 >= n {
 			i++
 			break
@@ -94,7 +79,7 @@ func Analyze(raw []byte) Stats {
 		esc := raw[i+1]
 
 		switch esc {
-		case '[': // CSI
+		case '[':
 			j := i + 2
 			for j < n && raw[j] < 0x40 {
 				j++
@@ -108,7 +93,7 @@ func Analyze(raw []byte) Stats {
 			classifyCSI(s, params, final)
 			i = j + 1
 
-		case ']': // OSC, terminated by BEL or ST (ESC \)
+		case ']':
 			j := i + 2
 			for j < n {
 				if raw[j] == 0x07 {
@@ -129,7 +114,7 @@ func Analyze(raw []byte) Stats {
 				i = n
 			}
 
-		case 'P': // DCS, terminated by ST (ESC \); approximated as XTGETTCAP bucket
+		case 'P':
 			j := i + 2
 			for j < n {
 				if raw[j] == 0x1b && j+1 < n && raw[j+1] == '\\' {

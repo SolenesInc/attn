@@ -13,11 +13,6 @@ interface CodeBlockProps {
   preProps?: HTMLAttributes<HTMLPreElement>;
 }
 
-/**
- * Fenced code block: plannotator chrome (rounded pre, 13px mono, hover copy
- * button) + shiki dual-theme highlighting. Unknown languages fall back to
- * plain text with the same chrome.
- */
 export function CodeBlock({ code, language, preProps }: CodeBlockProps) {
   const highlighted = useShikiHighlight(code, language);
   const [copied, setCopied] = useState(false);

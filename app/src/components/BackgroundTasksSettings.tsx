@@ -1,13 +1,3 @@
-// app/src/components/BackgroundTasksSettings.tsx
-//
-// The durable task runner's task list, surfaced in Settings › Background Tasks.
-// This is the management view (state, attempts, next attempt, last error, Retry)
-// that used to live in the notebook browser's collapsible Tasks section; tasks
-// are a global daemon concern, not a notebook one, so they belong in Settings.
-//
-// Broadcast-authoritative, like the old panel: it fetches on mount and on every
-// tasks_changed bump (taskChangeSignal), and a Retry only issues the
-// command — the resulting broadcast drives the refetch that reflects truth.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Task } from '../hooks/useDaemonSocket';
 import './BackgroundTasksSettings.css';
@@ -15,15 +5,11 @@ import './BackgroundTasksSettings.css';
 interface BackgroundTasksSettingsProps {
   listTasks: () => Promise<Task[]>;
   retryTask: (taskId: string) => Promise<Task | null>;
-  // Bumps on every tasks_changed broadcast so the list re-fetches.
   taskChangeSignal: number;
 }
 
-// A terminal task isn't waiting on a next attempt, so its scheduled time is noise.
 const TASK_TERMINAL_STATES = new Set(['done', 'dead']);
 
-// formatNextAttempt renders an RFC3339 next_attempt_at as a short relative phrase
-// ("in 2m", "5s ago", "now"). Returns '' for an unparseable/zero timestamp.
 function formatNextAttempt(iso: string): string {
   if (!iso) return '';
   const t = Date.parse(iso);

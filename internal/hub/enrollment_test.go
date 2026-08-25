@@ -17,8 +17,6 @@ import (
 
 const testHomeDaemonID = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-// shimSSH replaces ssh on PATH with a script, so the enrollment step can be
-// driven through the exit codes a remote `attn enrollment enroll` really emits.
 func shimSSH(t *testing.T, script string) {
 	t.Helper()
 	shimDir := t.TempDir()
@@ -90,8 +88,6 @@ func TestEnrollRemote_AlreadyEnrolledIsQuiet(t *testing.T) {
 }
 
 func TestEnrollRemote_RefusalStopsTheSyncAndCarriesTheReason(t *testing.T) {
-	// The banner every remote `attn` prints is on stderr with the refusal; the
-	// person whose sync just failed does not need the remote's socket path.
 	script := "#!/bin/sh\n" +
 		"printf '[attn profile=fence socket=~/.attn-fence/attn.sock port=21320]\\n' >&2\n" +
 		"printf 'this daemon (d-x) is already an outpost of d-other\\n' >&2\nexit 3\n"
@@ -110,8 +106,6 @@ func TestEnrollRemote_RefusalStopsTheSyncAndCarriesTheReason(t *testing.T) {
 }
 
 func TestEnrollRemote_UnansweredCheckDoesNotBlockTheSync(t *testing.T) {
-	// An older remote binary has no `enrollment` command. Enrollment is a record,
-	// not a precondition for sessions, so the sync continues and says why.
 	script := "#!/bin/sh\nprintf 'attn: unknown command \"enrollment\"\\n' >&2\nexit 2\n"
 	log, err := enrollWithShim(t, script, testHomeDaemonID)
 	if err != nil {

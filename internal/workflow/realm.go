@@ -8,7 +8,6 @@ import (
 	"github.com/dop251/goja/parser"
 )
 
-// Meta is the parsed workflow descriptor from the leading `export const meta = {...}`.
 type Meta struct {
 	Name        string
 	Description string
@@ -17,13 +16,7 @@ type Meta struct {
 	Model       string
 }
 
-// installDeterminismBans replaces every non-deterministic ambient with a clear,
-// agent-actionable throw, and confirms goja's already-clean surface stays clean.
-//
-// goja's New() installs Date, Math, Promise, etc. It does NOT install fs, net,
-// process, require, crypto, performance, setTimeout, or console — and because we
-// inject nothing else (no goja_nodejs), the realm exposes ONLY our host surface
-// plus the determinism-banned shims below.
+// goja's New() installs no fs, net, process, require, crypto, performance, setTimeout or console, and nothing else is injected, so the realm exposes only the host surface plus the shims below.
 func installDeterminismBans(vm *goja.Runtime) error {
 	throw := func(api, substitute string) func(goja.FunctionCall) goja.Value {
 		return func(goja.FunctionCall) goja.Value {
@@ -31,7 +24,6 @@ func installDeterminismBans(vm *goja.Runtime) error {
 		}
 	}
 
-	// Date.now() -> throw. Keep the rest of Date (parse, instance methods).
 	dateObj := vm.Get("Date")
 	if dateObj != nil {
 		if obj, ok := dateObj.(*goja.Object); ok {
@@ -44,13 +36,10 @@ func installDeterminismBans(vm *goja.Runtime) error {
 		}
 	}
 
-	// new Date() with no args reads the wall clock -> throw. new Date(<arg>) is
-	// deterministic and stays allowed by delegating to the genuine constructor.
 	if err := banArglessNewDate(vm); err != nil {
 		return err
 	}
 
-	// Math.random() -> throw. Keep deterministic Math methods.
 	mathObj := vm.Get("Math")
 	if mathObj != nil {
 		if obj, ok := mathObj.(*goja.Object); ok {
@@ -63,8 +52,7 @@ func installDeterminismBans(vm *goja.Runtime) error {
 		}
 	}
 
-	// Belt-and-suspenders: deny performance/crypto if a future goja build ships
-	// them. They are absent in this build, so these are no-ops today.
+	// Belt-and-suspenders: performance/crypto are absent in this build, so these are no-ops today.
 	for _, name := range []string{"performance", "crypto"} {
 		if v := vm.Get(name); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 			if err := vm.Set(name, goja.Undefined()); err != nil {
@@ -76,10 +64,7 @@ func installDeterminismBans(vm *goja.Runtime) error {
 	return nil
 }
 
-// banArglessNewDate replaces the global Date constructor with a wrapper that
-// throws on argless `new Date()` (wall-clock read) while delegating any explicit
-// `new Date(arg)` to the genuine constructor. Implemented in JS so instance
-// prototype/inheritance is preserved exactly.
+// In JS so instance prototype/inheritance is preserved exactly.
 func banArglessNewDate(vm *goja.Runtime) error {
 	banMsg := (&ErrDeterminismBan{
 		API:        "new Date()",
@@ -89,15 +74,8 @@ func banArglessNewDate(vm *goja.Runtime) error {
 	if err := vm.Set("__wfDateBanMsg", banMsg); err != nil {
 		return err
 	}
-	// The IIFE captures the ban thrower so the text survives after we drop the
-	// temporary global. WfDate routes EVERY wall-clock-reading form to the ban:
-	//   - Date()        : a plain function call (new.target === undefined). Per spec
-	//                     this ignores its args entirely and returns the current
-	//                     time string, so it is non-deterministic with OR without
-	//                     args — always banned.
-	//   - new Date()    : argless construction reads the wall clock — banned.
-	// Only `new Date(<arg>)` (construction with at least one argument) is
-	// deterministic and is delegated to the genuine constructor.
+	// The IIFE captures the ban thrower so the text survives dropping the temporary global.
+	// A plain `Date()` call ignores its args per spec and returns the current time, so it is banned with OR without args.
 	const shim = `(function(){
 		var OrigDate = Date;
 		function WfDate() {
@@ -128,15 +106,11 @@ func banArglessNewDate(vm *goja.Runtime) error {
 	if _, err := vm.RunString(shim); err != nil {
 		return err
 	}
-	// Drop the temporary globals (the captured Go closure keeps the message alive;
-	// __wfThrowDateBan stays referenced by WfDate so it remains reachable).
+	// Safe to drop: __wfThrowDateBan stays reachable through WfDate's closure.
 	return vm.Set("__wfDateBanMsg", goja.Undefined())
 }
 
-// stripExport removes a single leading `export ` keyword from a `const meta = ...`
-// (or any export) line so goja's non-module parser/runtime accepts the script.
-// goja does not parse ES module export syntax; the workflow contract allows
-// `export const meta = {...}` purely as authoring sugar.
+// goja does not parse ES module syntax, and `export const meta = {...}` is authoring sugar.
 func stripExport(src string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(src, "\n") {
@@ -153,27 +127,19 @@ func stripExport(src string) string {
 	return b.String()
 }
 
-// parseMeta enforces the meta contract: `meta` must be the FIRST statement, a
-// `const` (or let/var) declaration whose initializer is a PURE object literal
-// (no computed keys, no call/expression values). It returns nil Meta if no meta
-// is declared (meta is optional), or an *ErrMeta on a malformed declaration.
-//
-// The src passed here must already have `export` stripped.
+// `meta` must be the FIRST statement and its initializer a PURE object literal; src must already have `export` stripped.
 func parseMeta(src string) (*Meta, error) {
 	body, err := topLevelStatements(src)
 	if err != nil {
-		// Let the runtime surface the real syntax error; meta parsing only
-		// validates the meta shape, not general syntax.
 		return nil, nil
 	}
 	if len(body) == 0 {
 		return nil, nil
 	}
 
-	// Find a `meta` declaration anywhere, but require it to be the FIRST statement.
 	declIdx, decl := findMetaDecl(body)
 	if decl == nil {
-		return nil, nil // no meta declared (allowed)
+		return nil, nil
 	}
 	if declIdx != 0 {
 		return nil, &ErrMeta{Reason: "meta must be the first statement in the workflow"}
@@ -235,16 +201,12 @@ func parseMeta(src string) (*Meta, error) {
 				m.Phases = append(m.Phases, s)
 			}
 		default:
-			// Unknown keys are tolerated as long as their values are literals; a
-			// computed/call value would already have been rejected for known keys.
 		}
 	}
 	return m, nil
 }
 
-// topLevelStatements parses the script wrapped in the same async function the
-// engine runs (so top-level await/return parse) and returns the wrapper's body
-// statements — i.e. the workflow's own top-level statements.
+// Parsed inside the same async wrapper the engine runs, so top-level await/return parse.
 func topLevelStatements(src string) ([]ast.Statement, error) {
 	wrapped := "(async function __wf__(){\n" + src + "\n})()"
 	prog, err := parser.ParseFile(nil, "workflow.js", wrapped, 0)
@@ -269,8 +231,6 @@ func topLevelStatements(src string) ([]ast.Statement, error) {
 	return fn.Body.List, nil
 }
 
-// findMetaDecl returns the index + binding of the first declaration named `meta`,
-// or (-1, nil) if none. It scans only top-level lexical/variable declarations.
 func findMetaDecl(body []ast.Statement) (int, *ast.Binding) {
 	for i, st := range body {
 		var bindings []*ast.Binding
@@ -291,9 +251,7 @@ func findMetaDecl(body []ast.Statement) (int, *ast.Binding) {
 	return -1, nil
 }
 
-// literalKey extracts a property key as a string when it is a string literal or a
-// bareword identifier (goja parses both as StringLiteral). Returns false for
-// anything else.
+// goja parses a string literal and a bareword identifier both as StringLiteral.
 func literalKey(e ast.Expression) (string, bool) {
 	switch k := e.(type) {
 	case *ast.StringLiteral:
@@ -305,9 +263,6 @@ func literalKey(e ast.Expression) (string, bool) {
 	}
 }
 
-// stringValue extracts a Go string from a string-literal expression. Anything that
-// is not a pure string literal (e.g. a CallExpression, template literal, or
-// identifier reference) returns false — this is what rejects computed meta values.
 func stringValue(e ast.Expression) (string, bool) {
 	sl, ok := e.(*ast.StringLiteral)
 	if !ok {

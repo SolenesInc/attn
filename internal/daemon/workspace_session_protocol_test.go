@@ -77,8 +77,6 @@ func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	}
 }
 
-// Bare spawn_session (no pre-created pane — wsctl, scripts) must still yield a
-// rendered session: the daemon ensures a layout pane on the spawn success path.
 func TestWorkspaceSessionProtocolBareSpawnEnsuresLayoutPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
@@ -123,9 +121,6 @@ func TestWorkspaceSessionProtocolBareSpawnEnsuresLayoutPane(t *testing.T) {
 	}
 }
 
-// A bare spawn (no pre-created pane) that fails must not leave a ghost pane
-// behind: ensureWorkspaceSessionPane only runs on the spawn success path, so a
-// rejected/timed-out spawn has nothing to roll back.
 func TestWorkspaceSessionProtocolBareSpawnFailureCreatesNoPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &failingSpawnBackend{err: errors.New("boom")}
@@ -163,8 +158,6 @@ func TestWorkspaceSessionProtocolBareSpawnFailureCreatesNoPane(t *testing.T) {
 	}
 }
 
-// The app pre-creates the pane before spawning; the spawn-time ensure must adopt
-// that pane instead of splitting a duplicate next to it.
 func TestWorkspaceSessionProtocolSpawnAdoptsPreCreatedPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
@@ -269,9 +262,6 @@ func TestWorkspaceSessionProtocolShellSpawnsIdleNotWorking(t *testing.T) {
 	})
 	expectSpawnResult(t, client, sessionID, true)
 
-	// A shell has no agent lifecycle and no launch phase to wait out: it is at
-	// its prompt the moment it spawns, so it spawns `idle` and the foreground
-	// heartbeat (see pty/shell_signals.go) moves it from there.
 	session := d.store.Get(sessionID)
 	if session == nil {
 		t.Fatalf("session %s was not registered", sessionID)
@@ -279,7 +269,6 @@ func TestWorkspaceSessionProtocolShellSpawnsIdleNotWorking(t *testing.T) {
 	if session.State != protocol.SessionStateIdle {
 		t.Fatalf("shell session state = %q, want %q", session.State, protocol.SessionStateIdle)
 	}
-	// The workspace dot rolls up from its only session, so it must agree: idle.
 	ws, ok := d.workspaces.snapshot(workspaceID)
 	if !ok {
 		t.Fatalf("workspace %s missing from registry", workspaceID)
@@ -554,7 +543,6 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 		t.Fatalf("expected a split in layout, got %+v", snapshot.Layout)
 	}
 
-	// Unknown split id -> failure.
 	d.handleWorkspaceLayoutSetSplitRatio(client, &protocol.WorkspaceLayoutSetSplitRatioMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutSetSplitRatio,
 		WorkspaceID: workspaceID,
@@ -564,7 +552,6 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutSetSplitRatio, workspaceID, "", "does-not-exist", "", "request-missing", false)
 
-	// Set and lock the real split.
 	d.handleWorkspaceLayoutSetSplitRatio(client, &protocol.WorkspaceLayoutSetSplitRatioMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutSetSplitRatio,
 		WorkspaceID: workspaceID,
@@ -574,8 +561,6 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutSetSplitRatio, workspaceID, "", splitID, "", "request-real", true)
 
-	// Re-read through normalization: the locked ratio must survive (a two-pane
-	// split would otherwise be rebalanced back to 0.5).
 	reread, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
 		t.Fatalf("ensureWorkspaceLayout: %v", err)
@@ -621,7 +606,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "pane-2", true)
 
-	// A tile cannot take over a terminal pane's id.
 	d.handleWorkspaceLayoutDockTile(client, &protocol.WorkspaceLayoutDockTileMessage{
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
@@ -636,8 +620,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("pane id collision mutated layout: %+v", afterCollision.Layout)
 	}
 
-	// The trusted open-markdown path assigns the file. WebSocket docking can
-	// move the tile later, but cannot retarget it.
 	if err := d.dockTile(workspaceID, "pane-1", "tile-md", "markdown", "/tmp/notes.md", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dockTile: %v", err)
 	}
@@ -649,7 +631,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	if !workspacelayout.HasTile(snapshot.Layout, "tile-md") {
 		t.Fatalf("tile not present after dock: %+v", snapshot.Layout)
 	}
-	// Tiles never leak into agent-pane bookkeeping.
 	if ids := workspacelayout.PaneIDs(snapshot.Layout); len(ids) != 2 {
 		t.Fatalf("pane ids = %v, want the two agent panes only", ids)
 	}
@@ -657,7 +638,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("snapshot panes = %+v, want only the two agent panes", snapshot.Panes)
 	}
 
-	// A terminal pane cannot take over a docked tile's id.
 	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:          protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID:  workspaceID,
@@ -671,8 +651,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("tile id collision mutated layout: %+v", afterPaneCollision)
 	}
 
-	// The cross-restart / cross-client guarantee: the tile survives a layout
-	// JSON round-trip exactly as the store persists it.
 	encoded, err := workspacelayout.EncodeLayout(snapshot.Layout)
 	if err != nil {
 		t.Fatalf("EncodeLayout: %v", err)
@@ -685,7 +663,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatal("tile lost across layout JSON reload")
 	}
 
-	// Re-dock the same tile id at a different anchor: it moves, never duplicates.
 	d.handleWorkspaceLayoutDockTile(client, &protocol.WorkspaceLayoutDockTileMessage{
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
@@ -716,8 +693,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("markdown tile params = (%q, %v), want (%q, true)", params, ok, "/tmp/notes.md")
 	}
 
-	// Retargets only bind to sessions the daemon knows: an unknown id is
-	// rejected before anything is persisted.
 	d.store.Add(&protocol.Session{ID: "session-2", Label: "Two", WorkspaceID: workspaceID, Directory: cwd})
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
 		Cmd:           protocol.CmdWorkspaceLayoutUpdateTile,
@@ -732,8 +707,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("dangling session binding persisted: %q", sessionID)
 	}
 
-	// A retarget-only update (tile_session_id set, params echoed unchanged)
-	// rebinds the markdown tile's session without touching its params.
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
 		Cmd:           protocol.CmdWorkspaceLayoutUpdateTile,
 		WorkspaceID:   workspaceID,
@@ -766,9 +739,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	if params, ok := workspacelayout.TileParamsByID(updated.Layout, "tile-browser"); !ok || params != "https://example.com/docs" {
 		t.Fatalf("browser tile params = (%q, %v), want (%q, true)", params, ok, "https://example.com/docs")
 	}
-	// A combined retarget + params update on a non-markdown tile must persist
-	// BOTH: the params save works from a snapshot re-fetched after the rebind,
-	// so it cannot clobber the just-persisted session binding.
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
 		Cmd:           protocol.CmdWorkspaceLayoutUpdateTile,
 		WorkspaceID:   workspaceID,
@@ -799,8 +769,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("browser tile params after rejected URL = (%q, %v), want (%q, true)", params, ok, "https://example.com/combined")
 	}
 
-	// A notebook tile docks empty (its no-selection picker) and accepts a later
-	// file-path update through the same client path the user's file pick uses.
 	if err := d.dockTile(workspaceID, "pane-1", "tile-notebook", string(workspacelayout.TileKindNotebook), "", "", protocol.WorkspaceLayoutDockEdgeLeft, nil); err != nil {
 		t.Fatalf("dock notebook tile: %v", err)
 	}
@@ -819,7 +787,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("notebook tile params after update = (%q, %v), want the opened path", params, ok)
 	}
 
-	// Undock removes the tile and collapses its split; the panes are untouched.
 	d.handleWorkspaceLayoutUndockTile(client, &protocol.WorkspaceLayoutUndockTileMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutUndockTile,
 		WorkspaceID: workspaceID,
@@ -834,7 +801,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("pane ids after undock = %v, want the two agent panes intact", ids)
 	}
 
-	// Undocking a tile that's gone is a clean no-op failure.
 	d.handleWorkspaceLayoutUndockTile(client, &protocol.WorkspaceLayoutUndockTileMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutUndockTile,
 		WorkspaceID: workspaceID,
@@ -843,11 +809,6 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutUndockTile, workspaceID, "", "", "tile-md", false)
 }
 
-// TestWorkspaceLayoutDockTileMessageParamsField exercises the tile_params
-// field on the dock_tile websocket message directly (as opposed to the
-// internal d.dockTile helper): a freshly docked tile takes the sent params,
-// and a later re-dock (move) with tile_params empty preserves what's already
-// persisted rather than clobbering it.
 func TestWorkspaceLayoutDockTileMessageParamsField(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := newWorkspaceProtocolTestClient()
@@ -868,7 +829,6 @@ func TestWorkspaceLayoutDockTileMessageParamsField(t *testing.T) {
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "pane-1", true)
 
-	// (a) Docking a NEW tile with tile_params set persists the sent value.
 	d.handleWorkspaceLayoutDockTile(client, &protocol.WorkspaceLayoutDockTileMessage{
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
@@ -884,8 +844,6 @@ func TestWorkspaceLayoutDockTileMessageParamsField(t *testing.T) {
 		t.Fatalf("fresh tile params = (%q, %v), want (%q, true)", params, ok, "/notes/knowledge/decisions.md")
 	}
 
-	// (b) Re-docking that same tile (a move) with tile_params empty must NOT
-	// clobber the params already persisted.
 	d.handleWorkspaceLayoutDockTile(client, &protocol.WorkspaceLayoutDockTileMessage{
 		Cmd:          protocol.CmdWorkspaceLayoutDockTile,
 		WorkspaceID:  workspaceID,
@@ -1070,14 +1028,6 @@ func (b *failingSpawnBackend) Recover(context.Context) (ptybackend.RecoveryRepor
 }
 func (b *failingSpawnBackend) Shutdown(context.Context) error { return nil }
 
-// TestListWorkspacesLocalWorkspaceHasEmptyEndpointID guards the local half of
-// the endpoint_id contract (internal/protocol/schema/main.tsp Workspace):
-// only a hub stamps EndpointID on workspaces it mirrors from a remote
-// endpoint (internal/hub/manager.go replaceRemoteWorkspaces/
-// upsertRemoteWorkspace); a workspace registered directly on this daemon must
-// never carry one. The frontend's localWorkspaceDirectory gate
-// (app/src/types/workspace.ts) trusts this to decide whether a workspace's
-// directory is safe to hand to non-endpoint-aware fs calls.
 func TestListWorkspacesLocalWorkspaceHasEmptyEndpointID(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := newWorkspaceProtocolTestClient()

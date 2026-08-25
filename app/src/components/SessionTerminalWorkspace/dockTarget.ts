@@ -1,22 +1,12 @@
 import type { TerminalDockEdge } from '../../types/workspace';
 import type { NormalizedPaneBounds } from '../../types/workspace';
 
-// Drag-to-dock geometry: pure functions that turn a pointer position into a drop
-// target (which leaf or the whole workspace, which edge, and how big). Kept out
-// of the component so the math is unit-testable in isolation.
-
-// Drop sizing: how deep the pointer sits in the target leaf sets the incoming
-// leaf's fraction — thin at the edge (DOCK_F_MIN), up to half at the center —
-// magnetically snapping to clean splits when close.
 const DOCK_F_MIN = 0.15;
 const DOCK_F_MAX = 0.5;
 const DOCK_SNAP_POINTS = [0.25, 1 / 3, 0.5];
 const DOCK_SNAP_TOLERANCE = 0.045;
-// A thin perimeter band docks against the whole workspace (the root) instead of
-// one leaf. It splits the workspace in half; refine with the divider afterward.
 const DOCK_CONTAINER_FRAME_PX = 28;
 const DOCK_CONTAINER_FRACTION = 0.5;
-// A leaf counts as touching a container edge within this normalized slack.
 const DOCK_EDGE_EPSILON = 0.01;
 
 export type DockEdgeFlags = Record<TerminalDockEdge, boolean>;
@@ -29,11 +19,9 @@ export interface DockNormalizedRect {
 }
 
 export interface DockTarget {
-  // The leaf the incoming leaf docks beside, or '' to dock against the whole
-  // workspace (a container dock).
+  // '' docks against the whole workspace.
   anchorId: string;
   edge: TerminalDockEdge;
-  // The incoming leaf's fraction of the new split (snapped).
   ratio: number;
   rect: DockNormalizedRect;
 }
@@ -75,9 +63,6 @@ function containerBandRect(edge: TerminalDockEdge, fraction: number): DockNormal
   }
 }
 
-// computeContainerSides reports which workspace edges hold 2+ leaves, so a
-// container dock is only offered where it would differ from the leaf edge
-// already on that border (a single full-span leaf makes them coincide).
 export function computeContainerSides(boundsList: NormalizedPaneBounds[]): DockEdgeFlags {
   let left = 0;
   let right = 0;
@@ -111,11 +96,6 @@ function containerDockTarget(nx: number, ny: number, frameX: number, frameY: num
   };
 }
 
-// computeDockTarget maps a pointer position to a drop target: a container dock
-// when the pointer is in the workspace's perimeter frame (on a side that holds
-// 2+ leaves), otherwise the leaf it's over plus the nearest edge (X-pattern),
-// sized by how deep the pointer sits. The dragged leaf is excluded from
-// leafRects, so hovering it returns null — a self-drop no-op.
 export function computeDockTarget(
   clientX: number,
   clientY: number,

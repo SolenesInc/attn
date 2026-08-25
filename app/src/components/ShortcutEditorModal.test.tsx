@@ -66,10 +66,8 @@ describe('ShortcutEditorModal', () => {
 
     const newSession = row('New session in this workspace');
     fireEvent.click(newSession.querySelector('.key-capture-button')!);
-    // ⌘⇧D already belongs to "Split pane sideways" (terminal.splitHorizontal).
     fireEvent.keyDown(window, { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
 
-    // The reassign prompt appears inline on this row, naming the current holder.
     const reassignBtn = screen.getByText('Reassign');
     expect(within(newSession).getByText(/Split pane sideways/)).toBeInTheDocument();
     fireEvent.click(reassignBtn);
@@ -80,8 +78,6 @@ describe('ShortcutEditorModal', () => {
   });
 
   it('runs conflict detection when resetting a shortcut whose default is now claimed', () => {
-    // session.new rebound off ⌘N; terminal.splitHorizontal has taken ⌘N. Resetting
-    // session.new to its default (⌘N) must not silently duplicate — it should offer reassign.
     const { setSetting } = renderEditor({
       [KEYBINDINGS_SETTING_KEY]: JSON.stringify({
         version: 1,
@@ -94,13 +90,11 @@ describe('ShortcutEditorModal', () => {
 
     fireEvent.click(within(row('New session in this workspace')).getByTitle('Reset to ⌘N'));
 
-    // Reassign prompt appears naming the current ⌘N holder (Split pane sideways).
     const reassignBtn = screen.getByText('Reassign');
     expect(within(row('New session in this workspace')).getByText(/Split pane sideways/)).toBeInTheDocument();
     fireEvent.click(reassignBtn);
 
     const cfg = lastConfig(setSetting);
-    // session.new back to default (override dropped), terminal.splitHorizontal freed.
     expect('session.new' in cfg.overrides).toBe(false);
     expect(cfg.overrides['terminal.splitHorizontal']).toBeNull();
   });
@@ -108,11 +102,9 @@ describe('ShortcutEditorModal', () => {
   it('pins a shortcut to the dock from its row star', () => {
     const { setSetting } = renderEditor();
     const newSession = row('New session in this workspace');
-    // Not in the default dock -> star offers to add.
     fireEvent.click(within(newSession).getByLabelText('Add to dock'));
 
     expect(lastConfig(setSetting).dock.items).toContain('session.new');
-    // Star now reflects membership (same row node, re-rendered in place).
     expect(within(newSession).getByLabelText('Remove from dock')).toBeInTheDocument();
   });
 
@@ -125,7 +117,6 @@ describe('ShortcutEditorModal', () => {
       }),
     });
 
-    // First item can't move up; move it down instead.
     fireEvent.click(screen.getByLabelText('Move Zoom active pane down'));
 
     expect(lastConfig(setSetting).dock.items).toEqual(['dock.attention', 'terminal.toggleZoom']);
@@ -161,8 +152,6 @@ describe('ShortcutEditorModal', () => {
   });
 
   it('persists a chord whose leader equals the row’s own default combo', () => {
-    // Regression: ⌘K-then-D on "Action menu" (default ⌘K) must not be silently
-    // dropped as if it resolved to the default.
     const { setSetting } = renderEditor();
     recordChord('Action menu', { key: 'k', metaKey: true }, { key: 'd' });
     expect(lastConfig(setSetting).overrides['ui.actionMenu']).toEqual({
@@ -182,14 +171,12 @@ describe('ShortcutEditorModal', () => {
     );
     const { rerender } = render(tree(true));
 
-    // Start a chord recording and capture the leader (now awaiting the follow key).
     fireEvent.click(within(row('Action menu')).getByLabelText('Record a chord'));
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     expect(within(row('Action menu')).queryByLabelText('Record a chord')).toBeNull();
 
     rerender(tree(false));
     rerender(tree(true));
-    // The row is no longer stuck recording.
     expect(within(row('Action menu')).getByLabelText('Record a chord')).toBeInTheDocument();
   });
 
@@ -197,12 +184,10 @@ describe('ShortcutEditorModal', () => {
 
   it('filters rows to matching labels and hides the dock while searching', () => {
     renderEditor();
-    // "maximize" is unique to the panes category and not a default dock member.
     fireEvent.change(filterInput(), { target: { value: 'maximize' } });
 
     expect(screen.getByText('Maximize active pane')).toBeInTheDocument();
     expect(screen.queryByText('New session in this workspace')).toBeNull();
-    // Dock section and now-empty categories are hidden during a search.
     expect(screen.queryByText('Dock')).toBeNull();
     expect(screen.queryByText('Workspaces & Sessions')).toBeNull();
     expect(screen.getByText('Panes & Terminals')).toBeInTheDocument();
@@ -211,7 +196,6 @@ describe('ShortcutEditorModal', () => {
   it('filters rows by the displayed key string', () => {
     renderEditor();
     fireEvent.change(filterInput(), { target: { value: '⌘⇧n' } });
-    // session.newHorizontal's default is ⌘⇧N; plain ⌘N must not match.
     expect(screen.getByText('New session, split sideways')).toBeInTheDocument();
     expect(screen.queryByText('New session in this workspace')).toBeNull();
   });
@@ -219,37 +203,30 @@ describe('ShortcutEditorModal', () => {
   it('shows an announced, trimmed no-matches message when nothing matches', () => {
     renderEditor();
     fireEvent.change(filterInput(), { target: { value: '  zzznope  ' } });
-    // role=status so screen readers announce it; the echoed query is trimmed.
     expect(screen.getByRole('status')).toHaveTextContent(/^No shortcuts match .zzznope.$/);
     expect(screen.queryByText('Panes & Terminals')).toBeNull();
   });
 
   it('clears a stranded reassign prompt when the user starts filtering', () => {
     renderEditor();
-    // Capture a taken combo (⌘⇧D belongs to Split pane sideways) to raise the
-    // inline Reassign prompt on this row.
     fireEvent.click(row('New session in this workspace').querySelector('.key-capture-button')!);
     fireEvent.keyDown(window, { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
     expect(screen.getByText('Reassign')).toBeInTheDocument();
 
-    // Typing in the filter must not leave the prompt stranded on a hidden row.
     fireEvent.change(filterInput(), { target: { value: 'new session' } });
     expect(within(row('New session in this workspace')).queryByText('Reassign')).toBeNull();
   });
 
   it('clears recording when the filter is focused, so the first keystroke is not captured as a binding', () => {
     const { setSetting } = renderEditor();
-    // Enter combo-recording on a row (its KeyCaptureInput now owns a
-    // capture-phase window keydown listener).
     fireEvent.click(row('Maximize active pane').querySelector('.key-capture-button')!);
     expect(within(row('Maximize active pane')).queryByLabelText('Record a chord')).toBeNull();
 
-    // Focusing the filter must tear that listener down BEFORE any keystroke,
-    // otherwise the first character would rebind the row instead of searching.
+    // A recording row owns a capture-phase window keydown listener: focusing the filter
+    // must tear it down BEFORE any keystroke, or the first character rebinds the row.
     fireEvent.focus(filterInput());
     expect(within(row('Maximize active pane')).getByLabelText('Record a chord')).toBeInTheDocument();
 
-    // The filter now receives text, and no binding was persisted.
     fireEvent.change(filterInput(), { target: { value: 'zoom' } });
     expect(filterInput().value).toBe('zoom');
     expect(setSetting.mock.calls.filter(([k]) => k === KEYBINDINGS_SETTING_KEY)).toHaveLength(0);
@@ -288,11 +265,8 @@ describe('ShortcutEditorModal', () => {
 
   it('badges only the shortcuts gated behind an open terminal', () => {
     renderEditor();
-    // Gated via sessionVisible (and not a default dock member, so the row is unique).
     expect(within(row('Maximize active pane')).getByText('Needs terminal')).toBeInTheDocument();
-    // App-global shortcut.
     expect(within(row('New session in this workspace')).queryByText('Needs terminal')).toBeNull();
-    // No useShortcut handler at all, despite the panes category.
     expect(within(row('Collapse utility terminal')).queryByText('Needs terminal')).toBeNull();
   });
 
@@ -315,7 +289,6 @@ describe('ShortcutEditorModal', () => {
         overrides: { 'session.new': { key: 'm', meta: true } },
       }),
     });
-    // Starts customized.
     expect(within(row('New session in this workspace')).getByText('Customized')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Restore Defaults'));

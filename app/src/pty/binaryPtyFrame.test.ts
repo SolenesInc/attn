@@ -76,9 +76,6 @@ describe('decodeBinaryFrame', () => {
   });
 
   it('decodes a kitty image frame round-trip', () => {
-    // A 2x1 RGB image: the format byte, the dimensions, and the pixel bytes all
-    // have to be read at the right offsets or the pixels are drawn with the
-    // wrong stride, which renders as plausible garbage rather than failing.
     const pixels = new Uint8Array([1, 2, 3, 4, 5, 6]);
     const frame = decodeBinaryFrame(
       buildKittyFrame('sess-42', 7, 99n, 2, 1, 0, pixels),

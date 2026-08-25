@@ -1,9 +1,4 @@
-// Find-in-scrollback scanning for the Ghostty terminal.
-//
-// Modeled on Warp's chunked async find: the scan walks the buffer in row
-// chunks and yields to the event loop between chunks so a full-scrollback
-// search never blocks input or rendering. No row text is cached — scrollback
-// is byte-capped and a text mirror would double terminal memory.
+// No row text is cached: scrollback is byte-capped and a text mirror would double terminal memory.
 
 export interface FindMatch {
   bufferRow: number;
@@ -18,7 +13,6 @@ export interface FindRowAccess {
 
 export interface FindScanOptions {
   caseSensitive: boolean;
-  // Rows scanned per chunk before yielding. Exposed for tests.
   chunkRows?: number;
 }
 
@@ -48,8 +42,6 @@ export interface FindScanHandle {
   cancel(): void;
 }
 
-// Scan all rows ascending, invoking onProgress with the accumulated, sorted
-// match list after each chunk and onDone exactly once unless cancelled.
 export function startFindScan(
   access: FindRowAccess,
   query: string,
@@ -80,7 +72,6 @@ export function startFindScan(
   };
 
   if (!query) {
-    // Empty query resolves immediately with no matches.
     timer = setTimeout(() => onDone(matches), 0);
   } else {
     step();
@@ -94,14 +85,10 @@ export function startFindScan(
   };
 }
 
-// Index of the match to focus when a scan completes: the last match at or
-// above the bottom of the buffer (terminals search "backwards from the end").
 export function initialFocusedMatch(matches: FindMatch[]): number {
   return matches.length - 1;
 }
 
-// The subset of matches visible in [firstRow, firstRow + rowCount), located
-// with binary search so per-frame overlay work stays O(log n + visible).
 export function visibleMatches(matches: FindMatch[], firstRow: number, rowCount: number): FindMatch[] {
   if (matches.length === 0 || rowCount <= 0) return [];
   let low = 0;

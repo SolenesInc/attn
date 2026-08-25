@@ -1,16 +1,3 @@
-// app/src/components/EventBusSettings.tsx
-//
-// The durable event bus, surfaced in Settings › Event Bus: what the log holds,
-// which fact classes are writing to it and how fast, which consumers are reading
-// it and how far behind they are, and what is wrong with any of it.
-//
-// This exists because a producer bug once wrote two thirds of the log for a week
-// and was found by accident. Nothing in attn showed what the bus was doing.
-//
-// Every number here is computed by the daemon — the same bus.Status that
-// `attn bus status` renders — so the two surfaces cannot disagree. In
-// particular the health list arrives as finished sentences: this component
-// renders them, it does not decide what counts as unhealthy.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BusConsumerStatus, BusStatus } from '../hooks/daemonBusEvents';
 import './EventBusSettings.css';
@@ -20,17 +7,12 @@ interface EventBusSettingsProps {
   setConsumerEnabled: (consumer: string, enabled: boolean) => Promise<{ consumer: string }>;
 }
 
-// How often the page re-reads while it is open. The daemon answers with one
-// aggregate pass over the whole log — 209ms at 945k rows, measured — so this is
-// deliberately slow: attn runs all day, and a diagnostics page must not cost
-// battery to leave open. The component only mounts while its section is
-// selected, so closing Settings or navigating away stops it.
+// The daemon answers with one aggregate pass over the whole log — 209ms at 945k
+// rows, measured — so this is deliberately slow.
 const REFRESH_MS = 30_000;
 
-// Producers below this share are the long tail of a healthy log (35 of 50
-// classes in production hold 0.3% between them). They are collapsed rather than
-// dropped — the count and their combined share are always stated, and one click
-// shows them.
+// The long tail of a healthy log: 35 of 50 classes in production hold 0.3%
+// between them. Collapsed rather than dropped.
 const QUIET_SHARE = 0.005;
 
 const formatBytes = (n: number): string => {
@@ -43,7 +25,6 @@ const formatCount = (n: number): string => n.toLocaleString();
 
 const formatRate = (n: number): string => (n >= 10 ? n.toFixed(0) : n.toFixed(1));
 
-/** Renders a span the way someone says it: "8d", "3h", "12m", "40s". */
 const formatSpan = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds <= 0) return '';
   if (seconds >= 48 * 3600) return `${Math.round(seconds / 86400)}d`;
@@ -52,12 +33,8 @@ const formatSpan = (seconds: number): string => {
   return `${Math.round(seconds)}s`;
 };
 
-/**
- * Renders a configured limit exactly, where formatSpan renders an observation:
- * "1h", "1m30s", "45s". A limit rounded to "2m" when it was set to 1m30s names a
- * number the reader cannot check their own value against. Mirrors limitDuration
- * in internal/bus.
- */
+/** Renders a configured limit exactly, where formatSpan renders an observation:
+  * "1h", "1m30s", "45s". Mirrors limitDuration in internal/bus. */
 const formatLimit = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds <= 0) return '';
   const whole = Math.round(seconds);
@@ -69,7 +46,6 @@ const formatLimit = (seconds: number): string => {
   return `${s}s`;
 };
 
-/** Age of an RFC3339 stamp, as a span. Empty for an absent or unparseable one. */
 const formatAge = (iso: string, now: number): string => {
   if (!iso) return '';
   const t = Date.parse(iso);
@@ -83,7 +59,6 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
   const [loading, setLoading] = useState(false);
   const [showQuiet, setShowQuiet] = useState(false);
   const [pendingConsumer, setPendingConsumer] = useState<string | null>(null);
-  // Guards against an older answer landing after a newer one.
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -162,8 +137,7 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
 
         {status.health.length > 0 && (
           <ul className="bus-health" data-testid="bus-health">
-            {/* kind+subject identifies a finding: health() emits at most one of
-                each kind per consumer, producer, or floor. */}
+            {/* health() emits at most one finding of each kind per consumer, producer, or floor. */}
             {status.health.map((h) => (
               <li key={`${h.kind}:${h.subject}`} className={`bus-health-entry ${h.level}`}>
                 <span className={`settings-pill ${h.level === 'error' ? 'bad' : 'warn'}`}>
@@ -279,8 +253,7 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
               >
                 <span className="bus-name">
                   {c.name}
-                  {/* Holding the floor is the system working. Holding it past the
-                      tripwire is the thing to act on, so the two never look alike. */}
+                  {/* Holding the floor is the system working; holding it past the tripwire is not. */}
                   {c.holds_retention_floor && !c.pin_alarm && (
                     <span className="settings-pill" title="Retention stops at this consumer's cursor">
                       Retention floor
@@ -330,9 +303,8 @@ export function EventBusSettings({ getBusStatus, setConsumerEnabled }: EventBusS
           >
             {loading ? 'Reading…' : 'Refresh'}
           </button>
-          {/* This page always reads the daemon, so `delivering: false` here can
-              only mean the daemon runs no durable delivery loops — never the
-              CLI's other meaning, that the snapshot came from the database. */}
+          {/* `delivering: false` here can only mean the daemon runs no durable delivery
+              loops — never the CLI's other meaning, a snapshot read from the database. */}
           <span className="settings-hint">
             {status.delivering
               ? 'Read from the daemon that owns delivery, so a consumer that is registered but not running is visible.'

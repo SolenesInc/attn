@@ -27,10 +27,6 @@ func crewHandoffRetryCall(t *testing.T, d *Daemon, sessionID string) protocol.Re
 	return gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
 }
 
-// A retry is retrying a turnover, so an absence must not answer a different
-// question than the one it asked: the member ran --retry to get the successor
-// its letter was written for, and sleeping instead would quietly change what
-// the verb means. Saying so is one word away, and it is the member's word.
 func TestCrewHandoff_ARetryTurnsTheDayOverEvenWithTheUserAway(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -67,7 +63,6 @@ func TestCrewHandoff_ARetryTurnsTheDayOverEvenWithTheUserAway(t *testing.T) {
 	}
 }
 
-// The member can still end the day on a retry — it just has to say so.
 func TestCrewHandoff_ARetryCanBeToldToSleepInstead(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -197,9 +192,6 @@ func TestCrewPriming_RefusesASymlinkedLetter(t *testing.T) {
 	}
 }
 
-// The slice's acceptance: a member files its letter and the day turns over in
-// one motion. The letter lands on disk as written, a fresh session takes over
-// the member's day, and the member is awake throughout.
 func TestCrewHandoff_FilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
@@ -241,8 +233,6 @@ func TestCrewHandoff_FilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	if d.store.Get(newSessionID) == nil {
 		t.Error("the successor's session was not created")
 	}
-	// Still awake, now living the new day: the sidebar must never show the
-	// member asleep because it handed off.
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != newSessionID {
 		t.Fatalf("roster binding = %q, want the successor %q", got, newSessionID)
 	}
@@ -255,8 +245,6 @@ func TestCrewHandoff_FilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	if successor.ID != newSessionID {
 		t.Errorf("the second spawn is %s, want the successor %s", successor.ID, newSessionID)
 	}
-	// The whole point of the design: no transcript, no compaction summary — the
-	// member's letter is the only thread into the new day.
 	if successor.ResumeSessionID != "" {
 		t.Errorf("the successor resumes %q; a nap must never carry the closed day's transcript", successor.ResumeSessionID)
 	}
@@ -265,8 +253,6 @@ func TestCrewHandoff_FilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	}
 }
 
-// The successor re-reads the member's model. The nap otherwise inherits the
-// closed day's launch intent, which must not overrule current member config.
 func TestCrewHandoff_TheSuccessorWakesOnTheMembersModel(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr("claude-haiku-4-5")}); !resp.Ok {
@@ -290,9 +276,6 @@ func TestCrewHandoff_TheSuccessorWakesOnTheMembersModel(t *testing.T) {
 	}
 }
 
-// Ordering, asserted where it matters: at the instant the successor spawns, the
-// registry already names it. A release-then-rebind would show the member
-// unbound here, which is the gap another wake could claim.
 func TestCrewHandoff_TheMemberIsNeverUnboundDuringTheNap(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("keel", "")
@@ -320,9 +303,6 @@ func TestCrewHandoff_TheMemberIsNeverUnboundDuringTheNap(t *testing.T) {
 	}
 }
 
-// A session that is nobody has no day-line to close. The refusal names the
-// other axis, because filing one where the other belongs is the mistake the
-// guidance exists to prevent.
 func TestCrewHandoff_ASessionThatIsNobodyHasNoDayLine(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	addSession(t, d, "errand-session")
@@ -342,9 +322,6 @@ func TestCrewHandoff_ASessionThatIsNobodyHasNoDayLine(t *testing.T) {
 	}
 }
 
-// Append-only, from the daemon's side: a name already taken is refused, and the
-// refusal costs the member nothing — its day is still running and it is still
-// bound to it, with its letter unfiled and still in its hands.
 func TestCrewHandoff_ARefusedFilingLeavesTheDayRunning(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
@@ -352,8 +329,6 @@ func TestCrewHandoff_ARefusedFilingLeavesTheDayRunning(t *testing.T) {
 		t.Fatalf("wake: %v", err)
 	}
 
-	// Take both candidate names, so a minute rolling over between here and the
-	// call cannot make this pass by accident.
 	dir := filepath.Join(d.dataRoot, crew.HomesDirName, "trellis", crew.HandoffsDirName)
 	now := time.Now()
 	for _, at := range []time.Time{now, now.Add(time.Minute)} {
@@ -381,9 +356,6 @@ func TestCrewHandoff_ARefusedFilingLeavesTheDayRunning(t *testing.T) {
 	}
 }
 
-// The letter is filed first and is never rolled back: a nap that cannot spawn
-// is a day that did not start, not a letter that was not written. The member
-// keeps the day it has, and the caller is told which half failed.
 func TestCrewHandoff_ANapThatCannotSpawnKeepsTheLetterAndTheDay(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -416,9 +388,6 @@ func TestCrewHandoff_ANapThatCannotSpawnKeepsTheLetterAndTheDay(t *testing.T) {
 	}
 }
 
-// The way out of a nap that failed behind a filed letter. The line is
-// append-only, so the letter cannot be written twice: a retry runs the turnover
-// again against the one already on disk, and files nothing.
 func TestCrewHandoff_ARetryTurnsTheDayOverWithTheLetterAlreadyFiled(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -467,8 +436,6 @@ func TestCrewHandoff_ARetryTurnsTheDayOverWithTheLetterAlreadyFiled(t *testing.T
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "alder").BindingSession); got != successor {
 		t.Fatalf("roster binding = %q, want the successor %q", got, successor)
 	}
-	// The letter the member actually wrote is what threads the new day — the
-	// retry must not have primed the successor off some other file.
 	_, block, bound, err := d.crewPrimeForSession(successor)
 	if err != nil {
 		t.Fatalf("prime successor: %v", err)
@@ -478,9 +445,6 @@ func TestCrewHandoff_ARetryTurnsTheDayOverWithTheLetterAlreadyFiled(t *testing.T
 	}
 }
 
-// A retry and a correction share a symptom — the name this letter would take is
-// taken — and must never share an exit. When this day is the one that took it,
-// the refusal names the retry; nothing is filed either way.
 func TestCrewHandoff_AFilingCollisionAfterAFailedNapNamesTheRetry(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("alder", "")
@@ -495,8 +459,6 @@ func TestCrewHandoff_AFilingCollisionAfterAFailedNapNamesTheRetry(t *testing.T) 
 	if !first.Ok {
 		t.Fatalf("handoff: %v", protocol.Deref(first.Error))
 	}
-	// Take the next minute's name too, so a minute rolling over between the two
-	// calls cannot let the second one through.
 	dir := filepath.Join(d.dataRoot, crew.HomesDirName, "alder", crew.HandoffsDirName)
 	next := filepath.Join(dir, crew.HandoffFileName("alder", time.Now().Add(time.Minute)))
 	if err := os.WriteFile(next, []byte("taken\n"), 0o644); err != nil {
@@ -520,9 +482,6 @@ func TestCrewHandoff_AFilingCollisionAfterAFailedNapNamesTheRetry(t *testing.T) 
 	}
 }
 
-// The other half of the pair: a retry with nothing to retry says so, and points
-// at the verb that writes a letter. A member must never be told "already filed"
-// when nothing is.
 func TestCrewHandoff_ARetryWithNoFiledLetterSaysToWriteOne(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("keel", "")
@@ -545,9 +504,6 @@ func TestCrewHandoff_ARetryWithNoFiledLetterSaysToWriteOne(t *testing.T) {
 	}
 }
 
-// A letter belongs to the day that wrote it. Once the turnover succeeds, the
-// new day has written nothing — so its retry is refused rather than turning the
-// day over a second time off its predecessor's letter.
 func TestCrewHandoff_ANewDayInheritsNoLetterToRetry(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
@@ -569,9 +525,6 @@ func TestCrewHandoff_ANewDayInheritsNoLetterToRetry(t *testing.T) {
 	}
 }
 
-// The successor is the same member running the same way. A member woken yolo
-// must not come back attended at its first nap — the launch intent of the day
-// that closed is the authority for everything but the model, which is pinned.
 func TestCrewHandoff_TheSuccessorCarriesTheClosedDaysLaunchParams(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("keel", "")
@@ -600,15 +553,11 @@ func TestCrewHandoff_TheSuccessorCarriesTheClosedDaysLaunchParams(t *testing.T) 
 	if successor.Effort != "high" {
 		t.Errorf("the successor launched effort=%q, want the closed day's high", successor.Effort)
 	}
-	// The one thing a nap does not inherit: an intent naming another model is
-	// overruled by the member/default/fallback selection.
 	if successor.Model != crewWakeFallbackModel {
 		t.Errorf("the successor launched model=%q, want the fallback %q", successor.Model, crewWakeFallbackModel)
 	}
 }
 
-// The letter just filed is what primes the successor. This is the whole nap:
-// the member's own words, and nothing else, thread the new day.
 func TestCrewHandoff_TheSuccessorIsPrimedByTheLetterJustFiled(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
@@ -639,9 +588,6 @@ func TestCrewHandoff_TheSuccessorIsPrimedByTheLetterJustFiled(t *testing.T) {
 	}
 }
 
-// Home-only, like every crew verb: an outpost holds no part of the crew, so it
-// refuses by naming the home rather than filing into a home that is not its to
-// write.
 func TestCrewHandoff_AnOutpostHoldsNoneOfIt(t *testing.T) {
 	const home = "d-cccccccccccccccccccccccccccccccc"
 	d := newEnrolledDaemon(t, home)
@@ -663,10 +609,6 @@ func TestCrewHandoff_AnOutpostHoldsNoneOfIt(t *testing.T) {
 	}
 }
 
-// The nap replaces the session rather than reloading in place, so it is
-// agent-agnostic by construction — this pins that: a codex member's successor
-// comes back on codex, primed by the letter the day just filed, and is not
-// handed the Claude model pin on the way.
 func TestCrewHandoff_ACodexMembersSuccessorComesBackOnCodex(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("codex")}); !resp.Ok {

@@ -18,16 +18,14 @@ func write(t *testing.T, abs, content string) {
 	}
 }
 
-// List is shallow (immediate children only), sorts directories before files, and
-// hides dot-entries. File entries carry size and mtime; directory entries do not.
 func TestListShallowSortedAndFiltered(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "b.md"), "bb")
 	write(t, filepath.Join(root, "a.txt"), "aaa")
-	write(t, filepath.Join(root, "knowledge", "deep.md"), "deep") // creates the dir
-	write(t, filepath.Join(root, ".hidden"), "x")                 // dotfile, skipped
+	write(t, filepath.Join(root, "knowledge", "deep.md"), "deep")
+	write(t, filepath.Join(root, ".hidden"), "x")
 	if err := os.MkdirAll(filepath.Join(root, ".attn"), 0o755); err != nil {
-		t.Fatal(err) // dotdir, skipped
+		t.Fatal(err)
 	}
 
 	s := NewStore(root)
@@ -39,8 +37,6 @@ func TestListShallowSortedAndFiltered(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name)
 	}
-	// knowledge/ (dir) first, then files a.txt, b.md; no dot-entries; not recursive
-	// (deep.md is not surfaced).
 	want := []string{"knowledge", "a.txt", "b.md"}
 	if len(names) != len(want) {
 		t.Fatalf("list names = %v, want %v", names, want)
@@ -64,8 +60,6 @@ func TestListShallowSortedAndFiltered(t *testing.T) {
 	}
 }
 
-// Listing a subdirectory scopes to that directory's immediate children, with
-// root-relative paths.
 func TestListSubdirectory(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "knowledge", "areas", "foo.md"), "x")
@@ -130,8 +124,6 @@ func TestReadMissingIsNotFound(t *testing.T) {
 	}
 }
 
-// Write creates, refuses to clobber on create-only, applies a matching hash-CAS
-// edit, and reports a conflict (with the current hash) on a stale base.
 func TestWriteCreateEditAndConflict(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
@@ -144,27 +136,22 @@ func TestWriteCreateEditAndConflict(t *testing.T) {
 		t.Fatalf("on-disk = %q after create", got)
 	}
 
-	// Create-only against an existing file => conflict carrying the current hash.
 	_, conflict, err = s.Write("dir/a.txt", []byte("v2"), "")
 	if err != nil || conflict == nil || conflict.CurrentHash != h1 {
 		t.Fatalf("create-only over existing = conflict %+v err %v", conflict, err)
 	}
 
-	// Stale base hash => conflict, no write.
 	_, conflict, err = s.Write("dir/a.txt", []byte("v2"), "deadbeef")
 	if err != nil || conflict == nil || conflict.CurrentHash != h1 {
 		t.Fatalf("stale CAS = conflict %+v err %v", conflict, err)
 	}
 
-	// Correct base hash => the edit applies.
 	h2, conflict, err := s.Write("dir/a.txt", []byte("v2"), h1)
 	if err != nil || conflict != nil || h2 != notebook.Hash([]byte("v2")) {
 		t.Fatalf("CAS edit = %q conflict %+v err %v", h2, conflict, err)
 	}
 }
 
-// A hash-CAS edit of a file that does not exist is a conflict with an empty
-// current hash (not a create), so the editor learns the file vanished.
 func TestWriteCASMissingIsConflict(t *testing.T) {
 	s := NewStore(t.TempDir())
 	_, conflict, err := s.Write("gone.txt", []byte("x"), "somehash")
@@ -180,8 +167,6 @@ func TestWriteRejectsOversizeContent(t *testing.T) {
 	}
 }
 
-// Exists reports presence without reading: true for a real file or directory,
-// false for a genuinely absent path (no error — that's the "broken link" signal).
 func TestExists(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "knowledge", "areas", "foo.md"), "x")
@@ -191,9 +176,9 @@ func TestExists(t *testing.T) {
 		path string
 		want bool
 	}{
-		{"knowledge/areas/foo.md", true},  // a real file
-		{"/knowledge/areas/foo.md", true}, // root-absolute form resolves the same
-		{"knowledge/areas", true},         // a directory exists too
+		{"knowledge/areas/foo.md", true},
+		{"/knowledge/areas/foo.md", true},
+		{"knowledge/areas", true},
 		{"knowledge/areas/missing.md", false},
 		{"nope/at/all.md", false},
 	} {
@@ -207,10 +192,6 @@ func TestExists(t *testing.T) {
 	}
 }
 
-// A path the rules reject outright (the root itself, or a dotfile/dotdir segment)
-// is an error, not a false — the caller leaves such a link unflagged rather than
-// calling it broken. (A `..` escape is not an error: cleanRel clamps it back inside
-// the root, where it is simply checked for existence like any other path.)
 func TestExistsInvalidPathErrors(t *testing.T) {
 	s := NewStore(t.TempDir())
 	for _, p := range []string{"", ".secret", "dir/.git/config"} {
@@ -220,7 +201,6 @@ func TestExistsInvalidPathErrors(t *testing.T) {
 	}
 }
 
-// Lexical escapes (.. above the root) are rejected by every operation.
 func TestPathEscapesRejected(t *testing.T) {
 	s := NewStore(t.TempDir())
 	for _, p := range []string{"../outside.txt", "/../../etc/passwd", "a/../../b.txt"} {
@@ -230,8 +210,6 @@ func TestPathEscapesRejected(t *testing.T) {
 	}
 }
 
-// A symlink inside the root that points outside it is skipped by List and
-// rejected by Read — the same containment the notebook enforces, reused here.
 func TestSymlinkEscapeContained(t *testing.T) {
 	outside := t.TempDir()
 	secret := filepath.Join(outside, "secret.txt")

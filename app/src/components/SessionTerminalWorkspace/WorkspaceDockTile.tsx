@@ -34,16 +34,9 @@ import { useDaemonApi, useOptionalDaemonApi } from '../../contexts/DaemonApiCont
 import type { Seed } from '../../hooks/useDaemonSocket';
 import './WorkspaceDockTile.css';
 
-// Link/image target resolution moved to the reader; re-exported here for
-// existing consumers.
 export { resolveMarkdownTarget } from '../MarkdownReader/markdownLinks';
 
-// Browser and notebook tiles manage their own scroll + chrome, so their body
-// drops the padding/overflow and fills the frame. The markdown reader draws
-// its own centered card, so its body only keeps the scroll (no padding).
 function bodyKindModifier(tileKind: string): string {
-  // An app's view fills the frame and draws its own everything; the body gives
-  // it the space and none of attn's padding.
   if (parseAppViewTileKind(tileKind)) return 'workspace-dock-tile-body--app';
   if (tileKind === 'browser') return 'workspace-dock-tile-body--browser';
   if (tileKind === 'notebook') return 'workspace-dock-tile-body--notebook';
@@ -59,7 +52,6 @@ export function normalizeBrowserAddress(value: string): string {
   return `${localHost ? 'http' : 'https'}://${trimmed}`;
 }
 
-/** One selectable Send target in the markdown tile header's session picker. */
 export interface WorkspaceTileSessionOption {
   sessionId: string;
   label: string;
@@ -73,34 +65,18 @@ interface WorkspaceDockTileProps {
   allowLocalTargets?: boolean;
   dragging: boolean;
   visible?: boolean;
-  // The workspace's agent sessions — the markdown tile's retarget options.
   workspaceSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
-  // The session the workspace has selected, if any. An app's view is given this
-  // as `sessionId`; nothing else reads it.
   workspaceSessionId?: string | null;
-  // The owning workspace's directory (Workspace.directory), for the notebook
-  // tile's root switcher's "Workspace — <dir>" option. Absent for tile-only
-  // workspaces with no directory.
   workspaceDirectory?: string;
   onClose: () => void;
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
-  // Rebind the tile's session binding (markdown Send target). Persisted by the
-  // daemon via workspace_layout_update_tile's tile_session_id; the layout
-  // broadcast echoes the new binding back into `tile.tileSessionId`.
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRequestContent: (workspaceId: string, tileId: string) => void;
-  // Handle to the scrollable body. A tile-only workspace has no terminal to
-  // focus on select, so the workspace focuses this element to enable keyboard
-  // scrolling. Left undefined for tiles that never receive select-time focus.
   bodyRef?: Ref<HTMLDivElement>;
 }
 
-/** Header send state for an annotated document tile. `sent` auto-clears after ~4s;
-    `skipped`/`warning`/`error` persist until the next action. `warning`
-    covers accepted-but-draft-clear-failed: the payload reached its destination
-    but the daemon still holds the draft, so local state is kept to match. */
 type MarkdownSendResult =
   | { kind: 'sent'; destination: 'session' | 'seed' }
   | { kind: 'skipped' }
@@ -130,17 +106,14 @@ export function WorkspaceDockTile({
   onRequestContent,
   bodyRef,
 }: WorkspaceDockTileProps) {
-  // Pull the current content on mount and whenever the tile retargets a new
-  // file. Live-reload updates then arrive as broadcasts (no re-request needed).
   useEffect(() => {
     if (tile.tileKind === 'markdown') {
       onRequestContent(workspaceId, tile.tileId);
     }
   }, [workspaceId, tile.tileId, tile.tileKind, tile.tileParams, onRequestContent]);
 
-  // Notebook tileParams may be the legacy bare-path string or the {root, path}
-  // JSON envelope a root-bound tile persists — parse either way so the header
-  // tooltip and annotation transport see the plain open path, not raw JSON.
+  // Notebook tileParams may be the legacy bare-path string or the {root, path} JSON
+  // envelope — parse either way so consumers see the plain open path, not raw JSON.
   const path = content?.path
     || (tile.tileKind === 'notebook' ? parseNotebookTileParams(tile.tileParams).path : tile.tileParams)
     || '';
@@ -150,13 +123,10 @@ export function WorkspaceDockTile({
   const browserLabel = browserHostLabel(workspaceId, tile.tileId);
   const [browserAddress, setBrowserAddress] = useState(tile.tileParams || '');
   const pendingBrowserParamsRef = useRef<string | null>(null);
-  // Handle to the docked NotebookTile's NotebookSurface, so the root switcher
-  // (below) can flush a dirty buffer to the OLD root before swapping params —
-  // otherwise the 700ms autosave debounce can lose an in-flight edit across
-  // a root switch, or worse, persist it to the wrong root after remount.
+  // Lets the root switcher below flush a dirty buffer to the OLD root before swapping
+  // params: the 700ms autosave debounce would otherwise lose an in-flight edit.
   const notebookSurfaceRef = useRef<NotebookSurfaceHandle | null>(null);
 
-  // ---- rendered-document annotation send flow ------------------------------
   const isMarkdown = tile.tileKind === 'markdown';
   const isSeed = tile.tileKind === 'seed';
   const isAnnotatedDocument = isMarkdown || isSeed;
@@ -171,26 +141,17 @@ export function WorkspaceDockTile({
   );
   const annotationsSendRef = useRef<MarkdownAnnotationsSendHandle | null>(null);
   const [annotationCount, setAnnotationCount] = useState(0);
-  // Focus-within on the tile root gates the ⌘Enter shortcut's registration:
-  // when focus sits in a terminal pane the shortcut
+  // Gates the ⌘Enter shortcut's registration: with focus in a terminal pane the shortcut
   // must not exist at all, so the key falls through to the PTY untouched.
   const [hasFocusWithin, setHasFocusWithin] = useState(false);
 
-  // The Send target: the tile's persisted session binding, but only while that
-  // session is still in the workspace — otherwise the picker shows a disabled
-  // "No session" placeholder and Send is disabled.
-  //
-  // Optimistic retarget: `tile.tileSessionId` only updates when the daemon's
-  // layout broadcast echoes the rebind back, which can lag well behind the
-  // click under WS load. The user's pick is held locally in the meantime and
-  // is authoritative for BOTH the picker value and the Send target — "Send
-  // always goes to the currently selected target". Cleared when the echo
-  // catches up or the retarget request fails.
+  // `tile.tileSessionId` only updates when the daemon's layout broadcast echoes the
+  // rebind back, which can lag the click; the user's pick is held locally meanwhile.
   const boundSessionId = tile.tileSessionId ?? '';
   const [pendingTargetSessionId, setPendingTargetSessionId] = useState<string | null>(null);
   useEffect(() => {
     if (pendingTargetSessionId !== null && boundSessionId === pendingTargetSessionId) {
-      setPendingTargetSessionId(null); // broadcast echo caught up
+      setPendingTargetSessionId(null);
     }
   }, [boundSessionId, pendingTargetSessionId]);
   const pendingInWorkspace = pendingTargetSessionId !== null
@@ -224,14 +185,13 @@ export function WorkspaceDockTile({
       return null;
     }
     if (!handle.isHydrated()) {
-      // The daemon draft has not been loaded (hydrate in flight or failed):
-      // local edits are unsaved, so the daemon would format a STALE stored
-      // draft — not what the sidebar shows. Refuse rather than mis-deliver.
+      // The daemon draft has not been loaded (hydrate in flight or failed), so the daemon would
+      // format a STALE stored draft. Refuse rather than mis-deliver.
       return { kind: 'error', message: NOT_HYDRATED_MESSAGE };
     }
     return (async () => {
-      // Flush the 500ms save debounce first so the daemon formats a draft
-      // that includes the last keystroke's edit.
+      // Flush the 500ms save debounce first so the daemon formats a draft that includes the
+      // last keystroke's edit.
       await handle.flushPendingSave();
       const result = await transport.submitMarkdownAnnotations(
         documentSource,
@@ -239,8 +199,6 @@ export function WorkspaceDockTile({
         handle.getOrphanedIds(),
       );
       if ((result.status === 'delivered' || result.status === 'noted') && result.error) {
-        // The daemon accepted the payload but kept its draft; local state
-        // stays with that surviving source of truth.
         return { kind: 'warning', message: result.error };
       }
       if (result.status === 'delivered' || result.status === 'noted') {
@@ -277,7 +235,6 @@ export function WorkspaceDockTile({
     setHasFocusWithin(true);
   }, []);
   const handleTileBlur = useCallback((event: ReactFocusEvent<HTMLDivElement>) => {
-    // focusout semantics: only clear when focus truly left the tile subtree.
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
       setHasFocusWithin(false);
     }
@@ -355,18 +312,11 @@ export function WorkspaceDockTile({
     };
   }, [browserLabel, onUpdateParams, tile.tileKind, tile.tileParams]);
 
-  // Root switcher (notebook tiles only). Lives in the tile chrome rather than
-  // NotebookSurface because the dock tile already owns tileParams writes (see
-  // the notebook body's onOpenFile below) — the switcher just writes a
-  // different field of the same params.
   const { effectiveNotebookRoot } = useNotebookSurfaceContext();
   const isNotebook = tile.tileKind === 'notebook';
   const currentRoot = isNotebook ? parseNotebookTileParams(tile.tileParams).root : undefined;
   const ROOT_BROWSE_VALUE = '__browse__';
   const workspaceDirIsRoot = !!workspaceDirectory && workspaceDirectory !== effectiveNotebookRoot;
-  // The current root shows as its own option only when it's neither of the two
-  // named shortcuts already covering it — otherwise it'd duplicate "Notebook"
-  // or "Workspace — <dir>".
   const currentRootIsOther = !!currentRoot
     && currentRoot !== effectiveNotebookRoot
     && currentRoot !== workspaceDirectory;
@@ -376,18 +326,12 @@ export function WorkspaceDockTile({
     if (value === ROOT_BROWSE_VALUE) {
       void open({ directory: true, multiple: false, title: 'Choose editor root' }).then(async (selected) => {
         if (!selected || typeof selected !== 'string') {
-          return; // cancelled — the select is controlled by parsed params, snaps back on re-render
+          return;
         }
-        // Flush the outgoing root's dirty buffer BEFORE swapping params — the
-        // surface persists it to the OLD root via the same instance that has
-        // it open, since the param swap is what remounts NotebookSurface onto
-        // the new root (NotebookTile keys on `root`).
+        // Flush the outgoing root's dirty buffer BEFORE the param swap: it remounts NotebookSurface
+        // onto the new root, and only this instance can still persist to the old one.
         const outcome = notebookSurfaceRef.current ? await notebookSurfaceRef.current.flushPendingSave() : 'noop';
         if (outcome === 'conflict' || outcome === 'error') {
-          // The surface's own conflict/save-error banner is already visible;
-          // the controlled select snaps back on re-render since params never
-          // changed. Aborting here is what keeps the edit from vanishing
-          // behind a root swap.
           return;
         }
         void Promise.resolve(onUpdateParams?.(serializeNotebookTileParams({ root: selected }))).catch((error) => {
@@ -399,14 +343,10 @@ export function WorkspaceDockTile({
       return;
     }
     void (async () => {
-      // Same flush-then-switch rule as the browse-dialog branch above.
       const outcome = notebookSurfaceRef.current ? await notebookSurfaceRef.current.flushPendingSave() : 'noop';
       if (outcome === 'conflict' || outcome === 'error') {
         return;
       }
-      // A chosen dir (or any non-browse option): path is deliberately omitted —
-      // the open file is meaningless under a different root, so the tile drops
-      // back to its tree view.
       void Promise.resolve(onUpdateParams?.(serializeNotebookTileParams({ root: value || undefined }))).catch((error) => {
         console.warn('[WorkspaceDockTile] Failed to persist notebook root:', error);
       });
@@ -473,8 +413,7 @@ export function WorkspaceDockTile({
             className="workspace-dock-tile-root-picker"
             aria-label="Editor root"
             value={currentRoot ?? ''}
-            // The header is the drag handle; interacting with the picker must
-            // not start a re-dock drag (mirrors the session-picker below).
+            // The header is the drag handle; interacting with the picker must not start a re-dock drag.
             onPointerDown={(event) => event.stopPropagation()}
             onChange={handleRootChange}
           >
@@ -491,8 +430,7 @@ export function WorkspaceDockTile({
         {isAnnotatedDocument ? (
           <div
             className="workspace-dock-tile-send"
-            // The header is the drag handle; interacting with the send
-            // controls must not start a re-dock drag.
+            // The header is the drag handle; interacting with the send controls must not start a drag.
             onPointerDown={(event) => event.stopPropagation()}
           >
             {sendStatus.kind === 'sending' ? (
@@ -589,9 +527,6 @@ export function WorkspaceDockTile({
                     if (!sessionId || sessionId === targetSessionId) {
                       return;
                     }
-                    // Optimistic: the pick takes effect immediately (picker value
-                    // AND Send target); the daemon echo confirms it later. On a
-                    // failed retarget request, roll back to the persisted binding.
                     setPendingTargetSessionId(sessionId);
                     clearSendOutcome();
                     void Promise.resolve(onRetargetTile?.(sessionId)).catch((error) => {
@@ -680,10 +615,8 @@ export function WorkspaceDockTile({
             onClose={onClose}
           />
         ) : tile.tileKind === 'notebook' ? (
-          // The notebook tile self-serves its content over the fs surface (via
-          // context); the only tile→params write is the opened file's path.
           // tileParams may be the legacy bare-path string (rootless tile) or the
-          // {root, path} JSON envelope a root-bound tile persists.
+          // {root, path} JSON envelope.
           (() => {
             const { root, path: openPath } = parseNotebookTileParams(tile.tileParams);
             return (
@@ -752,8 +685,6 @@ function MarkdownBody({
 }
 
 function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boolean) {
-  // Ordinary tiles are also rendered in lightweight workspace surfaces that
-  // do not need daemon commands. Only require the API when this is a seed.
   const sendSeedDocumentGet = useOptionalDaemonApi()?.sendSeedDocumentGet;
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -774,9 +705,8 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     };
   }, [document, liveSeed]);
 
-  // Every garden fact re-pushes the seeds snapshot. Notes and child changes do
-  // not necessarily touch this seed's own revision, so the array identity is
-  // the live invalidation signal for the complete reader document.
+  // Every garden fact re-pushes the seeds snapshot, and notes or child changes need not
+  // touch this seed's own revision, so the array identity is the live invalidation signal.
   useEffect(() => {
     if (!enabled) return;
     if (!seedId) {

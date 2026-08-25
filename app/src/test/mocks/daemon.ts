@@ -1,5 +1,3 @@
-// Mock daemon for testing components that interact with the daemon
-// Tracks all calls and allows controlling responses
 
 import type { GitStatusUpdate, FileDiffResult } from '../../hooks/useDaemonSocket';
 
@@ -27,14 +25,11 @@ export class MockDaemon {
     this.options = options;
   }
 
-  // Record a call
   private recordCall(method: string, args: unknown[]): void {
-    // Check strict mode
     if (this.options.strict && !this.expectedCalls.has(method)) {
       throw new Error(`Unexpected call to ${method} in strict mode. Expected: ${[...this.expectedCalls].join(', ')}`);
     }
 
-    // Check max calls
     const maxCalls = this.options.maxCalls?.[method];
     if (maxCalls !== undefined) {
       const currentCount = this.getCalls(method).length;
@@ -50,7 +45,6 @@ export class MockDaemon {
     });
   }
 
-  // Get calls, optionally filtered by method
   getCalls(method?: string): Call[] {
     if (method) {
       return this.calls.filter(c => c.method === method);
@@ -58,27 +52,22 @@ export class MockDaemon {
     return [...this.calls];
   }
 
-  // Clear recorded calls
   clearCalls(): void {
     this.calls = [];
   }
 
-  // Set expected calls for strict mode
   expect(method: string): void {
     this.expectedCalls.add(method);
   }
 
-  // Set a response for a method
   setResponse<T>(method: string, response: ResponseValue<T>): void {
     this.responses.set(method, response);
   }
 
-  // Set delay for a method
   setDelay(method: string, delayMs: number): void {
     this.delays.set(method, delayMs);
   }
 
-  // Get response, applying delay if set
   private async getResponse<T>(method: string, args: unknown[]): Promise<T> {
     const delay = this.delays.get(method);
     if (delay) {
@@ -96,7 +85,6 @@ export class MockDaemon {
     return response as T;
   }
 
-  // Create mock functions that match the daemon API
   createFetchDiff(): (path: string, options?: { staged?: boolean; baseRef?: string }) => Promise<FileDiffResult> {
     return async (path: string, options?: { staged?: boolean; baseRef?: string }): Promise<FileDiffResult> => {
       this.recordCall('fetchDiff', [path, options]);
@@ -112,12 +100,10 @@ export class MockDaemon {
   }
 }
 
-// Factory function
 export function createMockDaemon(options?: MockDaemonOptions): MockDaemon {
   return new MockDaemon(options);
 }
 
-// Fixture creators
 export function createGitStatus(files: string[], options?: {
   staged?: boolean;
   status?: string;
@@ -149,7 +135,6 @@ export function createFileDiffResult(original: string, modified: string): FileDi
   };
 }
 
-// Helper to wait for a condition
 export async function waitForCalls(
   mock: MockDaemon,
   method: string,
@@ -165,7 +150,6 @@ export async function waitForCalls(
   }
 }
 
-// Helper to ensure no more calls happen
 export async function assertNoMoreCalls(
   mock: MockDaemon,
   method: string,

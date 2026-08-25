@@ -2,9 +2,7 @@ package probetui
 
 import "bytes"
 
-// codex-cli 0.145.0 never uses the alternate screen, addresses the
-// existing screen with CUP/EL, and queries DA1/CPR/OSC 10+11 colors on
-// startup. See internal/probetui/testdata/agent-vocab-codex.json.
+// codex-cli 0.145.0 never uses the alternate screen, addresses the existing screen with CUP/EL, and queries DA1/CPR/OSC 10+11 colors on startup; see internal/probetui/testdata/agent-vocab-codex.json.
 
 func startupCodex(cols, rows int) []byte {
 	var b bytes.Buffer
@@ -20,7 +18,7 @@ func startupCodex(cols, rows int) []byte {
 func frameCodex(cols, rows, seq int) []byte {
 	var b bytes.Buffer
 	b.Write(privateMode(true, "2026"))
-	b.Write(privateMode(false, "25")) // hide cursor at frame start
+	b.Write(privateMode(false, "25"))
 
 	for row := 1; row <= rows; row++ {
 		b.Write(cup(row, 1))
@@ -31,7 +29,6 @@ func frameCodex(cols, rows, seq int) []byte {
 		case 2:
 			b.WriteString(truncateToWidth(bannerStyleRow(StyleCodex, seq), cols))
 		case 3:
-			// One SGR color and one OSC 8 hyperlink per frame.
 			b.Write(sgr("38;5;2"))
 			b.Write(hyperlink("file:///tmp/attn-probe/session.log", truncateToWidth("session.log", cols)))
 			b.Write(sgr("0"))
@@ -40,7 +37,7 @@ func frameCodex(cols, rows, seq int) []byte {
 		}
 	}
 
-	b.Write(privateMode(true, "25")) // show cursor at frame end
+	b.Write(privateMode(true, "25"))
 	b.Write(privateMode(false, "2026"))
 	return b.Bytes()
 }

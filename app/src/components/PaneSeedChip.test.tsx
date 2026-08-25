@@ -24,8 +24,6 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   };
 }
 
-// The pane header's answer to "what is this agent working on": the seed it
-// reports to, and the way into it.
 describe('PaneSeedChip', () => {
   it('shows the seed title and opens it', () => {
     const onOpen = vi.fn();
@@ -46,9 +44,6 @@ describe('PaneSeedChip', () => {
     expect(onOpen).toHaveBeenCalled();
   });
 
-  // The session names its seed on the wire; the garden list it would be titled
-  // from can lag or be capped. A chip that waited would read as "this agent
-  // reports to nothing" — the one thing it must never say.
   it('falls back to the id when the seed is not in the pushed list', () => {
     render(<PaneSeedChip seedId="s-late11" unread sessionId="sess-b" onOpen={vi.fn()} />);
 

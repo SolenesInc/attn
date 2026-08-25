@@ -11,9 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// callJournalAppend drives handleJournalAppend over an in-memory pipe and returns
-// the decoded response, waiting for the handler to fully return before the caller
-// inspects any daemon-side side effects (self-write record, broadcast).
+// callJournalAppend waits for the handler to fully return before the caller
+// inspects any daemon-side side effect.
 func callJournalAppend(t *testing.T, d *Daemon, msg *protocol.JournalAppendMessage) protocol.Response {
 	t.Helper()
 	server, clientConn := net.Pipe()
@@ -32,8 +31,6 @@ func callJournalAppend(t *testing.T, d *Daemon, msg *protocol.JournalAppendMessa
 	return resp
 }
 
-// A successful append creates journal/<date>.md with the entry and echoes
-// rel_path and hash.
 func TestJournalAppendCreatesFile(t *testing.T) {
 	d := newNotebookDaemon(t)
 	resp := callJournalAppend(t, d, &protocol.JournalAppendMessage{
@@ -66,9 +63,6 @@ func TestJournalAppendCreatesFile(t *testing.T) {
 	}
 }
 
-// A second append lands both entries in the same file — the serialization
-// behavior itself belongs to notebook.Store's own tests; this only checks the
-// handler wires two calls through to two appends.
 func TestJournalAppendSecondCallLandsBothEntries(t *testing.T) {
 	d := newNotebookDaemon(t)
 	date := protocol.Ptr("2026-07-05")
@@ -93,7 +87,6 @@ func TestJournalAppendSecondCallLandsBothEntries(t *testing.T) {
 	}
 }
 
-// An empty (or whitespace-only) entry is rejected before reaching the store.
 func TestJournalAppendEmptyEntryFails(t *testing.T) {
 	d := newNotebookDaemon(t)
 	resp := callJournalAppend(t, d, &protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: "   "})
@@ -102,8 +95,6 @@ func TestJournalAppendEmptyEntryFails(t *testing.T) {
 	}
 }
 
-// A malformed date is rejected — the store's own validation error passes through
-// rather than being duplicated in the handler.
 func TestJournalAppendMalformedDateFails(t *testing.T) {
 	d := newNotebookDaemon(t)
 	resp := callJournalAppend(t, d, &protocol.JournalAppendMessage{
@@ -116,7 +107,6 @@ func TestJournalAppendMalformedDateFails(t *testing.T) {
 	}
 }
 
-// An empty date defaults to today, in the daemon's local timezone.
 func TestJournalAppendDefaultsDateToToday(t *testing.T) {
 	d := newNotebookDaemon(t)
 	resp := callJournalAppend(t, d, &protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: "an entry"})

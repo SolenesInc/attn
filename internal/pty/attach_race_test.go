@@ -50,28 +50,8 @@ func TestSessionInfoAndSubscribeDoNotSerializeReplay(t *testing.T) {
 	}
 }
 
-// TestAttachSnapshotSeqConsistency proves — deterministically — that a frontend
-// re-attach can lose PTY output at the restore/live boundary.
-//
-// On attach the daemon hands the frontend a restore payload (the serialized
-// ghostty snapshot) plus a LastSeq watermark; the frontend applies the restore
-// and then keeps only live chunks with seq > LastSeq, assuming everything up to
-// LastSeq is already restored. If info() captured the payload and read LastSeq
-// at DIFFERENT times, a PTY write landing in that window is in neither: not yet
-// in the payload, and deduped out of the live stream because its seq <= LastSeq.
-// It vanishes. info() serializes the snapshot and reads lastReplaySeq under a
-// single replayMu critical section to close that window; this test proves the
-// watermark bounds exactly the covered history regardless of how the payload is
-// represented — LastSeq names the last chunk baked into the payload, so the
-// authoritative stream and the applied-live stream meet with no hole or overlap.
-//
-// fish emits `OSC 133;D` (close command) + `OSC 133;A` (open next prompt)
-// back-to-back at each new prompt, so a single lost chunk here silently merges
-// two command blocks — the make-install-then-echo-1 bug.
-//
-// infoSnapshotHook drives the race deterministically: it injects two PTY writes
-// into the window after the payload is captured. The first injected chunk then
-// has seq < LastSeq but is absent from the payload — exactly the lost chunk.
+// info() must serialize the snapshot and read lastReplaySeq under one replayMu
+// section, or a write in that window is in neither the payload nor the stream.
 func TestAttachSnapshotSeqConsistency(t *testing.T) {
 	const cols, rows = 80, 24
 	defer func() { infoSnapshotHook = nil }()
@@ -98,7 +78,6 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 	}
 	go s.readLoop(nil, func(string, ...any) {})
 
-	// Authoritative stream: every fanned chunk, in order, no dedup.
 	mirror := &streamMirror{}
 	s.addSubscriber("mirror", mirror.send, nil)
 
@@ -119,22 +98,16 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 		}
 	}
 
-	// Seed the "replay history": several commands' worth of output, all fully
-	// fanned (and thus in the replay payload) before we attach.
 	seeded := 0
 	for i := range 50 {
 		seeded += write(fmt.Sprintf("SEED%05d|prior-command-output-line\n", i))
 	}
 	waitMirror(seeded)
 
-	// Arm the race: when info() reaches the post-payload window, inject two PTY
-	// writes (think: fish's `OSC 133;D` + `OSC 133;A` at a new prompt) and wait
-	// until both are fanned so LastSeq is read AHEAD of the captured payload.
 	lostChunk := "GAP_LOST|command-end+next-prompt\n"
 	keptChunk := "GAP_KEPT|following-output\n"
-	// Inject as two distinct fanned chunks (two seqs): write, wait for it to be
-	// fanned, then write the next. Back-to-back writes would coalesce into one
-	// read/seq and not advance the watermark past the lost chunk.
+	// Back-to-back writes coalesce into one read and one seq, which would not
+	// advance the watermark past the lost chunk.
 	injectOneChunk := func(line string) {
 		start := s.seqCounter.Load()
 		write(line)
@@ -155,21 +128,12 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 		})
 	}
 
-	// Model Manager.Attach exactly: register the live subscriber, then read the
-	// replay payload + watermark (the hook fires inside info()).
 	probe := &recordingSink{}
 	s.addSubscriber("probe", probe.send, nil)
 	info := s.info()
 
-	// The payload covers exactly the seeded history (all of it was fanned before
-	// the attach), so the restore/live boundary sits at `seeded` bytes in the
-	// authoritative stream. This holds independently of the payload's
-	// representation (ghostty snapshot); what is under test is that LastSeq names
-	// the last chunk baked into the payload.
 	boundary := seeded
 
-	// The bytes the frontend would actually apply after the restore: live chunks
-	// with seq > LastSeq (matching planLivePtyOutput's stale rule).
 	var applied []byte
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -190,26 +154,13 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 		t.Fatal("mirror did not cover the reconstruction boundary")
 	}
 	if !ok {
-		// reconstruction = restore payload ++ applied-live has a hole/overlap:
-		// the user loses (or double-sees) output across the re-attach.
 		t.Fatalf("re-attach lost output: payload covered %d bytes, LastSeq=%d, but the first applied live bytes are %q, not the next bytes in the stream %q",
 			boundary, info.LastSeq, firstLine(applied), firstLine(mirror.slice(boundary, len(applied))))
 	}
 }
 
-// TestScreenSnapshotSeqConsistency proves the same replay-boundary loss for
-// the snapshot observer path (Manager.Snapshot): grid/read-only consumers seed
-// a tile from screenSnapshot() and then dedupe the live firehose against its
-// LastSeq. The read loop allocates a chunk's sequence number BEFORE applying
-// the chunk to replay/screen state, so a snapshot taken in that gap must
-// report the watermark of the last APPLIED chunk (lastReplaySeq), not
-// seqCounter. Reporting seqCounter would claim coverage of the in-flight chunk
-// while the snapshot screen lacks its bytes — the observer then drops that
-// live chunk and the bytes vanish, the same class of loss as the attach race
-// above.
-//
-// readLoopSeqGapHook drives the race deterministically: it takes the observer
-// snapshot inside the gap for a known marker chunk.
+// The read loop allocates a chunk's seq before applying it, so a snapshot in
+// that gap must report lastReplaySeq, not seqCounter.
 func TestScreenSnapshotSeqConsistency(t *testing.T) {
 	const cols, rows = 80, 24
 	defer func() { readLoopSeqGapHook = nil }()
@@ -256,13 +207,9 @@ func TestScreenSnapshotSeqConsistency(t *testing.T) {
 		}
 	}
 
-	// Seed applied history so the gap snapshot has a real screen and a non-zero
-	// watermark to report.
 	seeded := write("SEED|earlier-output\r\n")
 	waitMirror(seeded)
 
-	// Arm the race: when the marker chunk's seq is allocated but its bytes have
-	// not yet reached the screen, take the observer snapshot inside the gap.
 	var (
 		once    sync.Once
 		gapInfo ScreenSnapshotInfo
@@ -283,15 +230,10 @@ func TestScreenSnapshotSeqConsistency(t *testing.T) {
 	if bytes.Contains(gapInfo.Screen.Payload, []byte("MARKER")) {
 		t.Fatal("gap snapshot already contains the in-flight chunk; the seam fired too late to exercise the race")
 	}
-	// The core invariant: a snapshot whose screen lacks the chunk's bytes must
-	// not claim the chunk. LastSeq >= gapSeq would make an observer drop the
-	// live chunk carrying bytes the snapshot does not have.
 	if gapInfo.LastSeq >= gapSeq {
 		t.Fatalf("snapshot taken before chunk %d reached the screen reports LastSeq=%d — observers deduping seq <= LastSeq would lose the chunk's bytes", gapSeq, gapInfo.LastSeq)
 	}
 
-	// Once applied, the pair is consistent again: the watermark covers the
-	// marker chunk and the screen contains its bytes.
 	settled := s.screenSnapshot()
 	if settled.LastSeq != gapSeq {
 		t.Fatalf("settled snapshot LastSeq = %d, want %d (the applied marker chunk)", settled.LastSeq, gapSeq)
@@ -306,7 +248,6 @@ func firstLine(b []byte) string {
 	return string(line)
 }
 
-// recordingSink captures the live chunks a single attached subscriber receives.
 type recordingSink struct {
 	mu     sync.Mutex
 	chunks []recordedChunk
@@ -324,10 +265,8 @@ func (r *recordingSink) send(data []byte, seq uint32) bool {
 	return true
 }
 
-// appliedAfter returns the concatenated bytes of the first maxChunks live
-// chunks the frontend would APPLY: those with seq > lastSeq (the rest are
-// deduped as already-in-replay). This must mirror the real client rule in
-// planLivePtyOutput, or the test validates a contract no client implements.
+// Must mirror planLivePtyOutput's stale rule, or the test validates a contract
+// no client implements.
 func (r *recordingSink) appliedAfter(lastSeq uint32, maxChunks int) []byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -345,8 +284,6 @@ func (r *recordingSink) appliedAfter(lastSeq uint32, maxChunks int) []byte {
 	return out
 }
 
-// streamMirror is the authoritative ordered byte stream (every fanned chunk,
-// no dedup) — the ground truth of what the user should see.
 type streamMirror struct {
 	mu  sync.Mutex
 	buf []byte
@@ -365,8 +302,7 @@ func (m *streamMirror) len() int {
 	return len(m.buf)
 }
 
-// matchAt reports whether p appears in the authoritative stream starting at
-// offset. have=false means the mirror has not yet reached offset+len(p).
+// have=false means the mirror has not yet reached offset+len(p).
 func (m *streamMirror) matchAt(offset int, p []byte) (ok bool, have bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -8,13 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// TestWireTracePRFlowGolden is the flow golden for the PR surface: the handlers
-// a user's clicks land on, in the order the app sends them.
-//
-// The producer golden proves prs_updated still looks the same; it cannot prove
-// that muting a PR still causes one. These handlers only ever reached clients
-// through a whole-list re-push, so a migration that dropped the publish
-// entirely would leave every per-producer assertion green.
+// The producer golden cannot prove that muting a PR still causes a prs_updated: these
+// handlers only reached clients via a whole-list re-push, so a dropped publish is green.
 func TestWireTracePRFlowGolden(t *testing.T) {
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "test.sock"))
@@ -31,12 +26,10 @@ func TestWireTracePRFlowGolden(t *testing.T) {
 	runDaemonSocketCommand(t, func(conn net.Conn) {
 		d.handleInjectTestPR(conn, &protocol.InjectTestPRMessage{PR: injected})
 	})
-	// Injecting the same PR again is an update, not an appearance.
 	runDaemonSocketCommand(t, func(conn net.Conn) {
 		d.handleInjectTestPR(conn, &protocol.InjectTestPRMessage{PR: injected})
 	})
 	d.handleMutePRWS(&protocol.MutePRMessage{ID: prID})
-	// Unmuting also warms the PR, so it is two facts and still one push.
 	d.handleMutePRWS(&protocol.MutePRMessage{ID: prID})
 	d.handlePRVisitedWS(&protocol.PRVisitedMessage{ID: prID})
 	d.handleMuteRepoWS(&protocol.MuteRepoMessage{Repo: "owner/repo"})

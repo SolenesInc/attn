@@ -14,20 +14,14 @@ var builtInRateCards = map[string]RateCard{
 	"claude-haiku-4-5":          anthropicRates(1, 5),
 	"claude-haiku-4-5-20251001": anthropicRates(1, 5),
 
-	// Sources, checked 2026-08-15:
-	// https://developers.openai.com/api/docs/models/gpt-5-codex
-	// https://developers.openai.com/api/docs/models/gpt-5.4-mini
-	// https://developers.openai.com/api/docs/models/gpt-5.5
+	// Sources checked 2026-08-15: developers.openai.com/api/docs/models/{gpt-5-codex,gpt-5.4-mini,gpt-5.5}.
 	// These models bill cache reads separately and list no cache-write charge.
 	"gpt-5-codex":  openAIRates(1.25, 10, 0.125, 0),
 	"gpt-5.4-mini": openAIRates(0.75, 4.5, 0.075, 0),
 	"gpt-5.5":      openAIRates(5, 30, 0.5, 0),
 
-	// Sources, checked 2026-08-15:
-	// https://openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/
-	// https://developers.openai.com/api/docs/guides/latest-model
-	// The July 30 prices supersede older model-page values for Terra and Luna;
-	// GPT-5.6 cache reads cost 10% and explicit writes cost 125% of input.
+	// Sources checked 2026-08-15: openai.com/index/advancing-the-price-performance-frontier-with-gpt-5-6/.
+	// GPT-5.6 cache reads cost 10% and explicit writes 125% of input.
 	"gpt-5.6-sol":   openAIRates(5, 30, 0.5, 6.25),
 	"gpt-5.6-terra": openAIRates(2, 12, 0.2, 2.5),
 	"gpt-5.6-luna":  openAIRates(0.2, 1.2, 0.02, 0.25),

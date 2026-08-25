@@ -52,10 +52,6 @@ async function waitForOpenSocket(): Promise<FakeWebSocket> {
   return ws;
 }
 
-// The ambient critical surface is driven by the broadcast, not by a listed feed,
-// because the panel only lists while it is open. So what the broadcast carries is
-// the whole contract: get it wrong and a user who never opens the panel never
-// learns that something critical is unread.
 describe('useDaemonSocket critical notifications', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -129,9 +125,8 @@ describe('useDaemonSocket critical notifications', () => {
     expect(onNotificationsUpdated).toHaveBeenCalledWith(1, { count: 0, title: '' });
   });
 
-  // A daemon older than the app sends neither field. That must read as "nothing
-  // critical" — the surface staying down is the safe failure, and inventing a
-  // count from a missing field would put up a banner nothing can clear.
+  // A daemon older than the app sends neither field; that must read as "nothing
+  // critical", or a missing field puts up a banner nothing can clear.
   it('treats a broadcast without the severity fields as nothing critical', async () => {
     const { ws, onNotificationsUpdated } = await renderWithBroadcast();
 

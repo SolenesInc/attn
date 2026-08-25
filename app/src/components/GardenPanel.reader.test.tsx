@@ -61,8 +61,6 @@ describe('GardenPanel seed reader drill', () => {
       artifact: { kind: 'markdown_file', path: '/repo/evidence.md' },
     });
     fetched.notes_total += 1;
-    // The set is the daemon's projection over the whole log, not something the
-    // panel recomputes from the notes it happens to have been sent.
     fetched.artifacts = [{ kind: 'markdown_file', path: '/repo/evidence.md' }];
     const fetchSeedDocument = vi.fn().mockResolvedValue(fetched);
     const onOpenAsTile = vi.fn();
@@ -89,8 +87,6 @@ describe('GardenPanel seed reader drill', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open as tile' }));
     expect(onOpenAsTile).toHaveBeenCalledWith('s-plan11');
 
-    // An artifact row is the object, not the path: the kind is named in words
-    // and the file is named by its file name, with the directory beside it.
     const artifact = screen.getByRole('button', { name: /evidence\.md/ });
     expect(artifact).toHaveTextContent('markdown');
     expect(artifact).toHaveTextContent('/repo');
@@ -116,8 +112,6 @@ describe('GardenPanel seed reader drill', () => {
     fireEvent.click(screen.getByText('Open this plan'));
     expect(await screen.findByText('Before the push')).toBeInTheDocument();
 
-    // garden.noted re-pushes a freshly decoded snapshot, but writing a note
-    // does not revise the seed document itself.
     rerender(
       <GardenPanel
         isOpen

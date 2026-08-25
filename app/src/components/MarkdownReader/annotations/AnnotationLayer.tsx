@@ -1,19 +1,3 @@
-/**
- * AnnotationLayer — the UI orchestration over the useAnnotations engine:
- *
- * - SelectionToolbar over a pending selection (center-above for prose,
- *   top-right for code blocks) or over a hovered code block (whole-block
- *   annotation, donor behavior);
- * - AnnotationPopover for comment composition (type-to-comment seeding,
- *   draft survival, dirty-close blocking) and global comments;
- * - QuickLabelPicker (inside the toolbar) at the last mouseup cursor;
- * - AnnotationSidebar column — collapsed by default at 0 annotations,
- *   auto-opens on the first one (tile real estate is precious).
- *
- * Rendered as a sibling of the reader's document area inside the flex row;
- * toolbar/popover/picker are body portals, the sidebar is the in-flow column.
- */
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { resolveDomRange } from '../anchoring/domRange';
@@ -61,8 +45,6 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
   const autoOpenedRef = useRef(false);
   const hoverHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Collapsed by default when empty; auto-open once on the first annotation
-  // (creation or hydration).
   useEffect(() => {
     if (annotations.length > 0 && !autoOpenedRef.current) {
       autoOpenedRef.current = true;
@@ -70,24 +52,19 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     }
   }, [annotations.length]);
 
-  // Clicking a painted highlight selects it in the sidebar (E28) — reopen a
-  // collapsed sidebar so the selection is actually visible.
   useEffect(() => {
     if (selectedId !== null) {
       setSidebarOpen(true);
     }
   }, [selectedId]);
 
-  // Mirror popover-open state into the hook so its mouseup guard is scoped to
-  // THIS tile (not a document-wide popover query — see useAnnotations).
+  // Scope the hook's mouseup guard to THIS tile, not a document-wide popover query.
   useEffect(() => {
     api.popoverOpenRef.current = popover !== null;
   }, [api.popoverOpenRef, popover]);
 
-  // ---- code-block hover (react-side, event delegation on root) ------------
-  // NOT inside CodeBlock.tsx: the annotation layer stays decoupled from the
-  // renderer, and CodeBlock lives behind the memo gate where new props would
-  // break the gate contract.
+  // NOT inside CodeBlock.tsx: it lives behind the memo gate, where new props break the
+  // gate contract.
 
   const cancelHoverHide = useCallback(() => {
     if (hoverHideTimerRef.current) {
@@ -135,7 +112,7 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
         return;
       }
       if (related instanceof Element && related.closest('.md-codeblock')) {
-        return; // still inside the block
+        return;
       }
       scheduleHoverHide();
     };
@@ -148,7 +125,6 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     };
   }, [rootRef, cancelHoverHide, scheduleHoverHide]);
 
-  // ---- toolbar anchoring ---------------------------------------------------
 
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -169,7 +145,7 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
           return rect;
         }
       } catch {
-        // fall through to the snapshot
+
       }
     }
     return current.rect;
@@ -186,7 +162,6 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     [api.lastMousePosRef],
   );
 
-  // ---- toolbar actions -----------------------------------------------------
 
   /** Hover-toolbar actions first turn the hovered block into a whole-block
       pending selection; selection-toolbar actions use the existing pending. */
@@ -238,7 +213,6 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     setPopover({ kind: 'global', anchorEl });
   }, []);
 
-  // ---- popover -------------------------------------------------------------
 
   const popoverRef = useRef(popover);
   popoverRef.current = popover;
@@ -277,7 +251,6 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     }
   }, [api]);
 
-  // ---- render --------------------------------------------------------------
 
   const showSelectionToolbar = pending !== null && popover === null;
   const showHoverToolbar = !showSelectionToolbar && popover === null && hoverBlock !== null;

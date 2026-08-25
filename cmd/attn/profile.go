@@ -17,15 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-// runProfile is the `attn profile <subcommand>` group: the human-facing surface
-// over the single profile authority in internal/config. Bare `attn profile`
-// prints status (the most useful default).
-//
-//	attn profile               → status of the active profile
-//	attn profile status        → same
-//	attn profile resolve [...]  → machine-readable resolution (JSON or --field)
-//	attn profile list          → every profile with data and/or an installed app
-//	attn profile env <name>     → alias of `attn profile-env`
 func runProfile() {
 	if len(os.Args) < 3 {
 		runProfileStatus()
@@ -45,7 +36,6 @@ func runProfile() {
 	case "list":
 		runProfileList(os.Args[3:])
 	case "env":
-		// `attn profile env …` mirrors the top-level `attn profile-env …`.
 		runProfileEnvArgs(os.Args[3:])
 	case "help", "-h", "--help":
 		printProfileHelp(os.Stdout)
@@ -56,13 +46,9 @@ func runProfile() {
 	}
 }
 
-// profileResolved is the single authority payload: every resource derived from
-// one profile name. Emitted by `attn profile resolve --json` and consumed by
-// the Makefile, the e2e harness, and the real-app harness so the derivation
-// lives in exactly one place (internal/config) instead of being re-encoded.
 type profileResolved struct {
 	Profile        string `json:"profile"` // normalized ("" for default)
-	Label          string `json:"label"`   // "default" | name
+	Label          string `json:"label"`
 	DataDir        string `json:"dataDir"`
 	Socket         string `json:"socket"`
 	DBPath         string `json:"dbPath"`
@@ -140,8 +126,6 @@ func runProfileStatus() {
 	fmt.Printf("  scheme     %s\n", r.DeepLinkScheme)
 	fmt.Printf("  e2e ports  daemon %s · vite %s\n\n", r.E2EDaemonPort, r.E2EVitePort)
 
-	// The one command that still runs under a contradicting environment, so it
-	// is the one that has to say what is wrong with it.
 	if err := config.ValidateProfileRouting(); err != nil {
 		fmt.Printf("CONFLICT — every other attn command refuses to run here:\n%v\n\n", err)
 	}
@@ -157,7 +141,6 @@ func runProfileResolve(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--json":
-			// JSON is the default; accepted for explicitness.
 		case "--profile":
 			if i+1 >= len(args) {
 				profileFatal("--profile requires a value")
@@ -198,13 +181,6 @@ func runProfileResolve(args []string) {
 	fmt.Println(string(b))
 }
 
-// runProfileTauriConfig emits a Tauri `--config` overlay for a profile's
-// packaged build: productName, bundle identifier, deep-link scheme, and window
-// title, all derived from the single authority. The Makefile writes this to a
-// gitignored tauri.<name>.gen.conf.json and passes it to `tauri build --config`
-// so a named profile's bundle metadata is never hand-maintained. Structurally
-// identical to the (now removed) committed tauri.dev.conf.json, so the dev build
-// is byte-for-byte equivalent after unification.
 func runProfileTauriConfig(args []string) {
 	profile := config.Profile()
 	for i := 0; i < len(args); i++ {
@@ -255,13 +231,6 @@ func runProfileTauriConfig(args []string) {
 	fmt.Println(string(b))
 }
 
-// cleanPlan parses `attn profile clean` arguments and applies the safety guard.
-// It is pure (no side effects, no os.Exit) so the rules that decide WHAT gets
-// destroyed are unit-tested in isolation from the destruction itself.
-//
-// Returns the normalized profile name ("" for default/prod) and whether --force
-// was given. Refuses the default/prod profile unless --force is explicit, since
-// cleaning it would remove ~/.attn and ~/Applications/attn.app.
 func cleanPlan(args []string) (normalized string, force bool, err error) {
 	name := ""
 	for i := 0; i < len(args); i++ {
@@ -292,10 +261,6 @@ func cleanPlan(args []string) (normalized string, force bool, err error) {
 	return normalized, force, nil
 }
 
-// runProfileClean tears down a profile: stop its daemon, quit its app, forget
-// the bundle in LaunchServices, and remove its app bundle and data dir. Every
-// step is best-effort and reported, so cleaning a partially-installed profile is
-// idempotent. The destructive removals (app, data) are the only hard failures.
 func runProfileClean(args []string) {
 	for _, a := range args {
 		if a == "-h" || a == "--help" {
@@ -311,8 +276,7 @@ func runProfileClean(args []string) {
 
 	fmt.Printf(">>> Cleaning profile %s\n", r.Label)
 
-	// Quit the app first so it stops talking to the daemon, then stop the
-	// daemon itself (it outlives the app by design).
+	// The daemon outlives the app by design, so quit the app first.
 	quitProfileApp(r.BundleID)
 	if msg := stopProfileDaemon(r); msg != "" {
 		fmt.Printf("  daemon   %s\n", msg)
@@ -320,21 +284,17 @@ func runProfileClean(args []string) {
 		fmt.Printf("  daemon   stopped\n")
 	}
 
-	// Workers outlive the daemon on purpose, so stopping it is not enough: the
-	// data dir removal below destroys the registry they are found through, and
-	// any worker still alive at that point is stranded with no daemon that could
-	// ever adopt it. Reap before the registry goes.
+	// The data dir removal below destroys the registry workers are found through:
+	// reap before it goes, or a live worker is stranded.
 	reportWorkerReap(ptyworker.ReapDataDir(r.DataDir))
 
-	// Conversation hosts and plugin runtime processes die with their daemon on
-	// purpose — but a daemon that died without running its shutdown left them
-	// running, reparented to init, findable only through the registries this
-	// data dir holds. Same rule as workers: reap before the registries go.
+	// A daemon that skipped its shutdown leaves these reparented to init, findable
+	// only through these registries: reap before the registries go.
 	reportProcReap("hosts", "session", hostsession.ReapDataDir(r.DataDir))
 	reportProcReap("plugins", "plugin", plugins.ReapRuntimeProcesses(r.DataDir))
 
-	// App bundle: forget it in LaunchServices (so the deep-link scheme and
-	// bundle id stop resolving to a path we're about to delete), then remove it.
+	// Forget the bundle first, so its id and deep-link scheme stop resolving to a
+	// path we are about to delete.
 	if fileExists(r.AppPath) {
 		lsregisterForget(r.AppPath)
 		if err := os.RemoveAll(r.AppPath); err != nil {
@@ -345,7 +305,6 @@ func runProfileClean(args []string) {
 		fmt.Printf("  app      not installed (%s)\n", r.AppPath)
 	}
 
-	// Data dir: socket, pid file, db, tokens — everything for this profile.
 	if fileExists(r.DataDir) {
 		if err := os.RemoveAll(r.DataDir); err != nil {
 			profileFatal(fmt.Sprintf("remove data dir %s: %v", r.DataDir, err))
@@ -358,10 +317,6 @@ func runProfileClean(args []string) {
 	fmt.Printf("Cleaned profile %s.\n", r.Label)
 }
 
-// reportWorkerReap prints one line per registered worker. An unidentified
-// worker is the one outcome that needs a human: the reaper refused to signal a
-// PID it could not confirm, so the process is named rather than silently left
-// behind for someone to find days later at the top of `ps`.
 func reportWorkerReap(results []ptyworker.ReapResult) {
 	if len(results) == 0 {
 		fmt.Printf("  workers  none registered\n")
@@ -381,10 +336,6 @@ func reportWorkerReap(results []ptyworker.ReapResult) {
 	}
 }
 
-// reportProcReap prints one line per process registered in a procreap registry
-// (conversation hosts, plugin runtime processes). Anything short of a confirmed
-// death names the pid: an unidentified process was left alone on purpose, and a
-// survivor outlived SIGKILL — both need a human.
 func reportProcReap(label, noun string, results []procreap.ReapResult) {
 	if len(results) == 0 {
 		fmt.Printf("  %-8s none registered\n", label)
@@ -440,20 +391,8 @@ func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 	return strings.Join(parts, ", ")
 }
 
-// stopProfileDaemon stops a profile's daemon via its pid file, for an
-// arbitrary profile resolved by path rather than the current process's
-// config. It is a thin adapter over daemonctl.Stop: it preserves this
-// function's original string-return contract ("" on a clean stop, a human
-// note otherwise) because a missing/dead daemon is an expected, non-fatal
-// state during `attn profile clean`. See daemonctl.Stop for the underlying
-// liveness+ownership safety argument (the pid file's flock, not its
-// presence, is the gate — never trust the pid alone).
-//
-// One outcome maps error → note here: daemonctl.Stop treats "the pid names
-// this command's own process tree" as an error (a genuine caller mistake),
-// but `attn profile clean` must stay non-fatal even when cleaning the
-// profile it happens to be running under, so that specific error is mapped
-// back to a note instead of propagated.
+// The pid file's flock, not its presence, is the liveness gate (daemonctl.Stop). Its
+// own-process-tree error maps to a note, so cleaning the profile you run under is non-fatal.
 func stopProfileDaemon(r profileResolved) string {
 	pidPath := filepath.Join(r.DataDir, "attn.pid")
 	result, err := daemonctl.Stop(pidPath)
@@ -472,15 +411,10 @@ func stopProfileDaemon(r profileResolved) string {
 	return ""
 }
 
-// quitProfileApp asks the app to quit by bundle id. Best-effort: a not-running
-// app makes osascript fail harmlessly.
 func quitProfileApp(bundleID string) {
 	_ = exec.Command("osascript", "-e", fmt.Sprintf("tell application id %q to quit", bundleID)).Run()
 }
 
-// lsregisterPath is macOS's LaunchServices registration tool. Used to forget a
-// bundle so its identifier and deep-link scheme stop resolving to a path we are
-// about to delete.
 const lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 func lsregisterForget(appPath string) {
@@ -509,10 +443,8 @@ func runProfileList(args []string) {
 		profileFatal("cannot resolve home directory: " + err.Error())
 	}
 
-	// The default profile always exists conceptually.
 	known := map[string]bool{"": true}
 
-	// Data dirs: ~/.attn (default) and ~/.attn-<profile>.
 	if entries, err := os.ReadDir(home); err == nil {
 		for _, e := range entries {
 			name := e.Name()
@@ -528,7 +460,6 @@ func runProfileList(args []string) {
 		}
 	}
 
-	// Installed apps: ~/Applications/attn.app and attn-<profile>.app.
 	appsDir := filepath.Join(home, "Applications")
 	if entries, err := os.ReadDir(appsDir); err == nil {
 		for _, e := range entries {
@@ -551,7 +482,7 @@ func runProfileList(args []string) {
 	for p := range known {
 		names = append(names, p)
 	}
-	sort.Strings(names) // "" sorts first → default listed first
+	sort.Strings(names)
 
 	active := config.Profile()
 
@@ -616,8 +547,6 @@ Profile names must match [a-z0-9][a-z0-9-]{0,15}. "dev" is the development
 sibling (port 29849, ~/.attn-dev). `+"`clean`"+` refuses the default (production)
 profile unless given --force.`)
 }
-
-// --- small local helpers (profile-prefixed to avoid package collisions) ---
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)

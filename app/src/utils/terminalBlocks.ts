@@ -1,11 +1,3 @@
-// Command-block tracking built on OSC 133 markers.
-//
-// A block is one prompt → command → output cycle, stored as absolute buffer
-// rows captured when the markers arrived. Rows can drift if the terminal
-// trims scrollback, so each completed block keeps a text anchor (the command
-// line's content at completion time); extraction re-anchors against the live
-// buffer and refuses to extract rather than return wrong text.
-
 import type { Osc133Marker } from './terminalOsc133';
 
 export interface BlockPosition {
@@ -18,8 +10,7 @@ export interface TerminalBlock {
   promptRow: number;
   inputStart?: BlockPosition;
   outputStartRow?: number;
-  // Exclusive: the row the cursor was on when the command finished (where the
-  // next prompt renders).
+  // Exclusive: the row the cursor was on when the command finished.
   endRow?: number;
   command: string;
   exitCode?: number;
@@ -34,14 +25,9 @@ export interface BlockRowAccess {
 
 const MAX_BLOCKS = 200;
 const ANCHOR_LENGTH = 64;
-// Per-click / per-extract re-anchor window. Drift between a stored row and the
-// live buffer on these hot paths comes from scrollback trimming, which is small.
 export const REANCHOR_SCAN_ROWS = 64;
-// Re-anchor window used after a HEIGHT-only resize (width changes reflow the
-// buffer non-uniformly and clear the store instead — see GhosttyTerminal's
-// resizeModelAndReanchor). Height changes shift rows uniformly (rows move
-// between scrollback and screen, plus any trim), which can exceed the per-click
-// window; 512 covers it with margin. An anchor outside it tombstones the block.
+// Height-only resizes shift rows uniformly and can exceed the per-click window; a
+// width change reflows non-uniformly and clears the store instead.
 export const RESIZE_REANCHOR_SCAN_ROWS = 512;
 
 interface PendingBlock {
@@ -58,11 +44,8 @@ export class TerminalBlockStore {
   private nextId = 1;
 
   applyMarker(marker: Osc133Marker, position: BlockPosition, rowTextAt?: (row: number) => string): void {
-    // Self-heal against a lost command-end. If a command already ran in the
-    // current block (outputStartRow is set) and a marker that begins a NEW
-    // command context arrives, fish's `OSC 133;D` for the previous command
-    // never reached us (e.g. a PTY output chunk was dropped). Close the open
-    // block here so two commands don't silently merge into one.
+    // fish's `OSC 133;D` can go missing; close the open block here or two
+    // commands silently merge into one.
     if (
       this.pending?.outputStartRow !== undefined
       && (marker.kind === 'prompt-start' || marker.kind === 'input-start' || marker.kind === 'pre-exec')
@@ -77,8 +60,6 @@ export class TerminalBlockStore {
         this.nextId += 1;
         return;
       case 'input-start':
-        // A surviving input-start with no prompt-start (its prompt-start was
-        // lost) still anchors a block, just at the input row.
         if (!this.pending) this.pending = this.openPending(position.row);
         this.pending.inputStart = position;
         return;
@@ -90,8 +71,6 @@ export class TerminalBlockStore {
       case 'command-end': {
         const pending = this.pending;
         this.pending = null;
-        // A block without a pre-exec marker never ran a command (e.g. a bare
-        // Enter at the prompt) — nothing copyable.
         if (pending && pending.outputStartRow !== undefined) {
           this.complete(pending, position.row, marker.exitCode, rowTextAt);
         }
@@ -108,7 +87,6 @@ export class TerminalBlockStore {
     return pending;
   }
 
-  // Pushes a completed block from a pending one with a known outputStartRow.
   private complete(
     pending: PendingBlock,
     endRow: number,
@@ -151,9 +129,6 @@ export class TerminalBlockStore {
     return null;
   }
 
-  // Reflow-aware hit-test: re-anchor each block against the live buffer before
-  // range-checking, so a stale stored row never matches (or mismatches) the
-  // wrong buffer row. Blocks whose anchor is gone are skipped (never matched).
   blockAtAnchored(bufferRow: number, access: BlockRowAccess): TerminalBlock | null {
     for (let i = this.completed.length - 1; i >= 0; i -= 1) {
       const block = this.completed[i];
@@ -171,12 +146,6 @@ export class TerminalBlockStore {
     return this.completed.find((block) => block.id === id) ?? null;
   }
 
-  // Re-anchor every completed block against the live buffer after a resize.
-  // A block whose anchor matches at a non-zero delta is shifted in place so its
-  // stored rows track the live buffer again; a block whose anchor is gone is
-  // dropped (its content is unrecoverable). Returns 'all-stale' when the store
-  // held blocks but every one was dropped, so the caller can clear the
-  // selection; otherwise 'ok'.
   reanchorOnResize(
     access: BlockRowAccess,
     scanRows: number = RESIZE_REANCHOR_SCAN_ROWS,
@@ -205,15 +174,8 @@ export class TerminalBlockStore {
     this.pending = null;
   }
 
-  // Seed the store from a server-authoritative restore snapshot. The worker
-  // resolved these blocks from its own OSC 133 marks and grid refs; their rows
-  // are SCREEN-space rows of the VT dump, which equal live buffer rows now that
-  // the dump has been written into a fresh same-size terminal. Completed blocks
-  // enter with a locally-computed anchorText (from the restored buffer, the same
-  // source applyMarker uses) so re-anchoring keeps working; the pending block
-  // re-arms so the live D marker that arrives next completes it. The id counter
-  // continues above the max seeded id so live blocks never collide with seeded
-  // ones. Replaces any existing state (a restore is authoritative).
+  // The worker's rows are SCREEN-space rows of the VT dump, which equal live
+  // buffer rows only because the dump was written into a fresh same-size terminal.
   seed(blocks: readonly SeededBlock[], rowTextAt?: (row: number) => string): void {
     this.completed = [];
     this.pending = null;
@@ -224,8 +186,6 @@ export class TerminalBlockStore {
         ? { row: b.inputRow, col: b.inputCol ?? 0 }
         : undefined;
       if (b.pending) {
-        // At most one pending block; a later one would just overwrite, matching
-        // the store's single-pending invariant.
         this.pending = {
           id: b.id,
           promptRow: b.promptRow,
@@ -235,8 +195,6 @@ export class TerminalBlockStore {
         };
         continue;
       }
-      // A completed block without output/end rows is not extractable; the worker
-      // should not emit such, but drop defensively rather than store a bad row.
       if (b.outputStartRow === undefined || b.endRow === undefined) continue;
       const anchorRow = b.inputRow ?? b.promptRow;
       this.completed.push({
@@ -255,9 +213,6 @@ export class TerminalBlockStore {
   }
 }
 
-// SeededBlock is one restore-snapshot command block in client-domain (camelCase)
-// form. It mirrors the protocol AttachBlock; the daemon-socket layer maps the
-// wire shape to this before it reaches the terminal.
 export interface SeededBlock {
   id: number;
   pending: boolean;
@@ -270,15 +225,13 @@ export interface SeededBlock {
   exitCode?: number;
 }
 
-// A completed block's position relative to the current viewport, in viewport
-// rows. startRow may be negative and endRow may exceed the last viewport row
-// when the block extends past the visible area — renderers and diagnostics
-// must share this one mapping so what gets logged is what gets drawn.
+// startRow may be negative and endRow may exceed the last viewport row when the
+// block extends past the visible area.
 export interface BlockViewportSpan {
-  startRow: number; // viewport row of the block's prompt row
-  endRow: number;   // viewport row of the block's last row (inclusive)
-  visible: boolean; // intersects the viewport at all
-  spansViewport: boolean; // covers every visible row (both edges off-screen or at the borders)
+  startRow: number;
+  endRow: number;
+  visible: boolean;
+  spansViewport: boolean;
 }
 
 export function blockViewportSpan(
@@ -297,26 +250,18 @@ export function blockViewportSpan(
   };
 }
 
-// Minimum characters an anchor comparison must cover to count as a match. A
-// narrower pane clips rowText to the visible width, so the comparison runs on
-// the overlapping prefix — but a tiny overlap (e.g. a 4-col pane) would match
-// almost anything, so short overlaps refuse instead.
+// A narrower pane clips rowText, and a tiny overlap (a 4-col pane) would match
+// almost anything.
 const MIN_ANCHOR_OVERLAP = 8;
 
-// Width-tolerant anchor comparison. The anchor was captured at the pane width
-// of completion time; the live row may be clipped to a narrower width (or the
-// anchor itself may be the shorter one after re-widening). Compare the
-// overlapping prefix, requiring MIN_ANCHOR_OVERLAP unless the anchor is
-// genuinely shorter than that (a short command line is fully compared).
 function anchorMatches(anchorText: string, rowText: string): boolean {
   const overlap = Math.min(anchorText.length, rowText.length);
   if (overlap < Math.min(anchorText.length, MIN_ANCHOR_OVERLAP)) return false;
   return rowText.slice(0, overlap) === anchorText.slice(0, overlap);
 }
 
-// Row offset between the block's recorded rows and the live buffer, found by
-// matching the anchor text. null means the block's content is gone (trimmed
-// or rewritten) and extraction must not proceed.
+// null means the content is gone (trimmed or rewritten) and extraction must not
+// proceed.
 export function reanchorDelta(
   block: TerminalBlock,
   access: BlockRowAccess,
@@ -335,12 +280,7 @@ export function reanchorDelta(
   return null;
 }
 
-// Reflow-aware viewport span: re-anchors the block against the live buffer
-// (default per-click window) before mapping to viewport rows. Returns null when
-// the block's anchor is gone, so the overlay clears the selection rather than
-// drawing a box at stale coordinates. firstViewportBufferRow must be computed
-// from the SAME live scrollback the access reads, so the delta and the mapping
-// agree.
+// firstViewportBufferRow must come from the SAME live scrollback `access` reads.
 export function blockViewportSpanAnchored(
   block: TerminalBlock,
   access: BlockRowAccess,

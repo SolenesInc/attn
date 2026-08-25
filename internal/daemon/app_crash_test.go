@@ -9,19 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// The crash rule: an app whose error escapes every handler takes the shared
-// sidecar down with it, and is charged for doing so.
-//
-// It is the second auto-disable clock because the first one cannot reach this
-// case. A crash kills the process before the delivery finishes, the event is
-// redelivered against a fresh runtime, and the next crash may land on a
-// different event entirely — so "stuck on the same event for fifteen minutes"
-// never accrues for the one app that stops every other app.
-//
-// The host names the culprit from the stack of the error that killed it, which
-// is why these tests drive the wire method rather than a Go helper: the
-// attribution is a claim the host makes and the daemon acts on.
-
 func reportCrash(t *testing.T, d *Daemon, app, kind, message string) {
 	t.Helper()
 	params, err := json.Marshal(appRuntimeCrashParams{App: app, Kind: kind, Error: message})
@@ -64,8 +51,6 @@ func TestAppThatKeepsCrashingTheRuntimeIsDisabledAndSaysSoThreeWays(t *testing.T
 	if len(notes) != 1 {
 		t.Fatalf("auto-disable notifications = %d, want 1", len(notes))
 	}
-	// It has to say what happened and how to come back, or the author is left
-	// with an app that stopped for no reason they can see.
 	if !strings.Contains(notes[0].Body, "attn app enable leaker") {
 		t.Fatalf("the notification does not name the way back: %q", notes[0].Body)
 	}
@@ -80,8 +65,6 @@ func TestAppThatKeepsCrashingTheRuntimeIsDisabledAndSaysSoThreeWays(t *testing.T
 	}
 }
 
-// Crashes far apart are not a crash loop. An app that took the runtime down
-// once a month is not the thing this rule exists to stop.
 func TestCrashesOutsideTheWindowDoNotAccumulate(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -97,9 +80,6 @@ func TestCrashesOutsideTheWindowDoNotAccumulate(t *testing.T) {
 	}
 }
 
-// The host sends an empty name when the error carried no stack naming a loaded
-// bundle. Nothing is charged: guessing which app was running is exactly how an
-// innocent app gets disabled, which is why the host reads the stack at all.
 func TestACrashThatNamesNoAppChargesNobody(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "innocent", subscribing("ticket.*"))
@@ -116,10 +96,6 @@ func TestACrashThatNamesNoAppChargesNobody(t *testing.T) {
 	}
 }
 
-// Enabling is the way back, so it clears the streak. The case that depends on
-// it is an app switched off and on by hand while carrying strikes: without the
-// clear it is disabled again on its very next crash, against a clock it never
-// got to restart.
 func TestEnablingAnAppClearsItsCrashStreak(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "leaker", subscribing("ticket.*"))

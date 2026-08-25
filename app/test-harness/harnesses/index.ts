@@ -1,8 +1,3 @@
-/**
- * Component Harness Registry
- *
- * Register all component harnesses here for the test harness router.
- */
 import type { HarnessProps } from '../types';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
 import { DashboardPRsHarness } from './DashboardPRsHarness';

@@ -20,7 +20,6 @@ func twoPaneTree() Node {
 }
 
 func TestMoveLeafRelocatesPaneBesidePane(t *testing.T) {
-	// Move pane-a to the right of pane-b: a|b -> b|a.
 	moved, ok := MoveLeaf(twoPaneTree(), "pane-a", "pane-b", "split-x", DirectionVertical, false, 0.4)
 	if !ok {
 		t.Fatal("MoveLeaf did not change layout")
@@ -41,7 +40,6 @@ func TestMoveLeafLocksDroppedRatioSoSizeSticks(t *testing.T) {
 	if !moved.RatioLocked || math.Abs(moved.Ratio-0.4) > 1e-9 {
 		t.Fatalf("new split = {locked:%v ratio:%v}, want locked at 0.4 so the drop size survives", moved.RatioLocked, moved.Ratio)
 	}
-	// And the lock must survive normalization (otherwise the depth gesture is lost).
 	normalized := NormalizeWorkspaceLayout(WorkspaceLayout{
 		WorkspaceID: "ws",
 		Layout:      moved,
@@ -82,8 +80,6 @@ func TestMoveLeafUnknownLeafFails(t *testing.T) {
 }
 
 func TestMoveLeafContainerDockWrapsRoot(t *testing.T) {
-	// Left column (lt over lb) beside a full-height right pane. Container-dock
-	// pane-r to the left: it should span the full height, pushing the column right.
 	tree := Node{
 		Type:      "split",
 		SplitID:   "root",
@@ -134,7 +130,6 @@ func TestMoveLeafMovesTilePreservingKindAndParams(t *testing.T) {
 	if !ok {
 		t.Fatal("tile-on-tile move did not change layout")
 	}
-	// md2 stays put; md1 lands beside it carrying its kind + params.
 	right := moved.Children[1]
 	if right.Type != "tile" || right.TileID != "md1" {
 		t.Fatalf("children[1] = %+v, want relocated md1 tile", right)
@@ -170,7 +165,6 @@ func TestMoveLeafBetweenLayoutsRenamesConflictingTileID(t *testing.T) {
 }
 
 func TestMoveLeafCollapsesSourceSplitWhenNested(t *testing.T) {
-	// a | (b / c). Move c next to a; the right column collapses to bare b.
 	tree := Node{
 		Type:      "split",
 		SplitID:   "root",

@@ -14,14 +14,8 @@ interface AppViewBoundaryState {
   resetKey: string;
 }
 
-/**
- * Catches a render error from one app's view.
- *
- * Per app rather than per surface: a view that throws must cost its own tile and
- * nothing else — not the workspace it sits in, not another app's tile beside it,
- * and not attn's own chrome. React unmounts the whole tree above an uncaught
- * error, so without this the first broken view takes the window down.
- */
+/** Catches a render error from one app's view, per app: React unmounts the whole tree
+ * above an uncaught error, so without this the first broken view takes the window down. */
 export class AppViewBoundary extends Component<AppViewBoundaryProps, AppViewBoundaryState> {
   state: AppViewBoundaryState = { error: null, resetKey: this.props.resetKey };
 

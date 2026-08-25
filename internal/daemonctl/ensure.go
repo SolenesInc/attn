@@ -85,10 +85,8 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 }
 
 func daemonMatchesCurrentBinary(health healthResponse) bool {
-	// A daemon running under a different profile (e.g. dev answering on
-	// the default socket after a leftover state) must be restarted even
-	// if the source fingerprint matches — profile identity is stronger
-	// than binary identity.
+	// Profile identity is stronger than binary identity: a daemon running under
+	// another profile must be restarted even when the fingerprint matches.
 	if !profileMatchesCurrent(health) {
 		return false
 	}
@@ -101,8 +99,7 @@ func daemonMatchesCurrentBinary(health healthResponse) bool {
 
 func profileMatchesCurrent(health healthResponse) bool {
 	expected := config.ProfileLabel()
-	// Older daemons predate the profile field. Treat an empty profile as
-	// "default" for backward compatibility.
+	// Older daemons predate the profile field; treat an empty profile as "default".
 	reported := strings.TrimSpace(health.Profile)
 	if reported == "" {
 		reported = "default"
@@ -145,18 +142,8 @@ func spawnDaemon(binaryPath string) error {
 	return nil
 }
 
-// removeStaleSocketFiles clears the way for a fresh daemon to bind a new
-// listening socket. It deliberately does NOT remove the PID file: the PID
-// file's exclusive flock (not its presence on disk) is the sole mutual-
-// exclusion mechanism a live daemon and `attn db restore` share (see
-// Daemon.acquirePIDLock / releasePIDLock and cmd/attn/db.go's
-// acquireDaemonLock). Unlinking it here — right before spawnDaemon calls
-// acquirePIDLock, which reopens the path with O_CREATE — would let a
-// concurrent flock holder (e.g. a restore in progress) keep its lock on an
-// orphaned inode while the new daemon creates and locks a different inode
-// at the same pathname, so the two would never actually contend. The
-// listening socket has no such lock-based protection, so it still needs
-// unlinking before a fresh bind.
+// removeStaleSocketFiles unlinks the listening socket only. The PID file must
+// survive: its exclusive flock is the lock `attn db restore` contends on.
 func removeStaleSocketFiles() error {
 	socketPath := config.SocketPath()
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {

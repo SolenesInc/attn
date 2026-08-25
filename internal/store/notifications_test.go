@@ -71,7 +71,6 @@ func TestNotifications_ListNewestFirst(t *testing.T) {
 	if len(all) != 3 {
 		t.Fatalf("expected 3, got %d", len(all))
 	}
-	// Titles were a,b,c at t+1,t+3,t+2 → newest-first is b,c,a.
 	order := []string{all[0].Title, all[1].Title, all[2].Title}
 	want := []string{"b", "c", "a"}
 	for i := range want {
@@ -96,7 +95,6 @@ func TestNotifications_MarkRead(t *testing.T) {
 		t.Fatalf("unread after one read = %d, want 1", n)
 	}
 
-	// Read timestamp is preserved on a second mark-read (idempotent).
 	later := readAt.Add(time.Hour)
 	if err := s.MarkNotificationRead(r1.ID, later); err != nil {
 		t.Fatalf("mark read again: %v", err)
@@ -115,7 +113,6 @@ func TestNotifications_MarkRead(t *testing.T) {
 		t.Fatalf("read_at moved on re-mark: got %v want %v", got.ReadAt, readAt)
 	}
 
-	// Marking a missing id is not an error.
 	if err := s.MarkNotificationRead("absent", readAt); err != nil {
 		t.Fatalf("mark missing: %v", err)
 	}
@@ -139,7 +136,6 @@ func TestNotifications_MarkAllRead(t *testing.T) {
 	if n, _ := s.UnreadNotificationCount(); n != 0 {
 		t.Fatalf("unread after mark-all = %d, want 0", n)
 	}
-	// A second mark-all flips nothing.
 	flipped, err = s.MarkAllNotificationsRead(base.Add(2 * time.Minute))
 	if err != nil {
 		t.Fatalf("mark all again: %v", err)
@@ -192,7 +188,7 @@ func TestNotifications_SeverityNormalizes(t *testing.T) {
 		{"critical", NotificationCritical},
 		{"  Critical ", NotificationCritical},
 		{"WARNING", NotificationWarning},
-		{"criticial", NotificationInfo}, // a typo is not critical
+		{"criticial", NotificationInfo},
 		{"error", NotificationInfo},
 		{"0", NotificationInfo},
 	} {
@@ -201,8 +197,6 @@ func TestNotifications_SeverityNormalizes(t *testing.T) {
 		}
 	}
 
-	// The same rule has to hold through the database, not just in the helper:
-	// an unrecognized value written to the row must read back as info.
 	s := New()
 	now := time.Now().UTC()
 	if _, err := s.AddNotification(NotificationRecord{
@@ -219,9 +213,6 @@ func TestNotifications_SeverityNormalizes(t *testing.T) {
 	}
 }
 
-// A notification feed that predates the severity column must survive the
-// migration with its rows intact and every one of them reading as info: the
-// column is added, never recreated, and its DEFAULT is what carries them.
 func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -230,8 +221,6 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Put the table back the way a store before migration 100 had it, with two
-	// notifications already in it — one read, one not.
 	if _, err := s.db.Exec(`ALTER TABLE notifications DROP COLUMN severity`); err != nil {
 		t.Fatalf("drop severity column: %v", err)
 	}
@@ -249,8 +238,6 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		}
 	}
 
-	// Sanity: the planted schema really is the old one, so a pass here would
-	// mean the test proves nothing.
 	if _, err := s.ListNotifications(); err == nil {
 		t.Fatal("the planted schema already has severity; this test would pass without the migration")
 	}
@@ -277,8 +264,6 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 			t.Fatalf("carried row %q lost fields: %+v", got.Title, got)
 		}
 	}
-	// The read/unread split survives too — a migration that reset read_at would
-	// re-raise every notification the user had already dealt with.
 	unread, err := s.UnreadNotificationCount()
 	if err != nil {
 		t.Fatalf("unread count: %v", err)
@@ -287,7 +272,6 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		t.Fatalf("unread = %d, want 1", unread)
 	}
 
-	// The guarded ALTER makes a re-run a no-op rather than an error.
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 100`); err != nil {
 		t.Fatalf("unrecord migration 100 again: %v", err)
 	}
@@ -303,8 +287,6 @@ func TestNotifications_UnreadCritical(t *testing.T) {
 	s := New()
 	base := time.Now().UTC().Truncate(time.Millisecond)
 
-	// Nothing critical yet: a warning and an info do not count, and the title is
-	// empty rather than borrowed from them.
 	if _, err := s.AddNotification(NotificationRecord{
 		Kind: "task_failed", Severity: NotificationWarning, Title: "Dead job",
 	}, base); err != nil {
@@ -336,8 +318,6 @@ func TestNotifications_UnreadCritical(t *testing.T) {
 		t.Fatalf("add newer critical: %v", err)
 	}
 
-	// Two unread, and the title is the NEWEST one's — not whichever the storage
-	// engine happened to return first.
 	n, title, err = s.UnreadCriticalNotifications()
 	if err != nil {
 		t.Fatalf("unread critical: %v", err)
@@ -346,8 +326,6 @@ func TestNotifications_UnreadCritical(t *testing.T) {
 		t.Fatalf("got (%d, %q), want (2, \"Newer critical\")", n, title)
 	}
 
-	// Reading the newest falls back to the older one rather than emptying the
-	// title while a critical notification is still unread.
 	if err := s.MarkNotificationRead(newer.ID, base.Add(4*time.Second)); err != nil {
 		t.Fatalf("mark read: %v", err)
 	}
@@ -359,7 +337,6 @@ func TestNotifications_UnreadCritical(t *testing.T) {
 		t.Fatalf("after reading the newest got (%d, %q), want (1, \"Older critical\")", n, title)
 	}
 
-	// Reading the last one clears the surface entirely.
 	if err := s.MarkNotificationRead(older.ID, base.Add(5*time.Second)); err != nil {
 		t.Fatalf("mark read: %v", err)
 	}

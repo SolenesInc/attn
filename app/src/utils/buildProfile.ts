@@ -1,8 +1,5 @@
-/**
- * Compile-time profile baked into this bundle ("" = production), mirroring the
- * Rust shell's ATTN_BUILD_PROFILE and the daemon's ATTN_PROFILE. A daemon
- * reporting a different profile is refused rather than served the wrong data dir.
- */
+/** Compile-time profile baked into this bundle ("" = production), mirroring the Rust
+ * shell's ATTN_BUILD_PROFILE. A daemon reporting a different profile is refused. */
 export const BUILD_PROFILE: string = (import.meta.env.VITE_ATTN_BUILD_PROFILE ?? '').trim();
 
 export const BUILD_PROFILE_LABEL: string = BUILD_PROFILE === '' ? 'default' : BUILD_PROFILE;
@@ -34,10 +31,8 @@ export interface DaemonHealthProfile {
   port?: string;
 }
 
-/**
- * Fetches /health for the profile-identity subset. Throws on network/HTTP
- * errors so the caller decides whether no answer is a mismatch or transient.
- */
+/** Fetches /health for the profile-identity subset. Throws on network/HTTP errors so the
+ * caller decides whether no answer is a mismatch or transient. */
 export async function fetchDaemonHealthProfile(wsUrl: string, signal?: AbortSignal): Promise<DaemonHealthProfile> {
   const url = healthURLFromWS(wsUrl);
   if (!url) throw new Error('cannot derive health URL from ws URL');

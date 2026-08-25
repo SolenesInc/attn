@@ -108,10 +108,8 @@ struct BridgeResponse {
 }
 
 fn generate_token() -> String {
-    // 32 random bytes from the OS RNG, hex-encoded. The previous
-    // pid+nanos scheme was predictable enough that anyone on the box
-    // could guess it and drive the bridge — local-only sockets soften
-    // the threat model, but the cost of doing this right is one dep.
+    // 32 bytes from the OS RNG: a pid+nanos scheme is guessable enough that
+    // anyone on the box could drive the bridge.
     let mut buf = [0u8; 32];
     getrandom::getrandom(&mut buf).expect("OS RNG must be available");
     let mut hex = String::with_capacity(buf.len() * 2);
@@ -842,11 +840,8 @@ fn window_bounds<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
         .map_err(|error| format!("failed to check minimized: {error}"))?;
     let logical_position = position.to_logical::<f64>(scale_factor);
     let logical_size = size.to_logical::<f64>(scale_factor);
-    // Shape matches the JS bridge in `useUiAutomationBridge.ts` so harness
-    // callers (`readUiAutomationWindowBounds`) get a consistent result whether
-    // the request is served by this Rust shortcut or the webview after it's
-    // ready. Mismatched shapes silently fell through to the AppleScript
-    // fallback, which is unreliable for Tauri/wry windows.
+    // The shape must match the JS bridge in `useUiAutomationBridge.ts`: a mismatch
+    // falls through silently to the unreliable AppleScript fallback.
     Ok(serde_json::json!({
         "scaleFactor": scale_factor,
         "minimized": minimized,
@@ -859,10 +854,8 @@ fn window_bounds<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
     }))
 }
 
-// Mirror of window_bounds for moving/resizing. Accepts logical bounds (same
-// coordinate system window_bounds returns) and drives Tauri's window API
-// directly, sidestepping AppleScript which is unreliable for Tauri/wry
-// windows — especially under `open -g` where attn isn't frontmost.
+// Logical bounds, the coordinate system window_bounds returns. Drives Tauri's window
+// API directly because AppleScript is unreliable for Tauri/wry windows.
 fn set_window_bounds<R: Runtime>(app: &AppHandle<R>, payload: &Value) -> Result<Value, String> {
     let bounds = payload
         .get("logicalBounds")

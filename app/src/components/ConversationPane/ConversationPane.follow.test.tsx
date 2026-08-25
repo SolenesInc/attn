@@ -4,10 +4,6 @@ import { ConversationPane } from './index';
 import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
 import { useConversationsStore } from '../../store/conversations';
 
-/**
- * Following the live end of a stream, and the two ways a reader leaves it.
- */
-
 const SESSION = 'sess-follow';
 
 function renderPane() {
@@ -66,12 +62,6 @@ describe('ConversationPane follow mode', () => {
     expect(list.scrollTop).toBe(900);
   });
 
-  /**
-   * followingRef starts true because that is what opening a conversation wants.
-   * A reader restored mid-transcript arrives already scrolled, and no scroll
-   * event has fired yet — so an assumed `true` would yank them to the bottom on
-   * the very first delta.
-   */
   it('leaves a reader restored mid-transcript where they were', () => {
     renderPane();
     apply('session_ready', { state: 'working' }, 1);

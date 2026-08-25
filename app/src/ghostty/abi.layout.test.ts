@@ -1,19 +1,9 @@
 // @vitest-environment node
-// The receipt behind abi.ts.
-//
-// Every struct offset and size in abi.ts was read off include/ghostty/vt/*.h by
-// hand. A hand-copied offset is only right until upstream moves a field, and a
-// wrong one does not throw: it reads the neighbouring bytes and renders a wrong
-// colour or a wrong flag, quietly, forever.
-//
-// libghostty-vt describes its own layout, so this asks the shipped module
-// instead of trusting the transcription. A pin bump that moves a field fails
-// here, by name, with both numbers.
-//
-// It found one on the first run: COLORS_SIZE was 782, the struct's content, not
-// the 784 the ABI pads it to.
-// @types/node isn't a direct dependency of this package (only a transitive peer
-// of vite/vitest), matching kittyWireRewrite.parity.test.ts's pattern.
+
+// The receipt behind abi.ts: offsets were read off include/ghostty/vt/*.h by hand,
+// and a wrong one reads neighbouring bytes forever (COLORS_SIZE was 782, not 784).
+
+// @types/node isn't a direct dependency of this package.
 // @ts-expect-error -- see above
 import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
@@ -79,8 +69,8 @@ beforeAll(async () => {
 });
 
 describe('the ABI abi.ts transcribes', () => {
-  // Every offset below is a wasm32 offset. On a 64-bit ABI the leading size_t
-  // alone would shift all of them, so this is the assumption the rest rests on.
+  // Every offset below is a wasm32 offset: on a 64-bit ABI the leading size_t
+  // alone would shift all of them.
   it('is the wasm32 one', () => {
     expect(abi.pointer_size).toBe(4);
     expect(abi.usize_size).toBe(4);
@@ -111,8 +101,6 @@ describe('the ABI abi.ts transcribes', () => {
     expect(t.fields.underline.offset).toBe(STYLE_OFF_UNDERLINE);
   });
 
-  // The scrollback path reads a colour slot as two u32s at absolute offsets,
-  // so it depends on where the slot sits AND on its own inner layout.
   it('lays the style colour slots out where the scrollback path reads them', () => {
     const slot = types.GhosttyStyleColor;
     const fg = types.GhosttyStyle.fields.fg_color.offset;

@@ -30,9 +30,6 @@ func TestRemoteShellCommandExportsRemoteOverrideEnv(t *testing.T) {
 	}
 }
 
-// Images are on by default at both ends, so the way OUT has to travel too: a
-// hub told to disable them must disable them on the remote daemon, and "0" is a
-// value rather than an absence.
 func TestRemoteShellCommandCarriesTheKittyDisableToTheRemote(t *testing.T) {
 	t.Setenv("ATTN_KITTY_STORAGE_LIMIT", "0")
 

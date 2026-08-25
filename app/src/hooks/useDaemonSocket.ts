@@ -112,34 +112,23 @@ import { useConversationsStore, type AgentPromptMode } from '../store/conversati
 import { conversationAgents } from '../utils/agentAvailability';
 import { useAutomationsStore } from '../store/automations';
 
-// Short names for daemon payloads used throughout the app.
 export type DaemonSession = GeneratedSession;
 
-/**
- * A conversation this daemon has already recorded, and can start a new session
- * from. Display-only: the resume itself carries `file` back to the daemon, which
- * hands it to a host that forks it through pi's own reader.
- */
 export interface PastConversation {
   session_id: string;
   file: string;
   cwd: string;
   preview: string;
-  /** Last write, epoch ms. */
   modified: number;
   bytes: number;
-  /** A session is running on this conversation right now. */
   live: boolean;
 }
 
 export interface PastConversationsResult {
   conversations: PastConversation[];
-  /** More exist than are listed; these are the newest. */
   truncated: boolean;
 }
 
-// A seed as the garden pushes it: the whole document, because a seed is small
-// and the panel renders its body without a second round trip.
 export type Seed = GeneratedSeed;
 export interface SeedDocument {
   seed: Seed;
@@ -147,12 +136,8 @@ export interface SeedDocument {
   children: Seed[];
   notes: GeneratedSeedNote[];
   notes_total: number;
-  // Attach minus detach over the seed's whole log, projected by the daemon.
   artifacts: GeneratedSeedArtifactReference[];
 }
-// A crew member as the roster pushes it. Every member is here, awake or asleep:
-// an awake one names the session living its day (binding_session), and that
-// presence IS "awake" — the daemon judged the binding live before sending it.
 export type CrewMember = GeneratedCrewMember;
 export interface CrewSleepResult {
   member: string;
@@ -166,8 +151,6 @@ export type DaemonPR = GeneratedPR;
 export type DaemonWorktree = GeneratedWorktree;
 export type DaemonPlugin = GeneratedPluginInfo;
 export type AppRegistryEntry = GeneratedAppRegistryEntry;
-// quicktype names the inlined member type ViewElement; AppViewInfo and it are
-// the same shape, and this is the one AppRegistryEntry.views actually carries.
 export type AppViewInfo = GeneratedAppViewInfo;
 export type DaemonPluginIssue = GeneratedPluginIssue;
 export type DaemonGitOperation = GeneratedGitOperation;
@@ -179,28 +162,20 @@ export type WorkflowRunState = GeneratedWorkflowRun;
 export type DaemonSettings = Record<string, string>;
 export type DaemonWarning = GeneratedWarning;
 export type DaemonWorkspaceContext = GeneratedWorkspaceContext;
-/** The assistant messages a session's terminal annotations can anchor to. */
 export interface SessionMessageWindow {
-  /** Oldest first. Empty when the transcript holds no annotatable prose. */
   messages: DaemonSessionMessage[];
-  /** The live transcript authority's current lifecycle. */
   status: SessionMessageWindowStatus;
-  /** Actionable reason when status is unavailable. */
   detail?: string;
-  /** Older or oversized messages were left out; the daemon log says which. */
   truncated: boolean;
 }
-/** A session's persisted annotations, with the generation floor to write past. */
 export interface SessionAnnotationSet {
   annotations: DaemonSessionAnnotation[];
-  /** What the user wants to say about the turn as a whole. Empty when unset. */
   note: string;
   generation: number;
 }
 export interface DirectoryEntry {
   name: string;
   path: string;
-  /** Directories are always listed; files only when the request asked for extensions. */
   is_dir: boolean;
 }
 export interface PathInspection {
@@ -213,10 +188,8 @@ export interface PathInspection {
 }
 export type { DaemonEndpointProfile };
 
-// Re-export enums and useful types
 export { PRRole, HeatState };
 
-// Extended WebSocketEvent with action result fields (generated allows extra properties)
 type WebSocketEvent = GeneratedWebSocketEvent & {
   id?: string;
   endpoint?: GeneratedEndpoint;
@@ -242,13 +215,11 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   exit_code?: number;
   signal?: string;
   reason?: string;
-  // PR action result fields
   action?: string;
   repo?: string;
   number?: number;
   success?: boolean;
   error?: string;
-  // Worktree action result fields
   path?: string;
   name?: string;
   priority?: number;
@@ -264,7 +235,6 @@ type WebSocketEvent = GeneratedWebSocketEvent & {
   issues?: DaemonPluginIssue[];
   github_hosts?: string[];
   contexts?: DaemonWorkspaceContext[];
-  // Legacy review event fields
   review_id?: string;
   session_id?: string;
   content?: string;
@@ -282,20 +252,12 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-// Increment when making breaking changes to the protocol
 export const PROTOCOL_VERSION = '271';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
-// Identifies this app process to the daemon across its own reconnects, so a
-// connection the daemon hung up on can be explained on the next one (the close
-// frame saying why cannot get through the backlog that caused the eviction).
-// Minted per app run: after a restart there is no earlier connection to explain.
 const CLIENT_INSTANCE_ID =
   globalThis.crypto?.randomUUID?.() ?? `client-${Math.random().toString(36).slice(2)}`;
 
-// Turns the daemon's eviction record into something worth reading. "client too
-// slow" is the daemon's own wording for its close frame; the user needs to know
-// which side fell behind and that the app is back.
 export function explainEviction(reason: string, evictedAt: string): string {
   const when = new Date(evictedAt);
   const at = Number.isNaN(when.getTime()) ? '' : ` at ${when.toLocaleTimeString()}`;
@@ -305,20 +267,8 @@ export function explainEviction(reason: string, evictedAt: string): string {
   return `Reconnected. The daemon dropped this window${at}: ${reason}.`;
 }
 
-// AutomationActionTimeoutError distinguishes "the daemon never sent a
-// definitive result within the client's wait window" from an ordinary
-// rejection carrying a daemon-reported error string (e.g. "automation is
-// disabled"). The four automation wrappers below (listAutomationDefinitions,
-// listAutomationRuns, setAutomationEnabled, runAutomationNow) all reject with
-// this on their timeout path so callers — notably AutomationsPanel's run-now
-// handler — can tell "no outcome yet, retry is safe" apart from "the daemon
-// definitively said no, don't retry blindly".
 export class AutomationActionTimeoutError extends Error {}
 
-// AutomationActionError carries the daemon's typed error_code (protocol 182:
-// revision_conflict | id_collision | deleted_elsewhere | id_mismatch |
-// validation, or '' for untyped failures) so callers can route recovery UI
-// without string-matching messages.
 export class AutomationActionError extends Error {
   readonly code: string;
   constructor(message: string, code: string) {
@@ -368,11 +318,7 @@ export interface PluginListResult {
   issues: DaemonPluginIssue[];
 }
 
-// Read-only seed for an observer (grid tile): the session's current rendered
-// screen plus the sequence watermark to dedup the live firehose against.
 export interface ScreenSnapshotResult {
-  // base64 ANSI repaint of the visible frame, or undefined if no fresh frame
-  // exists yet (e.g. the session has produced no output).
   screenSnapshot?: string;
   screenCols?: number;
   screenRows?: number;
@@ -488,12 +434,8 @@ export interface SessionExitInfo {
   signal?: string;
 }
 
-// One Notebook note's metadata, as surfaced by notebook_list / notebook_backlinks
-// (no body). Mirrors the daemon's protocol.NotebookEntry.
 export interface NotebookEntry {
   path: string;
-  // Open key frontmatter (OKF) document type, e.g. "note" or "journal". Optional
-  // because the types are open-ended and an entry may omit it.
   type?: string;
   title?: string;
   summary?: string;
@@ -501,41 +443,26 @@ export interface NotebookEntry {
   size: number;
 }
 
-// The full bytes of one Notebook note plus its content hash (for hash-CAS edits).
 export interface NotebookReadResult {
   path: string;
   content: string;
   hash: string;
 }
 
-// One durable runner task as surfaced by task_list / task_retry.
-// Mirrors the daemon's protocol.Task (which deliberately omits the runner's
-// internal Meta/CommitGuard so transcript paths etc. never reach the UI).
 export type Task = GeneratedTask;
 export type DaemonNotification = GeneratedNotification;
 
-// The ambient critical surface's whole input: how many critical notifications
-// are unread and what the newest one is called. The daemon computes both in one
-// read and sends them on both the list result and the notifications_updated
-// broadcast, so the surface never has to derive them from a list it may not have
-// fetched — a panel the user never opened must not be why they miss something.
 export interface CriticalNotificationState {
   count: number;
   title: string;
 }
 
-// readCriticalState pulls the pair off any message that carries it, defaulting
-// to "nothing critical" for a daemon that predates the fields.
 function readCriticalState(data: Record<string, unknown>): CriticalNotificationState {
   const count = typeof data.unread_critical_count === 'number' ? data.unread_critical_count : 0;
   const title = typeof data.critical_title === 'string' ? data.critical_title : '';
   return { count, title };
 }
 
-// The outcome of a Notebook hash-CAS save. conflict=true means the note changed
-// on disk since the editor loaded it, so the write did NOT apply; currentHash is
-// the hash now on disk, for the editor to reconcile against. Mirrors the daemon's
-// protocol.NotebookWriteResult.
 export interface NotebookWriteResult {
   path: string;
   hash?: string;
@@ -543,18 +470,11 @@ export interface NotebookWriteResult {
   currentHash?: string;
 }
 
-// The outcome of sending a selection to the chief of staff. path is the inbox
-// note it was appended to; nudged is true when a live chief session was pinged in
-// its PTY (false when no chief is set or it was busy — the inbox delivery still
-// happened). Mirrors the daemon's protocol.NotebookSendToChiefResult.
 export interface NotebookSendToChiefResult {
   path: string;
   nudged: boolean;
 }
 
-// One child of a listed directory in the generic filesystem surface (fs_list).
-// isDir distinguishes a subdirectory (expand with another fs_list) from a file
-// (open with fs_read). Mirrors the daemon's protocol.FsEntry (is_dir on the wire).
 export interface FsEntry {
   path: string;
   name: string;
@@ -563,26 +483,18 @@ export interface FsEntry {
   modified?: string;
 }
 
-// The full bytes of one file plus its content hash (for hash-CAS edits). Mirrors
-// the daemon's protocol.FsReadResult.
 export interface FsReadResult {
   path: string;
   content: string;
   hash: string;
 }
 
-// One image asset's bytes, base64-encoded, plus its mime type — for rendering
-// ![alt](path) images in the notebook editor without widening Tauri's fs
-// permissions. Mirrors the daemon's protocol.FsReadAssetResult.
 export interface FsReadAssetResult {
   path: string;
   mimeType: string;
   dataBase64: string;
 }
 
-// The outcome of a filesystem hash-CAS save. conflict=true means the file changed
-// on disk since it was loaded, so the write did NOT apply; currentHash is the hash
-// now on disk. Same contract as NotebookWriteResult; mirrors protocol.FsWriteResult.
 export interface FsWriteResult {
   path: string;
   hash?: string;
@@ -599,34 +511,21 @@ export interface FsDeleteResult {
   path: string;
 }
 
-// Whether a path exists under the notebook root, without reading it. Used to flag
-// an in-notebook markdown link whose target note is missing. Mirrors the daemon's
-// protocol.FsExistsResult.
 export interface FsExistsResult {
   path: string;
   exists: boolean;
 }
 
-// The resolved absolute root an fs_watch/fs_unwatch applied to. Mirrors the
-// daemon's protocol.FsWatchResultMessage/FsUnwatchResultMessage (root only —
-// there is no other result payload).
 export interface FsWatchResult {
   root: string;
 }
 
-// Result of fs_index: a bounded recursive file index of root, for the ⌘P
-// finder. Mirrors the daemon's protocol.FsIndexResultMessage. files are
-// root-relative slash paths, files only, sorted lexicographically. truncated
-// is true when the walk hit the server-side entry cap before finishing.
 export interface FsIndexResult {
   root: string;
   files: string[];
   truncated: boolean;
 }
 
-// One remembered file, ranked by frecency. Mirrors the daemon's
-// protocol.FileActivity: source is what happened to it ("opened" today), count
-// is how many times, lastAt when it last happened.
 export interface RecentFile {
   path: string;
   source: string;
@@ -637,36 +536,13 @@ export interface RecentFile {
 
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
-  // Fired when notebook content changes (any client/agent/external write). paths
-  // are notebook-relative; origin is agent|ui|external.
   onNotebookChanged?: (origin: string, paths: string[]) => void;
-  // Fired when the durable task runner's task set changes (any lifecycle
-  // transition: queue/run/retry/fail/done). Carries no payload — an open Tasks
-  // panel refetches via task_list to reflect truth.
   onTasksChanged?: () => void;
-  // Fired when the global notifications feed changes (a notification is added or
-  // one/all are marked read). Carries the authoritative post-change unread count
-  // so the sidebar badge updates without a re-list; an open panel re-lists.
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
-  // Fired when files under the root change (any client/agent/external write). paths
-  // are root-relative; origin is agent|ui|external. Mirrors onNotebookChanged for
-  // the generic filesystem surface (fs_changed).
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
-  // Fired with the garden — newest first, every workspace — on initial_state and
-  // on every garden_seeds_updated broadcast. The panel filters to the workspace
-  // it shows, so switching workspaces costs no round trip.
-  // `total` is how many seeds the garden holds; it exceeds `seeds.length` only
-  // when the garden outgrew one push, and the panel says so rather than ending
-  // silently at the cap.
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
-  // Fired with this daemon's whole app registry on initial_state and on every
-  // apps_updated broadcast. A version flip moves an app's content hash, which is
-  // how a docked tile learns its bundle URL moved — there is no other signal.
   onAppsUpdate?: (apps: AppRegistryEntry[]) => void;
-  // Fired with the whole crew roster on initial_state and on every crew_updated
-  // broadcast. Members are permanent, so the sidebar renders from this alone.
   onCrewUpdate?: (members: CrewMember[]) => void;
-  // Fired when a presentation is created or its status/latest-round state changes.
   onPresentationAdded?: (presentation: Presentation) => void;
   onPresentationUpdated?: (presentation: Presentation) => void;
   onWorkspacesUpdate: (workspaces: DaemonWorkspace[]) => void;
@@ -848,20 +724,12 @@ function requestTileContentsForWorkspaces(ws: WebSocket, workspaces: DaemonWorks
 
 const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
-// A daemon round trip that only touches local state — the store, a file under a
-// scoped root — answers in single-digit milliseconds. This is the tripwire for
-// one that never answers at all, not a budget any healthy call approaches; the
-// git and GitHub commands below, which wait on the network or a subprocess, set
-// their own in minutes.
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
-// Bus status is one aggregate pass over the whole event log. Measured on a copy
-// of production, 209ms at 945k rows — so 30s is roughly a hundred times the
-// worst real log, a tripwire for a scan that has hung rather than a budget.
+// Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
+// at 945k rows — so 30s is roughly a hundred times the worst real log.
 const BUS_STATUS_TIMEOUT_MS = 30_000;
-// An app command is bounded by the daemon, which abandons a handler at 60s and
-// answers with a refusal naming the app, the command and that limit. This sits
-// past it so that refusal is what a view shows: a shorter one here would win the
-// race and replace it with "timed out".
+// An app command is bounded by the daemon, which abandons a handler at 60s and answers with a refusal.
+// This sits past it so that refusal is what a view shows, not "timed out".
 const APP_COMMAND_TIMEOUT_MS = 75_000;
 const GIT_METADATA_TIMEOUT_MS = 30 * 60_000;
 const GIT_DIFF_TIMEOUT_MS = 10 * 60_000;
@@ -872,9 +740,8 @@ const GITHUB_REFRESH_TIMEOUT_MS = 5 * 60_000;
 const WORKSPACE_SESSIONS_CAPABILITY = 'workspace_sessions';
 const BROWSER_HOST_CAPABILITY = 'browser_host';
 const BINARY_PTY_OUTPUT_CAPABILITY = 'binary_pty_output';
-// "Describe images to me": gates the kitty_placements feed. Deliberately not the
-// same bit as binary_pty_output, which decides only how a blob TRAVELS — the hub
-// relay wants the descriptions over a text pipe and takes its pixels as base64.
+// "Describe images to me": gates the kitty_placements feed. Deliberately not the same bit as
+// binary_pty_output, which decides only how a blob TRAVELS — the hub relay takes its pixels as base64.
 const KITTY_IMAGES_CAPABILITY = 'kitty_images';
 
 export function isTransientAttachError(error: unknown): boolean {
@@ -928,41 +795,6 @@ export async function retryTransientAttachRequest<T>(
     }
   }
 }
-
-// ============================================================================
-// Async Pattern Guide
-// ============================================================================
-//
-// Operations use two patterns depending on failure impact:
-//
-// 1. PROMISE-BASED (for mutations that can fail):
-//    - sendPRAction (approve/merge): Can fail due to conflicts, permissions
-//    - sendRefreshPRs: Can fail due to rate limits, network
-//    - sendCreateWorktree: Can fail due to existing branch, disk space
-//    - sendDeleteWorktree: Can fail due to uncommitted changes
-//    Pattern: Return Promise, use pendingActionsRef, show loading state
-//
-// 2. OPTIMISTIC FIRE-AND-FORGET (for toggles that rarely fail):
-//    - sendMutePR: Toggle mute state
-//    - sendMuteRepo: Toggle repo mute state
-//    - sendMuteAuthor: Toggle author mute state
-//    - sendPRVisited: Clear notification flag
-//    - sendSetSetting: Update user preference
-//    - sendClearSessions: Dev/admin action
-//    - sendUnregisterSession: Session cleanup acknowledgment
-//    - sendListWorktrees: Query operation
-//    Pattern: Update UI immediately, assume success
-//
-// Why optimistic? These operations are simple state toggles that only fail
-// if the daemon is down (which triggers reconnect anyway). Adding Promise
-// handling would add complexity without improving UX.
-//
-// To convert a fire-and-forget to Promise-based:
-// 1. Add a result event in daemon (e.g., "mute_pr_result")
-// 2. Add event handling in onmessage switch
-// 3. Return Promise and store in pendingActionsRef
-// 4. Update caller to handle loading/error states
-// ============================================================================
 
 export function useDaemonSocket({
   onSessionsUpdate,
@@ -1048,19 +880,10 @@ export function useDaemonSocket({
     onSessionExited,
   };
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const reconnectDelayRef = useRef<number>(1000); // Start with 1s, exponential backoff
-  // Keyed `<kind>:<requestId>` — see daemonPendingRequests.ts for the format and
-  // the settle helper the extracted event modules use.
+  const reconnectDelayRef = useRef<number>(1000);
   const pendingActionsRef = useRef<PendingRequests>(new Map());
-  // Markdown-annotation drafts use shared last-writer-wins correlation.
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
-  // Completed transcript messages invalidate only their own terminal. Keeping
-  // listeners here avoids a global React tick and releases the session entry as
-  // soon as its last pane unmounts.
   const sessionMessageListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
-  // In-flight `get` promises shared per document URI: two tiles hydrating the same
-  // document must share one round-trip, not supersede-reject each other
-  // (a rejected hydrate would leave that tile's saves locked until retry).
   const mdAnnotationsGetInflightRef = useRef<Map<string, Promise<{
     annotations: MarkdownAnnotation[];
     generation: number;
@@ -1069,51 +892,32 @@ export function useDaemonSocket({
   const pendingOutboundCommandsRef = useRef<string[]>([]);
   const recoveryNoticeTimeoutRef = useRef<number | null>(null);
   const gitStatusSubscriptionRef = useRef<string | null>(null);
-  // Live document queries. They live on the daemon's connection, so a reconnect
-  // has to re-send them; the registry is what remembers they are still wanted.
   const docSubscriptionsRef = useRef<DocumentSubscriptions | null>(null);
   const docSubscriptions = (docSubscriptionsRef.current ??= new DocumentSubscriptions());
   const ptyTransportRef = useRef(createPtyTransportState<AttachRequestContext>());
   const canceledAttachIdsRef = useRef(new Set<string>());
-  // Per-session attach serialization chain — see sendAttachSession.
   const attachQueueRef = useRef(new Map<string, Promise<unknown>>());
   const selectedSessionRef = useRef<string | null>(null);
   const selectedWorkspaceRef = useRef<string | null>(null);
   const daemonInstanceIDRef = useRef<string>('');
   const hasReceivedInitialStateRef = useRef(false);
-  // The daemon holds the terminal theme in memory only (no persistence), so
-  // every (re)connect must re-seed it — see the initial_state handler below.
   const lastTerminalThemeRef = useRef<{
     foreground: string;
     background: string;
     cursor: string;
     ansi_palette: string[];
   } | null>(null);
-  // Once we detect a profile mismatch, we refuse to operate forever — the
-  // user must quit and launch the matching app. Never clears inside the
-  // session.
   const profileMismatchRef = useRef<boolean>(false);
   const profileCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  // Why the previous connection ended, when the daemon ended it deliberately
-  // and could only say so afterwards. Set on the connection after the one that
-  // died; the consumer clears it once shown.
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
-  // Bumped on every successful WebSocket connect (including reconnects). The
-  // daemon deliberately drops explicit fs_watch refs when a client's socket
-  // disconnects, so any consumer that needs a durable server-side
-  // subscription across reconnects (e.g. NotebookTile's arbitrary-root
-  // fs_watch) must re-issue it whenever this generation changes.
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
-  // Daemon-served content for docked tiles (markdown files), keyed by
-  // tileContentKey. Updated by workspace_tile_content events (reply + live reload).
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
 
-  // Circuit breaker state for reconnect storms
   const reconnectAttemptsRef = useRef(0);
   const circuitOpenRef = useRef(false);
   const circuitResetTimeoutRef = useRef<number | null>(null);
@@ -1187,10 +991,8 @@ export function useDaemonSocket({
       case 'unregister':
         rejectPendingByPredicate((key) => key.startsWith('unregister:'), error);
         return;
-      // command_error carries no correlation id, so this fails every
-      // registration in flight. Registering more than one workspace at a time
-      // is not something the app does, and over-rejecting beats the ten-second
-      // silent timeout that a failure used to surface as.
+      // command_error carries no correlation id, so this fails every registration in flight. Over-rejecting
+      // beats the ten-second silent timeout that a failure used to surface as.
       case 'register_workspace':
         rejectPendingByPredicate((key) => key.startsWith('register_workspace:'), error);
         return;
@@ -1240,12 +1042,6 @@ export function useDaemonSocket({
       case 'delete_branch':
         rejectPendingByPredicate((key) => key.startsWith('delete_branch_'), error);
         return;
-      // Keyed requests park under `<cmd>:<id>` (reload_session, rename_session,
-      // unregister, ...). Matching the bare command alone left those waiting out
-      // their timeout on an error the daemon had already named — which is how a
-      // parked endpoint's refusal reached the user as "timed out". Like
-      // register_workspace above, this over-rejects when two are in flight for
-      // one command; that beats swallowing the reason.
       default:
         rejectPendingByPredicate((key) => key === cmd || key.startsWith(`${cmd}:`), error);
     }
@@ -1300,20 +1096,6 @@ export function useDaemonSocket({
     pendingOutboundCommandsRef.current.push(serialized);
   }, []);
 
-  // One request/result round trip, parked under `key` until the matching result
-  // event settles it: reject if the socket is down, and give up after a timeout
-  // so a caller awaiting a daemon that never answers is not stuck forever.
-  //
-  // Every fallible command that returns a promise wants exactly this, and each
-  // one used to spell it out. Identical copies is how one of them ends up with
-  // a different timeout, or forgets to delete its pending entry on the way out
-  // and leaks the closure.
-  //
-  // `key` is the caller's, not derived here, because the two correlation
-  // schemes disagree on what a second in-flight call means. A request-id key
-  // (sendRequest below) lets calls queue independently; a fixed one like
-  // 'refresh_prs' is deliberately last-writer-wins. Deriving the key would pick
-  // one of those for everybody.
   const sendKeyedRequest = useCallback(<T,>(
     key: string,
     payload: Record<string, unknown>,
@@ -1337,9 +1119,6 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // The same round trip, correlated by a fresh request id — what a command
-  // wants when two of its calls may be in flight at once and each needs its own
-  // answer.
   const sendRequest = useCallback(<T,>(
     cmd: string,
     body: Record<string, unknown>,
@@ -1358,21 +1137,11 @@ export function useDaemonSocket({
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
     if (profileMismatchRef.current) {
-      // Already detected a mismatch in a previous connect attempt; stay
-      // stopped. Reconnect would just bounce off the same check.
       return;
     }
 
     await ensureDaemonRunning();
 
-    // Verify the daemon's profile matches this build before opening the
-    // WebSocket. Only meaningful for non-default builds: the dev bundle
-    // (BUILD_PROFILE="dev") refuses to operate on a daemon that reports
-    // anything other than "dev". The default/prod build skips the check
-    // — a default frontend reaching a dev daemon would need a deliberate
-    // port override, and the initial_state protocol-version handshake
-    // over the WS still catches the common failure modes. Skipping also
-    // keeps existing WebSocket mocks in tests sync with the connect path.
     if (BUILD_PROFILE !== '' && !profileCheckedRef.current) {
       try {
         const health = await fetchDaemonHealthProfile(resolvedWsUrl);
@@ -1384,20 +1153,11 @@ export function useDaemonSocket({
         }
         profileCheckedRef.current = true;
       } catch (err) {
-        // Health fetch failed (daemon still coming up, network hiccup,
-        // older daemon without /health). Don't block the WS connect —
-        // the initial_state handshake will surface hard errors, and a
-        // real mismatch will be caught on the next try.
         console.warn('[Daemon] profile pre-check failed, proceeding without it:', err);
       }
     }
 
     let browserHostToken = '';
-    // The per-profile credential the daemon requires in client_hello. In the app
-    // it comes from the profile's token file through Tauri; in a plain browser
-    // (dev:vite, Playwright) Vite hands it over, because nothing there can read
-    // a file. Empty means the hello is refused, and the daemon says where to
-    // look.
     let clientToken = import.meta.env.VITE_CLIENT_TOKEN ?? '';
     if (isTauri()) {
       try {
@@ -1413,17 +1173,11 @@ export function useDaemonSocket({
     }
 
     const ws = new WebSocket(resolvedWsUrl);
-    // Live PTY output arrives as binary frames (see BINARY_PTY_OUTPUT_CAPABILITY).
     ws.binaryType = 'arraybuffer';
 
-    // Shared by the JSON pty_output event and the binary frame path: queue
-    // while an attach for the session is in flight, otherwise dedup by seq and
-    // emit to the pane runtime.
     const handleLivePtyOutput = (id: string, seq: number | undefined, payload: string | Uint8Array) => {
       const attachKey = `pty_attach_${id}`;
       if (pendingActionsRef.current.has(attachKey)) {
-        // Attach replay is emitted before this queue is drained.
-        // Ghostty then serializes those emitted writes in order.
         const queued = enqueuePendingAttachOutput(
           ptyTransportRef.current.getQueuedAttachOutputs(id) || [],
           { data: payload, seq },
@@ -1450,7 +1204,7 @@ export function useDaemonSocket({
       daemonRestartInProgressRef.current = false;
       setConnectionError(null);
       setConnectionGeneration((prev) => prev + 1);
-      reconnectDelayRef.current = 1000; // Reset to 1s on successful connect
+      reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
       circuitOpenRef.current = false;
       if (circuitResetTimeoutRef.current) {
@@ -1458,9 +1212,6 @@ export function useDaemonSocket({
         circuitResetTimeoutRef.current = null;
       }
 
-      // Identify ourselves first thing, and prove we may be here: the daemon
-      // withholds initial_state and every broadcast until this hello passes,
-      // so nothing else can be sent before it.
       ws.send(
         JSON.stringify({
           cmd: 'client_hello',
@@ -1478,10 +1229,6 @@ export function useDaemonSocket({
         }),
       );
 
-      // The blob cache pulls pixels on miss; this is the socket it pulls over.
-      // Set on every connect and never cleared: a sender left over from a closed
-      // socket reports failure, and the key it was asked about stays absent so
-      // the next description asks again over the new one.
       kittyImageCache.setSender((sessionId, imageId) => {
         if (ws.readyState !== WebSocket.OPEN) return false;
         ws.send(JSON.stringify({ cmd: 'get_kitty_image', id: sessionId, image_id: imageId }));
@@ -1492,19 +1239,12 @@ export function useDaemonSocket({
         ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory: gitStatusSubscriptionRef.current }));
       }
 
-      // Every live query the daemon lost when this socket's predecessor closed.
-      // Each subscriber is asked for its `have()` right now, so the resume
-      // carries only what changed while we were away.
       docSubscriptions.resubscribeAll((payload) => ws.send(JSON.stringify(payload)));
 
       if (selectedSessionRef.current) {
         ws.send(JSON.stringify({ cmd: 'session_selected', id: selectedSessionRef.current }));
       }
 
-      // An invalidation broadcast while this client was disconnected cannot be
-      // replayed to it. Revalidate mounted message windows on every connection;
-      // the initial mount already fetches, and last-request-wins makes that
-      // harmless on the first open.
       for (const listeners of sessionMessageListenersRef.current.values()) {
         for (const listener of listeners) listener();
       }
@@ -1523,9 +1263,6 @@ export function useDaemonSocket({
             return;
           }
           if (frame.kind === 'kitty_image') {
-            // The pixels alias the frame's own buffer — the whole point of the
-            // binary path is that a multi-megabyte image never becomes a base64
-            // string and then a second copy on its way to a texture.
             kittyImageCache.fill({
               sessionId: frame.id,
               imageId: frame.imageId,
@@ -1567,13 +1304,9 @@ export function useDaemonSocket({
               daemonInstanceIDRef.current &&
               data.daemon_instance_id !== daemonInstanceIDRef.current
             ) {
-              // Endpoint identity changed (new daemon instance). Keep the
-              // attached session set so we can reattach after initial_state,
-              // but clear stream caches to force clean replay.
               ptyTransportRef.current.clearStreamCaches();
             }
             daemonInstanceIDRef.current = data.daemon_instance_id || '';
-            // Check protocol version on initial connection
             if (data.protocol_version && data.protocol_version !== PROTOCOL_VERSION) {
               console.error(`[Daemon] Protocol version mismatch: daemon=${data.protocol_version}, client=${PROTOCOL_VERSION}`);
               const daemonVersion = Number(data.protocol_version);
@@ -1603,8 +1336,6 @@ export function useDaemonSocket({
               } else {
                 setConnectionError(`Version mismatch: daemon v${data.protocol_version}, app v${PROTOCOL_VERSION}. Restart/reinstall required.`);
               }
-              // Open circuit immediately to prevent reconnection storm
-              // Version mismatch won't fix itself - requires manual intervention
               circuitOpenRef.current = true;
               ws.close();
               return;
@@ -1651,17 +1382,9 @@ export function useDaemonSocket({
             }
             hasReceivedInitialStateRef.current = true;
             setHasReceivedInitialState(true);
-            // Automations aren't part of initial_state (they're pulled on
-            // demand via automation_definitions_list), so a panel open across
-            // a daemon restart/reconnect never sees a fresh event to refetch
-            // on. Bump changedTick on every (re)connect so an open panel
-            // re-reads instead of staying on a stale error.
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
             requestTileContentsForWorkspaces(ws, nextWorkspaces);
-            // The daemon's terminal theme is in-memory only, so a restarted
-            // daemon comes back with no theme — re-push it on every
-            // (re)connect rather than relying on the one-time push from App.
             if (lastTerminalThemeRef.current && ws.readyState === WebSocket.OPEN) {
               const theme = lastTerminalThemeRef.current;
               ws.send(JSON.stringify({
@@ -1673,8 +1396,6 @@ export function useDaemonSocket({
               }));
             }
             if (ws.readyState === WebSocket.OPEN) {
-              // Re-attach PTY streams only after recovery barrier has lifted and
-              // initial_state has arrived.
               const reattachIds = ptyTransportRef.current.listAttachedRuntimeIds();
               if (reattachIds.length > 0) {
                 recordDiag({ kind: 'attach', reason: 'recovery_reattach', sessions: reattachIds });
@@ -1908,14 +1629,10 @@ export function useDaemonSocket({
           }
 
           case 'tasks_changed':
-            // Payload-free broadcast: an open Tasks panel refetches the list so it
-            // reflects the runner's truth (no optimistic mutation here).
             callbacksRef.current.onTasksChanged?.();
             break;
 
           case 'notifications_updated':
-            // Carries the authoritative unread count so the sidebar badge updates
-            // immediately; an open notifications panel re-lists for the new row.
             callbacksRef.current.onNotificationsUpdated?.(
               typeof data.unread_count === 'number' ? data.unread_count : 0,
               readCriticalState(data),
@@ -1979,9 +1696,6 @@ export function useDaemonSocket({
             break;
           }
 
-          // The garden board's two writes. Both are correlated exactly like
-          // seed_document_get above; the garden push that follows a successful
-          // move is what redraws every other client.
           case 'seed_transition_result': {
             const requestId = data.request_id;
             if (typeof requestId !== 'string') break;
@@ -2126,7 +1840,6 @@ export function useDaemonSocket({
             }
             pendingActionsRef.current.delete(key);
             if (data.success) {
-              // A non-terminal task is a no-op retry (task=null) — still a success.
               pending.resolve(data.task ?? null);
             } else {
               pending.reject(new Error(data.error || 'Notebook task retry failed'));
@@ -2301,16 +2014,11 @@ export function useDaemonSocket({
                   previousSeq: ptyTransportRef.current.getLastSeq(data.id),
                   queuedOutputs: ptyTransportRef.current.getQueuedAttachOutputs(data.id),
                 });
-                // A Ghostty snapshot carries the daemon worker's exact grid.
-                // The decoded model comes up at it; the pane's surface is sized
-                // to match here so the two agree before the first paint.
                 const snapshotGeometry = restorePlan.hasSnapshot
                   && typeof restorePlan.restoreCols === 'number'
                   && typeof restorePlan.restoreRows === 'number'
                   ? { cols: restorePlan.restoreCols, rows: restorePlan.restoreRows }
                   : null;
-                // A snapshot-less relaunch_restore still reconstructs at the
-                // daemon's reported PTY grid so a resumed agent redraws cleanly.
                 const relaunchFallbackGeometry = attachContext?.policy === 'relaunch_restore'
                   && typeof data.cols === 'number'
                   && typeof data.rows === 'number'
@@ -2341,11 +2049,6 @@ export function useDaemonSocket({
                     id: data.id,
                     data: attachEffects.restoreAction.data,
                   });
-                  // Seed OSC 133 command blocks from the snapshot: a decode
-                  // replays no markers, so the client rebuilds none on restore.
-                  // Enqueued after the adoption (seedBlocks runs on the same
-                  // chain) so anchor text reads the restored buffer. Wire shape
-                  // (snake_case) → client-domain SeededBlock.
                   const snapshotBlocks = data.snapshot?.blocks;
                   if (snapshotBlocks && snapshotBlocks.length > 0) {
                     emitPtyEvent({
@@ -2364,12 +2067,8 @@ export function useDaemonSocket({
                       })),
                     });
                   }
-                  // Seed kitty placements from the same snapshot, after the
-                  // blocks. Always emitted, including with no placements: a
-                  // restore resets the model, so absence here means "this
-                  // session is showing no images" — and without saying so, an
-                  // image the pane drew before the reattach would survive it
-                  // with nothing left on screen underneath.
+                  // Always emitted, including with no placements: a restore resets the model, so absence
+                  // here means "this session is showing no images" — otherwise an image would survive it.
                   emitPtyEvent({
                     event: 'seed_placements',
                     id: data.id,
@@ -2409,7 +2108,6 @@ export function useDaemonSocket({
                   };
                   pending.resolve(result);
                 } else {
-                  // Unsupported / session gone: degrade to live-fill.
                   pending.resolve(null);
                 }
               }
@@ -2418,9 +2116,6 @@ export function useDaemonSocket({
           }
 
           case 'pty_output': {
-            // Local sessions arrive as binary frames instead (the daemon honors
-            // our binary_pty_output capability); this JSON event remains for
-            // relayed remote-endpoint sessions.
             if (data.id && data.data) {
               handleLivePtyOutput(data.id, data.seq, data.data);
             }
@@ -2454,9 +2149,6 @@ export function useDaemonSocket({
             break;
 
           case 'agent_event': {
-            // One envelope from a conversation session's host. The daemon does
-            // not read the render kinds, so this is the only place they are
-            // understood; the store owns what each kind means.
             if (data.id && typeof data.kind === 'string') {
               useConversationsStore.getState().applyEnvelope(
                 data.id,
@@ -2469,10 +2161,6 @@ export function useDaemonSocket({
           }
 
           case 'kitty_placements': {
-            // The whole placement set of a session's active screen, measured on
-            // the chunk stamped `seq`. It rides the pty event chain so it lands
-            // behind that chunk's bytes: the positions only mean anything
-            // against the grid those bytes produce.
             if (data.id) {
               emitPtyEvent({
                 event: 'placements',
@@ -2485,9 +2173,6 @@ export function useDaemonSocket({
           }
 
           case 'kitty_image_result': {
-            // The JSON half of the blob transport. A capable client still gets
-            // here: every failure is JSON (it has no pixels and so no frame),
-            // and so is every answer relayed from a remote daemon.
             if (!data.id || typeof data.image_id !== 'number') break;
             const blob = kittyImageBlobFromResult(data);
             if (blob) {
@@ -2511,8 +2196,6 @@ export function useDaemonSocket({
                 pendingKill.resolve({ success: true });
               }
               ptyTransportRef.current.clearRuntime(data.id);
-              // A conversation session exits the same way, and its store has to
-              // stop claiming a host is listening. A no-op for every PTY session.
               useConversationsStore.getState().hostExited(data.id);
               emitPtyEvent({
                 event: 'exit',
@@ -2540,13 +2223,8 @@ export function useDaemonSocket({
             break;
 
           case 'runtime_respawned':
-            // The daemon killed and re-spawned this session's agent in place (chief
-            // assign/demote reload). We still believe we're attached (the kill's
-            // session_exited was suppressed daemon-side), so mirror pty_desync exactly:
-            // reset + clear the stale stream cache, then re-attach DIRECTLY over the ws
-            // (not via spawnPtyRuntime, which would take the alreadyAttached fast-path
-            // and never re-establish the stream). relaunch_restore replays the fresh
-            // worker's scrollback so the resumed agent redraws cleanly.
+            // The daemon re-spawned this session's agent in place: mirror pty_desync and
+            // re-attach directly (spawnPtyRuntime would take the alreadyAttached path).
             if (data.id) {
               recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
@@ -2797,7 +2475,6 @@ export function useDaemonSocket({
 
           case 'worktree_created':
           case 'worktree_deleted':
-            // These events are informational, UI updates handled via worktrees_updated
             break;
 
           case 'git_operation_started':
@@ -2814,7 +2491,6 @@ export function useDaemonSocket({
 
           case 'create_worktree_result':
           case 'delete_worktree_result':
-            // Handle async result for pending worktree actions
             const actionKey = `worktree_${data.event}_${data.endpoint_id || 'local'}`;
             const pendingAction = pendingActionsRef.current.get(actionKey);
             if (pendingAction) {
@@ -2833,17 +2509,15 @@ export function useDaemonSocket({
           case 'rate_limited':
             if (data.rate_limit_resource && data.rate_limit_reset_at) {
               const resetAt = new Date(data.rate_limit_reset_at);
-              // Only set if reset is in the future
               if (resetAt > new Date()) {
                 setRateLimit({
                   resource: data.rate_limit_resource,
                   resetAt,
                 });
-                // Auto-clear when reset time passes
                 const msUntilReset = resetAt.getTime() - Date.now();
                 setTimeout(() => {
                   setRateLimit(null);
-                }, msUntilReset + 1000); // Add 1s buffer
+                }, msUntilReset + 1000);
               }
             }
             break;
@@ -2956,9 +2630,6 @@ export function useDaemonSocket({
             break;
 
           case 'file_diff_result': {
-            // Resolve by request id only — a path-based key would let a stale
-            // round's late reply resolve a newer round's in-flight request for
-            // the same path with the wrong content.
             const key = `get_file_diff_${data.request_id}`;
             const pending = pendingActionsRef.current.get(key);
             if (pending) {
@@ -2977,7 +2648,6 @@ export function useDaemonSocket({
           }
 
           case 'get_repo_info_result': {
-            // Extract repo from info to build key
             const repoPath = (data as any).info?.repo || '';
             const key = `repo_info_${data.endpoint_id || 'local'}_${repoPath}`;
             const pending = pendingActionsRef.current.get(key);
@@ -3001,7 +2671,6 @@ export function useDaemonSocket({
           case 'workflow_action_result': {
             const action = (data as any).action || '';
             const runId = (data as any).run_id || '';
-            // populate the store from any returned run(s) so list/get hydrate the slice
             const run = (data as any).run ?? null;
             const runs = (data as any).runs ?? [];
             if (run) useWorkflowRunsStore.getState().upsertWorkflowRun(run);
@@ -3024,13 +2693,6 @@ export function useDaemonSocket({
             break;
           }
 
-          // The 9 typed automations result events (one per command — see
-          // internal/protocol/schema/main.tsp's Automation*ResultMessage
-          // family and daemon/automations_actions.go). Correlated by
-          // request_id, not action/event, so concurrent calls (e.g. listing
-          // runs for two different definitions) never cross-resolve; each
-          // caller wraps its own extraction of the typed payload at
-          // registration time (see the wrapper functions below).
           case 'automation_apply_result':
           case 'automation_validate_result':
           case 'automation_definitions_result':
@@ -3060,15 +2722,11 @@ export function useDaemonSocket({
             break;
           }
 
-          // Canonical state stays daemon-side: this broadcast carries no
-          // payload views need. Bump the tick and let open views re-fetch.
           case 'automations_changed': {
             useAutomationsStore.getState().bumpChanged();
             break;
           }
 
-          // The daemon dropped our previous connection and is telling us why
-          // now, because it could not tell us then.
           case 'client_eviction_notice': {
             console.warn(
               `[Daemon] Previous connection was dropped at ${data.evicted_at}: ${data.reason} ` +
@@ -3082,9 +2740,6 @@ export function useDaemonSocket({
 
           case 'command_error':
             if (data.error_code === 'unauthorized_client') {
-              // The daemon hangs up right after this. Reconnecting cannot help —
-              // the token is wrong until someone changes it — so open the circuit
-              // and show what the daemon said, which names the file to read.
               console.error('[Daemon] Client token refused:', data.error);
               setConnectionError(data.error || 'The daemon refused this client.');
               circuitOpenRef.current = true;
@@ -3100,9 +2755,6 @@ export function useDaemonSocket({
             rejectPendingForCommand(data.cmd, data.error || `Command ${data.cmd || ''} failed`);
             break;
 
-          // Domains that live in their own module. The chain sits in `default`
-          // so the hot cases above (pty_output) never pay for it, and an event
-          // no module claims stays silently ignored, as it was before.
           default: {
             const pending = pendingActionsRef.current;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -3131,7 +2783,6 @@ export function useDaemonSocket({
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
 
-      // Circuit breaker: if open, don't retry
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
         return;
@@ -3140,7 +2791,6 @@ export function useDaemonSocket({
       reconnectAttemptsRef.current++;
       let delay = reconnectDelayRef.current;
       if (reconnectAttemptsRef.current > MAX_RECONNECTS_BEFORE_PAUSE) {
-        // Keep retrying in the background instead of pausing indefinitely.
         delay = MAX_RECONNECT_DELAY_MS;
         reconnectDelayRef.current = MAX_RECONNECT_DELAY_MS;
         setConnectionError('Daemon disconnected. Reconnecting...');
@@ -3149,7 +2799,6 @@ export function useDaemonSocket({
         reconnectDelayRef.current = Math.min(delay * 1.5, MAX_RECONNECT_DELAY_MS);
       }
 
-      // Normal reconnect with backoff
       console.log(`[Daemon] WebSocket disconnected, reconnecting in ${delay}ms... (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECTS_BEFORE_PAUSE})`);
       reconnectTimeoutRef.current = window.setTimeout(() => {
         void connect();
@@ -3177,10 +2826,8 @@ export function useDaemonSocket({
       if (recoveryNoticeTimeoutRef.current) {
         clearTimeout(recoveryNoticeTimeoutRef.current);
       }
-      // Detach handlers before closing: onclose otherwise schedules a fresh
-      // reconnect timer synchronously (as it does in tests, and can in real
-      // browsers too), which would leak past this cleanup and fire after
-      // teardown with a stale WebSocket reference.
+      // Detach handlers before closing: onclose otherwise schedules a fresh reconnect timer synchronously,
+      // which would fire after teardown with a stale WebSocket reference.
       const ws = wsRef.current;
       if (ws) {
         ws.onclose = null;
@@ -3192,7 +2839,6 @@ export function useDaemonSocket({
     };
   }, [connect]);
 
-  // Manual retry function for UI
   const retryConnection = useCallback(() => {
     console.log('[Daemon] Manual retry requested');
     if (circuitResetTimeoutRef.current) {
@@ -3223,8 +2869,6 @@ export function useDaemonSocket({
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.resume_conversation_file && { resume_conversation_file: args.resume_conversation_file }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
-      // Tri-state, unlike yolo: absent means "follow the promoted default", so
-      // an explicit false has to survive rather than be dropped as falsy.
       ...(args.auto_mode !== undefined && { auto_mode: args.auto_mode }),
       ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
       ...(args.spawned_from && { spawned_from: args.spawned_from }),
@@ -3277,10 +2921,8 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Attaches to the same session must not overlap (see attachQueue.ts):
-  // a second in-flight attach overwrites the first's pending entry (its
-  // promise then never settles — callers hang), gets resolved with the FIRST
-  // attach's result, and has its replay classified against the wrong context.
+  // Attaches to the same session must not overlap (see attachQueue.ts): a second in-flight attach
+  // overwrites the first's pending entry, resolves with the FIRST attach's result, and misclassifies its replay.
   const sendAttachSession = useCallback((id: string, context?: AttachRequestContext): Promise<AttachResult> => {
     return enqueuePerKey(attachQueueRef.current, id, () => sendAttachSessionNow(id, context));
   }, [sendAttachSessionNow]);
@@ -3343,9 +2985,6 @@ export function useDaemonSocket({
   }, [sendOrQueueCommand]);
 
   const sendTerminalPointerActivity = useCallback((id: string) => {
-    // This is an ephemeral recency signal, not input that must be replayed.
-    // Dropping it while disconnected avoids an idle reconnect accumulating and
-    // later flushing a burst of stale mouse movements.
     const ws = wsRef.current;
     if (!hasReceivedInitialStateRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
       return;
@@ -3353,14 +2992,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'terminal_pointer_activity', id }));
   }, []);
 
-  // Reports what this window can see, so the daemon knows whether anyone is
-  // reading the session activity lines it would otherwise spend money
-  // generating. The client reports facts (visible, showing the dashboard, how
-  // long since input); the daemon owns the policy those facts feed.
-  //
-  // Dropped while disconnected rather than queued, like the pointer signal
-  // above: presence is a heartbeat, and a stale report flushed on reconnect
-  // would claim the user was watching at a moment that has already passed.
   const sendSetClientPresence = useCallback((presence: {
     visible: boolean;
     dashboardVisible: boolean;
@@ -3378,16 +3009,6 @@ export function useDaemonSocket({
     }));
   }, []);
 
-  // Sends a message to a conversation session's host. Fire-and-forget in the
-  // same sense as pty_input: the answer is not a result message but the
-  // envelope stream the host starts producing, which lands in the conversations
-  // store. A failure the daemon can name (no live host) comes back as a
-  // command error and is surfaced there, not awaited here.
-  //
-  // `mode` is when the agent reads it: a plain prompt opens a run, a steer cuts
-  // into the one already open at its next turn boundary, and a follow-up waits
-  // for it to finish. The host resolves a steer or follow-up on an idle session
-  // into a run of its own, so the caller does not have to check first.
   const sendAgentPrompt = useCallback((id: string, text: string, mode?: AgentPromptMode) => {
     sendOrQueueCommand(
       { cmd: 'agent_prompt', id, input_id: nextRequestID('agent-input'), text, ...(mode ? { mode } : {}) },
@@ -3395,15 +3016,6 @@ export function useDaemonSocket({
     );
   }, [nextRequestID, sendOrQueueCommand]);
 
-  // Asks the host for what one tool call actually read, wrote or printed. Sent
-  // when a tool card is opened, and again with `full` when the user asks for the
-  // whole of an output pi clipped.
-  //
-  // Fire-and-forget for the same reason as the prompt, and deliberately not a
-  // request/result pair: the host broadcasts the answer to every client, so the
-  // same card opened in two windows costs one read, and a card whose answer is
-  // already on its way asks for nothing. It also means a slow disk cannot time
-  // out a promise — the card simply fills in when the text arrives.
   const sendAgentToolDetail = useCallback((id: string, callId: string, full?: boolean) => {
     sendOrQueueCommand(
       { cmd: 'agent_tool_detail', id, call_id: callId, ...(full ? { full } : {}) },
@@ -3411,55 +3023,22 @@ export function useDaemonSocket({
     );
   }, [sendOrQueueCommand]);
 
-  // Drops everything the user has sent that the agent has not read yet — both
-  // queues at once, which is all pi offers. The queue strip empties on the
-  // host's own queue_update rather than here, so what the app shows is still
-  // pi's answer about pi's queues and never a local guess.
   const sendAgentClearQueue = useCallback((id: string) => {
     sendOrQueueCommand({ cmd: 'agent_clear_queue', id }, { waitForInitialState: true });
   }, [sendOrQueueCommand]);
 
-  // Asks a conversation's host for a snapshot of it — what a client that has not
-  // been watching the stream needs before it can draw anything.
-  //
-  // This is the conversation's attach_session, and it answers the same way the
-  // rest of the host's surface does: not here, but as a `conversation_snapshot`
-  // envelope. That envelope is broadcast rather than addressed to this client,
-  // which is deliberate — the host's transcript is the authority, so replacing
-  // with it can only move a client forward, and two windows on one conversation
-  // are identical by construction instead of by coincidence.
   const sendAgentAttach = useCallback((id: string) => {
     sendOrQueueCommand({ cmd: 'agent_attach', id }, { waitForInitialState: true });
   }, [sendOrQueueCommand]);
 
-  // Asks for the page of conversation older than the item this client is showing
-  // at the top of its transcript.
-  //
-  // Addressed by that anchor rather than by a request id, and answered by a
-  // broadcast `conversation_page`, for the same reason the snapshot is: two
-  // windows scrolled to the same place in a long conversation cost the host one
-  // read, and a window standing somewhere else recognises the anchor as not its
-  // own and ignores the page.
   const sendAgentHistory = useCallback((id: string, before: string) => {
     sendOrQueueCommand({ cmd: 'agent_history', id, before }, { waitForInitialState: true });
   }, [sendOrQueueCommand]);
 
-  // Switches the model a conversation's agent runs on, from its next run.
-  //
-  // Nothing comes back here. The host reports the model actually in force in a
-  // `model_changed` envelope — including when pi refused the switch — so a
-  // picker that moved early is corrected by the host rather than left showing a
-  // model the agent is not on.
   const sendAgentSetModel = useCallback((id: string, model: string) => {
     sendOrQueueCommand({ cmd: 'agent_set_model', id, model }, { waitForInitialState: true });
   }, [sendOrQueueCommand]);
 
-  // Lists the conversations this daemon has already recorded, so one can be
-  // picked up in a new session.
-  //
-  // A request/result pair, unlike the rest of the conversation surface: this is
-  // one window's question about files on disk, and nothing about the answer
-  // changes what any other window is showing.
   const sendListPastConversations = useCallback((): Promise<PastConversationsResult> => {
     return sendRequest<PastConversationsResult>(
       'list_past_conversations',
@@ -3468,11 +3047,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Reads the event bus's operator picture — the same snapshot `attn bus status`
-  // renders, computed daemon-side so the two can never disagree.
-  //
-  // The daemon answers with one aggregate pass over the whole log, which is
-  // why the default timeout is not enough for a large one.
   const sendBusStatusGet = useCallback((): Promise<BusStatus> => {
     return sendRequest<BusStatus>(
       'bus_status_get',
@@ -3482,7 +3056,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Flips a durable consumer's kill switch, matching `attn bus enable|disable`.
   const sendBusSetConsumerEnabled = useCallback((
     consumer: string,
     enabled: boolean,
@@ -3494,11 +3067,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Auto mode's app-only surface. `automode_get` reads the promoted policy and
-  // the proposals waiting on a human; promote and discard resolve one; the two
-  // pattern verbs edit a list directly. The CLI can propose and nothing else —
-  // a human in the app is the trust boundary that keeps an agent from writing
-  // its own leash, which is why all five exist on this transport alone.
   const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
     return sendRequest<AutoModeState>(
       'automode_get',
@@ -3545,14 +3113,6 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
-  // Pushes the app's resolved terminal theme colors to the daemon, which uses
-  // them to seed the worker's authoritative color model and answer OSC
-  // 10/11/12 (foreground/background/cursor) queries on behalf of every session
-  // — see stripDaemonOwnedResponses in
-  // terminalQueryResponses.ts for why the frontend no longer answers these
-  // itself. Fire-and-forget like sendPtyResize: a dropped send just means the
-  // daemon answers with a stale theme until the next push (on reconnect or
-  // theme change), which self-heals.
   const sendSetTerminalTheme = useCallback((theme: {
     foreground: string;
     background: string;
@@ -3572,25 +3132,8 @@ export function useDaemonSocket({
     );
   }, [sendOrQueueCommand]);
 
-  // pixels is the pane's total size in device pixels, known only to a fit. It is
-  // left off the command entirely when absent: an explicit 0 and an omitted
-  // field mean the same thing to the daemon ("no pixel geometry"), and omitting
-  // keeps the wire honest about which resizes actually measured the pane.
-  // A docked app view crashed while rendering. Fire-and-forget on purpose: the
-  // host already has the error and shows it in the tile — this is the copy the
-  // authoring agent reads in `attn app logs`, stamped with the version that
-  // served the bundle, and a report the daemon never answers must not become a
-  // second failure inside an error boundary.
-  /**
-   * Open a live document query. Returns the way to close it, which the caller
-   * must call: a subscription left open makes the daemon re-run its query on
-   * every write to that collection, for nobody.
-   *
-   * The subscribe never goes through the outbound queue. A queued one would be
-   * flushed on the next open *and* re-sent by `resubscribeAll`, and the daemon
-   * refuses the second id as already open — so when the socket is down the
-   * registry alone carries it, and the connect handler sends it once.
-   */
+  /** The subscribe never goes through the outbound queue: `resubscribeAll` would
+   * re-send it and the daemon refuses the second id as already open. */
   const subscribeDocuments = useCallback((subscriber: DocumentSubscriber) => {
     const registry = docSubscriptions;
     const id = registry.add(subscriber);
@@ -3627,23 +3170,12 @@ export function useDaemonSocket({
     });
   }, [sendOrQueueCommand]);
 
-  /**
-   * Run one of an app's declared commands and resolve with what its handler
-   * returned. Which app is asked comes from the host that mounted the view, not
-   * from the view — the same rule the document namespace follows.
-   *
-   * The timeout is past the daemon's own dispatch budget (60s) on purpose. The
-   * daemon's refusal names the app, the command and the limit; a shorter one
-   * here would replace that with "timed out" and lose everything worth reading.
-   */
   const sendAppCommand = useCallback((app: string, command: string, payload?: unknown): Promise<unknown> => {
     return sendRequest<AppCommandResult>(
       'app_command',
       {
         app,
         command,
-        // JSON text, exactly as a document body travels. Absent when the command
-        // takes no argument.
         ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
       },
       `${app} did not answer the command “${command}”`,
@@ -3736,7 +3268,6 @@ export function useDaemonSocket({
         ...(signal && { signal }),
       }));
 
-      // Wait for session_exited to avoid kill/spawn races during reload.
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -3851,12 +3382,6 @@ export function useDaemonSocket({
     );
   }, [nextRequestID, sendWorkspaceCommand]);
 
-  // Dock a new tile into a workspace layout beside an anchor leaf. Unlike the
-  // daemon-initiated markdown/browser docks (the `attn open` unix path), this is
-  // the in-app entry used by notebook tile mode. Each dock MUST pass a unique
-  // tileId: the daemon treats a duplicate id as a move, so a repeated id would
-  // relocate the existing tile instead of adding a second one. anchorPaneId
-  // defaults to '' (the daemon falls back to the active leaf, then the first).
   const sendWorkspaceDockTile = useCallback((
     workspaceId: string,
     tileId: string,
@@ -3893,9 +3418,6 @@ export function useDaemonSocket({
     );
   }, [sendWorkspaceCommand]);
 
-  // tileSessionId, when set, rebinds the tile's session binding (markdown
-  // tiles' Send target) — tile_params keeps its existing meaning and is sent
-  // unchanged alongside a retarget.
   const sendWorkspaceUpdateTile = useCallback((
     workspaceId: string,
     tileId: string,
@@ -3919,11 +3441,6 @@ export function useDaemonSocket({
     );
   }, [nextRequestID, sendWorkspaceCommand]);
 
-  // Move an existing leaf (terminal pane or docked tile) beside an anchor leaf.
-  // An empty anchorId docks the leaf against the whole workspace (the root). The
-  // daemon broadcasts the authoritative layout, so this is effectively
-  // fire-and-forget; a rejected move (self-drop, only leaf) just leaves the
-  // layout unchanged.
   const sendWorkspaceMoveLeaf = useCallback((
     workspaceId: string,
     leafId: string,
@@ -3966,11 +3483,6 @@ export function useDaemonSocket({
     );
   }, [sendWorkspaceCommand]);
 
-  // Split a leaf out into a brand-new workspace. Mirrors
-  // sendWorkspaceMoveLeafToWorkspace, but with no target: the daemon registers a
-  // fresh workspace (seeded at the end of the rank order), moves the leaf into it,
-  // and tears down the source if it ends up empty. Correlated by leaf id, like the
-  // move-to-workspace path.
   const sendWorkspaceMoveLeafToNewWorkspace = useCallback((
     sourceWorkspaceId: string,
     leafId: string,
@@ -3991,13 +3503,6 @@ export function useDaemonSocket({
     );
   }, [sendWorkspaceCommand]);
 
-  // Reorder a workspace by dropping it between two neighbours. The frontend sends
-  // only the neighbour ids (the workspace that should end up directly above and
-  // directly below the moved one); the daemon computes the fractional-index rank
-  // key, writes the single moved row, and broadcasts the authoritative order.
-  // Empty prevWorkspaceId = move to the top; empty nextWorkspaceId = move to the
-  // bottom. Mirrors sendWorkspaceMoveLeafToWorkspace's request/result pattern: the
-  // daemon replies with a workspace_layout_action_result keyed by action+workspace.
   const sendSetWorkspaceRank = useCallback((
     workspaceId: string,
     prevWorkspaceId?: string,
@@ -4015,11 +3520,6 @@ export function useDaemonSocket({
     );
   }, [sendWorkspaceCommand]);
 
-  // requestTileContent pulls a tile's current content (used on first render).
-  // The reply and all subsequent live-reload updates arrive as
-  // workspace_tile_content events handled above. Fire-and-forget: no result
-  // tracking needed. Queue the pull while disconnected so mounting a tile
-  // during reconnect cannot leave it stale.
   const requestTileContent = useCallback((workspaceId: string, tileId: string) => {
     sendOrQueueCommand(
       { cmd: 'workspace_tile_content_get', workspace_id: workspaceId, tile_id: tileId },
@@ -4027,10 +3527,6 @@ export function useDaemonSocket({
     );
   }, [sendOrQueueCommand]);
 
-  // sendOpenMarkdown docks (or reuses) a markdown tile for the given file and
-  // binds it to the session it was opened from. Empty sessionId lets the
-  // daemon fall back to the currently selected session. Resolves with the
-  // workspace/tile the daemon placed the file in.
   const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ workspaceId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -4081,9 +3577,6 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  // Move a seed: tend | park | harvest | wither | replant. The daemon owns
-  // what is legal from where the seed actually is, so a refusal comes back as
-  // its own sentence and the caller renders it rather than pre-judging.
   const sendSeedTransition = useCallback(
     (seedId: string, verb: string, reason?: string, force?: boolean): Promise<Seed> => {
       return new Promise((resolve, reject) => {
@@ -4116,9 +3609,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // Write on a seed's log. The board uses it for the moves that refuse a
-  // reason — park and replant record none, and the daemon's own refusal says
-  // the log is where that sentence goes.
   const sendSeedNote = useCallback((seedId: string, body: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -4162,11 +3652,6 @@ export function useDaemonSocket({
   useEffect(() => {
     setPtyBackend({
       spawn: async (args: PtySpawnArgs) => {
-        // A conversation session's runtime is a host process, not a PTY, so
-        // spawn_session is the whole of its launch. The rest of this path is
-        // terminal work — a bootstrap resize, then an attach — and the attach
-        // would ask the PTY backend for a session it never created, whose
-        // rejection rolls the session creation back.
         if (conversationAgents(settingsRef.current).has(args.agent ?? '')) {
           await sendSpawnSession(args);
           return;
@@ -4244,7 +3729,6 @@ export function useDaemonSocket({
       console.log('[Daemon] Sending PR action:', msg);
       ws.send(JSON.stringify(msg));
 
-      // Timeout after 30 seconds
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -4254,9 +3738,6 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Fetch a session's current screen to seed a grid tile. Resolves null on any
-  // failure (disconnected, session gone, or a worker too old to answer) so the
-  // observer degrades to live-fill rather than surfacing an error.
   const getScreenSnapshot = useCallback((runtimeId: string): Promise<ScreenSnapshotResult | null> => {
     return new Promise((resolve) => {
       const ws = wsRef.current;
@@ -4265,7 +3746,6 @@ export function useDaemonSocket({
         return;
       }
       const key = `screen_snapshot_${runtimeId}`;
-      // A newer request supersedes any in-flight one for the same runtime.
       pendingActionsRef.current.get(key)?.resolve(null);
       pendingActionsRef.current.set(key, { resolve, reject: () => resolve(null) });
       ws.send(JSON.stringify({ cmd: 'get_screen_snapshot', id: runtimeId }));
@@ -4278,8 +3758,6 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Annotation identity is opaque; typed source fields are what the daemon
-  // validates and acts on. Never recover a path or seed id from the URI.
   const sendMarkdownAnnotationsCommand = useCallback(<T,>(
     op: 'get' | 'save' | 'clear' | 'submit',
     source: MarkdownDocumentSource,
@@ -4314,7 +3792,7 @@ export function useDaemonSocket({
     const inflightKey = source.uri;
     const inflight = mdAnnotationsGetInflightRef.current.get(inflightKey);
     if (inflight) {
-      return inflight; // share the round-trip (see ref comment)
+      return inflight;
     }
     const promise: Promise<{ annotations: MarkdownAnnotation[]; generation: number }> =
       sendMarkdownAnnotationsCommand<{ annotations: MarkdownAnnotation[]; generation: number }>(
@@ -4342,9 +3820,6 @@ export function useDaemonSocket({
       'clear', source, { generation },
     ), [sendMarkdownAnnotationsCommand]);
 
-  // Format the persisted draft and submit it to one typed destination. Pending
-  // key `submit:<uri>` keeps this last-writer-wins per document. Resolves the
-  // accepted/skipped status and rejects on `status:"error"`.
   const submitMarkdownAnnotations = useCallback((
     source: MarkdownDocumentSource,
     destination: MarkdownAnnotationsDestination,
@@ -4359,12 +3834,10 @@ export function useDaemonSocket({
     ));
   }, [sendMarkdownAnnotationsCommand]);
 
-  // Mute a PR with optimistic update
   const sendMutePR = useCallback((prId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Optimistic update - toggle PR muted state immediately
     const updatedPRs = prsRef.current.map(pr =>
       pr.id === prId ? { ...pr, muted: !pr.muted } : pr
     );
@@ -4374,12 +3847,10 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'mute_pr', id: prId }));
   }, []);
 
-  // Mute a repo with optimistic update
   const sendMuteRepo = useCallback((repo: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Optimistic update - toggle repo muted state immediately
     const existingRepo = reposRef.current.find(r => r.repo === repo);
     let updatedRepos: RepoState[];
     if (existingRepo) {
@@ -4387,7 +3858,6 @@ export function useDaemonSocket({
         r.repo === repo ? { ...r, muted: !r.muted } : r
       );
     } else {
-      // Repo doesn't exist in state yet, add it as muted
       updatedRepos = [...reposRef.current, { repo, muted: true, collapsed: false }];
     }
     reposRef.current = updatedRepos;
@@ -4396,12 +3866,10 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'mute_repo', repo }));
   }, []);
 
-  // Mute a PR author with optimistic update
   const sendMuteAuthor = useCallback((author: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Optimistic update - toggle author muted state immediately
     const existingAuthor = authorsRef.current.find(a => a.author === author);
     let updatedAuthors: AuthorState[];
     if (existingAuthor) {
@@ -4409,7 +3877,6 @@ export function useDaemonSocket({
         a.author === author ? { ...a, muted: !a.muted } : a
       );
     } else {
-      // Author doesn't exist in state yet, add it as muted
       updatedAuthors = [...authorsRef.current, { author, muted: true }];
     }
     authorsRef.current = updatedAuthors;
@@ -4418,7 +3885,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'mute_author', author }));
   }, []);
 
-  // Mute a workspace (toggle muted state)
   const sendMuteWorkspace = useCallback((workspaceId: string, endpointId?: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4439,7 +3905,6 @@ export function useDaemonSocket({
     }));
   }, []);
 
-  // Pins one session out of the queue, leaving its workspace and siblings in it.
   const sendPinSession = useCallback((sessionId: string, pinned: boolean) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4450,19 +3915,16 @@ export function useDaemonSocket({
     }));
   }, []);
 
-  // Request daemon to refresh PRs from GitHub
   const sendRefreshPRs = useCallback((): Promise<PRActionResult> => {
     const key = 'refresh_prs';
     return sendKeyedRequest<PRActionResult>(key, { cmd: 'refresh_prs' }, 'Refresh timed out', GITHUB_REFRESH_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  // Fetch PR details (branch, status) for a repo
   const sendFetchPRDetails = useCallback((id: string): Promise<FetchPRDetailsResult> => {
     const key = 'fetch_pr_details';
     return sendKeyedRequest<FetchPRDetailsResult>(key, { cmd: 'fetch_pr_details', id }, 'Fetch PR details timed out', GITHUB_REFRESH_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  // Clear all sessions from daemon
   const sendClearSessions = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4590,10 +4052,6 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Pin (cap > 0) or clear (cap 0) a per-session context-window cap. The daemon
-  // stores the pin and reloads a live agent in place so it applies immediately.
-  // Last-writer-wins per session: a second cap for the same session supersedes
-  // the first rather than queueing behind it, so the key is the session id.
   const sendSetSessionContextWindowCap = useCallback((sessionId: string, cap: number): Promise<void> => {
     if (!sessionId) {
       return Promise.reject(new Error('Session is required'));
@@ -4609,7 +4067,6 @@ export function useDaemonSocket({
     );
   }, [sendKeyedRequest]);
 
-  // Unregister a single session from daemon
   const sendUnregisterSession = useCallback((sessionId: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (!sessionId) {
@@ -4637,12 +4094,10 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Mark a PR as visited (clears HasNewChanges flag)
   const sendPRVisited = useCallback((prId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Optimistic update - clear has_new_changes immediately
     const updatedPRs = prsRef.current.map(pr =>
       pr.id === prId ? { ...pr, has_new_changes: false } : pr
     );
@@ -4714,12 +4169,10 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Set a setting value with optimistic update
   const sendSetSetting = useCallback((key: string, value: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    // Optimistic update
     settingsRef.current = { ...settingsRef.current, [key]: value };
     callbacksRef.current.onSettingsUpdate?.(settingsRef.current);
 
@@ -4896,19 +4349,12 @@ export function useDaemonSocket({
     return sendKeyedRequest<DaemonWorkspaceContext[]>(key, { cmd: 'workspace_context_list', request_id: requestId }, 'Workspace context list timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  // List Notebook notes (metadata only). Optional prefix scopes a subtree.
   const sendNotebookList = useCallback((prefix?: string): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_list', { ...(prefix ? { prefix } : {}) }, 'Notebook list timed out'), [sendRequest]);
 
-  // Read one Notebook note's full bytes + content hash.
   const sendNotebookRead = useCallback((path: string): Promise<NotebookReadResult> =>
     sendRequest<NotebookReadResult>('notebook_read', { path }, 'Notebook read timed out'), [sendRequest]);
 
-  // Fetch the assistant messages terminal annotations can anchor to — recent
-  // ones, not only the newest, so a turn scrolling past stays annotatable. An
-  // empty list is a success: the transcript holds no annotatable prose (a
-  // structured verdict, or pure tool activity), and the caller says so rather
-  // than offering an empty annotation surface.
   const sendSessionMessagesGet = useCallback((sessionId: string): Promise<SessionMessageWindow> => {
     return sendRequest('session_messages_get', { session_id: sessionId }, 'Session message fetch timed out');
   }, [sendRequest]);
@@ -4926,14 +4372,10 @@ export function useDaemonSocket({
     };
   }, []);
 
-  // Read a session's persisted annotations. `generation` is the floor a save
-  // has to beat, which the caller seeds its counter from.
   const sendSessionAnnotationsGet = useCallback((sessionId: string): Promise<SessionAnnotationSet> => {
     return sendRequest('session_annotations_get', { session_id: sessionId }, 'Session annotation fetch timed out');
   }, [sendRequest]);
 
-  // Persist the full annotation list. `stale: true` means a newer write won;
-  // that is an outcome to re-hydrate from, not an error.
   const sendSessionAnnotationsSave = useCallback((
     sessionId: string,
     annotations: readonly DaemonSessionAnnotation[],
@@ -4947,7 +4389,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Tombstone a session's annotations, which is what sending them does.
   const sendSessionAnnotationsClear = useCallback((
     sessionId: string,
     generation: number,
@@ -4959,10 +4400,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Deliver the composed annotation feedback into the session — typed as one
-  // pasted block and then submitted, both daemon-side. Resolves with the status
-  // for `delivered` and `skipped_pending_approval` alike; rejects on error. Only
-  // `delivered` means the marks were spent.
   const sendSessionAnnotationsSubmit = useCallback((
     sessionId: string,
     text: string,
@@ -4974,12 +4411,6 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
-  // Reopen the session tending a seed — the way back to a delegate whose session
-  // is gone. The daemon owns the whole resume composite (register workspace + add
-  // pane + spawn, with rollback), so this sends the command and resolves with the
-  // session to focus; the session and pane arrive over the normal broadcasts. A
-  // tender still running resolves as alreadyRunning, which is the same thing to
-  // focus.
   const sendSeedResume = useCallback(
     (seedId: string): Promise<{ sessionId: string; workspaceId?: string; alreadyRunning?: boolean }> => {
       return new Promise((resolve, reject) => {
@@ -5003,11 +4434,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // Start a crew member's day. The daemon owns the whole composite — bind,
-  // register the member's workspace, add the pane, spawn primed — so this sends
-  // one command and resolves with the session to focus; the session and pane
-  // arrive over the normal broadcasts. A member already awake resolves with its
-  // running day (alreadyAwake), which is the same thing to focus.
   const sendCrewWake = useCallback(
     (member: string): Promise<{ sessionId: string; alreadyAwake: boolean }> => {
       return new Promise((resolve, reject) => {
@@ -5031,8 +4457,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // Ask an awake member to close its day. The daemon delivers the request over
-  // the agent-message rail; the member remains awake until it files its letter.
   const sendCrewSleep = useCallback(
     (member: string): Promise<CrewSleepResult> => sendRequest(
       'crew_sleep',
@@ -5042,17 +4466,12 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
-  // List the durable runner's tasks (newest-updated first). Resolves with an empty
-  // array when the runner is disabled or has no tasks.
   const sendTaskList = useCallback((): Promise<Task[]> => {
     const requestId = nextRequestID('task_list');
     const key = `task_list:${requestId}`;
     return sendKeyedRequest<Task[]>(key, { cmd: 'task_list', request_id: requestId }, 'Notebook task list timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  // Force a failed|dead task back to queued (runs immediately). Resolves with the
-  // requeued task, or null when the task was non-terminal (a no-op retry). The
-  // tasks_changed broadcast then drives the panel's refetch.
   const sendTaskRetry = useCallback((taskId: string): Promise<Task | null> => {
     const requestId = nextRequestID('task_retry');
     const key = `task_retry:${requestId}`;
@@ -5063,9 +4482,6 @@ export function useDaemonSocket({
     }, 'Notebook task retry timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  // List the global notification feed (newest first) with the current unread
-  // count. The notifications_updated broadcast drives live refreshes; this is the
-  // on-open/authoritative read.
   const sendNotificationList = useCallback((): Promise<{
     notifications: DaemonNotification[];
     unreadCount: number;
@@ -5080,9 +4496,6 @@ export function useDaemonSocket({
   }>(key, { cmd: 'notification_list', request_id: requestId }, 'Notification list timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  // Mark a notification read (notificationId set) or every unread one (undefined).
-  // Resolves with the post-mark unread count; the notifications_updated broadcast
-  // then refreshes any open panel.
   const sendNotificationMarkRead = useCallback((notificationId?: string): Promise<number> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -5109,42 +4522,24 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  // List the notes whose body links to `path` (root-absolute markdown links).
   const sendNotebookBacklinks = useCallback((path: string): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_backlinks', { path }, 'Notebook backlinks timed out'), [sendRequest]);
 
-  // Save one Notebook note via the daemon (hash-CAS). Omit baseHash to create-only;
-  // pass the note's loaded hash to edit. Resolves with the outcome — including a
-  // conflict (resolve, not reject) the editor reconciles; rejects only on a
-  // transport/daemon error.
   const sendNotebookWrite = useCallback((path: string, content: string, baseHash?: string): Promise<NotebookWriteResult> =>
     sendRequest<NotebookWriteResult>('notebook_write', { path, content, ...(baseHash ? { base_hash: baseHash } : {}) }, 'Notebook save timed out'), [sendRequest]);
 
-  // Hand a Notebook selection to the daemon to deliver to the chief of staff. The
-  // daemon appends it to the chief inbox note and (if a chief is live and idle)
-  // nudges its PTY. The UI never messages the chief directly. Resolves with the
-  // inbox path + whether a live nudge fired; rejects on a transport/daemon error.
   const sendNotebookToChief = useCallback((selection: string, sourcePath?: string): Promise<NotebookSendToChiefResult> =>
     sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
 
-  // List one directory's immediate children over the generic filesystem surface.
-  // Omit/empty path = the root directory. Shallow: a tree expands lazily, one call
-  // per node.
   const sendFsList = useCallback((path?: string, root?: string): Promise<FsEntry[]> =>
     sendRequest<FsEntry[]>('fs_list', { ...(path ? { path } : {}), ...(root ? { root } : {}) }, 'Filesystem list timed out'), [sendRequest]);
 
-  // Read one file's full bytes + content hash.
   const sendFsRead = useCallback((path: string, root?: string): Promise<FsReadResult> =>
     sendRequest<FsReadResult>('fs_read', { path, ...(root ? { root } : {}) }, 'Filesystem read timed out'), [sendRequest]);
 
-  // Read one image asset's bytes as base64, for rendering ![alt](path) images in
-  // the notebook editor without widening Tauri's fs permissions.
   const sendFsReadAsset = useCallback((path: string, root?: string): Promise<FsReadAssetResult> =>
     sendRequest<FsReadAssetResult>('fs_read_asset', { path, ...(root ? { root } : {}) }, 'Filesystem asset read timed out'), [sendRequest]);
 
-  // Save one file via the daemon (hash-CAS). Omit baseHash to create-only; pass the
-  // file's loaded hash to edit. Resolves with the outcome — including a conflict
-  // (resolve, not reject) the editor reconciles; rejects only on a transport error.
   const sendFsWrite = useCallback((path: string, content: string, baseHash?: string, root?: string): Promise<FsWriteResult> =>
     sendRequest<FsWriteResult>('fs_write', { path, content, ...(baseHash ? { base_hash: baseHash } : {}), ...(root ? { root } : {}) }, 'Filesystem save timed out'), [sendRequest]);
 
@@ -5154,38 +4549,18 @@ export function useDaemonSocket({
   const sendFsDelete = useCallback((path: string, root?: string): Promise<FsDeleteResult> =>
     sendRequest<FsDeleteResult>('fs_delete', { path, ...(root ? { root } : {}) }, 'Filesystem delete timed out'), [sendRequest]);
 
-  // Check whether a path exists under the notebook root, without reading it. Used
-  // to flag in-notebook markdown links whose target note is missing. Rejects on a
-  // transport/daemon error (the caller leaves the link unflagged in that case).
   const sendFsExists = useCallback((path: string, root?: string): Promise<FsExistsResult> =>
     sendRequest<FsExistsResult>('fs_exists', { path, ...(root ? { root } : {}) }, 'Filesystem exists check timed out'), [sendRequest]);
 
-  // Subscribe this client to fs_changed broadcasts for root (undefined/empty =
-  // the notebook root, which is always watched already). Refcounted on the
-  // daemon side, so repeat calls and multiple subscribers share one watcher; pair
-  // with sendFsUnwatch when live updates are no longer needed.
   const sendFsWatch = useCallback((root?: string): Promise<FsWatchResult> =>
     sendRequest<FsWatchResult>('fs_watch', { ...(root ? { root } : {}) }, 'Filesystem watch timed out'), [sendRequest]);
 
-  // Drop this client's subscription from sendFsWatch. A success no-op if this
-  // client never watched root, or root is the notebook root (always watched
-  // independent of subscriptions).
   const sendFsUnwatch = useCallback((root?: string): Promise<FsWatchResult> =>
     sendRequest<FsWatchResult>('fs_unwatch', { ...(root ? { root } : {}) }, 'Filesystem unwatch timed out'), [sendRequest]);
 
-  // Bounded recursive file index of root (undefined/empty = the notebook
-  // root), for the ⌘P finder. No client-controlled limit — the daemon caps
-  // entries server-side and reports truncated=true if the walk was cut short.
-  // extensions (dotless, case-insensitive) filter server-side, before the cap,
-  // so asking for markdown cannot be truncated away by files nobody wanted.
   const sendFsIndex = useCallback((root?: string, extensions?: string[]): Promise<FsIndexResult> =>
     sendRequest<FsIndexResult>('fs_index', { ...(root ? { root } : {}), ...(extensions && extensions.length > 0 ? { extensions } : {}) }, 'Filesystem index timed out'), [sendRequest]);
 
-  // Get recent locations from daemon
-  // Files recently opened as reader tiles or written by an agent, frecency-ranked
-  // and merged per file. Recorded daemon-side — every route into a markdown tile
-  // plus the tool-use hook — so this list needs no client bookkeeping. root is the
-  // caller's workspace, which ranks its own files above equally-scored strangers.
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -5216,7 +4591,6 @@ export function useDaemonSocket({
         request_id: requestId,
       }));
 
-      // Timeout after 10 seconds
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -5226,9 +4600,6 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  // extensions (dotless, e.g. ['md']) widens the listing from directories-only
-  // to directories plus matching files. The daemon gates that variant on this
-  // client's app identity, since file names are documents rather than tree shape.
   const sendBrowseDirectory = useCallback((inputPath: string, endpointId?: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
     const requestId = nextRequestID('browse_directory');
     const key = `browse_directory_${requestId}`;
@@ -5252,7 +4623,6 @@ export function useDaemonSocket({
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  // Create worktree from existing branch
   const sendCreateWorktreeFromBranch = useCallback((mainRepo: string, branch: string, path?: string): Promise<WorktreeActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -5280,13 +4650,11 @@ export function useDaemonSocket({
     });
   }, []);
 
-  // Fetch all remotes
   const sendFetchRemotes = useCallback((repo: string): Promise<FetchRemotesResult> => {
     const key = 'fetch_remotes';
     return sendKeyedRequest<FetchRemotesResult>(key, { cmd: 'fetch_remotes', repo }, 'Fetch remotes timed out', GIT_NETWORK_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  // Ensure repo exists (clone if needed) and fetch remotes
   const sendEnsureRepo = useCallback((targetPath: string, cloneUrl: string): Promise<EnsureRepoResult> => {
     const key = 'ensure_repo';
     return sendKeyedRequest<EnsureRepoResult>(key, {
@@ -5296,7 +4664,6 @@ export function useDaemonSocket({
     }, 'Ensure repo timed out', GIT_CLONE_TIMEOUT_MS);
   }, [sendKeyedRequest]);
 
-  // Subscribe to git status updates for a directory
   const sendSubscribeGitStatus = useCallback((directory: string) => {
     const previousDirectory = gitStatusSubscriptionRef.current;
     if (previousDirectory === directory) return;
@@ -5311,7 +4678,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'subscribe_git_status', directory }));
   }, []);
 
-  // Unsubscribe from git status updates
   const sendUnsubscribeGitStatus = useCallback(() => {
     const hadSubscription = gitStatusSubscriptionRef.current;
     gitStatusSubscriptionRef.current = null;
@@ -5323,7 +4689,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
   }, []);
 
-  // Records the session the UI is showing, so `attn open` targets it.
   const sendSessionSelected = useCallback((id: string) => {
     selectedSessionRef.current = id;
     const ws = wsRef.current;
@@ -5338,68 +4703,43 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'workspace_selected', workspace_id: workspaceId }));
   }, []);
 
-  // Deliver a session's pending ticket nudge now, bypassing the countdown. Fire and
-  // forget: the daemon re-checks idle/unread and doorbells (exempt from the keystroke
-  // guard — an explicit click is unambiguous intent), then broadcasts the cleared state.
   const sendTriggerNudge = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'trigger_nudge', session_id: sessionId }));
   }, []);
 
-  // Close the turn a session opened. It is the only way a turn ends: no state
-  // transition takes a session out of the queue, so this is also the ordinary
-  // move on an agent that is still running. Fire and forget — the daemon stamps
-  // and re-broadcasts the session.
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: sessionId }));
   }, []);
 
-  // Defer a session until an instant. Closes any open turn and stops the next
-  // one opening before then, so an agent you cannot act on yet leaves the queue
-  // without being pretended-settled. `until` is absolute and computed here:
-  // "tomorrow" and "Monday" need the user's timezone, which the daemon that owns
-  // a remote session does not share. Fire and forget.
   const sendSnoozeTurn = useCallback((sessionId: string, until: Date) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'snooze_turn', session_id: sessionId, until: until.toISOString() }));
   }, []);
 
-  // End a snooze early. Whether a turn then opens depends on the state the agent
-  // is in, which is the daemon's call. Fire and forget.
   const sendWakeTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'wake_turn', session_id: sessionId }));
   }, []);
 
-  // Call off whatever attn is counting down to on this session — the auto-settle
-  // about to close a turn, the ticket nudge about to doorbell the agent, or both.
-  // The daemon cancels every countdown the session has and keeps each cancelled
-  // until something genuinely new happens, so it survives the agent simply
-  // carrying on. Fire and forget — the daemon re-broadcasts the session without
-  // its deadlines.
   const sendCancelCountdown = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  // Get file diff
-  // Options: staged (deprecated), baseRef (for PR-like branch diffs), headRef
-  // (pins the modified side to a commit instead of the working tree — used by
-  // the presentation reader for base_sha->head_sha diffs)
   const sendGetFileDiff = useCallback((
     directory: string,
     path: string,
     options?: { staged?: boolean; baseRef?: string; headRef?: string }
   ): Promise<FileDiffResult> => {
-    // Key by request id, not path: two in-flight requests for the same path
-    // (e.g. a stale round's late reply racing a new round's request) must not
-    // clobber each other's pending promise.
+    // Key by request id, not path: a stale round's late reply racing a new round's request must not
+    // clobber the pending promise.
     const requestId = nextRequestID('get_file_diff');
     const key = `get_file_diff_${requestId}`;
     return sendKeyedRequest<FileDiffResult>(key, {
@@ -5413,7 +4753,6 @@ export function useDaemonSocket({
     }, 'Get file diff timed out', GIT_DIFF_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  // Get repo info
   const getRepoInfo = useCallback((repo: string, endpointId?: string): Promise<RepoInfoResult> => {
     const key = `repo_info_${endpointId || 'local'}_${repo}`;
     return sendKeyedRequest<RepoInfoResult>(key, {
@@ -5450,9 +4789,6 @@ export function useDaemonSocket({
         reject,
       });
       ws.send(JSON.stringify({ cmd: 'automation_definitions_get', request_id: requestId }));
-      // Mutations can serialize behind an in-flight automation delivery
-      // (daemon holds automationMu across full run delivery); 30s matches the
-      // repo's async-action convention.
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -5476,9 +4812,6 @@ export function useDaemonSocket({
         reject,
       });
       ws.send(JSON.stringify({ cmd: 'automation_runs_get', definition_id: definitionId, request_id: requestId }));
-      // Mutations can serialize behind an in-flight automation delivery
-      // (daemon holds automationMu across full run delivery); 30s matches the
-      // repo's async-action convention.
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -5497,17 +4830,10 @@ export function useDaemonSocket({
       }
       const requestId = nextRequestID('automation_set_enabled');
       const key = `automation:${requestId}`;
-      // Success carries the daemon's updated definition, but canonical state
-      // flows back through the automations_changed broadcast + refetch, not
-      // this promise — resolve void and let the caller's store stay
-      // untouched here.
       pendingActionsRef.current.set(key, { resolve: () => resolve(undefined), reject });
       ws.send(
         JSON.stringify({ cmd: 'automation_set_enabled', definition_id: definitionId, enabled, request_id: requestId }),
       );
-      // Mutations can serialize behind an in-flight automation delivery
-      // (daemon holds automationMu across full run delivery); 30s matches the
-      // repo's async-action convention.
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
@@ -5525,22 +4851,12 @@ export function useDaemonSocket({
           reject(new Error('WebSocket not connected'));
           return;
         }
-        // requestId is caller-owned (useAutomationsStore's
-        // ensureRunRequest), not nextRequestID's counter scheme: the daemon
-        // persists it as ClaimManualAutomationRun's idempotency key
-        // (internal/daemon/automations.go automationRun), so callers reuse
-        // the same id across a retry of the same click (e.g. after this
-        // promise rejects with AutomationActionTimeoutError) to claim the
-        // same run instead of creating a duplicate.
         const key = `automation:${requestId}`;
         pendingActionsRef.current.set(key, {
           resolve: (result: any) => resolve(result.run as AutomationRunSummary | undefined),
           reject,
         });
         ws.send(JSON.stringify({ cmd: 'automation_run', definition_id: definitionId, request_id: requestId }));
-        // Mutations can serialize behind an in-flight automation delivery
-        // (daemon holds automationMu across full run delivery); 30s matches
-        // the repo's async-action convention.
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
@@ -5552,11 +4868,6 @@ export function useDaemonSocket({
     [],
   );
 
-  // getAutomationDefinition backs the editor's load path. definitionId '' asks
-  // for the starter template (the create case, D7 in the design) — create and
-  // edit share this one call. The template response carries no `definition`
-  // (revision 0, unsaved); an edit's response carries the current definition
-  // summary, whose `.revision` is what the editor tracks for Save's guard.
   const getAutomationDefinition = useCallback(
     (
       definitionId: string,
@@ -5581,11 +4892,6 @@ export function useDaemonSocket({
         ws.send(
           JSON.stringify({ cmd: 'automation_definition_get', definition_id: definitionId, request_id: requestId }),
         );
-        // Mutations can serialize behind an in-flight automation delivery
-        // (daemon holds automationMu across full run delivery); 30s matches the
-        // repo's async-action convention. get/definition_get is read-only and
-        // doesn't itself take automationMu, but shares the same timeout for
-        // consistency with the rest of the automations WS surface.
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
@@ -5597,12 +4903,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // applyAutomationDefinition is validate-then-persist, carrying expected_id
-  // (D4) and expected_revision (D5) so the daemon can refuse an id change or a
-  // stale save. expectedId is '' when creating, expectedRevision is 0 when
-  // creating — matching AutomationEditor's loadedId/revision state, which
-  // start from getAutomationDefinition('')'s template response. The result's
-  // revision lives on `definition.revision`, not a top-level field.
   const applyAutomationDefinition = useCallback(
     (
       definitionYaml: string,
@@ -5634,9 +4934,6 @@ export function useDaemonSocket({
             request_id: requestId,
           }),
         );
-        // Mutations can serialize behind an in-flight automation delivery
-        // (daemon holds automationMu across full run delivery); 30s matches
-        // the repo's async-action convention.
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
@@ -5648,11 +4945,6 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // deleteAutomationDefinition removes a persisted definition. Mirrors
-  // applyAutomationDefinition's mutation-serialization comment: mutations can
-  // serialize behind an in-flight automation delivery (daemon holds
-  // automationMu across full run delivery); 30s matches the repo's
-  // async-action convention.
   const deleteAutomationDefinition = useCallback(
     (definitionId: string): Promise<void> => {
       return new Promise((resolve, reject) => {
@@ -5678,13 +4970,11 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
-  // Fetch the current open/closed presentations (for the main-window banner).
   const getPresentations = useCallback((): Promise<Presentation[]> => {
     const key = 'get_presentations';
     return sendKeyedRequest<Presentation[]>(key, { cmd: 'get_presentations' }, 'Get presentations timed out', 30000);
   }, [sendKeyedRequest]);
 
-  // Fetch a presentation's round (defaults to latest) for the PresentRoot window.
   const getPresentationRound = useCallback((
     presentationId: string,
     seq?: number,
@@ -5697,9 +4987,6 @@ export function useDaemonSocket({
     }, 'Get presentation round timed out', 30000);
   }, [sendKeyedRequest]);
 
-  // Hand a round's review back to the authoring agent (presentation reader).
-  // verdict is "approved" (comments allowed alongside — approve-with-nits) or
-  // "feedback" (today's plain handback).
   const submitPresentationRound = useCallback((input: {
     roundId: string;
     verdict: 'approved' | 'feedback';
@@ -5716,8 +5003,6 @@ export function useDaemonSocket({
     }, 'Submit presentation round timed out', 30000);
   }, [sendKeyedRequest]);
 
-  // Dismiss a presentation without a review: no round submission, no
-  // handback — the presentation's status moves straight to "closed".
   const closePresentation = useCallback((presentationId: string): Promise<{ presentationId: string }> => {
     const key = 'present_close';
     return sendKeyedRequest<{ presentationId: string }>(key, { cmd: 'present_close', presentation_id: presentationId, }, 'Close presentation timed out', 30000);

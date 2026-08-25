@@ -1,17 +1,3 @@
-// Package enrollment answers two questions about a daemon's data dir from two
-// files that sit beside each other: who this daemon is (`daemon-id`) and whose
-// it is (`enrollment.json`).
-//
-// A record naming the daemon itself means a home daemon — it owns its garden,
-// its crew, and every other piece of user-level shared state. A record naming
-// another daemon means an outpost of that home, which owns none of it.
-// Status.RequireHome is the fence: the single place code asks whether
-// home-level state may live here, so nothing has to check the record ad hoc.
-//
-// Both files are written under an flock on a sibling `.lock` file, because a
-// daemon starting on the outpost and a home enrolling it over ssh reach the
-// same directory at the same time.
-//
 // Design: docs/plans/2026-08-10-home-garden-crew-arc.md
 package enrollment
 
@@ -29,43 +15,29 @@ import (
 )
 
 const (
-	// DaemonIDFileName holds the daemon's own durable `d-<32 hex>` identity.
 	DaemonIDFileName = "daemon-id"
-	// RecordFileName holds the enrollment record, beside the daemon id.
-	RecordFileName = "enrollment.json"
-	// PlanPath is quoted in refusals so whoever hits one can read why.
-	PlanPath = "docs/plans/2026-08-10-home-garden-crew-arc.md"
+	RecordFileName   = "enrollment.json"
+	PlanPath         = "docs/plans/2026-08-10-home-garden-crew-arc.md"
 )
 
-// ErrNoRecord reports a data dir with no enrollment record at all. Every daemon
-// writes one at startup, so this means the daemon has never run here, or the
-// file was removed by hand.
 var ErrNoRecord = errors.New("no enrollment record")
 
-// ErrNoDaemonID reports a data dir with no daemon id: nothing has ever started
-// here, so there is no identity to enroll or release.
 var ErrNoDaemonID = errors.New("no daemon id")
 
-// Record is the on-disk enrollment record. A home daemon's record names the
-// daemon itself; an outpost's names its home.
 type Record struct {
 	HomeDaemonID string `json:"home_daemon_id"`
 	RecordedAt   string `json:"recorded_at,omitempty"`
 }
 
-// Status is the resolved relationship: this daemon's id, and the id of the
-// daemon that owns its home-level state.
 type Status struct {
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
 }
 
-// IsHome reports whether this daemon is its own home.
 func (s Status) IsHome() bool {
 	return s.DaemonID != "" && s.DaemonID == s.HomeDaemonID
 }
 
-// Describe renders the relationship the way health output and logs say it.
 func (s Status) Describe() string {
 	if s.IsHome() {
 		return "home"
@@ -76,9 +48,6 @@ func (s Status) Describe() string {
 	return "outpost of " + s.HomeDaemonID
 }
 
-// RequireHome is the fence. Garden, crew, and anything else the home owns asks
-// it before touching state; surface names the thing being refused, in words a
-// reader recognises ("the garden", "the crew roster").
 func (s Status) RequireHome(surface string) error {
 	if s.IsHome() {
 		return nil
@@ -86,9 +55,6 @@ func (s Status) RequireHome(surface string) error {
 	return &FencedError{Surface: surface, DaemonID: s.DaemonID, HomeDaemonID: s.HomeDaemonID}
 }
 
-// FencedError is what an outpost answers when asked to hold home-level state.
-// It names what refused, why, and both ways forward — run it at home, or make
-// this daemon a home again.
 type FencedError struct {
 	Surface      string
 	DaemonID     string
@@ -129,9 +95,6 @@ func displayID(id string) string {
 	return id
 }
 
-// ForeignHomeError is the re-home refusal: this daemon is already enrolled to a
-// home, and a different one asked to take it. Enrollment is never overwritten
-// silently, so the decision goes back to whoever made it.
 type ForeignHomeError struct {
 	DaemonID     string
 	CurrentHome  string
@@ -150,10 +113,7 @@ func (e *ForeignHomeError) Error() string {
 	)
 }
 
-// Result is what a write returns, and the JSON `attn enrollment` prints. The
-// hub reads it back over ssh, so the wording lands in the home's log verbatim.
 type Result struct {
-	// Status is one of: enrolled, unchanged, left, refused.
 	Status       string `json:"status"`
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
@@ -161,13 +121,10 @@ type Result struct {
 	Message      string `json:"message"`
 }
 
-// Changed reports whether the record on disk moved.
 func (r Result) Changed() bool {
 	return r.Status == "enrolled" || r.Status == "left"
 }
 
-// EnsureDaemonID returns this data dir's durable daemon id, minting it on first
-// call. Concurrent daemons agree because the write happens under an flock.
 func EnsureDaemonID(dataRoot string) (string, error) {
 	if strings.TrimSpace(dataRoot) == "" {
 		return "", fmt.Errorf("missing data root")
@@ -197,8 +154,6 @@ func EnsureDaemonID(dataRoot string) (string, error) {
 	return id, nil
 }
 
-// ReadDaemonID returns the daemon id already on disk, or ErrNoDaemonID when
-// nothing has ever started in this data dir.
 func ReadDaemonID(dataRoot string) (string, error) {
 	id, err := readDaemonIDFile(filepath.Join(dataRoot, DaemonIDFileName))
 	if err != nil {
@@ -207,9 +162,6 @@ func ReadDaemonID(dataRoot string) (string, error) {
 	return id, nil
 }
 
-// Ensure resolves this daemon's enrollment at startup, writing the home record
-// on a fresh install: a daemon nobody enrolled is its own home, and the record
-// says so rather than leaving the question open.
 func Ensure(dataRoot, daemonID string) (Status, error) {
 	if !ValidDaemonID(daemonID) {
 		return Status{}, fmt.Errorf("invalid daemon id %q", daemonID)
@@ -235,8 +187,6 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 	}
 }
 
-// Load reads the relationship without writing anything. Callers on the fence
-// path use it, so an unreadable record fails the check rather than passing it.
 func Load(dataRoot string) (Status, error) {
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil && !errors.Is(err, ErrNoDaemonID) {
@@ -249,9 +199,6 @@ func Load(dataRoot string) (Status, error) {
 	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
 }
 
-// Enroll records homeDaemonID as this daemon's home. A daemon that is its own
-// home (or has no record yet) enrolls; one already enrolled to the same home is
-// unchanged; one enrolled elsewhere refuses with ForeignHomeError.
 func Enroll(dataRoot, homeDaemonID string) (Result, error) {
 	if !ValidDaemonID(homeDaemonID) {
 		return Result{}, fmt.Errorf("invalid home daemon id %q (want d- followed by 32 hex characters)", homeDaemonID)
@@ -289,7 +236,6 @@ func Enroll(dataRoot, homeDaemonID string) (Result, error) {
 			Message:      fmt.Sprintf("already an outpost of %s", homeDaemonID),
 		}, nil
 	case "", daemonID:
-		// Never enrolled, or its own home: this is the enrolling act.
 	default:
 		refusal := &ForeignHomeError{DaemonID: daemonID, CurrentHome: current, RequestedBy: homeDaemonID}
 		return Result{
@@ -313,9 +259,6 @@ func Enroll(dataRoot, homeDaemonID string) (Result, error) {
 	}, nil
 }
 
-// Leave is the way out of enrollment: this daemon becomes its own home again,
-// which is also what a second home's operator has to do here before that home
-// may take it.
 func Leave(dataRoot string) (Result, error) {
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil {
@@ -357,7 +300,6 @@ func Leave(dataRoot string) (Result, error) {
 	}, nil
 }
 
-// ValidDaemonID reports whether id has the durable `d-<32 hex>` shape.
 func ValidDaemonID(id string) bool {
 	if !strings.HasPrefix(id, "d-") {
 		return false
@@ -436,12 +378,8 @@ func writeFileAtomic(path string, data []byte) error {
 	return nil
 }
 
-// lockPath takes an exclusive flock on <path>.lock and returns the release. The
-// lock file is never removed: unlinking it would let a later locker create a
-// fresh inode and hold an uncontended lock against a live one.
-//
-// It creates the data dir first, because a home enrolls a remote that has never
-// run a daemon — there is nothing there yet but the binary.
+// lockPath takes an exclusive flock on <path>.lock and returns the release. The lock
+// file is never removed: unlinking it lets a later locker hold an uncontended lock.
 func lockPath(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, fmt.Errorf("create data root: %w", err)

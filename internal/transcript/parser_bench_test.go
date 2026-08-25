@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// Synthetic JSONL line shapes used to build a realistic-mix transcript
-// fixture without committing a multi-MB blob. Built via encoding/json
-// (never hand-concatenated strings), so every generated line is guaranteed
-// valid JSON.
-
 type benchContentBlock struct {
 	Type  string          `json:"type"`
 	Text  string          `json:"text,omitempty"`
@@ -49,8 +44,6 @@ type benchCodexEventMsg struct {
 	} `json:"payload"`
 }
 
-// benchAssistantText is a few hundred chars, roughly what a real assistant
-// turn looks like.
 const benchAssistantText = "I've reviewed the change and it looks correct. The fix addresses the " +
 	"root cause rather than papering over the symptom, and the added test exercises the failing " +
 	"path directly. One small note: consider extracting the retry helper if a third caller shows " +
@@ -84,9 +77,6 @@ func userLine(tb testing.TB, index int) []byte {
 	return marshalLine(tb, e)
 }
 
-// assistantToolUseLine is a tool_use-style content block with no text block,
-// forcing extractTextContent to walk the block array and come up empty for
-// this line (realistic: tool-call entries don't carry assistant prose).
 func assistantToolUseLine(tb testing.TB, index int, ts time.Time) []byte {
 	var e benchAssistantEntry
 	e.Type = "assistant"
@@ -107,14 +97,6 @@ func codexAgentMessageLine(tb testing.TB, index int) []byte {
 	return marshalLine(tb, e)
 }
 
-// writeSyntheticTranscript writes a deterministic, realistic-shaped JSONL
-// transcript to dir, cycling through a Claude assistant text entry, a Claude
-// user entry, a tool_use-style assistant entry (content-block array with a
-// non-text block), and a codex event_msg agent_message line. It always
-// finishes with an assistant text line after the last user line, so
-// ExtractLastAssistantTurnAfterLastUserSince exercises the full extract path
-// instead of taking the early empty-turn return ("last user has no
-// subsequent assistant yet").
 func writeSyntheticTranscript(tb testing.TB, dir string, numLines int) (path string, fileSize int64) {
 	tb.Helper()
 	path = filepath.Join(dir, "transcript.jsonl")
@@ -141,7 +123,6 @@ func writeSyntheticTranscript(tb testing.TB, dir string, numLines int) (path str
 			tb.Fatal(err)
 		}
 	}
-	// Always finish on a real assistant text line after the last user line.
 	finalTS := base.Add(time.Duration(numLines) * time.Second)
 	if _, err := f.Write(assistantTextLine(tb, numLines, finalTS)); err != nil {
 		tb.Fatal(err)
@@ -157,12 +138,8 @@ func writeSyntheticTranscript(tb testing.TB, dir string, numLines int) (path str
 	return path, info.Size()
 }
 
-// TestSyntheticTranscriptFixtureIsRealistic guards the benchmark fixture's
-// key assumption: it must end with real assistant content after the last
-// user line, not an early empty AssistantTurn{}. If a future edit to the
-// generator (or to ExtractLastAssistantTurnAfterLastUserSince) breaks that,
-// the benchmarks below would silently start measuring the cheap early-return
-// path instead of the full parse — this test catches that.
+// Without a real assistant turn after the last user line the benchmarks would silently
+// measure the cheap early-return path instead of the full parse.
 func TestSyntheticTranscriptFixtureIsRealistic(t *testing.T) {
 	dir := t.TempDir()
 	path, size := writeSyntheticTranscript(t, dir, 40)
@@ -178,18 +155,10 @@ func TestSyntheticTranscriptFixtureIsRealistic(t *testing.T) {
 	}
 }
 
-// benchExtractLastAssistantTurn benchmarks the once-per-assistant-turn
-// transcript parse, which today re-reads the whole file from offset 0 and
-// runs isUserEntry + ExtractAssistantContent (several json.Unmarshal calls
-// each) per line. Parameterizing by line count makes the O(file-size)
-// scaling visible.
 func benchExtractLastAssistantTurn(b *testing.B, numLines int) {
 	dir := b.TempDir()
 	path, fileSize := writeSyntheticTranscript(b, dir, numLines)
 
-	// Sanity check, outside the timed loop: confirm the fixture drives the
-	// full extract path and returns real content rather than the early
-	// empty-turn return, so the benchmark below measures real work.
 	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 2000, time.Time{})
 	if err != nil {
 		b.Fatal(err)
@@ -201,8 +170,7 @@ func benchExtractLastAssistantTurn(b *testing.B, numLines int) {
 	b.ReportAllocs()
 	b.SetBytes(fileSize)
 	b.ResetTimer()
-	// ReportMetric must come after ResetTimer: ResetTimer clears any custom
-	// metrics recorded before it.
+	// ReportMetric must come after ResetTimer, which clears custom metrics recorded before it.
 	b.ReportMetric(float64(fileSize), "fixture_bytes")
 	for i := 0; i < b.N; i++ {
 		if _, err := ExtractLastAssistantTurnAfterLastUserSince(path, 2000, time.Time{}); err != nil {

@@ -21,21 +21,14 @@ const (
 	assistantDedupWindow     = 2 * time.Second
 	transcriptDiscoveryGrace = 2 * time.Second
 
-	// Discovery is a directory walk — codex and copilot search their whole session
-	// tree, thousands of files on a working machine — and it repeats every poll
-	// until it lands. A session that never gets a transcript (one parked at a trust
-	// prompt, one whose agent writes nowhere we look) would otherwise walk that
-	// tree twice a second for as long as it lives. Fast while a transcript is
-	// plausibly still being created, then slow, because after a minute it is not
-	// arriving in the next half second either.
+	// Discovery walks codex's and copilot's whole session tree — thousands of files —
+	// every poll, so back off once a transcript is no longer plausibly being created.
 	transcriptDiscoveryFastAttempts = 20
 	transcriptDiscoverySlowAttempts = 40
 	transcriptDiscoverySlowInterval = 2 * time.Second
 	transcriptDiscoveryIdleInterval = 5 * time.Second
 )
 
-// transcriptDiscoveryDelay is how long to wait before the next discovery attempt
-// after `attempts` have failed. Zero means the next poll.
 func transcriptDiscoveryDelay(attempts int) time.Duration {
 	switch {
 	case attempts < transcriptDiscoveryFastAttempts:
@@ -48,12 +41,10 @@ func transcriptDiscoveryDelay(attempts int) time.Duration {
 }
 
 type transcriptWatcher struct {
-	sessionID string
-	agent     protocol.SessionAgent
-	cwd       string
-	startedAt time.Time
-	// preferredPath is the exact path reported by SessionStart. It is a runtime
-	// hint; after restart the persisted native id resolves the same transcript.
+	sessionID     string
+	agent         protocol.SessionAgent
+	cwd           string
+	startedAt     time.Time
 	preferredPath string
 	behavior      agentdriver.TranscriptWatcherBehavior
 	stopCh        chan struct{}
@@ -64,10 +55,7 @@ type transcriptWatcher struct {
 	detail         string
 	transcriptPath string
 	window         *transcript.AssistantWindow
-	// occupancy is the newest reading of how full this session's context is, or
-	// nil before its first assistant turn. Memory only: it describes a live
-	// session, and the next turn restores it after a daemon restart.
-	occupancy *transcript.ContextObservation
+	occupancy      *transcript.ContextObservation
 }
 
 type assistantWindowSnapshot struct {
@@ -131,9 +119,8 @@ func (w *transcriptWatcher) resetSource(status protocol.SessionMessageWindowStat
 	w.detail = detail
 	w.transcriptPath = path
 	w.window = newAnnotatableWindow()
-	// A transcript attn can no longer vouch for cannot vouch for its context
-	// either. Dropping the reading costs one turn of blindness; keeping a stale
-	// one risks ending a member's day on a number from another file.
+	// A transcript attn can no longer vouch for cannot vouch for its context either:
+	// keeping the reading risks ending a member's day on a number from another file.
 	w.occupancy = nil
 	if omittedPrefix {
 		w.window.MarkPrefixOmitted()
@@ -240,9 +227,6 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	go d.runTranscriptWatcher(watcher)
 }
 
-// restoreTranscriptWatchers gives surviving local runtimes their exact durable
-// resume identity after a daemon restart. Sessions without one stay explicitly
-// unavailable rather than guessing from cwd and recovery time.
 func (d *Daemon) restoreTranscriptWatchers() {
 	if d.store == nil || d.ptyBackend == nil {
 		return
@@ -296,9 +280,8 @@ func (d *Daemon) newSessionCostFollower(w *transcriptWatcher, path string) (*tra
 		return nil, err
 	}
 
-	// A cursor that no longer names this file cannot prove where new traffic
-	// begins. Seed at the current head: replaying can double-charge Codex records,
-	// while skipping an uncertain prefix preserves the forward-only contract.
+	// A cursor that no longer names this file cannot prove where new traffic begins.
+	// Seed at head: replaying double-charges Codex records.
 	cursor, err := transcript.HeadCursor(path)
 	if err != nil {
 		return nil, err
@@ -402,9 +385,6 @@ func (d *Daemon) assistantWindow(sessionID string, agent protocol.SessionAgent) 
 	return watcher.snapshot(), true
 }
 
-// sessionContextOccupancy reports how full a live session's context is, as of
-// its last turn. Absent for a session whose harness attn cannot read
-// (transcript.SupportsContextOccupancy) and for one that has not spoken yet.
 func (d *Daemon) sessionContextOccupancy(sessionID string) (transcript.ContextObservation, bool) {
 	d.watchersMu.Lock()
 	watcher := d.transcriptWatch[sessionID]
@@ -595,10 +575,6 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 						d.logf("transcript watcher: ignoring turn abort session=%s reason=%s abort_at=%s", w.sessionID, reason, lineResult.AbortAt.Format(time.RFC3339Nano))
 					} else {
 						d.recordTurnAbortedEvidence(w.sessionID, lineResult.AbortDetail, lineResult.AbortAt, now)
-						// The halted turn has nothing to classify: what it left on record is
-						// a truncated fragment, and a verdict drawn from that describes a
-						// question the agent never finished asking. Marking the sequence
-						// consumed is what keeps the quiet window below from picking it up.
 						classifiedSeq = assistantSeq
 					}
 				}
@@ -632,9 +608,8 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			}
 			windowChanged = w.applyEvents(batch.Events) || windowChanged
 		}
-		// The existing watcher stat is the movement gate: accounting opens the
-		// transcript only when its byte length changed, so an idle session does
-		// not double the watcher's recurring file reads.
+		// The watcher's stat is the movement gate: accounting opens the transcript
+		// only on a byte-length change, so an idle session adds no file reads.
 		if info.Size() > 0 && costFollower != nil && info.Size() != costFileSize {
 			batch, readErr := costFollower.Read()
 			if readErr != nil {
@@ -693,17 +668,6 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 	}
 }
 
-// staleTranscriptAbort decides whether a halt read out of the transcript
-// describes this session's life or someone else's.
-//
-// The watcher re-reads history as a matter of course: it rewinds up to a
-// bootstrap window behind the end of the file at discovery, and starts over at
-// offset zero whenever a transcript shrinks. A codex session resumed onto an
-// existing rollout, or a claude transcript rewritten in place, therefore replays
-// old lines — and a halt among them, filed as if it had just happened, settles a
-// session that is working. Dating the halt is what tells the two apart, so a halt
-// that cannot be dated is not believed at all: losing the feature loudly beats
-// settling live sessions on the strength of last week's ESC.
 func staleTranscriptAbort(abortAt, sessionStartedAt time.Time) (bool, string) {
 	if abortAt.IsZero() {
 		return true, "undated"

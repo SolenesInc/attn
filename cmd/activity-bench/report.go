@@ -40,9 +40,6 @@ func runReport(args []string) error {
 	return nil
 }
 
-// summarize is the comparison table: one row per variant. Pass rate is the
-// deterministic checks only — it says a variant did not regress a known failure
-// mode, not that its lines are good. Reading the lines is still the job.
 func summarize(results []Result) {
 	type stat struct {
 		runs, passed, errored int
@@ -92,8 +89,6 @@ func summarize(results []Result) {
 			truncate(key, 46), s.runs, rate, p50, p95, s.cost/float64(max(s.runs, 1)), s.promptChars/max(s.runs, 1))
 	}
 
-	// Failure breakdown last, because which check failed is what tells you what
-	// to change in the prompt.
 	fmt.Println("\nfailures by check:")
 	any := false
 	for _, key := range order {
@@ -121,8 +116,6 @@ func summarize(results []Result) {
 	}
 }
 
-// printLines groups by corpus entry so variants can be compared on the same
-// input, side by side. This is the part that cannot be automated away.
 func printLines(results []Result, onlyFailures bool) {
 	byEntry := map[string][]Result{}
 	var order []string

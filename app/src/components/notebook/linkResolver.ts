@@ -1,13 +1,9 @@
-// Single resolver for markdown link hrefs inside the notebook editor and its broken-
-// link checker, replacing the two resolvers that used to disagree (one required a
-// leading '/' + '.md' for in-notebook links, the other accepted bare root-relative
-// paths — neither resolved against the linking note's own directory). The daemon
-// always interprets fs paths root-relative (fsdoc cleanRel), so directory-relative
+// The daemon always interprets fs paths root-relative (fsdoc cleanRel), so directory-relative
 // resolution has to happen here, before a path ever reaches the daemon.
 
 export type ResolvedLink =
-  | { kind: 'note'; path: string; anchor?: string } // path root-relative, no leading slash, normalized
-  | { kind: 'fragment'; anchor: string } // same-note anchor, '#' stripped, URI-decoded
+  | { kind: 'note'; path: string; anchor?: string }
+  | { kind: 'fragment'; anchor: string }
   | { kind: 'external'; href: string };
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
@@ -20,9 +16,7 @@ function decodeAnchor(raw: string): string {
   }
 }
 
-// Split '#anchor' (kept, decoded) and '?query' (dropped) off a path, in that order —
-// an anchor always follows any query in a URL, so a literal '?' inside the anchor
-// text (rare, but possible after decoding) is preserved rather than mis-split.
+// Split '#anchor' before '?query': an anchor always follows any query, so a literal '?' inside the anchor text is preserved.
 function stripAnchorAndQuery(href: string): { path: string; anchor?: string } {
   const hashIdx = href.indexOf('#');
   const path = hashIdx === -1 ? href : href.slice(0, hashIdx);
@@ -31,9 +25,7 @@ function stripAnchorAndQuery(href: string): { path: string; anchor?: string } {
   return { path: queryIdx === -1 ? path : path.slice(0, queryIdx), anchor };
 }
 
-// Join and normalize '.'/'..' segments against a base. A '..' that would climb above
-// the notebook root clamps there instead of escaping it or throwing — matching the
-// daemon's cleanRel, since the resolved path is always handed to the daemon next.
+// A '..' above the notebook root clamps there rather than escaping or throwing, matching the daemon's cleanRel.
 function normalizeJoin(baseDir: string, path: string): string {
   const parts: string[] = [];
   for (const segment of `${baseDir}/${path}`.split('/')) {
@@ -44,14 +36,11 @@ function normalizeJoin(baseDir: string, path: string): string {
   return parts.join('/');
 }
 
-// Directory of a root-relative note path; '' for a root-level path.
 export function noteDir(notePath: string): string {
   const idx = notePath.lastIndexOf('/');
   return idx === -1 ? '' : notePath.slice(0, idx);
 }
 
-// GitHub-style anchor slug of a heading's text: lowercase, punctuation stripped
-// (keep letters/digits/space/hyphen), spaces → '-'.
 export function headingSlug(text: string): string {
   return text
     .toLowerCase()
@@ -60,8 +49,6 @@ export function headingSlug(text: string): string {
     .replace(/\s+/g, '-');
 }
 
-// baseDir: the current note's directory, root-relative, '' at the root
-// (e.g. 'knowledge/areas' for note 'knowledge/areas/foo.md').
 export function resolveNotebookLink(href: string, baseDir: string): ResolvedLink {
   const trimmed = href.trim();
   if (!trimmed) return { kind: 'external', href: '' };

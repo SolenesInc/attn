@@ -80,11 +80,8 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 	})
 }
 
-// inspectableTranscriptPath resolves only exact transcript identities. The
-// agent-native resume id is durable, and the live watcher holds the path that
-// exact id resolved. We never do a broad cwd/newest fallback here because
-// returning a neighboring session's conversation would violate the transcript
-// command's identity contract.
+// Exact identities only: a broad cwd/newest fallback would return a neighboring
+// session's conversation.
 func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 	if session == nil {
 		return ""
@@ -104,7 +101,6 @@ func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 	return d.liveTranscriptPath(session.ID, session.Agent)
 }
 
-// SessionTranscriptErrorMessage is the stable, transcript-free CLI surface.
 func SessionTranscriptErrorMessage(code string) string {
 	switch strings.TrimSpace(code) {
 	case "session_not_found":

@@ -1,21 +1,9 @@
-// useCommand — a view acting, as a view sees it.
-//
-// A command is the way out for the way in `useQuery` opened: the view names one
-// of the commands its manifest declares, the host addresses it to this app, and
-// the app's own handler runs in the sidecar with the same document access it has
-// on a bus event. The view is never the authority for the app's rules.
-//
-// One rule shapes the shape: **the returned runner never rejects.** A view calls
-// it straight from an onClick, and a rejected promise nobody awaited is an
-// unhandled rejection that reaches attn's console rather than the user's tile.
-// It resolves with an outcome to branch on, and mirrors the same failure into
-// `error` for the common case of just rendering it.
-//
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "Protocol
-// envelopes".
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAppViewRuntime } from "./runtime"
+
+// The returned runner NEVER rejects: a view calls it from an onClick, where a rejected
+// promise nobody awaited becomes an unhandled rejection, not a message in the tile.
 
 /** What one invocation did. Never a rejection — see the file header. */
 export type CommandOutcome =
@@ -23,51 +11,24 @@ export type CommandOutcome =
   | {
       ok: false
       error: string
-      /**
-       * A stable name for the refusal, when attn had one. `"reconcile_owed"`
-       * means the app is rebuilding its collections and every command is held
-       * until that finishes — worth retrying, unlike a handler that threw.
-       */
+      /** A stable name for the refusal, when attn had one. `"reconcile_owed"` is
+       * worth retrying — the app is rebuilding its collections. */
       code?: string
     }
 
-/**
- * A command, ready to invoke. It is a function first, because that is what a
- * view does with it; `pending` and `error` are what it renders around the call.
- */
 export interface CommandRunner {
   (payload?: unknown): Promise<CommandOutcome>
-  /** True from the call until the daemon answers. */
   readonly pending: boolean
-  /**
-   * The last failure, cleared by the next call. It is a message meant to be
-   * shown: it names the app, the command and the way forward.
-   */
+  /** The last failure, meant to be shown, cleared by the next call. */
   readonly error: string | null
 }
 
-/**
- * Invoke one of this app's declared commands.
- *
- * ```tsx
- * const approve = useCommand("approve")
- * <Button variant="primary" disabled={approve.pending} onClick={() => approve({ id })}>
- *   Approve
- * </Button>
- * {approve.error && <p>{approve.error}</p>}
- * ```
- *
- * The command must appear in a `[[commands]]` block of attn-app.toml and the
- * bundle must export a handler under `commands` — the generated `Handlers`
- * type makes the second half a compile error at `attn app apply`.
- */
+/** Invoke one of this app's declared commands. It must appear in a `[[commands]]` block
+ * of attn-app.toml and the bundle must export a handler under `commands`. */
 export function useCommand(command: string): CommandRunner {
   const runtime = useAppViewRuntime()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // A tile can be undocked while a command is in flight. Answering into an
-  // unmounted component is a warning nobody can act on, and the daemon has
-  // already recorded the invocation either way.
   const live = useRef(true)
   useEffect(() => {
     live.current = true

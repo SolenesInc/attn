@@ -17,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// kittyImageBackend serves one image, or refuses in the way the caller picked.
 type kittyImageBackend struct {
 	*fakeSpawnBackend
 	image pty.KittyImage
@@ -45,8 +44,6 @@ func kittyTestImage() pty.KittyImage {
 	}
 }
 
-// kittyCapableClient is the real app's set: it wants the descriptions and can
-// decode a binary frame.
 func kittyCapableClient() *wsClient {
 	client := spawnTestClient()
 	client.setIdentity("test", "v", []string{
@@ -57,8 +54,6 @@ func kittyCapableClient() *wsClient {
 	return client
 }
 
-// kittyRelayClient is the hub's set: it wants the descriptions and cannot take
-// a binary frame, because it relays what it receives over a text pipe.
 func kittyRelayClient() *wsClient {
 	client := spawnTestClient()
 	client.setIdentity("test", "v", []string{
@@ -92,15 +87,8 @@ func readKittyImageResult(t *testing.T, client *wsClient) protocol.KittyImageRes
 	return protocol.KittyImageResultMessage{}
 }
 
-// The event family is the only thing that tells a client an image exists, and a
-// client that draws none has nothing to do with it. Sending anyway spams every
-// automation client with traffic it parses and drops; not sending leaves a
-// client that asked blind to every image.
-//
-// The gate is kitty_images and nothing else. The two clients in the middle are
-// what pin that: a gate accidentally written against binary_pty_output would
-// serve the hub nothing (killing images on every remote session) and spam a
-// binary-capable client that never asked.
+// The gate is kitty_images and nothing else; binary_pty_output would serve the
+// hub nothing and kill images on every remote session.
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 	binaryOnly := spawnTestClient()
 	binaryOnly.setIdentity("test", "v", []string{
@@ -159,10 +147,8 @@ func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 	}
 }
 
-// The empty set is the one message that says "stop drawing". It has to survive
-// serialization as a present, empty array: dropped by an omitempty, or turned
-// into null by a nil slice, and the client keeps painting an image the session
-// no longer has — forever, because nothing else is coming.
+// The empty set says "stop drawing": an omitempty or a nil slice turns it into
+// nothing or null, and the client paints a dead image forever.
 func TestKittyPlacementsEventCarriesTheEmptySet(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -193,9 +179,6 @@ func TestKittyPlacementsEventCarriesTheEmptySet(t *testing.T) {
 	}
 }
 
-// Clients that can decode a frame take the pixels that way — a measured real
-// image is megabytes, and base64-in-JSON adds a third of that plus a parse
-// stall on the UI thread.
 func TestHandleGetKittyImageAnswersBinaryCapableClientsWithAFrame(t *testing.T) {
 	image := kittyTestImage()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -224,12 +207,8 @@ func TestHandleGetKittyImageAnswersBinaryCapableClientsWithAFrame(t *testing.T) 
 	}
 }
 
-// The hub asks for image descriptions and cannot take a binary frame: it relays
-// what it receives over a text pipe, re-reading each message as a JSON envelope
-// before pushing it on, so a frame would arrive as bytes it cannot parse and go
-// out as an invalid text message. Wanting the descriptions must therefore not
-// imply wanting the frames — this is the whole reason the two capabilities are
-// separate, and the contract the remote leg rests on.
+// The hub relays over a text pipe: wanting the descriptions must not imply
+// wanting the binary frames, which it cannot re-read as JSON.
 func TestHandleGetKittyImageAnswersTheRelayWithBase64DespiteKittyImages(t *testing.T) {
 	image := kittyTestImage()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -255,8 +234,6 @@ func TestHandleGetKittyImageAnswersTheRelayWithBase64DespiteKittyImages(t *testi
 	}
 }
 
-// Automation clients that never opted into anything still have to be able to
-// pull an image, or nothing outside the app can prove one reached a session.
 func TestHandleGetKittyImageAnswersPlainClientsWithBase64(t *testing.T) {
 	image := kittyTestImage()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -286,9 +263,6 @@ func TestHandleGetKittyImageAnswersPlainClientsWithBase64(t *testing.T) {
 	}
 }
 
-// An evicted or unknown id is an ordinary answer, not a broken session — and
-// the client correlates by id, so an error that does not name the id cannot be
-// matched to the placement it kills.
 func TestHandleGetKittyImageReportsAMissingImageByID(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -310,10 +284,8 @@ func TestHandleGetKittyImageReportsAMissingImageByID(t *testing.T) {
 	}
 }
 
-// KittyImageProvider is optional, like ScreenSnapshotProvider: the embedded backend
-// and a worker built before the method existed both have to answer something.
-// Asserting the interface without checking is a nil-interface panic that takes
-// the daemon down over a missing image.
+// KittyImageProvider is optional: a bare interface assertion is a nil-interface
+// panic that takes the daemon down over a missing image.
 func TestHandleGetKittyImageAnswersWhenTheBackendServesNoImages(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -331,8 +303,6 @@ func TestHandleGetKittyImageAnswersWhenTheBackendServesNoImages(t *testing.T) {
 	}
 }
 
-// A backend failure that is not "no such image" still has to come back as an
-// answer rather than silence, or the client waits on a pull that never lands.
 func TestHandleGetKittyImageReportsBackendFailures(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -362,9 +332,8 @@ func (b *placementAttachBackend) Attach(context.Context, string, string, ...ptyb
 	return b.info, newFakeOutputStream(), nil
 }
 
-// The VT dump has no images in it — the APC bytes were stripped from the stream
-// long before it was serialized — so without the placements riding beside it, a
-// detach/reattach silently loses every image the session was showing.
+// The VT dump carries no images: the APC bytes were stripped before it was
+// serialized, so placements must ride beside it.
 func TestAttachResultCarriesTheSnapshotPlacements(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -406,10 +375,8 @@ func TestAttachResultCarriesTheSnapshotPlacements(t *testing.T) {
 	}
 }
 
-// A fresh placement carries kitty's natural size — ghostty resolves a cell
-// footprint only on reflow — so the zeros have to reach the client as zeros. A
-// daemon that "helpfully" derived cell counts would be running a second, wrong
-// model of the grid beside the worker's.
+// Ghostty resolves a cell footprint only on reflow, so a fresh placement's
+// zeros must reach the client as zeros.
 func TestPlacementsToProtocolKeepsNaturalSizeZeros(t *testing.T) {
 	out := placementsToProtocol([]pty.KittyPlacement{{
 		ImageID:     77,

@@ -63,9 +63,8 @@ type spawnRejection struct {
 	err          error
 }
 
-// reason is a rejection as one error, for the callers that have no client to
-// send a command error to. A rejection carries one or the other and never both,
-// so reading `err` alone silently turns "missing workspace_id" into success.
+// command error to. A rejection carries one or the other and never both, so
+// reading `err` alone silently turns "missing workspace_id" into success.
 func (r *spawnRejection) reason() error {
 	if r == nil {
 		return nil
@@ -96,9 +95,6 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID string) {
 	}
 }
 
-// restoreLaunchIntent undoes the pre-spawn SetLaunchIntent for a session whose
-// row survives the failure (existing-session paths). Fresh sessions need no
-// restore: their row, intent included, is removed outright.
 func (plan *spawnPlan) restoreLaunchIntent(d *Daemon, sessionID string) {
 	if plan.hadPriorIntent {
 		d.store.SetLaunchIntent(sessionID, plan.priorIntent)
@@ -156,8 +152,6 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	if req.label == "" {
 		req.label = filepath.Base(req.cwd)
 	}
-	// A non-empty stored label is the durable authority — a respawn or reload
-	// must not revert a user rename, even if the client sends a stale label.
 	if req.existingSession != nil && strings.TrimSpace(req.existingSession.Label) != "" {
 		req.label = req.existingSession.Label
 	}
@@ -167,9 +161,6 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.resumeSessionID = protocol.Deref(req.msg.ResumeSessionID)
 	req.driver = agentdriver.Get(req.agent)
 	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.workspaceID, req.isShell)
-	// A respawn or a revive carries no spawned_from — the client is not splitting
-	// anything, it is bringing a session back — so the stored link is the
-	// authority there, exactly as the stored label is above.
 	if req.parentSessionID == "" && req.existingSession != nil {
 		req.parentSessionID = strings.TrimSpace(protocol.Deref(req.existingSession.ParentSessionID))
 	}
@@ -185,42 +176,20 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	if req.existingSession != nil && !req.hasPluginDriver {
 		req.resumeSessionID = agentdriver.ResolveSpawnResumeSessionID(req.driver, req.existingSession.ID, req.resumeSessionID, d.store.GetResumeSessionID(msg.ID))
-		// Downgrade to a fresh launch when the resume target is the session's own
-		// id and no transcript exists for it yet. Claude launches with
-		// --session-id <attn id> and writes its transcript lazily on the first
-		// turn, so a session that booted but was never prompted resolves to its
-		// own id as the resume target with nothing on disk — `claude --resume
-		// <id>` then exits non-zero ("No conversation found"). A relaunch (the
-		// sidebar Reload button, or the pane-mount auto-revive of a recoverable
-		// session) must not spawn that dead agent: dropping the resume id
-		// fresh-spawns while reusing --session-id, preserving identity. Scoped to
-		// the self-id case so a distinct agent-native resume id (codex's, or a
-		// cross-session resume) is still trusted and passed through unchanged.
-		// Mirrors the fresh-spawn downgrade in buildReloadSpawnOptions (reload.go).
+		// Claude writes its transcript lazily, so a session that booted but was never
+		// prompted has nothing on disk and `claude --resume <id>` exits non-zero.
 		if req.resumeSessionID == msg.ID && !agentdriver.ResumeAvailable(req.driver, req.resumeSessionID) {
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
 		}
 	} else if !req.hasPluginDriver && req.resumeSessionID == "" && protocol.Deref(msg.ResumePicker) {
-		// Seed "Resume": the bound session's row (and its resume_session_id) was
-		// deleted on close, so the session-keyed lookup above is skipped. The
-		// resume key was mirrored under the same session id — on its dispatch
-		// record, or on a ticket for work bound before tickets retired — so
-		// resolve it here to
-		// resume the prior conversation directly instead of dropping the user into
-		// the agent's resume picker. Falls back to the picker (resumeSessionID
-		// stays "") when no mirrored resume key exists.
 		mirroredResumeID := d.gardenDispatchResume(msg.ID)
 		if mirroredResumeID == "" {
 			mirroredResumeID = d.store.GetTicketResumeSessionID(msg.ID)
 		}
 		if ticketResumeID := mirroredResumeID; ticketResumeID != "" {
-			// Only adopt the mirrored id when it is actually resumable. Claude writes
-			// its transcript lazily, so a session closed before it ever took a turn has
-			// a mirrored id pointing at a transcript that does not exist; `claude -r
-			// <dead-id>` would exit non-zero. Leaving resumeSessionID empty falls the
-			// ResumePicker back to the cwd-scoped picker instead. Mirrors the
-			// fresh-spawn downgrade in buildReloadSpawnOptions (reload.go).
+			// Claude writes its transcript lazily, so a mirrored id can point at a
+			// transcript that does not exist and `claude -r <dead-id>` would exit non-zero.
 			if agentdriver.ResumeAvailable(req.driver, ticketResumeID) {
 				req.resumeSessionID = ticketResumeID
 			} else {
@@ -232,17 +201,8 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	if configuredExecutable == "" {
 		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
 	}
-	// A conversation to pick up has to still be there. The picker lists files
-	// that exist, but a spawn can arrive after a cleanup or a profile reset has
-	// taken one away, and the launch intent re-offers the same path to every
-	// replacement host. Without this the fork throws, the host exits, the revive
-	// re-forks the same missing path, and the user watches a session flap with
-	// nothing said. Refusing here says which file and stops.
-	//
-	// Only when the host would actually open it: a dir that already holds this
-	// conversation's own history continues that and never looks at the resume
-	// file, so an established session stays revivable long after the file it was
-	// picked up from is gone.
+	// A conversation to pick up has to still be there: without this the fork throws,
+	// the revive re-forks the same missing path, and the session flaps silently.
 	if resume := strings.TrimSpace(protocol.Deref(msg.ResumeConversationFile)); resume != "" && !hostSessionStateDirHoldsConversation(msg.ID) {
 		if info, err := os.Stat(resume); err != nil {
 			return nil, &spawnRejection{err: fmt.Errorf("cannot pick up the conversation at %s: %w", resume, err)}
@@ -261,9 +221,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.spawnOpts.InitialPromptFile = initialPromptFile
 	}
 	plan.spawnOpts = ptybackend.SpawnOptions{ID: msg.ID, CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), InitialPromptFile: plan.spawnOpts.InitialPromptFile, Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), CopilotExecutable: protocol.Deref(msg.CopilotExecutable), LoginShellEnv: d.cachedLoginShellEnv(), WorkflowGuidanceEnabled: parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)), AutoApprove: parseBooleanSetting(d.store.GetSetting(SettingAutoApproveEnabled)), Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort)), ResumeConversationFile: strings.TrimSpace(protocol.Deref(msg.ResumeConversationFile))}
-	// The frontend sets chief_of_staff only on initial creation, not on
-	// reconnect/resume spawns after a daemon restart. Fall back to the
-	// persisted profile-roles table so chief settings survive respawns.
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
 		plan.rollback(d, msg.ID)
@@ -275,11 +232,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	}
 	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, requestedChief, req.existingSession)
 	plan.isChief = d.isChiefOfStaffSession(msg.ID)
-	// Precedence: an explicit per-spawn pin (delegation) wins outright; a chief
-	// launch next falls back to chief_model_<agent>/chief_effort_<agent>; every
-	// launch (chief or not) then falls back to the operator-configured
-	// default_model_<agent>/default_effort_<agent>; otherwise the agent's own
-	// built-in default (empty, meaning no --model/--effort flag).
 	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.isChief, plan.spawnOpts.Model)
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
@@ -313,9 +265,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 	} else {
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
-	// A per-session pin wins; otherwise a chief launch caps its context window
-	// (chief_context_window_cap) and every other launch takes
-	// default_context_window_cap_<agent>, unset meaning uncapped.
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
 
 	return plan, nil
@@ -365,9 +314,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 				plan.rollback(d, msg.ID)
 				return &spawnOutcome{err: fmt.Errorf("read auto mode config: %w", err)}
 			}
-			// The launcher's per-session choice overrides the promoted default and
-			// nothing else: patterns and models stay as promoted. Absent means the
-			// session follows enabled_default, which is why the field is tri-state.
 			if msg.AutoMode != nil {
 				cfg.EnabledDefault = *msg.AutoMode
 			}
@@ -399,10 +345,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	// Persist the complete launch intent before creating the worker. If the daemon
-	// dies after Spawn, startup recovery can now associate that worker with its
-	// workspace, pane, ticket, and automation run instead of seeing an anonymous
-	// process with no durable session row.
+	// Persist the complete launch intent before creating the worker: a daemon death
+	// after Spawn otherwise leaves a worker with no durable session row to recover.
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
 	session := plan.launchSession
 	if err := d.store.AddChecked(session); err != nil {
@@ -415,18 +359,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
-	// The recovery contract must be durable before the worker exists: a daemon
-	// death after Spawn but before commit would otherwise leave a recoverable
-	// session with no stored launch intent to revive from.
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	if req.hasPluginDriver && req.pluginDriver.Capabilities[pluginDriverConversationCapability] {
-		// A conversation session's launch prompt outlives the process that was
-		// given it. The host is handed it again on every relaunch and delivers it
-		// only into a conversation it reopens empty — which is the whole of the
-		// zero-file early crash, where a delegation would otherwise come back as
-		// an agent with no brief. See LaunchIntent.InitialPrompt for why no other
-		// runtime gets this.
 		intent.InitialPrompt = req.initialPrompt
 	}
 	intent.AutoMode = msg.AutoMode
@@ -449,10 +384,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	// Who answers this session's approval requests is decided here and nowhere
-	// else, so it is filed here. Codex reports no permission mode to the daemon at
-	// any point in its life, and without this its guardian would be invisible —
-	// which is the arrangement the dwell exists for.
+	// Codex reports no permission mode to the daemon at any point, so without this
+	// its guardian would be invisible — the arrangement the dwell exists for.
 	d.recordReviewerEvidence(msg.ID, plan.spawnOpts.ApprovalRoute.ReviewerInLoop())
 	if plan.spawnOpts.InitialPromptFile != "" {
 		// The spawned wrapper removes the file after reading it. Keep a fallback
@@ -465,9 +398,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
-	// A state transition can land between executeSpawn's persist and this commit
-	// (the wrapper reports working as soon as the PTY boots). The commit upsert
-	// must not rewind it to the pre-spawn snapshot.
+	// A state transition can land between executeSpawn's persist and this commit, so
+	// the upsert must not rewind it to the pre-spawn snapshot.
 	if current := d.store.Get(session.ID); current != nil {
 		session.State = current.State
 		session.StateSince = current.StateSince
@@ -496,11 +428,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: persistErr}
 	}
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
-		// This durable marker precedes transcript discovery, so a new session's
-		// first provider response counts even when the transcript appears between
-		// watcher polls. Sessions carried across the migration or launched by
-		// resuming provider history have no marker and seed at transcript head
-		// instead of backfilling history.
 		if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
 			d.logf("initialize session cost tracking for %s: %v", session.ID, err)
 		}
@@ -530,15 +457,9 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if persistResumeID := agentdriver.SpawnResumeSessionID(req.driver, session.ID, req.resumeSessionID, protocol.Deref(msg.ResumePicker)); persistResumeID != "" {
 		d.persistResumeSessionID(session.ID, persistResumeID)
 	}
-	// Re-arm orphaned-ticket reconciliation: the owning session is alive again
-	// (a ticket Resume respawns under the same id), so a future death deserves
-	// a fresh verdict. No-op when nothing is flagged.
 	if err := d.store.ClearTicketReconciliationForAssignee(session.ID); err != nil {
 		d.logf("clear ticket reconciliation on spawn for %s: %v", session.ID, err)
 	}
-	// A crash-stamped ticket whose owner just respawned (dead-pane reload,
-	// ticket Resume) is no longer crashed: move it back to Working and put it
-	// back on the crash seam's radar (ticket_revive.go).
 	d.reviveCrashedTicketsForSession(session.ID)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
@@ -548,10 +469,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	}
 	d.store.UpsertRecentLocation(req.cwd)
 	d.associateSessionWithWorkspace(session.ID, req.workspaceID)
-	// Single mechanism: spawn_session guarantees the session has a layout
-	// pane. Clients that pre-created one (app, delegate, ticket resume) hit
-	// the adopt path; bare spawns (wsctl, scripts) get default placement.
-	// A pane failure must not fail the spawn — the session is already live.
 	if req.workspaceID != "" {
 		if _, err := d.ensureWorkspaceSessionPane(req.workspaceID, session.ID, session.Label); err != nil {
 			d.logf("ensure workspace pane for session %s: %v", session.ID, err)
@@ -573,8 +490,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	return &spawnOutcome{}
 }
 
-// runSpawnPipeline executes the full spawn pipeline without any client
-// communication. nil means the session is live (spawned or already running).
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {

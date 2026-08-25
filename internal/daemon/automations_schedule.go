@@ -18,25 +18,18 @@ var scheduleDueInstantCap = 1_000_000
 // policy will still fire it; past this the instant is never delivered.
 const scheduleSkipGrace = 5 * time.Minute
 
-// automationScheduleKind is the queue kind for the observation tick.
 const automationScheduleKind = "automation_schedule"
 
-// automationScheduleInterval matches the minutely-grade schedule floor.
 const automationScheduleInterval = time.Minute
 
-// automationScheduleTickTimeout is a tripwire: far past any healthy pass, so
-// only a wedged one frees the slot instead of stalling the kind.
+// automationScheduleTickTimeout is a tripwire, far past any healthy pass.
 const automationScheduleTickTimeout = 2 * time.Minute
 
-// automationScheduleHandler is the queue handler for the observation tick. It
-// never errors: the decision is cursor-driven, so the next tick re-decides.
 func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any, error) {
 	d.observeDueSchedules(time.Now())
 	return nil, nil
 }
 
-// observeDueSchedules fans out over enabled scheduled definitions, claiming at
-// most one due occurrence per definition per tick.
 func (d *Daemon) observeDueSchedules(now time.Time) {
 	if d.isRecovering() {
 		// Racing ahead of startup recovery could double-claim or misjudge cursors.
@@ -64,8 +57,6 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 	}
 }
 
-// observeDueSchedule decides and, if due, claims and delivers the single
-// occurrence owed to one scheduled definition this tick.
 func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec automation.DefinitionSpec, now time.Time) {
 	if spec.Trigger.Schedule == nil {
 		d.logf("automation schedule observation %s: scheduled trigger has no schedule", definition.ID)
@@ -82,7 +73,6 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 		return
 	}
 	if !ok {
-		// First observation anchors the cursor at now — never fires retroactively.
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
 			d.logf("automation schedule observation anchor %s: %v", definition.ID, err)
 		}
@@ -90,7 +80,6 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 	}
 	instants, ok := compiled.DueInstants(cursor, now, scheduleDueInstantCap)
 	if !ok {
-		// Replay-storm guard: jump the cursor to now instead of bursting.
 		d.logf("automation schedule observation %s: replay storm guard hit, cursor advanced to now", definition.ID)
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
 			d.logf("automation schedule observation advance %s: %v", definition.ID, err)
@@ -100,8 +89,6 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 	if len(instants) == 0 {
 		return
 	}
-	// Only the newest due instant ever fires: at most one claim per definition
-	// per tick.
 	intended := instants[len(instants)-1]
 	fire := true
 	if spec.Trigger.CatchUp == "skip" {
@@ -109,9 +96,8 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 	}
 	if fire {
 		if claimErr := d.claimAndDeliverScheduledRun(definition, spec, intended, now); claimErr != nil {
-			// Claim rejected or failed: hold the cursor behind intended so the
-			// instant stays eligible and the next tick re-decides — delayed,
-			// never silently dropped.
+			// Claim rejected: hold the cursor behind intended so the instant stays
+			// eligible and the next tick re-decides — delayed, never silently dropped.
 			return
 		}
 	}
@@ -122,11 +108,8 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 	}
 }
 
-// claimAndDeliverScheduledRun claims the occurrence for intended (idempotent on
-// definition + occurrence key) and delivers a freshly pending run. Non-nil error
-// means no run row was claimed (caller withholds the cursor advance); delivery
-// failures after a successful claim return nil — the run belongs to
-// delivery/recovery from there.
+// A non-nil error means no run row was claimed, so the caller withholds the cursor
+// advance; a delivery failure after a successful claim returns nil.
 func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefinition, spec automation.DefinitionSpec, intended, observedAt time.Time) error {
 	observationLock := d.automationObservationLock(definition.ID, "schedule", 0)
 	observationLock.Lock()
@@ -159,7 +142,6 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 		d.logf("automation schedule observation claim %s: %v", definition.ID, claimErr)
 		return claimErr
 	}
-	// A run row now exists regardless of delivery; broadcast so watchers see it.
 	d.broadcastAutomationsChanged(definition.ID)
 	d.automationMu.Lock()
 	current, loadErr := d.store.GetAutomationRun(run.ID)

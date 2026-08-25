@@ -1,6 +1,3 @@
-// The two entrypoints, loaded the way pi loads them: attn's suite, which
-// composes auto mode in only when attn sent a config, and the standalone
-// bundle a bare pi gets with `-e`.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { autoModeConfigEnvVar } from "../automode/source";
@@ -13,8 +10,8 @@ type Registered = { events: string[]; commands: string[]; flags: string[] };
 
 async function load(entrypoint: string, env: Record<string, string>): Promise<Registered> {
   const run = Bun.spawn([process.execPath, "run", probe, entrypoint], {
-    // A clean environment, so a machine that happens to run attn does not hand
-    // this test a config nobody asked for.
+    // A clean environment: a machine running attn would otherwise hand this test
+    // a config nobody asked for.
     env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
     stdout: "pipe",
     stderr: "pipe",

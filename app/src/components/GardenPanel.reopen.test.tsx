@@ -24,10 +24,6 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   };
 }
 
-// The way back to a delegate that is no longer on screen. The garden replaced
-// the ticket board, and the board's resume affordance was the one thing a
-// panel drill had no answer for: without this, a seed whose tender session was
-// closed is a dead end.
 describe('GardenPanel reopen', () => {
   it('reopens the tender of a drilled seed', () => {
     const onResumeSeed = vi.fn();

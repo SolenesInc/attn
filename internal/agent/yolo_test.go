@@ -80,16 +80,10 @@ func TestClaudeBuildCommand_AppendsWorkspaceContextSystemPrompt(t *testing.T) {
 	if flagIndex == -1 || flagIndex+1 >= len(cmd.Args) {
 		t.Fatalf("args = %#v, want --append-system-prompt with guidance", cmd.Args)
 	}
-	// A non-chief workspace agent gets the production composition as the
-	// system-prompt value: its workspace-context guidance plus the home-gated
-	// garden contract — no journaling directive. Pin the exact value so a
-	// re-introduced directive (composed or as a separate arg) is caught.
 	want := (hooks.Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}).Instructions()
 	if cmd.Args[flagIndex+1] != want {
 		t.Fatalf("system prompt = %q, want the workspace-context + garden composition", cmd.Args[flagIndex+1])
 	}
-	// The same launch sets the suppression marker, so the SessionStart fallback does
-	// not re-emit the guidance on resume/compact.
 	if !slices.Contains((&Claude{}).BuildEnv(opts), "ATTN_WORKSPACE_CONTEXT_GUIDANCE=append_system_prompt") {
 		t.Fatal("non-chief launch must set ATTN_WORKSPACE_CONTEXT_GUIDANCE so the SessionStart fallback is suppressed")
 	}
@@ -104,8 +98,6 @@ func TestClaudeBuildEnvMarksAppendSystemPromptGuidance(t *testing.T) {
 	}
 }
 
-// A chief launch (NotebookRoot set) injects chief guidance and suppresses the
-// workspace-context guidance, even if a checkout path is also present.
 func TestClaudeBuildCommand_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:            "sess-1",
@@ -127,8 +119,6 @@ func TestClaudeBuildCommand_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	if strings.Contains(prompt, "/tmp/context.md") {
 		t.Fatalf("chief launch must not inject workspace-context guidance: %q", prompt)
 	}
-	// The chief's fuller guidance already covers journaling; it must not also carry
-	// the lite directive (which would duplicate/contradict the curator guidance).
 	if strings.Contains(prompt, "notable moments, not routine steps") {
 		t.Fatalf("chief launch must not append the lite journaling directive: %q", prompt)
 	}
@@ -174,9 +164,6 @@ func TestCodexConfigOverrides_ChiefGuidanceTakesPrecedence(t *testing.T) {
 	}
 }
 
-// A non-chief Codex launch carries its workspace-context guidance plus the
-// home-gated garden contract in a single developer_instructions override. No
-// journaling directive is appended.
 func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	overrides := (&Codex{}).GenerateConfigOverrides(SpawnOpts{
 		SessionID:            "sess-1",
@@ -189,8 +176,6 @@ func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 			devInstr = append(devInstr, o)
 		}
 	}
-	// Exactly one developer_instructions entry, equal to the value the codex path
-	// composes: the workspace-context guidance plus the garden contract.
 	if len(devInstr) != 1 {
 		t.Fatalf("want exactly one developer_instructions override, got %d: %q", len(devInstr), overrides)
 	}
@@ -198,11 +183,9 @@ func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	if devInstr[0] != want {
 		t.Fatalf("developer_instructions = %q, want the workspace + garden composition %q", devInstr[0], want)
 	}
-	// Still carries the workspace context path and the home garden block.
 	if !strings.Contains(devInstr[0], "/tmp/context.md") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
 		t.Fatalf("developer_instructions should carry workspace-context and garden guidance: %q", devInstr[0])
 	}
-	// The journaling directive must NOT be appended for non-chief agents.
 	if strings.Contains(devInstr[0], "notable moments, not routine steps") {
 		t.Fatalf("non-chief developer_instructions must not append the journaling directive: %q", devInstr[0])
 	}
@@ -262,7 +245,7 @@ func TestCopilotBuildCommandInitialPrompt(t *testing.T) {
 		Executable:    "copilot",
 		InitialPrompt: "fix the bug",
 	})
-	args := cmd.Args[1:] // skip executable
+	args := cmd.Args[1:]
 	found := false
 	for i, a := range args {
 		if a == "--interactive" && i+1 < len(args) && args[i+1] == "fix the bug" {

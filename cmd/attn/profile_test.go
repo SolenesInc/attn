@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// cleanPlan is the pure safety guard for `attn profile clean`. These tests pin
-// the rules that decide WHAT gets destroyed, separate from the destruction
-// itself (which is exercised end-to-end by the real-app build/teardown).
 func TestCleanPlan(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -25,12 +22,10 @@ func TestCleanPlan(t *testing.T) {
 		{name: "force flag captured", args: []string{"agent7", "--force"}, wantName: "agent7", wantForce: true},
 		{name: "force short flag", args: []string{"-f", "agent7"}, wantName: "agent7", wantForce: true},
 
-		// Safety: the default/prod profile is refused without --force.
 		{name: "no name", args: nil, wantErr: true},
 		{name: "default refused without force", args: []string{"default"}, wantErr: true},
 		{name: "default allowed with force", args: []string{"default", "--force"}, wantName: "", wantForce: true},
 
-		// Hygiene.
 		{name: "unknown flag", args: []string{"--nope", "agent7"}, wantErr: true},
 		{name: "two names", args: []string{"a", "b"}, wantErr: true},
 		{name: "invalid name", args: []string{"bad name"}, wantErr: true},
@@ -55,7 +50,6 @@ func TestCleanPlan(t *testing.T) {
 	}
 }
 
-// A missing pid file means no daemon — never an error during clean.
 func TestStopProfileDaemonNoPidFile(t *testing.T) {
 	msg := stopProfileDaemon(profileResolved{DataDir: t.TempDir()})
 	if !strings.Contains(msg, "no pid file") {
@@ -63,11 +57,8 @@ func TestStopProfileDaemonNoPidFile(t *testing.T) {
 	}
 }
 
-// The safety fix: a pid file that no live daemon holds the lock on is stale, and
-// must NOT be signaled even when its pid names a live (recycled) process. We use
-// pid 1 (launchd: always alive, never ours, unkillable by us) as the canary — if
-// the flock liveness gate regressed, stopProfileDaemon would attempt to signal
-// it and report an EPERM failure instead of treating the file as stale.
+// A pid file no live daemon holds the lock on is stale and must NOT be signaled, even
+// when its pid names a live (recycled) process. pid 1 is the canary: alive, never ours.
 func TestStopProfileDaemonStalePidNotSignaled(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")

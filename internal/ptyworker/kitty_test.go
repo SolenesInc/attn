@@ -1,10 +1,5 @@
 package ptyworker
 
-// The kitty hop: an event that says where the images are, and a method that
-// hands back the pixels. Both cross a JSON boundary between two processes that
-// can be different builds, so what is asserted here is that nothing is lost or
-// silently reinterpreted on the way.
-
 import (
 	"encoding/json"
 	"reflect"
@@ -35,10 +30,6 @@ func testPlacement(imageID, placementID uint32) pty.KittyPlacement {
 	}
 }
 
-// Every field of a placement survives the trip. Asserted whole rather than
-// field by field: a geometry field that arrives zeroed puts an image at the
-// wrong size or the wrong row, and a list of the fields worth checking would go
-// stale the first time ghostty resolves a new one.
 func TestKittyPlacementsSurviveTheWire(t *testing.T) {
 	observed := []pty.KittyPlacement{testPlacement(7, 1), testPlacement(9, 2)}
 
@@ -56,10 +47,6 @@ func TestKittyPlacementsSurviveTheWire(t *testing.T) {
 	}
 }
 
-// The empty set is the message that the last image is gone, and it travels as
-// an event with no placements rather than as no event at all. A reader that
-// treats "no array" as "nothing to say" leaves a ghost image on the screen with
-// nothing left to remove it.
 func TestKittyPlacementsEventCarriesTheEmptySet(t *testing.T) {
 	seq := uint32(41)
 	payload, err := json.Marshal(EventEnvelope{
@@ -88,8 +75,6 @@ func TestKittyPlacementsEventCarriesTheEmptySet(t *testing.T) {
 	}
 }
 
-// A stamped set stays with its stamp on a full envelope, alongside the fields
-// the other events use.
 func TestKittyPlacementsEventRoundTrip(t *testing.T) {
 	seq := uint32(1234)
 	payload, err := json.Marshal(EventEnvelope{
@@ -120,9 +105,6 @@ func TestKittyPlacementsEventRoundTrip(t *testing.T) {
 	}
 }
 
-// The pixels and the layout they are in. The layout crosses as a name because
-// the two ends can be different builds; a number would be read through whatever
-// enum order the reader was compiled with.
 func TestKittyImageResultRoundTrip(t *testing.T) {
 	pixels := []byte{0, 1, 2, 253, 254, 255}
 	img := pty.KittyImage{
@@ -160,9 +142,6 @@ func TestKittyImageResultRoundTrip(t *testing.T) {
 	}
 }
 
-// Every layout ghostty can store has a name and comes back as itself. A layout
-// that collapsed into another would be drawn with the wrong bytes per pixel —
-// a smeared image, not an error.
 func TestKittyImageFormatsAreDistinctOnTheWire(t *testing.T) {
 	formats := []ghosttyvt.KittyImageFormat{
 		ghosttyvt.KittyImageRGB,
@@ -192,8 +171,6 @@ func TestKittyImageFormatsAreDistinctOnTheWire(t *testing.T) {
 	}
 }
 
-// A name this build does not know is reported, never guessed at: rendering
-// pixels as a layout they are not in produces a plausible-looking wrong image.
 func TestKittyImageResultRejectsAnUnknownFormat(t *testing.T) {
 	_, err := KittyImageResult{ImageID: 5, Format: "yuv420", Data: ""}.Decode()
 	if err == nil {

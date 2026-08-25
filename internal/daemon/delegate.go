@@ -51,29 +51,14 @@ func readInternalActionResult(client *wsClient) (internalActionResult, error) {
 	}
 }
 
-// maxDelegationNameRunes bounds a delegated session/workspace display name.
-// Names are short, human, and glanceable in the sidebar; longer strings (e.g. a
-// worktree folder like "attn--feat-some-long-branch") are rejected so the caller
-// supplies a real name with --name.
 const maxDelegationNameRunes = 16
 
-// validateDelegationName enforces the naming rules for a resolved delegation
-// name (whether it came from --name or the directory-basename default):
-//
-//   - non-empty and at most maxDelegationNameRunes runes
-//   - when a new workspace is being created, unique across workspace titles
-//   - unique among the session labels already in the target workspace
-//
-// targetWorkspaceID is the workspace whose sessions are checked for a clash; it
-// is empty when a brand-new (and therefore empty) workspace is being created.
 func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, targetWorkspaceID string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return fmt.Errorf("a name is required; pass --name")
 	}
 	if name == "." || name == string(filepath.Separator) {
-		// A directory-basename default can degenerate to "." or "/" for an odd
-		// directory; those are not usable names, so ask for an explicit one.
 		return fmt.Errorf("%q is not a usable name; pass --name", name)
 	}
 	if len([]rune(name)) > maxDelegationNameRunes {
@@ -97,13 +82,6 @@ func (d *Daemon) validateDelegationName(name string, creatingWorkspace bool, tar
 	return nil
 }
 
-// truncateDelegationName shortens a directory-basename-derived name to fit
-// maxDelegationNameRunes. Unlike an explicit --name (which must fail loudly so
-// the caller learns the limit), a derived default should just fit — a worktree
-// checkout like "attn--feat-some-long-branch" always exceeds 16 runes, and
-// erroring there would make --worktree unusable without also passing --name.
-// Trailing "-", "_", ".", and whitespace are trimmed off the cut so the result
-// reads cleanly (e.g. "attn--feat-agent" rather than "attn--feat-agent-").
 func truncateDelegationName(name string) string {
 	runes := []rune(name)
 	if len(runes) <= maxDelegationNameRunes {
@@ -136,11 +114,6 @@ func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (
 	return driver.Name(), nil
 }
 
-// validateDelegationModelEffort rejects --model / --effort for agents whose
-// launch command cannot apply them, so the pin fails fast at delegate time
-// instead of being silently dropped by the spawned session. Values themselves
-// are passed through (aliases, full ids, and new effort levels stay legal
-// without an allowlist to rot); the agent CLI is the authority on them.
 func (d *Daemon) validateDelegationModelEffort(agent, model, effort string) error {
 	if model == "" && effort == "" {
 		return nil
@@ -224,21 +197,8 @@ func (d *Daemon) activeSessionInLinkedWorktree(directory string) (string, bool) 
 	return worktreeRoot, false
 }
 
-// delegationRollback is the compensation stack for delegation's saga, shared with
-// ticket resume, which reassembles the same resources. Delegation acquires several
-// in sequence — a worktree, a workspace, a layout pane, a live session — and any
-// step after the first can fail. Each acquisition pushes its own undo here; a
-// later failure unwinds everything pushed so far, newest first.
-//
-// The point is that a failure site no longer decides WHICH compensations apply.
-// Hand-listing them at each `return` is what leaks a workspace, a pane, or a
-// worktree the moment a new failure point is added between two existing ones,
-// because the correct set is only visible by reading every site above it.
-//
-// Unwind order is acquisition order reversed, which is also the only safe order:
-// the session must stop before its pane is removed, the pane must go before its
-// workspace is unregistered, and the workspace must go before the worktree its
-// directory points at is deleted.
+// delegationRollback unwinds newest first: a session stops before its pane is removed,
+// the pane before its workspace, the workspace before the worktree it points at.
 type delegationRollback struct {
 	d    *Daemon
 	undo []func() error
@@ -248,9 +208,6 @@ func (d *Daemon) newDelegationRollback() *delegationRollback {
 	return &delegationRollback{d: d}
 }
 
-// fail unwinds every compensation pushed so far and returns cause, annotated with
-// any compensation that itself failed. The stack is emptied, so a caller that
-// keeps using the same rollback after a handled failure cannot double-undo.
 func (r *delegationRollback) fail(cause error) error {
 	for i := len(r.undo) - 1; i >= 0; i-- {
 		if err := r.undo[i](); err != nil {
@@ -261,14 +218,12 @@ func (r *delegationRollback) fail(cause error) error {
 	return cause
 }
 
-// abandon drops the pending compensations without running them, for the case where
-// undoing is no longer safe. Only correct when EVERY pending compensation is one
-// this operation must not perform; it is not a general "skip cleanup".
+// Only correct when EVERY pending compensation must not be performed; not a
+// general "skip cleanup".
 func (r *delegationRollback) abandon() {
 	r.undo = nil
 }
 
-// onWorktreeCreated registers deletion of a worktree THIS operation created. A
 // reused or adopted worktree must never be pushed here.
 func (r *delegationRollback) onWorktreeCreated(path string) {
 	r.undo = append(r.undo, func() error {
@@ -344,29 +299,8 @@ func verifyDelegationWorktreeOwner(worktreePath, token string) error {
 	return nil
 }
 
-// delegationWorktreeRepo resolves the main repository a worktree delegated into
-// an existing workspace belongs to, or "" when the workspace offers nothing to
-// infer from.
-//
-// A workspace's stored Directory is the location it was last registered at, not
-// a claim about the repositories its sessions occupy. It is overwritten on every
-// re-registration (unlike title/rank/muted/pinned, which are deliberately
-// preserved), it is inherited wholesale when a pane is dragged out into a new
-// workspace, and it is never recomputed when a member session moves into a
-// worktree. It can therefore name a repository no member session has ever been
-// in, and trusting it here silently created worktrees in unrelated repositories.
-//
-// The member sessions are the authority instead: they carry a directory that is
-// re-derived from the real cwd on every register and spawn. When they disagree
-// on a main repository the choice is genuinely ambiguous, so fail and ask for
-// --repo rather than guess — a confusing error beats a silent misplacement.
-//
-// This deliberately answers only "which repository". Several member sessions can
-// sit in different worktrees of that one repository, each on its own branch, so
-// no member session's branch is a defensible starting point for the new one;
-// picking a representative session here would make the starting ref depend on
-// session ordering. Starting-ref selection is left to the caller (see the
-// worktreeStartRefBase comment in delegateOperation).
+// The member sessions are the authority on the repository, not the workspace's stored
+// Directory: a dragged-out pane inherits that wholesale and can name another repo.
 func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 	seen := map[string]struct{}{}
 	var repos []string
@@ -379,8 +313,6 @@ func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 		if err != nil {
 			continue
 		}
-		// Distinct worktrees of one repository all resolve to the same main
-		// repository, so they are not an ambiguity.
 		repo := git.ResolveMainRepoPath(root)
 		if _, ok := seen[repo]; ok {
 			continue
@@ -391,8 +323,6 @@ func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 
 	switch len(repos) {
 	case 0:
-		// An empty or non-git workspace offers nothing to infer from; the caller
-		// falls back to the stored directory so its own repo check reports it.
 		return "", nil
 	case 1:
 		return repos[0], nil
@@ -403,15 +333,8 @@ func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 	}
 }
 
-// delegationDefaultStartRef names the ref an automatically created delegated
-// worktree starts from. It returns "" when the repository's default branch
-// cannot be resolved, so the caller can ask for an explicit --from value.
-//
-// Prefers the remote-tracking ref, matching how the app's own new-worktree flow
-// defaults (RepoOptions.tsx), so a delegated branch starts from what upstream
-// has rather than from however stale the local checkout is; doCreateWorktree
-// fetches it before creating. Falls back to the local default branch for
-// repositories with no matching remote branch.
+// Prefers the remote-tracking ref, matching the app's new-worktree flow
+// (RepoOptions.tsx), so a delegated branch starts from upstream, not a stale local.
 func delegationDefaultStartRef(repo string) string {
 	branch, err := git.GetDefaultBranch(repo)
 	if err != nil {
@@ -442,9 +365,7 @@ func automaticDelegationBranch(label, sessionID string) string {
 	return "delegate/" + slug + "-" + suffix
 }
 
-// applyDefaultDelegationWorktree resolves an empty worktree request into the
-// automatic Git-repository default. A nil request is the caller's explicit
-// opt-out, while a named branch preserves the existing explicit behavior.
+// A nil worktree request is an explicit opt-out.
 func (d *Daemon) applyDefaultDelegationWorktree(msg *protocol.DelegateMessage, placement, workspaceID, directory, sessionID, label string) error {
 	if msg.Worktree == nil {
 		return nil
@@ -471,12 +392,6 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *protocol.DelegateMessage, p
 			if configuredWorktree {
 				return fmt.Errorf("workspace directory is not in a git repository; pass --repo")
 			}
-			// Bare flags promise a worktree; a non-repository source silently
-			// degraded that into no checkout at all, and the delegate woke in a
-			// directory where its brief's paths do not exist. Every other
-			// placement flag is the caller's explicit consent to that target, so
-			// only the default refuses. A confusing error beats a silent
-			// misplacement.
 			if placement == delegationPlacementCurrent {
 				return fmt.Errorf("source directory %s is not a git repository, so this delegate would launch with no checkout; place it with --cwd <repo> or --workspace <id>, or pass --no-worktree to delegate without one", directory)
 			}
@@ -493,11 +408,6 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *protocol.DelegateMessage, p
 	return nil
 }
 
-// createDelegationWorktree creates the worktree. inferredRepo, when non-empty,
-// names the main repository already resolved by the caller; baseDirectory, when
-// non-empty, is a working directory the repository may be inferred from. The
-// starting ref is always explicit: --from when supplied, otherwise the
-// repository's default branch.
 func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, request *protocol.DelegateWorktreeRequest, operationID, ownedPath string, worktreeOwned bool, ownedToken string, allowReuse bool) (string, bool, error) {
 	branch := strings.TrimSpace(request.Branch)
 	if branch == "" {
@@ -539,11 +449,8 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 			return expectedPath, true, nil
 		}
 		if operationID != "" && ownedPath != "" && git.CanonicalizePath(ownedPath) == expectedPath {
-			// Git creation and SQLite ownership cannot be one atomic transaction.
-			// A crash after `git worktree add` but before Mark...Owned leaves the
-			// path ambiguous: it may be ours, or another actor may have created it
-			// after the durable intent record. The product contract permits a
-			// terminal failure on restart; never adopt or delete without proof.
+			// Git creation and SQLite ownership cannot be one transaction: never adopt or
+			// delete an ambiguous path without proof.
 			return "", false, fmt.Errorf("worktree %s appeared while delegation preparation was interrupted; ownership cannot be proven, so it was left untouched", expectedPath)
 		}
 		return "", false, fmt.Errorf("worktree %s already exists; pass --allow-worktree-reuse only when sharing it is intentional", expectedPath)
@@ -593,7 +500,6 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 			return "", false, rollback.fail(fmt.Errorf("record delegated worktree ownership: %w", err))
 		}
 	}
-	// Handed to the caller intact; its own rollback owns the worktree from here.
 	rollback.abandon()
 	return worktreePath, true, nil
 }
@@ -603,9 +509,8 @@ func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResu
 }
 
 func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID, workspaceID, directory, name, agent, model, effort, brief string, fromChief bool) error {
-	// Bound before the spawn, because the launch primer and the delegate's own
-	// prompt both read it: a delegate must launch already knowing the seed it
-	// reports to and, when it was dispatched at a crown, its plot.
+	// Bound before the spawn: the launch primer and the delegate's own prompt
+	// both read the seed it reports to.
 	seedID, err := d.bindDelegationSeed(sessionID, strings.TrimSpace(msg.SourceSessionID),
 		brief, name, strings.TrimSpace(protocol.Deref(msg.Plot)), directory, agent, fromChief)
 	if err != nil {
@@ -642,10 +547,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		return nil, fmt.Errorf("source_session_id is required")
 	}
 	brief := strings.TrimSpace(msg.Brief)
-	// Tickets retired: a delegation binds a seed and nothing else, so there is no
-	// ticket left to adopt. The refusal names the garden path rather than failing
-	// on a missing brief, because a caller passing ticket_id is running on stale
-	// guidance and needs to be told where the capability went.
 	if ticketID := strings.TrimSpace(protocol.Deref(msg.TicketID)); ticketID != "" {
 		return nil, fmt.Errorf(
 			"delegating onto ticket %s retired: plant the work as a seed and dispatch at it — `attn seed plant \"<title>\" -m \"<brief>\"`, then `attn delegate --brief \"<brief>\" --plot <seed-id>`",
@@ -671,8 +572,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		return nil, err
 	}
 	effort = d.defaultDelegationEffort(agent, effort)
-	// The crown is resolved before any worktree or runtime side effect: a
-	// delegation aimed at nothing should refuse, not launch unaimed.
 	if err := d.validateDispatchCrown(strings.TrimSpace(protocol.Deref(msg.Plot)), sourceSessionID); err != nil {
 		return nil, err
 	}
@@ -680,12 +579,7 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	if sessionID == "" {
 		sessionID = uuid.NewString()
 	}
-	// name is the explicit --name, otherwise the finalized directory basename below.
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
-	// The chief's own delegations are chief-OWNED, which now gates one behavior
-	// alone: unmuting a hidden target workspace. The chief-ness of an operation is
-	// fixed when it is claimed (initiatingChiefSessionID), so a role transfer
-	// mid-launch cannot change it underneath a resumed operation.
 	delegatedByChief := initiatingChiefSessionID != "" ||
 		(operationID == "" && d.chiefOfStaffSessionID() == sourceSessionID)
 	paneID := "pane-" + sessionID
@@ -722,9 +616,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
 		}
-		// The seed bind is idempotent through the dispatch record, and
-		// spawnDelegatedRuntime above already re-ran it, so a recovered delegation
-		// has its whole tracking back with nothing left to reconcile here.
 		if operationID != "" {
 			worktreePath := ""
 			if msg.Worktree != nil {
@@ -762,9 +653,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		}
 		directory = strings.TrimSpace(protocol.Deref(msg.Cwd))
 		if directory != "" && msg.Worktree != nil {
-			// --cwd + --worktree compose: the worktree's repo and starting ref are
-			// inferred from this base directory below (createDelegationWorktree),
-			// and the workspace ends up placed at the created worktree path.
 			validatedCwd, cwdErr := validateDelegationDirectory(directory)
 			if cwdErr != nil {
 				return nil, cwdErr
@@ -782,10 +670,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		return nil, err
 	}
 
-	// Naming scope: a new workspace must take a globally-unique name; a session
-	// must be unique among the sessions already in its target workspace (empty
-	// for a brand-new workspace). Validate an explicit --name now, before any
-	// side effects, so a bad name fails fast without creating a worktree.
 	creatingWorkspace := placement == delegationPlacementNew
 	sessionNameWorkspaceID := ""
 	if !creatingWorkspace {
@@ -797,11 +681,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		}
 	}
 
-	// The workspace record's directory is a registration artifact, not a repo
-	// authority (see delegationWorktreeRepo). Existing-workspace placement must
-	// infer the repository from its member sessions. Starting-ref selection is
-	// independent of placement: an explicit --from wins, otherwise
-	// createDelegationWorktree uses the repository's default branch.
 	inferredWorktreeRepo := ""
 	if msg.Worktree != nil && placement == delegationPlacementExisting {
 		if strings.TrimSpace(protocol.Deref(msg.Worktree.Repo)) == "" {
@@ -810,9 +689,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 				return nil, repoErr
 			}
 			if resolvedRepo == "" {
-				// A workspace with no member sessions to learn from leaves the
-				// stored directory as the only remaining signal for *which*
-				// repository — still never for which ref.
 				if root, rootErr := git.GetRepoRoot(directory); rootErr == nil {
 					resolvedRepo = git.ResolveMainRepoPath(root)
 				}
@@ -837,8 +713,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		directory = validatedDirectory
 		operationWorktreePath = directory
 	}
-	// Finalize a new workspace's directory before resolving the name so a
-	// directory-basename default reflects the real directory.
 	if placement == delegationPlacementNew {
 		validatedDirectory, directoryErr := validateDelegationDirectory(directory)
 		if directoryErr != nil {
@@ -847,17 +721,12 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		directory = validatedDirectory
 	}
 	if worktreeRoot, occupied := d.activeSessionInLinkedWorktree(directory); occupied && !protocol.Deref(msg.AllowWorktreeReuse) {
-		// Once another active session occupies the worktree, it is no longer safe
-		// to roll the directory back even if this operation originally created it.
-		// The worktree is the only thing acquired so far, so abandoning the whole
-		// stack is exactly "leave the occupied worktree alone".
+		// Once another active session occupies the worktree it must not be rolled back,
+		// even if this operation created it.
 		rollback.abandon()
 		return nil, fmt.Errorf("an active session already uses worktree %s; pass --allow-worktree-reuse only when sharing it is intentional", worktreeRoot)
 	}
 
-	// Default the name to the directory basename when --name was not given, then
-	// validate the final name. Only a worktree may exist at this point, so a
-	// validation failure rolls it back (no workspace/pane/session yet).
 	if name == "" {
 		name = truncateDelegationName(filepath.Base(directory))
 		if err := d.validateDelegationName(name, creatingWorkspace, sessionNameWorkspaceID); err != nil {
@@ -903,9 +772,6 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			return nil, rollback.fail(fmt.Errorf("create delegated pane: %w", err))
 		}
 	}
-	// Covers the reserved pane too: an interrupted operation's pane is this
-	// operation's to clean up once it has adopted it, which is what the previous
-	// hand-listed compensations did at every failure site below.
 	rollback.onPaneCreated(sessionID)
 
 	if err := d.spawnDelegatedRuntime(msg, sessionID, workspaceID, directory, name, agent, model, effort, brief, delegatedByChief); err != nil {
@@ -922,15 +788,11 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			return nil, rollback.fail(err)
 		}
 	}
-	// Unmuting the target workspace stays chief-only: an ordinary delegation
-	// preserves the workspace's current mute state (references/delegation.md).
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
 			return nil, rollback.fail(fmt.Errorf("make delegated workspace visible: %s", errMsg))
 		}
 	}
-	// The seed is what a delegation is tracked on now; spawnDelegatedRuntime bound
-	// it before the runtime launched, because the delegate's own prompt names it.
 	if operationID != "" {
 		_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 			"delegated session bound", workspaceID, "", operationWorktreePath, nil, nil, time.Now())
@@ -963,14 +825,7 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, placement 
 	return result
 }
 
-// leafIdentityPreamble is prepended to every delegated agent's initial prompt.
-// attn marks a chief of staff with a passive, positive signal (an env var and a
-// system-prompt block); a delegated leaf gets nothing analogous — it is defined
-// only by the absence of those chief markers, an absence it shares with every
-// ordinary top-level session. Without this line, a leaf delegated by a non-chief
-// session is byte-identical to an ordinary session and has no way to learn it is
-// a leaf, so it can misapply chief-only guidance (like the delegation license) to
-// itself. See docs/plans/2026-06-30-delegated-leaf-not-chief.md.
+// See docs/plans/2026-06-30-delegated-leaf-not-chief.md.
 const leafIdentityPreamble = "You are a delegated attn session — a leaf, not a " +
 	"coordinator. Do the work below in this session. For your own subtasks, use " +
 	"native subagents (your Task/Agent tools), not `attn delegate` — delegating " +
@@ -978,15 +833,10 @@ const leafIdentityPreamble = "You are a delegated attn session — a leaf, not a
 	"watching. Spawn a visible attn agent only if the user steering this session " +
 	"explicitly asks for one."
 
-// withLeafIdentity prefixes a delegated agent's composed initial prompt with the
-// leaf identity line. Tracking is universal, so this line carries the whole
-// "you are a leaf" signal — a bound ticket is never a promotion to coordinator.
 func withLeafIdentity(prompt string) string {
 	return leafIdentityPreamble + "\n\n---\n\n" + strings.TrimSpace(prompt)
 }
 
-// delegatedBriefPrompt is a delegate's brief plus the reporting contract for
-// its bound seed. An outpost has no seed, so its brief stands alone.
 func delegatedBriefPrompt(brief, seedID string) string {
 	brief = strings.TrimSpace(brief)
 	if strings.TrimSpace(seedID) == "" {

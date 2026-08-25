@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// readySet is the garden's own readiness answer, keyed by id — the shape
-// progress counts against, so the two cannot disagree.
 func readySet(seeds []Seed) map[string]bool {
 	ready := map[string]bool{}
 	for _, seed := range Ready(seeds, nil) {
@@ -18,7 +16,6 @@ func readySet(seeds []Seed) map[string]bool {
 	return ready
 }
 
-// child is one plot member: part-of the crown, planted, unheld.
 func child(id, crown, status string, blocks ...string) Seed {
 	seed := Seed{ID: id, Title: id, Status: status, Edges: []Edge{{Kind: EdgePartOf, To: crown}}}
 	for _, target := range blocks {
@@ -27,16 +24,11 @@ func child(id, crown, status string, blocks ...string) Seed {
 	return seed
 }
 
-// heldBy claims a seed for a crew member, which is what growing means: a
-// growing seed with nobody on it would be offered as ready.
 func heldBy(seed Seed, member string) Seed {
 	seed.TenderMember = member
 	return seed
 }
 
-// A crown row's whole job is saying whether the plot is draining and where it
-// is stuck, so the counts have to come from the same readiness answer the
-// ready command gives.
 func TestPlotProgressCountsWhereTheChildrenStand(t *testing.T) {
 	seeds := []Seed{
 		{ID: "s-crown", Title: "crown", Status: StatusPlanted},
@@ -48,7 +40,6 @@ func TestPlotProgressCountsWhereTheChildrenStand(t *testing.T) {
 		child("s-late", "s-crown", StatusPlanted),
 		{ID: "s-elsewhere", Title: "elsewhere", Status: StatusPlanted},
 	}
-	// s-open holds s-late back, so exactly one child is blocked.
 	seeds[5].Edges = append(seeds[5].Edges, Edge{Kind: EdgeBlocks, To: "s-late"})
 
 	got := PlotProgress(seeds, "s-crown", readySet(seeds))
@@ -58,8 +49,6 @@ func TestPlotProgressCountsWhereTheChildrenStand(t *testing.T) {
 	}
 }
 
-// The crown is not its own child: counting it would make an untouched plot read
-// as one open item before anybody planted anything into it.
 func TestPlotProgressDoesNotCountTheCrown(t *testing.T) {
 	seeds := []Seed{{ID: "s-crown", Title: "crown", Status: StatusPlanted}}
 	if got := PlotProgress(seeds, "s-crown", readySet(seeds)); got.Total != 0 {
@@ -67,9 +56,6 @@ func TestPlotProgressDoesNotCountTheCrown(t *testing.T) {
 	}
 }
 
-// A plot is a tree, not one level: a grandchild is the plot's work as much as a
-// child, and a listing that stopped at depth one would report a plot as done
-// while its leaves are still open.
 func TestPlotProgressReachesTheWholeTree(t *testing.T) {
 	seeds := []Seed{
 		{ID: "s-crown", Title: "crown", Status: StatusPlanted},
@@ -81,8 +67,6 @@ func TestPlotProgressReachesTheWholeTree(t *testing.T) {
 	}
 }
 
-// Stale is measured against the window, and the boundary is inclusive so a
-// seed that has sat exactly the window is named rather than missed.
 func TestStaleNamesOnlyOpenSeedsPastTheWindow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		now := time.Now()
@@ -107,8 +91,6 @@ func TestStaleNamesOnlyOpenSeedsPastTheWindow(t *testing.T) {
 	})
 }
 
-// A seed with no movement evidence at all is not evidence of neglect. Judging
-// it stale would name seeds on nothing.
 func TestStaleSkipsASeedItHasNoEvidenceFor(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		seeds := []Seed{{ID: "s-unknown", Status: StatusPlanted}}
@@ -134,8 +116,6 @@ func TestParsePlotSpecReadsAWholePlot(t *testing.T) {
 	if spec.Title != "ship the thing" || len(spec.Children) != 3 {
 		t.Fatalf("parsed = %+v", spec)
 	}
-	// Children are parallel by default: a payload that names no blocks carries
-	// no sequencing at all.
 	for _, child := range spec.Children {
 		if len(child.Blocks) != 0 {
 			t.Fatalf("a child with no blocks came back sequenced: %+v", child)
@@ -143,8 +123,6 @@ func TestParsePlotSpecReadsAWholePlot(t *testing.T) {
 	}
 }
 
-// Everything a plot payload can get wrong is refused before anything is
-// written, and the refusal names what to change.
 func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 	cases := map[string]struct {
 		payload string
@@ -190,8 +168,6 @@ func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 	}
 }
 
-// A cycle three children long is still a cycle; a chain three children long is
-// not. The walk has to tell them apart.
 func TestValidatePlotSpecSeparatesAChainFromACycle(t *testing.T) {
 	chain := PlotSpec{Title: "t", Children: []PlotChildSpec{
 		{Title: "a", Blocks: []string{"b"}},
@@ -209,8 +185,6 @@ func TestValidatePlotSpecSeparatesAChainFromACycle(t *testing.T) {
 	}
 }
 
-// The payload is what an agent writes by hand, so its shape has to survive a
-// round trip through the documented JSON.
 func TestPlotSpecRoundTripsThroughItsPayload(t *testing.T) {
 	want := PlotSpec{Title: "t", Body: "b", Children: []PlotChildSpec{
 		{Title: "a", Body: "ab", Blocks: []string{"b"}},

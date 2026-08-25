@@ -1,7 +1,3 @@
-// app/src/components/PresentRoot/DriveBar.tsx
-// Fixed bottom strip for the Present reader: review-progress on the left,
-// keyboard hints in the middle, and the "Submit review" action on the right.
-// Jaunt-style "drive bar" — always visible, independent of scroll position.
 import './DriveBar.css';
 
 export interface DriveBarProps {
@@ -9,7 +5,6 @@ export interface DriveBarProps {
   totalCount: number;
   draftCount: number;
   submitting: boolean;
-  /** Shows the N/P hint iff the round carries any manifest author annotations. */
   hasAnnotations: boolean;
   onSubmit: () => void;
 }

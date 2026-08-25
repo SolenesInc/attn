@@ -30,9 +30,8 @@ func TestPin(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "base commit")
 	baseSHA := runGit(t, dir, "rev-parse", "HEAD")
 
-	// The initial branch name may be "main" or "master" depending on git
-	// config; resolve it before switching away so the test isn't
-	// environment-dependent.
+	// The initial branch may be "main" or "master" depending on git config; resolve
+	// it before switching away.
 	initialBranch := runGit(t, dir, "branch", "--show-current")
 	if initialBranch == "" {
 		t.Fatal("could not determine initial branch name")

@@ -5,10 +5,6 @@ import {
   type DocumentSubscriber,
 } from './daemonDocumentEvents';
 
-// The registry's whole job: route each delivery to the right subscriber, forget
-// one the daemon has ended, and remember the rest across a reconnect so they can
-// be re-sent — carrying what the subscriber holds at that moment, not what it
-// held when it first subscribed.
 
 function subscriber(overrides: Partial<DocumentSubscriber> = {}): DocumentSubscriber {
   return {
@@ -72,8 +68,6 @@ describe('DocumentSubscriptions', () => {
 
   it('forgets an ended subscription before telling the subscriber', () => {
     const registry = new DocumentSubscriptions();
-    // A subscriber that resubscribes in response must get a fresh id, not the
-    // one the daemon has just dropped.
     let idAtEnding = '';
     const sub = subscriber({
       onEnded: () => {

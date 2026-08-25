@@ -16,19 +16,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Boundary-bound, the whole paced set in this file. Four tests
-// (TestFsWriteBroadcastsUiChange, TestFsWriteNormalizesEchoedPath,
-// TestFsChangedExternalEditNotSelfWrite,
-// TestFsCommandsOmittedRootResolvesToNotebookRoot) start the real hub with
-// `go d.wsHub.run()`, whose loop has no exit path — a bubble would never end.
-// The rest (TestFsCommandsWithExplicitRootActOnThatDirectory,
-// TestFsWriteBroadcastsResolvedRoot, TestFsRenameDeleteNotebookCouplingIsRootConditional)
-// start a real fsnotify watcher through fsWatch, whose goroutine parks in kqueue
-// and so is never durably blocked. Giving the hub a quit channel is a production
-// change, which is why these stay on real time.
+// Boundary-bound, the whole paced set here: the real hub's loop has no exit path
+// and the fsnotify watcher parks in kqueue — neither can end a synctest bubble.
 
-// newFsDaemon returns a test daemon whose root (notebook.root, shared by the fs
-// surface) points at an isolated temp dir.
 func newFsDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -36,11 +26,6 @@ func newFsDaemon(t *testing.T) *Daemon {
 	return d
 }
 
-// trustedFsClient returns a wsClient identified — via the real identity
-// setters, not by poking identityMu-guarded fields directly — as the
-// authenticated attn app itself (isTrustedAppClient() == true). The fs
-// surface's explicit-root gate requires exactly this identity; ordinary
-// clients (browser tabs, other local processes) must not pass it.
 func trustedFsClient(bufSize int) *wsClient {
 	client := &wsClient{send: make(chan outboundMessage, bufSize), trustedTauriOrigin: true}
 	client.setBrowserHostAuthenticated(true)
@@ -48,17 +33,11 @@ func trustedFsClient(bufSize int) *wsClient {
 	return client
 }
 
-// fsWriteCAS performs a hash-CAS fs_write over the WS path and returns the decoded
-// result event (a successful result may carry conflict=true). Uses a throwaway
-// trusted client; the origin=ui broadcast goes to the hub, not this client.
 func fsWriteCAS(t *testing.T, d *Daemon, path, content, baseHash string) protocol.FsWriteResultMessage {
 	t.Helper()
 	return fsWriteCASRoot(t, d, path, content, baseHash, "")
 }
 
-// fsWriteCASRoot is fsWriteCAS with an explicit root (empty = notebook root).
-// Uses a trusted app client so root tests exercise root resolution, not the
-// separate auth-gate tests below.
 func fsWriteCASRoot(t *testing.T, d *Daemon, path, content, baseHash, root string) protocol.FsWriteResultMessage {
 	t.Helper()
 	client := trustedFsClient(8)
@@ -68,14 +47,11 @@ func fsWriteCASRoot(t *testing.T, d *Daemon, path, content, baseHash, root strin
 	return res
 }
 
-// listFs lists one directory over the WS fs path and returns the entries.
 func listFs(t *testing.T, d *Daemon, dir string) []protocol.FsEntry {
 	t.Helper()
 	return listFsRoot(t, d, dir, "")
 }
 
-// listFsRoot is listFs with an explicit root (empty = notebook root). Uses a
-// trusted app client; see fsWriteCASRoot.
 func listFsRoot(t *testing.T, d *Daemon, dir, root string) []protocol.FsEntry {
 	t.Helper()
 	client := trustedFsClient(8)
@@ -88,7 +64,6 @@ func listFsRoot(t *testing.T, d *Daemon, dir, root string) []protocol.FsEntry {
 	return res.Entries
 }
 
-// fsExists checks one path over the WS fs path and returns the decoded result event.
 func fsExists(t *testing.T, d *Daemon, path string) protocol.FsExistsResultMessage {
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 8)}
@@ -98,8 +73,6 @@ func fsExists(t *testing.T, d *Daemon, path string) protocol.FsExistsResultMessa
 	return res
 }
 
-// waitForFsChange returns the paths of the first fs_changed broadcast matching the
-// given origin, ignoring other events (notebook_changed, other origins).
 func waitForFsChange(t *testing.T, ch chan outboundMessage, origin string) []string {
 	t.Helper()
 	deadline := time.After(3 * time.Second)
@@ -120,8 +93,6 @@ func waitForFsChange(t *testing.T, ch chan outboundMessage, origin string) []str
 	}
 }
 
-// The fs surface writes, lists, and reads arbitrary files (not just .md) over the
-// WS path, round-tripping content and the hash used for hash-CAS edits.
 func TestFsWriteListReadWSResults(t *testing.T) {
 	d := newFsDaemon(t)
 
@@ -132,21 +103,17 @@ func TestFsWriteListReadWSResults(t *testing.T) {
 	}
 	hash := *create.Result.Hash
 
-	// List the root: the notes/ directory shows up (is_dir), not the file inside it
-	// (shallow).
 	rootEntries := listFs(t, d, "")
 	if len(rootEntries) != 1 || rootEntries[0].Name != "notes" || !rootEntries[0].IsDir {
 		t.Fatalf("root list = %+v, want a single notes/ directory", rootEntries)
 	}
 
-	// List notes/: the file shows up with its byte size and a non-empty mtime.
 	sub := listFs(t, d, "notes")
 	if len(sub) != 1 || sub[0].Path != "notes/todo.txt" || sub[0].IsDir ||
 		sub[0].Size != int(len("buy milk")) || sub[0].Modified == nil {
 		t.Fatalf("notes list = %+v", sub)
 	}
 
-	// Read the file: content + the same hash the write returned.
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.sendFsReadWSResult(client, "r1", "notes/todo.txt", "")
 	var read protocol.FsReadResultMessage
@@ -156,7 +123,6 @@ func TestFsWriteListReadWSResults(t *testing.T) {
 		t.Fatalf("read result = %+v", read.Result)
 	}
 
-	// A missing file is a failed result, not a panic or empty success.
 	d.sendFsReadWSResult(client, "r2", "nope.txt", "")
 	var missing protocol.FsReadResultMessage
 	readNotebookWSEvent(t, client.send, &missing)
@@ -188,9 +154,6 @@ func TestFsReadWSRejectsOversizedFile(t *testing.T) {
 	}
 }
 
-// fs_exists answers presence without reading: a present file is exists=true, a
-// genuinely absent path is a successful exists=false (the broken-link signal), and a
-// path the rules reject (a dotfile) is a failed result the UI leaves unflagged.
 func TestFsExistsWSResults(t *testing.T) {
 	d := newFsDaemon(t)
 	if c := fsWriteCAS(t, d, "knowledge/areas/foo.md", "x", ""); !c.Success || c.Result == nil {
@@ -214,8 +177,6 @@ func TestFsExistsWSResults(t *testing.T) {
 	}
 }
 
-// fs_write is hash-CAS: a stale base hash comes back as a successful result
-// carrying conflict=true (for the UI to reconcile), and a matching base applies.
 func TestFsWriteWSResultSaveAndConflict(t *testing.T) {
 	d := newFsDaemon(t)
 
@@ -237,10 +198,6 @@ func TestFsWriteWSResultSaveAndConflict(t *testing.T) {
 	}
 }
 
-// The fs reads/writes must dispatch correctly through handleClientMessage — the
-// real frontend path — not only when the WS-result handlers are called directly.
-// This covers the request_id/path/content/base_hash extraction in the websocket
-// switch (a swapped Deref would compile and ship).
 func TestFsDispatchThroughClientMessage(t *testing.T) {
 	d := newFsDaemon(t)
 	client := newWorkspaceProtocolTestClient()
@@ -254,8 +211,6 @@ func TestFsDispatchThroughClientMessage(t *testing.T) {
 		t.Fatalf("write dispatch = %+v", write)
 	}
 
-	// fs_list with request_id AND path set: a swapped Deref would put the path in
-	// request_id (and vice versa), so assert both correlation and scoping.
 	d.handleClientMessage(client, []byte(`{"cmd":"fs_list","request_id":"l1","path":"docs"}`))
 	var list protocol.FsListResultMessage
 	readNotebookWSEvent(t, client.send, &list)
@@ -271,8 +226,6 @@ func TestFsDispatchThroughClientMessage(t *testing.T) {
 		t.Fatalf("read dispatch = %+v", read.Result)
 	}
 
-	// fs_exists with request_id AND path set: assert both correlation and that the
-	// just-written note resolves as present (a swapped Deref would misroute either).
 	d.handleClientMessage(client, []byte(`{"cmd":"fs_exists","request_id":"e1","path":"docs/readme.md"}`))
 	var exists protocol.FsExistsResultMessage
 	readNotebookWSEvent(t, client.send, &exists)
@@ -296,9 +249,6 @@ func TestFsDispatchThroughClientMessage(t *testing.T) {
 	}
 }
 
-// fs_write broadcasts fs_changed(origin=ui) with the written path, so an open fs
-// view refreshes after an in-app save. (A non-.md path is used so the watcher does
-// not also fire — this isolates the direct ui broadcast.)
 func TestFsWriteBroadcastsUiChange(t *testing.T) {
 	d := newFsDaemon(t)
 	hubClient := &wsClient{send: make(chan outboundMessage, 64)}
@@ -319,9 +269,6 @@ func TestFsWriteBroadcastsUiChange(t *testing.T) {
 	}
 }
 
-// A write whose path arrives root-absolute (leading slash) echoes and broadcasts
-// the normalized root-relative path — the form fs_list returns — so the UI never
-// has to reconcile two spellings of the same file.
 func TestFsWriteNormalizesEchoedPath(t *testing.T) {
 	d := newFsDaemon(t)
 	hubClient := &wsClient{send: make(chan outboundMessage, 64)}
@@ -338,9 +285,6 @@ func TestFsWriteNormalizesEchoedPath(t *testing.T) {
 	}
 }
 
-// An external .md edit on disk surfaces as fs_changed(origin=external), while the
-// fs surface's own write is suppressed (self-write) and does not echo as external.
-// (The shared watcher only surfaces .md today, so this uses .md files.)
 func TestFsChangedExternalEditNotSelfWrite(t *testing.T) {
 	d := newFsDaemon(t)
 	root := d.store.GetSetting(SettingNotebookRoot)
@@ -348,16 +292,12 @@ func TestFsChangedExternalEditNotSelfWrite(t *testing.T) {
 	d.wsHub.clients[client] = true
 	go d.wsHub.run()
 
-	// Touch the fs surface so the lazy shared watcher starts, then let it settle.
 	listFs(t, d, "")
 	time.Sleep(80 * time.Millisecond)
 
-	// An fs_write records a self-write before it lands, so the watcher must not
-	// report it as external.
 	if res := fsWriteCAS(t, d, "own.md", "attn wrote this", ""); !res.Success || res.Result == nil || res.Result.Conflict {
 		t.Fatalf("own write = %+v", res.Result)
 	}
-	// An edit straight to disk (bypassing the daemon) must surface as external.
 	if err := os.WriteFile(filepath.Join(root, "ext.md"), []byte("edited externally"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -371,13 +311,8 @@ func TestFsChangedExternalEditNotSelfWrite(t *testing.T) {
 	}
 }
 
-// pngHeaderBytes is a minimal valid PNG signature + IHDR-ish prefix. It does not
-// need to decode as a real image: fs_read_asset only serves bytes, it never
-// decodes them.
 var pngHeaderBytes = []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D}
 
-// fsReadAsset reads one asset over the WS fs path and returns the decoded result
-// event.
 func fsReadAsset(t *testing.T, d *Daemon, requestID, path string) protocol.FsReadAssetResultMessage {
 	t.Helper()
 	client := &wsClient{send: make(chan outboundMessage, 4)}
@@ -387,8 +322,6 @@ func fsReadAsset(t *testing.T, d *Daemon, requestID, path string) protocol.FsRea
 	return res
 }
 
-// fs_read_asset serves an allowlisted image's bytes as base64 with its mime type,
-// round-tripping the exact bytes written to disk.
 func TestFsReadAssetWSResult(t *testing.T) {
 	d := newFsDaemon(t)
 	if res := fsWriteCAS(t, d, "assets/pic.png", string(pngHeaderBytes), ""); !res.Success || res.Result == nil {
@@ -411,8 +344,6 @@ func TestFsReadAssetWSResult(t *testing.T) {
 	}
 }
 
-// A path that escapes the notebook root is rejected by the same containment guard
-// fs_read uses (fsStoreFor/store.Read), not by any asset-specific path logic.
 func TestFsReadAssetPathEscape(t *testing.T) {
 	d := newFsDaemon(t)
 	got := fsReadAsset(t, d, "a1", "../outside.png")
@@ -421,7 +352,6 @@ func TestFsReadAssetPathEscape(t *testing.T) {
 	}
 }
 
-// A missing asset is a failed result with an error, not a panic or empty success.
 func TestFsReadAssetMissingFile(t *testing.T) {
 	d := newFsDaemon(t)
 	got := fsReadAsset(t, d, "a1", "assets/nope.png")
@@ -430,9 +360,6 @@ func TestFsReadAssetMissingFile(t *testing.T) {
 	}
 }
 
-// A file over the per-asset byte cap is rejected with an error mentioning the cap,
-// even though it has a supported extension. Written directly to disk (bypassing
-// fs_write, which has its own smaller 2MiB cap) so the asset cap is what's tested.
 func TestFsReadAssetOversize(t *testing.T) {
 	d := newFsDaemon(t)
 	root := d.store.GetSetting(SettingNotebookRoot)
@@ -450,10 +377,7 @@ func TestFsReadAssetOversize(t *testing.T) {
 	}
 }
 
-// A file at exactly the per-asset byte cap is accepted, and the resulting
-// fs_read_asset_result message still fits maxAssetMessageBytes once marshaled.
-// This is the boundary the cap derivation exists to guarantee: it fails if
-// someone raises maxAssetBytes without re-deriving it, or if the base64
+// Fails if maxAssetBytes is raised without re-deriving the cap, or if the base64
 // envelope math is wrong.
 func TestFsReadAssetMaxSizeFitsMessageCap(t *testing.T) {
 	d := newFsDaemon(t)
@@ -480,11 +404,8 @@ func TestFsReadAssetMaxSizeFitsMessageCap(t *testing.T) {
 	}
 }
 
-// assetMessageFits is the exact per-request wire-size check that guards against
-// an arbitrarily long path pushing a max-size asset's message over the cap. It
-// is a pure function, tested directly here rather than through a real long path
-// on disk: macOS's PATH_MAX (1024) makes a real >4 KiB path uncreatable, but the
-// check itself must still hold for paths far longer than that.
+// Tested directly rather than through a real long path: macOS's PATH_MAX (1024)
+// makes a real >4 KiB path uncreatable, but the check must hold past that.
 func TestAssetMessageFitsRejectsLongPath(t *testing.T) {
 	longPath := strings.Repeat("d/", 4096) + "x.png"
 	if fits, err := assetMessageFits("a1", longPath, "image/png", maxAssetBytes); err != nil {
@@ -500,8 +421,6 @@ func TestAssetMessageFitsRejectsLongPath(t *testing.T) {
 	}
 }
 
-// An extension outside the image allowlist is rejected before the file is even
-// read, regardless of the file's actual content.
 func TestFsReadAssetUnsupportedExtension(t *testing.T) {
 	d := newFsDaemon(t)
 	if res := fsWriteCAS(t, d, "assets/doc.pdf", "not an image", ""); !res.Success || res.Result == nil {
@@ -514,12 +433,6 @@ func TestFsReadAssetUnsupportedExtension(t *testing.T) {
 	}
 }
 
-// An explicit root pointing outside the notebook root must make fs_write/fs_read/
-// fs_list operate on THAT directory: the file must physically land there (not
-// under the notebook root), results must be relative to it, and the fs_changed
-// broadcast must carry the resolved root. This is the core PR1 behavior — without
-// it, an explicit root would be silently ignored or resolved against the wrong
-// base.
 func TestFsCommandsWithExplicitRootActOnThatDirectory(t *testing.T) {
 	d := newFsDaemon(t)
 	notebookRoot, err := d.notebookRoot()
@@ -528,9 +441,6 @@ func TestFsCommandsWithExplicitRootActOnThatDirectory(t *testing.T) {
 	}
 	externalRoot := t.TempDir()
 
-	// A generic root's fs_changed audience is its fs_watch subscribers, not
-	// every connected client (see broadcastFsChanged), so watch externalRoot
-	// to observe the write's broadcast.
 	watchClient := trustedFsClient(4)
 	if res := fsWatch(t, d, watchClient, "w1", externalRoot); !res.Success {
 		t.Fatalf("fs_watch(externalRoot) = %+v", res)
@@ -544,7 +454,6 @@ func TestFsCommandsWithExplicitRootActOnThatDirectory(t *testing.T) {
 		t.Fatalf("write result path = %q, want root-relative notes/todo.txt", write.Result.Path)
 	}
 
-	// The file must physically land under externalRoot, not the notebook root.
 	if _, err := os.Stat(filepath.Join(externalRoot, "notes", "todo.txt")); err != nil {
 		t.Fatalf("file did not land under explicit root: %v", err)
 	}
@@ -574,8 +483,6 @@ func TestFsCommandsWithExplicitRootActOnThatDirectory(t *testing.T) {
 	}
 }
 
-// waitForFsChangeWithRoot returns the full fs_changed event matching origin, so
-// callers can assert on Root in addition to Paths.
 func waitForFsChangeWithRoot(t *testing.T, ch chan outboundMessage, origin string) protocol.FsChangedMessage {
 	t.Helper()
 	deadline := time.After(3 * time.Second)
@@ -596,14 +503,10 @@ func waitForFsChangeWithRoot(t *testing.T, ch chan outboundMessage, origin strin
 	}
 }
 
-// fs_changed's root must be the resolved absolute root the write happened under,
-// so a UI subscribed to one root can ignore broadcasts for another.
 func TestFsWriteBroadcastsResolvedRoot(t *testing.T) {
 	d := newFsDaemon(t)
 	externalRoot := t.TempDir()
 
-	// A generic root's fs_changed audience is its fs_watch subscribers, not
-	// every connected client (see broadcastFsChanged).
 	watchClient := trustedFsClient(4)
 	if res := fsWatch(t, d, watchClient, "w1", externalRoot); !res.Success {
 		t.Fatalf("fs_watch(externalRoot) = %+v", res)
@@ -618,10 +521,6 @@ func TestFsWriteBroadcastsResolvedRoot(t *testing.T) {
 	}
 }
 
-// Omitting root must still resolve to the notebook root, and fs_changed.root must
-// equal it exactly — a back-compat regression would either break existing fs
-// clients (nothing sent a root before this PR) or silently resolve to some other
-// directory.
 func TestFsCommandsOmittedRootResolvesToNotebookRoot(t *testing.T) {
 	d := newFsDaemon(t)
 	notebookRoot, err := d.notebookRoot()
@@ -645,12 +544,6 @@ func TestFsCommandsOmittedRootResolvesToNotebookRoot(t *testing.T) {
 	}
 }
 
-// A relative root, and a root inside config.DataDir(), must both be rejected —
-// the same validation notebook.root enforces. Without this, a client could point
-// the fs surface at attn's own data dir (defeating the "notebook must live
-// outside .attn" invariant) or at an ambiguous relative path. Uses a trusted app
-// client so this exercises path validation specifically, not the separate
-// auth-gate tests below.
 func TestFsCommandsRejectInvalidRoots(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
@@ -677,13 +570,8 @@ func TestFsCommandsRejectInvalidRoots(t *testing.T) {
 	}
 }
 
-// fsdoc.Store deliberately permits symlinked roots, so the data-dir exclusion
-// in normalizeExternalRoot cannot be a purely lexical comparison: a root that
-// LOOKS external but is actually a symlink into config.DataDir() (or a subdir
-// of it) must still be rejected — otherwise fs_delete could reach attn.db
-// through the alias. Covers both the read-only path (fs_list) and the
-// mutating path (fs_delete), and asserts the delete never touches the data
-// dir file.
+// fsdoc.Store permits symlinked roots, so the data-dir exclusion cannot be
+// lexical: a root that symlinks into config.DataDir() reaches attn.db.
 func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
@@ -697,7 +585,6 @@ func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Symlink directly at the data dir.
 	linkDir := t.TempDir()
 	directLink := filepath.Join(linkDir, "editor-root")
 	if err := os.Symlink(config.DataDir(), directLink); err != nil {
@@ -729,7 +616,6 @@ func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 		t.Fatalf("fs_delete(symlink into data dir) must not touch the data dir, stat err = %v", err)
 	}
 
-	// Symlink to a SUBDIR of the data dir (nested alias) must also be rejected.
 	subdir := filepath.Join(config.DataDir(), "workers")
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
@@ -750,12 +636,8 @@ func TestFsCommandsRejectSymlinkedRootIntoDataDir(t *testing.T) {
 	}
 }
 
-// A symlink to a normal external directory (not aliasing the data dir) must
-// keep working: the canonicalization added for the data-dir exclusion check
-// must not become a general "no symlinked roots" ban. macOS matters here
-// specifically because t.TempDir() lives under /var/folders, itself reached
-// via a /private symlink — so this exercises the exact canonicalize-both-sides
-// path the fix relies on, not just a synthetic case.
+// t.TempDir() lives under /var/folders, reached via a /private symlink, so this
+// is the real canonicalize-both-sides path.
 func TestFsCommandsAcceptLegitimateSymlinkedRoot(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
@@ -783,11 +665,6 @@ func TestFsCommandsAcceptLegitimateSymlinkedRoot(t *testing.T) {
 	}
 }
 
-// An explicit root turns the fs surface into an arbitrary-file API, so it must be
-// gated on the caller being the authenticated attn app itself — not just any
-// accepted local WebSocket client (a browser tab, or any other local process that
-// completes the handshake). Without this gate, fs_read/{root} would let such a
-// client read any file the OS lets the daemon process read.
 func TestFsReadWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	externalRoot := t.TempDir()
@@ -808,9 +685,6 @@ func TestFsReadWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	}
 }
 
-// The write side of the same gate: an untrusted client must not be able to
-// CREATE a file anywhere on disk via an explicit root, and the attempted write
-// must never touch the filesystem (not merely reported as an error).
 func TestFsWriteWithExplicitRootDeniedForUntrustedClientAndFileNotCreated(t *testing.T) {
 	d := newFsDaemon(t)
 	externalRoot := t.TempDir()
@@ -830,10 +704,6 @@ func TestFsWriteWithExplicitRootDeniedForUntrustedClientAndFileNotCreated(t *tes
 	}
 }
 
-// The SAME untrusted client must still succeed with root omitted — the auth
-// gate is scoped to the explicit-root escape hatch, not the fs surface as a
-// whole. Regressing this would break every existing fs_* caller, none of which
-// authenticate as the app today.
 func TestFsCommandsOmittedRootStillWorksForUntrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	notebookRoot, err := d.notebookRoot()
@@ -853,11 +723,6 @@ func TestFsCommandsOmittedRootStillWorksForUntrustedClient(t *testing.T) {
 	}
 }
 
-// A client that has the browser-host secret and the right origin but declared a
-// non-tauri-app client kind (e.g. it spoofed/omitted client_hello's kind) must
-// still be denied. This catches the gate collapsing to token-only — checking just
-// trustedTauriOrigin+browserHostAuthenticated without clientKind would let any
-// client that merely obtained the secret claim arbitrary roots.
 func TestFsCommandsExplicitRootDeniedForNonTauriAppClientKind(t *testing.T) {
 	d := newFsDaemon(t)
 	externalRoot := t.TempDir()
@@ -877,11 +742,6 @@ func TestFsCommandsExplicitRootDeniedForNonTauriAppClientKind(t *testing.T) {
 	}
 }
 
-// fs_rename/fs_delete under a non-notebook root must broadcast fs_changed but NOT
-// notebook_changed (a foreign root has no notebook to couple to), while the same
-// operations under the notebook root must still broadcast both — regressing
-// either direction either leaks the notebook coupling to arbitrary roots or loses
-// it for the actual notebook.
 func TestFsRenameDeleteNotebookCouplingIsRootConditional(t *testing.T) {
 	d := newFsDaemon(t)
 	notebookRoot, err := d.notebookRoot()
@@ -894,21 +754,14 @@ func TestFsRenameDeleteNotebookCouplingIsRootConditional(t *testing.T) {
 	d.wsHub.clients[hubClient] = true
 	go d.wsHub.run()
 
-	// A generic root's fs_changed audience is its fs_watch subscribers, not
-	// every connected client (see broadcastFsChanged), so watch externalRoot
-	// to observe its write/rename/delete broadcasts below. notebook_changed
-	// stays global, so hubClient still covers the assertNoBroadcast checks.
 	watchClient := trustedFsClient(8)
 	if res := fsWatch(t, d, watchClient, "w1", externalRoot); !res.Success {
 		t.Fatalf("fs_watch(externalRoot) = %+v", res)
 	}
 
-	// --- foreign root: rename ---
 	if res := fsWriteCASRoot(t, d, "a.md", "x", "", externalRoot); !res.Success || res.Result == nil {
 		t.Fatalf("seed write (external) = %+v", res.Result)
 	}
-	// Drain the seed write's own fs_changed(a.md) so the rename's broadcast below
-	// is the one actually asserted on.
 	waitForFsChange(t, watchClient.send, originUI)
 	renameClient := trustedFsClient(4)
 	d.sendFsRenameWSResult(renameClient, "rn1", "a.md", "b.md", externalRoot)
@@ -922,7 +775,6 @@ func TestFsRenameDeleteNotebookCouplingIsRootConditional(t *testing.T) {
 		t.Fatalf("fs_changed after external rename = %v, want b.md", got)
 	}
 
-	// --- foreign root: delete ---
 	deleteClient := trustedFsClient(4)
 	d.sendFsDeleteWSResult(deleteClient, "d1", "b.md", externalRoot)
 	var deleteRes protocol.FsDeleteResultMessage
@@ -935,11 +787,9 @@ func TestFsRenameDeleteNotebookCouplingIsRootConditional(t *testing.T) {
 		t.Fatalf("fs_changed after external delete = %v, want b.md", got)
 	}
 
-	// --- notebook root: rename still broadcasts both ---
 	if res := fsWriteCAS(t, d, "c.md", "x", ""); !res.Success || res.Result == nil {
 		t.Fatalf("seed write (notebook) = %+v", res.Result)
 	}
-	// Drain the seed write's own fs_changed(c.md) broadcast.
 	waitForFsChange(t, hubClient.send, originUI)
 	renameClient2 := &wsClient{send: make(chan outboundMessage, 4)}
 	d.sendFsRenameWSResult(renameClient2, "rn2", "c.md", "d.md", "")
@@ -958,10 +808,6 @@ func TestFsRenameDeleteNotebookCouplingIsRootConditional(t *testing.T) {
 	_ = notebookRoot
 }
 
-// assertNoBroadcast fails the test if an event of the given type shows up on ch
-// within the wait window. Any other events (including fs_changed) are drained and
-// ignored so a later waitForFsChange in the same test still sees them — this
-// function only asserts absence of eventType.
 func assertNoBroadcast(t *testing.T, ch chan outboundMessage, eventType string, wait time.Duration) {
 	t.Helper()
 	deadline := time.After(wait)
@@ -985,8 +831,6 @@ func assertNoBroadcast(t *testing.T, ch chan outboundMessage, eventType string, 
 	}
 }
 
-// waitForNotebookChangeEvent returns the paths of the first notebook_changed
-// broadcast on ch.
 func waitForNotebookChangeEvent(t *testing.T, ch chan outboundMessage) []string {
 	t.Helper()
 	deadline := time.After(3 * time.Second)

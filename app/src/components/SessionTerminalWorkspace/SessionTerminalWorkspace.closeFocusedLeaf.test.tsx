@@ -7,8 +7,6 @@ import { tileContentKey, type TerminalWorkspaceState } from '../../types/workspa
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../../contexts/NotebookSurfaceContext';
 import type { WorkspaceSelectionStyle } from '../../utils/workspaceSelectionStyle';
 
-// The docked markdown tile below reads effectiveNotebookRoot unconditionally
-// via useNotebookSurfaceContext — real usage is always under App's provider.
 const testSurfaceValue: NotebookSurfaceContextValue = {
   makeDaemon: () => ({
     listDir: vi.fn(),
@@ -30,10 +28,7 @@ function NotebookSurfaceTestWrapper({ children }: { children: ReactNode }) {
   return <NotebookSurfaceProvider value={testSurfaceValue}>{children}</NotebookSurfaceProvider>;
 }
 
-// The terminal surface pulls in the Ghostty WASM model; stub it so the import
-// graph stays light in jsdom. The stub still announces readiness and takes real
-// DOM focus, because when a mounting terminal grabs focus is exactly what this
-// spec is about.
+// The Ghostty stub still announces readiness and takes real DOM focus: when a mounting terminal grabs focus is what this spec is about.
 const terminalFocusCalls = vi.hoisted(() => [] as string[]);
 vi.mock('../GhosttyTerminal', async () => {
   const React = await import('react');
@@ -55,8 +50,7 @@ vi.mock('../GhosttyTerminal', async () => {
         setSurfaceReleased: () => {},
       }), [paneId]);
       React.useImperativeHandle(ref, () => handle, [handle]);
-      // Once per mount, like the real terminal: onReady's identity changes every
-      // parent render, so firing on its identity would announce readiness forever.
+      // Once per mount: onReady's identity changes every parent render, so firing on it would announce forever.
       const onReadyRef = React.useRef(props.onReady);
       onReadyRef.current = props.onReady;
       React.useEffect(() => {
@@ -67,9 +61,6 @@ vi.mock('../GhosttyTerminal', async () => {
   };
 });
 
-// A split workspace: one terminal pane beside a docked markdown tile. This is the
-// shape that produces the reported bug — the tile lives inside
-// .session-terminal-workspace, so its Cmd+W is dispatched as terminal.close.
 function paneAndTileWorkspace(): TerminalWorkspaceState {
   return {
     agents: [{ id: 'pane-term', runtimeId: 'rt-1', sessionId: 'sess-1', title: 'shell' }],
@@ -86,7 +77,6 @@ function paneAndTileWorkspace(): TerminalWorkspaceState {
   };
 }
 
-// The same workspace with the tile undocked — one terminal pane, no split.
 function paneOnlyWorkspace(): TerminalWorkspaceState {
   return {
     agents: [{ id: 'pane-term', runtimeId: 'rt-1', sessionId: 'sess-1', title: 'shell' }],
@@ -104,7 +94,6 @@ function renderSplit(overrides: {
   const onUndockTile = overrides.onUndockTile ?? vi.fn();
   const onFocusPane = overrides.onFocusPane ?? vi.fn();
   const eventRouter = createPaneRuntimeEventRouterController();
-  // Zoom mode lives in App, so a standalone render needs a host to hold it.
   function ZoomHost({ workspace }: { workspace: TerminalWorkspaceState }) {
     const [zoomActive, setZoomActive] = useState(false);
     return (
@@ -158,9 +147,6 @@ describe('SessionTerminalWorkspace selection style', () => {
 });
 
 describe('SessionTerminalWorkspace leaf focus', () => {
-  // Clicking a tile must be enough — no programmatic focus() — for the tile to
-  // become the focused leaf and take real DOM focus. Everything else here
-  // (Cmd+W routing, the ⌘Enter send gate, keyboard scrolling) rides on it.
   it('makes a clicked tile the active leaf and gives its body DOM focus', () => {
     const { container } = renderSplit();
 
@@ -178,8 +164,6 @@ describe('SessionTerminalWorkspace leaf focus', () => {
     expect(document.activeElement).toBe(tileBody);
   });
 
-  // Zoom and maximize follow the focused leaf, so they land on a tile too —
-  // ⌘⇧Z used to be able to target only a terminal pane.
   it('zooms and maximizes the focused tile', () => {
     const { container } = renderSplit();
     const surface = container.querySelector('.session-terminal-workspace') as HTMLElement;
@@ -191,15 +175,11 @@ describe('SessionTerminalWorkspace leaf focus', () => {
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter', metaKey: true, shiftKey: true });
     expect(surface.getAttribute('data-maximized-pane-id')).toBe('tile-notes');
     expect(surface.getAttribute('data-zoomed-pane-id')).toBe('');
-    // The maximized tile renders alone, keeping its identity as a tile leaf.
     expect(container.querySelector('[data-pane-kind="agent"]')).toBeNull();
     expect(tileEl(container).getAttribute('data-pane-id')).toBe('tile-notes');
   });
 
-  // A markdown tile's id is derived from its file path, so closing one and
-  // reopening the same file produces the SAME leaf id. A maximized leaf that
-  // leaves the layout must therefore be forgotten, or reopening the file would
-  // silently come back maximized.
+  // A markdown tile's id is derived from its file path, so a maximized leaf that leaves the layout must be forgotten.
   it('forgets a maximized tile once it leaves the layout', () => {
     const { container, setWorkspace } = renderSplit();
     const surface = () => container.querySelector('.session-terminal-workspace') as HTMLElement;
@@ -215,9 +195,6 @@ describe('SessionTerminalWorkspace leaf focus', () => {
     expect(container.querySelector('[data-pane-kind="agent"]')).not.toBeNull();
   });
 
-  // Clicking back onto the terminal returns the focus display to the pane. The
-  // pane's own focus goes through onFocusPane (activePaneId is owned upstream),
-  // so the assertion here is the callback plus the chrome.
   it('returns the active leaf to the terminal pane when it is clicked', () => {
     const { container, onFocusPane } = renderSplit();
 
@@ -233,9 +210,6 @@ describe('SessionTerminalWorkspace leaf focus', () => {
 });
 
 describe('SessionTerminalWorkspace Cmd+W closes the focused leaf', () => {
-  // Regression: Cmd+W from inside a docked notebook tile used to close the
-  // previously-active terminal pane (activePaneId still pointed at it), killing
-  // the wrong leaf. It must undock the focused tile instead.
   it('undocks the focused tile instead of closing the active terminal pane', () => {
     const { container, onClosePane, onUndockTile } = renderSplit();
 
@@ -249,10 +223,6 @@ describe('SessionTerminalWorkspace Cmd+W closes the focused leaf', () => {
     expect(onClosePane).not.toHaveBeenCalled();
   });
 
-  // Focus utility terminal (⌘`) focuses the pane without changing activePaneId —
-  // the pane was already the session's active one. The focused tile has to be
-  // released anyway, or the active leaf stays the tile and Cmd+W undocks the
-  // document you just typed away from.
   it('closes the terminal pane after Focus utility terminal takes focus back from a tile', () => {
     const { container, onClosePane, onUndockTile } = renderSplit();
 
@@ -271,11 +241,6 @@ describe('SessionTerminalWorkspace Cmd+W closes the focused leaf', () => {
     expect(onUndockTile).not.toHaveBeenCalled();
   });
 
-  // A terminal that mounts while a tile holds focus must leave it alone. Maximizing
-  // the tile unmounts the terminal and restoring remounts it, so its ready callback
-  // fires with the tile still the focused leaf — if it grabbed focus there, DOM
-  // focus and the active leaf would disagree, which is the state the Cmd+W cases
-  // above are protecting against.
   it('leaves a focused tile alone when a terminal remounts and announces readiness', () => {
     const { container } = renderSplit();
     terminalFocusCalls.length = 0;
@@ -284,7 +249,6 @@ describe('SessionTerminalWorkspace Cmd+W closes the focused leaf', () => {
     const tileBody = tileEl(container).querySelector('.workspace-dock-tile-body') as HTMLElement;
     expect(document.activeElement).toBe(tileBody);
 
-    // Maximize the tile (terminal unmounts), then restore it (terminal remounts).
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter', metaKey: true, shiftKey: true });
     expect(container.querySelector('[data-pane-kind="agent"]')).toBeNull();
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter', metaKey: true, shiftKey: true });
@@ -295,8 +259,6 @@ describe('SessionTerminalWorkspace Cmd+W closes the focused leaf', () => {
     expect(document.activeElement).toBe(tileEl(container).querySelector('.workspace-dock-tile-body'));
   });
 
-  // The terminal-pane path is unchanged: Cmd+W with the pane focused closes that
-  // pane, never the tile — including after a tile visit.
   it('closes the active terminal pane when the pane is the focused leaf', () => {
     const { container, onClosePane, onUndockTile } = renderSplit();
 

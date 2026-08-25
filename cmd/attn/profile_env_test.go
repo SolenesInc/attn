@@ -20,9 +20,8 @@ func TestWriteProfileEnvClearsRoutingOverridesBeforeSelectingProfile(t *testing.
 	}
 }
 
-// The list is shared with the fence, so iterating it cannot catch a variable
-// missing from both. ATTN_DATA_DIR was exactly that gap: `profile-env` left it
-// behind, and an inherited one silently outranked the profile it selected.
+// The list is shared with the fence, so iterating it cannot catch a variable missing from
+// both. ATTN_DATA_DIR was that gap: an inherited one silently outranked the profile.
 func TestWriteProfileEnvClearsTheDataDir(t *testing.T) {
 	var output strings.Builder
 	writeProfileEnv(&output, "dev", false)

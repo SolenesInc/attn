@@ -22,11 +22,6 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// writeClaudeTranscriptFixture points ATTN_TOOL_HOME at a temp dir and writes
-// a Claude transcript for sessionID so FindClaudeTranscript (which walks
-// ~/.claude/projects) treats the session as resumable. Without it a
-// reload-resume id with no transcript on disk is correctly downgraded to a
-// fresh spawn.
 func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	t.Helper()
 	home := t.TempDir()
@@ -40,8 +35,6 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
-// fakeReloadBackend records the kill/remove/spawn orchestration and serves the
-// SessionInfo (geometry) + SessionLaunchParams (registry) the reload path reads.
 type fakeReloadBackend struct {
 	mu        sync.Mutex
 	liveIDs   []string
@@ -51,15 +44,9 @@ type fakeReloadBackend struct {
 	spawnErr  error
 	calls     []string
 	spawnOpts []ptybackend.SpawnOptions
-	spawnGate *rendezvous // optional: forces concurrent reloads to collide at Spawn
+	spawnGate *rendezvous
 }
 
-// rendezvous is a best-effort barrier: arrivals release together once `want` of
-// them gather, or fall through individually after `timeout`. It lets the concurrency
-// test deterministically force two unsynchronized reloads to reach Spawn together
-// (reproducing the "already exists" tear-down) while a correctly serialized reload —
-// where only one goroutine is ever in the composite — simply times out and proceeds
-// alone instead of deadlocking.
 type rendezvous struct {
 	want    int
 	timeout time.Duration
@@ -91,15 +78,9 @@ func (r *rendezvous) arrive() {
 	}
 }
 
-// Spawn models the real backend's liveness: it rejects an id that is still live
-// ("already exists"). With kill/remove/spawn serialized per session this never
-// fires; if two reloads interleave, the Spawn loser hits it — which is exactly the
-// tear-down the per-session reload lock exists to prevent.
 func (b *fakeReloadBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
 	if b.spawnGate != nil {
-		// Arrive BEFORE taking the liveness lock so two collided reloads (both having
-		// already cleared the id via their own Kill/Remove) decide add-vs-"already
-		// exists" against the same empty state.
+		// Arrive before taking the liveness lock, or the collision is not tested.
 		b.spawnGate.arrive()
 	}
 	b.mu.Lock()
@@ -202,9 +183,6 @@ func newReloadTestDaemon(t *testing.T, backend *fakeReloadBackend) *Daemon {
 	return newReloadTestDaemonOn(t, newReloadTestBase(t), backend)
 }
 
-// newReloadTestBase builds the daemon a bubbled reload test needs: constructed
-// outside the bubble, its store closed by the outer T. Pair it with
-// newReloadTestDaemonOn inside synctest.Test.
 func newReloadTestBase(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -226,10 +204,6 @@ func addReloadSession(d *Daemon, id string, agent protocol.SessionAgent, state p
 	})
 }
 
-// A reload re-spawns the live agent in place, preserving the transcript (resume)
-// and the launch flags the daemon does not otherwise persist (yolo, executable),
-// then announces runtime_respawned. The killed worker's exit is suppressed so the
-// reload reads as a runtime replacement, not a session close.
 func TestReloadSessionAgentRespawnsWithResumeAndPreservedLaunchParams(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"chief"},
@@ -239,8 +213,6 @@ func TestReloadSessionAgentRespawnsWithResumeAndPreservedLaunchParams(t *testing
 	d := newReloadTestDaemon(t, backend)
 	addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateWorking)
 	d.persistResumeSessionID("chief", "resume-xyz")
-	// The resume target must have a transcript on disk to be resumable; otherwise
-	// the reload correctly downgrades to a fresh spawn (see the fresh-spawn test).
 	writeClaudeTranscriptFixture(t, "resume-xyz")
 
 	var respawned, exited bool
@@ -285,7 +257,6 @@ func TestReloadSessionAgentRespawnsWithResumeAndPreservedLaunchParams(t *testing
 		t.Fatal("expected a runtime_respawned broadcast")
 	}
 
-	// The killed worker's async exit must be suppressed (not a session close).
 	d.handlePTYExit(ptybackend.ExitInfo{ID: "chief"})
 	if exited {
 		t.Fatal("session_exited must be suppressed for a reloading session")
@@ -295,10 +266,6 @@ func TestReloadSessionAgentRespawnsWithResumeAndPreservedLaunchParams(t *testing
 	}
 }
 
-// A chief promoted before it ever took a turn has a resume id (its own session id,
-// assigned at spawn) pointing at a transcript Claude has not written yet. Resuming
-// it would exit non-zero (a dead chief), so the reload must downgrade to a fresh
-// spawn — which reuses --session-id and preserves the session identity.
 func TestReloadSessionAgentFreshSpawnsWhenNotResumable(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"chief"},
@@ -307,8 +274,6 @@ func TestReloadSessionAgentFreshSpawnsWhenNotResumable(t *testing.T) {
 	}
 	d := newReloadTestDaemon(t, backend)
 	addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	// A resume id with NO transcript on disk: point ATTN_TOOL_HOME at an empty
-	// temp home so FindClaudeTranscript finds nothing for this id.
 	d.persistResumeSessionID("chief", "chief")
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 
@@ -323,10 +288,6 @@ func TestReloadSessionAgentFreshSpawnsWhenNotResumable(t *testing.T) {
 	}
 }
 
-// Resume restores the transcript, not launch flags. A worker that did not record
-// its launch params (pre-reload build) must NOT be respawned with defaulted flags
-// — a yolo chief would silently come back asking permissions. Abort instead and
-// leave the live worker untouched.
 func TestReloadSessionAgentAbortsWhenLaunchParamsNotRecorded(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"chief"},
@@ -346,16 +307,7 @@ func TestReloadSessionAgentAbortsWhenLaunchParamsNotRecorded(t *testing.T) {
 	}
 }
 
-// A reload reconstructs SpawnOptions from scratch, so it must re-attach the chief
-// context-window cap or a runtime reload/respawn would silently bring a chief back
-// UNCAPPED even though a fresh chief launch is capped. The cap is keyed on the
-// persisted chief role (not a spawn-time request flag), which is the same source
-// the wrapper's NotebookGuide RPC uses to decide chief-ness — so the reloaded cap
-// and the reloaded guidance stay consistent. Ordinary/delegated sessions stay
-// uncapped through reload even when a cap is configured.
 func TestBuildReloadSpawnOptionsCarriesContextWindowCap(t *testing.T) {
-	// No transcript on disk → deterministic resume resolution (fresh-spawn), which
-	// keeps buildReloadSpawnOptions from depending on a resumable transcript.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 
 	newDaemonWithSession := func(t *testing.T, sessionID string) *Daemon {
@@ -399,7 +351,6 @@ func TestBuildReloadSpawnOptionsCarriesContextWindowCap(t *testing.T) {
 
 	t.Run("reloaded non-chief session stays uncapped even with a chief cap configured", func(t *testing.T) {
 		d := newDaemonWithSession(t, "worker")
-		// A configured chief cap must not leak onto a delegated/ordinary reload.
 		d.store.SetSetting(SettingChiefContextWindowCap, "160000")
 
 		opts, err := d.buildReloadSpawnOptions(d.store.Get("worker"))
@@ -520,10 +471,7 @@ func TestReloadSessionAgentSkipsUnsupportedAgent(t *testing.T) {
 	}
 }
 
-// Boundary-bound: setting the notebook root starts the notebook fsnotify
-// watcher, whose goroutine parks in kqueue. That is a real fd nobody is durably
-// blocked on, so a bubble here hangs (measured: the 25s test timeout, with the
-// watcher the only goroutine left).
+// No synctest bubble: the notebook fsnotify watcher parks in kqueue and hangs it.
 func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"plugin-chief"},
@@ -609,7 +557,7 @@ func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testin
 	}
 }
 
-// Boundary-bound: same notebook fsnotify watcher as the test above.
+// No synctest bubble: same notebook fsnotify watcher as the test above.
 func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"plugin-chief"},
@@ -653,8 +601,7 @@ func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *
 	}
 }
 
-// Boundary-bound: same notebook fsnotify watcher. Its three sibling
-// set-chief-of-staff tests bubble because they never set a notebook root.
+// No synctest bubble: same notebook fsnotify watcher.
 func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testing.T) {
 	for _, test := range []struct {
 		name         string
@@ -740,8 +687,6 @@ func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testi
 	}
 }
 
-// A respawn that fails after the kill must never leave a live-looking pane over a
-// dead session: emit the real session_exited so the UI degrades to a dead pane.
 func TestReloadSessionAgentRespawnFailureBroadcastsSessionExited(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs:  []string{"chief"},
@@ -769,8 +714,6 @@ func TestReloadSessionAgentRespawnFailureBroadcastsSessionExited(t *testing.T) {
 	}
 }
 
-// Promotion AND demotion both reload, so the new chief status reaches the system
-// prompt either way (assign injects guidance, demote drops it).
 func TestSetChiefOfStaffReloadsOnAssignAndDemote(t *testing.T) {
 	base := newReloadTestBase(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -796,11 +739,6 @@ func TestSetChiefOfStaffReloadsOnAssignAndDemote(t *testing.T) {
 	})
 }
 
-// Two reloads of the same session fired concurrently (a rapid double-toggle, or a
-// role transfer that reloads both chiefs) must not interleave: the per-session
-// reload lock serializes them so neither Spawn loses the "already exists" race and
-// tears down the other's respawn. The session ends with exactly one live worker and
-// no session_exited.
 func TestReloadSessionAgentSerializesConcurrentReloads(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs:   []string{"chief"},
@@ -845,9 +783,6 @@ func TestReloadSessionAgentSerializesConcurrentReloads(t *testing.T) {
 	}
 }
 
-// Promoting a new chief while another session still holds the role demotes the old
-// chief via the single-holder upsert. Both must reload: the new chief to gain the
-// guidance, the displaced one to drop it now instead of keeping it until it restarts.
 func TestSetChiefOfStaffRoleTransferReloadsBothChiefs(t *testing.T) {
 	base := newReloadTestBase(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -867,7 +802,6 @@ func TestSetChiefOfStaffRoleTransferReloadsBothChiefs(t *testing.T) {
 		})
 		requireSpawnCount(t, backend, 1, "assign alice")
 
-		// Transfer the role to bob while alice still holds it.
 		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
 			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "bob", ChiefOfStaff: true,
 		})
@@ -882,10 +816,6 @@ func TestSetChiefOfStaffRoleTransferReloadsBothChiefs(t *testing.T) {
 	})
 }
 
-// The reload is destructive (kill + respawn), unlike the doorbell it replaced. A
-// redundant toggle that changes no role must NOT kill+respawn an innocent agent:
-// demoting a session that isn't the chief (a ClearProfileRole no-op), or re-assigning
-// the session that already holds the role.
 func TestSetChiefOfStaffNoReloadOnNoOpToggle(t *testing.T) {
 	base := newReloadTestBase(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -900,19 +830,16 @@ func TestSetChiefOfStaffNoReloadOnNoOpToggle(t *testing.T) {
 		addReloadSession(d, "other", protocol.SessionAgentClaude, protocol.SessionStateIdle)
 		client := newRenameTestClient()
 
-		// Demote a session that holds no role: nothing changes, nothing should reload.
 		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
 			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "other", ChiefOfStaff: false,
 		})
 		assertSpawnCountStaysBelow(t, backend, 1, "no-op demote of a non-chief")
 
-		// Real assign reloads once.
 		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
 			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true,
 		})
 		requireSpawnCount(t, backend, 1, "assign chief")
 
-		// Re-assigning the SAME session that already holds the role changes nothing.
 		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
 			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true,
 		})
@@ -920,9 +847,6 @@ func TestSetChiefOfStaffNoReloadOnNoOpToggle(t *testing.T) {
 	})
 }
 
-// assertSpawnCountStaysBelow asserts the spawn count never reached want. The
-// window a wrongly-fired async reload needed is now a settled bubble: there is no
-// goroutine left that could still spawn.
 func assertSpawnCountStaysBelow(t *testing.T, backend *fakeReloadBackend, want int, label string) {
 	t.Helper()
 	synctest.Wait()
@@ -931,8 +855,6 @@ func assertSpawnCountStaysBelow(t *testing.T, backend *fakeReloadBackend, want i
 	}
 }
 
-// requireSpawnCount settles the bubble and reads the count once: the reload is
-// async, and a settled bubble is the instant after which nothing more will spawn.
 func requireSpawnCount(t *testing.T, backend *fakeReloadBackend, want int, label string) {
 	t.Helper()
 	synctest.Wait()

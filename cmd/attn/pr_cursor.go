@@ -11,14 +11,8 @@ import (
 	"time"
 )
 
-// prWaitCursor is what a previous wait on this pull request already reported,
-// so an event landing between two waits is never absorbed into the next
-// baseline and silently swallowed. "Seen" differs per event shape: comments
-// are discrete (IDs); a verdict supersedes itself (record its submit time — a
-// standing verdict is still reported, a re-review is measured against it); a
-// failing check is a condition (which checks on which commit — same failure on
-// the same commit is not news twice). The cursor advances only to what a wait
-// reported; advancing to everything a poll saw would lose events permanently.
+// Advances only to what a wait REPORTED: advancing to everything a poll saw
+// loses events permanently.
 type prWaitCursor struct {
 	CommentIDs    []string  `json:"comment_ids,omitempty"`
 	VerdictAt     time.Time `json:"verdict_at,omitempty"`
@@ -59,8 +53,7 @@ func (c prWaitCursor) seenComments() map[string]bool {
 	return seen
 }
 
-// sameFailure reports whether a failing-checks observation is the one already
-// reported. Check order comes from the API, so compare as a set.
+// Check order comes from the API, so compare as a set.
 func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
 	if c.FailureHead != head {
 		return false
@@ -72,16 +65,14 @@ func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
 	return strings.Join(names, "\n") == strings.Join(previous, "\n")
 }
 
-// prCursorFileLimit caps stored comment IDs. Comment surfaces are queried
-// newest-100, so an ID older than that window can never come back as unseen.
+// Comment surfaces are queried newest-100, so an ID older than that window can
+// never come back as unseen.
 const prCursorFileLimit = 500
 
-// prCursorMaxAge is how long a cursor outlives its last use; nothing else
-// cleans the directory.
 const prCursorMaxAge = 30 * 24 * time.Hour
 
-// cursorPath locates one pull request's cursor. Every segment is a legal
-// filename without escaping: owner/repo cannot contain a slash, host is a domain.
+// Every segment is a legal filename without escaping: owner/repo cannot contain
+// a slash, host is a domain.
 func cursorPath(dir string, opts prWaitOptions) string {
 	host := opts.Host
 	if host == "" {
@@ -90,8 +81,6 @@ func cursorPath(dir string, opts prWaitOptions) string {
 	return filepath.Join(dir, host, opts.Owner, opts.Name, fmt.Sprintf("%d.json", opts.Number))
 }
 
-// loadPRWaitCursor reads the cursor for this pull request. A missing file is
-// the normal first call, not an error.
 func loadPRWaitCursor(dir string, opts prWaitOptions) (prWaitCursor, error) {
 	if dir == "" {
 		return prWaitCursor{}, nil
@@ -110,8 +99,6 @@ func loadPRWaitCursor(dir string, opts prWaitOptions) (prWaitCursor, error) {
 	return cursor, nil
 }
 
-// savePRWaitCursor writes the cursor atomically (temp file, then rename) so a
-// wait killed mid-write leaves either the old cursor or the new one.
 func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now time.Time) error {
 	if dir == "" {
 		return nil
@@ -149,8 +136,6 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	return nil
 }
 
-// prunePRWaitCursors drops cursors nothing has touched in prCursorMaxAge. Best
-// effort: a failure to prune must never fail a wait.
 func prunePRWaitCursors(dir string, now time.Time) {
 	cutoff := now.Add(-prCursorMaxAge)
 	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {

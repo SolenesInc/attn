@@ -14,17 +14,10 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// haltedTurnCase is one agent's captured halt, plus whatever its real transcript
-// finder needs in order to find the file.
 type haltedTurnCase struct {
 	name  string
 	agent protocol.SessionAgent
-	// seed writes the transcript the watcher must discover, and returns its path.
-	// Discovery is per-agent, and the watcher resolves the agent-native id through
-	// each real finder, so the fixture has to satisfy that exact lookup.
-	seed func(t *testing.T, home, dir, sessionID string) string
-	// abort is the captured line each agent writes when the user hits ESC, dated
-	// at `at`. The date is part of the contract: an undated halt is thrown away.
+	seed  func(t *testing.T, home, dir, sessionID string) string
 	abort func(at time.Time) string
 }
 
@@ -101,18 +94,8 @@ func haltedTurnCases() []haltedTurnCase {
 	}
 }
 
-// Halting a turn is the one ending no agent reports. Measured live: claude
-// 2.1.220 with all 31 of its hook events wired to a logger, codex 0.146.0 with
-// attn's own trusted-hash hook overrides, and copilot 1.0.77 — all interrupted
-// with ESC mid-turn, and none of them produce a Stop, a StopFailure, a
-// Notification, or anything else, for as long as you wait. What each does write,
-// in the same second, is a line in its transcript, so that is what the watcher
-// reads.
-//
-// These drive the real watcher against a real file rather than calling the
-// parser directly: discovery, tailing, the per-agent behavior, and the evidence
-// write are one path, and the bug this fixes lived in the fact that nothing
-// connected them.
+// Halting a turn is the one ending no agent reports: measured on claude 2.1.220, codex
+// 0.146.0 and copilot 1.0.77, none emit Stop — each writes a transcript line instead.
 func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 	for _, tc := range haltedTurnCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -126,8 +109,6 @@ func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 				addCharacterizationSession(t, d, id, tc.agent, protocol.SessionStateWorking)
 				session := d.store.Get(id)
 
-				// The turn the user is about to halt. Its closing hook is the one that
-				// never arrives.
 				d.recordBracketEvidence(id, protocol.StateWorking)
 
 				startedAt := time.Now()
@@ -136,8 +117,6 @@ func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 				d.startTranscriptWatcher(id, tc.agent, session.Directory, startedAt)
 				t.Cleanup(func() { d.stopTranscriptWatcher(id) })
 
-				// Let the watcher find the file before the abort lands, so the test
-				// exercises the tail rather than the bootstrap read.
 				requireTranscriptDiscovery(t, d, id)
 				writeLine(t, path, tc.abort(time.Now()))
 
@@ -188,8 +167,6 @@ func TestWatcherInvalidatesMessagesWhileSessionStaysWorking(t *testing.T) {
 			afterSeq = baseline[len(baseline)-1].Seq
 		}
 
-		// Codex can write the same completed prose in paired native records. One
-		// transcript poll invalidates once, not once per line.
 		writeLine(t, path, `{"type":"event_msg","payload":{"type":"agent_message","message":"Checking the current renderer."}}`)
 		writeLine(t, path, `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Checking the current renderer."}]}}`)
 		advancePolls(2)
@@ -225,7 +202,6 @@ func TestWatcherLifecycleRequiresExactNativeTranscriptIdentity(t *testing.T) {
 		addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
 		session := d.store.Get(id)
 
-		// A rollout in the same cwd is not authority for this session.
 		var seed func(t *testing.T, home, dir, sessionID string) string
 		for _, tc := range haltedTurnCases() {
 			if tc.name == "codex" {
@@ -274,11 +250,6 @@ func TestWatcherLifecycleRequiresExactNativeTranscriptIdentity(t *testing.T) {
 	})
 }
 
-// The watcher re-reads history as a matter of course — it rewinds a bootstrap
-// window behind the end of the file the moment it discovers one, and starts over
-// at offset zero whenever a transcript shrinks. A codex session resumed onto an
-// existing rollout replays every halt in that window. None of them are this
-// session's, and filing one settles a session that is working right now.
 func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 	for _, tc := range haltedTurnCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -293,8 +264,6 @@ func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 				session := d.store.Get(id)
 				d.recordBracketEvidence(id, protocol.StateWorking)
 
-				// The transcript already holds a halt from an earlier life, and the
-				// watcher starts after it — exactly what a resume looks like.
 				startedAt := time.Now()
 				path := tc.seed(t, home, session.Directory, id)
 				writeLine(t, path, tc.abort(startedAt.Add(-2*time.Hour)))
@@ -304,7 +273,6 @@ func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 				t.Cleanup(func() { d.stopTranscriptWatcher(id) })
 				requireTranscriptDiscovery(t, d, id)
 
-				// Long enough for several polls to have read the bootstrap window.
 				advancePolls(4)
 
 				got, ok := d.evidenceTable().snapshot(id)
@@ -322,9 +290,6 @@ func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 	}
 }
 
-// An undated halt cannot be told from one replayed out of history, so it is not
-// believed. Every agent attn watches dates its lines; losing the feature loudly
-// on a format that stops doing so beats settling live sessions on last week's ESC.
 func TestAnUndatedHaltIsIgnored(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	home, _ := toolhome.Dir()
@@ -362,9 +327,6 @@ func TestAnUndatedHaltIsIgnored(t *testing.T) {
 	})
 }
 
-// The halt is dated by the agent, not by the poll that read it. Half a second of
-// polling is long enough for the user to have typed again, and a halt filed with
-// the read time outranks the busy frames of the turn that followed it.
 func TestAHaltIsDatedByTheAgentNotTheRead(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-halt-dating"
@@ -380,14 +342,10 @@ func TestAHaltIsDatedByTheAgentNotTheRead(t *testing.T) {
 	if !got.LastHarnessEvent.ObservedAt.Equal(halted) {
 		t.Fatalf("observed at %s, want the agent's own %s", got.LastHarnessEvent.ObservedAt, halted)
 	}
-	// The movement clock still has to advance to now, or a halt read out of
-	// history would age the session into `stuck`.
 	if got.LastMovement.Before(halted.Add(time.Second)) {
 		t.Fatalf("last movement %s, want the read time: a late read must not age the session", got.LastMovement)
 	}
 
-	// The user typed again right after halting, and the agent is visibly running.
-	// The halt must not outrank that.
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: time.Now()})
 	evidence, _ := d.evidenceTable().snapshot(id)
 	if got := sessionstate.Resolve(evidence, sessionstate.PolicyFor(string(protocol.SessionAgentClaude)), time.Now()); got.Reason == sessionstate.ReasonTurnAborted {
@@ -395,16 +353,6 @@ func TestAHaltIsDatedByTheAgentNotTheRead(t *testing.T) {
 	}
 }
 
-// Copilot aborts for its own reasons too, and those are not the user halting the
-// turn — but they end it just the same, and the bracket they leave behind is the
-// watcher's own: nothing but this closes it, because copilot's turn_start is what
-// opened it and no `assistant.turn_end` follows an abort.
-//
-// It is not a bracket that expires. Copilot paints no heartbeat, so the resolver's
-// stale test can never retire it — `heartbeatSilentFor` answers "not silent"
-// forever for a session that has nothing to have gone quiet from — and the session
-// runs out the stuck timer and reports `unknown`. So the abort has to say the turn
-// is over, without saying the user did it.
 func TestACopilotAbortNobodyAskedForStillClosesTheTurn(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	home, _ := toolhome.Dir()
@@ -440,11 +388,6 @@ func TestACopilotAbortNobodyAskedForStillClosesTheTurn(t *testing.T) {
 			t.Fatal("copilot giving up on its own was filed as the user halting the turn")
 		}
 
-		// The bracket is what pins the session, and for copilot it pins it from the
-		// moment the abort lands: with no heartbeat to go silent, the resolver's stale
-		// test cannot retire the bracket at all, so `bracket_open` holds until the
-		// stuck timer converts it to `unknown`. Settling the turn is the classifier's
-		// job — this only has to prove nothing is still claiming the turn is running.
 		policy := sessionstate.PolicyFor(string(protocol.SessionAgentCopilot))
 		if reason := sessionstate.Resolve(got, policy, time.Now()).Reason; reason == sessionstate.ReasonBracketOpen {
 			t.Fatalf("reason %q: the abandoned turn held the session open", reason)
@@ -452,8 +395,6 @@ func TestACopilotAbortNobodyAskedForStillClosesTheTurn(t *testing.T) {
 	})
 }
 
-// requireClosedTurnBracket asserts the watcher has closed the evidence brackets,
-// which for copilot is the only thing that ends an abandoned turn.
 func requireClosedTurnBracket(t *testing.T, d *Daemon, sessionID string) sessionstate.Evidence {
 	t.Helper()
 	advancePolls(2)
@@ -464,9 +405,6 @@ func requireClosedTurnBracket(t *testing.T, d *Daemon, sessionID string) session
 	return got
 }
 
-// A user who quotes the marker back at claude — asking about it, pasting a log —
-// must not settle their own session. The dedicated field is what tells the two
-// apart, and this is the case that would make the fix worse than the bug.
 func TestATranscriptLineThatMerelyMentionsTheMarkerIsNotAHalt(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	home, _ := toolhome.Dir()
@@ -491,7 +429,6 @@ func TestATranscriptLineThatMerelyMentionsTheMarkerIsNotAHalt(t *testing.T) {
 		t.Cleanup(func() { d.stopTranscriptWatcher(id) })
 		requireTranscriptDiscovery(t, d, id)
 
-		// Long enough for several polls to have read the line and decided nothing.
 		advancePolls(4)
 
 		got, ok := d.evidenceTable().snapshot(id)
@@ -519,11 +456,6 @@ func writeLine(t *testing.T, path, line string) {
 	}
 }
 
-// requireTranscriptDiscovery advances past enough of the watcher's own polls for
-// it to have adopted a transcript, which is the point from which appended lines
-// are tailed. The watcher is a plain time.Ticker over the filesystem — no
-// fsnotify — so it runs at its shipped 500ms interval inside a bubble and two
-// ticks of fake time cost nothing.
 func requireTranscriptDiscovery(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	advancePolls(2)
@@ -535,7 +467,6 @@ func requireTranscriptDiscovery(t *testing.T, d *Daemon, sessionID string) {
 	}
 }
 
-// advancePolls runs n of the transcript watcher's polls to completion.
 func advancePolls(n int) {
 	time.Sleep(time.Duration(n) * transcriptPollInterval)
 	synctest.Wait()

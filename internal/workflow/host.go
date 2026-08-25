@@ -9,14 +9,13 @@ import (
 	"github.com/dop251/goja"
 )
 
-// nowRFC3339Nano stamps a display-only time, NEVER part of the cache identity.
+// Display-only; NEVER part of the cache identity.
 func nowRFC3339Nano() string {
 	return time.Now().UTC().Format(time.RFC3339Nano)
 }
 
-// runState holds everything mutated during a Run/Resume. It lives on the loop
-// goroutine; workers touch only the semaphore and mutate counters back on the
-// loop goroutine inside posted closures.
+// runState lives on the loop goroutine; workers touch only the semaphore and
+// mutate counters back on the loop goroutine inside posted closures.
 type runState struct {
 	vm    *goja.Runtime
 	el    *eventLoop
@@ -24,49 +23,40 @@ type runState struct {
 	jour  Journal
 	stack *pathStack
 
-	// ctx reaches every live agent() dispatch, so cancel tears the subagent down.
 	ctx context.Context
 
 	agentLifetimeCap int
 	maxItemsPerCall  int
 
-	// Loop-goroutine-only counters (mutated inside posted closures or synchronously).
 	liveAgentCount int
 	cachedCalls    int
 	liveCalls      int
 
-	// diverged latches on the first cache miss; every structurally-later agent()
-	// then runs live too, so no cached call ever has a live-run ancestor.
+	// diverged latches on the first cache miss, so no cached call ever has a
+	// live-run ancestor.
 	diverged bool
 
-	// Concurrency cap for live agent dispatch: correctness, not throughput.
 	sem chan struct{}
 
-	// Cached JS helpers giving parallel/pipeline their never-reject semantics in
-	// JS, where promise semantics are exact.
-	resolveThen goja.Callable // (p, onFulfilled, onRejected) => p.then(onFulfilled, onRejected)
-	promiseAll  goja.Callable // (arr) => Promise.all(arr)
+	resolveThen goja.Callable
+	promiseAll  goja.Callable
 
 	nullValue goja.Value
 }
 
-// callsiteKey is a stable lexical id for the agent() call site. Must be called
-// synchronously on the VM goroutine, while the call stack is intact.
+// MUST be called synchronously on the VM goroutine, while the call stack is intact.
 func (rs *runState) callsiteKey() string {
 	var frames [4]goja.StackFrame
 	captured := rs.vm.CaptureCallStack(4, frames[:0])
-	// frames[0] is the host fn's own frame; the first with a filename is the caller.
 	for _, f := range captured {
 		pos := f.Position()
 		if pos.Filename != "" && pos.Line > 0 {
 			return fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column)
 		}
 	}
-	// A single bucket; the loop counter still disambiguates repeats.
 	return "<unknown>"
 }
 
-// installHostFns registers args/log/phase/agent/parallel/pipeline/workflow.
 func installHostFns(rs *runState, args any) error {
 	vm := rs.vm
 	rs.nullValue = goja.Null()
@@ -123,8 +113,7 @@ func installHostFns(rs *runState, args any) error {
 	return nil
 }
 
-// makeAgentFn returns the agent(prompt, opts?) host function. It must read the
-// structural ordinal SYNCHRONOUSLY, before any async boundary.
+// agent() MUST read the structural ordinal synchronously, before any async boundary.
 func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 	vm := rs.vm
 	return func(call goja.FunctionCall) goja.Value {
@@ -132,28 +121,22 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 		if len(call.Arguments) > 0 {
 			prompt = call.Arguments[0].String()
 		}
-		// The schema is part of the cache identity (hashSchema).
 		schema := extractAgentSchema(call.Argument(1))
-		// Threaded to the stub but NOT part of the cache identity, which stays
-		// ordinal+prompt_hash+schema_hash.
+		// NOT part of the cache identity, which stays ordinal+prompt_hash+schema_hash.
 		isolation := validateIsolation(extractAgentString(call.Argument(1), "isolation"))
 		model := extractAgentString(call.Argument(1), "model")
 		agentType := extractAgentString(call.Argument(1), "agentType")
-		// label is display metadata, not part of the cache identity.
 		label := extractAgentString(call.Argument(1), "label")
 
-		// Fix the ordinal synchronously, before anything async.
 		site := rs.callsiteKey()
 		ordinal := rs.stack.ordinalFor(site)
 		ordKey := ordinal.String()
 		promptHash := hashPrompt(prompt)
 		schemaHash := hashSchema(schema)
-		// Captured here so it reflects THIS call's position. Display only.
 		phaseTitle := rs.stack.currentPhase()
 
 		p, resolve, _ := vm.NewPromise()
 
-		// A hit resolves immediately, but only inside the unchanged prefix.
 		if !rs.diverged {
 			if entry, ok := rs.jour.Lookup(ordKey); ok && IsCacheHit(entry, ordKey, promptHash, schemaHash) {
 				rs.cachedCalls++
@@ -161,7 +144,6 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 				mustResolve(resolve, val)
 				return vm.ToValue(p)
 			}
-			// Latch divergence so everything after runs live.
 			rs.diverged = true
 		}
 
@@ -170,8 +152,6 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 			panic(vm.ToValue((&ErrAgentCap{Cap: rs.agentLifetimeCap}).Error()))
 		}
 
-		// An in-flight record, so a multi-minute call is visible. IsCacheHit rejects
-		// non-terminal entries, and the terminal Upsert overwrites this in place.
 		startedAt := nowRFC3339Nano()
 		rs.jour.Upsert(JournalEntry{
 			Ordinal: ordKey, PromptHash: promptHash, SchemaHash: schemaHash,
@@ -192,12 +172,9 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 			})
 			<-rs.sem
 
-			// The ONLY place a worker's value re-enters the runtime.
 			rs.el.post(func() {
 				rs.liveCalls++
 				if runErr != nil {
-					// Resolves null, never rejects; the display fields are carried so
-					// overwriting the "running" row keeps them.
 					rs.jour.Upsert(JournalEntry{
 						Ordinal: ordKey, PromptHash: promptHash, SchemaHash: schemaHash,
 						Result: nil, Status: "errored", Err: runErr.Error(),
@@ -221,8 +198,6 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 	}
 }
 
-// extractAgentSchema pulls `schema` off the agent() opts object as canonical
-// JSON, so the same logical schema hashes identically across runs.
 func extractAgentSchema(optsVal goja.Value) json.RawMessage {
 	if optsVal == nil || goja.IsUndefined(optsVal) || goja.IsNull(optsVal) {
 		return nil
@@ -246,8 +221,6 @@ func extractAgentSchema(optsVal goja.Value) json.RawMessage {
 	return json.RawMessage(raw)
 }
 
-// extractAgentString pulls a string property off the agent() opts object;
-// non-strings are ignored rather than coerced.
 func extractAgentString(optsVal goja.Value, key string) string {
 	if optsVal == nil || goja.IsUndefined(optsVal) || goja.IsNull(optsVal) {
 		return ""
@@ -267,8 +240,6 @@ func extractAgentString(optsVal goja.Value, key string) string {
 	return s
 }
 
-// validateIsolation normalizes the isolation opt to "" (share the working tree)
-// or "worktree". Unknown falls back to "" so a typo can't change where a call runs.
 func validateIsolation(s string) string {
 	if s == "worktree" {
 		return "worktree"
@@ -276,15 +247,13 @@ func validateIsolation(s string) string {
 	return ""
 }
 
-// mustResolve re-panics on goja's uncatchable errors (a watchdog
-// *InterruptedError), which it returns; without that the loop silently stalls.
+// Re-panics on goja's uncatchable *InterruptedError; swallowing it stalls the loop.
 func mustResolve(resolve func(interface{}) error, v goja.Value) {
 	if err := resolve(v); err != nil {
 		panic(err)
 	}
 }
 
-// resultToValue converts a journaled JSON result into a goja Value (null on empty).
 func (rs *runState) resultToValue(raw json.RawMessage) goja.Value {
 	if len(raw) == 0 {
 		return rs.nullValue
@@ -296,8 +265,6 @@ func (rs *runState) resultToValue(raw json.RawMessage) goja.Value {
 	return rs.vm.ToValue(v)
 }
 
-// makeParallelFn returns parallel(thunks): a barrier that never rejects; a
-// throwing thunk yields a null slot.
 func (rs *runState) makeParallelFn() func(goja.FunctionCall) goja.Value {
 	vm := rs.vm
 	return func(call goja.FunctionCall) goja.Value {
@@ -310,11 +277,9 @@ func (rs *runState) makeParallelFn() func(goja.FunctionCall) goja.Value {
 		for i, thunkV := range thunks {
 			thunk, ok := goja.AssertFunction(thunkV)
 			if !ok {
-				// Non-callable slot -> null.
 				childPromises[i] = rs.settledNull()
 				continue
 			}
-			// So agent() inside reads the positional ordinal, whatever the timing.
 			pop := rs.stack.push(segParallelSlot, i)
 			slotPath := rs.stack.snapshot()
 			childPromises[i] = rs.invokeNullable(thunk, slotPath)
@@ -330,8 +295,6 @@ func (rs *runState) makeParallelFn() func(goja.FunctionCall) goja.Value {
 	}
 }
 
-// makePipelineFn returns pipeline(items, ...stages): no barrier, each item flows
-// through all stages independently; a throwing stage drops that item to null.
 func (rs *runState) makePipelineFn() func(goja.FunctionCall) goja.Value {
 	vm := rs.vm
 	return func(call goja.FunctionCall) goja.Value {
@@ -362,9 +325,8 @@ func (rs *runState) makePipelineFn() func(goja.FunctionCall) goja.Value {
 	}
 }
 
-// buildPipelineItem constructs one item's .then chain synchronously, but each
-// stage's agent() fires at resolution time — hence the captured path snapshot
-// re-established before each callback.
+// Each stage's agent() fires at resolution time, hence the captured path
+// re-established before every callback.
 func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Callable) goja.Value {
 	vm := rs.vm
 	popItem := rs.stack.push(segPipelineItem, j)
@@ -373,10 +335,9 @@ func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Call
 	prev := rs.settledValue(item)
 	for s, stage := range stages {
 		popStage := rs.stack.push(segStage, s)
-		stagePath := rs.stack.snapshot() // captured at construction; bound to (j, s)
+		stagePath := rs.stack.snapshot()
 
 		if stage == nil {
-			// Non-callable stage: drop the item to null for the rest.
 			prev = rs.settledNull()
 			popStage()
 			continue
@@ -386,7 +347,6 @@ func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Call
 		idxVal := vm.ToValue(j)
 		origItem := item
 
-		// A null prevResult (a prior stage dropped the item) short-circuits.
 		onFulfilled := func(fcall goja.FunctionCall) goja.Value {
 			prevResult := fcall.Argument(0)
 			if goja.IsNull(prevResult) || goja.IsUndefined(prevResult) {
@@ -396,7 +356,6 @@ func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Call
 			defer restore()
 			v, err := stageFn(goja.Undefined(), prevResult, origItem, idxVal)
 			if err != nil {
-				// Throwing stage -> null for this item.
 				return rs.nullValue
 			}
 			return v
@@ -413,8 +372,6 @@ func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Call
 	return prev
 }
 
-// invokeNullable runs a thunk under a captured path, wrapping the result so a
-// throw or rejection becomes a null slot.
 func (rs *runState) invokeNullable(fn goja.Callable, capturedPath []segment) goja.Value {
 	vm := rs.vm
 	// Matters for agent() issued after an await; synchronous calls see the push.
@@ -438,7 +395,6 @@ func (rs *runState) invokeNullable(fn goja.Callable, capturedPath []segment) goj
 	if thrown {
 		return rs.settledNull()
 	}
-	// So a later rejection becomes null and continuations keep the captured path.
 	onRejected := func(goja.FunctionCall) goja.Value { return rs.nullValue }
 	onFulfilled := func(fcall goja.FunctionCall) goja.Value {
 		restore := rs.stack.replace(capturedPath)
@@ -452,19 +408,16 @@ func (rs *runState) invokeNullable(fn goja.Callable, capturedPath []segment) goj
 	return wrapped
 }
 
-// settledValue returns an already-fulfilled promise carrying v.
 func (rs *runState) settledValue(v goja.Value) goja.Value {
 	p, resolve, _ := rs.vm.NewPromise()
 	mustResolve(resolve, v)
 	return rs.vm.ToValue(p)
 }
 
-// settledNull returns an already-fulfilled promise carrying null.
 func (rs *runState) settledNull() goja.Value {
 	return rs.settledValue(rs.nullValue)
 }
 
-// toSlice flattens a goja array-like value into a Go slice of element Values.
 func toSlice(vm *goja.Runtime, v goja.Value) []goja.Value {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return nil
@@ -485,7 +438,6 @@ func toSlice(vm *goja.Runtime, v goja.Value) []goja.Value {
 	return out
 }
 
-// toIfaceSlice adapts a []goja.Value to the variadic []interface{} NewArray wants.
 func toIfaceSlice(vs []goja.Value) []interface{} {
 	out := make([]interface{}, len(vs))
 	for i, v := range vs {

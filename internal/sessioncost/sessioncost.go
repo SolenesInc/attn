@@ -1,4 +1,3 @@
-// Package sessioncost owns provider-neutral token accounting and USD pricing.
 package sessioncost
 
 import (
@@ -11,13 +10,10 @@ import (
 	"strings"
 )
 
-// SessionCostPricePrefix prefixes an exact-model price override in settings.
-// The suffix is the transcript's model id, without alias expansion.
 const SessionCostPricePrefix = "session_cost.price."
 
-// Usage is one model's billable token traffic. InputTokens excludes cache
-// reads: adapters for providers whose input count includes cached tokens must
-// subtract that subset before adding the usage to a Ledger.
+// Usage is one model's billable token traffic. InputTokens excludes cache reads:
+// an adapter whose provider counts them in must subtract before adding.
 type Usage struct {
 	InputTokens                  int64 `json:"input_tokens"`
 	OutputTokens                 int64 `json:"output_tokens"`
@@ -27,13 +23,10 @@ type Usage struct {
 	UnclassifiedCacheWriteTokens int64 `json:"unclassified_cache_write_tokens"`
 }
 
-// HasUsage reports whether the value is valid and contains any token traffic.
 func (u Usage) HasUsage() bool {
 	return u.valid() && u.hasUsage()
 }
 
-// Add returns the component-wise sum. Invalid input or overflow produces an
-// invalid value so Price reports unknown instead of silently undercharging.
 func (u Usage) Add(other Usage) Usage {
 	if !u.valid() || !other.valid() {
 		return invalidUsage()
@@ -45,9 +38,6 @@ func (u Usage) Add(other Usage) Usage {
 	return next
 }
 
-// Subtract returns the component-wise difference. Invalid input or underflow
-// produces an invalid value so Price reports unknown instead of silently
-// undercharging.
 func (u Usage) Subtract(other Usage) Usage {
 	if !u.valid() || !other.valid() ||
 		other.InputTokens > u.InputTokens ||
@@ -68,12 +58,8 @@ func (u Usage) Subtract(other Usage) Usage {
 	}
 }
 
-// Ledger preserves usage by exact model id so a settings change can reprice a
-// session and a model switch does not apply the new model's rate retroactively.
 type Ledger map[string]Usage
 
-// Add accumulates non-negative usage without partially applying an overflow.
-// It returns false for empty, negative, overflowing, or nil-ledger input.
 func (l Ledger) Add(model string, usage Usage) bool {
 	if l == nil || !usage.hasUsage() || !usage.valid() {
 		return false
@@ -91,8 +77,6 @@ func (l Ledger) Add(model string, usage Usage) bool {
 	return true
 }
 
-// RateCard prices each token category in USD per million tokens. A complete
-// settings override supplies every field, including zero-priced categories.
 type RateCard struct {
 	InputUSDPerMTok        float64 `json:"input_usd_per_mtok"`
 	OutputUSDPerMTok       float64 `json:"output_usd_per_mtok"`
@@ -101,8 +85,6 @@ type RateCard struct {
 	CacheWrite1hUSDPerMTok float64 `json:"cache_write_1h_usd_per_mtok"`
 }
 
-// ParseOverrides decodes all non-blank exact-model overrides. It rejects an
-// incomplete object rather than filling omitted categories with a free rate.
 func ParseOverrides(settings map[string]string) (map[string]RateCard, error) {
 	keys := make([]string, 0)
 	for key := range settings {
@@ -131,10 +113,6 @@ func ParseOverrides(settings map[string]string) (map[string]RateCard, error) {
 	return overrides, nil
 }
 
-// Price returns the ledger's standard USD list-price estimate. hasUsage is
-// false only before any token usage exists. known is false when any used model
-// has no rate or when persisted usage/settings are invalid; partial totals are
-// never returned as if they were the whole session cost.
 func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, hasUsage bool) {
 	for _, usage := range ledger {
 		if usage.hasAnyValue() {
@@ -157,9 +135,8 @@ func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, 
 		if !usage.valid() {
 			return 0, false, true
 		}
-		// Claude transcripts that report only aggregate cache creation do not say
-		// whether those writes used the 5-minute or 1-hour rate. Guessing would
-		// violate the session-cost contract, so the entire total stays unknown.
+		// An aggregate cache-creation count does not say whether the writes billed
+		// at the 5-minute or 1-hour rate, so the whole total stays unknown.
 		if usage.UnclassifiedCacheWriteTokens > 0 {
 			return 0, false, true
 		}

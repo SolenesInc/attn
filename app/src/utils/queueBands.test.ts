@@ -30,8 +30,6 @@ describe('buildQueueBands', () => {
   });
 
   it('reads turn_owed rather than deriving it from state', () => {
-    // The daemon applies exclusions the client cannot see, so a session that
-    // looks like it wants attention but is not owed must not appear.
     const bands = buildQueueBands(views([
       { id: 'waiting-but-settled', label: 'a', workspaceId: 'ws-a', state: 'waiting_input', turnOwed: false },
       { id: 'working-but-owed', label: 'b', workspaceId: 'ws-a', state: 'working', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -126,9 +124,6 @@ describe('buildQueueBands', () => {
   });
 
   it('keeps pinned and muted workspaces out of both bands — they stay in the tree', () => {
-    // Pinning is the way out of the queue entirely, and muting is its absolute
-    // sibling. Either one landing in Settled would put it back in the list it
-    // was taken out of.
     const pinnedAndMuted = [
       { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true },
       { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b', muted: true },
@@ -143,8 +138,6 @@ describe('buildQueueBands', () => {
   });
 
   it('anchors the chief even when its workspace is pinned or muted', () => {
-    // The chief is the seat you always want to reach, not a piece of work you
-    // filed away, so neither pin nor mute takes its slot from it.
     for (const flag of [{ pinned: true }, { muted: true }]) {
       const bands = buildQueueBands(buildWorkspaceViewModels(
         [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', ...flag }],
@@ -167,8 +160,8 @@ describe('buildQueueBands', () => {
   });
 
   describe('snoozed', () => {
-    // Fixed clocks: a snooze is a comparison against now, and a test whose
-    // deadlines drift with the wall clock is a test that expires.
+    // Fixed clocks: a snooze is a comparison against now, and a test whose deadlines drift
+    // with the wall clock is a test that expires.
     const now = Date.parse('2026-07-26T12:00:00Z');
     const laterToday = '2026-07-26T13:00:00Z';
     const laterStill = '2026-07-26T18:00:00Z';
@@ -195,9 +188,6 @@ describe('buildQueueBands', () => {
     });
 
     it('returns a lapsed deadline to the settled band', () => {
-      // The daemon strips a lapsed deadline from the broadcast, but a client
-      // holding a snapshot across the wake must not park the row for as long as
-      // it takes the next one to land.
       const bands = buildQueueBands(views([
         { id: 'woken', label: 'woken', workspaceId: 'ws-a', turnSnoozedUntil: '2026-07-26T11:00:00Z' },
       ]), now);
@@ -207,9 +197,6 @@ describe('buildQueueBands', () => {
     });
 
     it('keeps a snoozed agent out of the turns band even if a snapshot still says owed', () => {
-      // The daemon settles as it snoozes, so the two never both hold. The order
-      // of the checks is what stops a snapshot taken mid-broadcast from drawing
-      // a deferred agent as a turn the user owes.
       const bands = buildQueueBands(views([
         { id: 'both', label: 'both', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z', turnSnoozedUntil: laterToday },
       ]), now);
@@ -219,8 +206,6 @@ describe('buildQueueBands', () => {
     });
 
     it('leaves a pinned workspace out of the snoozed list too', () => {
-      // Pinned and muted are in the tree, not the bands, whatever else is true
-      // of them.
       const pinnedViews = buildWorkspaceViewModels(
         [{ id: 'ws-p', title: 'P', directory: '/repo/p', rank: 'a', pinned: true }],
         [{ id: 'pinned', label: 'pinned', workspaceId: 'ws-p', turnSnoozedUntil: laterToday }],
@@ -236,7 +221,6 @@ describe('oldestWantedTurn', () => {
   const wantsOwed = (session: QueueBandSession) => Boolean(session.turnOwed);
 
   it('lands on the turn owed longest, not the first in list order', () => {
-    // The list arrives in workspace order; ⌘J must follow the queue's order.
     const target = oldestWantedTurn([
       { id: 'newest', label: 'newest', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
       { id: 'oldest', label: 'oldest', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -247,8 +231,6 @@ describe('oldestWantedTurn', () => {
   });
 
   it('skips sessions that do not want the user, whatever their stamp says', () => {
-    // A settled turn keeps its turnOpenedAt until the next turn opens; being
-    // old is not being owed.
     const target = oldestWantedTurn([
       { id: 'settled-old', label: 'a', workspaceId: 'ws-a', turnOwed: false, turnOpenedAt: '2026-07-26T08:00:00Z' },
       { id: 'owed', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T10:00:00Z' },
@@ -282,9 +264,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('reads the position from the earlier snapshot, where the closed row still is', () => {
-    // The row is already out of the turns band by the time this runs, so a
-    // decision made from the new bands alone would have no position to continue
-    // from and would restart at the top of the queue.
     const queue = [owed('oldest', 0), owed('watched', 1), owed('newest', 2)];
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([queue[0], { ...queue[1], turnOwed: false }, queue[2]]));
@@ -295,8 +274,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('wraps to the top when the bottom row is the one that closed', () => {
-    // Queue order is not attention order: the rows above are still owed, so the
-    // bottom row moves on to the oldest rather than falling off the end.
     const queue = [owed('oldest', 0), owed('middle', 1), owed('watched', 2)];
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([queue[0], queue[1], { ...queue[2], turnOwed: false }]));
@@ -307,10 +284,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('skips a successor that settled in the same broadcast', () => {
-    // One update can close several turns — an auto-settle countdown and a settle
-    // from another client landing together. The successor was owed in the old
-    // snapshot and is not owed in this one, so landing on it would hand the user
-    // a second agent that is already finished with them.
     const queue = [owed('watched', 0), owed('alsoSettled', 1), owed('after', 2)];
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([
@@ -325,9 +298,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('wraps past a coalesced settle rather than falling through to home', () => {
-    // The only row still owed sits above the one that closed, and the row below
-    // it went with it. Eligibility is read from the new band, so the wrap has to
-    // keep going rather than stop at the first old-snapshot successor.
     const queue = [owed('stillOwed', 0), owed('watched', 1), owed('alsoSettled', 2)];
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([
@@ -342,9 +312,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('lands on a turn that opened in the same broadcast that closed this one', () => {
-    // The arrival has no position in the old snapshot, so the scan cannot find
-    // it. Home is reached from the current band being empty, never from the old
-    // one running out — otherwise a queue that is not empty sends the user home.
     const watched = owed('watched', 0);
     const before = buildQueueBands(views([watched]));
     const after = buildQueueBands(views([{ ...watched, turnOwed: false }, owed('arrival', 1)]));
@@ -355,8 +322,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('goes home when the closed turn was the last one owed', () => {
-    // Staying would leave the user on the one agent guaranteed to be finished
-    // with them.
     const only = owed('watched', 0);
     const before = buildQueueBands(views([only]));
     const after = buildQueueBands(views([{ ...only, turnOwed: false }]));
@@ -372,7 +337,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('stays put when the watched agent never owed the turn that closed', () => {
-    // Someone else's turn closing is not a reason to move the user.
     const queue = [owed('elsewhere', 0)];
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', workspaceId: 'ws-a' }]));
@@ -381,9 +345,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('stays put when the row left the queue by being pinned rather than settled', () => {
-    // Pinning clears turn_owed too, but it means "keep this in view" — being
-    // carried off to another agent is the opposite of what was asked for. The
-    // row lands in no band at all, which is what tells the two apart.
     const watched = owed('watched', 0);
     const before = buildQueueBands(views([watched, owed('next', 1, 'ws-b')]));
     const after = buildQueueBands(buildWorkspaceViewModels(
@@ -397,8 +358,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('stays put when the watched agent is gone from the bands entirely', () => {
-    // A closed session, or a muted workspace: nothing settled, so nothing to
-    // move on from.
     const watched = owed('watched', 0);
     const before = buildQueueBands(views([watched, owed('next', 1)]));
     const after = buildQueueBands(views([owed('next', 1)]));
@@ -407,9 +366,6 @@ describe('advanceAfterTurnClosed', () => {
   });
 
   it('moves on when the watched turn closed by being snoozed', () => {
-    // A snooze closes the turn on the agent the user is looking at, exactly like
-    // a settle — so leaving them parked in the agent they just deferred is the
-    // bookkeeping this exists to remove.
     const watched = owed('watched', 0);
     const before = buildQueueBands(views([watched, owed('next', 1)]));
     const after = buildQueueBands(views([
@@ -444,8 +400,6 @@ describe('advanceAfterTurnClosed', () => {
 
 describe('headOfQueue', () => {
   it('is the turn owed longest, not the first one listed by the workspace tree', () => {
-    // Home waits on this while the queue is empty, so it must answer with the
-    // same row the band and ⌘J lead with — the oldest turn, wherever it lives.
     const bands = buildQueueBands(views([
       { id: 'newer', label: 'newer', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T12:00:00Z' },
       { id: 'older', label: 'older', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -490,8 +444,6 @@ describe('the pinned band', () => {
   });
 
   it('leaves a pinned session in a pinned workspace out of the bands entirely', () => {
-    // The workspace keeps its group in the tree, so a row here would draw the
-    // agent twice.
     const bands = buildQueueBands(buildWorkspaceViewModels(
       [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true }],
       [{ id: 'both', label: 'both', workspaceId: 'ws-a', pinnedAt: '2026-08-05T10:00:00Z' }],
@@ -531,8 +483,6 @@ describe('satellite shells', () => {
   });
 
   it('gives an orphan its row back when the agent is gone', () => {
-    // Reachability: a session with no parent to be reached through has only its
-    // own row left, and the queue reorders rather than hides.
     const bands = buildQueueBands(views([
       { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'closed-agent' },
     ]));
@@ -592,11 +542,7 @@ describe('the crew band', () => {
       { id: 'worker', label: 'worker', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
     ]));
 
-    // Member id order, not state order: a member's row is where the user
-    // learned it is, every day.
     expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-keel', 'sess-trellis']);
-    // Exactly once on the sidebar — a day that also appeared under turns or
-    // pinned would be the same agent in two places.
     expect(bands.turns.map((row) => row.session.id)).toEqual(['worker']);
     expect(bands.pinned).toHaveLength(0);
     expect(bands.settled).toHaveLength(0);

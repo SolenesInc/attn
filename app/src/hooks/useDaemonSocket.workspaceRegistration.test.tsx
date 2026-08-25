@@ -81,11 +81,6 @@ function emitInitialState(ws: FakeWebSocket) {
   });
 }
 
-// Registering and unregistering a workspace park a promise that only the daemon
-// can settle. A registration the daemon refuses — a forwarded remote one that
-// failed, say — comes back as `command_error`, which carries no correlation id,
-// so the socket has to match it by command name. Without that the caller waits
-// out the full ten seconds and reports a timeout, hiding what the daemon said.
 describe('useDaemonSocket workspace registration errors', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -129,9 +124,6 @@ describe('useDaemonSocket workspace registration errors', () => {
       });
     });
 
-    // Drain the ten-second registration timeout too: if the command_error branch
-    // is ever dropped, this test fails on the timeout's own wording rather than
-    // hanging on a promise nobody settles.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });

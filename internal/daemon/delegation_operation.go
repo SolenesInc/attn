@@ -15,8 +15,6 @@ import (
 func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
-		// Compatibility for older websocket clients. The CLI always supplies and
-		// prints a stable key, which is the recoverable retry contract.
 		requestID = uuid.NewString()
 	}
 	if strings.HasPrefix(requestID, "op-") {
@@ -76,11 +74,6 @@ func (d *Daemon) finishDelegationFailure(id string, err error) {
 		"delegation failed", "", "", nil, err)
 }
 
-// Terminal persistence is part of completing the launch operation, not
-// best-effort bookkeeping. If SQLite temporarily rejects the write after
-// externally visible side effects, keep one finisher alive so callers cannot be
-// stranded polling a permanently preparing record. Daemon restart is the other
-// recovery boundary: pending records are resumed from the durable journal.
 func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, workspaceID, worktreePath string, result *protocol.DelegateResult, operationErr error) {
 	delay := 100 * time.Millisecond
 	for {

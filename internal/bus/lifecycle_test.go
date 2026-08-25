@@ -10,12 +10,6 @@ import (
 	"time"
 )
 
-// Runtime consumer lifecycle: a durable consumer can arrive and leave while the
-// bus runs, because an app installs and uninstalls while the daemon runs.
-
-// A consumer registered after Start is served immediately — an install must not
-// wait for a daemon restart — and it starts at head, exactly as one registered
-// before Start does. Registration is not a request to replay history.
 func TestRegisterAfterStartDeliversFromHead(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -47,10 +41,6 @@ func TestRegisterAfterStartDeliversFromHead(t *testing.T) {
 	}
 }
 
-// Head is where a consumer NEW to the store starts. One whose row survives — the
-// same daemon re-registering it after a restart, an app whose registration was
-// never removed — resumes from its persisted cursor, so runtime registration
-// carries the same catch-up guarantee startup registration does.
 func TestRegisterAfterStartResumesAnExistingCursor(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -59,7 +49,6 @@ func TestRegisterAfterStartResumesAnExistingCursor(t *testing.T) {
 	}
 	t.Cleanup(b.Stop)
 
-	// A row left at cursor 0 by an earlier run, and a backlog it never read.
 	if err := s.SaveConsumer(Consumer{Name: "app:notes", Cursor: 0, Filter: "*", Enabled: true}, time.Now()); err != nil {
 		t.Fatalf("seeding the consumer: %v", err)
 	}
@@ -81,16 +70,10 @@ func TestRegisterAfterStartResumesAnExistingCursor(t *testing.T) {
 	}
 }
 
-// Unregister is the way out: the loop stops and the row goes. The row matters as
-// much as the loop — while it exists and is enabled it holds the retention floor
-// down against a consumer nobody serves.
 func TestUnregisterStopsDeliveryAndDeletesTheRow(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
 
-	// A second consumer that stays registered is the signal that the bus has
-	// delivered a later fact, so "the unregistered one received nothing more" is
-	// asserted against a real receipt rather than a wait.
 	witness := newRecorder()
 	if err := b.Register("witness", All, witness.handle); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -125,17 +108,14 @@ func TestUnregisterStopsDeliveryAndDeletesTheRow(t *testing.T) {
 	}
 }
 
-// Unregister must interrupt a loop parked in its retry sleep. A consumer stalled
-// at the retry cap sits in that wait for two minutes; an uninstall that had to
-// wait it out would look like a hang.
 func TestUnregisterInterruptsAConsumerParkedInRetryBackoff(t *testing.T) {
 	s := newMemStore()
-	// A retry sleep far longer than any correct run needs: if Unregister waits for
-	// the timer, this test hangs to its tripwire instead of passing slowly.
 	b := New(Options{
 		Store:        s,
 		Log:          func(string, ...interface{}) {},
 		PollInterval: 5 * time.Millisecond,
+		// A retry sleep far longer than any correct run needs: if Unregister waits for
+		// the timer, this test hangs to its tripwire instead of passing slowly.
 		RetryBase:    time.Hour,
 		RetryCap:     time.Hour,
 		TrimInterval: time.Hour,
@@ -171,21 +151,13 @@ func TestUnregisterInterruptsAConsumerParkedInRetryBackoff(t *testing.T) {
 	}
 }
 
-// Cancel, wait for the loop to exit, then delete the row — in that order. Deleting
-// first leaves the live loop reading a registration that disappeared, which is an
-// error path that records a failure and retries forever: a zombie consumer.
 func TestUnregisterDeletesTheRowOnlyAfterTheLoopExits(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	// Released on cleanup too, so an assertion that fails before the release below
-	// still frees the handler: otherwise Stop would wait on a loop parked inside it
-	// and the failure would read as a hang.
 	releaseHandler := sync.OnceFunc(func() { close(release) })
-	// The handler deliberately ignores cancellation: the case under test is a
-	// handler still running when Unregister lands.
 	handler := func(context.Context, Event) error {
 		close(entered)
 		<-release
@@ -198,8 +170,6 @@ func TestUnregisterDeletesTheRowOnlyAfterTheLoopExits(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(b.Stop)
-	// Registered after Stop's cleanup so it runs before it: cleanups are LIFO, and
-	// Stop waits for the delivery loop that is parked inside the handler.
 	t.Cleanup(releaseHandler)
 
 	d := b.durables[0]
@@ -220,8 +190,6 @@ func TestUnregisterDeletesTheRowOnlyAfterTheLoopExits(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- b.Unregister("app:slow") }()
 
-	// Wait for Unregister to have retired the consumer, so releasing the handler
-	// really is a result arriving after the unregister began.
 	waitFor(t, "the consumer to be retired", d.isRetired)
 	releaseHandler()
 
@@ -236,19 +204,11 @@ func TestUnregisterDeletesTheRowOnlyAfterTheLoopExits(t *testing.T) {
 	default:
 		t.Fatal("Unregister returned while the delivery loop was still running")
 	}
-	// The handler completed after the unregister; its cursor advance is dropped,
-	// so nothing recreated or moved the row it no longer owns.
 	if _, ok, err := s.GetConsumer("app:slow"); err != nil || ok {
 		t.Fatalf("a late handler result wrote to the deleted registration (found=%v, err=%v)", ok, err)
 	}
 }
 
-// The name is claimed for the whole of Unregister, not just up to the moment it
-// leaves the in-memory set. Serving a Register inside that window would resume the
-// outgoing consumer's cursor from a row that is deleted underneath the new loop,
-// which then drains against a registration that disappeared and retries that error
-// forever — the zombie the delete-last ordering exists to prevent, through the
-// side door.
 func TestRegisterIsRefusedWhileTheNameIsBeingUnregistered(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -268,7 +228,6 @@ func TestRegisterIsRefusedWhileTheNameIsBeingUnregistered(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(b.Stop)
-	// After Stop's cleanup, so it runs before it. See the note above.
 	t.Cleanup(releaseHandler)
 
 	d := b.durables[0]
@@ -281,7 +240,6 @@ func TestRegisterIsRefusedWhileTheNameIsBeingUnregistered(t *testing.T) {
 	go func() { done <- b.Unregister("app:notes") }()
 	waitFor(t, "the consumer to be retired", d.isRetired)
 
-	// The row still exists here: the loop has not exited, so the delete has not run.
 	if _, ok, err := s.GetConsumer("app:notes"); err != nil || !ok {
 		t.Fatalf("expected the row to still exist mid-unregister (found=%v, err=%v)", ok, err)
 	}
@@ -294,7 +252,6 @@ func TestRegisterIsRefusedWhileTheNameIsBeingUnregistered(t *testing.T) {
 		t.Fatalf("Unregister: %v", err)
 	}
 
-	// Once the row is gone the name is free again.
 	rec := newRecorder()
 	if err := b.Register("app:notes", All, rec.handle); err != nil {
 		t.Fatalf("Register after the unregister completed: %v; the name stayed claimed", err)
@@ -305,9 +262,6 @@ func TestRegisterIsRefusedWhileTheNameIsBeingUnregistered(t *testing.T) {
 	waitFor(t, "the reinstalled consumer to deliver", func() bool { return rec.count() >= 1 })
 }
 
-// A retired consumer writes nothing. Its handler may still be in flight when the
-// registration goes, and a cursor advance or failure record against a row that no
-// longer exists is a no-op — not an error, not a failure streak.
 func TestRetiredConsumerDropsLateResults(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -329,9 +283,6 @@ func TestRetiredConsumerDropsLateResults(t *testing.T) {
 	}
 }
 
-// The orphan case the row lifecycle exists for: a stalled enabled consumer pins
-// retention, and nothing above its cursor can be trimmed while it is registered.
-// Unregistering it is what lets the floor move again.
 func TestUnregisteringAStalledConsumerReleasesTheRetentionFloor(t *testing.T) {
 	s := newMemStore()
 	clk := &testClock{now: time.Now()}
@@ -359,8 +310,6 @@ func TestUnregisteringAStalledConsumerReleasesTheRetentionFloor(t *testing.T) {
 	}
 	t.Cleanup(b.Stop)
 
-	// Two facts well outside the retention window, neither of which the stalled
-	// consumer will ever get past.
 	clk.advance(-4 * time.Hour)
 	for _, name := range []string{"a.happened", "b.happened"} {
 		if _, err := b.Publish(name, "", nil); err != nil {
@@ -382,9 +331,6 @@ func TestUnregisteringAStalledConsumerReleasesTheRetentionFloor(t *testing.T) {
 	}
 }
 
-// Unregister is idempotent, and it deletes rows this process never registered —
-// the orphan an earlier daemon left behind is exactly what an uninstall has to be
-// able to clear.
 func TestUnregisterIsIdempotentAndClearsOrphanRows(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -411,9 +357,6 @@ func TestUnregisterIsIdempotentAndClearsOrphanRows(t *testing.T) {
 	}
 }
 
-// A row that could not be deleted is reported, not swallowed: the loop is already
-// stopped, so the caller is left with an orphan row it has to be able to see and
-// retry.
 func TestUnregisterReportsAFailedRowDelete(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -445,9 +388,6 @@ func TestUnregisterReportsAFailedRowDelete(t *testing.T) {
 	}
 }
 
-// Reinstalling under the same name starts at head again: the cursor left with the
-// row, so an app that was removed and put back reacts to what happens next rather
-// than to the backlog it missed.
 func TestReinstallAfterUnregisterStartsAtHead(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -487,10 +427,6 @@ func TestReinstallAfterUnregisterStartsAtHead(t *testing.T) {
 	}
 }
 
-// A registration that fails anywhere before it is recorded leaves nothing behind:
-// no consumer in the set, no loop, and the name is free to try again. The failure
-// injected here is the log-bounds read, the first of the two store calls; the
-// invariant is the same for either.
 func TestRegisterAfterStartRollsBackWhenRegistrationFails(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -515,11 +451,6 @@ func TestRegisterAfterStartRollsBackWhenRegistrationFails(t *testing.T) {
 	waitFor(t, "the retried registration to deliver", func() bool { return rec.count() >= 1 })
 }
 
-// An app's subscriptions change when a new version is applied, and the consumer
-// serving it must follow without losing its place. This is the property that
-// rules out unregister-then-register: that pair expresses the same intent and
-// deletes the cursor on the way through, so the app would resume at head and skip
-// whatever was published while it was being updated.
 func TestSetFilterChangesDeliveryAndKeepsTheCursor(t *testing.T) {
 	s := newMemStore()
 	b := testBus(t, s)
@@ -560,7 +491,6 @@ func TestSetFilterChangesDeliveryAndKeepsTheCursor(t *testing.T) {
 		t.Fatal("SetFilter cleared the enabled bit; the kill switch is not its business")
 	}
 
-	// The new subscription is what the live loop uses, and the old one is gone.
 	if _, err := b.Publish("ticket.commented", "t2", nil); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
@@ -575,9 +505,6 @@ func TestSetFilterChangesDeliveryAndKeepsTheCursor(t *testing.T) {
 	}
 }
 
-// A caller changing the filter of a consumer nobody serves is told so. Answering
-// success would let an app believe its new subscriptions are live and learn
-// otherwise only from deliveries that never arrive.
 func TestSetFilterRefusesAnUnregisteredConsumer(t *testing.T) {
 	b := testBus(t, newMemStore())
 	if err := b.Start(); err != nil {

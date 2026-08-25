@@ -14,8 +14,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Browser screenshot and PDF results may approach the browser host's 24 MiB
-// serialized-result budget when relayed from an authenticated endpoint.
+// A browser screenshot or PDF result may approach the browser host's 24 MiB serialized-result budget.
 const remoteWSMessageReadLimit = 32 << 20
 const remoteWSDialRetryDelay = 250 * time.Millisecond
 
@@ -102,10 +101,8 @@ func connectViaSSHOnce(ctx context.Context, sshTarget, authToken, profile string
 	return ws, cmd, nil
 }
 
-// killAndReap terminates cmd and waits for it to exit so the child is not left
-// as a zombie on macOS. cmd.Wait also drains the Std{in,out,err}Pipe goroutines
-// that StdinPipe/StdoutPipe spawned; calling only os.Process.Kill leaks both the
-// OS-level zombie and the pipe goroutines.
+// cmd.Wait also drains the Std{in,out,err}Pipe goroutines; os.Process.Kill alone leaks
+// both the macOS zombie and the pipe goroutines.
 func killAndReap(cmd *exec.Cmd) {
 	if cmd == nil || cmd.Process == nil {
 		return

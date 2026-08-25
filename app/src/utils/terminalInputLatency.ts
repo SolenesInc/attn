@@ -127,9 +127,8 @@ function maybeRecordIncident(
   );
 }
 
-// DOM event timestamps are normally relative to performance.timeOrigin, but
-// older WebKit builds may report epoch milliseconds. Normalize both forms and
-// reject incompatible clocks rather than manufacturing a giant delay.
+// Older WebKit builds may report epoch milliseconds rather than performance
+// .timeOrigin-relative: normalize both and reject incompatible clocks.
 export function terminalEventQueueDelayMs(
   eventTimestamp: number,
   monotonicNow: number,

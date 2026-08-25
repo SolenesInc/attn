@@ -1,17 +1,10 @@
 package pty
 
-// Worker-side OSC 133 command-block table — the production workerBlockTable.
-// Lifecycle mirrors the client's TerminalBlockStore, proven identical by the
-// shared corpus (testdata/osc133_block_corpus.json). Positions are tracked grid
-// refs resolved to SCREEN-space rows at snapshot time; command text and exit
-// code are captured at parse time — unrecoverable from the grid later. Refs
-// are native memory: every retirement path must free them, and one marker's
+// Refs are native memory: every retirement path must free them, and one marker's
 // ref can back two blocks (self-heal), hence the reference counting.
 
 const maxBlocks = 200
 
-// sharedRef reference-counts one blockRef so a position pinned once can back
-// more than one block with a single native ref and a single Free.
 type sharedRef struct {
 	ref blockRef
 	rc  int
@@ -32,8 +25,6 @@ func (s *sharedRef) release() {
 	}
 }
 
-// freeIfUnheld frees the underlying ref only when nothing acquired it (an
-// orphan marker whose position no block kept). No-op once acquired.
 func (s *sharedRef) freeIfUnheld() {
 	if s.rc == 0 && s.ref != nil {
 		s.ref.Free()
@@ -48,8 +39,6 @@ func (s *sharedRef) point() (x, y int, ok bool) {
 	return s.ref.ScreenPoint()
 }
 
-// trackedBlock is one command block. hasCommand distinguishes a bare Enter
-// from a real command and arms self-heal; altScreen blocks drop at snapshot.
 type trackedBlock struct {
 	id         uint64
 	promptRef  *sharedRef
@@ -72,8 +61,8 @@ func (b *trackedBlock) release() {
 	}
 }
 
-// blockTable is the production workerBlockTable. All methods run under
-// replayMu (via blockFeeder), so it holds no lock of its own.
+// blockTable's methods all run under replayMu (via blockFeeder), so it holds no
+// lock of its own.
 type blockTable struct {
 	completed []*trackedBlock
 	pending   *trackedBlock
@@ -84,13 +73,11 @@ func newBlockTable() *blockTable {
 	return &blockTable{nextID: 1}
 }
 
-// ApplyMarker applies one parsed marker whose position is pinned by ref.
 func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) {
 	cur := newSharedRef(ref)
 
-	// Self-heal a lost command-end: a marker beginning a NEW command context
-	// while a command already ran means the previous 133;D never arrived —
-	// close the open block here so two commands don't merge.
+	// Self-heal a lost command-end: a new command context while a command already
+	// ran means the previous 133;D never arrived, so close the open block here.
 	if bt.pending != nil && bt.pending.hasCommand &&
 		(m.Kind == osc133PromptStart || m.Kind == osc133InputStart || m.Kind == osc133PreExec) {
 		bt.complete(bt.pending, cur, nil)
@@ -139,8 +126,7 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 		}
 	}
 
-	// A marker whose position no block kept (orphan D, unknown subtype) must
-	// not leak its native ref.
+	// A marker whose position no block kept must not leak its native ref.
 	cur.freeIfUnheld()
 }
 
@@ -151,8 +137,6 @@ func (bt *blockTable) openPending(promptRef *sharedRef, altScreen bool) *tracked
 	return b
 }
 
-// complete pushes a pending block into completed with its end position, then
-// enforces the cap oldest-first (freeing every evicted block's refs).
 func (bt *blockTable) complete(p *trackedBlock, endRef *sharedRef, exitCode *int32) {
 	p.endRef = endRef
 	endRef.acquire()
@@ -160,8 +144,6 @@ func (bt *blockTable) complete(p *trackedBlock, endRef *sharedRef, exitCode *int
 	bt.appendCompleted(p)
 }
 
-// appendCompleted pushes a finished block and enforces the cap oldest-first,
-// freeing every evicted block's refs.
 func (bt *blockTable) appendCompleted(b *trackedBlock) {
 	bt.completed = append(bt.completed, b)
 	if len(bt.completed) > maxBlocks {
@@ -173,9 +155,6 @@ func (bt *blockTable) appendCompleted(b *trackedBlock) {
 	}
 }
 
-// SnapshotBlocks resolves every serializable block to SCREEN-space rows,
-// dropping blocks whose essential refs no longer resolve (correct-or-absent).
-// The pending block carries Pending so the client can re-arm it.
 func (bt *blockTable) SnapshotBlocks() []AttachBlockData {
 	out := make([]AttachBlockData, 0, len(bt.completed)+1)
 	for _, b := range bt.completed {
@@ -191,16 +170,6 @@ func (bt *blockTable) SnapshotBlocks() []AttachBlockData {
 	return out
 }
 
-// Restore rebuilds the table from an attach snapshot's blocks, re-pinning each
-// anchor with pin. It is the adopt half of an in-place worker upgrade: the new
-// image's grid comes from a VT replay, which rebuilds no OSC 133 state and
-// leaves none of the old image's native refs alive, so rows are all there is
-// to pin from. A row pin can fail (the row scrolled out between the dump and
-// the replay); a block whose prompt anchor will not pin is dropped, the same
-// correct-or-absent rule SnapshotBlocks applies.
-// pinAnchor pins one optional block anchor, already acquired. nil row or a row
-// that no longer exists yields nil — the acquire lives here so a caller cannot
-// take a ref and forget to hold it.
 func pinAnchor(pin func(x, y int) blockRef, row *int32, col int) *sharedRef {
 	if row == nil {
 		return nil
@@ -253,7 +222,6 @@ func (bt *blockTable) Restore(blocks []AttachBlockData, pin func(x, y int) block
 	}
 }
 
-// pinShared pins one anchor, returning nil when the row is no longer there.
 func pinShared(pin func(x, y int) blockRef, x, y int) *sharedRef {
 	ref := pin(x, y)
 	if ref == nil {
@@ -262,7 +230,7 @@ func pinShared(pin func(x, y int) blockRef, x, y int) *sharedRef {
 	return newSharedRef(ref)
 }
 
-// Close frees every held ref. The table is unusable afterwards.
+// The table is unusable afterwards.
 func (bt *blockTable) Close() {
 	for _, b := range bt.completed {
 		b.release()

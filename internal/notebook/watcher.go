@@ -13,17 +13,14 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// DefaultWatchDebounce is the fixed coalescing window opened by a burst's first
-// event — not an idle window; later events do not extend it.
+// DefaultWatchDebounce is opened by a burst's first event — not an idle window;
+// later events do not extend it.
 const DefaultWatchDebounce = 400 * time.Millisecond
 
-// selfWriteTTL bounds an unconsumed NoteSelfWrite record whose event never
-// arrives, so a stale record cannot suppress a real edit forever.
+// selfWriteTTL keeps a record whose event never arrives from suppressing a real
+// edit forever.
 const selfWriteTTL = 3 * time.Second
 
-// Watcher observes a notebook root for changes made outside attn and invokes
-// onChange with the affected notebook-relative paths. attn's own writes are
-// excluded: NoteSelfWrite records the path before the file is mutated.
 type Watcher struct {
 	root      string
 	debounce  time.Duration
@@ -33,36 +30,28 @@ type Watcher struct {
 	fsw *fsnotify.Watcher
 
 	mu         sync.Mutex
-	selfWrites map[string]selfWriteRecord // notebook-relative path -> suppression record
+	selfWrites map[string]selfWriteRecord // notebook-relative path
 	closeOnce  sync.Once
-	loopDone   chan struct{}    // closed when loop() returns
-	now        func() time.Time // injectable clock for tests
+	loopDone   chan struct{}
+	now        func() time.Time
 }
 
-// selfWriteRecord is the per-path suppression record: expiry plus the content
-// hash attn wrote (empty for an unconditional suppression).
 type selfWriteRecord struct {
 	expiry time.Time
 	hash   string
 }
 
-// SelfWrite identifies a notebook-relative path attn just wrote. A non-empty
-// Hash makes suppression content-aware — an external edit in the same debounce
-// window still surfaces; an empty Hash suppresses the next event unconditionally.
+// An empty Hash suppresses the next event unconditionally; a non-empty one only
+// when the on-disk bytes still match.
 type SelfWrite struct {
 	Rel  string
 	Hash string
 }
 
-// NewWatcher starts watching root (must exist — errors rather than silently
-// watching nothing) and every non-dotdir subdirectory, coalescing events over
-// debounce before calling onChange. .md files only; see NewWatcherWithCleaner.
 func NewWatcher(root string, debounce time.Duration, onChange func(paths []string)) (*Watcher, error) {
 	return NewWatcherWithCleaner(root, debounce, CleanPath, onChange)
 }
 
-// NewWatcherWithCleaner is NewWatcher with an injectable path rule: cleanPath
-// maps a root-relative slash-path to its canonical form, or errors to skip it.
 func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(string) (string, error), onChange func(paths []string)) (*Watcher, error) {
 	clean := filepath.Clean(root)
 	if info, err := os.Stat(clean); err != nil {
@@ -92,8 +81,7 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 	return w, nil
 }
 
-// NoteSelfWrite marks paths as attn-originated so their next filesystem event
-// is dropped (see SelfWrite). A nil Watcher is a no-op.
+// A nil Watcher is a no-op.
 func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	if w == nil || len(writes) == 0 {
 		return
@@ -110,17 +98,17 @@ func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	}
 }
 
-// Close stops watching and waits for the event loop, so no onChange can fire
-// after it returns. Safe to call more than once and on a nil Watcher.
+// Close waits for the event loop, so no onChange can fire after it returns. Safe
+// to call more than once and on a nil Watcher.
 func (w *Watcher) Close() error {
 	if w == nil {
 		return nil
 	}
 	var err error
 	w.closeOnce.Do(func() {
-		err = w.fsw.Close() // closes Events/Errors, unblocking loop
+		err = w.fsw.Close()
 	})
-	<-w.loopDone // join the loop goroutine (idempotent: the channel stays closed)
+	<-w.loopDone
 	return err
 }
 
@@ -150,13 +138,12 @@ func (w *Watcher) loop() {
 	}
 }
 
-// handleEvent records a trackable change into pending; a newly created
-// directory gets a watch attached (fsnotify is not recursive).
+// A newly created directory gets a watch attached: fsnotify is not recursive.
 func (w *Watcher) handleEvent(ev fsnotify.Event, pending map[string]struct{}) {
 	if ev.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 			if base := filepath.Base(ev.Name); base == "." || strings.HasPrefix(base, ".") {
-				return // skip .attn/ and any dotdir subtree
+				return
 			}
 			// Surface whatever addTree found even if the walk aborted partway;
 			// dropping already-discovered files would silently miss external edits.
@@ -172,7 +159,6 @@ func (w *Watcher) handleEvent(ev fsnotify.Event, pending map[string]struct{}) {
 	}
 }
 
-// flush emits the coalesced, self-write-filtered change set and clears pending.
 func (w *Watcher) flush(pending map[string]struct{}) {
 	if len(pending) == 0 {
 		return
@@ -190,9 +176,6 @@ func (w *Watcher) flush(pending map[string]struct{}) {
 	w.onChange(rels)
 }
 
-// dropSelfWrites removes paths attn just wrote (consuming each record once) and
-// prunes expired records; a hashed record drops the path only if the on-disk
-// bytes still match, so a same-window external edit is surfaced.
 func (w *Watcher) dropSelfWrites(rels []string) []string {
 	w.mu.Lock()
 	now := w.now()
@@ -206,9 +189,9 @@ func (w *Watcher) dropSelfWrites(rels []string) []string {
 	var pending []recheck
 	for _, rel := range rels {
 		if rec, ok := w.selfWrites[rel]; ok && !now.After(rec.expiry) {
-			delete(w.selfWrites, rel) // consume: one event round per record
+			delete(w.selfWrites, rel)
 			if rec.hash == "" {
-				continue // unconditional suppression
+				continue
 			}
 			pending = append(pending, recheck{rel: rel, hash: rec.hash})
 			continue
@@ -226,7 +209,6 @@ func (w *Watcher) dropSelfWrites(rels []string) []string {
 	return out
 }
 
-// diskHash returns the content hash of rel on disk, or "" when unreadable —
 // "" never equals a real hash, so a deleted path surfaces as a change.
 func (w *Watcher) diskHash(rel string) string {
 	content, err := os.ReadFile(filepath.Join(w.root, filepath.FromSlash(rel)))
@@ -236,20 +218,18 @@ func (w *Watcher) diskHash(rel string) string {
 	return Hash(content)
 }
 
-// addTree watches dir and every non-dotdir subdirectory, returning the
-// trackable files it contains so a freshly created tree's files are not missed.
 func (w *Watcher) addTree(dir string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(dir, func(p string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
-				return nil // vanished mid-walk; ignore
+				return nil
 			}
 			return err
 		}
 		if dirent.IsDir() {
 			if p != w.root && strings.HasPrefix(dirent.Name(), ".") {
-				return fs.SkipDir // skip .attn/ and any dotdir subtree
+				return fs.SkipDir
 			}
 			_ = w.fsw.Add(p)
 			return nil
@@ -262,8 +242,6 @@ func (w *Watcher) addTree(dir string) ([]string, error) {
 	return files, err
 }
 
-// trackable reports whether an absolute path passes the cleanPath rule and
-// returns its clean relative path.
 func (w *Watcher) trackable(absPath string) (string, bool) {
 	rel, err := filepath.Rel(w.root, absPath)
 	if err != nil {

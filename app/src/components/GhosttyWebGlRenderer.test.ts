@@ -36,9 +36,6 @@ describe('graphemeAtViewportCell', () => {
   });
 });
 
-// Regression for the "selected command block's box covers the whole terminal"
-// bug: a block taller than the viewport has its top above row 0 and its bottom
-// below the last row, so neither is a real boundary and must not be drawn.
 describe('visibleOutlineEdges', () => {
   const ROWS = 24;
 
@@ -86,14 +83,6 @@ describe('nextAtlasSize (grow-on-demand policy)', () => {
   });
 });
 
-// --- grow-path regression harness -------------------------------------------
-// The renderer needs a real WebGL2 context plus a 2D canvas, neither of which
-// happy-dom provides. We stub both: a no-op WebGL2 proxy, and a recording 2D
-// context that faithfully reproduces the one browser behavior the bug hinges on
-// -- assigning canvas.width/height resets ALL 2D context state (font included)
-// back to defaults. That lets us drive the real getGlyph() grow path and assert
-// the glyph that triggers a grow is rasterized with the intended font rather
-// than the post-resize default.
 
 interface FillTextCall {
   text: string;
@@ -108,13 +97,8 @@ function makeRecordingContext() {
     fillStyle: '#000000',
     textBaseline: 'alphabetic',
     fillTextCalls: [] as FillTextCall[],
-    // When set, getImageData fills every pixel with this RGBA so tests can
-    // simulate a color-font raster (e.g. emoji) vs the default transparent one.
     nextPixel: null as null | { r: number; g: number; b: number; a: number },
     measureText(text: string) {
-      // Scale with the current font's px size (default 14) so tests can exercise
-      // cellWidth recomputation on a font-size change; existing 14px-fixture
-      // tests are unaffected since the factor is 1 at the default size.
       const sizeMatch = /^(\d+(?:\.\d+)?)px/.exec(this.font);
       const size = sizeMatch ? Number.parseFloat(sizeMatch[1]) : 14;
       return { width: text.length * 8 * (size / 14) };
@@ -142,10 +126,6 @@ function makeRecordingContext() {
 
 type RecordingContext = ReturnType<typeof makeRecordingContext>;
 
-// An ordered log of the GL calls that tell the render passes apart. The glyph
-// atlas texture is the first one the renderer creates, so a draw is an image
-// draw exactly when a different texture is bound in front of it — which is how
-// a test reads the pass order out of a frame without owning renderer internals.
 interface RecordedDraw {
   kind: 'atlas' | 'image';
   floats: number;
@@ -166,8 +146,6 @@ function makeGlRecorder() {
     reset() {
       calls.length = 0;
     },
-    // One entry per drawArrays, tagged with the texture bound at the time and
-    // the buffer uploaded just before it.
     draws(): RecordedDraw[] {
       const draws: RecordedDraw[] = [];
       let atlasBound = true;
@@ -191,9 +169,6 @@ function makeGlRecorder() {
 
 type GlRecorder = ReturnType<typeof makeGlRecorder>;
 
-// Any property accessed as a constant (gl.TEXTURE_2D) or called as a no-op
-// method resolves to a throwaway function; only the handful of calls whose
-// return value the renderer actually inspects get real-ish values.
 function makeFakeGl(recorder?: GlRecorder) {
   const truthy = new Set(['getShaderParameter', 'getProgramParameter']);
   const handles = new Set([
@@ -252,7 +227,7 @@ function makeFakeCanvas(recorder?: GlRecorder) {
     },
     set width(v: number) {
       this._w = v;
-      if (ctx2d) ctx2d.font = '10px sans-serif'; // resize resets 2D context state
+      if (ctx2d) ctx2d.font = '10px sans-serif';
     },
     get height() {
       return this._h;
@@ -278,8 +253,6 @@ function makeFakeCanvas(recorder?: GlRecorder) {
 }
 
 function makeRenderer(fontSize = 14, fontFamily = 'monospace', recorder?: GlRecorder) {
-  // Constructor creates two canvases via document.createElement: [0] metrics,
-  // [1] atlas. Intercept those; the main canvas is supplied directly.
   const created: ReturnType<typeof makeFakeCanvas>[] = [];
   const realCreate = document.createElement.bind(document);
   const spy = vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
@@ -341,8 +314,6 @@ function makeFakeTerminal(
   } as unknown as GhosttyTerminal;
 }
 
-// Floats one quad contributes to a vertex buffer: 6 vertices of
-// position(2) + texcoord(2) + color(4) + mode(1).
 const FLOATS_PER_QUAD = 6 * 9;
 
 function makeImageQuad(z: number, x: number, imageId: number): WebGlImageQuad {
@@ -355,8 +326,7 @@ function makeImageQuad(z: number, x: number, imageId: number): WebGlImageQuad {
       width,
       height,
       format: 'rgba',
-      // byteLength has to match width*height*bytes-per-pixel or the renderer
-      // refuses the blob instead of uploading a texture with a wrong stride.
+      // A byteLength that is not width*height*bpp is refused, not uploaded.
       pixels: new Uint8Array(width * height * 4),
     },
     x,
@@ -371,15 +341,10 @@ function makeImageQuad(z: number, x: number, imageId: number): WebGlImageQuad {
   };
 }
 
-// Kitty's three z layers, read off the frame's draw order. Each case names the
-// bug it catches; all of them are invisible to a quad-count assertion, because
-// the same quads are drawn either way — only the order differs.
 describe('WebGlTerminalRenderer kitty z layering', () => {
   it('draws a z<0 image between the cell backgrounds and the text', () => {
     const recorder = makeGlRecorder();
     const { renderer } = makeRenderer(14, 'monospace', recorder);
-    // One glyph cell and one cell with a non-default background, so both cell
-    // passes carry exactly one quad and the image has to land between them.
     const terminal = makeFakeTerminal(2, 1, {
       cell: (_row, col) => (col === 0 ? { codepoint: 65 } : { bg_r: 40, bg_g: 40, bg_b: 40 }),
     });
@@ -390,8 +355,8 @@ describe('WebGlTerminalRenderer kitty z layering', () => {
 
     const draws = recorder.draws();
     expect(draws.map((draw) => draw.kind)).toEqual(['atlas', 'image', 'atlas']);
-    expect(draws[0].floats).toBe(FLOATS_PER_QUAD); // background pass: the colored cell
-    expect(draws[2].floats).toBe(FLOATS_PER_QUAD); // foreground pass: the glyph
+    expect(draws[0].floats).toBe(FLOATS_PER_QUAD);
+    expect(draws[2].floats).toBe(FLOATS_PER_QUAD);
   });
 
   it('splits the two deepest layers at the spec constant, exclusive', () => {
@@ -401,8 +366,6 @@ describe('WebGlTerminalRenderer kitty z layering', () => {
     renderer.resize(1, 1);
     recorder.reset();
 
-    // Distinct x per quad so the two image draws are told apart by their
-    // vertex data rather than by the order under test.
     renderer.render(terminal, true, undefined, undefined, 0, [
       makeImageQuad(KITTY_Z_UNDER_BACKGROUND - 1, 11, 1),
       makeImageQuad(KITTY_Z_UNDER_BACKGROUND, 22, 2),
@@ -410,8 +373,6 @@ describe('WebGlTerminalRenderer kitty z layering', () => {
 
     const draws = recorder.draws();
     expect(draws.map((draw) => draw.kind)).toEqual(['image', 'atlas', 'image', 'atlas']);
-    // Only the one strictly BELOW the constant goes under the backgrounds; the
-    // one at it draws over them, like any other negative z.
     expect(draws[0].firstFloat).toBe(11 * renderer.dpr);
     expect(draws[2].firstFloat).toBe(22 * renderer.dpr);
   });
@@ -439,8 +400,6 @@ describe('WebGlTerminalRenderer kitty z layering', () => {
 
     const draws = recorder.draws();
     expect(draws.map((draw) => draw.kind)).toEqual(['atlas', 'image', 'atlas']);
-    // The cursor block is a foreground quad, not a cell background: in the
-    // background buffer it would be painted over by the image and disappear.
     expect(draws[0].floats).toBe(0);
     expect(draws[2].floats).toBe(FLOATS_PER_QUAD);
   });
@@ -463,17 +422,11 @@ describe('WebGlTerminalRenderer kitty z layering', () => {
 
     const draws = recorder.draws();
     expect(draws.map((draw) => draw.kind)).toEqual(['atlas', 'image', 'atlas']);
-    // The tint is an overlay, not a cell background — it has to survive on top
-    // of the image the selection was dragged across.
     expect(draws[0].floats).toBe(0);
     expect(draws[2].floats).toBe(FLOATS_PER_QUAD);
   });
 });
 
-// The row cache keeps a buffer per row per cell pass. This fixture's cells all
-// carry the default background, so every foreground row fills to one quad per
-// column while every background row stays at the one-quad minimum it was
-// allocated with.
 const QUAD_BYTES = TERMINAL_FLOATS_PER_QUAD * Float32Array.BYTES_PER_ELEMENT;
 const ROW_FG_BYTES = 50 * 50 * QUAD_BYTES;
 const ROW_BG_MIN_BYTES = 50 * QUAD_BYTES;
@@ -508,9 +461,6 @@ function makeControllableTerminal(cols: number, rows: number) {
   return { terminal, cells, state, markClean };
 }
 
-// A pane hidden behind another session holds two window-sized GPU surfaces for
-// a frame nobody can see. Release hands them back without touching the context,
-// the glyph atlas, or the model — so the only thing a reveal owes is a repaint.
 describe('WebGlTerminalRenderer off-screen drawing buffer', () => {
   it('hands the drawing buffer back and takes it again at the same geometry', () => {
     const { renderer, canvas } = makeRenderer();
@@ -603,8 +553,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
       quads: 2500,
     });
 
-    // Clear the middle row. Ghostty marks that row dirty; the renderer expands
-    // by one row on either side for cross-row grapheme pixels.
     for (let col = 0; col < 50; col += 1) cells[25 * 50 + col].codepoint = 0;
     state.dirty = 1;
     state.rows = new Set([25]);
@@ -636,16 +584,10 @@ describe('WebGlTerminalRenderer dirty rows', () => {
 
     expect(sample).toMatchObject({ fullPaint: true, paintedRows: 50 });
 
-    // Removing an overlay also changes pixels outside the model's dirty set.
-    // One full frame retires that composited surface before partial paints resume.
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: true, paintedRows: 50 });
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: false, paintedRows: 3 });
   });
 
-  // Defensive rather than observed: the real WASM reports a cross-row move as
-  // PARTIAL with *both* rows already in the set. This pins the row selection
-  // against a model that says PARTIAL and names no rows at all. The truly bare
-  // moves — the ones the WASM reports as DIRTY_NONE — are covered further down.
   it('repaints both cursor rows when a partial frame names no dirty rows', () => {
     const { renderer } = makeRenderer();
     const { terminal, state } = makeControllableTerminal(50, 50);
@@ -657,13 +599,9 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     state.rows = new Set();
     state.cursor = { x: 0, y: 30, visible: true };
 
-    // Rows 9-11 (vacated) and 29-31 (arrived), each expanded by one neighbor.
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: false, paintedRows: 6 });
   });
 
-  // The regressing case: Ghostty reports DIRTY_NONE for a move within one row,
-  // so such a move only reaches the renderer riding along with an unrelated
-  // dirty row. The cursor's own row is absent from that set.
   it('repaints the cursor row on a same-row move that rides along with another dirty row', () => {
     const { renderer } = makeRenderer();
     const { terminal, state } = makeControllableTerminal(50, 50);
@@ -675,7 +613,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     state.rows = new Set([40]);
     state.cursor = { x: 7, y: 10, visible: true };
 
-    // Rows 39-41 for the dirty row, 9-11 for the cursor's unmarked row.
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: false, paintedRows: 6 });
   });
 
@@ -693,9 +630,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: false, paintedRows: 6 });
   });
 
-  // A same-row move and a visibility toggle report DIRTY_NONE, so nothing else
-  // wakes the renderer. Without a cursor comparison ahead of the early return,
-  // the old inverted cell survives until unrelated output happens to arrive.
   it('paints a bare same-row cursor move that the model reports as not dirty', () => {
     const { renderer } = makeRenderer();
     const { terminal, state } = makeControllableTerminal(50, 50);
@@ -707,8 +641,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     state.rows = new Set();
     state.cursor = { x: 7, y: 10, visible: true };
 
-    // Rows 9-11: the cursor vacated and arrived on the same row. Partial, not
-    // full — a cursor move must not cost a whole-grid repaint.
     expect(renderer.render(terminal)).toMatchObject({ fullPaint: false, paintedRows: 3 });
   });
 
@@ -739,10 +671,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     expect(renderer.render(terminal)).toBeNull();
   });
 
-  // A hidden cursor paints nothing, so moving it changes no pixels. Treating
-  // that as a render reason is worse than missing it: the frame has no row to
-  // mark, so the zero-row guard escalates it to a full-grid paint — on the one
-  // path (a TUI redrawing with the cursor hidden) that must stay cheap.
   it('does not paint at all when a hidden cursor moves with nothing else dirty', () => {
     const { renderer } = makeRenderer();
     const { terminal, state } = makeControllableTerminal(50, 50);
@@ -808,8 +736,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
       paintedRows: 30,
       retainedRowVertexBytes: 0,
     });
-    // The frame buffer is what a direct-path paint stages regardless, so the
-    // reported total stays non-zero after the cache is gone.
     expect(afterRelease!.retainedRowVertexBytes).toBe(0);
     expect(afterRelease!.retainedStagingBytes).toBeGreaterThan(0);
   });
@@ -822,7 +748,6 @@ describe('WebGlTerminalRenderer overlays', () => {
     renderer.resize(4, 3);
 
     const sample = renderer.render(terminal, true, undefined, [
-      // row 0: cols 1..4 (3 cells), row 1: full width (4), row 2: cols 0..2 (2)
       { startRow: 0, startCol: 1, endRow: 2, endCol: 2, color: '#3366ff', kind: 'background' },
     ]);
     expect(sample?.quads).toBe(9);
@@ -850,7 +775,6 @@ describe('WebGlTerminalRenderer overlays', () => {
     renderer.resize(4, 2);
 
     const clamped = renderer.render(terminal, true, undefined, [
-      // rows -3..9 clamp to 0..1 (full grid: 8 cells)
       { startRow: -3, startCol: 0, endRow: 9, endCol: 4, color: '#3366ff', kind: 'background' },
       { startRow: 0, startCol: 2, endRow: 0, endCol: 2, color: '#3366ff', kind: 'background' },
     ]);
@@ -862,15 +786,11 @@ describe('WebGlTerminalRenderer color glyphs', () => {
   it('flags chromatic rasters as color glyphs and neutral ones as tinted', () => {
     const { renderer, atlasContext } = makeRenderer();
 
-    // Default raster is fully transparent -> a monochrome/tinted glyph.
     expect(renderer.getGlyph('A', 0).colored).toBe(false);
 
-    // A color font ignores the white fill and paints its own colors: chromatic
-    // opaque pixels mark the glyph as one to draw directly instead of tinting.
     atlasContext.nextPixel = { r: 240, g: 40, b: 30, a: 255 };
     expect(renderer.getGlyph('🔥', 0).colored).toBe(true);
 
-    // A white coverage glyph (r === g === b) stays tinted even when opaque.
     atlasContext.nextPixel = { r: 255, g: 255, b: 255, a: 255 };
     expect(renderer.getGlyph('B', 0).colored).toBe(false);
   });
@@ -880,24 +800,17 @@ describe('WebGlTerminalRenderer glyph cache invalidation', () => {
   it('re-rasterizes a cached glyph after invalidateGlyphCache (font finished loading)', () => {
     const { renderer, atlasContext } = makeRenderer(14, 'monospace');
 
-    // First request rasterizes; a second identical request is served from cache.
     renderer.getGlyph('', 0);
     const afterFirst = atlasContext.fillTextCalls.length;
     renderer.getGlyph('', 0);
     expect(atlasContext.fillTextCalls.length).toBe(afterFirst);
 
-    // After invalidation the same glyph must be drawn again so a now-loaded web
-    // font replaces the stale fallback raster instead of being served forever.
     renderer.invalidateGlyphCache();
     renderer.getGlyph('', 0);
     expect(atlasContext.fillTextCalls.length).toBe(afterFirst + 1);
   });
 });
 
-// setFontSize() must re-metric an existing renderer in place (no rebuild) so a
-// font-size change doesn't tear down every mounted pane's WASM model/WebGL
-// context. document.createElement is re-mocked around the call because
-// setFontSize creates its own metrics canvas, just like the constructor does.
 describe('WebGlTerminalRenderer.setFontSize', () => {
   function withMockedCanvas<T>(fn: () => T): T {
     const realCreate = document.createElement.bind(document);
@@ -922,7 +835,7 @@ describe('WebGlTerminalRenderer.setFontSize', () => {
     renderer.getGlyph('A', 0);
     const rasterizedBeforeResize = atlasContext.fillTextCalls.length;
     renderer.getGlyph('A', 0);
-    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize); // served from cache
+    expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize);
 
     withMockedCanvas(() => renderer.setFontSize(28));
 
@@ -930,7 +843,6 @@ describe('WebGlTerminalRenderer.setFontSize', () => {
     expect(renderer.cellHeight).toBeGreaterThan(smallHeight);
     expect(renderer.baseline).toBeGreaterThan(smallBaseline);
 
-    // The pre-resize glyph must not be served from a stale cache at the new size.
     renderer.getGlyph('A', 0);
     expect(atlasContext.fillTextCalls.length).toBe(rasterizedBeforeResize + 1);
   });
@@ -943,7 +855,6 @@ describe('WebGlTerminalRenderer.setFontSize', () => {
     const heightBefore = canvas.height;
 
     withMockedCanvas(() => renderer.setFontSize(28));
-    // Same grid dimensions as before the font-size change.
     renderer.resize(80, 24);
 
     expect(canvas.width).toBeGreaterThan(widthBefore);
@@ -956,37 +867,27 @@ describe('WebGlTerminalRenderer glyph atlas grow path', () => {
     const { renderer, atlasContext } = makeRenderer(14, 'monospace');
     const intendedFont = `${14 * renderer.dpr}px monospace`;
 
-    // A normal (non-grow) glyph draws with the intended font.
     renderer.getGlyph('A', 0);
     const normalDraw = atlasContext.fillTextCalls[atlasContext.fillTextCalls.length - 1];
     expect(normalDraw?.text).toBe('A');
     expect(normalDraw?.font).toBe(intendedFont);
 
-    // Force a vertical overflow so the next glyph triggers a real 1024->2048 grow.
     expect(renderer.atlasSize).toBe(INITIAL_ATLAS_SIZE);
     renderer.atlasY = INITIAL_ATLAS_SIZE;
     atlasContext.fillTextCalls.length = 0;
 
     renderer.getGlyph('B', 0);
 
-    // The grow happened...
     expect(renderer.atlasSize).toBe(MAX_ATLAS_SIZE);
-    // ...and the glyph that triggered it was drawn with the intended font, NOT
-    // the '10px sans-serif' that resizing the backing canvas reset it to. This
-    // is the regression: a cached glyph drawn with the default font survives the
-    // render() retry forever.
     const growDraw = atlasContext.fillTextCalls[atlasContext.fillTextCalls.length - 1];
     expect(growDraw?.text).toBe('B');
     expect(growDraw?.font).toBe(intendedFont);
     expect(growDraw?.font).not.toBe('10px sans-serif');
 
-    // At the cap, the next overflow takes the resetAtlas() branch (clear & reuse
-    // at 2048) instead of growing. It resizes the backing canvas the same way,
-    // so the font has to survive that path too.
     renderer.atlasY = MAX_ATLAS_SIZE;
     atlasContext.fillTextCalls.length = 0;
     renderer.getGlyph('C', 0);
-    expect(renderer.atlasSize).toBe(MAX_ATLAS_SIZE); // capped: reset, not grown
+    expect(renderer.atlasSize).toBe(MAX_ATLAS_SIZE);
     const resetDraw = atlasContext.fillTextCalls[atlasContext.fillTextCalls.length - 1];
     expect(resetDraw?.text).toBe('C');
     expect(resetDraw?.font).toBe(intendedFont);

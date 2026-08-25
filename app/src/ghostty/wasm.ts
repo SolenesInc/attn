@@ -27,10 +27,8 @@ async function getCompiledGhosttyModule(): Promise<WebAssembly.Module> {
   return compiledGhosttyModule;
 }
 
-// Compile the app's one vendored module once, then instantiate a fresh runtime
-// for every terminal. Separate instances retain pane-level crash isolation;
-// sharing only the immutable WebAssembly.Module removes cold-remount compile
-// work without letting one corrupt model take another pane down with it.
+// A fresh instance per terminal keeps pane-level crash isolation; only the
+// immutable WebAssembly.Module is shared.
 export async function loadGhostty(): Promise<Ghostty> {
   const module = await getCompiledGhosttyModule();
   let instance: WebAssembly.Instance | null = null;

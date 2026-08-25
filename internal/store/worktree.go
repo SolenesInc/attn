@@ -1,11 +1,9 @@
-// internal/store/worktree.go
 package store
 
 import (
 	"time"
 )
 
-// Worktree represents a tracked git worktree
 type Worktree struct {
 	Path      string    `json:"path"`
 	Branch    string    `json:"branch"`
@@ -13,7 +11,6 @@ type Worktree struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// AddWorktree adds a worktree to the registry
 func (s *Store) AddWorktree(wt *Worktree) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -29,7 +26,6 @@ func (s *Store) AddWorktree(wt *Worktree) {
 	)
 }
 
-// GetWorktree returns a worktree by path
 func (s *Store) GetWorktree(path string) *Worktree {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -54,7 +50,6 @@ func (s *Store) GetWorktree(path string) *Worktree {
 	return &wt
 }
 
-// RemoveWorktree removes a worktree from the registry
 func (s *Store) RemoveWorktree(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -66,7 +61,6 @@ func (s *Store) RemoveWorktree(path string) {
 	s.execLog("DELETE FROM worktrees WHERE path = ?", path)
 }
 
-// ListWorktreesByRepo returns all worktrees for a main repo
 func (s *Store) ListWorktreesByRepo(mainRepo string) []*Worktree {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -1,14 +1,8 @@
-/**
- * Request/result correlation for daemon commands: a command's promise parks
- * under `<kind>:<requestId>` until the matching `<command>_result` event lands.
- * See "WebSocket and state" in AGENTS.md.
- */
+// Request/result correlation for daemon commands: a command's promise parks under
+// `<kind>:<requestId>` until the matching `<command>_result` event lands.
 
-/**
- * The parked half of a command's promise, keyed by `pendingRequestKey`. One map
- * holds every command's resolver, so `resolve` cannot be typed here; go through
- * `settlePendingRequest` rather than reaching into the map.
- */
+// One map holds every command's resolver, so `resolve` cannot be typed here; go
+// through `settlePendingRequest` rather than reaching into the map.
 export interface PendingRequest {
   resolve: (result: any) => void;
   reject: (error: Error) => void;
@@ -74,14 +68,8 @@ interface ResultEvent {
   error?: string;
 }
 
-/**
- * Settle the request a `*_result` event answers; returns whether a waiter was
- * found (a timed-out or other client's request is not an error). `extract`
- * returning `undefined` counts as failure, never `resolve(undefined)`.
- *
- * `failure` rejects with that error rather than a plain one built from the
- * event's text, for a domain whose refusals carry a code the caller branches on.
- */
+// Returns whether a waiter was found (a timed-out or other client's request is not
+// an error). `extract` returning `undefined` counts as failure, never resolve.
 export function settlePendingRequest<E extends ResultEvent, T>(
   pending: PendingRequests,
   kind: string,

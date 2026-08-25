@@ -34,10 +34,8 @@ async function openTerminalSession(
   await page.locator(`[data-testid="session-${sessionId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${sessionId}"][data-pane-kind="agent"] .terminal-container`);
   await expect(terminal).toBeVisible();
-  // The container becomes visible before the Ghostty wasm terminal finishes
-  // initializing, and PTY data delivered before the pane handle registers is
-  // dropped by design (a real attach replays it; the e2e mock has no replay).
-  // Wait for the pane's connect_terminal signal before writing output.
+  // PTY data delivered before the pane handle registers is dropped by design (a real
+  // attach replays it; the e2e mock has no replay), so wait for connect_terminal.
   await expect
     .poll(
       async () => page.evaluate(
@@ -47,8 +45,7 @@ async function openTerminalSession(
       ),
     )
     .toBe(true);
-  // connect_terminal fires before ptyAttach, so the mock banner is still in
-  // flight here. Let it land before the caller clears the screen.
+  // connect_terminal fires before ptyAttach, so the mock banner is still in flight here.
   await waitForMockPtyBanner(page, sessionId);
   return terminal;
 }
@@ -66,7 +63,6 @@ async function writeTerminalOutput(
 test.describe('Ghostty terminal find', () => {
   test('cmd+f finds matches across scrollback and navigates to them', async ({ page, daemon }) => {
     const terminal = await openTerminalSession(page, daemon, 's-find');
-    // 80 rows: the needle appears early (scrolls out of view) and near the end.
     const lines = Array.from({ length: 80 }, (_, index) => {
       if (index === 4) return 'first FIND_NEEDLE here';
       if (index === 75) return 'second FIND_NEEDLE here';
@@ -91,7 +87,6 @@ test.describe('Ghostty terminal find', () => {
     const count = page.locator('[data-testid="ghostty-find-count"]');
     await expect(count).toHaveText('2/2');
 
-    // Enter walks upward to the first (older) match and scrolls it into view.
     await page.keyboard.press('Enter');
     await expect(count).toHaveText('1/2');
     await expect
@@ -100,7 +95,6 @@ test.describe('Ghostty terminal find', () => {
       )
       .toContain('first FIND_NEEDLE');
 
-    // Wraps around back to the newest match.
     await page.keyboard.press('Enter');
     await expect(count).toHaveText('2/2');
     await expect

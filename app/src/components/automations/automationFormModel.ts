@@ -1,12 +1,8 @@
 import { z } from 'zod';
 import { AutomationAgent, effortOptionsFor } from './launchCatalog';
 
-// Headless form model for the structured automation editor (PR6). This
-// mirrors the validation rules of internal/automation/automation.go's
-// DefinitionSpec/ValidateDefinition so the client rejects the same shapes
-// the daemon would, before a round trip. It intentionally narrows a few
-// daemon-legal combinations the CLI still supports (see the manual-trigger
-// note on directoryPath below) in exchange for a much simpler form.
+// Mirrors the validation rules of internal/automation/automation.go so the client
+// rejects the same shapes the daemon would.
 
 export const AUTOMATION_API_VERSION = 'attn.dev/automations/v1alpha1';
 
@@ -20,7 +16,7 @@ export interface AutomationRepositoryOverride {
 export interface AutomationFormValues {
   name: string;
   id: string;
-  idCustomized: boolean; // UI-only: id follows slugFromName(name) until true
+  idCustomized: boolean;
   trigger: AutomationTrigger;
   scheduleCron: string;
   continuity: 'fresh' | 'singleton';
@@ -28,7 +24,7 @@ export interface AutomationFormValues {
   repositoriesInclude: string[];
   repositoriesExclude: string[];
   agent: AutomationAgent;
-  model: string; // resolved model id, including custom free-text
+  model: string;
   effort: string;
   executable: string; // '' = default from PATH
   directoryPath: string;
@@ -95,7 +91,7 @@ function validateRepositoryList(
 function checkCrossListOverlap(include: string[], exclude: string[], ctx: z.RefinementCtx): void {
   const includeSet = new Set(include.filter(isValidRepositoryIdentity).map(canonicalRepositoryIdentity));
   exclude.forEach((entry, index) => {
-    if (!isValidRepositoryIdentity(entry)) return; // already reported by validateRepositoryList
+    if (!isValidRepositoryIdentity(entry)) return;
     const canonical = canonicalRepositoryIdentity(entry);
     if (includeSet.has(canonical)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repositoriesExclude', index], message: CROSS_LIST_MESSAGE });
@@ -159,10 +155,8 @@ export const automationFormSchema: z.ZodType<AutomationFormValues> = baseFormSch
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'A prompt is required.' });
   }
 
-  // model '' and effort '' both mean "use the agent's default" — the daemon
-  // treats launch.model/launch.effort as optional, so a CLI-authored
-  // definition that omits them (an ordinary shape) must stay editable here,
-  // not get stuck on a client-side requirement the daemon never had.
+  // model '' and effort '' both mean "use the agent's default", so a CLI-authored
+  // definition that omits them stays editable here.
   if (values.effort !== '') {
     const { efforts } = effortOptionsFor(values.agent, values.model);
     if (!efforts.includes(values.effort)) {
@@ -172,10 +166,8 @@ export const automationFormSchema: z.ZodType<AutomationFormValues> = baseFormSch
 
   switch (values.trigger) {
     case 'manual': {
-      // Deliberate simplification: the form only offers a directory
-      // location for manual triggers. The CLI/YAML path can still express
-      // manual + repository_worktree; editing such a definition through
-      // the form is out of scope for this pass.
+      // The form only offers a directory location for manual triggers, though the
+      // CLI/YAML path can still express manual + repository_worktree.
       if (!values.directoryPath.startsWith('/')) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['directoryPath'], message: ABSOLUTE_PATH_MESSAGE });
       }
@@ -222,8 +214,7 @@ function buildTrigger(values: AutomationFormValues): Record<string, unknown> {
     case 'manual':
       return { type: 'manual' };
     case 'scheduled':
-      // No time_zone key ever: schedules run in the machine's local
-      // timezone.
+      // No time_zone key ever: schedules run in the machine's local timezone.
       return {
         type: 'scheduled',
         schedule: { cron: values.scheduleCron.trim() },
@@ -270,9 +261,6 @@ function buildLocation(values: AutomationFormValues): Record<string, unknown> {
   return { type: 'directory', path: values.directoryPath };
 }
 
-// formValuesToSpec renders a DefinitionSpec-shaped plain object (snake_case
-// keys, optional keys omitted when empty, matching Go's json omitempty),
-// ready for JSON.stringify.
 export function formValuesToSpec(values: AutomationFormValues): Record<string, unknown> {
   return {
     api_version: AUTOMATION_API_VERSION,
@@ -301,9 +289,6 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
-// specToFormValues parses canonical spec JSON (the daemon's spec_json) into
-// form values. It throws a readable Error on any shape the form cannot
-// edit, rather than producing a silently-wrong form.
 export function specToFormValues(specJson: string): AutomationFormValues {
   let raw: unknown;
   try {

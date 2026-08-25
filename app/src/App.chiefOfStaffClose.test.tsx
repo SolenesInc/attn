@@ -4,11 +4,6 @@ import userEvent from '@testing-library/user-event';
 import App from './App';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
-// The chief-of-staff session is the profile-wide orchestrator and must be
-// protected from accidental close: ⌘W and the close action no-op on it (with a
-// hint), while ordinary sessions keep closing. Both user paths funnel through the
-// same App close handlers, so these tests drive the close button (UI) and the
-// session.close shortcut (⌘W) and assert no daemon close command is sent.
 
 const mockUseSessionStore = vi.fn();
 const mockUseDaemonStore = vi.fn();
@@ -34,8 +29,6 @@ vi.mock('./components/GhosttyTerminal', async () => {
   return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
 });
 
-// Sidebar stub: a single close button wired to the same prop the real close
-// control uses (handleRequestCloseSession).
 vi.mock('./components/Sidebar', () => ({
   EditorIcon: () => null,
   WorkflowIcon: () => null,
@@ -148,8 +141,6 @@ describe('chief-of-staff session is protected from close', () => {
       syncFromDaemonWorkspaces: vi.fn(),
     });
 
-    // daemonSessions is the source the close guard consults for chief_of_staff;
-    // a getter lets each test flip the flag before render.
     mockUseDaemonStore.mockImplementation(() => ({
       daemonSessions: [{
         id: 's1',

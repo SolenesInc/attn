@@ -26,18 +26,10 @@ export interface AutomationsPanelProps {
   onFocusPane: (sessionId: string, paneId: string) => void;
 }
 
-// What the editor overlay is showing: closed, a fresh template (New
-// automation), or an existing definition (Edit). Kept as a single value
-// (rather than two booleans) so there is exactly one source of truth for
-// "which target is open" — AutomationForm is keyed off it, so switching
-// targets always remounts a fresh editor instance (see automationFormKey).
 type EditorTarget = { definitionId: string | null } | null;
 
-// Where a run row navigates: the session the run happened in. The wire nit
-// applies here: session_id/pane_id are always present on AutomationRunSummary
-// but "" means absent, so a plain truthiness check is the correct emptiness
-// test. A run that names no session is not navigable — the app has no surface
-// left for a run's ticket, so there is nowhere else to send the click.
+// session_id/pane_id are always present on AutomationRunSummary but "" means absent.
+// absent, so a plain truthiness check is the correct emptiness test.
 export type RunNavigationTarget =
   | { kind: 'session'; sessionId: string; paneId: string | null }
   | null;
@@ -47,18 +39,8 @@ export function runNavigationTarget(run: AutomationRunSummary): RunNavigationTar
   return null;
 }
 
-// reconcilePendingRunRequest clears a definition's in-flight run-now request
-// key once a freshly-fetched run proves it reached a terminal state
-// (delivered or failed). The key's occurrence_key is always "manual:<key>"
-// (see internal/daemon/automations.go's automationRun); a run still pending
-// keeps the key so an impatient re-click reuses the same request_id instead
-// of minting a new one and claiming a duplicate run.
-//
-// When this session's store has no key for definitionId — most notably right
-// after an app relaunch, since pendingRunRequests is in-memory only — a
-// still-pending durable run on the daemon IS the retry identity. Adopt the
-// newest pending manual occurrence from run history so the next click reuses
-// it instead of minting a fresh id and claiming a second run.
+// A pending run keeps its request key, so a re-click reuses the same request_id.
+// pendingRunRequests is in-memory, so after a relaunch identity comes from run history.
 function reconcilePendingRunRequest(definitionId: string, runs: AutomationRunSummary[]) {
   const key = useAutomationsStore.getState().pendingRunRequests[definitionId];
   if (key) {
@@ -69,8 +51,7 @@ function reconcilePendingRunRequest(definitionId: string, runs: AutomationRunSum
     }
     return;
   }
-  // Runs arrive newest-first, so the first match is the newest pending
-  // manual run.
+  // Runs arrive newest-first, so the first match is the newest pending manual run.
   const adoptable = runs.find((run) => run.state === 'pending' && run.occurrence_key?.startsWith('manual:'));
   if (adoptable?.occurrence_key) {
     useAutomationsStore
@@ -121,21 +102,10 @@ export function AutomationsPanel({
   const [toggleInFlight, setToggleInFlight] = useState<Record<string, boolean>>({});
   const [runErrors, setRunErrors] = useState<Record<string, string>>({});
   const [runInFlight, setRunInFlight] = useState<Record<string, boolean>>({});
-  // D6: this is the ONLY state that opens/closes/targets the editor. The list
-  // refetch effect below never touches it, so an automations_changed broadcast
-  // arriving while it's non-null cannot close the editor or swap its target —
-  // see AutomationForm.tsx's doc comment for the other half of the guarantee
-  // (its buffer is loaded once per mount, not derived from the store).
+  // The ONLY state that opens/closes/targets the editor, so an automations_changed
+  // broadcast cannot close it or swap its target. AutomationForm.tsx holds the other
   const [editorTarget, setEditorTarget] = useState<EditorTarget>(null);
 
-  // Refetch on open and on every automations_changed tick. The list badge
-  // reads each definition's embedded last_run (see the store's
-  // LatestAutomationRunPerDefinition query), so there is no per-definition
-  // runs fetch here anymore. Reconciliation of a pending run-now request
-  // still runs off that same embedded last_run — it is by construction the
-  // newest run for the definition, which is all reconcilePendingRunRequest
-  // ever needed (a still-pending durable run or a freshly delivered/failed
-  // one), so this preserves that behavior without a per-definition fetch.
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -159,11 +129,6 @@ export function AutomationsPanel({
     };
   }, [isOpen, changedTick, fetchDefinitions]);
 
-  // Refetch the selected definition's runs the moment it is selected, so the
-  // expanded history is not stuck on whatever the eager fetch above last saw.
-  // Also refetch on every automations_changed broadcast (changedTick), so the
-  // expanded history tracks run-state transitions (create/deliver/fail)
-  // without requiring the user to re-select the definition.
   useEffect(() => {
     if (!isOpen || !selectedDefinitionId) return;
     let cancelled = false;
@@ -216,17 +181,11 @@ export function AutomationsPanel({
       return next;
     });
     runNow(definitionId, requestId)
-      // Success: the daemon's automations_changed broadcast drives the
-      // refetch above. No synthetic run row is injected here.
       .then(() => {
         useAutomationsStore.getState().clearRunRequest(definitionId);
       })
       .catch((error) => {
         if (error instanceof AutomationActionTimeoutError) {
-          // No definitive outcome yet: the daemon may still deliver this run
-          // after our wait window closed. Keep the request_id so a re-click
-          // reuses it (dedups onto the same run) instead of claiming a
-          // duplicate.
           setRunErrors((prev) => ({
             ...prev,
             [definitionId]:
@@ -254,11 +213,7 @@ export function AutomationsPanel({
 
   const showEmpty = definitionsLoaded && !definitionsError && definitions.length === 0;
 
-  // The editor is a full replacement of the panel body, not a sub-view of the
-  // list — see EditorTarget's doc comment for why closing it is the only way
-  // canonical list state (definitions/runsByDefinition) can affect it again.
-  // Keyed on the target so switching from one Edit to another (or New) always
-  // remounts AutomationForm, which is what makes its mount-only load correct.
+  // Keyed on the target so switching editors always remounts AutomationForm, whose load is mount-only.
   if (editorTarget) {
     return (
       <div className="automations-panel" data-testid="automations-panel">

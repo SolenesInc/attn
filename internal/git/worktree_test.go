@@ -1,4 +1,3 @@
-// internal/git/worktree_test.go
 package git
 
 import (
@@ -80,7 +79,6 @@ func TestListWorktrees(t *testing.T) {
 	runGit(t, mainDir, "init")
 	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
 
-	// Create a worktree
 	wtDir := filepath.Join(tmpDir, "wt")
 	runGit(t, mainDir, "worktree", "add", "-b", "feature", wtDir)
 
@@ -89,12 +87,10 @@ func TestListWorktrees(t *testing.T) {
 		t.Fatalf("ListWorktrees failed: %v", err)
 	}
 
-	// Should have 2: main + worktree
 	if len(worktrees) < 1 {
 		t.Errorf("expected at least 1 worktree, got %d", len(worktrees))
 	}
 
-	// Find the feature worktree
 	found := false
 	for _, wt := range worktrees {
 		if wt.Branch == "feature" {
@@ -123,12 +119,10 @@ func TestCreateWorktree(t *testing.T) {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	// Verify worktree exists
 	if _, err := os.Stat(wtDir); os.IsNotExist(err) {
 		t.Error("worktree directory was not created")
 	}
 
-	// Verify branch
 	info, err := GetBranchInfo(wtDir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
@@ -156,7 +150,6 @@ func TestDeleteWorktree(t *testing.T) {
 		t.Fatalf("DeleteWorktree failed: %v", err)
 	}
 
-	// Directory might still exist but shouldn't be a worktree
 	worktrees, _ := ListWorktrees(mainDir)
 	for _, wt := range worktrees {
 		if wt.Path == wtDir {

@@ -203,8 +203,6 @@ func TestScheduledAutomationClaimRejectsStaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A second apply bumps the revision, simulating the definition changing
-	// between the caller's revision read and this claim's transaction.
 	if _, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now); err != nil {
 		t.Fatal(err)
 	}
@@ -220,11 +218,6 @@ func TestScheduledAutomationClaimRejectsStaleRevision(t *testing.T) {
 	}
 }
 
-// TestScheduledAutomationClaimRejectsDisabledDefinition pins the store-level
-// guard itself (Fix 4b): there is already a daemon-level test that a disabled
-// definition never reaches the claim at all, but this proves
-// ClaimScheduledAutomationRun refuses on its own and leaves no occurrence or
-// run rows, matching the enabled-check every other claim path relies on.
 func TestScheduledAutomationClaimRejectsDisabledDefinition(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -295,11 +288,6 @@ func TestScheduledAutomationSingletonContinuityReusesBinding(t *testing.T) {
 	}
 }
 
-// TestAutomationContinuityBindingLifecycleReleaseThenReclaim pins the v2
-// append-only binding model: a claim creates (or reuses) the ACTIVE row for
-// (definition, continuity_key); releasing it flips status/reason without
-// deleting the row; and a later claim for the same key appends a fresh
-// active row rather than resurrecting the released one.
 func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -317,9 +305,6 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	}
 	firstBindingID := binding.ID
 
-	// Deliver the first run so a second claim isn't refused by the
-	// undelivered-predecessor guard (a separate protection, exercised
-	// elsewhere) — this test is about binding release/reclaim, not that guard.
 	if err := s.MarkAutomationRunDelivered(firstIDs.RunID, `{}`, now.Add(30*time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +315,6 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	if released, err := s.GetActiveAutomationContinuityBinding(def.ID, "singleton"); err != nil || released != nil {
 		t.Fatalf("expected no active binding after release, got %#v err=%v", released, err)
 	}
-	// Releasing again (no active row left) is a no-op, not an error.
 	if err := s.ReleaseAutomationContinuityBinding(def.ID, "singleton", AutomationBindingReleasedTicketSwept, now.Add(90*time.Second)); err != nil {
 		t.Fatalf("re-release of an already-released binding errored: %v", err)
 	}
@@ -357,11 +341,6 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	}
 }
 
-// TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow pins
-// idx_automation_bindings_active: at most one active row may exist per
-// (definition_id, continuity_key), enforced at the schema level so a bug in
-// the get-or-create path can never silently create two live claimants for
-// the same thread.
 func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -381,10 +360,6 @@ func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *t
 	}
 }
 
-// TestMarkAutomationRunCancelledSetsStateAndReason pins the cancelled+reason
-// terminal transition: it sets state and cancel_reason only, leaving
-// last_error and every other column untouched, since cancellation is not a
-// delivery failure.
 func TestMarkAutomationRunCancelledSetsStateAndReason(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -409,10 +384,6 @@ func TestMarkAutomationRunCancelledSetsStateAndReason(t *testing.T) {
 	}
 }
 
-// TestListPrunableAndTerminalAutomationRunsIncludeCancelledRuns pins that a
-// cancelled run is terminal exactly like delivered/failed for both the
-// retention sweep and the on-demand cleanup listing — it shares failed's
-// retention window rather than having its own.
 func TestListPrunableAndTerminalAutomationRunsIncludeCancelledRuns(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -439,12 +410,6 @@ func TestListPrunableAndTerminalAutomationRunsIncludeCancelledRuns(t *testing.T)
 	}
 }
 
-// TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdrawnNotFailed
-// pins the v2 undelivered-withdrawal predicate: state=pending OR
-// (state=cancelled AND cancel_reason=review_withdrawn) — the sentinel
-// LastError match is gone. A run that failed for an ordinary delivery reason
-// (not a withdrawal cancellation) must not be swept up here even once its
-// review request is later withdrawn.
 func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdrawnNotFailed(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
@@ -470,17 +435,12 @@ func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdraw
 	if err != nil || !created {
 		t.Fatalf("claim B created=%v err=%v", created, err)
 	}
-	// B fails for an ordinary (non-withdrawal) delivery reason before either
-	// request is withdrawn.
 	if err := s.MarkAutomationRunFailed(runB.ID, "spawn unavailable", now.Add(30*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	// Both requests are withdrawn.
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	// Only A's outcome is a withdrawal cancellation (mirrors the daemon's
-	// cancelWithdrawnAutomationRun) — B stays failed for its own reason.
 	if err := s.MarkAutomationRunCancelled(runA.ID, AutomationCancelReasonReviewWithdrawn, now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -504,8 +464,6 @@ func TestScheduledAutomationSingletonContinuityBlocksUndeliveredPredecessor(t *t
 	if _, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now, firstIDs); err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	// No ticket was ever created for the first run, so the second occurrence's
-	// claim must refuse rather than reuse a binding whose ticket is missing.
 	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", TicketID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
 	if _, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs); err == nil {
 		t.Fatal("expected second claim to be rejected while the first run has no ticket yet")
@@ -711,8 +669,6 @@ func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].Cycle != 1 {
 		t.Fatalf("first reconcile = %#v err=%v", candidates, err)
 	}
-	// A detail-fetch failure leaves the same edge eligible instead of losing it
-	// or manufacturing another occurrence.
 	candidates, err = s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(time.Minute))
 	if err != nil || len(candidates) != 1 || candidates[0].Cycle != 1 {
 		t.Fatalf("retry reconcile = %#v err=%v", candidates, err)
@@ -1062,9 +1018,6 @@ func TestGitHubReviewWithdrawalExposesPendingRunAndReleasesEmptyBinding(t *testi
 	if err := s.MarkAutomationRunFailed(first.ID, "review withdrawn", now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	// The binding row is never deleted, only released: its ticket never
-	// existed, so ReconcileAutomationReviewRequests' deactivate step already
-	// released it above.
 	if binding, err := s.GetActiveAutomationContinuityBinding(def.ID, subject); err != nil || binding != nil {
 		t.Fatalf("expected no active binding for the empty (never-ticketed) thread, got %#v err=%v", binding, err)
 	}
@@ -1147,8 +1100,6 @@ func TestGitHubReviewClaimAndTicketEventAreIdempotent(t *testing.T) {
 	if _, err := s.EnsureAutomationTicket(Ticket{ID: first.TicketID, Title: "Review", Status: TicketStatusWorking, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", TicketRoleChiefOfStaff, now); err != nil {
 		t.Fatal(err)
 	}
-	// Use the existing run to exercise transactional event dedupe without
-	// requiring another provider cycle in this focused test.
 	if err := s.EnsureAutomationContinuationTicket(first.TicketID, first.SessionID, first.ID, "/tmp/occ-1.json", "automation:review", now); err != nil {
 		t.Fatal(err)
 	}
@@ -1167,11 +1118,6 @@ func TestGitHubReviewClaimAndTicketEventAreIdempotent(t *testing.T) {
 	}
 }
 
-// TestReapplyWhileDisabledPreservesReviewActivationBaseline pins that
-// UpsertAutomationDefinition never disturbs the enabled column: a definition
-// disabled via SetAutomationEnabled stays disabled across an unrelated
-// re-apply of the same spec (enabled has exactly one authority — the
-// column), and re-enabling via SetAutomationEnabled baselines current demand.
 func TestReapplyWhileDisabledPreservesReviewActivationBaseline(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
@@ -1192,8 +1138,6 @@ func TestReapplyWhileDisabledPreservesReviewActivationBaseline(t *testing.T) {
 	if _, _, err := s.SetAutomationEnabled(def.ID, false, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	// An unrelated re-apply of the same spec while disabled must not silently
-	// re-enable it: enabled has exactly one authority now, the column.
 	if reapplied, err := s.UpsertAutomationDefinition(def.ID, def.Name, spec, now.Add(90*time.Second)); err != nil {
 		t.Fatal(err)
 	} else if reapplied.Enabled {
@@ -1319,7 +1263,6 @@ func TestSetAutomationEnabledFlipsStateAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Re-applying the current state is a no-op: changed=false, no update.
 	got, changed, err := s.SetAutomationEnabled(def.ID, true, now.Add(time.Minute))
 	if err != nil || changed || got == nil || !got.Enabled {
 		t.Fatalf("no-op enable: def=%#v changed=%v err=%v", got, changed, err)
@@ -1349,8 +1292,6 @@ func TestSetAutomationEnabledFlipsStateAndIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand proves the
-// disable/re-enable transition ignores demand already active at activation.
 func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
@@ -1390,12 +1331,6 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	}
 }
 
-// TestSetAutomationEnabledNeverTouchesSpecOrRevision pins the v2 contract:
-// enabled has exactly one authority, the column. Unlike v1 (where the
-// toggle also rewrote spec_json/spec_yaml and bumped revision to keep them
-// in sync), a real enabled transition here must leave spec_json and
-// revision completely untouched — there is no spec-side echo of enabled
-// left to keep in sync, so nothing to bump a stale-save guard for.
 func TestSetAutomationEnabledNeverTouchesSpecOrRevision(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
@@ -1417,7 +1352,6 @@ func TestSetAutomationEnabledNeverTouchesSpecOrRevision(t *testing.T) {
 		t.Fatalf("disable touched spec_json: got %q, want unchanged %q", disabled.SpecJSON, spec)
 	}
 
-	// The no-op re-application of the same state must not bump revision either.
 	noop, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(2*time.Minute))
 	if err != nil || changed || noop == nil {
 		t.Fatalf("no-op disable: def=%#v changed=%v err=%v", noop, changed, err)
@@ -1427,13 +1361,6 @@ func TestSetAutomationEnabledNeverTouchesSpecOrRevision(t *testing.T) {
 	}
 }
 
-// TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON pins that a row
-// whose spec_json cannot be parsed (a corrupt or otherwise unexpected value —
-// this store method never validates what UpsertAutomationDefinition was
-// given) never blocks the toggle: enabling, and especially disabling — a
-// safety control for turning off an unattended cron — must always take
-// effect on the column, since the toggle never reads or writes spec_json
-// at all.
 func TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
@@ -1455,15 +1382,6 @@ func TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON(t *testing.T) {
 	}
 }
 
-// TestListPrunableAutomationRunsProtectsBoundThreadOrigin pins the fix for
-// Slice 7 PR A's continuity-bricking blocker: a thread's ticket.automation_run_id
-// is written once at ticket creation and never updated, so it permanently
-// points at the thread's oldest (origin) run — exactly the run retention
-// would otherwise prune first. As long as the thread's continuity binding
-// still exists (the thread can still deliver again), the origin run must
-// never be a prunable candidate, however far outside the keep window or age
-// floor it is; pruning it would make automationContinuationOrigin
-// (internal/daemon/automations.go) fail forever on the next occurrence.
 func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -1479,8 +1397,6 @@ func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 	if err := s.MarkAutomationRunDelivered(origin.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
-	// The thread's ticket permanently points at the origin run: the real
-	// shape validateAutomationContinuation/automationContinuationOrigin rely on.
 	if _, err := s.EnsureAutomationTicket(Ticket{ID: origin.TicketID, Title: "Nightly", Status: TicketStatusWorking, Assignee: origin.SessionID, AutomationRunID: origin.ID}, "automation:nightly", TicketRoleChiefOfStaff, now); err != nil {
 		t.Fatal(err)
 	}
@@ -1497,14 +1413,6 @@ func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 	}
 }
 
-// TestListPrunableAutomationRunsStillPrunesNonContinuityRuns guards against
-// over-broadening the fix above: every automation run (continuity or not)
-// gets a ticket whose own automation_run_id is that run's own id, so an
-// unjoined "any run referenced by any ticket" exclusion would protect
-// essentially every run and silently turn retention into a no-op. Only the
-// join through automation_continuity_bindings should narrow protection to
-// threads that can still deliver again — an ordinary non-continuity run's
-// own ticket never has a continuity binding, so it must remain prunable.
 func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -1520,8 +1428,6 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
-	// This run's own ticket points back at itself, exactly like every
-	// automation run's ticket does, with no continuity binding involved.
 	if _, err := s.EnsureAutomationTicket(Ticket{ID: run.TicketID, Title: "Cleanup", Status: TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:cleanup", TicketRoleChiefOfStaff, now); err != nil {
 		t.Fatal(err)
 	}
@@ -1536,15 +1442,6 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	}
 }
 
-// TestSweepExpiredTicketsReleasesActiveContinuityBindings pins the other half
-// of the fix ListPrunableAutomationRunsProtectsBoundThreadOrigin (above)
-// relies on: a binding is only a temporary hold, not a permanent one. Once
-// the ticket it documents ages past the TTL, SweepExpiredTickets must
-// release the binding (status=released, reason=ticket_swept) in the same
-// transaction — never delete the row, since bindings are append-only history
-// in v2 — and GetActiveAutomationContinuityBinding must stop returning it so
-// the next occurrence claims fresh. A within-TTL or still-open thread's
-// binding must be left alone (still active).
 func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -1568,12 +1465,6 @@ func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 		if terminal {
 			status = TicketStatusDone
 		}
-		// EnsureAutomationTicket sets closed_at from the timestamp passed in
-		// when the ticket is created directly in a terminal status (mirrors
-		// TestFreshThreadAfterTicketSweepGetsItsOwnTicketNotTheOldOne's use of
-		// the same mechanism), so a distinct closedAt per thread is enough to
-		// place each on either side of the TTL without a separate SetTicketStatus
-		// call.
 		if _, err := s.EnsureAutomationTicket(Ticket{ID: run.TicketID, Title: "Nightly", Status: status, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:nightly", TicketRoleChiefOfStaff, closedAt); err != nil {
 			t.Fatal(err)
 		}
@@ -1592,10 +1483,7 @@ func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 		t.Fatalf("removed = %d, want 1 (only swept)", removed)
 	}
 
-	// Bindings are append-only in v2 (docs/plans/2026-07-21-automations-v2-simplification.md
-	// Data Model): a swept binding's row must still exist afterward, released
-	// rather than deleted, so history survives. No exported store method lists
-	// a binding by status, so query directly.
+	// No exported store method lists a binding by status, so query directly.
 	bindingStatus := func(continuityKey string) (status, reason string, exists bool) {
 		t.Helper()
 		err := s.db.QueryRow(`SELECT status,released_reason FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=?`, def.ID, continuityKey).Scan(&status, &reason)
@@ -1621,13 +1509,6 @@ func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 	}
 }
 
-// TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin is the chain
-// TestListPrunableAutomationRunsProtectsBoundThreadOrigin's protection exists
-// to eventually let go of: once the ticket that keeps a binding alive ages
-// out, both AutomationSessionHasContinuityBinding and ListPrunableAutomationRuns
-// must reflect the release, or the fix this PR makes is unproven — the guard
-// would be permanent instead of TTL-bounded, which is the exact bug this
-// branch exists to fix (see the "Fix brief" this test was written from).
 func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -1649,8 +1530,6 @@ func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 
 	far := now.Add(365 * 24 * time.Hour)
 
-	// Before the TTL sweep: still protected, exactly like
-	// TestListPrunableAutomationRunsProtectsBoundThreadOrigin pins.
 	if bound, err := s.AutomationSessionHasContinuityBinding(origin.SessionID); err != nil || !bound {
 		t.Fatalf("bound=%v err=%v, want bound before the sweep", bound, err)
 	}
@@ -1668,7 +1547,6 @@ func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
 
-	// After the sweep: the chain must actually close.
 	if bound, err := s.AutomationSessionHasContinuityBinding(origin.SessionID); err != nil || bound {
 		t.Fatalf("bound=%v err=%v, want released after the sweep", bound, err)
 	}
@@ -1687,12 +1565,6 @@ func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 	}
 }
 
-// TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly pins the
-// v2 revision-bump condition now that spec_yaml storage is gone: a
-// byte-identical reapply of spec_json is a no-op (revision must not move),
-// and any change to spec_json bumps it. It also pins that an update never
-// disturbs the enabled column (see UpsertAutomationDefinition's doc
-// comment) — SetAutomationEnabled owns that transition exclusively now.
 func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
@@ -1704,7 +1576,6 @@ func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.
 		t.Fatalf("initial revision = %d, want 1", def.Revision)
 	}
 
-	// A byte-identical reapply is a no-op: revision must not move.
 	noop, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
@@ -1716,7 +1587,6 @@ func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.
 		t.Fatalf("no-op reapply disturbed enabled: %#v", noop)
 	}
 
-	// A spec_json change bumps the revision.
 	edited, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now.Add(2*time.Minute))
 	if err != nil {
 		t.Fatal(err)

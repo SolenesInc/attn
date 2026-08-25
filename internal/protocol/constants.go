@@ -7,117 +7,39 @@ import (
 	"time"
 )
 
-// ProtocolVersion is the version of the daemon-client protocol.
-// Increment this when making breaking changes to the protocol.
-// Client and daemon must have matching versions.
 const ProtocolVersion = "271"
 
-// Error codes. A failed response may carry one beside its message text, naming
-// what a caller can do about it rather than leaving it to match English. The
-// question — "is this worth retrying, or is it broken?" — is not specific to a
-// domain, so document operations and app commands share this vocabulary.
-//
-// A client that does not recognise a code must treat the failure as broken
-// rather than guessing, which is what keeps adding one from being a breaking
-// change.
 const (
-	// ErrorCodeConflict: a conditional write was refused because the document is
-	// not at the revision the caller asserted. Response.ErrorConflict names both
-	// revisions. Re-read and apply the change to the version that won.
-	ErrorCodeConflict = "conflict"
-	// ErrorCodeUndeclaredCollection: the collection was never declared, or is no
-	// longer declared. Nothing to retry — declare it, or stop.
+	ErrorCodeConflict             = "conflict"
 	ErrorCodeUndeclaredCollection = "undeclared_collection"
-	// ErrorCodeInvalidQuery: the query itself is wrong — an unknown field, an
-	// operator that does not exist, a bound of the wrong type, a cursor pointing
-	// at a document that is gone. The message says which.
-	ErrorCodeInvalidQuery = "invalid_query"
-	// ErrorCodeCollectionUndefined ends a live subscription because the
-	// collection it watches was removed. Distinct from
-	// ErrorCodeUndeclaredCollection, which answers a request against a
-	// collection that was never there: this one says an accepted subscription's
-	// target went away underneath it, which is a UI host's "kill the tile"
-	// rather than "the caller asked for the wrong thing".
-	ErrorCodeCollectionUndefined = "collection_undefined"
-	// ErrorCodeCollectionRedeclared ends a live subscription because the
-	// collection was redeclared without a field the query uses. The query can
-	// never be answered again as written, so the tile's query is what has to
-	// change; resubscribing unchanged would fail the same way.
+	ErrorCodeInvalidQuery         = "invalid_query"
+	ErrorCodeCollectionUndefined  = "collection_undefined"
 	ErrorCodeCollectionRedeclared = "collection_redeclared"
-	// ErrorCodeSubscriptionLimit refuses a live query because the client already
-	// holds DocSubscriptionsPerClient of them. The refusal names the limit and
-	// the ask, because a silently dropped subscription is a tile that renders
-	// nothing forever with nothing to read.
-	ErrorCodeSubscriptionLimit = "subscription_limit"
-	// ErrorCodeReconcileOwed refuses an app command while the app's collection
-	// rebuild is owed or running. The result carries the current structured
-	// reconcile reason so a caller never has to recover the fence from prose.
-	ErrorCodeReconcileOwed = "reconcile_owed"
-	// ErrorCodeUnauthorizedClient refuses a client_hello whose client_token does
-	// not match the daemon's. Nothing to retry on the same value — read the token
-	// file the message names, or ask the daemon that owns it.
-	ErrorCodeUnauthorizedClient = "unauthorized_client"
+	ErrorCodeSubscriptionLimit    = "subscription_limit"
+	ErrorCodeReconcileOwed        = "reconcile_owed"
+	ErrorCodeUnauthorizedClient   = "unauthorized_client"
 )
 
-// DocSubscriptionsPerClient bounds how many live queries one WebSocket client
-// may hold at once.
-//
-// Measured 2026-08-13 against Victor's production database: seven live
-// workspaces, of which three hold exactly one docked tile and four hold none. A
-// view can reasonably open more than one query, so the healthy ceiling is single
-// digits and this sits an order of magnitude past it. It is a tripwire — a
-// working client never learns it exists — and reaching it is a named refusal,
-// never a dropped subscription.
+// Tripwire: measured 2026-08-13 against production, where no workspace held
+// more than one docked tile.
 const DocSubscriptionsPerClient = 64
 
-// AgentMessageMaxChars bounds one agent_msg. Measured 2026-08-10 against a live
-// session: a bracketed paste through the doorbell's own mechanics arrived intact
-// at 1KiB, 4KiB, 16KiB, 64KiB and 256KiB, so the PTY is not what constrains it.
-// The unix socket is — one request must fit the daemon's 64KiB frame, and JSON
-// escaping grows the content on the way in. 32KiB is 1.75x the largest assistant
-// prose block measured across 120 transcripts (18,713 chars), and leaves
-// ordinary text room to double before the frame limit would answer first.
-//
-// Both ends check it: the daemon because it is the authority, the sender so the
-// answer is this limit by name rather than a socket that hung up.
+// Measured 2026-08-10: 32KiB is 1.75x the largest assistant prose block across 120
+// transcripts (18,713 chars), and fits the daemon's 64KiB socket frame after escaping.
 const AgentMessageMaxChars = 32 * 1024
 
-// CapabilityWorkspaceSessions is required for websocket clients that use the
-// interactive daemon API. Clients without it are not workspace-first clients.
 const CapabilityWorkspaceSessions = "workspace_sessions"
 
-// CapabilityBrowserHost identifies the local Tauri client that owns the
-// visible child webview used by docked browser tiles.
 const CapabilityBrowserHost = "browser_host"
 
-// CapabilityBinaryPtyOutput opts a client into receiving live PTY output as
-// binary websocket frames (see binaryframe.go) instead of base64-in-JSON
-// pty_output events. Clients without it keep the JSON event, which is what
-// keeps daemon-to-daemon relays and older automation clients working.
-//
-// It is the general "this client takes binary frames" bit, so kitty image blobs
-// ride it too: the same client that can decode a PTY frame can decode a blob.
 const CapabilityBinaryPtyOutput = "binary_pty_output"
 
-// CapabilityKittyImages opts a client into being TOLD about images: the
-// kitty_placements event describing where they sit on the grid. A client
-// without it hears nothing about them, which is what every client did before
-// this existed — the APC bytes are stripped from the PTY stream, so an unaware
-// client draws a correct screen with no images in it.
-//
-// It says nothing about transport. get_kitty_image answers whether or not a
-// client advertised this, and how the pixels travel is
-// CapabilityBinaryPtyOutput's call. The two are separate because the hub asks
-// for one and not the other: it relays kitty traffic between daemons over a
-// text pipe, so it needs the descriptions in JSON and cannot take a binary
-// frame at all.
+// Says nothing about transport, which is CapabilityBinaryPtyOutput's call. The hub relays
+// kitty descriptions as JSON over a text pipe and cannot take a binary frame.
 const CapabilityKittyImages = "kitty_images"
 
-// SessionAgent labels in-tree and externally registered agent identifiers.
 type SessionAgent = string
 
-// Built-in session-agent identifiers. SessionAgent is intentionally open so
-// external plugin drivers can publish their own identifiers at runtime.
 const (
 	SessionAgentClaude  SessionAgent = "claude"
 	SessionAgentCodex   SessionAgent = "codex"
@@ -125,7 +47,6 @@ const (
 	SessionAgentShell   SessionAgent = "shell"
 )
 
-// Commands
 const (
 	CmdClientHello                           = "client_hello"
 	CmdRegister                              = "register"
@@ -363,11 +284,8 @@ const (
 	CmdSetSessionContextWindowCap            = "set_session_context_window_cap"
 )
 
-// Auto mode's commands, split by which surface may reach them. The first group
-// is agent-reachable over the unix socket and every one of its members reads or
-// records a proposal — none changes what a session launches with. The second
-// group is the app's alone: a human in the app is the trust boundary a CLI
-// caller cannot fake, so promotion lives here and nowhere else.
+// First group is agent-reachable over the unix socket and records proposals
+// only; the second is the app's alone, because promotion needs a human.
 const (
 	CmdAutoModeShow      = "automode_show"
 	CmdAutoModeEnvAdd    = "automode_env_add"
@@ -382,8 +300,6 @@ const (
 	CmdAutoModePatternRemove = "automode_pattern_remove"
 )
 
-// Per-action automations result events (socket + WS share one command set;
-// see the Cmd constants above and internal/daemon/automations_actions.go).
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
 	EventAutomationValidateResult    = "automation_validate_result"
@@ -396,12 +312,8 @@ const (
 	EventAutomationCleanupResult     = "automation_cleanup_result"
 )
 
-// EventAutomationsChanged is the id-only automations broadcast: canonical state
-// stays in SQLite, so clients re-read via automation_definitions_get /
-// automation_runs_get on receipt.
 const EventAutomationsChanged = "automations_changed"
 
-// WebSocket Events (daemon -> client)
 const (
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
@@ -540,7 +452,6 @@ const (
 	EventClientEvictionNotice            = "client_eviction_notice"
 )
 
-// Session states (values for SessionState enum)
 const (
 	StateLaunching       = "launching"
 	StateWorking         = "working"
@@ -551,17 +462,14 @@ const (
 	StateUnknown         = "unknown"
 )
 
-// Agent values
 const (
 	AgentShellValue = "shell"
 )
 
-// PR states (values for PR.State field, distinct from session states)
 const (
-	PRStateWaiting = "waiting" // PR needs attention
+	PRStateWaiting = "waiting"
 )
 
-// PR reasons (why it needs attention)
 const (
 	PRReasonReadyToMerge     = "ready_to_merge"
 	PRReasonCIFailed         = "ci_failed"
@@ -569,38 +477,31 @@ const (
 	PRReasonReviewNeeded     = "review_needed"
 )
 
-// Heat state timing constants
 const (
-	HeatHotDuration  = 3 * time.Minute  // Stay hot for 3 min after activity
-	HeatWarmDuration = 10 * time.Minute // Stay warm for 10 min total
-	HeatHotInterval  = 30 * time.Second // Refresh hot PRs every 30s
-	HeatWarmInterval = 2 * time.Minute  // Refresh warm PRs every 2 min
-	HeatColdInterval = 10 * time.Minute // Refresh cold PRs every 10 min
+	HeatHotDuration  = 3 * time.Minute
+	HeatWarmDuration = 10 * time.Minute
+	HeatHotInterval  = 30 * time.Second
+	HeatWarmInterval = 2 * time.Minute
+	HeatColdInterval = 10 * time.Minute
 )
 
-// NeedsDetailRefresh returns true if PR details should be re-fetched
 func (pr *PR) NeedsDetailRefresh() bool {
 	if !pr.DetailsFetched {
 		return true
 	}
-	// Parse timestamps for comparison
 	lastUpdated := Timestamp(pr.LastUpdated).Time()
 	detailsFetchedAt := Timestamp(Deref(pr.DetailsFetchedAt)).Time()
 
-	// Invalidate if PR was updated after we fetched details
 	if lastUpdated.After(detailsFetchedAt) {
 		return true
 	}
-	// Invalidate if details are older than 5 minutes
 	if time.Since(detailsFetchedAt) > 5*time.Minute {
 		return true
 	}
 	return false
 }
 
-// ParseMessage parses a JSON message and returns the command type and parsed message
 func ParseMessage(data []byte) (string, interface{}, error) {
-	// First, extract just the command
 	var peek struct {
 		Cmd string `json:"cmd"`
 	}
@@ -611,7 +512,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		return "", nil, errors.New("missing cmd field")
 	}
 
-	// Parse based on command type
 	switch peek.Cmd {
 	case CmdClientHello:
 		var msg ClientHelloMessage

@@ -15,13 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// A machine crash kills every worker at once and says nothing about any of
-// them. What decides whether a session survives it is the evidence left on
-// disk, so these tests are written in those terms: a resume target its driver
-// can still find, and a launch intent to start the replacement from.
-
-// recoveryHome points the tool homes at temp dirs once, so one test can give
-// several sessions resume targets without each fixture clobbering the last.
 type recoveryHome struct {
 	claudeProjects string
 	codexSessions  string
@@ -44,7 +37,6 @@ func newRecoveryHome(t *testing.T) recoveryHome {
 	return h
 }
 
-// resumableClaude writes the transcript `claude --resume <id>` needs.
 func (h recoveryHome) resumableClaude(t *testing.T, resumeID string) {
 	t.Helper()
 	path := filepath.Join(h.claudeProjects, resumeID+".jsonl")
@@ -53,7 +45,6 @@ func (h recoveryHome) resumableClaude(t *testing.T, resumeID string) {
 	}
 }
 
-// resumableCodex writes the rollout `codex resume <id>` needs.
 func (h recoveryHome) resumableCodex(t *testing.T, resumeID string) {
 	t.Helper()
 	rollout := []byte(`{"type":"session_meta","payload":{"id":"` + resumeID + `","cwd":"/tmp"}}` + "\n")
@@ -63,8 +54,6 @@ func (h recoveryHome) resumableCodex(t *testing.T, resumeID string) {
 	}
 }
 
-// giveRestorationEvidence files the two durable things startup recovery looks
-// for: where the conversation is, and how to relaunch into it.
 func giveRestorationEvidence(t *testing.T, d *Daemon, sessionID, resumeID string) {
 	t.Helper()
 	d.store.SetResumeSessionID(sessionID, resumeID)
@@ -123,10 +112,6 @@ func saveTwoPaneLayout(workspaceID, firstSessionID, secondSessionID string) work
 	}
 }
 
-// The defect this replaces: a crash deleted a `working` codex session that had
-// a rollout on disk and kept an `idle` one that did not, because recovery asked
-// which agent it was and whether it looked busy. Both axes are gone — every
-// agent with a resume target survives, in every state.
 func TestRecoveryKeepsAnyResumableSessionWhateverItWasDoing(t *testing.T) {
 	home := newRecoveryHome(t)
 	states := []protocol.SessionState{
@@ -167,10 +152,6 @@ func TestRecoveryKeepsAnyResumableSessionWhateverItWasDoing(t *testing.T) {
 	}
 }
 
-// The other half of the same rule: nothing to come back to means the row goes,
-// and it goes the one way a row ever goes — reaped, with its pane. A session
-// left sitting in `recoverable` with a resume id pointing at nothing would
-// offer the user a Reload that cannot work.
 func TestRecoveryReapsWhatItCannotBringBack(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -221,10 +202,6 @@ func TestRecoveryReapsWhatItCannotBringBack(t *testing.T) {
 	}
 }
 
-// A verdict is only as good as the evidence behind it right now. A session
-// parked in `recoverable` whose rollout has since been pruned is not a session
-// waiting to be reloaded, it is a dead row, and skipping it because of the
-// state it is already in would keep it forever.
 func TestRecoveryRedecidesSessionsAlreadyParkedAsRecoverable(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -240,7 +217,6 @@ func TestRecoveryRedecidesSessionsAlreadyParkedAsRecoverable(t *testing.T) {
 	if session := d.store.Get("still-there"); session == nil || session.State != protocol.SessionStateRecoverable {
 		t.Fatalf("still-there = %+v, want left recoverable", session)
 	}
-	// It was already there, so nothing moved and nothing is announced.
 	if report.MarkedRecoverable != 0 {
 		t.Fatalf("marked_recoverable = %d, want 0 for a session already parked there", report.MarkedRecoverable)
 	}
@@ -249,8 +225,6 @@ func TestRecoveryRedecidesSessionsAlreadyParkedAsRecoverable(t *testing.T) {
 	}
 }
 
-// A close the user asked for is not a crash. The mark outlives the daemon
-// precisely so a reap that runs on the next boot can still tell the two apart.
 func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -267,8 +241,6 @@ func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
 	}
 }
 
-// A shell holds no conversation, so there is nothing to check for and nothing
-// to lose: the intent describes it completely and the pane comes back.
 func TestRecoveryKeepsShellPanes(t *testing.T) {
 	newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -284,10 +256,6 @@ func TestRecoveryKeepsShellPanes(t *testing.T) {
 	}
 }
 
-// A plugin runtime is judged on the handle it persisted, not on what a
-// reconnected driver says it can do in general: the capability is about the
-// driver, the handle is about this conversation. At startup the plugin has
-// usually not reconnected anyway.
 func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 	newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -326,9 +294,6 @@ func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 	}
 }
 
-// A conversation session's history is a file under attn's data dir, and before
-// the host has written one the intent's own brief is what the replacement
-// opens. Neither needs the plugin to be back.
 func TestRecoveryKeepsConversationSessionsFromTheirOwnHistory(t *testing.T) {
 	newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -366,9 +331,6 @@ func TestRecoveryKeepsConversationSessionsFromTheirOwnHistory(t *testing.T) {
 	}
 }
 
-// The layout follows the verdict: a recoverable session keeps its pane, so the
-// user has somewhere to click Reload, and only the reaped one takes its pane
-// down with it.
 func TestRecoveryKeepsThePaneOfARecoverableSession(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))

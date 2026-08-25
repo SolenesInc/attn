@@ -1,16 +1,5 @@
-// OSC 133 semantic-prompt parsing (shell integration markers).
-//
-// fish 4.x emits these natively around every interactive command:
-//   ESC]133;A;click_events=1 BEL   prompt start
-//   ESC]133;B BEL                  prompt end / input start
-//   ESC]133;C;cmdline_url=... BEL  pre-exec (command text, percent-encoded)
-//   ESC]133;D;<exit> BEL           command finished
-//
-// The parser segments a PTY byte stream at marker boundaries so the caller
-// can write each segment to the terminal model and then read the model's
-// cursor to learn the marker's buffer position. It works on raw bytes —
-// decoding to a string and re-encoding would corrupt multibyte characters
-// split across PTY chunks.
+// The parser works on raw bytes: decoding to a string and re-encoding would corrupt
+// multibyte characters split across PTY chunks.
 
 export type Osc133Marker =
   | { kind: 'prompt-start' }
@@ -36,8 +25,6 @@ const PREFIX = new Uint8Array([0x1b, 0x5d, 0x31, 0x33, 0x33, 0x3b]); // ESC ] 1 
 const BEL = 0x07;
 const ESC = 0x1b;
 const BACKSLASH = 0x5c;
-// A marker that never terminates is abandoned past this size so a broken
-// producer cannot make the parser buffer output forever.
 const MAX_PENDING_BYTES = 4096;
 
 const payloadDecoder = new TextDecoder();
@@ -58,8 +45,6 @@ function indexOfPrefix(buffer: Uint8Array, from: number): number {
   return -1;
 }
 
-// Length of the longest buffer suffix that is a strict prefix of the marker
-// sequence — bytes that must be held back in case the next chunk completes it.
 function partialPrefixSuffixLength(buffer: Uint8Array): number {
   const max = Math.min(buffer.length, PREFIX.length - 1);
   for (let length = max; length > 0; length -= 1) {
@@ -101,8 +86,6 @@ function markerFromPayload(payload: string): Osc133Marker | undefined {
       return { kind: 'command-end', exitCode: Number.isFinite(exitCode) ? exitCode : undefined };
     }
     default:
-      // Unknown subtype: the sequence is still consumed (written through to
-      // the terminal, which ignores it) but produces no marker.
       return undefined;
   }
 }
@@ -112,7 +95,6 @@ export function emptyOsc133State(): Osc133State {
 }
 
 export function parseOsc133(state: Osc133State, chunk: Uint8Array): Osc133ParseResult {
-  // Fast path: nothing held back and no ESC byte in the chunk.
   if (!state.pending && chunk.indexOf(ESC) === -1) {
     return { state, segments: chunk.length > 0 ? [{ bytes: chunk }] : [] };
   }
@@ -144,7 +126,6 @@ export function parseOsc133(state: Osc133State, chunk: Uint8Array): Osc133ParseR
       };
     }
 
-    // Find the terminator: BEL or ESC \ (7-bit ST).
     let terminatorEnd = -1;
     for (let i = markerStart + PREFIX.length; i < buffer.length; i += 1) {
       if (buffer[i] === BEL) {
@@ -158,7 +139,6 @@ export function parseOsc133(state: Osc133State, chunk: Uint8Array): Osc133ParseR
     }
     if (terminatorEnd === -1) {
       if (buffer.length - markerStart > MAX_PENDING_BYTES) {
-        // Broken marker: give up and pass everything through.
         segments.push({ bytes: buffer.subarray(segmentStart) });
         return { state: { pending: null }, segments };
       }

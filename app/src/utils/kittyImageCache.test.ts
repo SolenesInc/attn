@@ -1,7 +1,3 @@
-// The blob cache: what gets asked for, what gets kept, and what stops being
-// asked for. Every test here runs against its own cache instance rather than the
-// module singleton, so one test's eviction cannot decide another's outcome.
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   KittyImageCache,
@@ -23,7 +19,6 @@ function blob(overrides: Partial<KittyImageBlob> = {}): KittyImageBlob {
   };
 }
 
-/** A cache wired to a sender that records what it was asked for. */
 function cacheWithSender(capacityBytes?: number) {
   const sent: Array<[string, number]> = [];
   const cache = new KittyImageCache(capacityBytes);
@@ -73,8 +68,6 @@ describe('KittyImageCache requests', () => {
 
     cache.ensure('sess', 7, 10);
 
-    // Not pending: a request that never went out must be retried by the next
-    // description, not waited on forever.
     expect(cache.status('sess', 7, 10)).toBe('absent');
   });
 
@@ -88,19 +81,14 @@ describe('KittyImageCache requests', () => {
     expect(cache.get('sess', 7, 11)).toBeNull();
   });
 
-  // A respawn keeps the session id and replaces the worker, so the image id can
-  // come back attached to entirely different pixels. The worker mints a fresh
-  // generation for its whole terminal (mintKittyEpoch in internal/pty/kitty.go),
-  // and this is the half of that contract the app owes: a generation it has
-  // never seen is a miss, whatever it holds for that image already, and filling
-  // it must not disturb what the previous worker's identity still points at.
+  // A respawn keeps the session id and replaces the worker, so an image id can come back
+  // attached to different pixels (mintKittyEpoch in internal/pty/kitty.go).
   it('pulls and keeps both sets of pixels when a respawned worker re-describes an image', () => {
     const { cache, sent } = cacheWithSender();
     const beforeRespawn = new Uint8Array([1, 1, 1]);
     const afterRespawn = new Uint8Array([2, 2, 2]);
     cache.fill(blob({ imageId: 1, generation: 10, pixels: beforeRespawn }));
 
-    // The replacement worker describes image 1 under its own identity.
     expect(cache.status('sess', 1, 4_300_000_000)).toBe('absent');
     cache.ensure('sess', 1, 4_300_000_000);
     expect(sent).toEqual([['sess', 1]]);
@@ -147,8 +135,7 @@ describe('KittyImageCache answers', () => {
     const { cache, sent } = cacheWithSender();
     cache.ensure('sess', 7, 10);
 
-    // The failure names no generation — an evicted image has none — so it has to
-    // land on whatever generation was waiting on that request.
+    // An evicted image has no generation, so the failure lands on whichever one was waiting.
     cache.markFailed('sess', 7, 'kitty image 7: not found');
 
     expect(cache.status('sess', 7, 10)).toBe('failed');
@@ -212,7 +199,6 @@ describe('KittyImageCache eviction', () => {
     cache.fill(blob({ imageId: 1, pixels: new Uint8Array(400) }));
     cache.fill(blob({ imageId: 2, pixels: new Uint8Array(400) }));
 
-    // Drawing image 1 makes image 2 the stale one.
     cache.get('sess', 1, 10);
     cache.fill(blob({ imageId: 3, pixels: new Uint8Array(400) }));
 
@@ -241,8 +227,6 @@ describe('KittyImageCache eviction', () => {
 });
 
 describe('kittyImageBlobFromResult', () => {
-  // The JSON answer and the binary frame must land the same blob: a relayed
-  // remote session only ever gets the JSON one, and it has to draw the same.
   const success = {
     id: 'sess',
     image_id: 7,

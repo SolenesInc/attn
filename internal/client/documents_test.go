@@ -11,8 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Unix socket paths are length-limited (notably on macOS), and the default
-// t.TempDir() path is long enough to blow the limit.
+// Unix socket paths are length-limited (notably on macOS) and t.TempDir()'s path
+// is long enough to blow the limit.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "attn-")
@@ -27,10 +27,6 @@ func doc(id, body string, rev int) protocol.StoredDocument {
 	return protocol.StoredDocument{ID: id, Body: body, Rev: rev}
 }
 
-// docServer is a unix socket that answers one doc_subscribe with the deliveries
-// it is handed and then does whatever the test asked of it. The daemon's own
-// handler is covered in internal/daemon; what is under test here is the client's
-// read loop, so the server side is scripted rather than real.
 func docServer(t *testing.T, serve func(conn net.Conn, subscribe protocol.DocSubscribeMessage)) string {
 	t.Helper()
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
@@ -61,17 +57,12 @@ func sendDelivery(t *testing.T, conn net.Conn, result protocol.DocSubscribeResul
 	}
 }
 
-// A live query that ends because the connection went reports it as an error too.
-// Nothing distinguishes "the daemon stopped" from "nothing has changed lately"
-// except this, and a watcher that cannot tell them apart shows a frozen list
-// forever.
 func TestASubscriptionEndingWithoutAnErrorIsStillAnError(t *testing.T) {
 	sockPath := docServer(t, func(conn net.Conn, _ protocol.DocSubscribeMessage) {
 		sendDelivery(t, conn, protocol.DocSubscribeResult{
 			Delivery: 1, AsOfSeq: 7, Order: []string{"a"},
 			Upsert: []protocol.StoredDocument{doc("a", `{}`, 1)},
 		})
-		// and then simply goes away, the way a daemon that was restarted does.
 	})
 
 	var seen int
@@ -94,14 +85,8 @@ func TestASubscriptionEndingWithoutAnErrorIsStillAnError(t *testing.T) {
 	}
 }
 
-// The three endings that are NOT worth retrying, kept together because what
-// separates them from a lost connection is one bit that is easy to conflate
-// with an empty code. A resuming watcher that retried any of them would spin:
-// the daemon refuses the same query again, and an unapplicable delivery repeats
-// with the same declared revisions.
 func TestOnlyALostConnectionIsWorthResubscribing(t *testing.T) {
 	unapplicable := docServer(t, func(conn net.Conn, _ protocol.DocSubscribeMessage) {
-		// Orders a document whose body it never sent and the client never held.
 		sendDelivery(t, conn, protocol.DocSubscribeResult{Delivery: 1, Order: []string{"ghost"}})
 	})
 	err := New(unapplicable).DocSubscribe(protocol.DocumentQuery{}, nil, func(DocWindow) bool { return true })
@@ -129,9 +114,6 @@ func TestOnlyALostConnectionIsWorthResubscribing(t *testing.T) {
 	}
 }
 
-// The daemon's coded ending has to survive the read loop as a code, because a UI
-// host branches on it: `collection_undefined` kills the tile, an empty code
-// reconnects.
 func TestACodedEndingKeepsItsCode(t *testing.T) {
 	sockPath := docServer(t, func(conn net.Conn, _ protocol.DocSubscribeMessage) {
 		json.NewEncoder(conn).Encode(protocol.Response{
@@ -151,9 +133,6 @@ func TestACodedEndingKeepsItsCode(t *testing.T) {
 	}
 }
 
-// Resuming declares revisions, not bodies. The wire carries the pairs; the
-// caller hands over whole documents so that everything it declared is also
-// something it can render.
 func TestResumingDeclaresTheRevisionsOfWhatIsHeld(t *testing.T) {
 	declared := make(chan []protocol.DocumentRevision, 1)
 	sockPath := docServer(t, func(conn net.Conn, msg protocol.DocSubscribeMessage) {
@@ -174,7 +153,6 @@ func TestResumingDeclaresTheRevisionsOfWhatIsHeld(t *testing.T) {
 	if len(have) != 1 || have[0].ID != "a" || have[0].Rev != 4 {
 		t.Fatalf("declared %+v, want a@4", have)
 	}
-	// And the body it never re-sent came out of the cache the caller seeded.
 	got := <-window
 	if len(got.Documents) != 1 || got.Documents[0].Body != `{"n":1}` {
 		t.Fatalf("resumed window is %+v, want the held body", got.Documents)
@@ -202,8 +180,6 @@ func TestApplyingADeliveryFollowsTheClientRule(t *testing.T) {
 	if window.Delivery != 3 || window.AsOfSeq != 42 {
 		t.Fatalf("window is delivery %d as of %d", window.Delivery, window.AsOfSeq)
 	}
-	// Order decides the order, an upsert overrides the cache, and the cached
-	// body is used untouched for what did not travel.
 	if len(window.Documents) != 2 ||
 		window.Documents[0].Body != `{"v":"kept"}` ||
 		window.Documents[1].Body != `{"v":"new"}` {
@@ -212,8 +188,6 @@ func TestApplyingADeliveryFollowsTheClientRule(t *testing.T) {
 	if len(window.Changed) != 1 || window.Changed[0] != "a" {
 		t.Fatalf("changed is %v, want only the body that travelled", window.Changed)
 	}
-	// Forget everything not named in order: the cache is the window, not a
-	// history, which is what bounds a long-lived subscription's memory.
 	if _, still := cache["c"]; still {
 		t.Fatalf("a document that left the window is still cached")
 	}
@@ -222,9 +196,6 @@ func TestApplyingADeliveryFollowsTheClientRule(t *testing.T) {
 	}
 }
 
-// The one case a subscriber cannot render: the daemon believes it holds a body
-// it does not. Reporting it beats drawing a window with a hole in it, and the
-// message says how to recover.
 func TestADeliveryOrderingAnUnheldDocumentEndsTheSubscription(t *testing.T) {
 	_, err := applyDocDelivery(map[string]protocol.StoredDocument{}, &protocol.DocSubscribeResult{
 		Delivery: 1,

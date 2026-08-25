@@ -9,10 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// recoveredApprovalRoute reads the surviving worker first because it records
-// what actually launched. The session's launch intent is the durable fallback.
-// A known worker route also repairs a stale intent so a later machine-level
-// revive preserves the same behavior.
 func (d *Daemon) recoveredApprovalRoute(sessionID string) (launchcontract.ApprovalRoute, bool) {
 	if provider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider); ok {
 		params, err := provider.SessionLaunchParams(context.Background(), sessionID)
@@ -43,10 +39,6 @@ func (d *Daemon) recoveredApprovalRoute(sessionID string) (launchcontract.Approv
 	return route, known
 }
 
-// recordedApprovalRoute interprets a persisted route without consulting mutable
-// daemon settings. Yolo and unattended contracts make legacy records
-// unambiguous; an otherwise empty route remains unknown so callers can try a
-// second durable source before conservatively treating approvals as user-owned.
 func recordedApprovalRoute(route launchcontract.ApprovalRoute, yoloMode bool, unattended launchcontract.UnattendedLaunchSpec) (launchcontract.ApprovalRoute, bool, error) {
 	if route != "" {
 		if !route.Valid() {
@@ -66,8 +58,6 @@ func recordedApprovalRoute(route launchcontract.ApprovalRoute, yoloMode bool, un
 	return "", false, nil
 }
 
-// applyApprovalRoute makes the persisted effective route authoritative over the
-// mutable settings from which a fresh launch would normally be composed.
 func applyApprovalRoute(opts *ptybackend.SpawnOptions, route launchcontract.ApprovalRoute) error {
 	if opts == nil || !route.Valid() {
 		return fmt.Errorf("invalid approval route %q", route)

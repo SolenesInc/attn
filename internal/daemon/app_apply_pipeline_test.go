@@ -12,14 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The seam, end to end: a real scaffold, a real build, and the daemon recording
-// what came out of it.
-//
-// Everything else about apply is covered on one side or the other. What only
-// this can show is that the two halves agree — the builder's hash is the hash
-// the daemon re-derives, and the path the builder wrote to is the path the
-// daemon derives from the app and that hash. Split across two processes in
-// production, those are the two places a divergence would hide.
+// The builder and the daemon run in separate processes in production, so a divergence hides here.
 
 func requireAppToolchain(t *testing.T) {
 	t.Helper()
@@ -28,7 +21,6 @@ func requireAppToolchain(t *testing.T) {
 	}
 }
 
-// buildApp scaffolds (once) and builds an app into the daemon's artifact store.
 func buildApp(t *testing.T, d *Daemon, dir string) appbuild.Result {
 	t.Helper()
 	res, err := appbuild.Build(context.Background(), appbuild.Options{Dir: dir, StoreDir: d.appsDir})
@@ -64,8 +56,6 @@ func TestAppApplyRecordsWhatTheBuilderProduced(t *testing.T) {
 		t.Fatalf("daemon recorded %q, builder wrote %q", first.ArtifactPath, built.ArtifactPath)
 	}
 
-	// Byte-identical, through the whole pipeline rather than through the store's
-	// unique index alone: rebuild the untouched directory and apply again.
 	second := applyBuilt(t, d, buildApp(t, d, dir))
 	if second.VersionID != first.VersionID || second.VersionCreated {
 		t.Fatalf("re-applying an untouched app gave %+v, want the same version reused", second)
@@ -74,7 +64,6 @@ func TestAppApplyRecordsWhatTheBuilderProduced(t *testing.T) {
 		t.Fatalf("versions = %d (%v), want 1", count, err)
 	}
 
-	// An edit is a new version, and the pointer follows it.
 	entrypoint := filepath.Join(dir, "src", "index.ts")
 	source, err := os.ReadFile(entrypoint)
 	if err != nil {
@@ -92,7 +81,6 @@ func TestAppApplyRecordsWhatTheBuilderProduced(t *testing.T) {
 		t.Fatalf("an edited app gave %+v, want a new version", third)
 	}
 
-	// And rollback puts the pointer back on the first, without building anything.
 	resp := appRollback(t, d, "pipeline-app", first.VersionID)
 	if !resp.Ok {
 		t.Fatalf("rollback: %v", protocol.Deref(resp.Error))
@@ -106,9 +94,6 @@ func TestAppApplyRecordsWhatTheBuilderProduced(t *testing.T) {
 	}
 }
 
-// A broken apply over an installed app changes nothing: the build fails before
-// any artifact is placed, so there is no row to record and the app is still on
-// the version it was on.
 func TestAppApplyBrokenOverInstalledLeavesTheGoodVersionInPlace(t *testing.T) {
 	requireAppToolchain(t)
 	d := appApplyDaemon(t)
@@ -118,7 +103,6 @@ func TestAppApplyBrokenOverInstalledLeavesTheGoodVersionInPlace(t *testing.T) {
 	}
 	good := applyBuilt(t, d, buildApp(t, d, dir))
 
-	// A subscription with no handler: the failure class an author hits most.
 	manifest := filepath.Join(dir, appbuild.ManifestName)
 	text, err := os.ReadFile(manifest)
 	if err != nil {

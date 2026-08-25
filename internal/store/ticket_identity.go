@@ -8,7 +8,6 @@ import (
 
 const ticketMemberIdentityPrefix = "member:"
 
-// TicketMemberIdentity returns the durable ticket identity for a crew member.
 func TicketMemberIdentity(memberID string) string {
 	memberID = strings.TrimSpace(memberID)
 	if memberID == "" {
@@ -17,7 +16,6 @@ func TicketMemberIdentity(memberID string) string {
 	return ticketMemberIdentityPrefix + memberID
 }
 
-// ParseTicketMemberIdentity extracts a crew member id from its ticket identity.
 func ParseTicketMemberIdentity(identity string) (string, bool) {
 	identity = strings.TrimSpace(identity)
 	memberID, ok := strings.CutPrefix(identity, ticketMemberIdentityPrefix)
@@ -27,13 +25,6 @@ func ParseTicketMemberIdentity(identity string) (string, bool) {
 	return memberID, true
 }
 
-// MigrateTicketIdentity carries a disposable ticket identity into a durable one.
-// Every ticket the source currently participates in becomes an explicit target
-// subscription, while cursor and interruption-clock progress move forward by
-// their respective maxima. Historical authorship is re-attributed to the durable
-// identity too: otherwise changing the observer's self-author identity would
-// replay its predecessor's own events as unread. Source subscriptions, cursors,
-// and attention are then removed in the same transaction.
 func (s *Store) MigrateTicketIdentity(from, to string, now time.Time) error {
 	from = strings.TrimSpace(from)
 	to = strings.TrimSpace(to)

@@ -1,29 +1,5 @@
-// The classifier behind classifier.ts's interface: one completion on the
-// configured model (layer 2a), and a second on the escalation model when the
-// first could not decide or asked for a review (layer 2b).
-//
-// Each layer names an ordered list of models, and the list is walked only when
-// a model cannot be reached — a thrown request, `stopReason: "error"`, an
-// endpoint that is down. A model that ANSWERS ends the walk, whatever it
-// answered: a deny is a verdict, and asking the next model would be shopping
-// for a different one. Output that does not read as a verdict is still an
-// answer (parseVerdict turns it into a deny), so it does not advance either.
-// Each entry gets one immediate retry before the walk moves on, which is what
-// carries a session through a blip rather than an outage.
-//
-// It reaches the model through `registry.getProvider(...).streamSimple(...)`,
-// which is pi's own simple path — it clamps a thinking level to what the model
-// supports and fills in the per-API request options. The flatter
-// `ModelRegistry.complete()` (pi 0.84.2) is the RAW path and does neither, so
-// the model thinks unbounded: measured on glm-5.3 with the same prompt,
-// 354 output tokens and 5.7 s against 60 tokens and 2.9 s here (2026-08-17).
-// Request auth is assembled the way ModelRuntime.prepareRequest assembles it,
-// from the same registry, because the runtime itself is not on the extension
-// context.
-//
-// Duck-typed against pi's shapes (0.83.0, core/model-registry.ts) the same way
-// index.ts is duck-typed against ExtensionAPI, so `bun test` covers the whole
-// path with a fake registry and no network.
+// The model is reached through `getProvider(...).streamSimple(...)`, pi's simple path;
+// `ModelRegistry.complete()` is RAW and thinks unbounded: 354 output tokens against 60.
 import type { Classifier, ClassifierLayer, ClassifierRequest, ClassifierVerdict } from "./classifier";
 import type { AutoModeConfig } from "./config";
 import {
@@ -36,19 +12,9 @@ import {
 import { describeCall } from "./policy";
 import type { UsageLike } from "./usage";
 
-/**
- * The floor. pi raises it to the model's own minimum — glm-5.3 refuses to stop
- * thinking at all and lands on "low" — so this asks for the cheapest verdict
- * each model can give rather than pinning a level no model has to honour.
- */
+/** The floor; pi raises it to the model's own minimum (glm-5.3 lands on "low"). */
 export const classifierThinkingLevel = "minimal";
 
-/**
- * Attempts one model gets before the walk moves to the next: the call, and one
- * immediate retry. A retry costs one round trip and covers the blip that a
- * fallback list would otherwise answer by paying a slower model; a second one
- * would only make an outage take longer to admit to.
- */
 export const attemptsPerModel = 2;
 
 export type ModelLike = { provider: string; id: string; baseUrl?: string };
@@ -95,7 +61,6 @@ export type RequestAuthLike = {
 
 export type ProviderAuthLike = { auth?: { baseUrl?: string } };
 
-/** The ModelRegistry methods a classification needs. */
 export type ModelRegistryLike = {
   find(provider: string, modelId: string): ModelLike | undefined;
   getProvider(provider: string): ProviderLike | undefined;
@@ -106,7 +71,6 @@ export type ModelRegistryLike = {
 export type ModelClassifierOptions = {
   registry: ModelRegistryLike;
   config: AutoModeConfig;
-  /** Every completion's usage, for the ledger that folds it into the session. */
   onUsage?: (usage: UsageLike) => void;
 };
 
@@ -131,10 +95,6 @@ export class ModelClassifier implements Classifier {
     });
     if (firstAnswer.answered === false) return unavailableVerdict(firstAnswer.reason, "2a");
     const first = firstAnswer.parsed;
-    // 2b reviews what 2a could not decide, and what it allowed while calling
-    // the call expensive to get wrong. A confident deny does not go: the user
-    // overturns one by saying so, and a second opinion buys them nothing but
-    // the wait.
     if (first.verdict === "deny" || (first.verdict === "allow" && !first.highStakes)) return narrow(first, "2a");
 
     const secondAnswer = await this.judge({
@@ -146,8 +106,6 @@ export class ModelClassifier implements Classifier {
     });
     if (secondAnswer.answered === false) return unavailableVerdict(secondAnswer.reason, "2b");
     const second = secondAnswer.parsed;
-    // Uncertain survived both passes: nobody is going to decide this, and a
-    // call auto mode cannot judge is refused.
     if (second.verdict === "uncertain") {
       return {
         verdict: "deny",
@@ -158,10 +116,6 @@ export class ModelClassifier implements Classifier {
     return narrow(second, "2b");
   }
 
-  /**
-   * One layer's answer: the first model in its list that answers at all, or
-   * the report that none of them could be reached.
-   */
   private async judge(input: {
     models: readonly string[];
     layer: LayerName;
@@ -176,9 +130,8 @@ export class ModelClassifier implements Classifier {
         try {
           result = await this.complete({ ...input, modelSpec });
         } catch (error) {
-          // An abort is the user taking their turn back, not a verdict. It
-          // travels to index.ts, which blocks the call without charging the
-          // breaker, and it ends the walk: the turn it belonged to is over.
+          // An abort is the user taking their turn back, not a verdict: it ends the
+          // walk and index.ts blocks without charging the breaker.
           if (input.signal?.aborted) throw error;
           lastFailure = `${modelSpec}: ${message(error)}`;
           continue;
@@ -197,7 +150,7 @@ export class ModelClassifier implements Classifier {
     return { answered: false, reason: unavailableReason(input.layer, input.models, lastFailure) };
   }
 
-  /** Everything ModelRuntime.prepareRequest does, from the extension's registry. */
+  /** ModelRuntime is not on the extension context, so this repeats prepareRequest. */
   private async complete(input: {
     modelSpec: string;
     layer: LayerName;
@@ -244,15 +197,8 @@ export class ModelClassifier implements Classifier {
 
 type LayerName = "classifier" | "escalation";
 
-/** What one layer produced: a model's answer, or nobody's. */
 type LayerAnswer = { answered: true; parsed: ParsedVerdict } | { answered: false; reason: string };
 
-/**
- * The block a human reads when no model could be reached. It says which layer,
- * what was tried and what the last endpoint said, because the difference
- * between "a model refused this" and "nothing looked at this" decides whether
- * the user argues with the verdict or fixes the outage.
- */
 function unavailableReason(layer: LayerName, models: readonly string[], lastFailure: string): string {
   const tried = models.length > 0 ? models.join(", ") : "(no model configured)";
   return (

@@ -40,24 +40,17 @@ describe('ghosttyGeometry resize policy', () => {
 });
 
 describe('geometryOverflowsContainer', () => {
-  // The clipped-bottom-row bug: the daemon left the PTY one row taller than this
-  // window fits, so the canvas spilled below the viewport. cellHeight 21.
   it('flags a grid one row taller than the container (the bug)', () => {
-    // window fits floor(540/21)=25 rows, but the model is 26.
     expect(geometryOverflowsContainer(26, 21, 540)).toBe(true);
   });
 
   it('does not flag a grid that fits, including the floor() remainder gap', () => {
-    // 25 rows * 21 = 525 <= 540 (a harmless 15px gap below the last row).
     expect(geometryOverflowsContainer(25, 21, 540)).toBe(false);
-    // Exact fit.
     expect(geometryOverflowsContainer(25, 21, 525)).toBe(false);
   });
 
   it('tolerates a 1px sub-pixel container height without a spurious refit', () => {
-    // 27 * 21 = 567; a 566px container is within the 1px slack.
     expect(geometryOverflowsContainer(27, 21, 566)).toBe(false);
-    // Two px short is a genuine overflow.
     expect(geometryOverflowsContainer(27, 21, 565)).toBe(true);
   });
 
@@ -69,28 +62,16 @@ describe('geometryOverflowsContainer', () => {
 });
 
 describe('fitShouldBailAsSuspicious', () => {
-  // cellWidth 9, cellHeight 21 throughout, matching the captured incident.
-  // Args: (paneKind, dims, modelCols, modelRows, cellWidth, cellHeight, clientWidth, clientHeight).
   it('does NOT bail when a small fit is required to stop the bottom-row clip', () => {
-    // The bug: a deep stacked split fits ~7 rows (rows<=10 => "suspicious"), but
-    // the live model is stranded at 13 rows, overflowing the 147px container. The
-    // small fit MUST apply — refusing it leaves the model taller than the pane and
-    // the last rows clip below the overflow:hidden edge.
     expect(fitShouldBailAsSuspicious('agent', { cols: 73, rows: 7 }, 73, 13, 9, 21, 720, 147)).toBe(false);
   });
 
   it('does NOT bail when a small fit is required to stop the right-column clip', () => {
-    // The width analog: a narrow side-by-side split fits ~16 cols (cols<=20 =>
-    // "suspicious"), but the model is stranded at 40 cols overflowing the 150px
-    // container width. Height fits, so only the width check catches this.
     expect(fitShouldBailAsSuspicious('agent', { cols: 16, rows: 40 }, 40, 40, 9, 21, 150, 840)).toBe(false);
   });
 
   it('bails on a suspicious fit when the model does not overflow (transient measurement)', () => {
-    // Pre-layout / first-show: container not yet measured (client ~0), so the
-    // model cannot overflow it. The tiny dims are garbage and must be suppressed.
     expect(fitShouldBailAsSuspicious('agent', { cols: 2, rows: 1 }, 13, 13, 9, 21, 0, 0)).toBe(true);
-    // A settled, comfortably-sized container with a transient tiny fit also bails.
     expect(fitShouldBailAsSuspicious('agent', { cols: 4, rows: 2 }, 24, 24, 9, 21, 720, 540)).toBe(true);
   });
 
@@ -104,23 +85,14 @@ describe('fitShouldBailAsSuspicious', () => {
   });
 
   it('does NOT bail when an already-small model grows toward a container that is still in the suspicious range (TR-205 close-after-relaunch stall)', () => {
-    // Model stuck at 15x25 after a 4-way split; a sibling closes and the
-    // container now fits 20x25 (still <= MIN_USABLE_TERMINAL_COLS). The model
-    // does not overflow, but refusing the grow strands the pane at 15 cols.
     expect(fitShouldBailAsSuspicious('agent', { cols: 20, rows: 25 }, 15, 25, 9, 21, 189, 540)).toBe(false);
   });
 
   it('still bails when a HEALTHY model sees a suspicious fit from an unlaid-out container', () => {
-    // Zero-sized container: dims collapse below the live model on both axes —
-    // a shrink — so the transient-measurement protection is retained.
     expect(fitShouldBailAsSuspicious('agent', { cols: 2, rows: 1 }, 62, 27, 9, 21, 0, 0)).toBe(true);
   });
 
   it('still bails when an already-small model would SHRINK further on one axis', () => {
-    // Mixed grow/shrink (cols grow 15->20, rows shrink 25->8); container is
-    // comfortably large so the model doesn't overflow it on either axis, which
-    // isolates the shrink check.
     expect(fitShouldBailAsSuspicious('agent', { cols: 20, rows: 8 }, 15, 25, 9, 21, 270, 540)).toBe(true);
   });
 });
-

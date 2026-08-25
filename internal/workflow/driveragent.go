@@ -16,53 +16,35 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// headlessRunner is the seam over agent.RunHeadlessTask, so driverAgent is
-// testable without spawning real binaries.
 type headlessRunner interface {
 	Run(ctx context.Context, req agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error)
 }
 
 const resultToolName = "return_result"
 
-// defaultDriverAgentRetries is the OUTER (engine-level) re-spawn bound: a turn
-// that ENDED without a valid result, not a malformed call (the sink
-// self-corrects those in-turn).
 const defaultDriverAgentRetries = 2
 
-// driverAgent is the real AgentStub: one headless subagent per agent() call.
-// With a schema it wires the return_result sink and reads the result file;
-// without one it returns the child's final text.
 type driverAgent struct {
 	runner     headlessRunner
 	executable string
 	model      string
-	attnExec   string // hosts the result-sink subcommand
-	runTmpDir  string // per-call schema/result files live here
+	attnExec   string
+	runTmpDir  string
 	maxRetries int
 
-	// workingTree is the writable CWD handed to each subagent (empty =>
-	// runTmpDir). Scratch always lives under runTmpDir, so the working tree
-	// stays clean of attn files.
-	workingTree string
-	// sessionMCPServers attach IN ADDITION to the return_result sink.
+	workingTree       string
 	sessionMCPServers []agentdriver.MCPServerSpec
-	// log records retained worktrees so a kept, mutated one can be found later.
-	log func(format string, args ...interface{})
+	log               func(format string, args ...interface{})
 }
 
-// DriverAgentOptions configures NewDriverAgent; zero fields take the defaults.
 type DriverAgentOptions struct {
-	Provider   string // "codex" or "claude"
-	Executable string
-	Model      string
-	// RunTmpDir is the per-call scratch dir, created if missing.
-	RunTmpDir      string
-	AttnExecutable string
-	MaxRetries     int
-	// Runner injects a headlessRunner for tests; nil => the real driver.
-	Runner headlessRunner
-	// WorkingTree is the writable CWD handed to each subagent; scratch files
-	// stay in RunTmpDir regardless.
+	Provider          string
+	Executable        string
+	Model             string
+	RunTmpDir         string
+	AttnExecutable    string
+	MaxRetries        int
+	Runner            headlessRunner
 	WorkingTree       string
 	SessionMCPServers []agentdriver.MCPServerSpec
 	LogFunc           func(format string, args ...interface{})
@@ -70,7 +52,6 @@ type DriverAgentOptions struct {
 
 var _ AgentStub = (*driverAgent)(nil)
 
-// NewDriverAgent constructs a driverAgent that spawns real subagents.
 func NewDriverAgent(opts DriverAgentOptions) (*driverAgent, error) {
 	provider := strings.TrimSpace(opts.Provider)
 	if provider == "" {
@@ -90,7 +71,6 @@ func NewDriverAgent(opts DriverAgentOptions) (*driverAgent, error) {
 		}
 		runner = headlessProviderRunner{provider: hp}
 
-		// Resolve a real binary only for the real runner; a fake may pass none.
 		if executable == "" {
 			resolved := driver.ResolveExecutable("")
 			path, err := exec.LookPath(resolved)
@@ -146,9 +126,6 @@ func (d *driverAgent) defaultRunCWD() string {
 	return d.runTmpDir
 }
 
-// Run implements AgentStub. Terminal failure returns a Go error (engine -> null),
-// never a thrown rejection. Isolation "" runs in the shared working tree,
-// "worktree" in a fresh git worktree so parallel mutating agents don't collide.
 func (d *driverAgent) Run(ctx context.Context, call AgentCall) (json.RawMessage, error) {
 	model := d.model
 	if call.Model != "" {
@@ -160,8 +137,6 @@ func (d *driverAgent) Run(ctx context.Context, call AgentCall) (json.RawMessage,
 	return d.runInCWD(ctx, call, d.defaultRunCWD(), model)
 }
 
-// runInCWD is the single body both isolation modes flow through, so isolation
-// only changes WHERE the subagent runs.
 func (d *driverAgent) runInCWD(ctx context.Context, call AgentCall, cwd, model string) (json.RawMessage, error) {
 	if len(call.Schema) == 0 {
 		return d.runNoSchema(ctx, call.Prompt, cwd, model)
@@ -169,9 +144,6 @@ func (d *driverAgent) runInCWD(ctx context.Context, call AgentCall, cwd, model s
 	return d.runWithSchema(ctx, call.Ordinal, call.Prompt, call.Schema, cwd, model)
 }
 
-// runIsolated runs in a fresh worktree branched off the ordinal: a git-clean
-// worktree is removed afterward, a dirtied one is KEPT and its path logged.
-// Scratch stays under runTmpDir, so cleanliness reflects only the agent's edits.
 func (d *driverAgent) runIsolated(ctx context.Context, call AgentCall, model string) (json.RawMessage, error) {
 	repoRoot := git.ResolveMainRepoPath(d.defaultRunCWD())
 	if repoRoot == "" {
@@ -181,18 +153,15 @@ func (d *driverAgent) runIsolated(ctx context.Context, call AgentCall, model str
 	branch := worktreeBranchFor(call.Ordinal)
 	path := git.GenerateWorktreePath(repoRoot, branch)
 	if err := git.CreateWorktree(repoRoot, branch, path); err != nil {
-		// Fail closed: falling back to the shared tree would let parallel
-		// mutators collide.
+		// Fail closed: falling back to the shared tree would let parallel mutators collide.
 		return nil, fmt.Errorf("worktree isolation: create worktree for %s: %w", call.Ordinal.String(), err)
 	}
 
 	result, runErr := d.runInCWD(ctx, call, path, model)
 
-	// Cleanup applies regardless of the run outcome; a failed run that dirtied
-	// the tree still keeps its worktree.
 	clean, cleanErr := git.IsWorktreeClean(path)
 	switch {
-	case cleanErr != nil: // keep it rather than discard possible mutations
+	case cleanErr != nil:
 		d.logf("worktree isolation: could not determine cleanliness of %q (%v); keeping it", path, cleanErr)
 	case clean:
 		if err := git.DeleteWorktree(repoRoot, path, true); err != nil {
@@ -207,8 +176,6 @@ func (d *driverAgent) runIsolated(ctx context.Context, call AgentCall, model str
 	return result, runErr
 }
 
-// worktreeBranchFor derives a filesystem-safe branch name from the ordinal,
-// which already disambiguates every call.
 func worktreeBranchFor(ordinal OrdinalPath) string {
 	sum := sha256.Sum256([]byte(ordinal.String()))
 	return "attn-wf/" + hex.EncodeToString(sum[:])[:12]
@@ -221,8 +188,6 @@ func (d *driverAgent) logf(format string, args ...interface{}) {
 	d.log(format, args...)
 }
 
-// runNoSchema returns the agent's final text JSON-encoded, so the engine decodes
-// it back to a JS string.
 func (d *driverAgent) runNoSchema(ctx context.Context, prompt, cwd, model string) (json.RawMessage, error) {
 	req := agentdriver.HeadlessTaskRequest{
 		Executable:      d.executable,
@@ -244,9 +209,6 @@ func (d *driverAgent) runNoSchema(ctx context.Context, prompt, cwd, model string
 	return encoded, nil
 }
 
-// runWithSchema wires the return_result sink and reads the validated result
-// file, re-spawning with a corrective prompt up to maxRetries when none was
-// written; exhausted retries return an error.
 func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, prompt string, schema json.RawMessage, cwd, model string) (json.RawMessage, error) {
 	base := ordinalFileBase(ordinal)
 	schemaPath := filepath.Join(d.runTmpDir, base+".schema.json")
@@ -296,8 +258,6 @@ func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, pr
 			lastDiag = ""
 		}
 
-		// A written result file is success regardless of exit code: the sink
-		// validated it in-turn.
 		if bytes, ok := readResultFile(resultPath); ok {
 			return bytes, nil
 		}
@@ -313,7 +273,6 @@ const schemaCallInstruction = "\n\nWhen you have the final answer, you MUST call
 
 const correctiveInstruction = "\n\nYour previous attempt did not produce a result: you did not call `return_result` with a schema-valid object. Call the `return_result` tool now, exactly once, with a JSON object matching the provided schema."
 
-// readResultFile reports ok=false when the file is missing or blank.
 func readResultFile(path string) (json.RawMessage, bool) {
 	b, err := os.ReadFile(path)
 	if err != nil || len(strings.TrimSpace(string(b))) == 0 {
@@ -322,8 +281,6 @@ func readResultFile(path string) (json.RawMessage, bool) {
 	return json.RawMessage(b), true
 }
 
-// ordinalFileBase hashes an ordinal, which contains '/', ':', '#', '@', into a
-// filesystem-safe base name.
 func ordinalFileBase(ordinal OrdinalPath) string {
 	sum := sha256.Sum256([]byte(ordinal.String()))
 	return "call-" + hex.EncodeToString(sum[:])[:16]
@@ -339,7 +296,6 @@ func diagnosticsOf(res agentdriver.HeadlessTaskResult, err error) string {
 	return "unknown failure"
 }
 
-// headlessProviderRunner adapts a HeadlessTaskProvider to headlessRunner.
 type headlessProviderRunner struct {
 	provider agentdriver.HeadlessTaskProvider
 }

@@ -69,10 +69,6 @@ func writeCodexTranscript(
 	return writeCodexTranscriptWithSource(t, homeDir, sessionID, cwd, "", startTime, modTime)
 }
 
-// writeCodexTranscriptWithSource writes a codex rollout whose session_meta
-// carries an explicit payload.source ("cli" for interactive sessions, "exec"
-// for headless `codex exec` runs). An empty source omits the field, matching
-// rollouts from codex versions that predate it.
 func writeCodexTranscriptWithSource(
 	t *testing.T,
 	homeDir,
@@ -144,11 +140,6 @@ func TestFindCodexTranscript_MatchesSymlinkEquivalentCWD(t *testing.T) {
 	}
 }
 
-// Regression for the classifier-decoy bug: attn's stop-time classifier used to
-// run `codex exec` from the session's own cwd and persist a rollout there, so
-// "newest rollout matching cwd" resolved attn's internal bookkeeping instead of
-// the user's conversation. Headless rollouts carry payload.source "exec" and
-// must never win interactive discovery, no matter how fresh they are.
 func TestFindCodexTranscript_IgnoresExecSourcedRollouts(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("CODEX_HOME", "")
@@ -161,7 +152,6 @@ func TestFindCodexTranscript_IgnoresExecSourcedRollouts(t *testing.T) {
 		t, homeDir, "codex-session-real", cwd, "cli",
 		startedAt.Add(5*time.Second), startedAt.Add(5*time.Second),
 	)
-	// The classifier's rollout: same cwd, written seconds later.
 	classifier := writeCodexTranscriptWithSource(
 		t, homeDir, "codex-classifier-decoy", cwd, "exec",
 		startedAt.Add(11*time.Second), startedAt.Add(11*time.Second),
@@ -172,8 +162,6 @@ func TestFindCodexTranscript_IgnoresExecSourcedRollouts(t *testing.T) {
 	}
 }
 
-// Exec-sourced rollouts are excluded from the mod-time fallback too, not just
-// the timestamp-ranked path.
 func TestFindCodexTranscript_FallbackIgnoresExecSourcedRollouts(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("CODEX_HOME", "")
@@ -182,8 +170,6 @@ func TestFindCodexTranscript_FallbackIgnoresExecSourcedRollouts(t *testing.T) {
 	cwd := "/repo/project"
 	startedAt := time.Date(2026, 5, 17, 14, 0, 0, 0, time.UTC)
 
-	// A resumed session: session_meta timestamp is old, but the file is still
-	// actively written (fresh mod time), so it resolves via the fallback.
 	session := writeCodexTranscriptWithSource(
 		t, homeDir, "codex-session-resumed", cwd, "cli",
 		startedAt.Add(-2*time.Hour), startedAt.Add(1*time.Minute),
@@ -213,8 +199,6 @@ func TestFindCodexTranscriptForResume_SelectsExactNativeID(t *testing.T) {
 func TestFindCodexTranscriptForResume_HonorsCodexHome(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
-	// CODEX_HOME is set, so codexSessionsDir never reaches toolhome.Dir(); set
-	// it anyway (defensive, and consistent with every other test in this file).
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	start := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	sessionDir := filepath.Join(codexHome, "sessions", "2026", "07", "18")
@@ -268,10 +252,8 @@ func TestFindCopilotTranscript_PrefersClosestStartTime(t *testing.T) {
 	}
 }
 
-// Copilot records the cwd it resolved, not the one it was handed. On macOS a
-// session launched under /tmp writes /private/tmp, and a literal comparison finds
-// nothing — which leaves the session showing `launching` for as long as it runs,
-// because copilot's live state comes from the watcher.
+// Copilot records the cwd it resolved, not the one it was handed: on macOS a
+// session launched under /tmp writes /private/tmp.
 func TestFindCopilotTranscript_MatchesThroughASymlinkedCWD(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv(toolhome.EnvVar, homeDir)
@@ -286,9 +268,7 @@ func TestFindCopilotTranscript_MatchesThroughASymlinkedCWD(t *testing.T) {
 	}
 
 	startedAt := time.Date(2026, 2, 8, 15, 30, 0, 0, time.UTC)
-	// Copilot writes the resolved path...
 	expected := writeCopilotSessionState(t, homeDir, "session-a", real, startedAt, true, true, startedAt.Add(time.Minute))
-	// ...and attn asks with the path the session was launched from.
 	if got := FindCopilotTranscript(link, startedAt); got != expected {
 		t.Fatalf("FindCopilotTranscript() = %q, want %q", got, expected)
 	}

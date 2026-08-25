@@ -7,21 +7,6 @@ import (
 	"time"
 )
 
-// Who is charged when a dispatch never comes back.
-//
-// Every app's handler runs on one event loop in one process, so a handler that
-// blocks without yielding stops all of them. Before attribution existed, the
-// dispatch timeout fired for every app waiting behind it and each one was
-// charged, which auto-disables apps whose code never ran — with a notification
-// telling their author to fix a handler that was never called.
-//
-// Two signals answer it. The ping says whether the loop is turning at all, since
-// the host serves it off that same loop without touching app code. The host's
-// entry announcements say which handler is on the loop, which the daemon cannot
-// work out for itself — see attributeWedgedDispatch.
-
-// enterOnceThenBlock is a sidecar whose handlers announce themselves and then
-// never return, which is what the daemon sees from a wedged loop.
 func enterOnceThenBlock(entered chan<- string, release <-chan struct{}) func(*fakeAppRuntime, appDispatchRequest) error {
 	return func(f *fakeAppRuntime, req appDispatchRequest) error {
 		entered <- req.App
@@ -30,17 +15,9 @@ func enterOnceThenBlock(entered chan<- string, release <-chan struct{}) func(*fa
 	}
 }
 
-// The case a live run falsified: charging the earliest dispatch blames the wrong
-// app whenever a well-behaved handler got there first.
-//
-// bystander awaits an attn API — the documented shape — so it enters, yields, and
-// is still unanswered when hog enters behind it and spins without yielding. hog
-// is what froze the loop, including bystander's own reply. The daemon's dispatch
-// order says bystander; only the host's entry order says hog.
 func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T) {
 	d := newAppDaemon(t)
-	// Tripwires the product ships are 60s and 2s. A test that waited them out
-	// would take a minute and prove nothing extra.
+	// The shipped tripwires are 60s and 2s; waiting them out proves nothing extra.
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "bystander", subscribing("ticket.*"))
@@ -52,7 +29,6 @@ func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T
 	defer close(release)
 	runtime := startFakeAppRuntime(t, d, enterOnceThenBlock(entered, release))
 
-	// bystander first, hog second: the order that makes earliest-dispatch wrong.
 	failures := map[string]chan error{"bystander": make(chan error, 1), "hog": make(chan error, 1), "latecomer": make(chan error, 1)}
 	for i, name := range []string{"bystander", "hog"} {
 		go func() {
@@ -62,10 +38,8 @@ func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T
 			t.Fatalf("handler %d in was %s, want %s", i, got, name)
 		}
 	}
-	// From here nothing is served: no ping, and no dispatch reaches app code.
 	runtime.freezeLoop()
 
-	// latecomer's dispatch lands on a loop that will never read it.
 	go func() {
 		failures["latecomer"] <- d.deliverAppEvent(context.Background(), "latecomer", appEvent("ticket.created", "tk-3", 3))
 	}()
@@ -78,7 +52,6 @@ func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T
 		}
 	}
 
-	// hog owns it: on the auto-disable clock, and its invocation is its own fault.
 	if _, ok := d.appStallSnapshot("hog"); !ok {
 		t.Fatal("hog wedged the runtime and is not on the auto-disable clock")
 	}
@@ -86,8 +59,6 @@ func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T
 		t.Fatalf("hog's invocation = %+v, want one with status %q", rows, appInvocationStatusError)
 	}
 
-	// Neither victim is charged. bystander entered but yielded; latecomer never ran
-	// a line of its own code at all.
 	for _, name := range []string{"bystander", "latecomer"} {
 		if stall, ok := d.appStallSnapshot(name); ok {
 			t.Fatalf("%s was charged for hog's wedge: %+v", name, stall)
@@ -98,9 +69,6 @@ func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T
 	}
 }
 
-// The culprit's own dispatch times out first — it entered first among the ones
-// still running — so by the time a victim gives up, nothing of the culprit's is
-// in flight. The entry announcement is what outlives that.
 func TestAVictimIsNotChargedAfterTheCulpritsDispatchHasGivenUp(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 200 * time.Millisecond
@@ -119,7 +87,6 @@ func TestAVictimIsNotChargedAfterTheCulpritsDispatchHasGivenUp(t *testing.T) {
 	}
 	runtime.freezeLoop()
 
-	// Let hog's own dispatch time out and be released before latecomer starts.
 	waitFor(t, "hog's dispatch to be abandoned", func() bool {
 		_, ok := d.appStallSnapshot("hog")
 		return ok
@@ -137,13 +104,6 @@ func TestAVictimIsNotChargedAfterTheCulpritsDispatchHasGivenUp(t *testing.T) {
 	}
 }
 
-// A handler that yields is still on the loop, and an answered ping does not say
-// otherwise. The daemon must keep naming it if it comes back and spins.
-//
-// This is the case that decides whether the daemon may infer a handler left. It
-// may not: the only thing it could infer from is the loop still turning, and a
-// handler that yielded and never settled is on a turning loop. Dropping entries
-// on an answered ping would leave this freeze named by nobody.
 func TestAHandlerThatYieldedIsStillNamedWhenItComesBackAndSpins(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 200 * time.Millisecond
@@ -156,8 +116,6 @@ func TestAHandlerThatYieldedIsStillNamedWhenItComesBackAndSpins(t *testing.T) {
 	defer close(release)
 	runtime := startFakeAppRuntime(t, d, enterOnceThenBlock(entered, release))
 
-	// sleeper enters and yields — it never settles, but the loop keeps turning, so
-	// its own dispatch times out against an *answered* ping.
 	err := d.deliverAppEvent(context.Background(), "sleeper", appEvent("ticket.created", "tk-1", 1))
 	if err == nil {
 		t.Fatal("a handler that never returned reported success")
@@ -166,7 +124,6 @@ func TestAHandlerThatYieldedIsStillNamedWhenItComesBackAndSpins(t *testing.T) {
 		t.Fatalf("failure = %v, want the hung-handler message on a turning loop", err)
 	}
 
-	// Now it resumes and spins: same handler, same entry, loop stops.
 	runtime.freezeLoop()
 
 	failure := d.deliverAppEvent(context.Background(), "latecomer", appEvent("ticket.created", "tk-2", 2))
@@ -181,9 +138,6 @@ func TestAHandlerThatYieldedIsStillNamedWhenItComesBackAndSpins(t *testing.T) {
 	}
 }
 
-// An app that ran and returned is off the loop, and must not be blamed for a
-// freeze it is not part of. When nothing is on the loop the daemon has no culprit
-// to name and charges the app whose dispatch timed out, which is all it knows.
 func TestAHandlerThatAlreadyReturnedIsNotBlamedForALaterFreeze(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 200 * time.Millisecond
@@ -196,8 +150,6 @@ func TestAHandlerThatAlreadyReturnedIsNotBlamedForALaterFreeze(t *testing.T) {
 		t.Fatalf("a handler that returns normally failed: %v", err)
 	}
 
-	// The loop stops with no app's handler on it — a host that wedged in its own
-	// code, not an app's.
 	runtime.freezeLoop()
 
 	err := d.deliverAppEvent(context.Background(), "unlucky", appEvent("ticket.created", "tk-2", 2))
@@ -215,8 +167,6 @@ func TestAHandlerThatAlreadyReturnedIsNotBlamedForALaterFreeze(t *testing.T) {
 	}
 }
 
-// The other half of the rule. A loop that is turning means nothing is in this
-// app's way, so its own handler is what did not return — charged as before.
 func TestATurningLoopChargesTheAppWhoseHandlerHung(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 300 * time.Millisecond
@@ -226,7 +176,6 @@ func TestATurningLoopChargesTheAppWhoseHandlerHung(t *testing.T) {
 	entered := make(chan string, 1)
 	release := make(chan struct{})
 	defer close(release)
-	// Pings stay answered: only this one handler is stuck.
 	startFakeAppRuntime(t, d, enterOnceThenBlock(entered, release))
 
 	err := d.deliverAppEvent(context.Background(), "dawdler", appEvent("ticket.created", "tk-1", 1))
@@ -244,8 +193,6 @@ func TestATurningLoopChargesTheAppWhoseHandlerHung(t *testing.T) {
 	}
 }
 
-// A ping is the arbiter, so it needs its own budget rather than whatever the
-// dispatch had left — which is nothing, by construction.
 func TestTheLivenessPingIsBoundedIndependently(t *testing.T) {
 	if appRuntimePingWait <= 0 {
 		t.Fatal("the liveness ping must be bounded")
@@ -263,21 +210,6 @@ func TestTheLivenessPingIsBoundedIndependently(t *testing.T) {
 	}
 }
 
-// A timeout has to interrupt the work, not merely stop waiting for it.
-//
-// Attribution says who wedged the loop; this says what happens to the process
-// the loop is in. A handler that never yields cannot be cancelled from Go, so
-// the only way back is to end the generation it is running in and let the
-// supervisor start the replacement. Everything below the daemon was already
-// pinned — TestTerminateGenerationRestartsOnlyTheExactProcess in
-// internal/supervise — and everything above it by the tests here; nothing drove
-// a wedged dispatch through the seam between them, which a live spinner walk
-// found and no test would have.
-//
-// The supervised child is a real process so the terminate has something to
-// kill and the supervisor something to replace. The sidecar the daemon talks to
-// is still the pipe: what is being pinned is which process dies, not what is
-// said over the socket.
 func TestAWedgedDispatchEndsTheRuntimeGenerationAndTheSupervisorReplacesIt(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 300 * time.Millisecond
@@ -294,9 +226,6 @@ func TestAWedgedDispatchEndsTheRuntimeGenerationAndTheSupervisorReplacesIt(t *te
 		t.Fatalf("supervised runtime snapshot = %+v, want a running child", wedged)
 	}
 
-	// The fake sidecar says generation 1, which is the generation the supervisor
-	// just spawned — the same agreement a real host reaches through its
-	// environment.
 	entered := make(chan string, 1)
 	release := make(chan struct{})
 	defer close(release)

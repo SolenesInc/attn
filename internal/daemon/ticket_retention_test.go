@@ -7,11 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestTicketRetentionSweepPassHonoursEnvOverrideTTL pins the wiring this PR
-// adds: ticketRetentionSweepPass must actually call SweepExpiredTickets
-// (nothing did, before this PR — see the fix brief), and the TTL it passes
-// must come from ATTN_TICKET_RETENTION_TTL when set, mirroring every other
-// sweep interval/TTL env override in this package.
 func TestTicketRetentionSweepPassHonoursEnvOverrideTTL(t *testing.T) {
 	t.Setenv("ATTN_TICKET_RETENTION_TTL", "1h")
 
@@ -40,10 +35,6 @@ func TestTicketRetentionSweepPassHonoursEnvOverrideTTL(t *testing.T) {
 	}
 }
 
-// TestTicketRetentionSweepPassGuardsNilStore pins the same defensive nil
-// check every other sweep pass in this package has (e.g.
-// automationRetentionSweepPass), so a daemon mid-startup (store not yet
-// wired) can't panic if the ticker somehow fires early.
 func TestTicketRetentionSweepPassGuardsNilStore(t *testing.T) {
 	d := &Daemon{}
 	d.ticketRetentionSweepPass(time.Now())

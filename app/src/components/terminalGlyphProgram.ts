@@ -1,17 +1,5 @@
-// Shared GLSL + glyph-classification for attn's two WebGL terminal renderers
-// (GhosttyWebGlRenderer, the per-pane main terminal, and WebGlGridRenderer,
-// the mission-control grid). They were forked from one source and must keep an
-// identical glyph pipeline; sharing the shaders and the color-glyph test here
-// keeps them from drifting.
-//
-// The pipeline is PREMULTIPLIED ALPHA. Both renderers set
-// gl.pixelStorei(UNPACK_PREMULTIPLY_ALPHA_WEBGL, true) on upload and
-// gl.blendFunc(ONE, ONE_MINUS_SRC_ALPHA), and the fragment shader emits color
-// already multiplied by coverage. A per-vertex float a_mode selects the path:
-//   0 = tinted coverage  -> sample the atlas alpha as a mask, paint it in the
-//       quad color (text, box-drawing, cursor, selection/find/outline overlays).
-//   1 = color glyph       -> sample the atlas RGBA directly so a color font
-//       (e.g. Apple Color Emoji) keeps its own colors, scaled only by quad alpha.
+// Premultiplied alpha: every renderer using these shaders must upload with
+// UNPACK_PREMULTIPLY_ALPHA_WEBGL and blend ONE, ONE_MINUS_SRC_ALPHA.
 
 export const TERMINAL_GLYPH_VERTEX_SHADER = `#version 300 es
 in vec2 a_position;
@@ -51,17 +39,10 @@ void main() {
 }
 `;
 
-// Per-vertex a_mode values: keep in sync with the fragment shader branch above.
 export const GLYPH_MODE_TINT = 0;
 export const GLYPH_MODE_COLOR = 1;
 
-// A glyph rasterized in white (the coverage color for tinted text) yields only
-// neutral pixels where r === g === b. A color font such as Apple Color Emoji
-// ignores the fill color and paints its own, so any opaque chromatic pixel marks
-// the glyph as one that must be drawn directly (mode 1) instead of tinted. The
-// threshold absorbs sub-channel rounding from antialiasing on neutral glyphs.
-// Pass the STRAIGHT (non-premultiplied) ImageData from getImageData — independent
-// of the GPU upload's premultiply flag.
+// Requires STRAIGHT (non-premultiplied) ImageData, as getImageData returns.
 export function isColorGlyphBitmap(image: ImageData): boolean {
   const data = image.data;
   for (let i = 0; i < data.length; i += 4) {

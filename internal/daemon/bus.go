@@ -9,86 +9,37 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The daemon's side of the event bus: the fact vocabulary and the projection
-// table that turns facts into what WebSocket clients see.
-// See docs/plans/2026-08-01-ext-a1-event-bus.md.
-//
-// Every fact carries a subject; a subject-less "the list changed" fact is the
-// snapshot invalidation this design exists to avoid. The hub runs matching
-// projections inline on the publishing goroutine.
-//
-// A projection writes to the wire and does nothing else: it must not mutate
-// state and must not publish — the bus holds its publish lock across the inline
-// fan-out, so a nested publish deadlocks.
-//
-// Byte streams (PTY output/desync, attach, tile content), fs bursts, and the
-// remote relay stay off the bus; TestWireTrafficComesFromProjections enforces
-// the enumerated exception list.
+// A projection writes to the wire and does nothing else: the bus holds its publish lock
+// across the inline fan-out, so a nested publish deadlocks.
 
-// Fact names are dotted `domain.verb`. `ext.<extension>.*` is reserved for facts
-// published by extensions.
 const (
-	// Session facts; subject is the session id. Registered (first appearance) and
-	// reregistered (re-announcement) produce different wire events.
-	FactSessionRegistered          = "session.registered"
-	FactSessionReregistered        = "session.reregistered"
-	FactSessionStateChanged        = "session.state.changed"
-	FactSessionModelRequestStarted = "session.model_request.started"
-	FactSessionRenamed             = "session.renamed"
-	FactSessionUnregistered        = "session.unregistered"
-	FactSessionTodosChanged        = "session.todos.changed"
-	// FactSessionAssistantWindowChanged: the canonical annotatable window for
-	// this session changed. It is a pure invalidation and compactable by subject.
+	FactSessionRegistered             = "session.registered"
+	FactSessionReregistered           = "session.reregistered"
+	FactSessionStateChanged           = "session.state.changed"
+	FactSessionModelRequestStarted    = "session.model_request.started"
+	FactSessionRenamed                = "session.renamed"
+	FactSessionUnregistered           = "session.unregistered"
+	FactSessionTodosChanged           = "session.todos.changed"
 	FactSessionAssistantWindowChanged = "session.assistant_window.changed"
 	FactSessionRespawned              = "session.respawned"
 	FactSessionPTYResized             = "session.pty.resized"
-	// FactSessionTerminated: a session going away in a bulk operation. Not
-	// FactSessionUnregistered — these paths only ever re-push the list.
-	FactSessionTerminated = "session.terminated"
-	// FactSessionBranchChanged: the branch monitor saw this session's checkout move.
-	FactSessionBranchChanged = "session.branch.changed"
-	// FactSessionChiefRoleChanged: this session took or lost the chief-of-staff role.
-	FactSessionChiefRoleChanged = "session.chief_role.changed"
-	// FactSessionReconciled: startup/recovery reconciliation changed this session.
-	FactSessionReconciled = "session.reconciled"
-	// FactSessionPTYExited: this session's PTY process exited.
-	FactSessionPTYExited = "session.pty.exited"
-	// FactSessionWorkspaceChanged: this session moved to another workspace.
-	FactSessionWorkspaceChanged = "session.workspace.changed"
-	// FactSessionPinChanged: pinned out of the queue or released back. Distinct
-	// from FactWorkspacePinChanged, which moves a whole workspace.
-	FactSessionPinChanged = "session.pin.changed"
-	// FactSessionCapChanged: context-window cap pin set or cleared.
-	FactSessionCapChanged = "session.cap.changed"
-	// FactSessionActivityChanged: the generator wrote a new activity line for
-	// this session. Subject-only — the projection re-reads the session, which is
-	// correct because the store was written before the publish and the bus fans
-	// out inline.
-	FactSessionActivityChanged = "session.activity.changed"
-	// FactSessionCostChanged: durable token usage changed, or a price override
-	// repriced it. The projection derives the current USD value onto the session.
-	FactSessionCostChanged = "session.cost.changed"
-	// FactSessionTerminalBuildChanged: a live session's pty-worker reported the
-	// libghostty-vt build it was compiled against, and it differs from what the
-	// daemon last knew. Subject-only; the projection re-reads the session, whose
-	// decoration compares the two.
-	FactSessionTerminalBuildChanged = "session.terminal_build.changed"
-	// FactSessionConversationChanged: the provider-owned conversation hosted by
-	// this stable attn session changed. The store already carries the new binding;
-	// the small payload is only the exact live transcript path reported by the
-	// SessionStart hook.
-	FactSessionConversationChanged = "session.conversation.changed"
+	FactSessionTerminated             = "session.terminated"
+	FactSessionBranchChanged          = "session.branch.changed"
+	FactSessionChiefRoleChanged       = "session.chief_role.changed"
+	FactSessionReconciled             = "session.reconciled"
+	FactSessionPTYExited              = "session.pty.exited"
+	FactSessionWorkspaceChanged       = "session.workspace.changed"
+	FactSessionPinChanged             = "session.pin.changed"
+	FactSessionCapChanged             = "session.cap.changed"
+	FactSessionActivityChanged        = "session.activity.changed"
+	FactSessionCostChanged            = "session.cost.changed"
+	FactSessionTerminalBuildChanged   = "session.terminal_build.changed"
+	FactSessionConversationChanged    = "session.conversation.changed"
 
-	// FactWorktreeSessionsRemoved: deleting this worktree took its sessions with
-	// it. Subject is the worktree path.
 	FactWorktreeSessionsRemoved = "worktree.sessions.removed"
 
-	// FactEndpointSessionsChanged: a remote endpoint's session set changed;
-	// subject is the endpoint id.
 	FactEndpointSessionsChanged = "endpoint.sessions.changed"
 
-	// Workspace facts; subject is the workspace id. Eight project to one wire event
-	// but stay separate facts — collapsing them re-creates the diffing problem.
 	FactWorkspaceRegistered         = "workspace.registered"
 	FactWorkspaceReregistered       = "workspace.reregistered"
 	FactWorkspaceRenamed            = "workspace.renamed"
@@ -103,212 +54,101 @@ const (
 	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
 	FactWorkspaceContextChanged     = "workspace.context.changed"
 
-	// PR facts; subject is the PR id. The three set facts come from diffing the
-	// list around a bulk refresh, which replaces the whole set.
-	FactPRAppeared    = "pr.appeared"
-	FactPRUpdated     = "pr.updated"
-	FactPRDisappeared = "pr.disappeared"
-	// The rest name a single PR the user or the daemon acted on directly.
+	FactPRAppeared       = "pr.appeared"
+	FactPRUpdated        = "pr.updated"
+	FactPRDisappeared    = "pr.disappeared"
 	FactPRMuteChanged    = "pr.mute.changed"
 	FactPRVisited        = "pr.visited"
 	FactPRHeatChanged    = "pr.heat.changed"
 	FactPRDetailsChanged = "pr.details.changed"
 
-	// Worktree facts. Subject is the worktree path, except the reconcile, whose
-	// subject is the main repo (the resulting list is per repo).
 	FactWorktreeCreated        = "worktree.created"
 	FactWorktreeDeleted        = "worktree.deleted"
 	FactWorktreeListReconciled = "worktree.list.reconciled"
 
-	// Git operation facts; subject is the operation id.
 	FactGitOperationStarted  = "git.operation.started"
 	FactGitOperationFinished = "git.operation.finished"
 
-	// FactRateLimited: subject is the rate-limited resource ("core", "search").
 	FactRateLimited = "ratelimit.hit"
 
-	// GitHub host facts; subject is the host.
 	FactGitHubHostAdded   = "github.host.added"
 	FactGitHubHostRemoved = "github.host.removed"
 
-	// FactRepoMuteChanged: subject is the repo, `owner/name`.
-	FactRepoMuteChanged = "repo.mute.changed"
-	// FactAuthorMuteChanged: subject is the author's login.
+	FactRepoMuteChanged   = "repo.mute.changed"
 	FactAuthorMuteChanged = "author.mute.changed"
 
-	// Endpoint facts; subject is the endpoint id.
 	FactEndpointAdded         = "endpoint.added"
 	FactEndpointRemoved       = "endpoint.removed"
 	FactEndpointChanged       = "endpoint.changed"
 	FactEndpointStatusChanged = "endpoint.status.changed"
 
-	// Plugin facts; subject is the plugin name.
-	FactPluginInstalled       = "plugin.installed"
-	FactPluginUninstalled     = "plugin.uninstalled"
-	FactPluginPriorityChanged = "plugin.priority.changed"
-	FactPluginConnected       = "plugin.connected"
-	FactPluginDisconnected    = "plugin.disconnected"
-	FactPluginHealthChanged   = "plugin.health.changed"
-	// FactPluginDriverRegistered changes which agents are available (settings),
-	// so it is the one plugin fact that does not re-push the plugin list.
+	FactPluginInstalled        = "plugin.installed"
+	FactPluginUninstalled      = "plugin.uninstalled"
+	FactPluginPriorityChanged  = "plugin.priority.changed"
+	FactPluginConnected        = "plugin.connected"
+	FactPluginDisconnected     = "plugin.disconnected"
+	FactPluginHealthChanged    = "plugin.health.changed"
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
-	// FactSettingChanged: subject is the setting key.
-	FactSettingChanged = "setting.changed"
-	// FactBackupWritten: subject is the backup file path; clients learn of it
-	// through settings (db.last_backup_at).
-	FactBackupWritten = "backup.written"
-	// FactTailscaleServeChanged: subject is the profile (one serve per daemon,
-	// one daemon per profile).
+	FactSettingChanged        = "setting.changed"
+	FactBackupWritten         = "backup.written"
 	FactTailscaleServeChanged = "tailscale.serve.changed"
 
-	// Notification facts; subject is the notification id.
 	FactNotificationCreated = "notification.created"
 	FactNotificationRead    = "notification.read"
 
-	// FactAutoModeDenied: a pi session refused a tool call under auto mode.
-	// Subject is the session it happened in — the entity a denial is about. The
-	// denial itself is already in the store when this is published, and the
-	// notification that surfaces it with it, which is why the projection is the
-	// notification push and there is no second notification.created fact.
 	FactAutoModeDenied = "automode.denied"
 
-	// FactAutomationChanged: subject is the automation definition id.
-	FactAutomationChanged = "automation.changed"
-	// FactWorkflowRunUpdated: subject is the workflow run id.
+	FactAutomationChanged  = "automation.changed"
 	FactWorkflowRunUpdated = "workflow.run.updated"
-	// FactTaskChanged: subject is the background task id.
-	FactTaskChanged = "task.changed"
+	FactTaskChanged        = "task.changed"
 
-	// FactNotebookFileChanged: subject is the notebook-relative path.
 	FactNotebookFileChanged = "notebook.file.changed"
 
-	// Presentation facts; subject is the presentation id.
 	FactPresentationAdded   = "presentation.added"
 	FactPresentationUpdated = "presentation.updated"
 
-	// Ticket facts; subject is the ticket id.
 	FactTicketCreated       = "ticket.created"
 	FactTicketStatusChanged = "ticket.status_changed"
 	FactTicketCommented     = "ticket.commented"
 	FactTicketAssigned      = "ticket.assigned"
 	FactTicketAttached      = "ticket.attached"
-	// FactTicketChanged is the fallback when the call site cannot name a sharper
-	// fact; still about one ticket, never a list invalidation.
-	FactTicketChanged = "ticket.changed"
+	FactTicketChanged       = "ticket.changed"
 
-	// FactDocumentChanged: subject is the address (namespace/collection/id).
-	// Appended inside the write's transaction (CommitDocumentWrite), so its seq is
-	// the write's position. No wireProjections entry: its consumer is the
-	// live-query fan-out in documents.go, not WebSocket clients.
-	FactDocumentChanged = "document.changed"
-	// FactDocumentCollectionRemoved: a collection was undefined, taking every
-	// document under it. Subject is the collection — a removal has no document
-	// to name.
-	FactDocumentCollectionRemoved = "document.collection.removed"
-	// FactDocumentCollectionRedeclared: subject is the collection. A redeclare that
-	// drops a queried field must end the subscriptions using it. No wire entry.
+	FactDocumentChanged              = "document.changed"
+	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
 
-	// FactGardenPlanted: a seed exists. Subject is the seed id — every garden
-	// fact names its seed, which is what lets a future sync engine be nothing but
-	// a durable consumer with a cursor that re-reads the document. Published
-	// after the write it describes has committed, so a consumer that reads it
-	// always finds the seed.
-	FactGardenPlanted = "garden.planted"
-	// FactGardenBodyEdited: a seed's living markdown document changed. The
-	// garden snapshot carries the new body and revision so open readers can
-	// re-anchor immediately without waiting on a detail refetch.
-	FactGardenBodyEdited = "garden.body_edited"
-	// FactGardenResumeIdentityChanged: the seed-owned fallback launch identity
-	// was set or cleared. Subject is the seed id.
+	FactGardenPlanted               = "garden.planted"
+	FactGardenBodyEdited            = "garden.body_edited"
 	FactGardenResumeIdentityChanged = "garden.resume_identity_changed"
-	// One fact per lifecycle move, rather than one `garden.changed`: the subject
-	// says which seed and the name says what happened to it, which is what a
-	// change feed and a future nudge both read. All of them project the same way
-	// — the panel re-renders a list — but a consumer that cares only about
-	// harvests must not have to diff documents to find them.
-	FactGardenTended    = "garden.tended"
-	FactGardenParked    = "garden.parked"
-	FactGardenHarvested = "garden.harvested"
-	FactGardenWithered  = "garden.withered"
-	FactGardenReplanted = "garden.replanted"
-	// FactGardenNoted: a note was appended to a seed's log. Subject is the
-	// seed, not the note — the log is the seed's memory of itself, and the
-	// entity anybody reads is the seed.
-	FactGardenNoted = "garden.noted"
-	// FactGardenLinked/FactGardenUnlinked: an edge was added to or removed from
-	// a seed. Subject is the seed the edge is stored on, which is the document
-	// that changed; the seed at the other end is read from that document.
-	FactGardenLinked   = "garden.linked"
-	FactGardenUnlinked = "garden.unlinked"
+	FactGardenTended                = "garden.tended"
+	FactGardenParked                = "garden.parked"
+	FactGardenHarvested             = "garden.harvested"
+	FactGardenWithered              = "garden.withered"
+	FactGardenReplanted             = "garden.replanted"
+	FactGardenNoted                 = "garden.noted"
+	FactGardenLinked                = "garden.linked"
+	FactGardenUnlinked              = "garden.unlinked"
 
-	// Crew facts; subject is the member id. The roster is what a client draws —
-	// every member, awake or asleep — so all three project the same whole-list
-	// push, and the name says which of the three things moved: a home became a
-	// member, a member's day started or ended, or its registry fields changed.
 	FactCrewRegistered = "crew.registered"
 	FactCrewBound      = "crew.bound"
 	FactCrewReleased   = "crew.released"
 	FactCrewUpdated    = "crew.updated"
 
-	// App registry facts; subject is the app's name.
-	//
-	// They have two readers. The runtime has to hear about a state change it did
-	// not make — an app disabled from the CLI, or by the auto-disable clock, has
-	// to reach the loop that dispatches its handlers. And, since A5, each one
-	// re-pushes the app registry snapshot the frontend mounts views from, which
-	// is how a docked tile learns its bundle URL moved.
-	//
-	// FactAppEnabledChanged: the app's bus consumer bit was flipped. The payload
-	// carries which way, so a consumer of this fact does not have to read back a
-	// bit that may already have moved again.
 	FactAppEnabledChanged = "app.enabled.changed"
-	// FactAppRemoved: the app was uninstalled — consumer stopped and deleted,
-	// registry row gone. It carries a payload rather than only a subject because
-	// the entity it describes no longer exists to be read.
-	FactAppRemoved = "app.removed"
-	// FactAppVersionChanged: the app now points at a different version. One fact
-	// for both ways of getting there — an apply and a rollback are the same
-	// pointer move, and a runtime that reloads on one must reload on the other.
-	// The payload names the version moved to and the one moved from, so a
-	// consumer that has to drain the outgoing version's handlers knows which one
-	// that is without racing the pointer it would otherwise read back.
+	FactAppRemoved        = "app.removed"
 	FactAppVersionChanged = "app.version.changed"
-	// FactAppRuntimeChanged: the shared app runtime's supervision state moved —
-	// started, connected, backing off, parked, stopped. Subject is the runtime's
-	// child name rather than an app's, because the entity that moved is the one
-	// process every app shares. It carries no payload: the state is the
-	// supervisor's and a reader asks it (`attn app runtime status`) rather than
-	// trusting a copy that was true when the fact was written.
 	FactAppRuntimeChanged = "app.runtime.changed"
 )
 
-// CompactableFacts are the fact classes retention may reduce to one row per
-// subject — invalidations where only the newest carries information. Document
-// facts re-read the store; the assistant-window fact reads the current watcher
-// snapshot. Historical session and ticket facts are deliberately absent.
-//
-// The three loudest classes in a real log are session.state.changed (74%),
-// pr.updated (17%) and plugin.health.changed. All three are subject-only with a
-// nil payload and project to a store re-read, so on delivery semantics alone
-// they qualify: a consumer that missed four of five is not missing anything the
-// fifth does not carry. They stay out anyway, because compaction would delete
-// the created_at history `attn bus status` computes producer rates from —
-// exactly the evidence that catches a producer flapping. Compaction bounds the
-// log by the data it describes; these classes are the ones whose write rate is
-// itself the signal. Bound them by fixing the producer, not by hiding the rows.
 var CompactableFacts = []string{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
 
-// projection maps facts to the wire traffic they produce.
 type projection struct {
 	filter bus.Filter
 	apply  func(*Daemon, bus.Event)
 }
 
-// wireProjections is the whole fact -> WebSocket mapping. Built on first use,
-// not package init: projections publish further facts and publishing reads the
-// table — a cycle the compiler rejects in a package-level initializer.
 var (
 	wireProjectionsOnce  sync.Once
 	wireProjectionsTable []projection
@@ -329,18 +169,14 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionRegistered},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionRegistered, ev.Subject)
-				// A new session can reactivate a stored tender with the same id.
 				d.projectGardenSeeds()
 			},
 		},
 		{
-			// A pin changes only what the session says about itself.
 			filter: bus.Filter{FactSessionPinChanged, FactSessionCapChanged, FactSessionModelRequestStarted},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{
-			// An activity line has no event of its own: it rides on the session
-			// snapshot, so it re-pushes that session alone.
 			filter: bus.Filter{FactSessionActivityChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
@@ -349,8 +185,6 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{
-			// The worker's handshake lands after recovery has already
-			// broadcast, so the verdict needs its own push.
 			filter: bus.Filter{FactSessionTerminalBuildChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
@@ -359,7 +193,6 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{
-			// Neither recomputes the workspace, unlike FactSessionStateChanged.
 			filter: bus.Filter{FactSessionReregistered, FactSessionRenamed},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
@@ -383,8 +216,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionUnregistered},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionUnregistered(ev)
-				// Session liveness is part of garden truth: it decides whether a
-				// stored tender still holds and therefore where feedback routes.
 				d.projectGardenSeeds()
 			},
 		},
@@ -395,7 +226,6 @@ func buildWireProjections() []projection {
 					Event: protocol.EventRuntimeRespawned,
 					ID:    protocol.Ptr(ev.Subject),
 				})
-				// Keep the computed tender hold in lockstep with session rebirth.
 				d.projectGardenSeeds()
 			},
 		},
@@ -404,7 +234,6 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionPTYResized(ev) },
 		},
 		{
-			// Facts whose only client-visible effect is one session-list push.
 			filter: bus.Filter{
 				FactSessionTerminated,
 				FactSessionBranchChanged,
@@ -453,12 +282,10 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceContextChanged(ev) },
 		},
 		{
-			// Every garden fact re-pushes the garden; the panel renders a list.
 			filter: bus.Filter{"garden.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
 		{
-			// Every crew fact re-pushes the roster; the sidebar renders a list.
 			filter: bus.Filter{"crew.*"},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectCrewRoster() },
 		},
@@ -524,8 +351,6 @@ func buildWireProjections() []projection {
 			apply: func(d *Daemon, _ bus.Event) { d.projectPluginsUpdated() },
 		},
 		{
-			// All change which agents are available, so re-push settings — with no
-			// changed key, because no setting was set.
 			filter: bus.Filter{FactPluginDisconnected, FactPluginDriverRegistered,
 				FactBackupWritten, FactTailscaleServeChanged},
 			apply: func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
@@ -563,18 +388,12 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectPresentation(ev) },
 		},
 		{
-			// The registry snapshot the UI mounts app views from. A version flip is
-			// how a docked tile learns its bundle URL moved, which is the whole
-			// reload mechanism — no watcher, no polling.
 			filter: bus.Filter{FactAppVersionChanged, FactAppEnabledChanged, FactAppRemoved},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAppsUpdated() },
 		},
 	}
 }
 
-// ensureEventBus constructs the bus and registers the hub as an ephemeral
-// consumer. Idempotent, and run at construction: a daemon that publishes without
-// having started (tests) must still project.
 func (d *Daemon) ensureEventBus() {
 	if d.eventBus != nil {
 		return
@@ -595,8 +414,6 @@ func (d *Daemon) ensureEventBus() {
 	d.subscribeAgentConversationFacts()
 }
 
-// startEventBus begins durable delivery; runs early in Start, before any
-// subsystem that publishes.
 func (d *Daemon) startEventBus() error {
 	d.ensureEventBus()
 	return d.eventBus.Start()
@@ -614,7 +431,6 @@ func (d *Daemon) stopEventBus() {
 	}
 }
 
-// projectToClients is the hub's ephemeral handler.
 func (d *Daemon) projectToClients(ev bus.Event) {
 	for _, p := range wireProjections() {
 		if p.filter.Matches(ev.Name) {
@@ -623,8 +439,6 @@ func (d *Daemon) projectToClients(ev bus.Event) {
 	}
 }
 
-// publishFact is the producer half. Nil-safe: a bus-less test Daemon runs its
-// projections directly, marshalling the payload exactly as Publish would.
 func (d *Daemon) publishFact(name, subject string, payload any) {
 	if d == nil {
 		return
@@ -647,8 +461,6 @@ func (d *Daemon) publishFact(name, subject string, payload any) {
 	}
 }
 
-// decodeFact reads a fact's payload, reporting a decode failure rather than
-// projecting a half-built message from it.
 func decodeFact[T any](d *Daemon, ev bus.Event) (T, bool) {
 	var out T
 	if err := ev.Decode(&out); err != nil {
@@ -658,10 +470,6 @@ func decodeFact[T any](d *Daemon, ev bus.Event) (T, bool) {
 	return out, true
 }
 
-// coalesceSnapshots runs fn with snapshot (whole-list) projections deferred and
-// de-duplicated by key, so a bulk operation does not put one full list per entity
-// on the wire. Per-entity projections still fire inline. The window is
-// process-wide: an unrelated goroutine's snapshot defers to the flush too.
 func (d *Daemon) coalesceSnapshots(fn func()) {
 	d.snapshotMu.Lock()
 	d.snapshotDepth++
@@ -688,8 +496,6 @@ func (d *Daemon) coalesceSnapshots(fn func()) {
 	fn()
 }
 
-// projectSnapshot runs a whole-list re-push, or defers it to the end of the
-// enclosing coalesceSnapshots window. Every list re-push goes through this.
 func (d *Daemon) projectSnapshot(key string, push func()) {
 	d.snapshotMu.Lock()
 	if d.snapshotDepth == 0 {
@@ -707,7 +513,6 @@ func (d *Daemon) projectSnapshot(key string, push func()) {
 	d.snapshotMu.Unlock()
 }
 
-// Snapshot keys. One per whole-list wire message.
 const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
@@ -725,8 +530,6 @@ const (
 	snapshotApps        = "apps_updated"
 )
 
-// wireEqual reports whether two values reach clients as the same JSON —
-// "changed" means the client would see something different.
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)
 	rawB, errB := json.Marshal(b)
@@ -736,7 +539,6 @@ func wireEqual(a, b any) bool {
 	return bytes.Equal(rawA, rawB)
 }
 
-// BusStatus snapshots the bus for operator inspection.
 func (d *Daemon) BusStatus() (bus.Status, error) {
 	if d.eventBus == nil {
 		return bus.Status{}, nil

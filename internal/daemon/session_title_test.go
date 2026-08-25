@@ -68,8 +68,6 @@ func TestDefaultSessionLabel(t *testing.T) {
 	}
 }
 
-// writeSessionTitleTranscript writes a minimal Claude-format transcript JSONL
-// with a genuine human turn, so slice.Brief is non-empty.
 func writeSessionTitleTranscript(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -85,9 +83,6 @@ func writeSessionTitleTranscript(t *testing.T) string {
 	return path
 }
 
-// writeSessionTitleTranscriptNoUserContent writes a transcript with no
-// genuine human turn (only a tool-result-shaped user line), so slice.Brief
-// stays empty.
 func writeSessionTitleTranscriptNoUserContent(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -102,8 +97,6 @@ func writeSessionTitleTranscriptNoUserContent(t *testing.T) string {
 	return path
 }
 
-// seedSessionTitleSession adds a session whose label is its directory's
-// default label (filepath.Base) unless label is explicitly given.
 func seedSessionTitleSession(t *testing.T, d *Daemon, id, directory, label string) *protocol.Session {
 	t.Helper()
 	if label == "" {
@@ -252,7 +245,6 @@ func TestMaybeGenerateSessionTitle_RenameRace(t *testing.T) {
 	transcriptPath := writeSessionTitleTranscript(t)
 
 	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
-		// Simulate a user rename landing while the LLM call is in flight.
 		d.store.UpdateSessionLabel("sess-1", "user choice")
 		return "llm title", nil
 	}
@@ -293,18 +285,8 @@ func TestMaybeGenerateSessionTitle_EmptyTranscriptNotMarkedAttempted(t *testing.
 	}
 }
 
-// TestMaybeGenerateSessionTitle_ConcurrentAttemptRunsExecOnce simulates two
-// Stop events for the same session interleaving between the early
-// attempted-check and the mark: exec, on its first invocation, synchronously
-// re-enters maybeGenerateSessionTitle for the same session — standing in for a
-// second concurrent Stop that raced past the early attempted-check while the
-// first call was still extracting the transcript slice, before either had
-// marked the session attempted. At that point the session's label is still
-// default (the outer call hasn't written the title yet), so only the
-// attempted-guard — not the label check — can stop the inner call. With the
-// fix, the inner call's re-check under the lock finds the session already
-// marked and returns without a second exec; if the guard mutex were instead
-// held across exec, this would deadlock.
+// exec re-entering maybeGenerateSessionTitle stands in for a second Stop that raced past
+// the early attempted-check; a guard mutex held across exec would deadlock here.
 func TestMaybeGenerateSessionTitle_ConcurrentAttemptRunsExecOnce(t *testing.T) {
 	d := newDaemonForTest(t)
 	directory := t.TempDir()
@@ -331,11 +313,6 @@ func TestMaybeGenerateSessionTitle_ConcurrentAttemptRunsExecOnce(t *testing.T) {
 	}
 }
 
-// A member's name is its identity, not a placeholder. A member launches in its
-// own home, so its label and its cwd basename are the same string and the
-// default-label check alone cannot tell "nobody named this" from "this is
-// trellis" — the auto-titler used to overwrite a live member's name at its
-// first Stop.
 func TestMaybeGenerateSessionTitle_CrewMemberNeverTitled(t *testing.T) {
 	d := newCrewDaemon(t)
 	home := filepath.Join(d.dataRoot, crew.HomesDirName, "trellis")
@@ -361,8 +338,6 @@ func TestMaybeGenerateSessionTitle_CrewMemberNeverTitled(t *testing.T) {
 	}
 }
 
-// The binding can be claimed while the LLM run is in flight — a member woken
-// into a session that was already talking. The post-run re-check must see it.
 func TestMaybeGenerateSessionTitle_CrewBindingRace(t *testing.T) {
 	d := newCrewDaemon(t)
 	directory := t.TempDir()

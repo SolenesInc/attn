@@ -1,10 +1,3 @@
-// A tiny module-level registry so the UI automation bridge / packaged-app
-// harness can drive and introspect the structured automation form without a
-// reference into the conditionally-mounted AutomationForm. Mirrors
-// automationEditorAutomation.ts's pattern exactly: AutomationForm publishes a
-// handle while mounted and clears it on unmount; the bridge reads/drives
-// through get/setAutomationFormAutomationHandle(). This exists for testing
-// only — it is not part of the component's own behavior.
 import type { AutomationFormValues } from './automationFormModel';
 
 export interface AutomationFormAutomationState {

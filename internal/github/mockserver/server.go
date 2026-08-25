@@ -1,4 +1,3 @@
-// internal/github/mockserver/server.go
 package mockserver
 
 import (
@@ -10,20 +9,17 @@ import (
 	"sync"
 )
 
-// RequestLog captures a request for assertions
 type RequestLog struct {
 	Method string
 	Path   string
 	Body   map[string]interface{}
 }
 
-// Server is a mock GitHub API server for testing
 type Server struct {
 	*httptest.Server
 	mu       sync.Mutex
 	requests []RequestLog
-	// Configurable responses
-	PRs []MockPR
+	PRs      []MockPR
 }
 
 type MockPR struct {
@@ -34,7 +30,6 @@ type MockPR struct {
 	Role   string // "author" or "reviewer"
 }
 
-// New creates a new mock GitHub server
 func New() *Server {
 	s := &Server{
 		requests: []RequestLog{},
@@ -62,27 +57,23 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Search endpoint
 	if r.URL.Path == "/search/issues" {
 		s.handleSearch(w, r)
 		return
 	}
 
-	// PR review (approve)
 	reviewPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/reviews$`)
 	if reviewPattern.MatchString(r.URL.Path) && r.Method == "POST" {
 		json.NewEncoder(w).Encode(map[string]interface{}{"id": 1, "state": "APPROVED"})
 		return
 	}
 
-	// PR merge
 	mergePattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/merge$`)
 	if mergePattern.MatchString(r.URL.Path) && r.Method == "PUT" {
 		json.NewEncoder(w).Encode(map[string]interface{}{"merged": true, "sha": "abc123"})
 		return
 	}
 
-	// PR details
 	prPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)$`)
 	if prPattern.MatchString(r.URL.Path) && r.Method == "GET" {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -93,7 +84,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check runs
 	checkPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/commits/([^/]+)/check-runs$`)
 	if checkPattern.MatchString(r.URL.Path) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -102,7 +92,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reviews list
 	reviewsPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/reviews$`)
 	if reviewsPattern.MatchString(r.URL.Path) && r.Method == "GET" {
 		json.NewEncoder(w).Encode([]map[string]interface{}{})
@@ -119,7 +108,6 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var items []map[string]interface{}
 	s.mu.Lock()
 	for _, pr := range s.PRs {
-		// Filter by query
 		isAuthorSearch := regexp.MustCompile(`author:@me`).MatchString(q)
 		isReviewSearch := regexp.MustCompile(`review-requested:@me`).MatchString(q)
 
@@ -141,21 +129,18 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// AddPR adds a PR to the mock server
 func (s *Server) AddPR(pr MockPR) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.PRs = append(s.PRs, pr)
 }
 
-// Requests returns all captured requests
 func (s *Server) Requests() []RequestLog {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]RequestLog{}, s.requests...)
 }
 
-// Reset clears all state
 func (s *Server) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -163,7 +148,6 @@ func (s *Server) Reset() {
 	s.PRs = []MockPR{}
 }
 
-// HasApproveRequest checks if approve was called for a PR
 func (s *Server) HasApproveRequest(repo string, number int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -179,7 +163,6 @@ func (s *Server) HasApproveRequest(repo string, number int) bool {
 	return false
 }
 
-// HasMergeRequest checks if merge was called for a PR
 func (s *Server) HasMergeRequest(repo string, number int, method string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

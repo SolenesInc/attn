@@ -231,12 +231,6 @@ func TestManagerRemoteWorkspacesTrackAndClear(t *testing.T) {
 	}
 }
 
-// TestManagerStampsEndpointIDOnIngest verifies the hub always overwrites
-// EndpointID with the ingesting endpoint's own id — never trusting a
-// remote-supplied value — for both replaceRemoteWorkspaces and
-// upsertRemoteWorkspace, and that stamping does not defeat the
-// workspaceLayoutsEqual change-detection short-circuit (re-ingesting an
-// identical workspace still reports no change).
 func TestManagerStampsEndpointIDOnIngest(t *testing.T) {
 	endpointStore := store.New()
 	first, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
@@ -262,14 +256,10 @@ func TestManagerStampsEndpointIDOnIngest(t *testing.T) {
 		t.Fatalf("RemoteWorkspace(ws-a).EndpointID = %v, want %q (bogus pre-set value must be overwritten)", got, first.ID)
 	}
 
-	// Re-ingesting the identical (still bogus-tagged) workspace must not
-	// report a change: stamping happens before the equality comparison, so
-	// stamped-vs-stamped still compares equal.
 	if changed := manager.replaceRemoteWorkspaces(first.ID, []protocol.Workspace{workspace}); changed {
 		t.Fatal("replaceRemoteWorkspaces reported a change re-ingesting an identical workspace")
 	}
 
-	// upsertRemoteWorkspace must also overwrite a spoofed EndpointID.
 	if changed := manager.upsertRemoteWorkspace(first.ID, protocol.Workspace{
 		ID:         "ws-c",
 		Title:      "Upserted",
@@ -620,15 +610,6 @@ func TestForwardsRawEventIncludesPickerResults(t *testing.T) {
 	}
 }
 
-// The remote image pipeline crosses the hub in two messages and dies if either
-// is dropped here: the placement description that tells the app an image exists,
-// and the blob answer carrying the pixels it then asks for.
-//
-// Worth its own test because the failure is silent and looks like it is covered.
-// The remote daemon fans both out correctly, the daemon's routing for relayed
-// kitty events is in place, and every unit test of that routing stays green —
-// while consumeRemote drops the messages before any of it runs, and a remote
-// session simply shows no images.
 func TestForwardsRawEventIncludesKittyRelayTraffic(t *testing.T) {
 	for _, event := range []string{
 		protocol.EventKittyPlacements,
@@ -640,18 +621,8 @@ func TestForwardsRawEventIncludesKittyRelayTraffic(t *testing.T) {
 	}
 }
 
-// The remote daemon rejects every capability-gated command (register_workspace,
-// spawn_session, forwarded client payloads, ...) from a connection that never
-// sent client_hello. The hub's persistent endpoint connection must therefore
-// declare workspace_sessions before anything else is written.
-//
-// The rest of the list is load-bearing for the remote leg in both directions,
-// so this pins it exactly rather than checking for presence. kitty_images is
-// what makes a remote session's images visible at all — the remote daemon
-// describes placements only to clients that ask, and this is its only client,
-// so dropping it silently kills images on every remote session. Adding
-// binary_pty_output would break the relay outright: it reads each message back
-// as a JSON envelope, so a binary frame arrives as bytes it cannot parse.
+// binary_pty_output would break the relay, which reads every message back as a
+// JSON envelope.
 func TestSendClientHelloDeclaresExactlyTheRelaysCapabilities(t *testing.T) {
 	received := make(chan protocol.ClientHelloMessage, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -711,15 +682,6 @@ func TestSendClientHelloDeclaresExactlyTheRelaysCapabilities(t *testing.T) {
 	}
 }
 
-// publishConnectionAndSendHello is what runEndpointLoop calls once the
-// connection is dialed: it must publish the connection and send the hello as
-// a single unit with respect to ForwardEndpointCommand, otherwise a forwarded
-// command racing in right after the connection becomes visible could write
-// before the hello and get rejected by the remote daemon. This drives that
-// race through the real manager/forwarding seam (not just the hello helper in
-// isolation) by hammering ForwardEndpointCommand concurrently with the
-// publish call and asserting the hello is always the first frame the remote
-// sees.
 func TestPublishConnectionAndSendHelloOrdersBeforeForwardedCommands(t *testing.T) {
 	frames := make(chan []byte, 16)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -745,9 +707,6 @@ func TestPublishConnectionAndSendHelloOrdersBeforeForwardedCommands(t *testing.T
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{}
 
-	// Fire ForwardEndpointCommand in a tight loop from before the connection
-	// exists until well after publish completes, to give it every chance to
-	// win the race against the hello.
 	forwardDone := make(chan struct{})
 	go func() {
 		defer close(forwardDone)
@@ -774,9 +733,6 @@ func TestPublishConnectionAndSendHelloOrdersBeforeForwardedCommands(t *testing.T
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for first frame")
 	}
-	// Drain any commands the forwarder managed to send after the hello so the
-	// server goroutine doesn't block on a full channel. Started only after
-	// the first frame is captured above, so it can't race the assertion.
 	go func() {
 		for range frames {
 		}
@@ -892,9 +848,6 @@ func TestManagerBrowserControlResponseMustComeFromOwningEndpoint(t *testing.T) {
 	}
 }
 
-// forwardTestServer accepts one hub connection and pushes every frame it reads
-// onto frames, so a test can assert both that a command arrived and that a
-// refused one never did.
 func forwardTestServer(t *testing.T) (*httptest.Server, chan []byte) {
 	t.Helper()
 	frames := make(chan []byte, 16)
@@ -927,9 +880,6 @@ func dialForwardTestServer(t *testing.T, ctx context.Context, server *httptest.S
 	return conn
 }
 
-// A binary_mismatch endpoint keeps its WebSocket alive, so the connection being
-// up is exactly the case where a naive forward runs the command on the wrong
-// build. The refusal has to beat the live connection.
 func TestForwardRefusesAParkedEndpointWhileItsConnectionIsAlive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -967,9 +917,6 @@ func TestForwardRefusesAParkedEndpointWhileItsConnectionIsAlive(t *testing.T) {
 	}
 }
 
-// Once the mismatched connection drops the manager keeps the parked status and
-// slow-retries, so the refusal must still name the reason instead of falling
-// through to the mute "endpoint not connected".
 func TestForwardRefusesAParkedEndpointWhoseConnectionDropped(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{
@@ -993,8 +940,6 @@ func TestForwardRefusesAParkedEndpointWhoseConnectionDropped(t *testing.T) {
 	}
 }
 
-// The PTY entry point resolves a target to an endpoint and must land on the
-// same refusal; it is the path every keystroke and attach takes.
 func TestForwardPTYCommandRefusesAParkedEndpoint(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{
@@ -1013,8 +958,6 @@ func TestForwardPTYCommandRefusesAParkedEndpoint(t *testing.T) {
 	}
 }
 
-// "endpoint not found" keeps meaning what it always meant: no runtime under
-// that id. Widening it to cover parked endpoints is the defect being fixed.
 func TestForwardStillReportsNotFoundForAnUnknownEndpoint(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 
@@ -1054,8 +997,6 @@ func TestForwardStillDeliversToAHealthyEndpoint(t *testing.T) {
 	}
 }
 
-// A protocol mismatch parks the endpoint the same way and for the same reason,
-// so it answers with the same refusal rather than "not connected".
 func TestForwardRefusesAVersionMismatchedEndpoint(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{
@@ -1076,8 +1017,6 @@ func TestForwardRefusesAVersionMismatchedEndpoint(t *testing.T) {
 	}
 }
 
-// The endpoint list has one wording for the mismatch; the command error must
-// reuse it rather than grow a second one that can drift.
 func TestParkedRefusalFallsBackToTheStatusWhenThereIsNoMessage(t *testing.T) {
 	manager := NewManager(store.New(), nil, nil, nil, nil, nil)
 	manager.runtimes["endpoint-1"] = &endpointRuntime{

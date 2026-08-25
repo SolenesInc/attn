@@ -10,10 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 )
 
-// TestNotebookTasksEnabledDefaultsOn proves the master switch is opt-OUT: a blank
-// or unset value reads as enabled (so existing installs keep running the keeper),
-// the documented truthy spellings enable it, and only an explicit falsey value
-// disables the whole async-duty group.
 func TestNotebookTasksEnabledDefaultsOn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -34,9 +30,6 @@ func TestNotebookTasksEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
-// TestNotebookSummariesEnabledDefaultsOn proves the per-duty switch is also
-// opt-out and that its effective value is present in the settings payload even
-// when no row has been persisted yet.
 func TestNotebookSummariesEnabledDefaultsOn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -58,8 +51,6 @@ func TestNotebookSummariesEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
-// TestNotebookWorkspaceNarrationEnabledDefaultsOn proves the curated-journal
-// switch is opt-out and appears as its effective value in every settings snapshot.
 func TestNotebookWorkspaceNarrationEnabledDefaultsOn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -81,9 +72,6 @@ func TestNotebookWorkspaceNarrationEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
-// TestNotebookSummariesDisabledOnlySkipsSummaries proves the per-duty switch
-// leaves journal narration alone while preventing summary records from being
-// created. Re-enabling restores the enqueue path without changing its model.
 func TestNotebookSummariesDisabledOnlySkipsSummaries(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -106,9 +94,6 @@ func TestNotebookSummariesDisabledOnlySkipsSummaries(t *testing.T) {
 	})
 }
 
-// TestNotebookNarrationDisabledOnlySkipsNarration proves the switch gates every
-// narration enqueue path without disabling session summaries. Re-enabling restores
-// routine narration without changing its agent/model configuration.
 func TestNotebookNarrationDisabledOnlySkipsNarration(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -139,10 +124,6 @@ func TestNotebookNarrationDisabledOnlySkipsNarration(t *testing.T) {
 	})
 }
 
-// TestNotebookTasksDisabledSkipsEnqueue proves the master switch gates the
-// BACKGROUND enqueue chokepoints: with the toggle off, a session-stop summarize and
-// a workspace narrate create no durable record at all; flipping it back on (here via
-// the default-ON unset) restores enqueueing.
 func TestNotebookTasksDisabledSkipsEnqueue(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -152,8 +133,7 @@ func TestNotebookTasksDisabledSkipsEnqueue(t *testing.T) {
 		d.store.SetSetting(SettingNotebookTasksEnabled, "false")
 		d.enqueueSummarizeSession("session-off", "", "")
 		d.enqueueNarrateWorkspace("ws-off")
-		// The gate returns synchronously without touching the runner, so an immediate
-		// Get is authoritative — no record was created.
+		// The gate returns synchronously, so an immediate Get is authoritative.
 		assertNoTask(t, d, notebookSummarizeSessionKind, "session-off")
 		assertNoTask(t, d, notebookNarrateWorkspaceKind, "ws-off")
 
@@ -169,10 +149,6 @@ func TestNotebookTasksDisabledSkipsEnqueue(t *testing.T) {
 	})
 }
 
-// TestNotebookTasksDisabledExecutorNoOps proves the master switch is also honored at
-// RUN time: a record queued before the user disabled the keeper (here injected
-// directly past the enqueue gate) is retired as a no-op success without invoking the
-// agent, so a stale queued run cannot fire background work after the toggle is off.
 func TestNotebookTasksDisabledExecutorNoOps(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -192,8 +168,6 @@ func TestNotebookTasksDisabledExecutorNoOps(t *testing.T) {
 	})
 }
 
-// TestNotebookSummariesDisabledExecutorNoOps covers the queued-before-toggle
-// case: the durable record completes without spawning a headless agent.
 func TestNotebookSummariesDisabledExecutorNoOps(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -213,8 +187,6 @@ func TestNotebookSummariesDisabledExecutorNoOps(t *testing.T) {
 	})
 }
 
-// TestNotebookNarrationDisabledExecutorNoOps covers the queued-before-toggle
-// case: the durable record completes without spawning a headless agent.
 func TestNotebookNarrationDisabledExecutorNoOps(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -234,9 +206,7 @@ func TestNotebookNarrationDisabledExecutorNoOps(t *testing.T) {
 	})
 }
 
-// assertNoTask fails if a record exists for the given kind/subject. Unlike
-// taskExists it does not poll: it asserts the record is absent right now, used after
-// a synchronous gate that must never have reached the runner.
+// Does not poll, unlike taskExists: the record must be absent right now.
 func assertNoTask(t *testing.T, d *Daemon, kind, subject string) {
 	t.Helper()
 	task, err := d.jobQueue.GetByKey(kind, subject)

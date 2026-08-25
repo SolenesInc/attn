@@ -44,11 +44,6 @@ func TestRecoveredRunningSessionState_DefaultAndAgentOverrides(t *testing.T) {
 	if got, ok := RecoveredRunningSessionState(Get("copilot"), protocol.StatePendingApproval); !ok || got != protocol.SessionStatePendingApproval {
 		t.Fatalf("copilot recovered pending_approval = %s (ok=%v), want pending_approval", got, ok)
 	}
-	// No opinion, not a state. Codex announces approvals in its title, which the
-	// resolver reads as evidence, so its worker caches nothing to recover; and a
-	// driver with nothing to say must not have `launching` put in its mouth,
-	// because recovery reads that as permission to overwrite the session's real
-	// state.
 	if got, ok := RecoveredRunningSessionState(Get("codex"), protocol.StateWaitingInput); ok {
 		t.Fatalf("codex recovered waiting_input = %s (ok=%v), want no opinion", got, ok)
 	}
@@ -63,10 +58,8 @@ func TestRecoveredRunningSessionState_DefaultAndAgentOverrides(t *testing.T) {
 	}
 }
 
-// No driver may filter live PTY state any more: the interface is gone. The one
-// source that still applies a state is the worker poll, whose only job is ending
-// `launching`, and a per-agent veto over that arbitrates against the resolver
-// rather than for it. This test is the guard that nobody reintroduces one.
+// No driver may filter live PTY state any more: the interface is gone. This test
+// is the guard that nobody reintroduces one.
 func TestNoDriverFiltersPTYState(t *testing.T) {
 	type ptyStateFilter interface {
 		ShouldApplyPTYState(current protocol.SessionState, incoming string) bool

@@ -98,59 +98,35 @@ func (c *blockingClassifier) CallCount() int {
 }
 
 func TestMain(m *testing.M) {
-	// Keep daemon package tests on embedded PTY by default to avoid spawning
-	// large numbers of worker subprocesses. Tests that need worker behavior
-	// explicitly override these with t.Setenv.
 	_ = os.Setenv("ATTN_PTY_BACKEND", "embedded")
 	_ = os.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
 
 	sessionInputSubmitDelay = 0
 
-	// Same reason for the other half of a delivery: a fake PTY never reports
-	// working, so confirmation would time out on every send. Zero trusts the
-	// write, which is what the daemon did before confirmation existed —
-	// TestAgentMsgQueuesWhenTheTargetNeverTakesIt restores a window to pin it.
+	// A fake PTY never reports working, so a non-zero confirmation window times
+	// out on every send here.
 	sessionInputTakenWindow = 0
 
-	// Plugin-process helper subprocesses (TestDaemonPluginProcessHelper,
-	// TestPluginDriverFixtureProcess) re-exec this same test binary with a
-	// single -test.run and rely on ATTN_SOCKET_PATH being the exact value
-	// the parent test process injected via cmd.Env to wire the fixture back
-	// to its temp-scoped daemon socket — that's trusted IPC plumbing from an
-	// already-scoped parent test, not an inherited-from-the-shell override,
-	// and neither helper calls config.DataDir()/DBPath()/SocketPath(), so
-	// there is nothing here for ScopeTestEnvironment to protect. Skip
-	// scoping (and let them inherit whatever ATTN_DATA_DIR the parent test
-	// process already had) rather than clobber that wiring, same shape as
-	// config's own ATTN_TEST_DATADIR_BACKSTOP_HELPER skip.
+	// Helper subprocesses need the exact ATTN_SOCKET_PATH their parent test
+	// injected; scoping them here would clobber it.
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" || os.Getenv("ATTN_PLUGIN_DRIVER_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
 
-	// Scope every test in this package to an explicit temp data dir so no
-	// daemon test can resolve config.DataDir() to the real ~/.attn — see
-	// docs/plans/2026-07-18-db-loss-mitigation.md. Individual tests that need
-	// their own isolation layer a t.Setenv("ATTN_DATA_DIR", ...) on top.
 	dataDir, err := os.MkdirTemp("", "attn-test-data-*")
 	if err != nil {
 		panic("daemon: TestMain: MkdirTemp: " + err.Error())
 	}
 	config.ScopeTestEnvironment(dataDir)
 
-	// Same story for toolhome.Dir() (~/.claude, ~/.codex, ~/.copilot,
-	// ~/.agents skill installs, transcript lookups): default every daemon
-	// test to a throwaway tool-home dir. Tests exercising specific transcript
-	// fixtures override this with their own t.Setenv(toolhome.EnvVar, ...).
 	toolHomeDir, err := os.MkdirTemp("", "attn-test-toolhome-*")
 	if err != nil {
 		panic("daemon: TestMain: MkdirTemp: " + err.Error())
 	}
 	_ = os.Setenv(toolhome.EnvVar, toolHomeDir)
 
-	// Daemons here start against a per-test socket dir, not the scoped data dir,
-	// so a minted token would land somewhere config.ClientToken() never looks.
-	// One value for both ends is exactly what the override is for; tests that
-	// exercise the refusal set their own.
+	// Daemons here use a per-test socket dir, so a minted token would land
+	// where config.ClientToken() never looks.
 	_ = os.Setenv("ATTN_CLIENT_TOKEN", "daemon-test-client-token")
 
 	code := m.Run()
@@ -159,8 +135,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// waitForSocket waits for a unix socket to be ready for connections.
-// This is more reliable than fixed sleeps, especially in CI environments.
 func waitForSocket(t *testing.T, sockPath string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -182,8 +156,8 @@ func waitForRecovery(t *testing.T, d *Daemon) {
 
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	// Unix socket paths are length-limited (notably on macOS). The default
-	// `t.TempDir()` path can be too long, so keep the base dir short.
+	// Unix socket paths are length-limited on macOS and a t.TempDir() path can
+	// exceed it.
 	base := "/tmp"
 	if _, err := os.Stat(base); err != nil {
 		base = ""
@@ -211,13 +185,11 @@ func TestDaemon_RegisterAndQuery(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	// Register a session
 	err := c.Register("sess-1", "drumstick", "/home/user/project")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	// Query all sessions
 	sessions, err := c.Query("")
 	if err != nil {
 		t.Fatalf("Query error: %v", err)
@@ -245,10 +217,8 @@ func TestDaemon_StateUpdate(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	// Register
 	c.Register("sess-1", "test", "/tmp")
 
-	// Report the hook's evidence. The state follows on the resolver's tick.
 	err := c.UpdateState("sess-1", protocol.StateWaitingInput)
 	if err != nil {
 		t.Fatalf("UpdateState error: %v", err)
@@ -302,7 +272,6 @@ func TestDaemon_MultipleSessions(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	// Register multiple sessions (all start as launching)
 	if err := c.Register("1", "one", "/tmp/1"); err != nil {
 		t.Fatalf("Register(1) error: %v", err)
 	}
@@ -313,7 +282,6 @@ func TestDaemon_MultipleSessions(t *testing.T) {
 		t.Fatalf("Register(3) error: %v", err)
 	}
 
-	// Update one to working
 	if err := c.UpdateState("2", protocol.StateWorking); err != nil {
 		t.Fatalf("UpdateState(2, working) error: %v", err)
 	}
@@ -344,7 +312,6 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
-	// Create stale socket file
 	f, _ := os.Create(sockPath)
 	f.Close()
 
@@ -354,7 +321,6 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	// Should still work (stale socket removed)
 	c := client.New(sockPath)
 	err := c.Register("1", "test", "/tmp")
 	if err != nil {
@@ -362,12 +328,6 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 	}
 }
 
-// The WebSocket port is derived from the profile name, so a daemon for the same
-// profile running elsewhere — on a VM whose listener is forwarded onto host
-// localhost, say — can already own it. Binding it has to be fatal: a daemon that
-// owns the unix socket but not the port answers the CLI from this process while
-// the app talks to the foreign listener. Fails if the bind ever goes back to a
-// fire-and-forget goroutine that only logs the failure.
 func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	t.Setenv("ATTN_PROFILE", "bindclash")
 	addr := net.JoinHostPort(config.WSBindAddress(), useFreeWSPort(t))
@@ -381,8 +341,8 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
 	t.Cleanup(d.Stop)
 
-	// Start() blocks on its accept loop once it reaches a running daemon, so race
-	// its return against the daemon's own started signal rather than a deadline.
+	// Start() blocks on its accept loop, so race its return against the
+	// daemon's own started signal.
 	startErr := make(chan error, 1)
 	go func() { startErr <- d.Start() }()
 
@@ -474,14 +434,9 @@ func TestDaemon_RecoverySettledSignalFollowsEachRecoveryCycle(t *testing.T) {
 	<-second
 }
 
-// Startup recovery rewrites session states directly in the store (prune marks a
-// recoverable session) without going through the per-session broadcast
-// that normally refreshes the workspace rollup. reseedWorkspaceStatuses, run at
-// the end of recovery, must repair the cached rollup so the first InitialState
-// snapshot shows a workspace dot consistent with its recovered sessions.
 func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "reseed.sock"))
-	d.ptyBackend = nil // no live PTYs, so prune treats the session as missing
+	d.ptyBackend = nil
 	d.workspaces = newWorkspaceRegistry()
 
 	workspaceID := "ws-reseed"
@@ -502,19 +457,15 @@ func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 		LastSeen:       nowStr,
 		WorkspaceID:    workspaceID,
 	})
-	// Recoverable: a transcript to resume and an intent to relaunch from.
 	newRecoveryHome(t).resumableClaude(t, sessionID)
 	giveRestorationEvidence(t, d, sessionID, sessionID)
 	d.workspaces.associateSession(sessionID, workspaceID, "claude")
 
-	// Seed the cached rollup the way loadWorkspacesFromStore does at startup.
 	d.recomputeWorkspaceStatus(workspaceID)
 	if ws, _ := d.workspaces.snapshot(workspaceID); ws.Status != protocol.WorkspaceStatusWorking {
 		t.Fatalf("precondition: seeded rollup = %q, want working", ws.Status)
 	}
 
-	// Recovery marks the missing-PTY session recoverable in the store, but does NOT
-	// recompute the rollup — so the cached status is now stale.
 	d.pruneSessionsWithoutPTY(time.Time{})
 	if got := d.store.Get(sessionID); got == nil || got.State != protocol.SessionStateRecoverable {
 		t.Fatalf("prune should keep session and mark it recoverable, got %+v", got)
@@ -523,7 +474,6 @@ func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 		t.Fatalf("rollup should still be stale-working before reseed, got %q", ws.Status)
 	}
 
-	// The reseed performStartupPTYRecovery runs after pruning repairs it.
 	d.reseedWorkspaceStatuses()
 	if ws, _ := d.workspaces.snapshot(workspaceID); ws.Status != protocol.WorkspaceStatusIdle {
 		t.Fatalf("rollup after reseed = %q, want idle", ws.Status)
@@ -848,8 +798,6 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend(t *testing.T) {
 	if report.StateUpdated != 2 {
 		t.Fatalf("state_updated = %d, want 2", report.StateUpdated)
 	}
-	// Both missing sessions go: neither has a resume target, and being idle is
-	// not a reason to keep one.
 	if report.Reaped != 2 {
 		t.Fatalf("reaped = %d, want 2", report.Reaped)
 	}
@@ -908,11 +856,6 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend(t *testing.T) {
 	}
 }
 
-// TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled proves that
-// daemon recovery does not clobber a live session parked on a cron/loop. The
-// worker is alive (Running) but its parked screen reads as idle, which would
-// otherwise be recovered as launching; the hook-reported "scheduled" state must
-// survive instead, since the next Stop re-derives it from live session_crons.
 func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
@@ -933,8 +876,8 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled(t *testing
 				SessionID: "live-scheduled",
 				Agent:     string(protocol.SessionAgentCodex),
 				CWD:       "/tmp/loop",
-				Running:   true,               // worker alive, parked on a cron
-				State:     protocol.StateIdle, // parked screen reads as idle
+				Running:   true,
+				State:     protocol.StateIdle,
 			},
 		},
 	}
@@ -1021,21 +964,13 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLivePluginReportedSt
 	}
 }
 
-// TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff covers the
-// prune's race with its own listener: the socket accepts registrations before
-// startup recovery runs, so a session that belongs to this run is in the store
-// with no PTY yet. Both prune verdicts are terminal for the resolver — it owns
-// neither `recoverable` nor a removed row — so the session has to survive
-// untouched rather than be recovered or reaped.
 func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	// The session store is the package's, not this daemon's, so the row outlives
-	// the test and the state this one ends on would seed the next run of it.
+	// The session store is the package's, so this row outlives the test and
+	// would seed the next run.
 	t.Cleanup(func() { d.store.Remove("just-registered") })
-	// Derive the registration time from the cutoff rather than calling the clock
-	// twice: consecutive time.Now() calls can land on the same microsecond, and
-	// then the session is not strictly after the cutoff for reasons that have
-	// nothing to do with the rule under test.
+	// Derive from the cutoff: two time.Now() calls can land on the same
+	// microsecond, and then the row is not strictly after it.
 	cutoff := time.Now()
 	now := string(protocol.NewTimestamp(cutoff.Add(time.Second)))
 	d.store.Add(&protocol.Session{
@@ -1060,8 +995,6 @@ func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *te
 		t.Fatalf("state = %s, want %s untouched", session.State, protocol.SessionStateLaunching)
 	}
 
-	// Same session, no cutoff: it has a transcript and an intent, so the verdict
-	// the guard above was holding off is `recoverable`.
 	newRecoveryHome(t).resumableClaude(t, "just-registered")
 	giveRestorationEvidence(t, d, "just-registered", "just-registered")
 	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 0 {
@@ -1156,10 +1089,6 @@ func TestDaemon_PruneSessionsWithoutPTY_RemovesReapedWorkspaceLayout(t *testing.
 	}
 }
 
-// TestDaemon_PruneSessionsWithoutPTY_KeepsTileOnlyWorkspace is the counterpart
-// to the teardown test above: when a reaped session leaves a docked tile
-// behind, the prune path keeps the workspace alive as a sessionless, tile-only
-// workspace instead of taking the tile down with it.
 func TestDaemon_PruneSessionsWithoutPTY_KeepsTileOnlyWorkspace(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
@@ -1475,11 +1404,6 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 			want:   protocol.SessionStatePendingApproval,
 			wantOK: true,
 		},
-		// The three below are the whole point of the change: a running worker
-		// with nothing observed must not manufacture a state for the session,
-		// because recovery uses "no opinion" to mean "leave the persisted state
-		// alone". `working` is the case that matters most — it is the string a
-		// worker with no observer of its own reports for every agent.
 		{
 			name: "running with the worker's default working is no opinion",
 			info: ptybackend.SessionInfo{Running: true, State: protocol.StateWorking},
@@ -1616,42 +1540,32 @@ func (b *fakeAttachBackend) SetAttachInfo(info ptybackend.AttachInfo) {
 }
 
 type fakeSpawnBackend struct {
-	mu                sync.Mutex
-	spawnOpts         []ptybackend.SpawnOptions
-	killed            []string
-	removed           []string
-	onSpawn           func(ptybackend.SpawnOptions)
-	onInput           func(string, []byte)
-	onInputResult     func(string, []byte) error
-	onKill            func()
-	killErr           error
-	spawnErr          error
-	sessionIDs        []string
-	themeCalls        []pty.TerminalTheme
-	themeCallIDs      []string
-	setThemeErr       error
-	screen            string
-	screenUnavailable bool
-	// terminalBuild is what SessionTerminalBuild answers. The zero value is
-	// "no answer yet", so a test that does not set it sees no stale verdict.
+	mu                 sync.Mutex
+	spawnOpts          []ptybackend.SpawnOptions
+	killed             []string
+	removed            []string
+	onSpawn            func(ptybackend.SpawnOptions)
+	onInput            func(string, []byte)
+	onInputResult      func(string, []byte) error
+	onKill             func()
+	killErr            error
+	spawnErr           error
+	sessionIDs         []string
+	themeCalls         []pty.TerminalTheme
+	themeCallIDs       []string
+	setThemeErr        error
+	screen             string
+	screenUnavailable  bool
 	terminalBuild      string
 	terminalBuildKnown bool
-	// upgradeErr is what UpgradeWorker answers, and onUpgrade stands in for the
-	// re-handshake a real swap ends with — the fake's chance to start reporting
-	// the new build.
-	upgradeErr  error
-	onUpgrade   func(*fakeSpawnBackend)
-	upgraded    []string
-	upgradeDone chan string
-	// upgradeEntered is closed-over by the fake to announce that a swap is
-	// under way, and upgradeGate holds it there — together they let a test put
-	// a second caller against an upgrade that is genuinely in flight.
-	upgradeEntered chan string
-	upgradeGate    chan struct{}
+	upgradeErr         error
+	onUpgrade          func(*fakeSpawnBackend)
+	upgraded           []string
+	upgradeDone        chan string
+	upgradeEntered     chan string
+	upgradeGate        chan struct{}
 }
 
-// UpgradeWorker makes the fake a ptybackend.WorkerUpgrader: the daemon swaps a
-// mismatched worker in place rather than asking the user to reload.
 func (f *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
 	f.mu.Lock()
 	f.upgraded = append(f.upgraded, sessionID)
@@ -1675,16 +1589,12 @@ func (f *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) er
 	return err
 }
 
-// SessionTerminalBuild makes the fake a ptybackend.TerminalBuildProvider, which
-// is what decorateSessionWithTerminalBuild reads.
 func (f *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.terminalBuild, f.terminalBuildKnown
 }
 
-// ScreenSnapshot makes the fake a ptybackend.ScreenSnapshotProvider, which is what the
-// doorbell's screen guard looks for.
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -2007,7 +1917,6 @@ func TestDaemon_ForwardPTYStreamEvents_ClosesStreamOnSendFailure(t *testing.T) {
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
 
-	// Fill send buffer so sendOutbound() fails.
 	client.send <- outboundMessage{kind: messageKindText, payload: []byte(`{\"event\":\"noop\"}`)}
 
 	stream := newFakeOutputStream()
@@ -2172,10 +2081,8 @@ func TestDaemon_HandleAttachSession_ServesGhosttySnapshotWhenAvailable(t *testin
 		if protocol.Deref(result.LastSeq) != 12 {
 			t.Fatalf("last_seq = %d, want 12", protocol.Deref(result.LastSeq))
 		}
-		// The format the worker encoded in travels with the bytes: the client
-		// owns the decoder, so it is the only participant that can tell whether
-		// these bytes are readable. A worker outlives an install, so this is
-		// routinely not the client's own format.
+		// A worker outlives an install, so the encoding format must travel with
+		// the bytes for the client to know whether it can decode them.
 		if got := protocol.Deref(result.Snapshot.Format); got != "cafef00d1234" {
 			t.Fatalf("snapshot format = %q, want %q", got, "cafef00d1234")
 		}
@@ -2220,11 +2127,6 @@ func TestDaemon_HandleAttachSession_PropagatesScrollbackTruncated(t *testing.T) 
 	}
 }
 
-// TestDaemon_HandleAttachSession_OmitsSnapshotWhenGhosttyAbsent covers the
-// pure-Go stub path (non-macOS builds, or ghostty construction failure): the
-// worker reports no VT serialization, so the daemon serves a snapshot-less
-// attach. The client keeps whatever it has and dedups the live stream against
-// last_seq; success and geometry still come through.
 func TestDaemon_HandleAttachSession_OmitsSnapshotWhenGhosttyAbsent(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeAttachBackend{}
@@ -2266,9 +2168,6 @@ func TestDaemon_HandleAttachSession_OmitsSnapshotWhenGhosttyAbsent(t *testing.T)
 	}
 }
 
-// TestDaemon_HandleAttachSession_OmitsSnapshotForFreshSpawnPolicy verifies the
-// fresh-spawn attach policy suppresses restore even when the worker has a
-// serialization available: a freshly spawned session must render from scratch.
 func TestDaemon_HandleAttachSession_OmitsSnapshotForFreshSpawnPolicy(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeAttachBackend{}
@@ -3006,11 +2905,9 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	// Register a session to verify it's counted
 	c := client.New(sockPath)
 	c.Register("test-1", "test", "/tmp")
 
-	// Poll the health endpoint until the HTTP server is ready
 	healthURL := "http://127.0.0.1:" + wsPort + "/health"
 	var resp *http.Response
 	logDeadline := time.Now().Add(5 * time.Second)
@@ -3057,15 +2954,12 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 	if daemonID, ok := health["daemon_instance_id"].(string); !ok || daemonID == "" {
 		t.Errorf("daemon_instance_id = %v, want non-empty string", health["daemon_instance_id"])
 	}
-	// sessions should be 1.0 (float64 from JSON)
 	if sessions, ok := health["sessions"].(float64); !ok || sessions != 1 {
 		t.Errorf("sessions = %v, want 1", health["sessions"])
 	}
 	if got := resp.Header.Get("Cache-Control"); got != "no-store, max-age=0" {
 		t.Errorf("health Cache-Control = %q, want no-store, max-age=0", got)
 	}
-	// Profile identity: with no ATTN_PROFILE set, profile is "default" and
-	// port mirrors what the daemon is actually bound to.
 	if health["profile"] != "default" {
 		t.Errorf("profile = %v, want %q", health["profile"], "default")
 	}
@@ -3172,7 +3066,6 @@ func TestDaemon_AttachFlowOverWebSocket(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, conn)
 	initial := waitForDaemonWebSocketEvent(t, conn, 10*time.Second, func(evt map[string]interface{}) bool {
 		return asString(evt["event"]) == protocol.EventInitialState
@@ -3414,7 +3307,6 @@ func assertNoOutboundEvent(t *testing.T, client *wsClient) {
 }
 
 func TestDaemon_SettingsValidation(t *testing.T) {
-	// Test the validateSetting function directly
 	d := &Daemon{}
 
 	tests := []struct {
@@ -3441,7 +3333,6 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 		{"empty gardenScale matches app", "gardenScale", "", false},
 		{"gardenScale out of range", "gardenScale", "3.0", true},
 		{"gardenScale not a number", "gardenScale", "big", true},
-		// The ticket board is gone; its key must not still be writable.
 		{"retired ticketBoardScale", "ticketBoardScale", "1.2", true},
 		{"valid tailscale_enabled true", "tailscale_enabled", "true", false},
 		{"valid tailscale_enabled false", "tailscale_enabled", "false", false},
@@ -3495,7 +3386,6 @@ func TestDaemon_SettingsValidation(t *testing.T) {
 func TestDaemon_ContextWindowCapResolutionAndGating(t *testing.T) {
 	d := &Daemon{store: store.New()}
 
-	// resolveContextWindowCap: blank / unparseable / non-positive => default.
 	for _, v := range []string{"", "  ", "not-a-number", "0", "-100"} {
 		if got := resolveContextWindowCap(v); got != agentdriver.DefaultContextWindowCap {
 			t.Fatalf("resolveContextWindowCap(%q) = %d, want default %d", v, got, agentdriver.DefaultContextWindowCap)
@@ -3505,9 +3395,6 @@ func TestDaemon_ContextWindowCapResolutionAndGating(t *testing.T) {
 		t.Fatalf("resolveContextWindowCap(200000) = %d, want 200000", got)
 	}
 
-	// launchContextWindowCap: 0 for a non-chief launch with no per-agent
-	// setting; default for a chief with no setting; the configured values
-	// otherwise, with the chief setting winning on chief launches.
 	if got := d.launchContextWindowCap("sess-1", "claude", false); got != 0 {
 		t.Fatalf("non-chief cap with no setting = %d, want 0 (uncapped)", got)
 	}
@@ -3528,14 +3415,10 @@ func TestDaemon_ContextWindowCapResolutionAndGating(t *testing.T) {
 	if got := d.launchContextWindowCap("sess-1", "codex", false); got != 0 {
 		t.Fatalf("other agent's cap = %d, want 0 (uncapped)", got)
 	}
-	// The chief setting still wins on chief launches even with a per-agent
-	// default configured.
 	if got := d.launchContextWindowCap("sess-1", "claude", true); got != 160000 {
 		t.Fatalf("chief cap with per-agent default also set = %d, want 160000", got)
 	}
 
-	// A per-session pin outranks everything: the chief setting on chief
-	// launches, and the per-agent default on plain ones.
 	d.store.Add(&protocol.Session{ID: "sess-pinned", Label: "pinned", Agent: protocol.SessionAgentClaude, Directory: "/tmp"})
 	if !d.store.SetSessionContextWindowCap("sess-pinned", 300000) {
 		t.Fatalf("SetSessionContextWindowCap failed")
@@ -3546,7 +3429,6 @@ func TestDaemon_ContextWindowCapResolutionAndGating(t *testing.T) {
 	if got := d.launchContextWindowCap("sess-pinned", "claude", true); got != 300000 {
 		t.Fatalf("pinned cap on a chief launch = %d, want 300000 (pin outranks chief setting)", got)
 	}
-	// Clearing the pin falls back to the settings.
 	if !d.store.SetSessionContextWindowCap("sess-pinned", 0) {
 		t.Fatalf("clear SetSessionContextWindowCap failed")
 	}
@@ -3555,9 +3437,6 @@ func TestDaemon_ContextWindowCapResolutionAndGating(t *testing.T) {
 	}
 }
 
-// TestDaemon_SetSessionContextWindowCap covers the write path behind
-// set_session_context_window_cap: validation, idempotence, and the pin landing
-// on the session record that broadcasts carry.
 func TestDaemon_SetSessionContextWindowCap(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.store.Add(&protocol.Session{ID: "sess-cap", Label: "capped", Agent: protocol.SessionAgentClaude, Directory: "/tmp"})
@@ -3584,11 +3463,9 @@ func TestDaemon_SetSessionContextWindowCap(t *testing.T) {
 	if got := protocol.Deref(d.store.Get("sess-cap").ContextWindowCap); got != 500000 {
 		t.Fatalf("stored cap = %d, want 500000", got)
 	}
-	// Repeating the same pin is a no-op, not an error.
 	if err := d.setSessionContextWindowCap("sess-cap", 500000); err != nil {
 		t.Fatalf("idempotent set errored: %v", err)
 	}
-	// 0 clears the pin.
 	if err := d.setSessionContextWindowCap("sess-cap", 0); err != nil {
 		t.Fatalf("clear cap: %v", err)
 	}
@@ -3600,7 +3477,6 @@ func TestDaemon_SetSessionContextWindowCap(t *testing.T) {
 func TestDaemon_DefaultLaunchModelAndEffort(t *testing.T) {
 	d := &Daemon{store: store.New()}
 
-	// Unset => "" (the agent's own default), regardless of chief status.
 	if got := d.defaultLaunchModel("claude"); got != "" {
 		t.Fatalf("default model with no setting = %q, want \"\"", got)
 	}
@@ -3611,7 +3487,6 @@ func TestDaemon_DefaultLaunchModelAndEffort(t *testing.T) {
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "opus")
 	d.store.SetSetting(SettingDefaultEffortPrefix+"claude", "high")
 
-	// Applies to non-chief AND chief launches alike, unlike chiefLaunchModel.
 	if got := d.defaultLaunchModel("claude"); got != "opus" {
 		t.Fatalf("default model = %q, want %q", got, "opus")
 	}
@@ -3619,7 +3494,6 @@ func TestDaemon_DefaultLaunchModelAndEffort(t *testing.T) {
 		t.Fatalf("default effort = %q, want %q", got, "high")
 	}
 
-	// Agent name is normalized (trimmed and lowercased) before the lookup.
 	if got := d.defaultLaunchModel(" Claude "); got != "opus" {
 		t.Fatalf("default model with unnormalized agent = %q, want %q", got, "opus")
 	}
@@ -3632,7 +3506,6 @@ func TestDaemon_ResolveLaunchModelAndEffort(t *testing.T) {
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "sonnet")
 	d.store.SetSetting(SettingDefaultEffortPrefix+"claude", "medium")
 
-	// 1. An explicit per-spawn pin always wins, chief or not.
 	if got := d.resolveLaunchModel("claude", false, "haiku"); got != "haiku" {
 		t.Fatalf("explicit pin (non-chief) = %q, want %q", got, "haiku")
 	}
@@ -3640,7 +3513,6 @@ func TestDaemon_ResolveLaunchModelAndEffort(t *testing.T) {
 		t.Fatalf("explicit pin (chief) = %q, want %q", got, "haiku")
 	}
 
-	// 2. No pin, chief launch: chief_model_<agent> wins over default_model_<agent>.
 	if got := d.resolveLaunchModel("claude", true, ""); got != "opus" {
 		t.Fatalf("chief resolve = %q, want chief override %q", got, "opus")
 	}
@@ -3648,9 +3520,6 @@ func TestDaemon_ResolveLaunchModelAndEffort(t *testing.T) {
 		t.Fatalf("chief resolve effort = %q, want chief override %q", got, "max")
 	}
 
-	// 3. No pin, non-chief launch: falls through to default_model_<agent> (the
-	// new configurable fallback that previously did not exist for non-chief
-	// launches).
 	if got := d.resolveLaunchModel("claude", false, ""); got != "sonnet" {
 		t.Fatalf("non-chief resolve = %q, want default %q", got, "sonnet")
 	}
@@ -3658,7 +3527,6 @@ func TestDaemon_ResolveLaunchModelAndEffort(t *testing.T) {
 		t.Fatalf("non-chief resolve effort = %q, want default %q", got, "medium")
 	}
 
-	// 4. No pin, no settings at all for an agent: agent's own default (empty).
 	if got := d.resolveLaunchModel("codex", false, ""); got != "" {
 		t.Fatalf("no-setting resolve = %q, want \"\"", got)
 	}
@@ -3667,8 +3535,6 @@ func TestDaemon_ResolveLaunchModelAndEffort(t *testing.T) {
 func TestDaemon_ChiefLaunchEffort(t *testing.T) {
 	d := &Daemon{store: store.New()}
 
-	// chiefLaunchEffort: "" for non-chief regardless of setting; "" for a
-	// chief with no setting; the configured value for a chief that set one.
 	d.store.SetSetting(SettingChiefEffortPrefix+"claude", "high")
 	if got := d.chiefLaunchEffort("claude", false); got != "" {
 		t.Fatalf("non-chief effort = %q, want \"\"", got)
@@ -3680,26 +3546,23 @@ func TestDaemon_ChiefLaunchEffort(t *testing.T) {
 		t.Fatalf("chief effort = %q, want %q", got, "high")
 	}
 
-	// Agent name is normalized (trimmed and lowercased) before the setting lookup.
 	if got := d.chiefLaunchEffort(" Claude ", true); got != "high" {
 		t.Fatalf("chief effort with unnormalized agent = %q, want %q", got, "high")
 	}
 }
 
 func TestDaemon_ApplyHeadlessContextWindowCap(t *testing.T) {
-	// The global is process-wide; restore it so this test does not leak into
-	// others that run headless spawns in the same binary.
+	// The cap is a process-wide global; restore it or it leaks into other
+	// tests in this binary.
 	t.Cleanup(func() { agentdriver.SetHeadlessContextWindowCap(0) })
 
 	d := &Daemon{store: store.New()}
 
-	// No setting => the default is pushed into the agent package's global.
 	d.applyHeadlessContextWindowCap()
 	if got := agentdriver.HeadlessContextWindowCap(); got != agentdriver.DefaultContextWindowCap {
 		t.Fatalf("headless cap with no setting = %d, want default %d", got, agentdriver.DefaultContextWindowCap)
 	}
 
-	// A configured value flows through on the next apply.
 	d.store.SetSetting(SettingHeadlessContextWindowCap, "180000")
 	d.applyHeadlessContextWindowCap()
 	if got := agentdriver.HeadlessContextWindowCap(); got != 180000 {
@@ -3971,11 +3834,9 @@ func TestDaemon_SettingsWithCodexAvailability_InstallsCodexSkill(t *testing.T) {
 }
 
 func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
-	// Create mock GitHub server
 	mockGH := mockserver.New()
 	defer mockGH.Close()
 
-	// Add a mock PR
 	mockGH.AddPR(mockserver.MockPR{
 		Repo:   "test/repo",
 		Number: 42,
@@ -3986,7 +3847,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 
 	wsPort := useFreeWSPort(t)
 
-	// Create GitHub client pointing to mock server
 	ghClient, err := github.NewClient(mockGH.URL, "test-token")
 	if err != nil {
 		t.Fatalf("NewClient error: %v", err)
@@ -3995,13 +3855,11 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
 	t.Setenv("ATTN_MOCK_GH_HOST", ghClient.Host())
 
-	// Create daemon with GitHub client
-	// Use /tmp directly to avoid long socket paths, with unique suffix to prevent parallel test conflicts
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 	d := NewWithGitHubClient(sockPath, ghClient)
 
-	// Start daemon in background
 	go func() {
 		if err := d.Start(); err != nil {
 			t.Logf("Daemon start error: %v", err)
@@ -4012,8 +3870,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 		os.Remove(sockPath)
 	}()
 
-	// Wait for daemon and WebSocket server to start (with retries)
-	// First wait for the unix socket to be ready
 	time.Sleep(200 * time.Millisecond)
 
 	ctx := context.Background()
@@ -4034,7 +3890,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; nothing arrives before it.
 	sendWorkspaceClientHello(t, conn)
 	_, initialData, err := conn.Read(ctx)
 	if err != nil {
@@ -4042,7 +3897,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 	}
 	t.Logf("Initial state: %s", string(initialData))
 
-	// Send approve command
 	prID := protocol.FormatPRID(ghClient.Host(), "test/repo", 42)
 	approveCmd := map[string]interface{}{
 		"cmd": "approve_pr",
@@ -4054,7 +3908,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 		t.Fatalf("Write approve command error: %v", err)
 	}
 
-	// Read responses until we get pr_action_result (prs_updated may come first due to background polling)
 	var response protocol.PRActionResultMessage
 	for i := 0; i < 10; i++ {
 		_, responseData, err := conn.Read(ctx)
@@ -4063,7 +3916,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 		}
 		t.Logf("Response %d: %s", i+1, string(responseData))
 
-		// Check if this is the pr_action_result event
 		var eventCheck struct {
 			Event string `json:"event"`
 		}
@@ -4075,10 +3927,8 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 			}
 			break
 		}
-		// Otherwise it's probably prs_updated from background polling, continue reading
 	}
 
-	// Verify response
 	if !response.Success {
 		t.Errorf("Expected success=true, got success=%v, error=%s", response.Success, protocol.Deref(response.Error))
 	}
@@ -4089,7 +3939,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 		t.Errorf("Expected id=%s, got id=%s", prID, response.ID)
 	}
 
-	// Verify mock server received the approve request
 	if !mockGH.HasApproveRequest("test/repo", 42) {
 		t.Error("Mock server did not receive approve request for test/repo#42")
 	}
@@ -4109,7 +3958,6 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	// Create test PR data
 	testPR := protocol.PR{
 		ID:          "github.com:owner/repo#123",
 		Repo:        "owner/repo",
@@ -4124,7 +3972,6 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 		Muted:       false,
 	}
 
-	// Send inject_test_pr message
 	msg := protocol.InjectTestPRMessage{
 		Cmd: protocol.CmdInjectTestPR,
 		PR:  testPR,
@@ -4142,7 +3989,6 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 		t.Fatalf("Write error: %v", err)
 	}
 
-	// Read response
 	var resp protocol.Response
 	err = json.NewDecoder(conn).Decode(&resp)
 	if err != nil {
@@ -4153,7 +3999,6 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 		t.Fatalf("Expected Ok=true, got Ok=%v, Error=%s", resp.Ok, protocol.Deref(resp.Error))
 	}
 
-	// Verify PR was added using query_prs
 	prs, err := c.QueryPRs("")
 	if err != nil {
 		t.Fatalf("QueryPRs error: %v", err)
@@ -4177,13 +4022,12 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// Use /tmp directly to avoid long socket paths, with unique suffix to prevent parallel test conflicts
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
 
-	// Start daemon in background
 	go func() {
 		if err := d.Start(); err != nil {
 			t.Logf("Daemon start error: %v", err)
@@ -4194,10 +4038,8 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 		os.Remove(sockPath)
 	}()
 
-	// Wait for daemon to start before dialing its Unix socket.
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	// Inject test PR via unix socket
 	testPR := protocol.PR{
 		ID:          "github.com:owner/repo#123",
 		Repo:        "owner/repo",
@@ -4232,7 +4074,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	}
 	conn.Close()
 
-	// Connect to WebSocket
 	ctx := context.Background()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
 	var wsConn *websocket.Conn
@@ -4250,7 +4091,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, wsConn)
 	initialState := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 	if len(initialState.Prs) != 1 {
@@ -4261,7 +4101,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	}
 	sendWorkspaceClientHello(t, wsConn)
 
-	// Send mute_pr command
 	muteCmd := map[string]interface{}{
 		"cmd": "mute_pr",
 		"id":  "github.com:owner/repo#123",
@@ -4272,7 +4111,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 		t.Fatalf("Write mute command error: %v", err)
 	}
 
-	// Other background broadcasts may arrive before the PR update.
 	updateEvent := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventPRsUpdated)
 	if len(updateEvent.Prs) != 1 {
 		t.Fatalf("Expected 1 PR in update, got %d", len(updateEvent.Prs))
@@ -4281,7 +4119,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 		t.Error("Expected PR to be muted after mute command")
 	}
 
-	// Send mute_pr again to toggle back
 	err = wsConn.Write(ctx, websocket.MessageText, muteJSON)
 	if err != nil {
 		t.Fatalf("Write second mute command error: %v", err)
@@ -4296,13 +4133,12 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// Use /tmp directly to avoid long socket paths, with unique suffix to prevent parallel test conflicts
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
 
-	// Start daemon in background
 	go func() {
 		if err := d.Start(); err != nil {
 			t.Logf("Daemon start error: %v", err)
@@ -4313,10 +4149,8 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 		os.Remove(sockPath)
 	}()
 
-	// Wait for daemon to start
 	time.Sleep(200 * time.Millisecond)
 
-	// Connect to WebSocket
 	ctx := context.Background()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
 	var wsConn *websocket.Conn
@@ -4334,11 +4168,9 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
-	// Send mute_repo command
 	muteCmd := map[string]interface{}{
 		"cmd":  "mute_repo",
 		"repo": "owner/test-repo",
@@ -4348,7 +4180,6 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 		t.Fatalf("Write mute_repo command error: %v", err)
 	}
 
-	// Read repos_updated broadcast (skipping unrelated background broadcasts).
 	updateEvent := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventReposUpdated)
 	if len(updateEvent.Repos) != 1 {
 		t.Fatalf("Expected 1 repo state in update, got %d", len(updateEvent.Repos))
@@ -4360,12 +4191,10 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 		t.Error("Expected repo to be muted after mute_repo command")
 	}
 
-	// Send mute_repo again to toggle back
 	if err := wsConn.Write(ctx, websocket.MessageText, muteJSON); err != nil {
 		t.Fatalf("Write second mute_repo command error: %v", err)
 	}
 
-	// Read second repos_updated broadcast.
 	updateEvent2 := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventReposUpdated)
 	if updateEvent2.Repos[0].Muted {
 		t.Error("Expected repo to be unmuted after second mute_repo command (toggle)")
@@ -4375,13 +4204,12 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// Use /tmp directly to avoid long socket paths, with unique suffix to prevent parallel test conflicts
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
 
-	// Start daemon in background
 	go func() {
 		if err := d.Start(); err != nil {
 			t.Logf("Daemon start error: %v", err)
@@ -4392,17 +4220,14 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 		os.Remove(sockPath)
 	}()
 
-	// Wait for daemon to start
 	time.Sleep(200 * time.Millisecond)
 
-	// First, toggle a repo mute via unix socket to set up state
 	c := client.New(sockPath)
 	err := c.ToggleMuteRepo("owner/test-repo")
 	if err != nil {
 		t.Fatalf("ToggleMuteRepo error: %v", err)
 	}
 
-	// Connect to WebSocket
 	ctx := context.Background()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
 	var wsConn *websocket.Conn
@@ -4420,11 +4245,9 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, wsConn)
 	initialState := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
-	// Verify initial state includes repos
 	if initialState.Repos == nil {
 		t.Fatal("Expected Repos array in initial state")
 	}
@@ -4438,10 +4261,6 @@ func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 		t.Error("Expected repo to be muted in initial state")
 	}
 }
-
-// ============================================================================
-// Session State Flow Tests
-// ============================================================================
 
 func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 	wsPort := useFreeWSPort(t)
@@ -4462,14 +4281,12 @@ func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	// Register session via unix socket
 	c := client.New(sockPath)
 	err := c.Register("test-session", "Test Session", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	// Connect to WebSocket
 	ctx := context.Background()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
 	var wsConn *websocket.Conn
@@ -4487,17 +4304,14 @@ func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
-	// Update state to waiting_input via unix socket
 	err = c.UpdateState("test-session", protocol.StateWaitingInput)
 	if err != nil {
 		t.Fatalf("UpdateState error: %v", err)
 	}
 
-	// Read WebSocket event - should be session_state_changed (skipping unrelated broadcasts).
 	event := waitForProtocolWebSocketEvent(t, wsConn, protocol.EventSessionStateChanged)
 	if event.Session == nil {
 		t.Fatal("Expected Session in event")
@@ -4510,14 +4324,6 @@ func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 	}
 }
 
-// TestDaemon_HookReportedStatesReachClients drives the three states a hook can
-// report over the real socket and pins that each one reaches a client as a state
-// change. The hook does not apply them any more, so this covers the whole chain:
-// the hook files evidence, the resolver reads it, and the publication broadcasts.
-//
-// It used to drive `idle` and `unknown` through the same wire. No hook reports
-// either — they are conclusions the resolver draws from a turn ending or from
-// evidence going silent, and TestResolve covers them where they are decided.
 func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
@@ -4558,12 +4364,9 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; other broadcasts may arrive first.
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
 
-	// A turn starts, the agent asks the user a question, the user answers and the
-	// turn resumes: the sequence claude's hooks actually produce.
 	for _, expected := range []string{
 		protocol.StateWorking,
 		protocol.StateWaitingInput,
@@ -4604,7 +4407,6 @@ func TestDaemon_InjectTestSession_BroadcastsToWebSocket(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	// Connect to WebSocket first
 	ctx := context.Background()
 	wsURL := "ws://127.0.0.1:" + wsPort + "/ws"
 	var wsConn *websocket.Conn
@@ -4622,14 +4424,12 @@ func TestDaemon_InjectTestSession_BroadcastsToWebSocket(t *testing.T) {
 	}
 	defer wsConn.Close(websocket.StatusNormalClosure, "")
 
-	// The hello is what unlocks initial_state; nothing arrives before it.
 	sendWorkspaceClientHello(t, wsConn)
 	_, _, err := wsConn.Read(ctx)
 	if err != nil {
 		t.Fatalf("Read initial state error: %v", err)
 	}
 
-	// Inject test session via unix socket
 	conn, err := net.Dial("unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
@@ -4678,9 +4478,9 @@ func TestDaemon_InjectTestSession_BroadcastsToWebSocket(t *testing.T) {
 func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 	useFreeWSPort(t)
 
-	// Use /tmp directly to avoid long socket paths
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
 	go d.Start()
@@ -4693,13 +4493,11 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	// Register session
 	err := c.Register("test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	// Send todos with pending items
 	conn, err := net.Dial("unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
@@ -4712,7 +4510,6 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 	todosJSON, _ := json.Marshal(todosMsg)
 	conn.Write(todosJSON)
 
-	// Read response
 	var resp protocol.Response
 	json.NewDecoder(conn).Decode(&resp)
 	conn.Close()
@@ -4721,7 +4518,6 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 		t.Fatalf("Todos update failed: %s", protocol.Deref(resp.Error))
 	}
 
-	// Send stop command (should classify as waiting_input due to pending todos)
 	conn2, err := net.Dial("unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
@@ -4729,30 +4525,22 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 	stopMsg := map[string]interface{}{
 		"cmd":             "stop",
 		"id":              "test-session",
-		"transcript_path": "/nonexistent/path", // Doesn't matter - pending todos short-circuit
+		"transcript_path": "/nonexistent/path",
 	}
 	stopJSON, _ := json.Marshal(stopMsg)
 	conn2.Write(stopJSON)
 	json.NewDecoder(conn2).Decode(&resp)
 	conn2.Close()
 
-	// Wait for the classification and the resolve tick that publishes its verdict.
 	waitForResolvedState(t, d, "test-session", protocol.SessionStateWaitingInput)
 }
 
 func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T) {
 	useFreeWSPort(t)
 
-	// This test verifies that when all todos are completed, the daemon
-	// does NOT short-circuit to waiting_input based on todos alone.
-	// Instead, it proceeds to classification.
-	//
-	// When transcript parsing fails, it now returns unknown,
-	// but that's different from the todos short-circuit path.
-
-	// Use /tmp directly to avoid long socket paths
+	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath) // Clean up any existing socket
+	os.Remove(sockPath)
 
 	d := NewForTesting(sockPath)
 	go d.Start()
@@ -4765,13 +4553,11 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 
 	c := client.New(sockPath)
 
-	// Register session
 	err := c.Register("test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
-	// Send todos with ALL completed items (using [✓] prefix)
 	conn, err := net.Dial("unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial error: %v", err)
@@ -4792,7 +4578,6 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 		t.Fatalf("Todos update failed: %s", protocol.Deref(resp.Error))
 	}
 
-	// Verify todos were stored correctly
 	sessions, _ := c.Query("")
 	if len(sessions) != 1 {
 		t.Fatalf("Expected 1 session, got %d", len(sessions))
@@ -4801,22 +4586,9 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 		t.Fatalf("Expected 2 todos, got %d", len(sessions[0].Todos))
 	}
 
-	// With all completed todos, stop should proceed to classification (not short-circuit)
-	// Since we're providing a nonexistent transcript, classification will fail
-	// and return unknown - but this is different from todos short-circuit
-	//
-	// The key difference:
-	// - With pending todos: immediately returns waiting_input (no transcript parsing)
-	// - With completed todos: tries to parse transcript, then classify
-	//
-	// This test mainly ensures the todos count logic correctly skips completed todos
 	t.Log("Test passed: todos with [✓] prefix are counted as completed, allowing classification to proceed")
 }
 
-// A classification that fails adds nothing to the evidence table, and a session
-// whose turn ended settles from the rest of it. This used to paint the session
-// grey — the classifier applied `unknown` itself — which said "attn has lost
-// track of this session" about a turn it had watched end normally.
 func TestClassifySessionState_ClassifierErrorAddsNoVerdict(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.classifier = &errorClassifier{
@@ -4844,7 +4616,6 @@ func TestClassifySessionState_ClassifierErrorAddsNoVerdict(t *testing.T) {
 		t.Fatalf("write transcript: %v", err)
 	}
 
-	// A turn that ran and ended, with the agent quiet at its prompt afterwards.
 	d.recordBracketEvidence("sess-unknown", protocol.StateWorking)
 	d.recordPTYEvidence("sess-unknown", pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
 	d.recordBracketEvidence("sess-unknown", protocol.StateIdle)
@@ -5034,10 +4805,6 @@ func TestClassifySessionState_ClaudeConcurrentDuplicateTurnRunsOnce(t *testing.T
 	})
 }
 
-// A finished run publishes its verdict as soon as it is classified, whatever
-// its duration. The long-run review deferral used to hold verdicts back on runs
-// over five minutes and publish them when the session was next looked at; the
-// turn that the finish opens is what carries the result to the user now.
 func TestClassifySessionState_PublishesImmediatelyAfterALongRun(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	mockClassifier := &countingClassifier{state: protocol.StateIdle}
@@ -5065,7 +4832,6 @@ func TestClassifySessionState_PublishesImmediatelyAfterALongRun(t *testing.T) {
 	d.recordBracketEvidence("sess-long", protocol.StateIdle)
 
 	d.classifySessionState("sess-long", transcriptPath)
-	// The verdict is evidence; the resolver is what publishes it.
 	d.resolveAllSessions(time.Now())
 
 	if got := mockClassifier.CallCount(); got != 1 {
@@ -5124,8 +4890,6 @@ func TestHandleStop_SkipsClassificationForForcedStopSession(t *testing.T) {
 
 		requireDone(t, done, "handleStop did not return")
 
-		// Nothing is left that could classify: the tolerance window this used to buy
-		// with 50ms is now the settled bubble itself.
 		settleStopClassification(t)
 		if got := mockClassifier.CallCount(); got != 0 {
 			t.Fatalf("classifier calls=%d, want 0", got)

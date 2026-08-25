@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// Drives an external file change through the harness, the way the daemon's fs_changed
-// broadcast would (see NotebookBrowserHarness).
 declare global {
   interface Window {
     __NB_HARNESS__?: {
@@ -12,32 +10,21 @@ declare global {
   }
 }
 
-// The full notebook modal (lazy filesystem tree sidebar + single live-editor document
-// pane), rendered by the component harness with mocked daemon functions in a real
-// browser. Verifies the fs-backed layout end-to-end and that the always-live editor
-// autosaves — no view/edit toggle. Screenshots capture the assembled UI.
-
 test.describe('NotebookBrowser (fs surface)', () => {
   test('opens the preferred note into a live editor with no view/edit toggle and autosaves edits', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
 
-    // The sidebar lists the root as a lazy tree; the preferred note opens into the
-    // live editor (heading is the file's basename).
     await expect(page.getByRole('treeitem', { name: 'knowledge' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'index' })).toBeVisible();
     await page.waitForSelector('.cm-content');
-    // Rendered inline (heading sized), not a textarea of raw markdown.
     await expect(page.locator('.cm-md-h1').first()).toBeVisible();
-    // There is no mode toggle — the surface is always editable.
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
-    // Backlinks render in the right context rail as a card (markdown only).
     const rail = page.locator('.notebook-browser-rail');
     await expect(rail.getByRole('button', { name: '2026-06-20' })).toBeVisible();
     await page.screenshot({ path: 'test-results/notebook-browser-open.png' });
 
-    // Type at the end of the document; the debounced autosave persists via hash-CAS.
     await page.locator('.cm-content').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' Extra words.', { delay: 8 });
@@ -49,8 +36,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
     const last = writes[writes.length - 1] as [string, string, string | undefined];
     expect(last[0]).toBe('knowledge/index.md');
     expect(last[1]).toContain('Extra words.');
-    expect(last[2]).toBe('h1'); // saved against the loaded hash
-    // The live save indicator reflects the persisted state.
+    expect(last[2]).toBe('h1');
     await expect(page.getByText('Saved')).toBeVisible();
     await page.screenshot({ path: 'test-results/notebook-browser-saved.png' });
   });
@@ -60,12 +46,9 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
-    // Click a non-markdown text file directly in the root tree.
     await page.getByRole('treeitem', { name: 'notes.txt' }).click();
 
     await expect(page.getByRole('heading', { level: 2, name: 'notes.txt' })).toBeVisible();
-    // A plain textarea, not the CodeMirror markdown surface; the context rail (outline
-    // + backlinks) is a markdown affordance, so a text file shows no rail.
     await expect(page.getByRole('textbox', { name: 'File contents' })).toBeVisible();
     await expect(page.locator('.notebook-browser-rail')).toHaveCount(0);
   });
@@ -76,13 +59,11 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
-    // The rail's Outline lists the note's ATX headings, indented by level.
     const rail = page.locator('.notebook-browser-rail');
     await expect(rail.getByRole('button', { name: 'Knowledge index' })).toBeVisible();
     await expect(rail.getByRole('button', { name: 'Sections' })).toBeVisible();
     await expect(rail.getByRole('button', { name: 'Subsection detail' })).toBeVisible();
 
-    // The editor starts at the top; clicking a lower heading scrolls it into view.
     const scrollTop = () =>
       page.locator('.cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop);
     expect(await scrollTop()).toBeLessThan(40);
@@ -91,41 +72,29 @@ test.describe('NotebookBrowser (fs surface)', () => {
   });
 
   test('keeps the reader scrolled in place when the open note changes on disk (and ignores unrelated changes)', async ({ page }) => {
-    // The reported bug, end-to-end through the real NotebookSurface: reading a note
-    // while files change scrolled it back to the top. Verified against the actual
-    // component + CodeMirror (the packaged app runs this same code).
     await page.goto('/test-harness/?component=NotebookBrowser');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
     const scrollTop = () => page.locator('.cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop);
-    // Scroll down into the note.
     await page.locator('.cm-scroller').evaluate((el) => { (el as HTMLElement).scrollTop = 300; });
     const parked = await scrollTop();
     expect(parked).toBeGreaterThan(150);
 
-    // 1) An UNRELATED file changes: fs_changed fires, the open note is re-read but its
-    //    bytes are identical, so nothing is applied and the reader does not move.
     await page.evaluate(() => window.__NB_HARNESS__!.fsChanged('journal/2026-06-20.md', '# touched\n', 'h-x'));
     await page.waitForTimeout(150);
     expect(Math.abs((await scrollTop()) - parked)).toBeLessThanOrEqual(4);
 
-    // 2) The OPEN note itself changes on disk (an agent appends a line below the fold).
-    //    The new content is applied as a minimal edit, so the reader stays parked.
     await page.evaluate(() => {
       const current = window.__NB_HARNESS__!.getContent('knowledge/index.md');
       window.__NB_HARNESS__!.fsChanged('knowledge/index.md', `${current}\nAppended by an agent while you were reading.\n`, 'h-appended');
     });
-    // The append landed in the document (scroll to the bottom to prove it's there) ...
     await expect.poll(async () => {
-      // Scroll to the very bottom to prove the appended line is in the document.
       await page.locator('.cm-scroller').evaluate((el) => { (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight; });
       return (await page.locator('.cm-content').textContent()) ?? '';
     }).toContain('Appended by an agent');
 
-    // ... and crucially, the apply itself did NOT jump the viewport: re-park and confirm
-    // a fresh genuine change leaves scrollTop where the reader left it.
     await page.locator('.cm-scroller').evaluate((el) => { (el as HTMLElement).scrollTop = 300; });
     const reparked = await scrollTop();
     expect(reparked).toBeGreaterThan(150);
@@ -153,30 +122,24 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-content');
 
-    // No finder until summoned — the modal navigates via the tree by default.
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
 
-    // Cmd+P from inside the modal (focus the editor first, as a user would) opens it.
     await page.locator('.cm-content').click();
     await page.keyboard.press('Meta+p');
     await expect(page.locator('.notebook-finder')).toBeVisible();
     await expect(page.locator('.notebook-finder-input')).toBeFocused();
 
-    // The empty query lists the whole (mocked) vault; typing narrows by path/title.
     await expect(page.locator('.notebook-finder-option')).toHaveCount(3);
     await page.locator('.notebook-finder-input').fill('journal');
     await expect(page.locator('.notebook-finder-option')).toHaveCount(1);
     await expect(page.locator('.notebook-finder-option-path')).toHaveText('journal/2026-06-20.md');
 
-    // Enter opens the highlighted note in the modal's editor and closes the finder.
     await page.keyboard.press('Enter');
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 2, name: '2026-06-20' })).toBeVisible();
   });
 
   test('Esc closes the finder before the modal, and Cmd+P re-summons it', async ({ page }) => {
-    // The modal's Esc is a capture-phase escape-stack entry; the finder must register a
-    // higher-priority entry so the first Esc closes the finder, not the whole modal.
     await page.goto('/test-harness/?component=NotebookBrowser');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-content');
@@ -185,8 +148,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.keyboard.press('Meta+p');
     await expect(page.locator('.notebook-finder')).toBeVisible();
 
-    // First Esc closes only the finder — the modal stays open (no onClose), and focus
-    // is restored into the dialog so Cmd+P re-summons without a re-click.
     await page.keyboard.press('Escape');
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
     await expect(page.locator('.cm-content')).toBeVisible();
@@ -195,7 +156,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.keyboard.press('Meta+p');
     await expect(page.locator('.notebook-finder')).toBeVisible();
 
-    // Close the finder, then a second Esc (no finder open) closes the modal itself.
     await page.keyboard.press('Escape');
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -203,8 +163,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
   });
 
   test('Cmd+F opens the in-editor search panel; Esc closes it before the modal', async ({ page }) => {
-    // The search panel gets its own higher-priority escape-stack entry, pushed only
-    // while it's open — the first Esc must close just the panel, not the modal.
     await page.goto('/test-harness/?component=NotebookBrowser');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-content');
@@ -214,18 +172,15 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await expect(page.locator('.cm-panel.cm-search')).toBeVisible();
     await expect(page.locator('.cm-search input[name="search"]')).toBeFocused();
 
-    // Search for a word that repeats throughout the fixture note; matches highlight.
     await page.keyboard.type('distilled');
     await expect(page.locator('.cm-searchMatch').first()).toBeVisible();
     expect(await page.locator('.cm-searchMatch').count()).toBeGreaterThan(0);
 
-    // First Esc closes only the search panel — the modal stays open (no onClose).
     await page.keyboard.press('Escape');
     await expect(page.locator('.cm-panel.cm-search')).toHaveCount(0);
     await expect(page.locator('.notebook-browser')).toBeVisible();
     expect(await page.evaluate(() => window.__HARNESS__.getCalls('close').length)).toBe(0);
 
-    // Second Esc (no panel open) closes the modal itself.
     await page.keyboard.press('Escape');
     expect(await page.evaluate(() => window.__HARNESS__.getCalls('close').length)).toBeGreaterThan(0);
   });
@@ -235,20 +190,17 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-content');
 
-    // Header chrome (folded into the existing header): the chief pulse and a kind badge.
     await expect(page.locator('.notebook-browser-chief-pulse')).toContainText('chief: active');
     await expect(page.locator('.notebook-browser-kind-badge')).toBeVisible();
     await page.screenshot({ path: 'test-results/notebook-stage5-chrome.png' });
 
-    // The tree column has real width, then folds to 0 — the pane stays in the DOM.
     const tree = page.locator('.notebook-browser-list');
     expect(await tree.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(100);
     await page.getByRole('button', { name: 'Hide file tree' }).click();
     await expect(page.locator('.notebook-browser-body')).toHaveClass(/tree-folded/);
     await expect.poll(() => tree.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(2);
-    await expect(tree).toBeAttached(); // folded, not unmounted
+    await expect(tree).toBeAttached();
 
-    // The handle now reopens it.
     await page.getByRole('button', { name: 'Show file tree' }).click();
     await expect.poll(() => tree.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(100);
   });
@@ -261,7 +213,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.getByRole('treeitem', { name: 'fences.md' }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'fences' })).toBeVisible();
 
-    // The JS language parser lazy-loads on demand — give it generous room to arrive.
     await expect(page.locator('.cm-md-codeblock .tok-keyword')).toBeVisible();
     await expect(page.locator('.cm-md-blockquote')).toHaveCount(1);
     await expect(page.locator('.cm-md-hr')).toHaveCount(1);
@@ -294,32 +245,23 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.getByRole('treeitem', { name: 'images.md' }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'images' })).toBeVisible();
 
-    // The resolvable image renders as a real <img>, sourced from readAsset's bytes as
-    // a data: URI (never a bare notebook-relative path — the editor has no fs perms).
     const img = page.locator('.cm-md-image img');
     await expect(img).toBeVisible();
     await expect(img).toHaveAttribute('src', /^data:image\/png;base64,/);
     const checked = await page.evaluate(() => window.__HARNESS__.getCalls('readAsset').map((c) => c[0]));
     expect(checked).toContain('assets/tiny.png');
 
-    // The missing asset shows the broken placeholder, not a blank/broken <img>.
     const broken = page.locator('.cm-md-image-broken');
     await expect(broken).toBeVisible();
     await expect(broken).toContainText('gone');
     await expect(broken).toContainText('image not found');
 
-    // Clicking the rendered widget's line reveals its raw markdown — the
-    // regression-prone part: if the selection-intersection reveal rule breaks, the
-    // widget never yields back to raw text.
     await page.locator('.cm-md-image').click();
     await expect(page.locator('.cm-md-image')).toHaveCount(0);
     await expect(page.locator('.cm-content')).toContainText('![tiny](assets/tiny.png)');
 
-    // Regression: the widget's eq() is deliberately position-blind (alt/src only) so
-    // an edit ABOVE it doesn't recreate its DOM (which would flicker/reload the image).
-    // But that means the click handler must read its position from the view at click
-    // time, not from a value captured when the DOM was built — otherwise editing above
-    // the image (shifting it down) leaves a click landing on the stale, pre-edit offset.
+    // The widget's eq() is position-blind (alt/src only), so the click handler must read
+    // its position from the view at click time, not from build time.
     await page.locator('.cm-content').getByText('Images', { exact: true }).click();
     await page.keyboard.press('Home');
     await page.keyboard.type('\n\n');
@@ -330,9 +272,8 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await expect(page.locator('.cm-content')).toContainText('![tiny](assets/tiny.png)');
   });
 
-  // CodeMirror renders each line as one text node, so a text-content locator can't
-  // isolate a single word for dblclick; find the word's on-screen rect via a DOM
-  // Range instead and double-click its center.
+  // CodeMirror renders each line as one text node, so a text-content locator cannot
+  // isolate a single word for dblclick; find its rect via a DOM Range.
   async function dblclickWord(page: import('@playwright/test').Page, word: string) {
     const wordRect = await page.evaluate((needle) => {
       const walker = document.createTreeWalker(document.querySelector('.cm-content')!, NodeFilter.SHOW_TEXT);
@@ -368,10 +309,8 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await expect(content).not.toContainText('**fenced**');
     await expect(content).toContainText('A fenced code block');
 
-    // Regression coverage for a real bug: basicSetup's defaultKeymap binds Mod-i to
-    // selectParentSyntax with preventDefault, which shadows Cmd-i at default keymap
-    // precedence unless formattingKeymap() is raised via Prec.high. Only a real keydown
-    // through the full extension stack (not a headless-state unit test) can catch this.
+    // basicSetup's defaultKeymap binds Mod-i with preventDefault, shadowing Cmd-i unless
+    // formattingKeymap() is raised via Prec.high; only a real keydown catches this.
     await dblclickWord(page, 'blockquote');
     await page.keyboard.press('Meta+i');
     await expect(page.locator('.cm-md-em')).toBeVisible();
@@ -400,8 +339,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     const pill = page.getByRole('button', { name: 'Send to chief' });
     await expect(pill).toBeVisible();
 
-    // The real DOM selection rect (the pill's anchor is computed from CM's own
-    // coordsAtPos, but this is the ground truth the pill must not cover).
     const selectionBottom = await page.evaluate(() => {
       const sel = window.getSelection();
       const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
@@ -411,10 +348,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
     const pillBox = await pill.boundingBox();
     expect(pillBox).not.toBeNull();
-    // The pill hangs below the selection end, so its top edge must sit at or below
-    // the selection's bottom edge — never covering the selected text or the line
-    // above it (the old above-anchored transform put the pill's bottom well above
-    // this point, failing this assertion).
     expect(pillBox!.y).toBeGreaterThanOrEqual(selectionBottom!);
   });
 
@@ -424,8 +357,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
-    // Force the next autosave to report a CAS conflict, then dirty the buffer so the
-    // debounced autosave fires and the banner appears.
     await page.evaluate(() => window.__NB_HARNESS__!.forceConflict(true));
     await page.locator('.cm-content').click();
     await page.keyboard.press('Control+End');
@@ -434,23 +365,16 @@ test.describe('NotebookBrowser (fs surface)', () => {
     const banner = page.locator('.notebook-browser-editor-conflict');
     await expect(banner).toBeVisible();
 
-    // Stop forcing conflicts so the reload's own read succeeds normally, then reload —
-    // this is the button click that steals focus.
     await page.evaluate(() => window.__NB_HARNESS__!.forceConflict(false));
     await banner.getByRole('button', { name: 'Reload from disk' }).click();
     await expect(banner).toHaveCount(0);
 
-    // Type WITHOUT clicking back into the editor. Without the focus() fix, focus is
-    // stuck on the (now-removed) button and this text never reaches the document.
+    // Typed WITHOUT clicking back in: focus must have been restored off the removed button.
     await page.keyboard.type('typed after reload', { delay: 8 });
     await expect(page.locator('.cm-content')).toContainText('typed after reload');
   });
 
   test('mod-click on a bare-relative link navigates to the sibling note (resolved against the linking note\'s directory)', async ({ page }) => {
-    // Regression: parseNotebookHref required a leading '/' + '.md' for in-notebook
-    // navigation, so a bare `sibling.md` link was classified external and handed to
-    // window.open instead of navigating. resolveNotebookLink resolves it against the
-    // linking note's own directory (knowledge/areas), landing on knowledge/areas/bar.md.
     await page.addInitScript(() => {
       (window as unknown as { __OPENED__: string[] }).__OPENED__ = [];
       window.open = ((url?: string | URL) => {
@@ -462,7 +386,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
-    // Open the linking note (knowledge/areas/foo.md) via the Cmd+P finder.
     await page.locator('.cm-content').click();
     await page.keyboard.press('Meta+p');
     await page.locator('.notebook-finder-input').fill('foo');
@@ -476,7 +399,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
     await expect(page.getByRole('heading', { level: 2, name: 'bar' })).toBeVisible();
     await expect(page.locator('.cm-content')).toContainText('Sibling of foo');
-    // Never fell through to opening it as an external URL.
     expect(await page.evaluate(() => (window as unknown as { __OPENED__: string[] }).__OPENED__)).toEqual([]);
   });
 

@@ -13,9 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// resumeSpawnForSession returns the spawn opts recorded for sessionID at or after
-// index `since`, so a resume respawn can be inspected without matching the original
-// delegation spawn of the same id.
 func resumeSpawnForSession(t *testing.T, backend *fakeSpawnBackend, sessionID string, since int) ptybackend.SpawnOptions {
 	t.Helper()
 	backend.mu.Lock()
@@ -29,8 +26,6 @@ func resumeSpawnForSession(t *testing.T, backend *fakeSpawnBackend, sessionID st
 	return ptybackend.SpawnOptions{}
 }
 
-// seedNoteCount is how many entries the seed's log holds — the spine assertion
-// that a resume writes nothing.
 func seedNoteCount(t *testing.T, d *Daemon, seedID string) int {
 	t.Helper()
 	notes, err := d.readNotesDomain(seedID)
@@ -46,9 +41,6 @@ func spawnCount(backend *fakeSpawnBackend) int {
 	return len(backend.spawnOpts)
 }
 
-// delegateBoundSeed delegates a leaf and returns its session id and the seed it
-// was bound to. The dispatch record carries the leaf's cwd + agent, which is
-// exactly what Resume relaunches from.
 func delegateBoundSeed(t *testing.T, d *Daemon, backend *fakeSpawnBackend, sourceSessionID, agent string) (string, string) {
 	t.Helper()
 	consumeDelegatedPrompt(t, backend)
@@ -72,8 +64,6 @@ func TestSeedResumeRespawnsClosedTender(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
 
-	// Close the leaf (its session row — and its own resume_session_id — are gone),
-	// then seed the durable resume mirror and its native rollout.
 	d.unregisterSession(leafID, syscall.SIGTERM)
 	if d.store.Get(leafID) != nil {
 		t.Fatalf("session %s still registered after close", leafID)
@@ -96,9 +86,6 @@ func TestSeedResumeRespawnsClosedTender(t *testing.T) {
 		t.Fatalf("outcome = %+v, want session=%s already_running=false", outcome, leafID)
 	}
 
-	// The session is re-registered under the SAME id, so the resumed delegate
-	// still reports to this seed. The stored directory is canonicalized
-	// (validateDelegationDirectory), so compare against the same canonical form.
 	dispatch, ok := d.gardenDispatch(leafID)
 	if !ok {
 		t.Fatalf("no dispatch record for %s", leafID)
@@ -120,13 +107,11 @@ func TestSeedResumeRespawnsClosedTender(t *testing.T) {
 		t.Fatalf("resume layout = %+v, want one pane for %s", layout, leafID)
 	}
 
-	// The spawn carries the mirrored resume id (precise resume, not the picker).
 	spawn := resumeSpawnForSession(t, backend, leafID, since)
 	if spawn.ResumeSessionID != "codex-conv-xyz" {
 		t.Fatalf("resume spawn ResumeSessionID = %q, want codex-conv-xyz", spawn.ResumeSessionID)
 	}
 
-	// Spine: Resume authors NOTHING on the seed — no note, no lifecycle move.
 	after, _, err := d.readSeed(seedID)
 	if err != nil {
 		t.Fatalf("readSeed after: %v", err)
@@ -143,7 +128,6 @@ func TestSeedResumeAlreadyRunningFocusesInsteadOfSpawning(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
 
-	// The tender is still registered — Resume must focus it, not spawn a duplicate.
 	before := spawnCount(backend)
 	outcome, err := d.resumeSeed(seedID)
 	if err != nil {
@@ -163,9 +147,8 @@ func TestSeedResumeFallsBackToPickerWhenTranscriptGone(t *testing.T) {
 
 	d.unregisterSession(leafID, syscall.SIGTERM)
 	d.persistResumeSessionID(leafID, leafID)
-	// Point ATTN_TOOL_HOME at an empty home so claude's transcript lookup finds
-	// nothing for the mirrored id: it is not resumable, so the spawn must fall
-	// back to the cwd-scoped picker instead of `claude -r <dead-id>`.
+	// An empty tool home makes claude's transcript lookup find nothing for the
+	// mirrored id, which is what leaves it unresumable.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	since := spawnCount(backend)
 
@@ -227,8 +210,6 @@ func TestSeedResumeUsesSeedIdentityWithoutDispatch(t *testing.T) {
 	}
 }
 
-// Every way a resume can have nothing to reopen refuses by name, and leaves no
-// phantom workspace behind.
 func TestSeedResumeValidation(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -315,7 +296,6 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	if _, err := d.resumeSeed(seed.ID); err == nil {
 		t.Fatal("resumeSeed succeeded, want spawn failure")
 	}
-	// The created workspace and its pane are rolled back — no phantom left behind.
 	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
 		t.Fatalf("workspace survived a failed resume: %+v", ws)
 	}

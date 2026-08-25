@@ -6,20 +6,12 @@ import (
 	"time"
 )
 
-// memStore is an in-memory Store for this package's tests. It exists only so the
-// runner's behavior can be exercised without a database; the daemon injects the
-// SQLite-backed store in production. It holds its own mutex because a test may
-// read it from the test goroutine while the dispatch loop writes.
 type memStore struct {
 	mu     sync.Mutex
 	jobs   map[string]*Job
 	locked bool
 
-	// saveErr, when set, makes the next Save fail. Tests use it to drive the
-	// claim-rollback path.
-	saveErr error
-	// stickySaveErr keeps saveErr in place instead of spending it on one call, so
-	// a test can hold the store down across several attempts.
+	saveErr       error
 	stickySaveErr bool
 }
 
@@ -87,8 +79,6 @@ func (m *memStore) Save(j *Job) error {
 		return err
 	}
 	if j.Requeued && j.State == StateRunning {
-		// The flag is only set on a record whose run is still in flight; seeing it
-		// persisted that way is the collision itself, not its aftermath.
 		sawTriggerLandOnARunningJob.Reached()
 	}
 	m.jobs[j.ID] = j.clone()
@@ -121,8 +111,6 @@ func (m *memStore) Eligible(now time.Time, limit int) ([]*Job, error) {
 			continue
 		}
 		if now.Before(j.ScheduledAt) {
-			// The record is in a runnable state and dispatch is asking; the only
-			// reason it is not going out is the clock.
 			sawJobWithheldByItsSchedule.Reached()
 			continue
 		}
@@ -156,22 +144,18 @@ func (m *memStore) TrimDone(cutoff time.Time) (int, error) {
 	return trimmed, nil
 }
 
-// count returns how many records the store holds.
 func (m *memStore) count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.jobs)
 }
 
-// failNextSave arms a one-shot Save failure.
 func (m *memStore) failNextSave(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.saveErr = err
 }
 
-// refuseSaves fails every Save until healSaves: a store that is down, rather
-// than one that is momentarily busy.
 func (m *memStore) refuseSaves(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -184,8 +168,6 @@ func (m *memStore) healSaves() {
 	m.saveErr, m.stickySaveErr = nil, false
 }
 
-// fakeClock is a manually advanced clock so backoff and debounce windows are
-// tested by moving time rather than by sleeping through it.
 type fakeClock struct {
 	mu sync.Mutex
 	t  time.Time

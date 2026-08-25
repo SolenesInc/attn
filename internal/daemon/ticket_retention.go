@@ -6,16 +6,8 @@ import (
 	"time"
 )
 
-// Ticket TTL sweep: the periodic backstop that actually runs
-// store.SweepExpiredTickets, hard-deleting terminal tickets once they age
-// past the TTL (and, as a side effect load-bearing for automations, releasing
-// any continuity binding the ticket documents — see SweepExpiredTickets and
-// hasPriorAutomationContinuityRun). SweepExpiredTickets shipped with a
-// production default baked into its own doc comment ("time.Now() and 30
-// days") but no caller ever wired it up; this is that caller. Env overrides
-// mirror automationRetentionSweepInterval's idiom (internal/daemon/
-// automation_retention.go) so tests can shrink both without touching real
-// time.Sleep or minting hundreds of tickets.
+// Ticket TTL sweep: the periodic caller of store.SweepExpiredTickets, which
+// also releases any continuity binding the deleted tickets document (see hasPriorAutomationContinuityRun).
 const (
 	defaultTicketRetentionTTL           = 30 * 24 * time.Hour
 	defaultTicketRetentionSweepInterval = time.Hour
@@ -39,11 +31,7 @@ func ticketRetentionSweepInterval() time.Duration {
 	return defaultTicketRetentionSweepInterval
 }
 
-// runTicketRetentionSweep is the dedicated periodic driver for the ticket
-// TTL. Mirrors runAutomationRetentionSweep's shape exactly (itself mirroring
-// runTicketReconcileSweep, ticket_reconcile.go) — no initial pass at boot
-// (the TTL is measured in weeks, not urgent enough to compete with startup
-// churn), select on d.done to stop cleanly at shutdown.
+// runTicketRetentionSweep runs no initial pass at boot: the TTL is measured in weeks and must not compete with startup churn.
 func (d *Daemon) runTicketRetentionSweep() {
 	ticker := time.NewTicker(ticketRetentionSweepInterval())
 	defer ticker.Stop()

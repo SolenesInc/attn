@@ -7,16 +7,9 @@ import (
 	"strings"
 )
 
-// Reserved layout (OKF-derived). index.md and log.md carry no frontmatter, like
-// OKF's bundle root. The .attn/ dotdir holds machine state (the durable task
-// runner, raw tier, narrate-cron anchor) and is never surfaced by List nor touched
-// by a dotfile-skipping external sync scanner.
 const (
 	FileIndex = "index.md"
 	FileLog   = "log.md"
-	// FileInbox is the reserved note where "send to chief" messages accumulate.
-	// It is created on the first send (not scaffolded) and lives at the root so
-	// it groups under "Notebook" in the browser, distinct from journal/knowledge.
 	FileInbox = "inbox.md"
 
 	DirJournal   = "journal"
@@ -25,17 +18,8 @@ const (
 	machineDir = ".attn"
 )
 
-// paraSubdirs are the PARA-method groupings under knowledge/ (the directory
-// axis). They are organizational, orthogonal to a note's OKF `type`. Knowledge
-// is nested under projects/ and areas/; resources/ and archive/ hold reference
-// and inactive material respectively.
 var paraSubdirs = []string{"projects", "areas", "resources", "archive"}
 
-// DefaultRoot returns the default notebook root for a profile, derived from the
-// user's home directory. The default profile ("" or "default") maps to
-// ~/attn-notebook; a named profile "foo" maps to ~/attn-notebook-foo, so a
-// dev/test profile never writes the real notebook. The root lives OUTSIDE
-// ~/.attn[-profile]/ so it is a plain, externally-syncable directory.
 func DefaultRoot(home, profile string) string {
 	base := filepath.Join(home, "attn-notebook")
 	p := strings.ToLower(strings.TrimSpace(profile))
@@ -45,38 +29,26 @@ func DefaultRoot(home, profile string) string {
 	return base + "-" + p
 }
 
-// TicketsDir returns the absolute .attn/tickets directory for a notebook root —
-// the store for ticket attachment files. Like the raw tier it lives under .attn/,
-// which CleanPath rejects and a dotfile-skipping external sync scanner ignores, so
-// it is written with direct filesystem I/O, not the notebook.Store APIs.
+// Lives under .attn/, which CleanPath rejects, so it is written with direct
+// filesystem I/O, not the Store APIs.
 func TicketsDir(root string) string {
 	return filepath.Join(root, machineDir, "tickets")
 }
 
-// TicketAttachmentsDir returns the absolute directory holding one ticket's copied
-// attachment files (.attn/tickets/<id>/).
 func TicketAttachmentsDir(root, ticketID string) string {
 	return filepath.Join(TicketsDir(root), ticketID)
 }
 
-// TicketArtifactsDir returns the visible Notebook directory whose direct
-// file children are the current artifacts for one ticket.
 func TicketArtifactsDir(root, ticketID string) string {
 	return filepath.Join(root, "tickets", ticketID)
 }
 
-// CleanPath validates and normalizes a notebook path. The input may be
-// root-absolute ("/knowledge/areas/foo.md", matching the link convention) or
-// relative ("knowledge/areas/foo.md"); the result is always a clean, slash-separated relative
-// path. It rejects empty paths, the root itself, parent-directory escapes,
-// dotfile/dotdir segments, and any extension other than .md.
 func CleanPath(p string) (string, error) {
 	trimmed := strings.TrimSpace(p)
 	if trimmed == "" {
 		return "", fmt.Errorf("notebook: empty path")
 	}
-	// Anchor at "/" and Clean so any ".." is neutralized to within the root,
-	// then strip the leading slash to get a relative path.
+	// Anchor at "/" and Clean so any ".." is neutralized to within the root.
 	rel := strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(trimmed, "/")), "/")
 	if rel == "" || rel == "." {
 		return "", fmt.Errorf("notebook: %q is the root, not a file", p)
@@ -123,8 +95,6 @@ func scaffoldFiles() []scaffoldFile {
 	return files
 }
 
-// ScaffoldPaths returns the notebook-relative paths of the reserved files that
-// EnsureScaffold creates, for callers that need to announce a fresh init.
 func ScaffoldPaths() []string {
 	files := scaffoldFiles()
 	out := make([]string, len(files))
@@ -156,8 +126,6 @@ const logTemplate = `# Log
 Change history, newest first.
 `
 
-// inboxTemplate seeds inbox.md on the first "send to chief". It has no type: it
-// is an append-only delivery log, not durable knowledge.
 const inboxTemplate = `# Chief inbox
 
 Selections sent to the chief of staff from the Notebook, oldest first.
@@ -177,7 +145,6 @@ Every note is grounded — carry resolvable ` + "`sources:`" + ` (journal anchor
 or URLs), never paraphrase alone.
 `
 
-// paraIndexTemplates seeds each PARA directory's reserved index.md.
 var paraIndexTemplates = map[string]string{
 	"projects":  "# Projects\n\nBounded efforts with an end. One folder per project or epic; a\nproject's `index.md` links the workspace that produced it with\n`resource: attn:workspace/<id>`.\n",
 	"areas":     "# Areas\n\nOngoing responsibilities and subsystems, with no end. Durable knowledge\npromoted out of finished projects lands here.\n",

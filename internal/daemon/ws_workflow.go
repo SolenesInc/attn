@@ -4,12 +4,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// WS wrappers for the durable workflow engine. The UI is
-// read-only over the WebSocket: it reads (get/list) and cancels. Run/call mutation
-// is owned by the engine process over the unix socket (see workflow_run.go, which
-// also gates starts on the workflows_enabled master switch), so there is no WS
-// upsert path. Each handler delegates to the shared core in workflow_run.go and
-// replies with a WorkflowActionResultMessage via sendToClient.
+// The UI is read-only over the WebSocket: run/call mutation is owned by the engine process over the unix socket (workflow_run.go), so there is no WS upsert path.
 
 func (d *Daemon) sendWorkflowActionResultWS(client *wsClient, action string, run *protocol.WorkflowRun, runs []*protocol.WorkflowRun, runID string, err error) {
 	d.sendToClient(client, buildWorkflowActionResult(action, run, runs, runID, err))

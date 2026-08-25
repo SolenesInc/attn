@@ -1,4 +1,3 @@
-// app/src/shortcuts/registry.test.ts
 import { describe, it, expect } from 'vitest';
 import {
   SHORTCUTS,
@@ -197,8 +196,7 @@ describe('shortcut registry', () => {
 
         const existing = seen.get(key);
         if (existing) {
-          // The registry's own exemption list, not a copy of it: a pair added
-          // there must not need this test edited to stay honest.
+          // The registry's own exemption list, not a copy of it.
           if (isAllowedConflict(existing as ShortcutId, id as ShortcutId)) {
             continue;
           }
@@ -275,7 +273,6 @@ describe('shortcut registry', () => {
     });
 
     it('does not conflict a chord with a combo that only equals its follow key', () => {
-      // A bare ⌘D combo collides with the leader (⌘K) check? No — different keystroke.
       expect(bindingsConflict(leaderK, { key: 'd' })).toBe(false);
     });
   });

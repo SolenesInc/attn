@@ -5,10 +5,8 @@ import (
 	"fmt"
 )
 
-// claude 2.1.217 runs full-screen: alt-screen, mouse tracking, bracketed
-// paste, and positions text with \r plus relative CSI column/row moves
-// rather than CUP+newlines. See
-// internal/probetui/testdata/agent-vocab-claude.json.
+// claude 2.1.217 runs full-screen: alt-screen, mouse tracking, bracketed paste,
+// and relative CSI moves. See testdata/agent-vocab-claude.json.
 
 var claudeMouseModes = []string{"1000", "1002", "1003", "1006"}
 
@@ -32,7 +30,7 @@ func startupClaude(cols, rows int) []byte {
 func frameClaude(cols, rows, seq int) []byte {
 	var b bytes.Buffer
 	b.Write(privateMode(true, "2026"))
-	b.Write(privateMode(false, "25")) // hide cursor at frame start
+	b.Write(privateMode(false, "25"))
 	b.Write(decsc())
 
 	b.WriteString("\r")
@@ -56,7 +54,7 @@ func frameClaude(cols, rows, seq int) []byte {
 	}
 
 	b.Write(decrc())
-	b.Write(privateMode(true, "25")) // show cursor at frame end
+	b.Write(privateMode(true, "25"))
 	b.Write(privateMode(false, "2026"))
 	return b.Bytes()
 }

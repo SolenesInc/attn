@@ -135,7 +135,6 @@ describe('getSplitDividers', () => {
     expect(root.ratio).toBeCloseTo(0.6);
     expect(root).toMatchObject({ left: 0, top: 0, right: 1, bottom: 1 });
 
-    // The inner split lives in the right 40% of the workspace.
     const inner = dividers.find((d) => d.splitId === 'inner')!;
     expect(inner.direction).toBe('horizontal');
     expect(inner.left).toBeCloseTo(0.6);
@@ -151,9 +150,7 @@ describe('applyRatioOverrides', () => {
   it('overrides a matching split ratio and recomputes pane bounds', () => {
     const overridden = applyRatioOverrides(verticalSplit, new Map([['root', 0.25]]));
     const bounds = getNormalizedPaneBounds(overridden);
-    // Pane 'a' now occupies the left 25% instead of 60%.
     expect(bounds.get('a')!.right).toBeCloseTo(0.25);
-    // Original tree is untouched.
     expect((verticalSplit as { ratio: number }).ratio).toBe(0.6);
   });
 
@@ -172,7 +169,6 @@ describe('collectSplitRatios', () => {
   });
 });
 
-// a | md | b — a docked markdown tile sitting between two terminal panes.
 const paneWithTile: TerminalLayoutNode = {
   type: 'split',
   splitId: 'root',
@@ -196,7 +192,6 @@ const paneWithTile: TerminalLayoutNode = {
 describe('docked tiles', () => {
   it('positions tile slots alongside panes', () => {
     const bounds = getNormalizedPaneBounds(paneWithTile);
-    // a occupies the left half; md the next quarter; b the last quarter.
     expect(bounds.get('a')!.right).toBeCloseTo(0.5);
     expect(bounds.get('md')!.left).toBeCloseTo(0.5);
     expect(bounds.get('md')!.right).toBeCloseTo(0.75);
@@ -204,16 +199,12 @@ describe('docked tiles', () => {
   });
 
   it('skips tiles when navigating between panes', () => {
-    // Right from 'a' jumps over the markdown tile to the next terminal pane.
     expect(findPaneInDirection(paneWithTile, 'a', 'right')).toBe('b');
     expect(findPaneInDirection(paneWithTile, 'b', 'left')).toBe('a');
-    // A tile is never itself a navigation target.
     expect(findPaneInDirection(paneWithTile, 'md', 'left')).toBeNull();
   });
 
   it('navigates into and out of a tile as a focus target', () => {
-    // Focus navigation treats a docked tile as a leaf like any other: right from
-    // 'a' lands on the tile, and moving on from the tile reaches 'b'.
     expect(findLeafInDirection(paneWithTile, 'a', 'right')).toBe('md');
     expect(findLeafInDirection(paneWithTile, 'md', 'right')).toBe('b');
     expect(findLeafInDirection(paneWithTile, 'md', 'left')).toBe('a');
@@ -254,7 +245,6 @@ describe('docked tiles', () => {
       ],
     });
     expect(findTileByKind(snapshot.workspace.layoutTree, 'markdown')?.tileId).toBe('tile-md');
-    // The tile does not leak into agent bookkeeping.
     expect(snapshot.workspace.agents.map((agent) => agent.id)).toEqual(['pane-a']);
   });
 
@@ -276,7 +266,6 @@ describe('docked tiles', () => {
         { pane_id: 'pane-a', workspace_id: 'ws', kind: WorkspaceLayoutPaneKind.Agent, title: 'A', status: WorkspaceLayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
       ],
     });
-    // A split whose second child fails to parse yields no usable tree.
     expect(snapshot.workspace.layoutTree).toBeNull();
   });
 });
@@ -315,8 +304,6 @@ describe('notebook tile params (parse/serialize)', () => {
   });
 
   it('preserves a tile\'s root across a path update (open-file round trip)', () => {
-    // Simulates WorkspaceDockTile's onOpenFile: parse the current params, keep
-    // `root`, and reserialize with the newly opened path.
     const initial = parseNotebookTileParams(serializeNotebookTileParams({ root: '/repo', path: 'a.md' }));
     const afterOpen = serializeNotebookTileParams({ root: initial.root, path: 'b.md' });
     expect(parseNotebookTileParams(afterOpen)).toEqual({ root: '/repo', path: 'b.md' });

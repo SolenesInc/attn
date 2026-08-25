@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures';
 
-// Helper to inject a session into the local UI store
 async function injectLocalSession(
   page: import('@playwright/test').Page,
   session: { id: string; label: string; state: string; cwd?: string; isWorktree?: boolean; branch?: string }
@@ -24,7 +23,6 @@ async function injectLocalSession(
   }, session);
 }
 
-// Helper to create a session in both local store AND daemon
 async function createSession(
   page: import('@playwright/test').Page,
   daemon: {
@@ -194,8 +192,7 @@ test.describe('Keyboard Shortcuts', () => {
       const mainPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-session"]');
       const utilityPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-shell-1"]').first();
       const rootSplit = page.locator('[data-split-id="root"]');
-      // Dock chips render their key tokens in a styled child span, so match the
-      // chip by its label rather than the full "keys + label" string.
+      // Dock chips render their key tokens in a styled child span, so match the chip by its label.
       const zoomHint = page.locator('.shortcut-hint', { hasText: 'zoom' });
 
       await expect(zoomHint).toHaveAttribute('data-active', 'false');
@@ -250,33 +247,26 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Open the shortcut editor via the action menu.
       await page.keyboard.press('Meta+k');
       await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
       await page.getByText('Customize keyboard shortcuts').click();
       const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
       await expect(editor).toBeVisible();
 
-      // Rebind "Action menu" to a chord: ⌘E then A. ⌘E is otherwise unbound, so
-      // it can act as an exclusive leader.
+      // Rebind "Action menu" to a chord: ⌘E then A. ⌘E is otherwise unbound, so it can act as an exclusive leader.
       const row = editor.locator('.shortcut-editor-row', { hasText: 'Action menu' });
       await row.getByLabel('Record a chord').click();
       await page.keyboard.press('Meta+e');
-      // After the leader, the prompt asks for the follow key.
       await expect(row).toContainText('then');
       await page.keyboard.press('a');
-      // The row now shows the persisted chord (leader · then · follow keycaps).
       await expect(row).toContainText('then');
 
-      // Close the editor.
       await editor.getByRole('button', { name: 'Done' }).click();
       await expect(editor).not.toBeVisible();
 
-      // Pressing the leader arms the chord and shows the HUD…
       await page.keyboard.press('Meta+e');
       await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
 
-      // …and the follow key fires the bound action (and clears the HUD).
       await page.keyboard.press('a');
       await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
       await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
@@ -301,7 +291,6 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+e');
       await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
-      // No follow key: the HUD disappears once the leader times out.
       await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
       await expect(page.getByRole('dialog', { name: 'Action menu' })).not.toBeVisible();
     });
@@ -345,20 +334,15 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Create and select a session to enter terminal view
       await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Click to select (enters terminal view)
       await page.locator('[data-testid="session-s1"]').click();
 
-      // Should show terminal area
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      // ⌘G should return to dashboard
       await page.keyboard.press('Meta+g');
 
-      // Dashboard should be visible, no active session
       await expect(page.locator('.dashboard')).toBeVisible();
     });
 
@@ -373,7 +357,6 @@ test.describe('Keyboard Shortcuts', () => {
       await page.locator('[data-testid="session-s1"]').click();
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      // Escape should return to dashboard
       await page.keyboard.press('Escape');
       await expect(page.locator('.dashboard')).toBeVisible();
     });
@@ -385,14 +368,12 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Create multiple sessions
       await createSession(page, daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
       await createSession(page, daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
       await createSession(page, daemon, { id: 's3', label: 'Third', state: 'working', cwd: '/tmp/test/s3' });
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Switching from a focused Ghostty terminal must not forward the shortcut's digit.
       await page.locator('[data-testid="session-s1"]').click();
       const firstTerminal = page.locator('[data-pane-session-id="s1"][data-pane-kind="agent"] .terminal-container');
       await expect(firstTerminal).toBeVisible();
@@ -404,10 +385,8 @@ test.describe('Keyboard Shortcuts', () => {
         window.__TEST_GET_SESSION_INPUT_EVENTS?.('s1') ?? []
       ).filter((event) => event.event === 'send_to_pty').length)).toBe(0);
 
-      // Go back to dashboard
       await page.keyboard.press('Escape');
 
-      // ⌘1 should select first session
       await page.keyboard.press('Meta+1');
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
     });
@@ -422,14 +401,11 @@ test.describe('Keyboard Shortcuts', () => {
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Select first session
       await page.keyboard.press('Meta+1');
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      // ⌘↓ should go to next session
       await page.keyboard.press('Meta+ArrowDown');
 
-      // ⌘↑ should go to previous session
       await page.keyboard.press('Meta+ArrowUp');
     });
   });
@@ -440,14 +416,12 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Create sessions with one waiting
       await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
       await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Dispatch directly so the browser does not consume Cmd+J as its own
-      // shortcut before the application shortcut listener receives it.
+      // Dispatch directly so the browser does not consume Cmd+J as its own shortcut first.
       await page.evaluate(() => {
         window.dispatchEvent(new KeyboardEvent('keydown', {
           key: 'j',
@@ -457,7 +431,6 @@ test.describe('Keyboard Shortcuts', () => {
         }));
       });
 
-      // Should be viewing a terminal (the waiting session)
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
     });
   });
@@ -489,14 +462,8 @@ test.describe('Keyboard Shortcuts', () => {
       const dialog = page.locator('.worktree-cleanup-prompt .cleanup-content');
       await expect(dialog).toBeVisible();
 
-      // In headless CI document.hasFocus() returns false, so two problems arise:
-      // 1. page.keyboard.press() routes via the OS focus chain, which may not
-      //    point at the button — the event never reaches the dialog's onKeyDown.
-      // 2. toBeFocused() requires hasFocus() && activeElement, so it always fails.
-      //
-      // Fix: dispatch each key directly to the currently-focused button via
-      // locator.press() (CDP routes to that element regardless of hasFocus).
-      // Check document.activeElement?.matches() directly to bypass hasFocus().
+      // In headless CI document.hasFocus() is false, which breaks page.keyboard.press() and toBeFocused();
+      // locator.press() reaches the element regardless, and document.activeElement?.matches() bypasses hasFocus().
       const activeEl = (sel: string) =>
         page.evaluate((s) => document.activeElement?.matches(s) ?? false, sel);
 
@@ -528,22 +495,17 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Sidebar is only visible in session view, so create a session first
       await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Click session to enter session view
       await page.locator('[data-testid="session-s1"]').click();
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      // Now sidebar should be visible and expanded
       await expect(page.locator('.sidebar:not(.collapsed)')).toBeVisible();
 
-      // ⌘⇧B should collapse sidebar
       await page.keyboard.press('Meta+Shift+B');
       await expect(page.locator('.sidebar.collapsed')).toBeVisible();
 
-      // ⌘⇧B should expand sidebar
       await page.keyboard.press('Meta+Shift+B');
       await expect(page.locator('.sidebar:not(.collapsed)')).toBeVisible();
     });
@@ -555,7 +517,6 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Create session with git info
       await injectLocalSession(page, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await daemon.injectSession({
         id: 's1',
@@ -566,16 +527,11 @@ test.describe('Keyboard Shortcuts', () => {
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-      // Select the session
       await page.locator('[data-testid="session-s1"]').click();
       await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
 
-      // Note: ⌘B may not open branch picker without actual git repo
-      // This test verifies the shortcut is wired up
       await page.keyboard.press('Meta+b');
 
-      // Branch picker might show loading or not open if no git
-      // Just verify no crash and the shortcut is handled
     });
 
     test('Escape closes branch picker', async ({ page, daemon }) => {
@@ -583,7 +539,6 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      // Create session
       await injectLocalSession(page, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await daemon.injectSession({
         id: 's1',
@@ -595,15 +550,12 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
       await page.locator('[data-testid="session-s1"]').click();
 
-      // Try to open branch picker
       await page.keyboard.press('Meta+b');
 
-      // If picker opens, Escape should close it without going to dashboard
       const picker = page.locator('.branch-picker-overlay');
       if (await picker.isVisible({ timeout: 1000 }).catch(() => false)) {
         await page.keyboard.press('Escape');
         await expect(picker).not.toBeVisible();
-        // Should still be in terminal view, not dashboard
         await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
       }
     });

@@ -9,12 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// A document write and the fact describing it are one commit, and the fact's
-// seq is the write's position. These tests pin both halves of that, including
-// the failure direction — which is the inverse of what the code did before:
-// a fact that cannot be made durable now fails the write instead of being
-// logged and forgotten.
-
 func changeFact(id string, deleted bool) BusEvent {
 	payload := fmt.Sprintf(`{"namespace":"app/approval-gate","collection":"requests","id":%q,"deleted":%t}`, id, deleted)
 	return BusEvent{
@@ -33,8 +27,6 @@ func factsOnLog(t *testing.T, s *Store) []BusEvent {
 	return events
 }
 
-// The write's position is the seq its fact landed at, and the fact is really on
-// the log — not a number the store made up for the caller.
 func TestACommittedWriteReportsWhereItsFactLanded(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{})
 	schema := requestsDecl(t, s)
@@ -64,13 +56,8 @@ func TestACommittedWriteReportsWhereItsFactLanded(t *testing.T) {
 	}
 }
 
-// The inverse of the old behavior, and the reason the composite exists: a fact
-// that cannot be made durable fails the whole write. The caller gets an error
-// and a retry rather than a store nobody was told about.
-//
-// The failure is injected through the real path — a trigger that refuses every
-// insert into bus_events — rather than through a seam, so what is proven is
-// that the two statements share a transaction rather than that a fake said so.
+// The failure is injected through the real path — a trigger refusing every insert
+// into bus_events — so what is proven is that the two statements share a transaction.
 func TestAWriteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -102,9 +89,6 @@ func TestAWriteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	}
 }
 
-// A batch is one commit, not a loop around the single-write method. Refusing
-// the second fact must roll back its document and the first pair that had
-// already run inside the transaction.
 func TestDocumentWriteBatchDoesNotSurviveItsSecondFactFailure(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{})
 	schema := requestsDecl(t, s)
@@ -166,8 +150,6 @@ func TestDocumentWriteBatchReportsEachFactsPosition(t *testing.T) {
 	}
 }
 
-// The delete half of the same contract: a removal that failed to announce must
-// leave the document there.
 func TestADeleteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -187,9 +169,6 @@ func TestADeleteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	}
 }
 
-// "Changed" is the whole meaning of the fact, so a write that changed nothing
-// must not append one. Two ways to change nothing: remove what is not there,
-// and be refused.
 func TestAWriteThatChangedNothingAnnouncesNothing(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)
@@ -216,15 +195,10 @@ func TestAWriteThatChangedNothingAnnouncesNothing(t *testing.T) {
 	}
 }
 
-// A read says where it stands. as_of_seq is at least the position of every
-// write it includes, which is the comparison a caller makes to know its own
-// write is in the answer.
 func TestAnAnswerCarriesThePositionItWasTrueAt(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{})
 	schema := requestsDecl(t, s)
 
-	// An empty log is position 0 — "before everything", a valid answer rather
-	// than a missing one.
 	read, found, err := s.ReadQuery(docstore.Query{Namespace: schema.Namespace, Collection: schema.Collection})
 	if err != nil || !found {
 		t.Fatalf("query: found=%v err=%v", found, err)
@@ -268,8 +242,6 @@ func TestAnAnswerCarriesThePositionItWasTrueAt(t *testing.T) {
 	}
 }
 
-// Reading an undeclared collection is not a failure to read, it is an answer:
-// the collection is not there.
 func TestReadingAnUndeclaredCollectionSaysSo(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{})
 
@@ -283,13 +255,6 @@ func TestReadingAnUndeclaredCollectionSaysSo(t *testing.T) {
 	}
 }
 
-// A count is the query's own compile against COUNT(*), so it has to agree with
-// the query on every value class the store compares — including the ones where
-// the encoding could disagree with the meaning.
-//
-// The fixtures are chosen for exactly that: stamps inside one second (whose
-// stored text sorts wrongly under a naive encoding), a numeric string beside a
-// number under a declared number field, and a boolean beside the string "true".
 func TestACountAgreesWithTheQueryItCounts(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
@@ -298,8 +263,6 @@ func TestACountAgreesWithTheQueryItCounts(t *testing.T) {
 	}
 	schema := requestsDecl(t, s)
 
-	// Written inside one second, at fraction widths that a variable-width
-	// encoding renders in the wrong order.
 	stamps := []time.Duration{0, 123400 * time.Microsecond, 123450 * time.Microsecond, 500 * time.Millisecond}
 	bodies := []string{
 		`{"status":"pending","attempts":5,"urgent":true}`,
@@ -328,9 +291,6 @@ func TestACountAgreesWithTheQueryItCounts(t *testing.T) {
 			}}},
 	}
 	for i, q := range queries {
-		// The query is asked for everything it matches, so the two answers are
-		// comparable: a limit would make the query's length the limit, not the
-		// number of matches.
 		q.Limit = docstore.MaxLimit
 		read, found, err := s.ReadQuery(q)
 		if err != nil || !found {
@@ -346,9 +306,6 @@ func TestACountAgreesWithTheQueryItCounts(t *testing.T) {
 	}
 }
 
-// Counting after a cursor counts what paging through the rest of the answer
-// would find, which is the only reading of "how many are left" that a caller
-// walking pages can use.
 func TestACountAfterACursorCountsWhatIsLeft(t *testing.T) {
 	s, _ := storeWithRequests(t, map[string]string{
 		"a": `{"attempts":1}`,

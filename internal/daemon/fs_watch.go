@@ -8,27 +8,18 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// maxFsWatchers caps the number of live non-notebook watchers at once. Each is
-// a goroutine + an OS watch handle (kqueue fd), so this is a resource bound, not
-// a UI limit — a client that wants more must fs_unwatch something first.
+// Each watcher is a goroutine plus an OS watch handle (kqueue fd), so this is a resource
+// bound, not a UI limit.
 const maxFsWatchers = 16
 
-// fsRootWatch is one live generic-root watcher plus the clients holding it open.
-// Never created for the notebook root — that watcher is always-on via
-// ensureNotebookWatcher, independent of any client subscription.
+// Never created for the notebook root — that watcher is always-on via ensureNotebookWatcher.
 type fsRootWatch struct {
 	watcher *notebook.Watcher
-	refs    map[*wsClient]int // per-client refcount
+	refs    map[*wsClient]int
 }
 
-// handleFsWatch subscribes client to fs_changed broadcasts for rawRoot: it
-// resolves the root through resolveFsRoot — the single chokepoint that gates
-// an explicit root on the authenticated app client, so fs_watch inherits that
-// gate with no separate check here — and for any root other than the notebook
-// root, starts a live watcher on first subscriber (refcounted so repeat calls
-// and multiple clients share one watcher). The notebook root is always watched
-// already, so fs_watch on it is a success no-op that does not touch the
-// registry. Replies with an fs_watch_result event correlated by requestID.
+// The root resolves through resolveFsRoot, the single chokepoint gating an explicit root
+// on the authenticated app client, so there is no separate check here.
 func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err == nil && !d.isNotebookRoot(root) {
@@ -47,11 +38,6 @@ func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	d.sendToClient(client, msg)
 }
 
-// handleFsUnwatch drops client's subscription to rawRoot, closing the watcher
-// once no client holds it open. The notebook root is a success no-op (nothing
-// to unwatch — it stays alive independent of subscriptions). Unwatching a root
-// this client never watched is also a success no-op. Replies with an
-// fs_unwatch_result event correlated by requestID.
 func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err == nil && !d.isNotebookRoot(root) {
@@ -70,9 +56,6 @@ func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
 	d.sendToClient(client, msg)
 }
 
-// addFsWatchRef increments client's ref on root's watcher, creating it (and the
-// registry entry) on the first subscriber. Returns an error if root cannot be
-// watched (e.g. it does not exist) or the live-watcher cap is exceeded.
 func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 	d.fsWatchMu.Lock()
 	defer d.fsWatchMu.Unlock()
@@ -97,9 +80,6 @@ func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 	return nil
 }
 
-// dropFsWatchRef decrements client's ref on root's watcher, deleting the ref (at
-// zero) and closing+deleting the watcher entry once no client holds it. A no-op
-// if root has no live registry entry or client never held a ref on it.
 func (d *Daemon) dropFsWatchRef(client *wsClient, root string) {
 	d.fsWatchMu.Lock()
 	entry, ok := d.fsWatchers[root]
@@ -119,14 +99,10 @@ func (d *Daemon) dropFsWatchRef(client *wsClient, root string) {
 		toClose = entry.watcher
 	}
 	d.fsWatchMu.Unlock()
-	// Close outside fsWatchMu: it joins the watcher's loop goroutine and can
-	// block briefly.
+	// Close outside fsWatchMu: it joins the watcher's loop goroutine and can block briefly.
 	_ = toClose.Close()
 }
 
-// dropFsWatchClient removes client's refs from every fs_watch registry entry
-// (called on websocket client disconnect), closing and deleting any entry that
-// reaches zero clients as a result.
 func (d *Daemon) dropFsWatchClient(client *wsClient) {
 	d.fsWatchMu.Lock()
 	var toClose []*notebook.Watcher
@@ -146,7 +122,6 @@ func (d *Daemon) dropFsWatchClient(client *wsClient) {
 	}
 }
 
-// stopFsWatchers closes every live registry watcher (daemon shutdown).
 func (d *Daemon) stopFsWatchers() {
 	d.fsWatchMu.Lock()
 	watchers := d.fsWatchers
@@ -157,9 +132,6 @@ func (d *Daemon) stopFsWatchers() {
 	}
 }
 
-// fsWatcherFor returns the live registry watcher for root, or nil if none is
-// active (root is unwatched, or is the notebook root — which is never in this
-// registry).
 func (d *Daemon) fsWatcherFor(root string) *notebook.Watcher {
 	d.fsWatchMu.Lock()
 	defer d.fsWatchMu.Unlock()
@@ -170,12 +142,8 @@ func (d *Daemon) fsWatcherFor(root string) *notebook.Watcher {
 	return entry.watcher
 }
 
-// sendFsChangedToWatchers delivers msg only to the clients currently holding
-// an fs_watch ref on root — the audience restriction that keeps a generic
-// editor root's absolute path and changed paths from leaking to a connected
-// client that never subscribed to it. A no-op if root has no live registry
-// entry (e.g. the last subscriber unwatched between the change firing and
-// this call).
+// The audience restriction that keeps a generic editor root's absolute path from leaking
+// to a client that never subscribed to it.
 func (d *Daemon) sendFsChangedToWatchers(root string, msg protocol.FsChangedMessage) {
 	d.fsWatchMu.Lock()
 	entry, ok := d.fsWatchers[root]

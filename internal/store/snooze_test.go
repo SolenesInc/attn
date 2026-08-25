@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A snooze closes the open turn as it defers. The two are one write because a
-// deadline stamped beside a still-open turn would be a row in the queue that no
-// state change could ever move.
 func TestSnoozeTurnSettlesAsItDefers(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
@@ -35,8 +32,6 @@ func TestSnoozeTurnSettlesAsItDefers(t *testing.T) {
 	}
 }
 
-// Snooze reaches any agent, not only one that owes a turn: deferring a run
-// before it finishes is the case the feature exists for.
 func TestSnoozeTurnWithNoOpenTurn(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
@@ -63,21 +58,12 @@ func TestWakeTurnClearsTheDeadlineOnlyOnce(t *testing.T) {
 	if !s.TurnStamps("s1").SnoozedUntil.IsZero() {
 		t.Error("deadline survived the wake")
 	}
-	// The second wake reporting false is what lets the daemon stay quiet when a
-	// timer and a hand wake race.
 	if s.WakeTurn("s1") {
 		t.Error("WakeTurn reported a change on a session that was not snoozed")
 	}
 }
 
-// WakeTurnAt is what a fired timer uses, and it clears only the deadline it was
-// armed for. The stored deadline is the record of which snooze is current: a
-// timer that expired before a second snooze landed has no way to know it was
-// replaced except by finding a different deadline there.
-//
-// Both branches, because a daemon without a database is a supported store and a
-// deferral that behaves differently in it is a deferral that behaves differently
-// for that user.
+// Both branches, because a daemon without a database is a supported store.
 func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -95,7 +81,6 @@ func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 			later := now.Add(time.Hour)
 			s.SnoozeTurn("s1", fired, now)
 
-			// The replacement lands while the first timer is on its way to the store.
 			s.SnoozeTurn("s1", later, now)
 
 			if s.WakeTurnAt("s1", fired) {
@@ -105,14 +90,12 @@ func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 				t.Errorf("live deadline = %s, want the replacement's %s", got, later)
 			}
 
-			// The replacement's own timer still ends it.
 			if !s.WakeTurnAt("s1", later) {
 				t.Fatal("the live deadline's own timer could not clear it")
 			}
 			if !s.TurnStamps("s1").SnoozedUntil.IsZero() {
 				t.Error("deadline survived its own wake")
 			}
-			// And nothing is left to clear, so a redelivered timer stays quiet.
 			if s.WakeTurnAt("s1", later) {
 				t.Error("WakeTurnAt reported a change on a session that was not snoozed")
 			}
@@ -120,8 +103,6 @@ func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 	}
 }
 
-// A wake must not re-open the turn the snooze closed. Whether one opens is the
-// daemon's call, from the state the agent is actually in.
 func TestWakeTurnDoesNotReopenTheTurn(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
@@ -147,9 +128,6 @@ func TestSnoozedSessionsListsLiveDeadlines(t *testing.T) {
 	future := now.Add(time.Hour)
 	past := now.Add(-time.Hour)
 	s.SnoozeTurn("deferred", future, now)
-	// A deadline already past is stored, not rejected: the daemon fires on it
-	// immediately at start-up, which is how a snooze that lapsed while the daemon
-	// was down behaves like one that lapsed while it was up.
 	s.SnoozeTurn("lapsed", past, now)
 
 	snoozed := s.SnoozedSessions()
@@ -167,9 +145,8 @@ func TestSnoozedSessionsListsLiveDeadlines(t *testing.T) {
 	}
 }
 
-// The deadline is in the database, not in the daemon's memory. This is the only
-// thing that makes a snooze survive a restart, so it is pinned against the real
-// SQLite path rather than the in-memory branch.
+// Pinned against the real SQLite path: the stored deadline is the only thing
+// that makes a snooze survive a restart.
 func TestSnoozeSurvivesReopeningTheDatabase(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "snooze.db")
 	s, err := NewWithDB(dbPath)

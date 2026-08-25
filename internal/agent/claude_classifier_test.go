@@ -11,15 +11,13 @@ import (
 	"github.com/victorarias/attn/internal/classifier"
 )
 
-// fakeClaudeClassifierCLI writes a stub `claude` that records its argv and emits
-// the given stdout, then points the driver's executable env var at it.
 func fakeClaudeClassifierCLI(t *testing.T, stdout string, exitCode int) (argsPath string) {
 	t.Helper()
 	dir := t.TempDir()
 	argsPath = filepath.Join(dir, "args.log")
 	scriptPath := filepath.Join(dir, "claude")
-	// Args are recorded NUL-separated: the prompt and the schema are multi-line,
-	// so a newline separator would shred them.
+	// Args are recorded NUL-separated: the prompt and the schema are multi-line, so a
+	// newline separator would shred them.
 	script := fmt.Sprintf(`#!/bin/sh
 for arg in "$@"; do
   printf '%%s\034' "$arg" >> '%s'
@@ -45,7 +43,6 @@ func readArgs(t *testing.T, argsPath string) []string {
 	return strings.Split(strings.TrimSuffix(string(raw), "\x1c"), "\x1c")
 }
 
-// argAfter returns the value following flag in a recorded argv.
 func argAfter(t *testing.T, args []string, flag string) string {
 	t.Helper()
 	for i, arg := range args {
@@ -57,8 +54,6 @@ func argAfter(t *testing.T, args []string, flag string) string {
 	return ""
 }
 
-// The classifier runs through the shared headless seam: capped, tool-less,
-// schema-enforced, and isolated from the user's MCP servers and settings.
 func TestClaudeClassifyRunsBoundedToolLessHeadlessQuery(t *testing.T) {
 	argsPath := fakeClaudeClassifierCLI(t,
 		`{"type":"result","structured_output":{"verdict":"WAITING"},"num_turns":1,"total_cost_usd":0.0012}`, 0)
@@ -86,7 +81,6 @@ func TestClaudeClassifyRunsBoundedToolLessHeadlessQuery(t *testing.T) {
 	if got := argAfter(t, args, "--json-schema"); got != classifier.ClaudeVerdictSchema {
 		t.Fatalf("--json-schema = %q, want the verdict schema", got)
 	}
-	// Tool-less: the run judges inlined text and must never touch disk.
 	if got := argAfter(t, args, "--allowedTools"); got != "" {
 		t.Fatalf("--allowedTools = %q, want empty (no tools)", got)
 	}
@@ -96,8 +90,6 @@ func TestClaudeClassifyRunsBoundedToolLessHeadlessQuery(t *testing.T) {
 	assertContainsNone(t, "Claude classifier args", args, "--mcp-config", "Read,Write,Edit,Grep,Glob")
 }
 
-// A run that ended before the structured-output turn still classifies from its
-// final text.
 func TestClaudeClassifyFallsBackToFinalText(t *testing.T) {
 	fakeClaudeClassifierCLI(t, `{"type":"result","result":"DONE"}`, 0)
 

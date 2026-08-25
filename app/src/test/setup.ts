@@ -3,12 +3,9 @@ import { beforeEach, vi } from 'vitest';
 import { gardenScrollMemory, useGardenWalk } from '../store/gardenWalk';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
 
-// Mock Tauri APIs that components might use
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => false),
-  // Mirrors Tauri's real behavior closely enough for assertions: an absolute
-  // path becomes an asset-protocol URL.
   convertFileSrc: vi.fn((filePath: string) => `asset://localhost/${filePath}`),
 }));
 
@@ -17,7 +14,6 @@ vi.mock('@tauri-apps/api/app', () => ({
 }));
 
 if (typeof window !== 'undefined') {
-  // Mock window.matchMedia for components that use it
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -33,9 +29,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Mock ResizeObserver. A class rather than a vi.fn() returning an object: the
-// arrow-function implementation could not be `new`-ed, so every component that
-// constructs one — rather than only reading the global — threw here.
+// A class, not a vi.fn() returning an object: an arrow function cannot be `new`-ed.
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
@@ -44,12 +38,8 @@ class ResizeObserverStub {
 (globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
   ResizeObserverStub as unknown as typeof ResizeObserver;
 
-// Node 22+ ships a built-in `localStorage` that shadows happy-dom's Storage
-// when vitest installs `window` onto globalThis. Node's stub is missing the
-// Storage methods unless --localstorage-file is set, which makes any test
-// that touches localStorage throw "removeItem is not a function". Install a
-// minimal Storage-compatible shim so the test environment matches the real
-// browser API regardless of node version.
+// Node 22+ ships a built-in `localStorage` that shadows happy-dom's Storage and
+// lacks its methods unless --localstorage-file is set.
 if (typeof window !== 'undefined') {
   const ensureLocalStorage = () => {
     const candidate = window.localStorage;
@@ -76,16 +66,13 @@ if (typeof window !== 'undefined') {
   };
   ensureLocalStorage();
 
-  // Treat the one-time "what's new" announcement as already seen so it does not
-  // render over unrelated component/App tests. Tests that exercise the modal
-  // clear localStorage and assert the gating themselves.
+  // Counts the one-time "what's new" announcement as seen so it never renders
+  // over unrelated tests.
   window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
 }
 
-// The garden walk outlives a mount on purpose — the dock and the fullscreen
-// surface are the same walk at two sizes, and closing either one keeps your
-// place. That makes it module state, so a test that drilled somewhere would
-// hand its depth to the next one.
+// The garden walk is module state, so a test that drilled somewhere would hand
+// its depth to the next one.
 beforeEach(() => {
   useGardenWalk.setState({ trail: [] });
   gardenScrollMemory.clear();

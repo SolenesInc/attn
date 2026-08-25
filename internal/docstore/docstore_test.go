@@ -15,8 +15,6 @@ func requestsSchema() CollectionSchema {
 			{Name: "attempts", Type: FieldNumber},
 			{Name: "urgent", Type: FieldBool},
 		},
-		// As the store hands a declaration back: a minted table, without which
-		// nothing compiles.
 		Table: "doc_12",
 	}
 }
@@ -34,8 +32,6 @@ func mustCompile(t *testing.T, q Query, anchor ...*Document) Compiled {
 	return c
 }
 
-// The proof composition's panel query — pending requests, newest first —
-// compiles to a bounded scan within one collection.
 func TestPendingRequestsNewestFirstCompiles(t *testing.T) {
 	c := mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
@@ -48,8 +44,6 @@ func TestPendingRequestsNewestFirstCompiles(t *testing.T) {
 	if c.Where != want {
 		t.Fatalf("where = %q, want %q", c.Where, want)
 	}
-	// No namespace or collection predicate: the table is the collection, so the
-	// only argument left is the caller's bound.
 	if got := []any{"pending"}; !equalArgs(c.Args, got) {
 		t.Fatalf("args = %v, want %v", c.Args, got)
 	}
@@ -64,10 +58,6 @@ func TestPendingRequestsNewestFirstCompiles(t *testing.T) {
 	}
 }
 
-// Every sort carries the document id as a tiebreaker, in the sort's own
-// direction, so documents sharing a sort value have a defined relative position
-// and the visible order is one uniformly directed tuple the cursor can compare
-// against.
 func TestEverySortIsMadeTotalByTheDocumentID(t *testing.T) {
 	c := mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
@@ -85,14 +75,11 @@ func TestEverySortIsMadeTotalByTheDocumentID(t *testing.T) {
 	if c.Order != `"f_status" DESC, id DESC` {
 		t.Fatalf("descending order = %q", c.Order)
 	}
-	// And an unsorted query is still deterministic.
 	if c := mustCompile(t, Query{Namespace: "app/approval-gate", Collection: "requests"}); c.Order != "id ASC" {
 		t.Fatalf("default order = %q", c.Order)
 	}
 }
 
-// created_at and updated_at are real columns, always queryable, never declared —
-// "newest first" and "changed since" need no schema.
 func TestReservedTimestampsAreQueryableWithoutDeclaration(t *testing.T) {
 	c := mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
@@ -104,8 +91,6 @@ func TestReservedTimestampsAreQueryableWithoutDeclaration(t *testing.T) {
 	}
 }
 
-// Declaring a field that shadows a reserved column is refused: the column would
-// win every query, so the declaration would be a lie.
 func TestACollectionCannotDeclareAReservedName(t *testing.T) {
 	s := requestsSchema()
 	s.Fields = append(s.Fields, FieldSpec{Name: FieldCreatedAt, Type: FieldString})
@@ -118,8 +103,6 @@ func TestACollectionCannotDeclareAReservedName(t *testing.T) {
 	}
 }
 
-// An undeclared field is refused, and the refusal lists what the collection does
-// offer — the reader has to be able to fix the query from the error alone.
 func TestQueryingAnUndeclaredFieldSaysWhatIsQueryable(t *testing.T) {
 	_, err := Query{
 		Namespace:  "app/approval-gate",
@@ -134,7 +117,6 @@ func TestQueryingAnUndeclaredFieldSaysWhatIsQueryable(t *testing.T) {
 			t.Fatalf("error %q does not mention %q", err, want)
 		}
 	}
-	// The same rule applies to sorting, and the error says which one was wrong.
 	_, err = Query{
 		Namespace:  "app/approval-gate",
 		Collection: "requests",
@@ -145,9 +127,6 @@ func TestQueryingAnUndeclaredFieldSaysWhatIsQueryable(t *testing.T) {
 	}
 }
 
-// A bound whose type cannot compare with the field's is refused rather than
-// silently matching nothing, which is what SQLite would do with a number
-// compared against text.
 func TestAFilterBoundMustMatchTheDeclaredType(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -174,8 +153,6 @@ func TestAFilterBoundMustMatchTheDeclaredType(t *testing.T) {
 	}
 }
 
-// Numbers arrive as float64 over the wire and as int from Go callers; booleans
-// bind as the 1/0 json_extract yields.
 func TestBoundsBindTheWayJSONExtractCompares(t *testing.T) {
 	c := mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
@@ -193,8 +170,6 @@ func TestBoundsBindTheWayJSONExtractCompares(t *testing.T) {
 	}
 }
 
-// A query decoded from JSON is the same query — this is the representation the
-// sidecar, the UI, and the CLI all carry.
 func TestAQueryRoundTripsThroughJSON(t *testing.T) {
 	raw := `{"namespace":"app/approval-gate","collection":"requests",
 	         "filters":[{"field":"attempts","op":"gte","value":2}],
@@ -215,9 +190,6 @@ func TestAQueryRoundTripsThroughJSON(t *testing.T) {
 	}
 }
 
-// An unset limit is the default, not "unbounded" — a query with no ceiling is a
-// wire message with no ceiling. Asking past the maximum names both numbers and
-// the way out.
 func TestLimitDefaultsAndItsCeilingNamesTheAsk(t *testing.T) {
 	if c := mustCompile(t, Query{Namespace: "app/approval-gate", Collection: "requests"}); c.Limit != DefaultLimit {
 		t.Fatalf("default limit = %d, want %d", c.Limit, DefaultLimit)
@@ -233,9 +205,6 @@ func TestLimitDefaultsAndItsCeilingNamesTheAsk(t *testing.T) {
 	}
 }
 
-// The namespace is an opaque owner/name string. The store validates its shape,
-// not which owners exist — who may write under an owner is enforced where the
-// namespace is granted.
 func TestNamespaceShapeIsTwoParts(t *testing.T) {
 	for _, ok := range []string{"app/approval-gate", "core/tickets", "app/a"} {
 		if err := ValidateNamespace(ok); err != nil {
@@ -249,8 +218,6 @@ func TestNamespaceShapeIsTwoParts(t *testing.T) {
 	}
 }
 
-// A field name is a plain identifier, which is what keeps both things it becomes
-// safe: a JSON path in the column's expression, and the column's own name.
 func TestFieldNamesAreIdentifiersSoThePathNeedsNoQuoting(t *testing.T) {
 	for _, bad := range []string{"has space", "with'quote", "a.b", "$x", ""} {
 		s := requestsSchema()
@@ -261,8 +228,6 @@ func TestFieldNamesAreIdentifiersSoThePathNeedsNoQuoting(t *testing.T) {
 	}
 }
 
-// A body is any JSON object. Objects only: a declared field is read with a JSON
-// path, and an array or scalar has nowhere for one to live.
 func TestBodyMustBeAJSONObject(t *testing.T) {
 	if err := ValidateBody([]byte(`{"status":"pending"}`)); err != nil {
 		t.Fatalf("object rejected: %v", err)
@@ -274,9 +239,6 @@ func TestBodyMustBeAJSONObject(t *testing.T) {
 	}
 }
 
-// A query compiled against another collection's declaration is a wiring mistake,
-// and refusing it is what keeps a caller from reading one collection under
-// another's rules.
 func TestAQueryWillNotCompileAgainstAnotherCollectionsDeclaration(t *testing.T) {
 	_, err := Query{Namespace: "app/other", Collection: "requests"}.Compile(requestsSchema(), nil)
 	if err == nil {
@@ -296,9 +258,6 @@ func equalArgs(got, want []any) bool {
 	return true
 }
 
-// The after cursor compiles to a comparison against the whole ordering tuple.
-// The second branch — equal sort value, greater id — is the one a filter cannot
-// express, and is why After is part of the query rather than caller-written.
 func TestTheAfterCursorComparesTheWholeOrderingTuple(t *testing.T) {
 	anchor := &Document{ID: "b", Body: []byte(`{"attempts":7}`)}
 	c := mustCompile(t, Query{
@@ -312,15 +271,10 @@ func TestTheAfterCursorComparesTheWholeOrderingTuple(t *testing.T) {
 	if !strings.HasSuffix(c.Where, want) {
 		t.Fatalf("where = %q, want it to end with %q", c.Where, want)
 	}
-	// The anchor's value is read back through the same column the ORDER BY uses,
-	// so the only cursor arguments are the anchor's id — once per read of its
-	// value, once for the tiebreaker.
 	if got := c.Args[len(c.Args)-3:]; !equalArgs(got, []any{"b", "b", "b"}) {
 		t.Fatalf("cursor args = %v", got)
 	}
 
-	// Descending flips both comparisons, and admits the NULLs the descending
-	// order puts last.
 	c = mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
 		Collection: "requests",
@@ -333,7 +287,6 @@ func TestTheAfterCursorComparesTheWholeOrderingTuple(t *testing.T) {
 	}
 }
 
-// An unsorted query's whole order is the id, so its cursor is that one column.
 func TestTheAfterCursorOfAnUnsortedQueryIsTheID(t *testing.T) {
 	c := mustCompile(t, Query{
 		Namespace:  "app/approval-gate",
@@ -345,8 +298,6 @@ func TestTheAfterCursorOfAnUnsortedQueryIsTheID(t *testing.T) {
 	}
 }
 
-// A cursor whose document is gone fails loudly. An empty page would read as
-// "end of results", which is a silent truncation of the caller's walk.
 func TestAnAfterCursorWithNoDocumentIsAnError(t *testing.T) {
 	_, err := Query{
 		Namespace:  "app/approval-gate",
@@ -362,8 +313,6 @@ func TestAnAfterCursorWithNoDocumentIsAnError(t *testing.T) {
 			t.Fatalf("error %q does not mention %q", err, want)
 		}
 	}
-	// And an anchor that is not the document the cursor named is a caller bug,
-	// not a page: it would silently return the wrong slice.
 	_, err = Query{
 		Namespace:  "app/approval-gate",
 		Collection: "requests",
@@ -374,8 +323,6 @@ func TestAnAfterCursorWithNoDocumentIsAnError(t *testing.T) {
 	}
 }
 
-// The over-limit error points at the cursor, because the range filter it used
-// to suggest is exactly the thing that breaks on ties.
 func TestTheLimitCeilingPointsAtTheCursor(t *testing.T) {
 	_, err := Query{
 		Namespace:  "app/approval-gate",
@@ -387,10 +334,6 @@ func TestTheLimitCeilingPointsAtTheCursor(t *testing.T) {
 	}
 }
 
-// Compiling needs a minted table, and refusing anything else is the whole
-// defence for the one identifier in the compiled SQL that is not derived from a
-// validated field name. A schema that reached the compiler from anywhere but a
-// read of the registry has to fail rather than compose a statement.
 func TestAQueryWillNotCompileWithoutAMintedTable(t *testing.T) {
 	bare := requestsSchema()
 	bare.Table = ""
@@ -412,9 +355,6 @@ func TestAQueryWillNotCompileWithoutAMintedTable(t *testing.T) {
 	}
 }
 
-// The physical names are derived from something already checked — an integer row
-// id, a field name that matched the identifier pattern — so no identifier the
-// store executes is ever a function of caller text.
 func TestPhysicalNamesAreDerivedFromCheckedInput(t *testing.T) {
 	if got := TableName(12); got != "doc_12" {
 		t.Fatalf("TableName(12) = %q", got)
@@ -425,16 +365,12 @@ func TestPhysicalNamesAreDerivedFromCheckedInput(t *testing.T) {
 	if got := FieldColumn("status"); got != "f_status" {
 		t.Fatalf("FieldColumn = %q", got)
 	}
-	// The prefix is what lets a collection declare a field named like one of the
-	// store's own columns without shadowing it.
 	if FieldColumn("id") == "id" || FieldColumn("body") == "body" {
 		t.Fatal("a declared field can shadow a stored column")
 	}
 	if got := FieldExpression("status"); got != "json_extract(body, '$.status')" {
 		t.Fatalf("FieldExpression = %q", got)
 	}
-	// Affinity is how two stored values compare, so each declared type has to map
-	// to one that reads its values the way the declaration promises.
 	for _, tc := range []struct {
 		typ  FieldType
 		want string

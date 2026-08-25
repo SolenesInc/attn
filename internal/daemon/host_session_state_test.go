@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A conversation session under a live driver run, which is what a spawn leaves
-// behind and what a declaration reports against.
 func addHostSession(t *testing.T, d *Daemon, id string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
@@ -51,9 +49,6 @@ func stateOf(t *testing.T, d *Daemon, id string) string {
 	return string(session.State)
 }
 
-// The whole of slice 2's state story in one pass: a host's declarations move the
-// session through attn's own states, and the settle puts it on the user's plate
-// like any other agent that stopped.
 func TestHostDeclarationsMoveTheSessionAndOpenItsTurn(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-1")
@@ -84,9 +79,6 @@ func TestHostDeclarationsMoveTheSessionAndOpenItsTurn(t *testing.T) {
 	}
 }
 
-// The seq spine is the ordering cursor, so a declaration that lost a race
-// cannot repaint a session that has already moved on. This is what makes a
-// slow or superseded envelope harmless rather than a state flicker.
 func TestHostDeclarationOutOfOrderIsDiscarded(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-2")
@@ -99,8 +91,6 @@ func TestHostDeclarationOutOfOrderIsDiscarded(t *testing.T) {
 	}
 }
 
-// A host that belongs to a superseded run must not describe the session that
-// replaced it — the same rule its exit already travels under.
 func TestHostDeclarationFromASupersededRunIsDiscarded(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-3")
@@ -118,10 +108,6 @@ func TestHostDeclarationFromASupersededRunIsDiscarded(t *testing.T) {
 	}
 }
 
-// The host is quick — `session_ready` regularly beats the spawn's own commit,
-// which is where the run cursor is opened. Without the holding pen the
-// session's first state is dropped and it sits in `launching` until its first
-// run.
 func TestHostDeclarationDuringLaunchIsAppliedAtCommit(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
@@ -152,9 +138,6 @@ func TestHostDeclarationDuringLaunchIsAppliedAtCommit(t *testing.T) {
 	}
 }
 
-// Renderings are the app's business. A daemon that reacted to one would be
-// keying persisted state on a shape the plugin is free to change without a
-// protocol conversation.
 func TestHostRenderingsDoNotMoveTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-5")
@@ -173,10 +156,6 @@ func TestHostRenderingsDoNotMoveTheSession(t *testing.T) {
 	}
 }
 
-// A tool boundary is a fact about a run that is already open, not a state
-// claim. Applying one would restamp `state_since` on every tool call and reset
-// the dashboard's "working for 4m" several times a minute on a session whose
-// state never changed.
 func TestHostToolEventsDoNotRestampTheState(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-7")
@@ -184,8 +163,6 @@ func TestHostToolEventsDoNotRestampTheState(t *testing.T) {
 	declare(d, "conv-7", 2, "run_started", protocol.StateWorking)
 
 	before := d.store.Get("conv-7").StateSince
-	// A tool declaration carries no state at all; even one that did must not be
-	// able to move the session.
 	d.handleHostEvent(hostsession.Event{
 		SessionID:   "conv-7",
 		Seq:         3,
@@ -210,9 +187,6 @@ func TestHostToolEventsDoNotRestampTheState(t *testing.T) {
 	}
 }
 
-// Both of the new verbs travel the same one-way pipe the delivery verbs do:
-// what comes back is an envelope on the host's own stream, not a return value
-// here. So the assertion is that the verb crossed the pipe intact.
 func TestToolDetailAndClearQueueReachTheHost(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-8")
@@ -265,7 +239,6 @@ func TestToolDetailAndClearQueueReachTheHost(t *testing.T) {
 	}
 }
 
-// A card that asks a session with no host must be told, or it spins forever.
 func TestToolDetailWithoutAHostIsAnError(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := &wsClient{send: make(chan outboundMessage, 10)}
@@ -286,9 +259,6 @@ func TestToolDetailWithoutAHostIsAnError(t *testing.T) {
 	}
 }
 
-// A conversation session has no PTY to type into. The doorbell has to become a
-// steer down the host's own pipe — which also means it lands at the agent's
-// next turn boundary instead of after everything it had planned to do.
 func TestTypeDoorbellSteersAConversationSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -297,8 +267,6 @@ func TestTypeDoorbellSteersAConversationSession(t *testing.T) {
 	d.ptyBackend = backend
 	addHostSession(t, d, "conv-6")
 
-	// A host that writes every verb it is handed straight back out as an
-	// envelope, so the assertion is on what actually crossed the pipe.
 	echo := filepath.Join(t.TempDir(), "echo-host.sh")
 	script := "#!/bin/sh\nwhile IFS= read -r line; do\n" +
 		"  escaped=$(printf '%s' \"$line\" | sed 's/\"/\\\\\"/g')\n" +

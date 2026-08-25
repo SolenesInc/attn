@@ -22,10 +22,6 @@ func TestReadLinesFile_MissingFile(t *testing.T) {
 	}
 }
 
-// TestReadLinesFile_LongLine exercises the scanner-token-limit case: a single
-// line far longer than bufio.Scanner's default 64KiB MaxScanTokenSize (an
-// incident record's embedded ring-buffer context can get this large). The
-// bufio.Reader-based reader in readLinesFile must not truncate or error.
 func TestReadLinesFile_LongLine(t *testing.T) {
 	longLine := strings.Repeat("x", 200*1024) // 200KiB, well past 64KiB
 	path := filepath.Join(t.TempDir(), "long.jsonl")
@@ -136,11 +132,11 @@ func TestFilterSinceLines(t *testing.T) {
 		return "[" + t.Format(daemonLogTimestampLayout) + "] INFO: msg"
 	}
 	lines := []string{
-		fmtTS(now.Add(-2 * time.Hour)),         // too old, excluded
-		"  a continuation line of the old one", // continuation of excluded -> excluded
-		fmtTS(now.Add(-30 * time.Minute)),      // within window, included
-		"  a continuation line of the new one", // continuation of included -> included
-		fmtTS(now.Add(-1 * time.Minute)),       // within window, included
+		fmtTS(now.Add(-2 * time.Hour)),
+		"  a continuation line of the old one",
+		fmtTS(now.Add(-30 * time.Minute)),
+		"  a continuation line of the new one",
+		fmtTS(now.Add(-1 * time.Minute)),
 	}
 	cutoff := now.Add(-1 * time.Hour)
 	got := filterSinceLines(lines, cutoff)
@@ -157,9 +153,6 @@ func TestFilterSinceLines(t *testing.T) {
 }
 
 func TestFilterSinceLines_LeadingContinuationExcluded(t *testing.T) {
-	// A file that (unrealistically) starts with a continuation line before any
-	// timestamped line is seen: it has no match state to inherit, so it must be
-	// excluded rather than defaulting to included.
 	lines := []string{"orphan continuation line with no preceding timestamp"}
 	got := filterSinceLines(lines, time.Now())
 	if len(got) != 0 {

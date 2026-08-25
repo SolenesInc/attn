@@ -1,24 +1,16 @@
 package pty
 
-// A read-only OSC scanner. Not the feed segmenter (kittyseg.go): that one
-// STRIPS what it finds, while OSC 0 (title) and OSC 777 (notification) are
-// real terminal state the client must keep — this scanner only looks, and
+// Strips nothing — OSC 0 and OSC 777 are state the client must keep — so it
 // carries no parity contract with any frontend parser.
 
-// oscScanMaxPending abandons a never-terminated sequence so a broken producer
-// cannot make the scanner buffer forever; anything past this is not a title.
+// Abandons a never-terminated sequence so a broken producer cannot make the
+// scanner buffer forever; anything past this is not a title.
 const oscScanMaxPending = 4096
 
-// oscScanner finds complete `ESC ] <code> ; <payload> (BEL | ESC \)` sequences
-// across chunk boundaries. It reports what it saw and consumes nothing.
 type oscScanner struct {
-	// pending holds a sequence begun in an earlier chunk, not yet terminated.
 	pending []byte
 }
 
-// Feed reports every complete OSC sequence in chunk, in order. code is the
-// numeric introducer (0, 133, 777, …) and payload is everything between the
-// first `;` and the terminator (empty when there is no `;`).
 func (s *oscScanner) Feed(chunk []byte, emit func(code int, payload string)) {
 	if len(s.pending) == 0 && indexOfByte(chunk, oscESC) < 0 {
 		return
@@ -55,10 +47,8 @@ func (s *oscScanner) Feed(chunk []byte, emit func(code int, payload string)) {
 		case oscScanAbandoned:
 			// Resume at the stray ESC, which may introduce the next one.
 			from = next
-		default: // oscScanIncomplete
+		default:
 			if len(buffer)-start > oscScanMaxPending {
-				// Drop the oversized hold; resume past the introducer so a
-				// later well-formed sequence is still seen.
 				from = start + 2
 				continue
 			}
@@ -68,7 +58,6 @@ func (s *oscScanner) Feed(chunk []byte, emit func(code int, payload string)) {
 	}
 }
 
-// indexOfOSCIntroducer finds the next `ESC ]`.
 func indexOfOSCIntroducer(buffer []byte, from int) int {
 	for i := from; i+1 < len(buffer); i++ {
 		if buffer[i] == oscESC && buffer[i+1] == ']' {
@@ -81,16 +70,11 @@ func indexOfOSCIntroducer(buffer []byte, from int) int {
 type oscScanStatus int
 
 const (
-	// oscScanIncomplete: may still be terminated by a later chunk.
 	oscScanIncomplete oscScanStatus = iota
-	// oscScanTerminated: a complete sequence.
 	oscScanTerminated
-	// oscScanAbandoned: a stray ESC not starting ST — the producer gave up;
-	// waiting for a terminator that never comes would hide later sequences.
 	oscScanAbandoned
 )
 
-// scanOSCBody returns the bytes between the introducer and the terminator;
 // next is just past the terminator, or the stray ESC to resume at (abandoned).
 func scanOSCBody(buffer []byte, from int) ([]byte, int, oscScanStatus) {
 	for i := from; i < len(buffer); i++ {
@@ -110,8 +94,6 @@ func scanOSCBody(buffer []byte, from int) ([]byte, int, oscScanStatus) {
 	return nil, 0, oscScanIncomplete
 }
 
-// splitOSCBody parses `<digits>;<payload>` (or a bare `<digits>`). ok is false
-// for a non-numeric introducer, which is not an OSC we can route.
 func splitOSCBody(body []byte) (int, string, bool) {
 	code := 0
 	digits := 0

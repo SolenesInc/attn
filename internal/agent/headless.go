@@ -15,28 +15,10 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// DefaultContextWindowCap is the auto-compaction token threshold attn applies to
-// capped Claude/Codex launches — the chief-of-staff session and headless runs —
-// when the operator has not configured a value. It is applied as
-// CLAUDE_CODE_AUTO_COMPACT_WINDOW (Claude) / model_auto_compact_token_limit
-// (Codex) so compaction fires here instead of at the model's full window. See the
-// chief_context_window_cap and headless_context_window_cap settings.
 const DefaultContextWindowCap = 128000
 
-// headlessContextWindowCap is the process-global auto-compaction token threshold
-// applied to every headless run. Headless runs execute in the daemon process and
-// all funnel through this package's spawn seam, so one process-global value (set
-// by the daemon from the headless_context_window_cap setting) governs them
-// uniformly — there is no per-run override and nothing threads through the
-// request builders, which keeps this refactor-proof against the background-task
-// changes moving those call sites. 0 means uncapped; the daemon resolves the
-// default before any headless run starts.
 var headlessContextWindowCap atomic.Int64
 
-// SetHeadlessContextWindowCap sets the token threshold applied to headless runs
-// (CLAUDE_CODE_AUTO_COMPACT_WINDOW for Claude, model_auto_compact_token_limit for
-// Codex). A value <= 0 clears the cap. The daemon calls this at startup and
-// whenever the setting changes.
 func SetHeadlessContextWindowCap(tokens int) {
 	if tokens < 0 {
 		tokens = 0
@@ -44,18 +26,10 @@ func SetHeadlessContextWindowCap(tokens int) {
 	headlessContextWindowCap.Store(int64(tokens))
 }
 
-// HeadlessContextWindowCap returns the current process-global headless cap in
-// tokens, or 0 when uncapped. Both the Claude env seam and the Codex arg builders
-// read it; it is exported so callers can observe the value they set.
 func HeadlessContextWindowCap() int {
 	return int(headlessContextWindowCap.Load())
 }
 
-// headlessOutputLimit bounds the captured stdout buffer. It is large enough to
-// hold a Claude `--output-format json` result object or a Codex final message
-// (the E2 text-capture path) while still being a hard ceiling against a runaway
-// child. classifyHeadlessFailure only does substring checks, so scanning the
-// whole buffer on the failure path stays cheap.
 const headlessOutputLimit = 1 << 20 // 1 MiB
 
 type boundedHeadlessOutput struct {
@@ -75,18 +49,10 @@ func (b *boundedHeadlessOutput) Write(p []byte) (int, error) {
 	return originalLength, nil
 }
 
-// headlessFailureOutputLimit bounds HeadlessTaskResult.FailureOutput. The tail
-// is kept (fatal errors land last on both streams); anything longer is cut.
 const headlessFailureOutputLimit = 4 << 10 // 4 KiB per stream
 
-// runHeadlessCommand runs a bounded headless agent process. It returns the
-// captured stdout bytes (bounded) so drivers can extract the child's final text
-// for the no-schema path. On a non-zero exit it returns a non-nil error with
-// Diagnostics and FailureOutput set; the error string itself stays free of
-// child output (it travels into keeper/journal surfaces that must not echo
-// workspace content) — callers that want the raw cause opt in via
-// FailureOutput. The error contract is otherwise unchanged; the workflow
-// boundary (driverAgent) is responsible for the error->null adaptation.
+// The error STRING stays free of child output: it travels into keeper/journal
+// surfaces that must not echo workspace content.
 func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
@@ -113,10 +79,6 @@ func runHeadlessCommand(
 	return HeadlessTaskResult{}, stdout.Bytes(), nil
 }
 
-// headlessFailureOutput assembles the bounded raw-output tail preserved on a
-// failed run: the ground truth behind the Diagnostics bucket. stderr first —
-// that is where agent CLIs put fatal errors; stdout may hold a partial result
-// envelope.
 func headlessFailureOutput(stdout, stderr string) string {
 	var parts []string
 	if s := strings.TrimSpace(stderr); s != "" {
@@ -128,7 +90,6 @@ func headlessFailureOutput(stdout, stderr string) string {
 	return strings.Join(parts, "\n")
 }
 
-// tailString keeps the last limit bytes of s, marking the cut.
 func tailString(s string, limit int) string {
 	if len(s) <= limit {
 		return s
@@ -136,9 +97,6 @@ func tailString(s string, limit int) string {
 	return "…(truncated) " + s[len(s)-limit:]
 }
 
-// headlessToolNames returns the single-tool list to thread through a driver's
-// argv when toolName is set, or the janitor default pair when it is empty. The
-// empty case preserves the janitor's exact {read_context, replace_context} argv.
 func headlessToolNames(toolName string) []string {
 	if name := strings.TrimSpace(toolName); name != "" {
 		return []string{name}
@@ -146,9 +104,6 @@ func headlessToolNames(toolName string) []string {
 	return []string{"read_context", "replace_context"}
 }
 
-// headlessTempDir returns a directory for per-run scratch files. It prefers the
-// request's work dir (already a throwaway temp dir for janitor/workflow runs) so
-// the scratch file is cleaned up with the run, falling back to the OS temp dir.
 func headlessTempDir(workDir string) string {
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
@@ -217,10 +172,8 @@ func headlessEnvironment(provider string) []string {
 	}
 	if provider == "claude" {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
-		// Cap the effective context window so auto-compaction fires at the
-		// configured threshold instead of the model's full window. Injected here
-		// (not inherited) because the allowlist above drops CLAUDE_CODE_* and the
-		// daemon deliberately scrubs this var from its own environment.
+		// Injected, not inherited: the allowlist above drops CLAUDE_CODE_* and the
+		// daemon scrubs this var from its own environment.
 		if window := HeadlessContextWindowCap(); window > 0 {
 			env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(window))
 		}

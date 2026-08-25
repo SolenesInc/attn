@@ -2,20 +2,6 @@
 
 package pty
 
-// The no-desync gate for the kitty feed path, at unit level.
-//
-// Two REAL ghostty terminals. The worker has kitty live and is fed raw input
-// through the real composed feeder; the client has kitty disabled — the closest
-// stand-in for the frontend's wasm model, which cannot parse the protocol at
-// all — and is fed only what the feeder puts on the wire. After every case the
-// two must agree on their whole text and on the cursor.
-//
-// That agreement IS the property this phase exists to protect: the worker grid
-// backs approval classification and the restore dump, so a grid the client
-// cannot reproduce shows up as the screen changing under the user on reattach.
-// The tests below judge that outcome and never the byte recipe that produces
-// it — synthesis is free to change shape as long as the two grids still match.
-
 import (
 	"encoding/base64"
 	"fmt"
@@ -25,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// mirrorStorageLimit is a positive limit so the protocol is live; the value
-// only has to exceed the test images.
 const mirrorStorageLimit = 10 << 20
 
 // Cells are 8x16 px in ghosttyvt, so every image size below is an exact cell
@@ -40,23 +24,15 @@ func kittyPlaceRGB(id uint32, w, h int, extra string) string {
 		id, w, h, extra, base64.StdEncoding.EncodeToString(pix))
 }
 
-// kittyTransmitRGB carries pixels and places nothing: a=t replaces the image
-// stored under an id, so a placement already showing that id keeps its key and
-// its position while its content — and its cell footprint — moves under it.
 func kittyTransmitRGB(id uint32, w, h int) string {
 	return fmt.Sprintf("\x1b_Ga=t,i=%d,f=24,t=d,s=%d,v=%d;%s\x1b\\",
 		id, w, h, base64.StdEncoding.EncodeToString(kittyCorpusPixels(w, h)))
 }
 
-// undescribed puts an APC where the segmenter must not cut it out: an
-// unfinished CSI in front of it makes the APC's leading ESC that CSI's exit
-// too, so removing the APC would remove the exit with it. The bytes therefore
-// go to the wire verbatim while ghostty still dispatches the command — an image
-// on the worker's grid that the client, which cannot parse kitty, never sees.
-// See kittyseg.go, and the corpus entry "an apc that cancels an unfinished csi".
+// An unfinished CSI in front of the APC makes its leading ESC that CSI's exit, so the
+// segmenter cannot cut the APC out: the bytes reach the wire verbatim.
 func undescribed(apc string) string { return "\x1b[1" + apc }
 
-// mirror holds the two terminals and the feeder under test.
 type mirror struct {
 	worker     *ghosttyvt.Terminal
 	client     *ghosttyvt.Terminal
@@ -65,9 +41,8 @@ type mirror struct {
 	lastResync string
 }
 
-// newKittyTerminal builds a terminal and gives it cell metrics: placement
-// geometry is resolved in cells, and cells only have a size after a resize
-// (newKittyT in internal/ghosttyvt carries the same line).
+// Placement geometry is resolved in cells, and cells only have a size after a
+// resize — hence the Resize below.
 func newKittyTerminal(t *testing.T, cols, rows int, opts ghosttyvt.Options) *ghosttyvt.Terminal {
 	t.Helper()
 	term, err := ghosttyvt.New(cols, rows, opts)
@@ -82,7 +57,6 @@ func newKittyTerminal(t *testing.T, cols, rows int, opts ghosttyvt.Options) *gho
 func newMirror(t *testing.T, cols, rows int, opts ghosttyvt.Options) *mirror {
 	t.Helper()
 	worker := newKittyTerminal(t, cols, rows, opts)
-	// The client stands in for the frontend's model: same size, no kitty.
 	client := newKittyTerminal(t, cols, rows, ghosttyvt.Options{ScrollbackBytes: opts.ScrollbackBytes})
 
 	feed := newWireFeeder(worker, 0, nil, 0)
@@ -93,9 +67,6 @@ func newMirror(t *testing.T, cols, rows int, opts ghosttyvt.Options) *mirror {
 	return &mirror{worker: worker, client: client, feed: feed}
 }
 
-// write feeds one chunk the way the read loop does and applies the produced
-// wire bytes to the client — through writeAsClient, so this harness models the
-// frontend the same way the corpus and the fuzz targets do.
 func (m *mirror) write(chunk string) {
 	wire, resync := m.feed.feed([]byte(chunk))
 	m.lastWire = append([]byte(nil), wire...)
@@ -109,10 +80,6 @@ func (m *mirror) agree(t *testing.T, when string) {
 		t.Errorf("%s: the client history diverged from the worker history\nworker:\n%s\nclient:\n%s",
 			when, want, got)
 	}
-	// The viewport is a separate question from the history, and the one the user
-	// looks at. On the primary screen a scroll only moves the boundary between
-	// them, so the two texts stay identical while the visible screen is off by
-	// however many rows the client failed to scroll.
 	if got, want := m.client.ViewportText(), m.worker.ViewportText(); got != want {
 		t.Errorf("%s: the client viewport diverged from the worker viewport\nworker:\n%s\nclient:\n%s",
 			when, want, got)
@@ -128,8 +95,7 @@ type mirrorCase struct {
 	name       string
 	cols, rows int
 	chunks     []string
-	// check runs after the last chunk, on state the grids alone do not show.
-	check func(t *testing.T, m *mirror)
+	check      func(t *testing.T, m *mirror)
 }
 
 var mirrorCases = []mirrorCase{
@@ -166,12 +132,6 @@ var mirrorCases = []mirrorCase{
 		},
 	},
 	{
-		// Leaving the alternate screen prunes the placements it held, which
-		// moves ghostty's stamp on bytes no APC accounted for. The check runs;
-		// the delta is a pure removal; nothing resyncs. That exemption is the
-		// case's point, so it is asserted rather than left implied — the mode
-		// switch is on the wire already, the client never drew the image, and no
-		// row came back when it went away.
 		name: "image placed on the alternate screen, then back",
 		cols: 20, rows: 8,
 		chunks: []string{
@@ -187,10 +147,6 @@ var mirrorCases = []mirrorCase{
 		},
 	},
 	{
-		// The same exemption reached the other way: a delete the wire could not
-		// describe. The bytes go out verbatim, ghostty retires the placement,
-		// and the grids stay equal — so the chunk is silent even though the
-		// stamp moved on bytes nothing accounted for.
 		name: "an undescribed delete of a live placement",
 		cols: 20, rows: 8,
 		chunks: []string{
@@ -213,11 +169,6 @@ var mirrorCases = []mirrorCase{
 		chunks: splitEvery(kittyPlaceRGB(6, 16, 32, ""), 11),
 	},
 	{
-		// The shape that puts a plain run inside the SEGMENTER's own buffer and
-		// then makes it move: a trailing ESC is held as a possible introducer,
-		// the next chunk carries text plus a half APC, and holding that half
-		// shifts the buffer under the text that was just emitted. Anything the
-		// wire keeps a pointer to instead of copying is clobbered here.
 		name: "a held escape, then text and a half image in one chunk",
 		cols: 20, rows: 8,
 		chunks: []string{
@@ -246,31 +197,11 @@ var mirrorCases = []mirrorCase{
 		},
 	},
 	{
-		// The shape the ST on every strip exists for, on the one column where
-		// it bites. A partial character is pending when the APC arrives; the
-		// APC's ESC aborts the worker's decode into a replacement character and
-		// the continuation byte that follows lands alone as a second one.
-		// Without the ST the client still holds the lead byte, joins it to that
-		// continuation, and prints one character where the worker printed two —
-		// and since neither side then holds anything pending, nothing heals it.
-		//
-		// Two things have to line up for it to be reachable, and both are in
-		// this case on purpose. The APC must move nothing, or the feeder
-		// describes the movement with a CSI whose own ESC aborts the client's
-		// decode by accident — so this is a delete, not a placement. And the
-		// cursor must be on the last column, or the aborted character advances
-		// it and that movement gets described for the same accidental reason.
-		// Here the replacement character fills the final cell and leaves the
-		// cursor put with a pending wrap, so there is nothing to describe and
-		// the ST is the only ESC the client gets.
 		name: "a character split around an apc on the last column",
 		cols: 20, rows: 8,
 		chunks: []string{strings.Repeat("0", 19) + "\xe1", "\x1b_Ga=d\x1b\\", "\xa5 done"},
 	},
 	{
-		// The marker's leading ESC ends a part-built character. Both models must
-		// receive the marker itself: on the wrap column, dropping it from either
-		// side costs a row as well as a cell.
 		name: "a prompt marker splitting a character on the wrap column",
 		cols: 20, rows: 8,
 		chunks: []string{strings.Repeat("0", 20) + "\xe1", "\x1b]133;A\x1b\\", "\xa5 done"},
@@ -305,9 +236,6 @@ var mirrorCases = []mirrorCase{
 	},
 }
 
-// The three delta shapes the end-of-feed check distinguishes. onlyRemovals is
-// the one it lets pass in silence: a placement retired and nothing created,
-// re-placed, or retransmitted.
 func onlyRemovals(delta kittyPlacementDelta) bool {
 	return len(delta.Removed) > 0 && len(delta.Added) == 0 && len(delta.Updated) == 0
 }
@@ -320,13 +248,9 @@ func onlyUpdates(delta kittyPlacementDelta) bool {
 	return len(delta.Updated) > 0 && len(delta.Added) == 0 && len(delta.Removed) == 0
 }
 
-// halfOf and restOf cut an escape in two at a fixed point well inside its
-// payload, so the first piece can never terminate on its own.
 func halfOf(s string) string { return s[:len(s)/2] }
 func restOf(s string) string { return s[len(s)/2:] }
 
-// splitEvery cuts s into n-byte chunks, which is how a real transmission
-// arrives: PTY reads land wherever they land, mid-escape included.
 func splitEvery(s string, n int) []string {
 	var out []string
 	for len(s) > n {
@@ -353,10 +277,6 @@ func TestWireFeedKeepsTheClientGridEqualToTheWorkerGrid(t *testing.T) {
 				tc.check(t, m)
 			}
 
-			// Every ref the feeder pins around an APC is freed inside the same
-			// feed call; the block table's refs are freed by close. Anything
-			// still live afterwards is a leak of native memory the process
-			// never gets back.
 			m.feed.close()
 			if got := ghosttyvt.LiveTrackedRefs(); got != baseline {
 				t.Errorf("LiveTrackedRefs() = %d after the case, want the %d it started at", got, baseline)
@@ -365,16 +285,6 @@ func TestWireFeedKeepsTheClientGridEqualToTheWorkerGrid(t *testing.T) {
 	}
 }
 
-// The shipping configuration. Ghostty refuses every transmission, so there is
-// nothing to observe and nothing to synthesize, and the wire is the input with
-// each APC replaced in position by an ST — one per APC, unconditionally, in the
-// 7-bit form. That ST is the entire wire contribution of an image here, and it
-// is there for the client's UTF-8 decoder rather than for its grid: the APC's
-// leading ESC aborted a partial multi-byte character in the worker, so the wire
-// must abort the same one at the same offset. See writeAPC.
-//
-// Deleting the append in writeAPC turns this red first and most legibly, which
-// is the point of asserting the exact bytes rather than a count.
 func TestWireFeedStripsAPCsWithKittyDisabled(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{})
 
@@ -395,10 +305,6 @@ func TestWireFeedStripsAPCsWithKittyDisabled(t *testing.T) {
 	m.agree(t, "with kitty disabled")
 }
 
-// A chunk that ends mid-APC contributes nothing to the wire: the grid effect
-// has not happened yet, so there is nothing to describe. This is what makes a
-// snapshot taken mid-transmission safe — it serves the pre-placement grid, and
-// the completing chunk carries a higher seq.
 func TestWireFeedHoldsAnUnterminatedAPCOffTheWire(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
 	full := kittyPlaceRGB(11, 16, 32, "")
@@ -417,11 +323,6 @@ func TestWireFeedHoldsAnUnterminatedAPCOffTheWire(t *testing.T) {
 	}
 }
 
-// A chunk with no kitty in it is handed straight back, so the overwhelmingly
-// common case — which is every chunk of every session while the feature is
-// dark — costs no copy and no allocation. ANSI escapes are in the input on
-// purpose: a terminal stream is full of them, and the fast path has to survive
-// an ESC that introduces something else.
 func TestWireFeedPassesAPlainChunkThroughByIdentity(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
 	chunk := []byte("\x1b[32mgreen\x1b[0m\r\n\x1b[2;3Hmoved")
@@ -436,19 +337,6 @@ func TestWireFeedPassesAPlainChunkThroughByIdentity(t *testing.T) {
 	}
 }
 
-// The escape hatch, on the case that reaches it: an image taller than the
-// ALTERNATE screen, which keeps no history, so the cell the cursor sat on is
-// destroyed by the scroll the image itself caused. Ghostty clamps a destroyed
-// tracked ref to the top of what is left instead of invalidating it, so the
-// measured scroll comes out short — five rows here against a real eight — and
-// the client would keep three rows the worker discarded. Detecting that the
-// anchor reached the top of history is what turns a silent divergence into a
-// snapshot re-push.
-//
-// The grids are deliberately NOT asserted equal afterwards: the wire carries no
-// synthesis for this chunk and the re-push is what makes the client whole. The
-// ST still goes out, because it is unconditional — it costs nothing here and a
-// rule with an exception is a rule someone has to re-derive.
 func TestWireFeedResyncsWhenTheAnchorHitsTheTopOfHistory(t *testing.T) {
 	m := newMirror(t, 20, 6, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
 
@@ -470,48 +358,22 @@ func TestWireFeedResyncsWhenTheAnchorHitsTheTopOfHistory(t *testing.T) {
 	}
 }
 
-// The end-of-feed check's whole truth table, on streams that reach every row of
-// it. It runs only when ghostty's kitty stamp moved on bytes the wire carried
-// verbatim, and from there the question is not whether an image APPEARED but
-// whether anything happened that could have scrolled the grid: creating or
-// re-placing a placement can, retiring one cannot. So a delta that is nothing
-// but removals is silent and everything else — an empty diff under a moved
-// stamp included — is a snapshot re-push.
-//
-// Asserted on the reason and not only on the grids, because the grids cannot
-// tell the two failures apart and one of the silent rows is silent by DESIGN.
-// Where nothing should resync the grids are asserted too, which is the whole
-// claim those rows make.
-//
-// Every row also states the delta shape it means to exercise. Without that a
-// row passes for the wrong reason the day ghostty reports one of these
-// differently — a re-place that came back as an Added placement would still
-// resync, and would stop being the Updated case the row is named for.
 func TestWireFeedResyncsOnEveryUnaccountedMutationButAPureRemoval(t *testing.T) {
 	cases := []struct {
 		name   string
 		chunks []string
 		want   string
-		// shape names what the last chunk's observations must have found, so a
-		// row cannot pass while exercising a different branch of the rule.
-		shape func(kittyPlacementDelta) bool
+		shape  func(kittyPlacementDelta) bool
 	}{
 		{
-			// Placed and deleted inside one chunk: the sets on both sides of the
-			// diff are empty, so no observation can name what moved and the
-			// stamp is the only witness. The cursor is two columns and one row
-			// apart by the end.
 			name: "a placement that appears and dies inside one chunk",
 			chunks: []string{
 				"\x1b[2;2Hkeep",
 				undescribed(kittyPlaceRGB(47, 16, 32, "")) + undescribed("\x1b_Ga=d\x1b\\"),
 			},
 			want: kittyResyncStampWithoutDelta,
-			// No shape: the point of the row is that there is no delta at all.
 		},
 		{
-			// A live key put somewhere new. Nothing is added; the diff reports
-			// Updated, and the placement moved the cursor on the worker alone.
 			name: "a live placement re-placed at a new position",
 			chunks: []string{
 				"\x1b[2;2Hkeep",
@@ -522,14 +384,6 @@ func TestWireFeedResyncsOnEveryUnaccountedMutationButAPureRemoval(t *testing.T) 
 			shape: onlyUpdates,
 		},
 		{
-			// New pixels under a live key RETIRE the placement rather than
-			// re-point it, so this reads as a pure removal and the rule
-			// deliberately stays quiet: the wire carried the transmission
-			// verbatim, so the client retires the same placement on the same
-			// bytes. agree() below is what keeps that claim honest.
-			//
-			// It used to be an Update — ImageGeneration moving under a key that
-			// did not — and moved to a removal when the ghostty pin did.
 			name: "an image retransmitted under a live placement id",
 			chunks: []string{
 				"\x1b[2;2Hkeep",
@@ -540,18 +394,12 @@ func TestWireFeedResyncsOnEveryUnaccountedMutationButAPureRemoval(t *testing.T) 
 			shape: onlyRemovals,
 		},
 		{
-			// The original shape, kept in the table so widening the rule cannot
-			// drop it: a placement created by an APC the wire carried verbatim.
 			name:   "a placement created by an undescribed apc",
 			chunks: []string{"\x1b[2;2Hkeep", undescribed(kittyPlaceRGB(55, 16, 32, ""))},
 			want:   kittyResyncUndescribedImage,
 			shape:  onlyAdditions,
 		},
 		{
-			// The settle runs at every described dispatch too, and it must not
-			// turn an ordinary one into a re-push: writeAPC accounts for its own
-			// move, so by the time the next settle looks there is nothing left
-			// unaccounted. This row is the guard on that.
 			name:   "a placement created by a described apc",
 			chunks: []string{"\x1b[2;2Hkeep", kittyPlaceRGB(60, 16, 32, "")},
 			want:   "",
@@ -602,9 +450,6 @@ func TestWireFeedResyncsOnEveryUnaccountedMutationButAPureRemoval(t *testing.T) 
 				t.Fatalf("deltas = %+v: not the shape this row is named for", m.feed.deltas)
 			}
 			if tc.want != "" {
-				// The wire deliberately carries no synthesis for the chunk, so
-				// the grids are allowed to differ; the snapshot re-push is what
-				// makes the client whole.
 				return
 			}
 			m.agree(t, "after a chunk that only retired placements")
@@ -612,22 +457,6 @@ func TestWireFeedResyncsOnEveryUnaccountedMutationButAPureRemoval(t *testing.T) 
 	}
 }
 
-// The accounting rule, at the shape that used to break it: an undescribed
-// dispatch followed by a described one in the SAME chunk.
-//
-// writeAPC ends by taking the terminal's kitty stamp as its own, and the stamp
-// is one number for the whole terminal — so a described APC used to absorb the
-// undescribed dispatch that ran before it, leaving the end-of-feed check a
-// stamp that already looked accounted for and the image on the worker's grid
-// alone. Settling at writeAPC's entry is what splits the two.
-//
-// Two claims, and the second is the one a naive fix would miss. The chunk must
-// resync for the image the wire could not carry, AND the APC that settled it
-// must still be described in full: a resync says what the wire could not
-// express, it is never a reason to stop expressing what it can. Pinned against
-// a control that runs the same placement alone from the same cursor — the
-// undescribed one carries C=1 so it moves nothing — which makes the expected
-// wire exact rather than a shape.
 func TestWireFeedStillDescribesTheAPCThatSettlesAnUndescribedOne(t *testing.T) {
 	const prefix = "\x1b[2;2Hkeep"
 	described := kittyPlaceRGB(59, 16, 32, "")
@@ -655,29 +484,14 @@ func TestWireFeedStillDescribesTheAPCThatSettlesAnUndescribedOne(t *testing.T) {
 	}
 }
 
-// `r=N` makes a 2x2 image claim N rows, which is the one knob that dials the
-// scroll a single placement causes. It is how a placement used to outrun what
-// one SU can express and trip kittyResyncScrollClamped, and it is the shape
-// most likely to do so again — so this sweeps it past every plausible height
-// and holds the wire to the strong claim at each one: no resync, and the two
-// grids agree.
-//
-// On this ghostty pin nothing in the sweep resyncs. A placement's scroll no
-// longer tracks the row count `r=` claims and stays inside the screen, so it
-// never exceeds one SU and the tripwire has no case here — see the receipt on
-// kittyResyncScrollClamped for the shapes probed against it.
 func TestWireFeedCarriesTheScrollOfAnOverTallPlacement(t *testing.T) {
 	for _, rows := range []int{8, 12} {
 		t.Run(fmt.Sprintf("%d rows", rows), func(t *testing.T) {
-			// Heights around and far past the screen, including the ones that
-			// used to sit on either side of the old boundary.
 			for _, r := range []int{1, 2, 7, 8, 12, 13, 14, 15, 22, 23, 40} {
 				m := newMirror(t, 20, rows, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
 				m.write("\x1b[2;2Hkeep")
 				m.write(kittyPlaceRGB(uint32(80+r), 16, 32, fmt.Sprintf(",r=%d", r)))
 				resync := m.lastResync
-				// The trailing text is what pushes the scroll into history,
-				// where agree() can compare it.
 				m.write("\r\ntail")
 
 				if resync != "" {
@@ -691,16 +505,6 @@ func TestWireFeedCarriesTheScrollOfAnOverTallPlacement(t *testing.T) {
 	}
 }
 
-// DECLRMM is the tripwire, and the same stream without it is the control. A
-// scroll confined to the margin box moves text between rows without moving the
-// rows, so the tracked pair reports nothing and the wire carries no SU for it —
-// the client's text stays put under a cursor that agrees, which is a divergence
-// no assertion on the cursor would catch.
-//
-// The control is what keeps this honest: it is the identical stream on a
-// terminal with no margins set, and it must stay silent AND byte-equal. A
-// tripwire that fired on every placement would pass the first half of this test
-// and fail the second.
 func TestWireFeedResyncsWhileLeftRightMarginsAreSet(t *testing.T) {
 	const bottom = "\x1b[32;5Hxy"
 	place := kittyPlaceRGB(65, 16, 32, "")
@@ -720,16 +524,8 @@ func TestWireFeedResyncsWhileLeftRightMarginsAreSet(t *testing.T) {
 		t.Fatalf("resync = %q, want %q: the placement scrolled the margin box and nothing measured it",
 			m.lastResync, kittyResyncMarginMode)
 	}
-	// Described in full anyway: the cursor moves are the part of the measurement
-	// margins do not spoil, and they are worth having until the snapshot lands.
-	// The one thing missing against the control is its SU, the scroll that
-	// happened inside the margin box and that nothing on this side could see,
-	// which is the whole reason the reason string exists.
-	//
-	// Both byte strings are receipts taken against the pinned ghostty; how far
-	// a placement scrolls is upstream's call, so a pin bump moves them. What
-	// must survive a bump is the difference: the control carries an SU and the
-	// tripwire carries the same cursor moves without it.
+	// Receipts against the pinned ghostty; a bump moves them. What must survive is the
+	// difference: the control carries an SU, the tripwire the same moves without it.
 	if got, want := string(control.lastWire), string(wireST)+"\x1b[1S\x1b[2C"; got != want {
 		t.Fatalf("control wire = %q, want %q: without margins the same placement scrolls a row and says so", got, want)
 	}
@@ -742,19 +538,8 @@ func TestWireFeedResyncsWhileLeftRightMarginsAreSet(t *testing.T) {
 	}
 }
 
-// The last column is the one place a cursor position hides state: a cell there
-// can be written with the wrap DEFERRED, so the cursor still reads as column
-// cols-1 while the next printable byte will wrap before it lands. A dispatch
-// consumes that bit on the worker and the wire's bytes do not consume it on the
-// client, and no accessor exposes it to compare — so the column is the tripwire.
-//
-// The control is the isolation: the identical stream with the cursor mid-row
-// carries no pending wrap, stays silent, and its grids agree. Without it this
-// test would pass for a tripwire that fired on every placement.
 func TestWireFeedResyncsWithACursorInTheLastColumn(t *testing.T) {
 	const cols, rows = 20, 8
-	// 8x16 px is one cell, so the placement itself scrolls nothing and moves the
-	// cursor by a single column — everything this case shows comes from the wrap.
 	place := kittyPlaceRGB(70, 8, 16, "")
 
 	control := newMirror(t, cols, rows, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
@@ -770,30 +555,20 @@ func TestWireFeedResyncsWithACursorInTheLastColumn(t *testing.T) {
 	control.agree(t, "with the cursor mid-row")
 
 	m := newMirror(t, cols, rows, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
-	// Exactly a screen width fills the row and leaves the wrap pending.
 	m.write(strings.Repeat("x", cols))
 	m.write(place)
 	if m.lastResync != kittyResyncPendingWrap {
 		t.Fatalf("resync = %q, want %q: the placement consumed a pending wrap nothing could measure",
 			m.lastResync, kittyResyncPendingWrap)
 	}
-	// Described in full, same as the margin tripwire. At the pinned ghostty the
-	// measurement now catches the wrap itself: the cursor moves down a row and
-	// back to column 0, which is exactly what the deferred wrap did.
+	// At the pinned ghostty the measurement catches the wrap itself: the cursor
+	// moves down a row and back to column 0.
 	if got, want := string(m.lastWire), string(wireST)+"\x1b[1B\x1b[19D"; got != want {
 		t.Errorf("wire = %q, want %q: the dispatch is still described, wrap included", got, want)
 	}
 
-	// And so both sides converge. That was NOT true at the previous pin, where
-	// the placement consumed the wrap invisibly and the two cursors parted
-	// company here; upstream moved, and this case stopped demonstrating the
-	// divergence the resync exists for.
-	//
-	// The resync stays anyway, and this asserts it stays: no accessor exposes
-	// the pending-wrap bit, so nothing proves the measurement covers it in
-	// general. One case converging at one pin is not that proof. Whether the
-	// resync still earns its cost is a question to answer on its own, with a
-	// case that still diverges, not as a side effect of a bump.
+	// Both sides converge at this pin. The resync stays: no accessor exposes the
+	// pending-wrap bit, so one case converging at one pin proves nothing.
 	m.write("y")
 	wx, wy := m.worker.CursorPos()
 	cx, cy := m.client.CursorPos()
@@ -803,18 +578,8 @@ func TestWireFeedResyncsWithACursorInTheLastColumn(t *testing.T) {
 	m.agree(t, "after a placement consumed the pending wrap")
 }
 
-// A limit someone can hit is a limit they must see. Ghostty refuses an image
-// larger than the whole storage limit and says nothing — kitty's own response is
-// suppressed by the `q=2` every measured emitter sends — so the worker is the
-// only place the refusal is visible at all.
-//
-// The pair is the point. The same transmission that is refused under a small
-// limit is accepted under a large one, and the accepted case must be silent:
-// a log on every image would be noise nobody reads, and eviction (an older image
-// dropped to admit a new one) is normal and reaches this same path.
 func TestWireFeedLogsATransmissionTheStorageLimitRefused(t *testing.T) {
-	// 64x64 RGBA is 16,384 bytes stored; the refusing limit is under it and the
-	// accepting one is over.
+	// 64x64 RGBA is 16,384 bytes stored: one limit under it, one over.
 	const refuses, accepts = 4096, 1 << 20
 
 	feedUnder := func(limit uint64, apc string) []string {
@@ -836,7 +601,6 @@ func TestWireFeedLogsATransmissionTheStorageLimitRefused(t *testing.T) {
 	if len(logs) != 1 {
 		t.Fatalf("logs = %q, want exactly one line for a refused transmission", logs)
 	}
-	// Name the limit, its value, and the ask: an agent can act on all three.
 	for _, want := range []string{kittyStorageLimitEnv, fmt.Sprint(refuses), fmt.Sprint(64 * 64 * 4)} {
 		if !strings.Contains(logs[0], want) {
 			t.Errorf("refusal log %q does not name %q", logs[0], want)
@@ -848,11 +612,6 @@ func TestWireFeedLogsATransmissionTheStorageLimitRefused(t *testing.T) {
 	}
 }
 
-// Every APC shape that is NOT a refused transmission, on the path that judges
-// one. Each row is a measured way to reach "the kitty generation did not move",
-// and mistaking any of them for a refusal would put a line in the daemon log for
-// ordinary output — the chunked rows especially, where kitty stores nothing
-// until the last escape and an emitter sends dozens of them per image.
 func TestWireFeedKeepsQuietForEverythingThatIsNotARefusal(t *testing.T) {
 	const limit = 1 << 20
 	place := kittyPlaceRGB(91, 16, 32, ",p=7")
@@ -893,10 +652,6 @@ func TestWireFeedKeepsQuietForEverythingThatIsNotARefusal(t *testing.T) {
 	}
 }
 
-// Ghostty answers a support query from the terminal's own response channel, and
-// the read loop forwards it to the program. Stripping the APC from the WIRE
-// must not touch that: a program that asks whether images are supported still
-// gets its answer from the one parser in the system.
 func TestWireFeedKeepsKittyResponsesFlowingToTheProgram(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{KittyImageStorageLimit: mirrorStorageLimit})
 	m.worker.DrainResponses()
@@ -912,14 +667,6 @@ func TestWireFeedKeepsKittyResponsesFlowingToTheProgram(t *testing.T) {
 	}
 }
 
-// The pre-ST writeAPC gives the WORKER is licensed by one property: from ground
-// it does nothing to the grid except end a part-built character. Measured rather
-// than asserted from the spec, because everything downstream — the cursor pin,
-// the tracked ref, the early exit — is measured against the state it leaves.
-//
-// Checked at every column, because the one place it is NOT inert is the one that
-// matters: on the last column the replacement character it resolves fills the
-// final cell, and on the wrap column it commits the deferred wrap.
 func TestWireFeedPreSTOnlyEndsTheDecode(t *testing.T) {
 	for _, pending := range []string{"", "\xe1", "\xc2", "\xf0\x9f"} {
 		for n := 17; n <= 21; n++ {
@@ -937,15 +684,12 @@ func TestWireFeedPreSTOnlyEndsTheDecode(t *testing.T) {
 			sameGrid := plain.PlainText() == withST.PlainText() && px == sx && py == sy
 
 			if pending == "" {
-				// Nothing held: the ST must be invisible.
 				if !sameGrid {
 					t.Errorf("n=%d, nothing pending: the ST moved the grid\nplain:  %q (%d,%d)\nwithST: %q (%d,%d)",
 						n, plain.PlainText(), px, py, withST.PlainText(), sx, sy)
 				}
 				continue
 			}
-			// Something held: the ST must resolve it into exactly one
-			// replacement character and nothing else.
 			if sameGrid {
 				t.Errorf("n=%d, %q pending: the ST changed nothing, so the decode was never ended", n, pending)
 				continue
@@ -959,16 +703,6 @@ func TestWireFeedPreSTOnlyEndsTheDecode(t *testing.T) {
 	}
 }
 
-// The ordering the fix rests on, at the shape that exposes it. On the wrap
-// column the pre-ST is what moves the cursor — it commits the deferred wrap —
-// and the APC that follows does nothing at all in the shipping configuration.
-// Pinned AFTER the ST, the feeder therefore measures zero movement and takes the
-// early exit, leaving the wire carrying the ST alone.
-//
-// Pinned before it, that same movement would be read as the image's, described
-// on the wire, and applied a second time by a client that had already performed
-// the abort itself — one row too far. This test is the guard on the ordering,
-// not on the bytes.
 func TestWireFeedPinsTheCursorAfterTheDecodeEnds(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{})
 
@@ -987,16 +721,9 @@ func TestWireFeedPinsTheCursorAfterTheDecodeEnds(t *testing.T) {
 	m.agree(t, "after an APC on the wrap column")
 }
 
-// The marker must be written BEFORE the block table pins its position, or the
-// block records the cell the cursor sat on before Ghostty applies prompt-start.
-//
-// Asserted on the pin, not on the grid: the grid agrees either way here, so a
-// text-only check would pass with the write and the pin in the wrong order.
 func TestWireFeedPinsTheBlockAfterTheDecodeEnds(t *testing.T) {
 	m := newMirror(t, 20, 8, ghosttyvt.Options{})
 
-	// A character left part-built on the wrap column: the marker's ESC commits
-	// the pending wrap to row 1, then prompt-start advances to fresh row 2.
 	m.write(strings.Repeat("0", 20) + "\xe1")
 	m.write("\x1b]133;A\x1b\\")
 

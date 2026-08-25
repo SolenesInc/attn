@@ -6,11 +6,8 @@ import (
 	"testing"
 )
 
-// The package dogfoods itself: this state is reached by TestReachedIsIdempotent
-// below, so a run of this package exercises registration, Reached, and Run's
-// end-of-run check for real. It is the only mark this file puts in the default
-// catalog — everything else registers into a throwaway one, so -count=N does not
-// trip the duplicate rule on its own tests.
+// The only mark this file puts in the default catalog — everything else registers
+// into a throwaway one, so -count=N does not trip the duplicate rule.
 var selfCheck = Sometimes("testinv's own mark was reached at least once")
 
 func TestMain(m *testing.M) { os.Exit(Run(m)) }
@@ -33,14 +30,12 @@ func TestReachedIsIdempotentAndVisible(t *testing.T) {
 
 func TestANilMarkIsInert(t *testing.T) {
 	var m *Mark
-	m.Reached() // must not panic: a mark behind a build tag may be nil
+	m.Reached()
 	if m.WasReached() {
 		t.Errorf("a nil mark reported itself reached")
 	}
 }
 
-// Two marks with the same description make the report ambiguous about which site
-// went quiet, which is the one thing the report has to be right about.
 func TestCatalogingTheSameStateTwicePanics(t *testing.T) {
 	const what = "a duplicated description"
 	c := newCatalog()
@@ -68,15 +63,12 @@ func TestAnEmptyDescriptionPanics(t *testing.T) {
 	newCatalog().add("   ", "x_test.go:1")
 }
 
-// The report points at the var so nobody has to grep for the description.
 func TestSometimesRecordsWhereItWasCataloged(t *testing.T) {
 	if !strings.HasPrefix(selfCheck.site, "testinv/testinv_test.go:") {
 		t.Errorf("registration site = %q, want this file", selfCheck.site)
 	}
 }
 
-// review is where the run's verdict is decided, so it is tested directly on
-// synthetic inventories rather than by wrangling a second test binary.
 func TestAnUnreachedStateFailsTheRunAndNamesItself(t *testing.T) {
 	report, incomplete := review([]state{
 		{what: "a batch of more than one event", site: "bus/testinv_test.go:12"},
@@ -100,8 +92,6 @@ func TestAnUnreachedStateFailsTheRunAndNamesItself(t *testing.T) {
 	}
 }
 
-// A run whose tests failed reaches less by construction, so the advice must not
-// tell someone chasing a real failure that their suite is silently rotting.
 func TestAFailedRunIsToldToFixTheTestsFirst(t *testing.T) {
 	report, incomplete := review([]state{
 		{what: "a batch of more than one event", site: "bus/testinv_test.go:12"},
@@ -137,8 +127,6 @@ func TestAnEmptyInventoryCostsNothing(t *testing.T) {
 	}
 }
 
-// A filtered run cannot reach the whole inventory, so it must not fail — but it
-// must say that it checked nothing, or the silence reads as a pass.
 func TestAFilteredRunSaysItCheckedNothing(t *testing.T) {
 	report, incomplete := review([]state{
 		{what: "a batch of more than one event", site: "bus/testinv_test.go:12"},
@@ -153,9 +141,6 @@ func TestAFilteredRunSaysItCheckedNothing(t *testing.T) {
 	}
 }
 
-// A mark may sit inside a test double that production code calls on a hot path,
-// so the steady-state cost is the number that decides whether placing one is ever
-// a judgement call. It is a plain atomic load once the state has been reached.
 func BenchmarkReachedOnAnAlreadyReachedMark(b *testing.B) {
 	m := newCatalog().add("a state already reached", "x_test.go:1")
 	m.Reached()

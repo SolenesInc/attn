@@ -1,6 +1,3 @@
-// Keeping the annotation surface inside the window: pure arithmetic over
-// measured sizes. Fitting the viewport is not enough, so placement also takes
-// the region the popup belongs in and a surface it must not cover.
 
 export interface Size {
   width: number;
@@ -25,16 +22,11 @@ export interface Rect {
 }
 
 export interface PlaceOptions {
-  // The annotated grid's rect. Preferred, not obeyed: a pane too narrow for
-  // the popup falls back to the window.
   bounds?: Rect | null;
-  // A surface the popup must not cover, in viewport coordinates.
   avoid?: Rect | null;
 }
 
-// Breathing room against the region edge.
 const MARGIN = 8;
-// Clearance from the anchor point, and from an avoided surface.
 const GAP = 10;
 
 function clamp(value: number, min: number, max: number): number {
@@ -45,7 +37,6 @@ function sizeToRect(size: Size): Rect {
   return { left: 0, top: 0, width: size.width, height: size.height };
 }
 
-// Fits a box fully inside a rect, preferring the requested position.
 function clampToRect(at: Placement, size: Size, region: Rect): Placement {
   return {
     left: clamp(at.left, region.left + MARGIN, region.left + region.width - size.width - MARGIN),
@@ -53,13 +44,10 @@ function clampToRect(at: Placement, size: Size, region: Rect): Placement {
   };
 }
 
-// Fits a box fully inside the viewport, preferring the requested position.
 export function clampToViewport(at: Placement, size: Size, viewport: Size): Placement {
   return clampToRect(at, size, sizeToRect(viewport));
 }
 
-// The region a box may occupy: the preferred rect when the box fits it with
-// margins, the whole window otherwise.
 function regionFor(size: Size, viewport: Size, preferred?: Rect | null): Rect {
   if (!preferred) return sizeToRect(viewport);
   const fits = preferred.width >= size.width + MARGIN * 2
@@ -81,9 +69,6 @@ function insideRect(at: Placement, size: Size, region: Rect): boolean {
     && at.top + size.height <= region.top + region.height - MARGIN;
 }
 
-// Steps a placement off a surface it lands on, to the nearest side that clears
-// it and still fits the region. When no side does, the request stands — the
-// covered panel is the lesser loss.
 function stepOff(at: Placement, size: Size, region: Rect, avoid?: Rect | null): Placement {
   if (!avoid || !overlaps(at, size, avoid)) return at;
   const candidates: Placement[] = [
@@ -101,9 +86,6 @@ function stepOff(at: Placement, size: Size, region: Rect, avoid?: Rect | null): 
   return moved[0] ?? at;
 }
 
-// Where to draw a popup anchored to a point on the grid: above and centred by
-// default (covering the annotated text defeats the point), below when there is
-// no room above, vertically centred when neither side fits.
 export function placePopup(
   at: Point,
   size: Size,

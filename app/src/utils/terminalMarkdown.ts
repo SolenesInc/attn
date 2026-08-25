@@ -1,6 +1,4 @@
-/**
- * Remove fixed-grid whitespace artifacts from captured terminal lines.
- */
+/** Remove fixed-grid whitespace artifacts from captured terminal lines. */
 export function cleanTerminalLines(lines: string[]): string[] {
   const result = lines.map((line) => line.trimEnd());
   if (result.length <= 1) return result;

@@ -13,15 +13,9 @@ import (
 	"time"
 )
 
-// TestConnectViaSSHOnceReapsChildOnDialFailure exercises the websocket.Dial
-// failure path in connectViaSSHOnce. Before the fix, each failed attempt left
-// the ssh child as a <defunct> zombie because cmd.Process.Kill was called
-// without a matching cmd.Wait. On macOS these accumulate until the per-user
-// process limit is hit.
+// The leak was cmd.Process.Kill with no matching cmd.Wait, leaving a <defunct>
+// child per failed dial until the per-user process limit was hit.
 func TestConnectViaSSHOnceReapsChildOnDialFailure(t *testing.T) {
-	// Shim "ssh" to return an invalid WebSocket upgrade immediately, then stay
-	// alive until connectViaSSHOnce kills it. The dial error path is the one that
-	// leaked zombies in the bug; a real timeout only made this regression slow.
 	shimDir := t.TempDir()
 	shim := filepath.Join(shimDir, "ssh")
 	script := "#!/bin/sh\nprintf 'HTTP/1.1 502 Bad Gateway\\r\\nContent-Length: 0\\r\\n\\r\\n'\nsleep 10\n"
@@ -34,7 +28,6 @@ func TestConnectViaSSHOnceReapsChildOnDialFailure(t *testing.T) {
 	ws, cmd, err := connectViaSSHOnce(ctx, "fake-target", "", "")
 	cancel()
 	if err == nil {
-		// Unexpected success — clean up and fail.
 		if ws != nil {
 			_ = ws.CloseNow()
 		}
@@ -48,9 +41,7 @@ func TestConnectViaSSHOnceReapsChildOnDialFailure(t *testing.T) {
 	}
 }
 
-// zombieChildrenOf returns the number of <defunct> processes whose PPID equals
-// parent. Uses `ps -A` because `ps` without -A scopes to the controlling tty
-// and will miss detached children in CI.
+// `ps` without -A scopes to the controlling tty and misses detached children in CI.
 func zombieChildrenOf(t *testing.T, parent int) int {
 	t.Helper()
 	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,stat=").Output()

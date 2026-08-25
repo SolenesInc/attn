@@ -2,11 +2,8 @@ package daemon
 
 import "testing"
 
-// Re-attach on the same websocket client must produce a fresh subscriber id.
-// When the id is reused, the PTY session subscriber map overwrites the
-// previous callback; the old stream's eventual detach then removes the new
-// subscriber, silently starving the live stream of output (regression fix
-// for tr205-claude close-pane redraw).
+// Reusing a subscriber id makes the PTY session subscriber map overwrite the previous
+// callback; the old stream's eventual detach then silently starves the live stream.
 func TestWSSubscriberIDIsUniquePerAttach(t *testing.T) {
 	client := &wsClient{}
 	seen := map[string]int{}

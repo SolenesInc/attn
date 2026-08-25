@@ -1,7 +1,5 @@
-// Colors shared by the terminal and mission-control grid renderers. Both stage
-// vertices through TerminalVertexBuffer, which stores a color as a single
-// packed integer: a per-cell {r,g,b} object allocates on the hottest loop in
-// the app, and the GPU only ever sees three normalized floats anyway.
+// Colors are staged through TerminalVertexBuffer as one packed integer: a
+// per-cell {r,g,b} object allocates on the hottest loop in the app.
 
 export interface Rgb {
   r: number;

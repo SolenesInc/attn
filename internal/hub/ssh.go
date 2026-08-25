@@ -23,10 +23,6 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
-// remoteBinaryName returns the install-relative binary name for a given
-// profile: the default profile uses "attn", named profiles use "attn-<profile>".
-// Mirrors the local install layout (~/Applications/attn-dev.app vs attn.app)
-// so a remote can host multiple profile-isolated daemons side by side.
 func remoteBinaryName(profile string) string {
 	p := strings.TrimSpace(profile)
 	if p == "" {
@@ -52,10 +48,8 @@ func remoteShellEnvScript(profile string) string {
 	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_DB_PATH")); value != "" {
 		assignments = append(assignments, "export ATTN_DB_PATH="+shellQuote(value))
 	}
-	// Kitty image storage carries its own name rather than an ATTN_REMOTE_ one:
-	// the hub and its remotes should run the same limit, so one export governs
-	// both ends — including the way out, since "0" is non-empty and disables the
-	// protocol on the remote exactly as it does locally.
+	// Deliberately not an ATTN_REMOTE_ name: one export governs both ends, "0"
+	// included, which disables the protocol on the remote as it does locally.
 	if value := strings.TrimSpace(os.Getenv("ATTN_KITTY_STORAGE_LIMIT")); value != "" {
 		assignments = append(assignments, "export ATTN_KITTY_STORAGE_LIMIT="+shellQuote(value))
 	}
@@ -84,11 +78,8 @@ func remoteAttnCommand(profile string, args ...string) string {
 	return bin
 }
 
-// runSSHExit runs a remote script and hands back what the remote command said
-// *and* how it ended. runSSH collapses both into one error string, which is
-// enough for scripts that only pass or fail; a remote `attn` subcommand answers
-// in exit codes (a refusal is not a crash), and telling those apart from "this
-// binary has no such command" needs the code itself.
+// runSSHExit keeps the exit code runSSH collapses: a remote `attn` answers refusals in
+// exit codes, which must be told apart from "this binary has no such command".
 func runSSHExit(ctx context.Context, target, profile, script string) (stdout, stderr string, exitCode int, err error) {
 	var errBuf bytes.Buffer
 	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(profile, script))...)
@@ -106,17 +97,6 @@ func runSSHExit(ctx context.Context, target, profile, script string) (stdout, st
 	return stdout, stderr, -1, runErr
 }
 
-// remoteClientToken reads the remote profile's client token — the credential
-// its daemon requires in client_hello. The hub cannot mint or derive it: the
-// token lives in that host's profile data, and ws-relay is a byte pipe, so the
-// hub's hello is checked on the far side like any local client's.
-//
-// SSH is the only new thing this asks for, and the hub already has it — it runs
-// the remote `attn` binary over the same channel to start the relay. Access to
-// the box was already full authority over it.
-//
-// Empty on any failure: the daemon's own refusal names the file and the
-// profile, which is a better answer than a guess made here.
 func (m *Manager) remoteClientToken(ctx context.Context, target, profile string) string {
 	stdout, stderr, code, err := runSSHExit(ctx, target, profile, remoteAttnCommand(profile, "client-token"))
 	if err != nil {

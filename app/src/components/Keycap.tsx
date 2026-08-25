@@ -3,11 +3,6 @@
 
 import './Keycap.css';
 
-/**
- * A combo rendered as adjacent keycaps. The literal 'then' token (emitted by
- * shortcutTokens for a chord, e.g. ['⌘','K','then','D']) renders as a small
- * separator word rather than a keycap, so chords read "⌘K then D".
- */
 export function KeyCombo({ tokens }: { tokens: string[] }) {
   return (
     <span className="key-combo">

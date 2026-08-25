@@ -1,16 +1,3 @@
-/**
- * AnnotationLayer — the UI surfaces wired to the real engine over a real
- * rendered reader DOM:
- * - toolbar appears on a pending selection, Delete redlines instantly (E6),
- *   Escape/cancel unpaints the provisional highlight (E4);
- * - type-to-comment opens the seeded popover, Cmd+Enter creates the comment
- *   (E9→E10 flow);
- * - ⚡ opens the picker; a row click creates a structured quick-label (E17);
- * - global comments flow from the sidebar header button (E13);
- * - sidebar: collapsed rail at 0 annotations, auto-open on the first one,
- *   focus glow + just-created scroll skip (E19), clear-all tombstones (E21);
- * - code-block hover toolbar annotates the whole block (E27, jsdom half).
- */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
@@ -110,8 +97,8 @@ let pathSeq = 0;
 async function mount(content = DOC) {
   const { transport, calls } = makeTransport();
   const apiRef: { current: UseAnnotationsApi | null } = { current: null };
-  // Unique URI per mount: the popover draft store is module-level and keyed
-  // by document identity — tests must not leak drafts into each other.
+  // Unique URI per mount: the popover draft store is module-level and keyed by
+  // document identity, so tests must not leak drafts into each other.
   const path = `/tmp/project/layer-${pathSeq++}.md`;
   const view = render(<Harness content={content} path={path} transport={transport} apiRef={apiRef} />);
   await flush();
@@ -186,7 +173,7 @@ describe('AnnotationLayer', () => {
     expect(api.annotations[0].type).toBe('deletion');
     expect(api.annotations[0].anchor?.exact).toBe('target words');
     expect(document.querySelector('.md-annotation-popover')).toBeNull();
-    expect(toolbar()).toBeNull(); // pending consumed, toolbar gone
+    expect(toolbar()).toBeNull();
     expect(view.container.querySelector('[data-md-mark="md-pending-selection"]')).toBeNull();
   });
 
@@ -208,7 +195,7 @@ describe('AnnotationLayer', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', bubbles: true }));
     });
 
-    expect(toolbar()).toBeNull(); // popover replaces the toolbar
+    expect(toolbar()).toBeNull();
     const textarea = popoverTextarea();
     expect(textarea.value).toBe('h');
 
@@ -230,7 +217,6 @@ describe('AnnotationLayer', () => {
     });
     fireEvent.change(popoverTextarea(), { target: { value: 'x plus more' } });
 
-    // A stray mouseup in the document (collapsed selection) while composing.
     const prose = findTextNode(view.container, 'plain prose').node.parentElement!;
     act(() => {
       prose.dispatchEvent(new Event('mouseup', { bubbles: true }));
@@ -258,7 +244,7 @@ describe('AnnotationLayer', () => {
       quickLabelId: label.id,
       quickLabelTip: label.tip,
     });
-    expect(api.annotations[0].text).toBeUndefined(); // never "emoji label" text
+    expect(api.annotations[0].text).toBeUndefined();
     expect(document.querySelector('.md-quick-label-picker')).toBeNull();
   });
 
@@ -274,7 +260,6 @@ describe('AnnotationLayer', () => {
     expect(document.querySelector('.md-sidebar-rail')).toBeNull();
     expect(document.querySelector('.md-sidebar-count')!.textContent).toBe('1');
 
-    // Collapse via the count pill; the rail returns with the count.
     fireEvent.click(screen.getByTitle('Collapse annotations sidebar'));
     expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
     expect(document.querySelector('.md-sidebar-rail-count')!.textContent).toBe('1');
@@ -283,7 +268,7 @@ describe('AnnotationLayer', () => {
   it('global comment flows from the sidebar header button (E13)', async () => {
     const view = await mount();
     beginSelection(view, 'target words');
-    fireEvent.click(screen.getByTitle('Delete')); // sidebar now open
+    fireEvent.click(screen.getByTitle('Delete'));
 
     fireEvent.click(screen.getByTitle('Add a document-wide comment'));
     expect(screen.getByText('Global Comment')).not.toBeNull();
@@ -308,7 +293,7 @@ describe('AnnotationLayer', () => {
 
     expect(view.apiRef.current!.annotations).toHaveLength(0);
     expect(view.calls.clear.length).toBeGreaterThan(0);
-    expect(view.calls.save).toHaveLength(0); // tombstoned, never save-[]
+    expect(view.calls.save).toHaveLength(0);
     expect(view.container.querySelector('[data-md-mark]')).toBeNull();
   });
 
@@ -319,12 +304,10 @@ describe('AnnotationLayer', () => {
     beginSelection(view, 'target words');
     fireEvent.click(screen.getByTitle('Delete'));
 
-    // First click right after creation: glow, no scroll.
     fireEvent.click(document.querySelector('.md-annotation-card')!);
     expect(document.querySelector('[data-md-mark="md-focus-glow"]')).not.toBeNull();
     expect(scrollSpy).not.toHaveBeenCalled();
 
-    // Second click: the just-created latch has been consumed — scroll happens.
     fireEvent.click(document.querySelector('.md-annotation-card')!);
     expect(scrollSpy).toHaveBeenCalledTimes(1);
     expect(view.apiRef.current!.selectedId).toBe(view.apiRef.current!.annotations[0].id);
@@ -339,7 +322,7 @@ describe('AnnotationLayer', () => {
 
     const bar = toolbar()!;
     expect(bar).not.toBeNull();
-    expect(bar.classList.contains('md-selection-toolbar--centered')).toBe(false); // top-right
+    expect(bar.classList.contains('md-selection-toolbar--centered')).toBe(false);
 
     fireEvent.click(screen.getByTitle('Delete'));
     const api = view.apiRef.current!;
@@ -354,7 +337,7 @@ describe('AnnotationLayer', () => {
     beginSelection(view, 'const a');
     expect(view.apiRef.current!.pending?.isCodeBlock).toBe(true);
     const bar = toolbar()!;
-    expect(bar.classList.contains('md-selection-toolbar--centered')).toBe(false); // top-right mode
+    expect(bar.classList.contains('md-selection-toolbar--centered')).toBe(false);
 
     fireEvent.click(screen.getByTitle('Delete'));
     expect(view.apiRef.current!.annotations[0].anchor?.exact).toBe('const a');

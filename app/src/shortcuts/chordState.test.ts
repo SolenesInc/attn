@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// macOS-only matcher: meta is the accelerator.
 vi.mock('./platform', () => ({
   isMacLikePlatform: () => true,
   isAccelKeyPressed: (e: KeyboardEvent) => e.metaKey,
@@ -71,7 +70,6 @@ describe('chordState', () => {
     enterLeader(LEADER, [{ id: 'dock.attention', then: { key: 'd' } }]);
     expect(resolvePendingThen(key({ key: 'Shift', shiftKey: true }))).toEqual({ kind: 'none' });
     expect(isLeaderPending()).toBe(true);
-    // The real follow key still fires afterward.
     expect(resolvePendingThen(key({ key: 'd' }))).toEqual({ kind: 'fired', id: 'dock.attention' });
   });
 
@@ -86,7 +84,6 @@ describe('chordState', () => {
     enterLeader(LEADER, [{ id: 'dock.attention', then: { key: 'd' } }]);
     expect(resolvePendingThen(key({ key: 'k', metaKey: true }))).toEqual({ kind: 'rearmed' });
     expect(isLeaderPending()).toBe(true);
-    // The follow key still fires after a re-arm.
     expect(resolvePendingThen(key({ key: 'd' }))).toEqual({ kind: 'fired', id: 'dock.attention' });
   });
 
@@ -101,7 +98,6 @@ describe('chordState', () => {
     const unsubscribe = subscribeChord(sub);
     enterLeader(LEADER, [{ id: 'dock.attention', then: { key: 'd' } }]);
     expect(sub).toHaveBeenCalledTimes(1);
-    // Same leader object -> snapshot unchanged -> no extra notification.
     enterLeader(LEADER, [{ id: 'dock.attention', then: { key: 'd' } }]);
     expect(sub).toHaveBeenCalledTimes(1);
     unsubscribe();

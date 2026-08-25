@@ -16,10 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// fileDiffTestRepo creates a real git repo with two commits touching path:
-// the first commit does not create path at all, the second adds it with
-// content v1, and a third commit updates it to v2 — so tests can pin a
-// base_ref/head_ref pair and a ref where the file doesn't exist yet.
 func fileDiffTestRepo(t *testing.T, path, v1, v2 string) (dir, shaEmpty, shaV1, shaV2 string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -64,7 +60,6 @@ func fileDiffTestRepo(t *testing.T, path, v1, v2 string) (dir, shaEmpty, shaV1, 
 func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
 	dir, _, shaV1, shaV2 := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
 
-	// Dirty the working tree; a pinned head_ref diff must ignore this.
 	if err := os.WriteFile(filepath.Join(dir, "src/file.ts"), []byte("dirty"), 0o644); err != nil {
 		t.Fatalf("dirty working tree: %v", err)
 	}
@@ -96,8 +91,7 @@ func TestReadFileDiff_HeadRefFileDoesNotExist(t *testing.T) {
 	}
 }
 
-// Boundary-bound: both the fixture repository and handleGetFileDiff itself shell
-// out to git, and a child process is a real fd nobody is durably blocked on.
+// Boundary-bound: the fixture repository and handleGetFileDiff shell out to git.
 func TestHandleGetFileDiff_EchoesRequestID(t *testing.T) {
 	dir, _, shaV1, shaV2 := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
 
@@ -136,7 +130,6 @@ func TestHandleGetFileDiff_EchoesRequestID(t *testing.T) {
 }
 
 func TestParseGitStatusPorcelain(t *testing.T) {
-	// Porcelain v1 format: XY PATH or XY ORIG -> PATH for renames
 	input := " M src/App.tsx\x00A  src/new.ts\x00?? untracked.txt\x00"
 
 	staged, unstaged, untracked := parseGitStatusPorcelain(input, "")
@@ -162,13 +155,8 @@ func TestParseGitDiffNumstat(t *testing.T) {
 	}
 }
 
-// The scheduler tests below run inside synctest bubbles at the production
-// debounce and safety intervals. They used to turn those intervals down to tens
-// of milliseconds so a test could outrun them; under a fake clock a 30-second
-// safety window costs nothing to wait out, so the schedule under test is the
-// shipped one. Nothing here touches a real repo — getGitStatusForDaemon is
-// stubbed and the client's send channel is buffered — so the whole scheduler
-// fits in a bubble.
+// The scheduler tests run inside synctest bubbles at production intervals;
+// getGitStatusForDaemon is stubbed and the send channel buffered, so it fits in a bubble.
 func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32
@@ -209,8 +197,6 @@ func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 		}
 		close(releaseFirst)
 
-		// One debounce later the whole burst has collapsed into a single refresh,
-		// and several debounces after that nothing more has run.
 		time.Sleep(gitStatusRefreshDebounce)
 		synctest.Wait()
 		if got := calls.Load(); got != 2 {
@@ -272,8 +258,6 @@ func TestGitStatusSchedulerDelaysSafetyRefreshAfterSlowRun(t *testing.T) {
 		previousGetGitStatus := getGitStatusForDaemon
 		getGitStatusForDaemon = func(dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			call := calls.Add(1)
-			// Slower than gitStatusSlowRefreshDuration, so the scheduler classifies
-			// the repo as slow and backs its safety refresh off.
 			time.Sleep(gitStatusSlowRefreshDuration + time.Second)
 			return testGitStatus(dir, fmt.Sprintf("file-%d.txt", call)), nil
 		}
@@ -294,14 +278,12 @@ func TestGitStatusSchedulerDelaysSafetyRefreshAfterSlowRun(t *testing.T) {
 			t.Fatalf("git status calls after subscribing = %d, want 1", got)
 		}
 
-		// Past the normal safety interval, which a slow repo must not be polled on.
 		time.Sleep(2 * gitStatusSafetyInterval)
 		synctest.Wait()
 		if got := calls.Load(); got != 1 {
 			t.Fatalf("git status calls = %d, want 1 slow run without normal safety refresh", got)
 		}
 
-		// Delayed, not abandoned: the slow interval still comes around.
 		time.Sleep(gitStatusSlowSafetyInterval)
 		synctest.Wait()
 		if got := calls.Load(); got != 2 {
@@ -390,11 +372,6 @@ func TestGitStatusCoordinatorSharesInFlightStatusForRepoAndMode(t *testing.T) {
 		}
 
 		<-started
-		// The sharing claim is a negative one, and this is where a bubble pays: the
-		// old 20ms sleep could only say "no second call had started yet by the time
-		// I looked". synctest.Wait returns when both callers are durably blocked —
-		// one inside the stub, one parked on the shared refresh's done channel — so
-		// the count is of a system that has finished deciding.
 		synctest.Wait()
 		if got := calls.Load(); got != 1 {
 			t.Fatalf("git status calls while first refresh is in flight = %d, want 1", got)

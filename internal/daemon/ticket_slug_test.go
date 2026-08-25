@@ -25,8 +25,6 @@ func TestTicketSlug(t *testing.T) {
 	}
 }
 
-// When the derived slug is already taken, the next ticket gets a numeric suffix
-// rather than failing outright.
 func TestCreateTicketWithUniqueSlugCollisionSuffix(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	if _, err := d.store.CreateTicket(store.Ticket{ID: "migrate-store-to-x", Title: "x"}, "chief", time.Now()); err != nil {
@@ -42,8 +40,6 @@ func TestCreateTicketWithUniqueSlugCollisionSuffix(t *testing.T) {
 	}
 }
 
-// Exhausting the readable sequential range must not fail the allocation: it falls
-// back to a random suffix on the same base.
 func TestCreateTicketWithUniqueSlugFallsBackPastSequentialRange(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := time.Now()
@@ -57,9 +53,8 @@ func TestCreateTicketWithUniqueSlugFallsBackPastSequentialRange(t *testing.T) {
 		}
 	}
 
-	// Two allocations: the fallback must be random, so it neither repeats itself nor
-	// resumes counting. The suffix is hex and so is all digits about 6% of the time —
-	// its fixed width, not its non-numeric-ness, is what separates it from the walk.
+	// The hex suffix is all digits about 6% of the time — its fixed width, not its
+	// non-numeric-ness, is what separates it from the walk.
 	var ids []string
 	for i := range 2 {
 		created, err := d.createTicketWithUniqueSlug(

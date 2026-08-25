@@ -24,9 +24,8 @@ type pluginLaunchInstructions struct {
 	NotebookRoot    string `json:"notebook_root,omitempty"`
 }
 
-// preparePluginLaunchInstructions composes the same attn-owned launch guidance
-// used by built-in agents. The rollback removes only a checkout that this call
-// created; an existing or locally modified checkout is never removed.
+// The rollback removes only a checkout that this call created; an existing or
+// locally modified checkout is never removed.
 func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief bool) (*pluginLaunchInstructions, func(), error) {
 	rollback := func() {}
 	gardenHome := d.requireHome(garden.Surface) == nil
@@ -79,9 +78,6 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 	}, rollback, nil
 }
 
-// crewPrimeForLaunch is the crew block for a plugin-driver launch, the same one
-// a built-in driver's wrapper fetches over `crew_prime`. Empty for a session
-// that is nobody.
 func (d *Daemon) crewPrimeForLaunch(sessionID string) string {
 	_, block, _, err := d.crewPrimeForSession(sessionID)
 	if err != nil {

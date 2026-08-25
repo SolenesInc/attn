@@ -6,11 +6,6 @@ import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiConte
 import { useDaemonStore } from '../../store/daemonSessions';
 import type { AppRegistryEntry } from '../../hooks/useDaemonSocket';
 
-// The host's whole job is what the user sees when a view does not mount, and
-// what the authoring agent sees afterwards. Every case here is one of those:
-// each says what is wrong and the way back, none of them removes the tile, and
-// the one that crashes is reported against the version that served it.
-
 const loadAppView = vi.hoisted(() => vi.fn());
 vi.mock('./loadAppView', async () => {
   const actual = await vi.importActual<typeof import('./loadAppView')>('./loadAppView');
@@ -111,8 +106,7 @@ describe('a view that cannot mount', () => {
     loadAppView.mockResolvedValue(() => <div>approvals body</div>);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByText('approvals body');
-    // A distinct URL, or the browser's module map would answer a top-level throw
-    // and a missing default export from cache and Retry could never recover.
+    // A distinct URL, or the browser's module map would answer from cache and Retry could never recover.
     expect(loadAppView.mock.calls[1][0]).not.toBe(loadAppView.mock.calls[0][0]);
     expect(loadAppView.mock.calls[1][0]).toContain(HASH_A);
   });
@@ -160,8 +154,7 @@ describe('a view that throws while rendering', () => {
     await screen.findByText(/crashed while rendering/);
     await waitFor(() => expect(sendAppViewCrash).toHaveBeenCalledTimes(1));
 
-    // Held open so the assertion lands in the window the bug lived in: after the
-    // boundary's reset key changed, before the fresh module resolved.
+    // Held open so the assertion lands after the boundary's reset key changed, before the fresh module resolved.
     let resolveSecond: (component: unknown) => void = () => {};
     loadAppView.mockReturnValue(new Promise((resolve) => { resolveSecond = resolve; }));
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
@@ -203,7 +196,6 @@ describe('a version that moves under a docked tile', () => {
       useDaemonStore.getState().setApps([entry({ version_id: 8, content_hash: HASH_B })]);
     });
 
-    // The badge is the whole notice, and it does not animate.
     await screen.findByText(/reloading when you leave this tile/);
     expect(loadAppView).toHaveBeenCalledTimes(1);
 

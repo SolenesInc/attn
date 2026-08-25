@@ -1,11 +1,5 @@
-/**
- * Notebook daemon events: `notebook_changed` and the `notebook_*_result` answers
- * to the notebook read/write/list commands. Kept out of `useDaemonSocket.ts` so
- * that grepping a `notebook_` wire name lands in a file about the notebook.
- *
- * See docs/glossary.md for what the notebook is; this module only moves its
- * events between the socket and the waiting promise.
- */
+/** Notebook daemon events: `notebook_changed` and the `notebook_*_result` answers. Kept out
+ * of `useDaemonSocket.ts` so grepping a `notebook_` wire name lands in a notebook file. */
 
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
@@ -28,10 +22,6 @@ export interface NotebookEventContext {
   onNotebookChanged?: (origin: string, paths: string[]) => void;
 }
 
-/**
- * Handle one notebook event. Returns false when the event is not one of ours,
- * so the caller can keep its own dispatch exhaustive.
- */
 export function handleNotebookDaemonEvent(event: NotebookEvent, ctx: NotebookEventContext): boolean {
   const { pending } = ctx;
   switch (event.event) {

@@ -5,40 +5,16 @@ export type CommandOutcome = {
 } | {
     ok: false;
     error: string;
-    /**
-     * A stable name for the refusal, when attn had one. `"reconcile_owed"`
-     * means the app is rebuilding its collections and every command is held
-     * until that finishes — worth retrying, unlike a handler that threw.
-     */
+    /** A stable name for the refusal, when attn had one. `"reconcile_owed"` is
+     * worth retrying — the app is rebuilding its collections. */
     code?: string;
 };
-/**
- * A command, ready to invoke. It is a function first, because that is what a
- * view does with it; `pending` and `error` are what it renders around the call.
- */
 export interface CommandRunner {
     (payload?: unknown): Promise<CommandOutcome>;
-    /** True from the call until the daemon answers. */
     readonly pending: boolean;
-    /**
-     * The last failure, cleared by the next call. It is a message meant to be
-     * shown: it names the app, the command and the way forward.
-     */
+    /** The last failure, meant to be shown, cleared by the next call. */
     readonly error: string | null;
 }
-/**
- * Invoke one of this app's declared commands.
- *
- * ```tsx
- * const approve = useCommand("approve")
- * <Button variant="primary" disabled={approve.pending} onClick={() => approve({ id })}>
- *   Approve
- * </Button>
- * {approve.error && <p>{approve.error}</p>}
- * ```
- *
- * The command must appear in a `[[commands]]` block of attn-app.toml and the
- * bundle must export a handler under `commands` — the generated `Handlers`
- * type makes the second half a compile error at `attn app apply`.
- */
+/** Invoke one of this app's declared commands. It must appear in a `[[commands]]` block
+ * of attn-app.toml and the bundle must export a handler under `commands`. */
 export declare function useCommand(command: string): CommandRunner;

@@ -1,9 +1,4 @@
-// changelog-check validates the pending changelog fragments under
-// changelog.d/. It is run by the CI changelog gate (scripts/changelog-gate.sh)
-// and can be run locally with `go run ./cmd/changelog-check`.
-//
-// Fragments are raw material for the release-time changelog compilation, not
-// final copy. docs/making-a-release.md describes the format and workflow.
+// Format and workflow: docs/making-a-release.md.
 package main
 
 import (
@@ -39,8 +34,8 @@ func validateFragment(data []byte) error {
 		}
 		return err
 	}
-	// One fragment per file: the decoder reads the first document and stops, so
-	// a second one here would pass this check and then never reach the changelog.
+	// The decoder reads the first document and stops, so a second one here would
+	// pass this check and then never reach the changelog.
 	var extra fragment
 	if err := dec.Decode(&extra); err == nil {
 		return fmt.Errorf("fragment file holds more than one YAML document; put each fragment in its own file")
@@ -59,9 +54,6 @@ func validateFragment(data []byte) error {
 	return nil
 }
 
-// validateDir checks every entry in the fragments directory: README.md is
-// ignored, everything else must be a .yaml fragment that parses and passes
-// validateFragment.
 func validateDir(dir string) []error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -74,9 +66,8 @@ func validateDir(dir string) []error {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		// Type() comes from lstat: a symlink is reported as a symlink, not as
-		// its target. Anything but a regular file is rejected so the compile
-		// step can never be pointed at a file outside changelog.d/.
+		// Type() comes from lstat, so a symlink is reported as a symlink, not as
+		// its target.
 		if !e.Type().IsRegular() {
 			errs = append(errs, fmt.Errorf("%s: fragments must be regular files (not directories, symlinks, or other special files)", path))
 			continue

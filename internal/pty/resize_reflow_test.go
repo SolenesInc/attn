@@ -2,21 +2,8 @@
 
 package pty
 
-// The grid-equality invariant across a RESIZE.
-//
-// Every client frame resizes with DEC wraparound off: the app's fit and its
-// historical replay both go through resizeGhosttyWithoutReflow
-// (app/src/utils/ghosttyResize.ts), load-bearing since the block store started
-// holding rows. A worker that reflowed instead would re-wrap history the
-// clients keep unwrapped, and from then on the same bytes would occupy
-// different numbers of rows on the two grids — which is exactly the frame the
-// wire's row-indexed mappings assume is shared. A kitty placement is the
-// visible casualty: the client maps it as `scrollbackLength + viewport_row`.
-//
-// The two tests below judge that outcome from opposite ends. The first pins the
-// grids themselves against a control driven by the client's own recipe; the
-// second pins the one arithmetic the frames feed, on the shape the drift was
-// first measured on.
+// Clients resize without reflow (app/src/utils/ghosttyResize.ts); a worker that
+// reflowed would re-wrap history and move every row-indexed mapping on the wire.
 
 import (
 	"fmt"
@@ -26,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// sessionTerminal reaches the worker's authoritative terminal — the one
-// Session.resize resizes and the one every placement and restore is read from.
 func sessionTerminal(t *testing.T, spawn *kittySpawn) *ghosttyvt.Terminal {
 	t.Helper()
 	session, err := spawn.manager.getSession(spawn.id)
@@ -40,8 +25,6 @@ func sessionTerminal(t *testing.T, spawn *kittySpawn) *ghosttyvt.Terminal {
 	return session.ghostty
 }
 
-// newQuietSpawn holds a session open with a child that writes nothing, so the
-// worker terminal starts empty and the only bytes in it are the test's.
 func newQuietSpawn(t *testing.T, id string, cols, rows uint16) *kittySpawn {
 	t.Helper()
 	spawn := newKittySpawnCmd(t, id, "", "read hold # %s")
@@ -51,11 +34,6 @@ func newQuietSpawn(t *testing.T, id string, cols, rows uint16) *kittySpawn {
 	return spawn
 }
 
-// historyRows is how many buffer rows sit above the viewport — the worker's
-// side of what the client reads as getScrollbackLength(). Derived the way the
-// feeder derives a block's row: pin the cursor's cell, ask for its position
-// counted from the top of retained history, and subtract the viewport-relative
-// row of the same cell.
 func historyRows(t *testing.T, term *ghosttyvt.Terminal) int {
 	t.Helper()
 	ref := term.TrackCursor()
@@ -71,9 +49,6 @@ func historyRows(t *testing.T, term *ghosttyvt.Terminal) int {
 	return fromTop - viewportRow
 }
 
-// framesAgree is the whole claim: the same bytes, the same rows. Text alone is
-// not enough — the viewport is what the user looks at, and the cursor is what
-// the next byte lands on.
 func framesAgree(t *testing.T, worker, control *ghosttyvt.Terminal, when string) {
 	t.Helper()
 	if got, want := worker.PlainText(), control.PlainText(); got != want {
@@ -89,14 +64,9 @@ func framesAgree(t *testing.T, worker, control *ghosttyvt.Terminal, when string)
 	}
 }
 
-// A prompt long enough to wrap at every width used below, so history holds
-// soft-wrapped rows whose count depends on which resize path ran.
+// Long enough to wrap at every width used below.
 const wrappingPrompt = "~/projects/victor/attn/worktrees/a4-reflow $ echo hello wrapped world"
 
-// The frame-parity gate. The worker resizes through the real Session.resize;
-// the control is a second real terminal fed the same bytes and resized with the
-// client's explicit recipe. Reverting session.go to the reflowing Resize reddens
-// the two width-changing rows.
 func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -107,10 +77,8 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 		cols, rows     uint16
 		toCols, toRows uint16
 		chunks         []string
-		// wraparoundOff says the stream turned DECAWM off, so the client's
-		// recipe is a plain resize — ghostty does not reflow with the mode
-		// already off, and writing it back on would enable what the program
-		// disabled.
+		// With DECAWM already off ghostty does not reflow, and writing it back
+		// on would enable what the program disabled.
 		wraparoundOff bool
 	}{
 		{
@@ -169,9 +137,8 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 			}
 			framesAgree(t, worker, control, fmt.Sprintf("after resizing to %dx%d", tc.toCols, tc.toRows))
 
-			// Output after the resize is what a leaked mode shows up in: the
-			// worker's toggle has to leave DECAWM exactly as the program left
-			// it, or this line wraps on one grid and overwrites on the other.
+			// The worker's toggle must leave DECAWM as the program left it, or
+			// this line wraps on one grid and overwrites on the other.
 			after := strings.Repeat("z", int(tc.toCols)+7) + "\r\nend"
 			worker.Write([]byte(after))
 			control.Write([]byte(after))
@@ -180,13 +147,8 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 	}
 }
 
-// The mapping the frames feed, on the shape the drift was measured on: a
-// wrapped prompt above a placement, a width-changing resize, then scrolling.
-// The client draws the image at `scrollbackLength + viewport_row`, so that sum —
-// the placement's absolute buffer row — is what must not move. A reflowing
-// worker re-wraps the prompt into an extra row and pushes the image down by one;
-// the following scrolls then correct it, which is why the defect read as a
-// one-row "drift" that healed itself.
+// The client draws an image at `scrollbackLength + viewport_row`, so that sum
+// must not move across a resize.
 func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -195,10 +157,8 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 
 	const placedMarker = "PLACED"
 	const scrolledMarker = "SCROLLED"
-	// The child emits the wrapped prompt and the image, waits, then scrolls a
-	// screenful and a half past it. `q=2` because ghostty answers a transmission
-	// on the program's own stdin: an unsuppressed OK lands in the child's line
-	// buffer and eats the read this handshake is built on.
+	// `q=2`: ghostty answers a transmission on the program's own stdin, and an
+	// unsuppressed OK eats the read this handshake is built on.
 	spawn := newKittySpawnCmd(t, "resize-mapping",
 		wrappingPrompt+"\r\n"+kittyPlaceRGB(94, 16, 32, ",q=2")+placedMarker,
 		"read release; cat %s; read scroll; seq 1 20; echo "+scrolledMarker+"; read hold")
@@ -209,7 +169,6 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 	spawn.waitForOutput(t, placedMarker)
 	worker := sessionTerminal(t, spawn)
 
-	// bufferRow is the client's arithmetic, computed from the worker's own grid.
 	bufferRow := func(when string) int {
 		t.Helper()
 		placements := worker.KittyPlacements()
@@ -221,8 +180,8 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 
 	placed := bufferRow("once the image is on the grid")
 
-	// 40 -> 24 columns: the 69-char prompt is two rows wide at 40 and three at
-	// 24, so a reflow inserts a row above the image and moves it down one.
+	// 40 -> 24 columns: the 69-char prompt is two rows at 40 and three at 24, so
+	// a reflow inserts a row above the image.
 	if _, err := spawn.manager.Resize(spawn.id, 24, 12, 0, 0); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}

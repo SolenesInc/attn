@@ -10,9 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// addAndSpawnSessionPane registers a session pane the way the app does — add the
-// layout pane, then spawn the runtime — so move tests run against a real
-// multi-pane layout.
+// The app's own ordering: add the layout pane, then spawn the runtime.
 func addAndSpawnSessionPane(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, paneID, targetPaneID, cwd string) {
 	t.Helper()
 	add := &protocol.WorkspaceLayoutAddSessionPaneMessage{
@@ -57,8 +55,6 @@ func TestWorkspaceLayoutMoveLeafRelocatesPane(t *testing.T) {
 	addAndSpawnSessionPane(t, d, client, workspaceID, "s-1", "pane-1", "", cwd)
 	addAndSpawnSessionPane(t, d, client, workspaceID, "s-2", "pane-2", "pane-1", cwd)
 
-	// Move pane-1 onto the bottom edge of pane-2: the left/right split collapses
-	// and pane-1 is restacked under pane-2 in a horizontal split.
 	d.handleWorkspaceLayoutMoveLeaf(client, &protocol.WorkspaceLayoutMoveLeafMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutMoveLeaf,
 		WorkspaceID: workspaceID,
@@ -80,7 +76,6 @@ func TestWorkspaceLayoutMoveLeafRelocatesPane(t *testing.T) {
 	if layout.Children[0].PaneID != "pane-2" || layout.Children[1].PaneID != "pane-1" {
 		t.Fatalf("children = %+v, want [pane-2, pane-1]", layout.Children)
 	}
-	// The move must not tear down either session.
 	if d.store.Get("s-1") == nil || d.store.Get("s-2") == nil {
 		t.Fatal("a session was lost during a pane move")
 	}
@@ -236,7 +231,6 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 	addAndSpawnSessionPane(t, d, client, sourceWorkspaceID, "s-1", "pane-1", "", sourceCwd)
 	addAndSpawnSessionPane(t, d, client, sourceWorkspaceID, "s-2", "pane-2", "pane-1", sourceCwd)
 
-	// No pre-created target: the daemon must mint a brand-new workspace.
 	d.handleWorkspaceLayoutMoveLeafToNewWorkspace(client, &protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage{
 		Cmd:               protocol.CmdWorkspaceLayoutMoveLeafToNewWorkspace,
 		SourceWorkspaceID: sourceWorkspaceID,
@@ -248,8 +242,6 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 		t.Fatalf("new workspace id = %q, want a fresh id distinct from the source", newWorkspaceID)
 	}
 
-	// The new workspace exists, inherits the source directory, and sorts after
-	// the source (PR1 seeds rank above the current maximum).
 	newWorkspace := d.store.GetWorkspace(newWorkspaceID)
 	if newWorkspace == nil {
 		t.Fatalf("new workspace %s was not registered", newWorkspaceID)
@@ -261,7 +253,6 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 		t.Fatalf("new workspace rank %q should sort after source rank %q", newWorkspace.Rank, source.Rank)
 	}
 
-	// The moved pane and its session now live in the new workspace.
 	newLayout := d.store.GetWorkspaceLayout(newWorkspaceID)
 	if newLayout == nil {
 		t.Fatal("new workspace layout missing after move")
@@ -273,7 +264,6 @@ func TestMoveLeafToNewWorkspaceCreatesWorkspace(t *testing.T) {
 		t.Fatalf("moved session = %+v, want workspace %s", session, newWorkspaceID)
 	}
 
-	// The source keeps its other leaf and survives.
 	sourceLayout := d.store.GetWorkspaceLayout(sourceWorkspaceID)
 	if sourceLayout == nil {
 		t.Fatal("source layout torn down despite a remaining leaf")
@@ -337,7 +327,6 @@ func TestMoveLeafToNewWorkspaceTearsDownEmptySource(t *testing.T) {
 		Title:     "Only",
 		Directory: sourceCwd,
 	})
-	// A single leaf: moving it out empties the source.
 	addAndSpawnSessionPane(t, d, client, sourceWorkspaceID, "s-only", "pane-only", "", sourceCwd)
 
 	d.handleWorkspaceLayoutMoveLeafToNewWorkspace(client, &protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage{
@@ -386,9 +375,8 @@ func TestMoveLeafToNewWorkspaceBroadcastsRegisteredBeforeLayout(t *testing.T) {
 	})
 	newWorkspaceID := expectMoveToNewWorkspaceResult(t, client, sourceWorkspaceID, "pane-a", true)
 
-	// The new workspace must be announced as registered before any layout
-	// update references it, so clients never see a layout for an unknown
-	// workspace.
+	// Registration must be announced before any layout update references it, or a
+	// client sees a layout for a workspace it does not know.
 	registeredIdx, layoutIdx := -1, -1
 	for i, event := range cap.snapshot() {
 		switch {
@@ -411,9 +399,6 @@ func TestMoveLeafToNewWorkspaceBroadcastsRegisteredBeforeLayout(t *testing.T) {
 	}
 }
 
-// expectMoveToNewWorkspaceResult waits for the move-to-new-workspace action
-// result, asserts source/leaf identity and success, and returns the minted new
-// workspace id (target_workspace_id) for follow-up assertions.
 func expectMoveToNewWorkspaceResult(t *testing.T, client *wsClient, sourceWorkspaceID, leafID string, success bool) string {
 	t.Helper()
 	deadline := time.After(1 * time.Second)

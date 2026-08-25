@@ -1,11 +1,6 @@
 //go:build (darwin && arm64) || (linux && amd64) || (linux && arm64)
 
-// Package ghosttyvt is the worker-side authoritative parsed terminal, backed
-// by libghostty-vt via cgo; attach/restore is served by serializing it. It is
-// the ONLY package that may include vt.h or touch native handles. Links on
-// darwin/arm64 and linux/amd64+arm64; every other target compiles the pure-Go
-// stub (stub.go). Archives: third_party/ghostty-vt/<goos>_<goarch>/ from
-// scripts/build-libghostty-vt.sh. See docs/plans/2026-07-22-server-authoritative-terminal.md.
+// Design: docs/plans/2026-07-22-server-authoritative-terminal.md
 package ghosttyvt
 
 /*
@@ -250,82 +245,53 @@ import (
 	"unsafe"
 )
 
-// Placeholder cell pixel size until a client reports the real one; image
-// emitters size output from pixel reports, so it must be replaced.
 const (
 	defaultCellWidthPx  = 8
 	defaultCellHeightPx = 16
 )
 
-// DefaultScrollbackBytes is the scrollback cap. Ghostty budgets scrollback in
-// bytes, not rows, and stores it in pages: measured at 200 columns, 4MB holds
-// 1,955 rows and 16MB holds 9,095, so a row costs roughly 1.8KB and this
-// budget is about 4,400 rows of agent output. Resident only once a session has
-// actually produced that much; a quiet session holds one page.
-//
-// It replaced a 10,000 that was written for a rows option and passed to a
-// bytes one — ten kilobytes, measured at 289 rows.
+// Ghostty budgets scrollback in bytes, not rows: measured at 200 columns, 4MB
+// held 1,955 rows and 16MB held 9,095 (~1.8KB/row), so this is ~4,400 rows.
 const DefaultScrollbackBytes = 8 << 20
 
-// ContinuationMaxBytes bounds the unfinished sequence a snapshot may carry.
-// It is ghostty's own kitty APC buffer limit: a longer sequence never reaches
-// the parser intact in the first place, so nothing legitimate can sit above
-// it, and the snapshot decoder defaults to the same number — a snapshot we
-// encode is one an unconfigured decoder accepts. It costs no steady-state
-// memory: only the bytes of a sequence currently in flight are retained, and
-// the APC handler is holding those same bytes already.
+// Ghostty's own kitty APC buffer limit; the snapshot decoder defaults to the
+// same number.
 const ContinuationMaxBytes = 65 << 20
 
-// Options configures a new Terminal.
 type Options struct {
-	// ScrollbackBytes caps retained scrollback in bytes. Zero uses
-	// DefaultScrollbackBytes.
 	ScrollbackBytes int
 
-	// KittyImageStorageLimit caps kitty image storage in bytes. Zero disables
-	// the protocol entirely — deliberate: the library default is 10MB, and a
-	// silently-live parser desyncs the grid from the client model.
+	// Zero disables the kitty protocol; it is not a "use the default" sentinel.
 	KittyImageStorageLimit uint64
 }
 
-// Snapshot is a self-contained serialization for reconstructing a terminal on
-// a client. Whole-terminal serialization fills Payload; the viewport-only form
-// fills VTDump.
 type Snapshot struct {
 	Cols, Rows int
-	// Payload is ghostty's binary snapshot format, decoded into a terminal.
-	Payload []byte
-	// VTDump replays into a fresh same-size terminal; no interrogative sequences.
-	VTDump []byte
+	Payload    []byte
+	VTDump     []byte
 }
 
-// respSink accumulates query-response bytes (CPR, DA1, …) headed back to the
-// pty. The cgo.Handle references the sink, NOT the Terminal, so the Terminal's
-// finalizer still runs; its own mutex guards buf, independent of the Terminal's.
+// The cgo.Handle references the sink, NOT the Terminal, so the Terminal's
+// finalizer still runs.
 type respSink struct {
 	mu     sync.Mutex
 	buf    []byte
 	handle cgo.Handle
 }
 
-// Terminal wraps a native libghostty-vt terminal; all methods serialize on its
-// mutex. Caller MUST Close exactly once — the finalizer is a backstop, not a
-// substitute (native memory + a cgo.Handle leak otherwise).
 type Terminal struct {
 	mu     sync.Mutex
 	term   C.GhosttyTerminal
-	sink   *respSink      // referenced by sink.handle; holds query-response bytes
-	pinner runtime.Pinner // pins &sink.handle for C to retain as userdata
+	sink   *respSink
+	pinner runtime.Pinner
 	cols   int
 	rows   int
-	// Cell size in device pixels; every resize re-derives the total pane size.
-	cellW int
-	cellH int
+	cellW  int
+	cellH  int
 
 	closed bool
 }
 
-// New creates a Terminal of the given size. cols and rows must be > 0.
 func New(cols, rows int, opts Options) (*Terminal, error) {
 	if cols <= 0 || rows <= 0 {
 		return nil, fmt.Errorf("ghosttyvt: invalid size %dx%d", cols, rows)
@@ -349,12 +315,6 @@ func New(cols, rows int, opts Options) (*Terminal, error) {
 	return t.configure(maxSB, opts)
 }
 
-// Restore decodes a snapshot produced by Serialize into a live Terminal.
-//
-// The decoder owns the whole record stream in one call: history is small
-// enough on this side that staging it costs more than it saves — the browser,
-// where the first frame is on the line, decodes READY and prepends history
-// after painting.
 func Restore(payload []byte, opts Options) (*Terminal, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("ghosttyvt: empty snapshot")
@@ -379,8 +339,6 @@ func Restore(payload []byte, opts Options) (*Terminal, error) {
 	return t.configure(maxSB, opts)
 }
 
-// configure applies our options to a freshly created or decoded terminal and
-// installs the response callback. It owns t.term on failure.
 func (t *Terminal) configure(maxSB int, opts Options) (*Terminal, error) {
 	if rc := C.ghosttyvt_set_max_scrollback(t.term, C.uint64_t(maxSB)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)
@@ -391,16 +349,13 @@ func (t *Terminal) configure(maxSB int, opts Options) (*Terminal, error) {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set kitty image storage limit failed: rc=%d", int(rc))
 	}
-	// Enabled from the first byte: tracking cannot reconstruct a sequence that
-	// was already in flight when it was switched on, and a pty chunk boundary
-	// lands mid-sequence often enough that an attach would otherwise fail to
-	// serialize whenever it did.
+	// Enabled from the first byte: tracking cannot reconstruct a sequence already
+	// in flight, and encoding mid-sequence fails without it.
 	if rc := C.ghosttyvt_set_continuation(t.term, C.size_t(ContinuationMaxBytes)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set continuation tracking failed: rc=%d", int(rc))
 	}
-	// C retains the userdata: pin &sink.handle (the supported way for C to hold
-	// a Go pointer); unpinned in Close, after ghostty_terminal_free.
+	// C retains &sink.handle past this call, so it stays pinned until Close.
 	t.sink.handle = cgo.NewHandle(t.sink)
 	t.pinner.Pin(&t.sink.handle)
 	if rc := C.ghosttyvt_install(t.term, unsafe.Pointer(&t.sink.handle)); rc != C.GHOSTTY_SUCCESS {
@@ -413,16 +368,12 @@ func (t *Terminal) configure(maxSB int, opts Options) (*Terminal, error) {
 	return t, nil
 }
 
-// Write feeds raw PTY bytes through the parser (malformed input is safe);
-// query responses accumulate for DrainResponses.
 func (t *Terminal) Write(p []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.writeLocked(p)
 }
 
-// SetColorTheme replaces the embedder-owned color defaults; ghostty preserves
-// program-issued OSC overrides.
 func (t *Terminal) SetColorTheme(theme ColorTheme) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -446,7 +397,6 @@ func (t *Terminal) SetColorTheme(theme ColorTheme) error {
 	return nil
 }
 
-// Resize changes dimensions; the primary screen reflows when wraparound is on.
 func (t *Terminal) Resize(cols, rows int) {
 	if cols <= 0 || rows <= 0 {
 		return
@@ -456,16 +406,13 @@ func (t *Terminal) Resize(cols, rows int) {
 	t.resizeLocked(cols, rows)
 }
 
-// DECAWM toggle selecting ghostty's no-reflow resize; same bytes as the client.
 var (
 	disableWraparound = []byte("\x1b[?7l")
 	enableWraparound  = []byte("\x1b[?7h")
 )
 
-// ResizeNoReflow resizes on ghostty's no-reflow path by temporarily disabling
-// DECAWM, mirroring the client's resizeGhosttyWithoutReflow
-// (app/src/utils/ghosttyResize.ts) so worker and client grids stay frame-equal
-// — every row-indexed mapping rides on that. Toggle bytes never reach a wire.
+// Must mirror the client's resizeGhosttyWithoutReflow
+// (app/src/utils/ghosttyResize.ts): worker and client grids stay frame-equal.
 func (t *Terminal) ResizeNoReflow(cols, rows int) {
 	if cols <= 0 || rows <= 0 {
 		return
@@ -485,7 +432,6 @@ func (t *Terminal) ResizeNoReflow(cols, rows int) {
 	t.resizeLocked(cols, rows)
 }
 
-// writeLocked feeds bytes through the parser. Caller holds t.mu.
 func (t *Terminal) writeLocked(p []byte) {
 	if len(p) == 0 || t.closed {
 		return
@@ -493,9 +439,6 @@ func (t *Terminal) writeLocked(p []byte) {
 	C.ghostty_terminal_vt_write(t.term, (*C.uint8_t)(unsafe.Pointer(&p[0])), C.size_t(len(p)))
 }
 
-// SetCellPixelSize sets the cell size in device pixels and pushes it to the
-// native terminal immediately — waiting for the next grid resize would leave a
-// still window sized from the placeholder. Non-positive dimensions are ignored.
 func (t *Terminal) SetCellPixelSize(w, h int) {
 	if w <= 0 || h <= 0 {
 		return
@@ -509,7 +452,6 @@ func (t *Terminal) SetCellPixelSize(w, h int) {
 	t.resizeLocked(t.cols, t.rows)
 }
 
-// resizeLocked resizes the native terminal; caller holds t.mu, cols/rows valid.
 func (t *Terminal) resizeLocked(cols, rows int) {
 	if t.closed {
 		return
@@ -518,8 +460,8 @@ func (t *Terminal) resizeLocked(cols, rows int) {
 	t.cols, t.rows = cols, rows
 }
 
-// DrainResponses returns and clears accumulated query-response bytes (sink
-// lock only, independent of t.mu).
+// Sink lock only: the write path takes sink.mu under t.mu, so taking t.mu here
+// would deadlock.
 func (t *Terminal) DrainResponses() []byte {
 	s := t.sink
 	s.mu.Lock()
@@ -532,14 +474,12 @@ func (t *Terminal) DrainResponses() []byte {
 	return out
 }
 
-// Size returns the current terminal dimensions.
 func (t *Terminal) Size() (cols, rows int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.cols, t.rows
 }
 
-// PlainText renders the terminal (viewport + scrollback) as plain UTF-8 text.
 func (t *Terminal) PlainText() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -549,7 +489,6 @@ func (t *Terminal) PlainText() string {
 	return string(t.format(C.GHOSTTY_FORMATTER_FORMAT_PLAIN))
 }
 
-// CursorPos returns the active-screen cursor position (0-indexed viewport).
 func (t *Terminal) CursorPos() (x, y int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -559,22 +498,18 @@ func (t *Terminal) CursorPos() (x, y int) {
 	return t.cursorXYLocked()
 }
 
-// CursorVisible reports whether the cursor is visible (DECTCEM, mode 25).
 func (t *Terminal) CursorVisible() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return !t.closed && bool(C.ghosttyvt_cursor_visible(t.term))
 }
 
-// LeftRightMarginMode reports DECLRMM (mode 69); false on a failed read.
 func (t *Terminal) LeftRightMarginMode() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return !t.closed && bool(C.ghosttyvt_left_right_margin_mode(t.term))
 }
 
-// ViewportText returns the visible screen as plain text, one \n-terminated
-// trimmed line per row; "" only if formatting fails.
 func (t *Terminal) ViewportText() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -584,8 +519,6 @@ func (t *Terminal) ViewportText() string {
 	return t.viewportTextLocked()
 }
 
-// SerializeViewport returns a self-contained styled VT stream of the visible
-// screen only (no scrollback), including cursor position and visibility.
 func (t *Terminal) SerializeViewport() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -601,10 +534,8 @@ func (t *Terminal) SerializeViewport() Snapshot {
 	return Snapshot{Cols: t.cols, Rows: t.rows, VTDump: t.appendCursorLocked(dump)}
 }
 
-// appendCursorLocked writes the true cursor position and visibility onto a
-// formatted dump. The formatter emits its own cursor CUP before the tabstop
-// resets, so this has to go last (0-indexed native coords → 1-based CUP).
-// Caller holds t.mu.
+// The formatter emits its own cursor CUP before the tabstop resets, so this
+// has to go last.
 func (t *Terminal) appendCursorLocked(dump []byte) []byte {
 	cx, cy := t.cursorXYLocked()
 	dump = fmt.Appendf(dump, "\x1b[%d;%dH", cy+1, cx+1)
@@ -614,15 +545,8 @@ func (t *Terminal) appendCursorLocked(dump []byte) []byte {
 	return append(dump, "\x1b[?25l"...)
 }
 
-// HandoffVT serializes the terminal as plain VT: escape sequences that replay
-// into a fresh terminal of any libghostty-vt version, scrollback included.
-// Unlike Serialize's binary payload it carries no encoder version with it,
-// which is what lets a worker hand its screen to its own replacement across a
-// bump.
-//
-// It CONSUMES the terminal. Reaching the primary screen means leaving the
-// alternate one, which destroys the alternate screen's contents. Call it only
-// on a terminal that is about to be discarded.
+// CONSUMES the terminal: reaching the primary screen destroys the alternate
+// screen's contents. Call it only on a terminal about to be discarded.
 func (t *Terminal) HandoffVT() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -634,9 +558,6 @@ func (t *Terminal) HandoffVT() Snapshot {
 	var altDump []byte
 	if alt {
 		altDump = t.dumpActiveLocked()
-		// DECRST 1049 restores the primary screen and its saved cursor; the
-		// alternate screen's contents are gone after this, which is why the
-		// caller may not keep using this terminal.
 		t.writeLocked([]byte("\x1b[?1049l"))
 	}
 
@@ -648,25 +569,14 @@ func (t *Terminal) HandoffVT() Snapshot {
 	return Snapshot{Cols: t.cols, Rows: t.rows, VTDump: dump}
 }
 
-// dumpActiveLocked serializes the active screen: the formatter's own output,
-// the rows it drops, and the cursor. Caller holds t.mu.
 func (t *Terminal) dumpActiveLocked() []byte {
 	dump := t.format(C.GHOSTTY_FORMATTER_FORMAT_VT)
 	if dump == nil {
 		return nil
 	}
 
-	// The formatter stops at the last non-blank row, so a grid whose bottom
-	// rows are blank replays short: the cursor then sits ON the last line of
-	// output instead of below it, and everything the child prints next
-	// overwrites a row it believes is still there. Measure the shortfall
-	// against a replay rather than predicting it — it does not follow the
-	// cursor, so a cursor moved up-screen hides it entirely.
-	//
-	// A screen with a scrolling region set below a blank bottom row keeps its
-	// shortfall: the line feeds land outside the region and scroll nothing.
-	// Programs that set a region keep the screen full, so the combination is
-	// not one a real session reaches.
+	// The formatter stops at the last non-blank row, so a grid with blank bottom
+	// rows replays short and the child then overwrites a row it believes is there.
 	if deficit := t.replayDeficitLocked(dump); deficit > 0 {
 		dump = fmt.Appendf(dump, "\x1b[%d;1H", t.rows)
 		dump = append(dump, strings.Repeat("\r\n", deficit)...)
@@ -675,8 +585,6 @@ func (t *Terminal) dumpActiveLocked() []byte {
 	return t.appendCursorLocked(dump)
 }
 
-// replayDeficitLocked reports how many grid rows a replay of dump comes up
-// short of this terminal. Caller holds t.mu.
 func (t *Terminal) replayDeficitLocked(dump []byte) int {
 	probe, err := New(t.cols, t.rows, Options{})
 	if err != nil {
@@ -691,15 +599,12 @@ func (t *Terminal) replayDeficitLocked(dump []byte) int {
 	return deficit
 }
 
-// Serialize produces a Snapshot of the whole terminal.
 func (t *Terminal) Serialize() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.serializeLocked()
 }
 
-// serializeLocked assumes t.mu is held; for callers capturing a snapshot
-// atomically with an external watermark (e.g. the read-loop seq).
 func (t *Terminal) serializeLocked() Snapshot {
 	if t.closed {
 		return Snapshot{Cols: t.cols, Rows: t.rows}
@@ -711,9 +616,6 @@ func (t *Terminal) serializeLocked() Snapshot {
 	}
 }
 
-// encodeSnapshotLocked serializes the whole terminal — both screens, their
-// scrollback, and any unfinished parser input — into ghostty's binary snapshot
-// format. Caller holds t.mu, not after Close.
 func (t *Terminal) encodeSnapshotLocked() []byte {
 	var ptr *C.uint8_t
 	var n C.size_t
@@ -727,15 +629,11 @@ func (t *Terminal) encodeSnapshotLocked() []byte {
 	return C.GoBytes(unsafe.Pointer(ptr), C.int(n))
 }
 
-// cursorXYLocked returns the native cursor position (0-indexed). Caller holds t.mu.
 func (t *Terminal) cursorXYLocked() (x, y int) {
 	return int(C.ghosttyvt_get_u16(t.term, C.GHOSTTY_TERMINAL_DATA_CURSOR_X)),
 		int(C.ghosttyvt_get_u16(t.term, C.GHOSTTY_TERMINAL_DATA_CURSOR_Y))
 }
 
-// TotalRows is the whole grid height of the active screen: scrollback plus
-// viewport. It is how two terminals are compared for scroll depth, which
-// PlainText cannot show — it trims trailing blank rows away.
 func (t *Terminal) TotalRows() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -745,8 +643,6 @@ func (t *Terminal) TotalRows() int {
 	return int(C.ghosttyvt_get_usize(t.term, C.GHOSTTY_TERMINAL_DATA_TOTAL_ROWS))
 }
 
-// AltScreenActive reports whether the alternate screen (DEC 1049/1047/47) is
-// active. Blocks are a primary-screen concept: alt-pinned ones are excluded.
 func (t *Terminal) AltScreenActive() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -756,8 +652,6 @@ func (t *Terminal) AltScreenActive() bool {
 	return C.ghosttyvt_active_screen(t.term) == C.int(C.GHOSTTY_TERMINAL_SCREEN_ALTERNATE)
 }
 
-// format runs the upstream formatter and returns freshly-allocated Go bytes.
-// Caller must hold t.mu and must not call it after Close.
 func (t *Terminal) format(emit C.GhosttyFormatterFormat) []byte {
 	var f C.GhosttyFormatter
 	opts := C.ghosttyvt_make_opts(emit)
@@ -777,8 +671,6 @@ func (t *Terminal) format(emit C.GhosttyFormatterFormat) []byte {
 	return C.GoBytes(unsafe.Pointer(ptr), C.int(n))
 }
 
-// formatViewport formats the visible viewport only; ok is false only on
-// failure (a blank viewport is a non-nil empty slice). Caller holds t.mu.
 func (t *Terminal) formatViewport(emit C.GhosttyFormatterFormat) ([]byte, bool) {
 	var ptr *C.uint8_t
 	var n C.size_t
@@ -792,7 +684,6 @@ func (t *Terminal) formatViewport(emit C.GhosttyFormatterFormat) ([]byte, bool) 
 	return C.GoBytes(unsafe.Pointer(ptr), C.int(n)), true
 }
 
-// viewportTextLocked normalizes formatter text into a stable row shape. Caller holds t.mu.
 func (t *Terminal) viewportTextLocked() string {
 	raw, ok := t.formatViewport(C.GHOSTTY_FORMATTER_FORMAT_PLAIN)
 	if !ok {
@@ -814,7 +705,6 @@ func (t *Terminal) viewportTextLocked() string {
 	return out.String()
 }
 
-// Close frees the native terminal and releases the cgo.Handle. Idempotent.
 func (t *Terminal) Close() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -830,7 +720,6 @@ func (t *Terminal) Close() {
 	runtime.SetFinalizer(t, nil)
 }
 
-// finalize is the SetFinalizer backstop; Close is idempotent.
 func (t *Terminal) finalize() {
 	t.Close()
 }

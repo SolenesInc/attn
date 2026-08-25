@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// fsIndex drives handleFsIndex directly and returns the decoded result event.
 func fsIndex(t *testing.T, d *Daemon, client *wsClient, requestID, root string, extensions ...string) protocol.FsIndexResultMessage {
 	t.Helper()
 	d.handleFsIndex(client, requestID, root, extensions)
@@ -21,14 +20,6 @@ func fsIndex(t *testing.T, d *Daemon, client *wsClient, requestID, root string, 
 	return res
 }
 
-// fs_index over a real tree returns every regular file's root-relative slash
-// path, sorted. Dot-files and dot-directory contents are real documents and are
-// included — path mode lists them, so hiding them here would make the same file
-// reachable one way and invisible the other. Excluded: .git's contents, a
-// node_modules dir's contents, symlinked files, and a FIFO (a non-regular-file
-// entry that would otherwise be advertised as an openable file when fs_read
-// rejects anything that isn't a regular file). truncated must be false since
-// nothing hits the cap.
 func TestFsIndexListsDotFilesButNotGitOrNodeModules(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -47,13 +38,11 @@ func TestFsIndexListsDotFilesButNotGitOrNodeModules(t *testing.T) {
 	mustWrite("top.md")
 	mustWrite("nested/dir/deep.md")
 	mustWrite("nested/dir/deep2.txt")
-	mustWrite(".hidden-dir/inside.md")     // dot-dirs hold real documents: included
-	mustWrite(".dotfile")                  // ...as do dot-files
-	mustWrite("node_modules/pkg/index.js") // whole node_modules dir excluded
-	mustWrite(".git/objects/ab/cdef.md")   // git's own metadata is never listed
+	mustWrite(".hidden-dir/inside.md")
+	mustWrite(".dotfile")
+	mustWrite("node_modules/pkg/index.js")
+	mustWrite(".git/objects/ab/cdef.md")
 
-	// A symlinked file must be excluded (listed as an entry but skipped, not
-	// followed).
 	symlinkTarget := filepath.Join(t.TempDir(), "target.md")
 	if err := os.WriteFile(symlinkTarget, []byte("target"), 0o644); err != nil {
 		t.Fatal(err)
@@ -62,8 +51,7 @@ func TestFsIndexListsDotFilesButNotGitOrNodeModules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A FIFO must be excluded too — not a symlink, but still not a regular
-	// file, and fs_read can't open it either.
+	// A FIFO: not a symlink, but fs_read cannot open it either.
 	if err := syscall.Mkfifo(filepath.Join(root, "pipe.fifo"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +73,6 @@ func TestFsIndexListsDotFilesButNotGitOrNodeModules(t *testing.T) {
 	}
 }
 
-// equalStrings reports whether a and b hold the same elements in the same
-// order.
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -99,9 +85,6 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// indexRoot (the injectable-cap walk helper) truncates once the cap is hit
-// rather than returning an unbounded list: with more files than cap, it must
-// report truncated=true and return exactly cap entries.
 func TestIndexRootTruncatesAtInjectedCap(t *testing.T) {
 	root := t.TempDir()
 	const total = 12
@@ -125,13 +108,8 @@ func TestIndexRootTruncatesAtInjectedCap(t *testing.T) {
 	}
 }
 
-// normalizeExternalRoot only requires the deepest EXISTING ancestor to
-// canonicalize, so a nonexistent explicit root (or one pointing at a regular
-// file rather than a directory) passes resolveFsRoot. Without an explicit
-// pre-walk check, WalkDir's error-recovery branch swallows the "root does not
-// exist" error and the walk silently "succeeds" with zero files — a
-// silently-empty finder instead of a visible error. Both cases must fail with
-// Success=false, not report an empty index.
+// resolveFsRoot only canonicalizes the deepest existing ancestor and WalkDir's
+// error-recovery branch swallows the error: the walk "succeeds" with zero files.
 func TestFsIndexRejectsNonexistentAndNonDirectoryRoots(t *testing.T) {
 	d := newFsDaemon(t)
 	base := t.TempDir()
@@ -157,11 +135,6 @@ func TestFsIndexRejectsNonexistentAndNonDirectoryRoots(t *testing.T) {
 	}
 }
 
-// An ordinary (unauthenticated) client asking to index an explicit root must
-// be denied with no file listing — fs_index inherits the resolveFsRoot
-// chokepoint's auth gate just like fs_watch does. The same client succeeds
-// with root omitted (the notebook root), since the gate is scoped to the
-// explicit-root escape hatch.
 func TestFsIndexWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	d := newFsDaemon(t)
 	root := t.TempDir()
@@ -187,9 +160,8 @@ func TestFsIndexWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
 	}
 }
 
-// The extension filter is applied server-side, and the cap counts only files
-// that survive it. Capping before the filter is what makes a large repository
-// truncate on files nobody asked for, hiding markdown that sorts late.
+// The cap counts only files that survive the extension filter: capping before it
+// truncates a large repository on files nobody asked for.
 func TestIndexRootAppliesCapAfterExtensionFilter(t *testing.T) {
 	root := t.TempDir()
 	for i := range 40 {
@@ -210,16 +182,11 @@ func TestIndexRootAppliesCapAfterExtensionFilter(t *testing.T) {
 	if truncated {
 		t.Fatalf("truncated = true, want false: only 2 markdown files exist")
 	}
-	// Extension matching is case-insensitive on both sides, and a leading dot
-	// in the request is optional.
 	if want := []string{"aa-early.MD", "zz-late.md"}; !slicesEqual(files, want) {
 		t.Fatalf("files = %v, want %v", files, want)
 	}
 }
 
-// Inside a git repository the enumeration comes from git, so .gitignore is
-// honored — build output and vendored trees cost nothing — while
-// untracked-but-not-ignored files still show up immediately.
 func TestIndexRootUsesGitAndHonorsGitignore(t *testing.T) {
 	root := t.TempDir()
 	mustWrite := func(rel, body string) {
@@ -236,8 +203,6 @@ func TestIndexRootUsesGitAndHonorsGitignore(t *testing.T) {
 	mustWrite("tracked.md", "x")
 	mustWrite("untracked.md", "x")
 	mustWrite("build/generated.md", "x")
-	// A dot-directory git tracks holds real documents, and path mode lists it,
-	// so fuzzy mode returns it too.
 	mustWrite(".claude/notes.md", "x")
 
 	for _, args := range [][]string{

@@ -16,16 +16,10 @@ export interface AttachGhosttySnapshot {
   scrollback_truncated?: boolean;
 }
 
-// The snapshot wire format this build decodes. A pty-worker outlives an
-// install, so an upgraded app is routinely offered bytes an older worker
-// encoded; only the client knows what its own decoder reads, which is why the
-// comparison lives here and not in the daemon.
-// See docs/plans/2026-08-16-snapshot-format-skew.md.
+// An upgraded app is routinely offered bytes an older worker encoded.
+// Design: docs/plans/2026-08-16-snapshot-format-skew.md
 export const LOCAL_SNAPSHOT_FORMAT = __ATTN_SNAPSHOT_FORMAT__;
 
-// A snapshot is decodable when it names this build's format. An unnamed format
-// — a worker from before the field existed — is one nobody speaks, which is
-// exactly the case that produced the incident this guards.
 export function snapshotIsDecodable(
   snapshot: Pick<AttachGhosttySnapshot, 'format'> | null | undefined,
   localFormat: string = LOCAL_SNAPSHOT_FORMAT,
@@ -38,13 +32,6 @@ export function snapshotIsDecodable(
 export interface AttachRestoreData {
   cols?: number;
   rows?: number;
-  // Server-authoritative terminal snapshot: the sole restore payload. Ghostty's
-  // binary snapshot format (base64), decoded into the client's model to
-  // reconstruct the daemon worker's full grid + scrollback (primary and alt
-  // screen). Absent when the policy omits restore or the worker has no
-  // serialization to offer (ghostty construction failed, or an unsupported
-  // platform's pure-Go stub); the client then keeps whatever it has and dedups
-  // the live stream against last_seq.
   snapshot?: AttachGhosttySnapshot;
 }
 
@@ -60,7 +47,6 @@ export interface AttachRuntimeRequest {
 }
 
 export interface PendingAttachOutputChunk {
-  /** Base64 (JSON pty_output event) or raw bytes (binary frame). */
   data: string | Uint8Array;
   seq?: number;
 }
@@ -103,18 +89,13 @@ function normalizeAttachAgent(agent?: string | null, shell?: boolean): string | 
   return normalized.length > 0 ? normalized : null;
 }
 
-// classifyAttachRestore resolves an attach result to the single restore
-// decision that remains: does the daemon hand us a Ghostty snapshot to
-// reconstruct from, and at what grid? There is exactly one restore payload or
-// none — the raw-replay-vs-snapshot decision tree is gone.
 export function classifyAttachRestore(
   data: AttachRestoreData,
   context?: AttachRequestContext,
   localFormat: string = LOCAL_SNAPSHOT_FORMAT,
 ) {
-  // A snapshot this build cannot decode is no snapshot: everything downstream
-  // of hasSnapshot already handles that case — no reset, the client's own
-  // watermark as the dedup baseline, the live stream painting on.
+  // A snapshot this build cannot decode is no snapshot: everything downstream of
+  // hasSnapshot already handles that case.
   const ghosttySnapshot = data.snapshot
     && data.snapshot.snapshot_b64
     && snapshotIsDecodable(data.snapshot, localFormat)
@@ -123,9 +104,6 @@ export function classifyAttachRestore(
   const hasSnapshot = ghosttySnapshot !== null;
   const attachedCols = typeof data.cols === 'number' ? data.cols : null;
   const attachedRows = typeof data.rows === 'number' ? data.rows : null;
-  // A Ghostty snapshot carries its own authoritative grid — the decoded model
-  // comes up at it. With no snapshot, geometry falls back to the daemon's
-  // reported PTY size.
   const restoreCols = hasSnapshot ? ghosttySnapshot.cols : attachedCols;
   const restoreRows = hasSnapshot ? ghosttySnapshot.rows : attachedRows;
 
@@ -154,16 +132,11 @@ export function planAttachedRuntimeGeometry(
   const restoreCols = restorePlan.restoreCols;
   const restoreRows = restorePlan.restoreRows;
   const ptyGeometryMatches = attachedCols === requestedCols && attachedRows === requestedRows;
-  // A Ghostty snapshot carries its own authoritative grid (restoreCols/Rows).
   const restoreGeometryMatches = restorePlan.hasSnapshot
     ? restoreCols === requestedCols && restoreRows === requestedRows
     : false;
-  // requestedGeometryAuthoritative === false means the client size is
-  // provisional (never measured against a visible container): it must not
-  // claim PTY geometry authority. Forcing the live PTY to a construction
-  // default SIGWINCH-churns the shell and bounces every attached model's
-  // width, invalidating a freshly restored grid. The daemon's geometry stays
-  // authoritative until a real fit produces an interactive resize.
+  // A provisional client size must not claim PTY geometry authority: a construction-default
+  // SIGWINCH churns the shell and bounces every attached model's width.
   const preserveAttachedGeometry = options.attachPolicy === 'relaunch_restore'
     || options.requestedGeometryAuthoritative === false;
   const resizeRequired = !preserveAttachedGeometry && !ptyGeometryMatches;
@@ -196,12 +169,8 @@ export function planAttachResultEffects({
   previousSeq?: number;
   queuedOutputs?: PendingAttachOutputChunk[];
 }) {
-  // Reset is only safe when a snapshot replaces the whole grid. Without one the
-  // server has no serialized state to hand us, so the client's existing model is
-  // the ONLY rendered terminal: resetting it (e.g. a same_app_remount after a
-  // ghostty construction failure) clears the screen with nothing to repaint it,
-  // leaving an idle shell blank until it next prints. Per AGENTS.md a
-  // snapshot-less attach keeps whatever the client already has.
+  // Reset is only safe when a snapshot replaces the whole grid: without one the
+  // client's model is the ONLY rendered terminal, and resetting leaves it blank.
   const shouldReset = restorePlan.hasSnapshot;
   const resetReason = shouldReset ? 'snapshot_restore' : null;
   const restoreAction = restorePlan.hasSnapshot && attachResult.snapshot?.snapshot_b64
@@ -213,15 +182,8 @@ export function planAttachResultEffects({
         kind: 'none' as const,
       };
 
-  // The dedup baseline is the highest seq the client has already rendered.
-  // With a snapshot it covers everything through the server's last_seq
-  // (see Session.info in internal/pty/session.go), so that is the baseline and a
-  // queued chunk with seq <= last_seq is already inside the dump. Without a
-  // snapshot nothing was repainted for the client, so the baseline is the
-  // client's OWN watermark (previousSeq): advancing to the server's last_seq
-  // would silently drop queued chunks between previousSeq and last_seq that the
-  // client never rendered. Live chunks resume just past the baseline, which
-  // planLivePtyOutput's `incomingSeq <= lastSeq` stale rule lets through.
+  // Without a snapshot the baseline is the client's OWN watermark: advancing to
+  // last_seq would drop queued chunks the client never rendered.
   let nextSeq = restorePlan.hasSnapshot
     ? (typeof attachResult.last_seq === 'number' ? attachResult.last_seq : 0)
     : (typeof previousSeq === 'number' ? previousSeq : 0);

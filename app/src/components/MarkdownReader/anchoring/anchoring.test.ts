@@ -1,13 +1,5 @@
-/**
- * Anchoring fixture suite — every resolve/rebase case from the PR4 spec's
- * fixture plan, driven through REAL markdown via extractBlockTexts (the
- * pipeline is never mocked; `./rebase` is spy-wrapped pass-through only so
- * the zero-heuristic guarantee of the hash-unchanged path is observable).
- *
- * DOM-dependent cases (pipeline-parity walker, domRange, painter) live with
- * the paint-layer spike, not here — this file is pure string/data.
- */
-
+// `./rebase` is spy-wrapped pass-through only, so the hash-unchanged path's
+// zero-heuristic guarantee stays observable.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAnchor } from "./create";
 import { extractBlockTexts } from "./extractBlocks";
@@ -31,7 +23,6 @@ function blockContaining(content: string, needle: string): BlockText {
   return hits.reduce((a, b) => (b.depth > a.depth ? b : a));
 }
 
-/** Create an anchor over the first occurrence of `needle`'s RENDERED text. */
 function anchorFor(content: string, needle: string): AnchorRecord {
   const block = blockContaining(content, needle);
   const start = block.text.indexOf(needle);
@@ -43,7 +34,6 @@ function anchorFor(content: string, needle: string): AnchorRecord {
   return anchor;
 }
 
-/** Record invariants from the spec: length contract + non-empty exact. */
 function expectInvariants(anchor: AnchorRecord): void {
   expect(anchor.end - anchor.start).toBe(anchor.exact.length);
   expect(anchor.exact.trim()).not.toBe("");
@@ -51,7 +41,6 @@ function expectInvariants(anchor: AnchorRecord): void {
   expect(anchor.suffix.length).toBeLessThanOrEqual(32);
 }
 
-/** Assert `anchor` is internally consistent against `content` (slice matches). */
 function expectBaselined(anchor: AnchorRecord, content: string): void {
   expectInvariants(anchor);
   expect(anchor.contentHash).toBe(fnv1a32(content));
@@ -60,8 +49,6 @@ function expectBaselined(anchor: AnchorRecord, content: string): void {
   expect(block!.text.slice(anchor.start, anchor.end)).toBe(anchor.exact);
   expect(block!.startLine).toBe(anchor.startLine);
   expect(block!.endLine).toBe(anchor.endLine);
-  // Re-resolving the re-baselined record against the same content is the
-  // hash-unchanged exact path — no search, byte-identical coordinates.
   const again = resolveOrRebase(content, anchor);
   expect(again).toEqual({
     state: "exact",
@@ -82,8 +69,6 @@ describe("hash-unchanged exactness (zero heuristics)", () => {
   ].join("\n");
 
   it("returns stored coordinates without ever invoking rebase", () => {
-    // Anchor the SECOND occurrence — if resolve secretly searched, the first
-    // occurrence would be a tempting wrong answer.
     const blocks = extractBlockTexts(DOC);
     const second = blocks.filter((b) => b.text.includes("Repeated sentence"))[1];
     const anchor = createAnchor(DOC, second.blockId, 0, second.text.length)!;
@@ -114,7 +99,6 @@ describe("hash-unchanged exactness (zero heuristics)", () => {
       expect(rebaseAnchor).toHaveBeenCalledTimes(1);
       expect(result.state).toBe("rebased");
       if (result.state !== "rebased") throw new Error("unreachable");
-      // Recovery lands back on the true coordinates and re-baselines.
       expect(result.start).toBe(anchor.start);
       expect(result.end).toBe(anchor.end);
       expectBaselined(result.anchor, DOC);
@@ -166,24 +150,19 @@ describe("duplicated paragraphs", () => {
       "",
       "Outro paragraph.",
     ].join("\n");
-    // Anchor the SECOND (beta) duplicate: select its block via unique text,
-    // then anchor the shared sentence inside it.
     const betaBlock = blockContaining(DOC, "Beta before.");
     const needle = "The shared sentence sits here.";
     const betaStart = betaBlock.text.indexOf(needle);
     const anchor = createAnchor(DOC, betaBlock.blockId, betaStart, betaStart + needle.length)!;
     expectInvariants(anchor);
-    expect(anchor.startLine).toBe(7); // the beta paragraph
+    expect(anchor.startLine).toBe(7);
     expect(anchor.prefix).toBe("Beta before. ");
 
-    // Inserting a paragraph at the top renumbers every block: the stored
-    // blockId now points at the filler paragraph, so the same-block tier is
-    // empty and the document tier must pick between the two duplicates.
     const EDITED = "Inserted at the very top.\n\n" + DOC;
     const result = resolveOrRebase(EDITED, anchor);
     expect(result.state).toBe("rebased");
     if (result.state !== "rebased") throw new Error("unreachable");
-    expect(result.anchor.startLine).toBe(9); // beta, shifted by 2 — NOT alpha at 5
+    expect(result.anchor.startLine).toBe(9);
     expect(result.anchor.prefix).toBe("Beta before. ");
     expect(result.anchor.exact).toBe("The shared sentence sits here.");
     expectBaselined(result.anchor, EDITED);
@@ -202,9 +181,6 @@ describe("duplicated paragraphs", () => {
       "",
       "Tail.",
     ].join("\n");
-    // Whole-block anchor on the SECOND duplicate: prefix and suffix are both
-    // empty, so candidate scores differ only by startLine proximity — and a
-    // 2-vs-3-line difference is noise, not evidence. Orphan over wrong-paint.
     const blocks = extractBlockTexts(DOC);
     const second = blocks.filter((b) => b.text === "Same duplicated paragraph text.")[1];
     expect(second.startLine).toBe(8);
@@ -212,7 +188,7 @@ describe("duplicated paragraphs", () => {
     expect(anchor.prefix).toBe("");
     expect(anchor.suffix).toBe("");
 
-    const EDITED = "Inserted at the very top.\n\n" + DOC; // dups now at 5 and 10
+    const EDITED = "Inserted at the very top.\n\n" + DOC;
     expect(resolveOrRebase(EDITED, anchor)).toEqual({ state: "orphan", reason: "ambiguous" });
   });
 
@@ -226,7 +202,6 @@ describe("duplicated paragraphs", () => {
       "",
       "Tail.",
     ].join("\n");
-    // Whole-block anchor on the SECOND duplicate (line 5).
     const blocks = extractBlockTexts(DOC);
     const second = blocks.filter((b) => b.text === "Same duplicated paragraph text.")[1];
     expect(second.startLine).toBe(5);
@@ -234,8 +209,6 @@ describe("duplicated paragraphs", () => {
     expect(anchor.prefix).toBe("");
     expect(anchor.suffix).toBe("");
 
-    // One copy stays where the anchor was; the other moves ~40 lines down.
-    // The proximity gap is large enough to clear the ambiguity margin.
     const EDITED = [
       "Intro.",
       "",
@@ -251,15 +224,11 @@ describe("duplicated paragraphs", () => {
     const result = resolveOrRebase(EDITED, anchor);
     expect(result.state).toBe("rebased");
     if (result.state !== "rebased") throw new Error("unreachable");
-    expect(result.anchor.startLine).toBe(5); // the near copy, not the far one
+    expect(result.anchor.startLine).toBe(5);
     expectBaselined(result.anchor, EDITED);
   });
 
   it("orphans on an exact score tie between identical duplicates (equidistant copies)", () => {
-    // Regression for the review blocker on PR #552: two identical whole-block
-    // paragraphs at EQUAL line distance from the old anchor produce equal
-    // scores; the old rule (margin OR absolute floor) accepted whichever the
-    // stable sort put first. Equal evidence must orphan as ambiguous.
     const DOC = [
       "Intro.",
       "",
@@ -280,8 +249,6 @@ describe("duplicated paragraphs", () => {
     expect(anchor.prefix).toBe("");
     expect(anchor.suffix).toBe("");
 
-    // Copies land at lines 5 and 13 — both exactly 4 lines from the old
-    // startLine 9, so their scores tie to the last bit.
     const EDITED = [
       "Intro.",
       "",
@@ -303,11 +270,6 @@ describe("duplicated paragraphs", () => {
   });
 
   it("does not adopt an inserted sibling that inherits the anchor's old ordinal blockId", () => {
-    // The anchored paragraph is the first block, so its blockId is stable
-    // ordinal position 0. Inserting a new paragraph directly above it means
-    // the NEW paragraph now occupies that same ordinal position — the
-    // same-block tier must not trust a lone hit there without checking it
-    // actually looks like the anchor's original context.
     const DOC = "Beta before. The shared sentence sits here. Beta after.";
     const needle = "The shared sentence sits here.";
     const anchor = anchorFor(DOC, needle);
@@ -332,9 +294,6 @@ describe("duplicated paragraphs", () => {
     ].join("\n");
     const anchor = anchorFor(OLD, "the target phrase lives here");
 
-    // New document: the phrase appears twice with identical, unrelated
-    // context, ~300 lines away — prefix/suffix similarity is low, proximity
-    // is negligible and near-equal, so no candidate clears the bar.
     const NEW = [
       "Other intro.",
       "",
@@ -372,7 +331,6 @@ describe("edits to the annotated sentence", () => {
     if (rebased.state !== "rebased") throw new Error("unreachable");
     expect(rebased.tier).toBe("same-block");
     expect(rebased.anchor.exact).toBe("the flag cache");
-    // Fresh context re-sliced from the NEW text — not the stale windows.
     expect(rebased.anchor.prefix).toBe("The deploy step now uses ");
     expect(rebased.anchor.suffix).toBe(" and retries three times.");
     expect(rebased.anchor.start).toBe(anchor.start + "now ".length);
@@ -411,7 +369,7 @@ describe("insertions above (line shift, offsets stable)", () => {
     const rebased = rebaseAnchor(anchor, EDITED);
     expect(rebased.state).toBe("rebased");
     if (rebased.state !== "rebased") throw new Error("unreachable");
-    expect(rebased.tier).toBe("same-block"); // blank lines add no blocks
+    expect(rebased.tier).toBe("same-block");
     expect(rebased.anchor.startLine).toBe(21);
     expect(rebased.anchor.start).toBe(anchor.start);
     expect(rebased.anchor.end).toBe(anchor.end);
@@ -440,7 +398,6 @@ describe("prose transforms in anchor space", () => {
       end: anchor.end,
     });
 
-    // Edit elsewhere: still exact in rendered-text space after rebase.
     const EDITED = DOC.replace("Another paragraph.", "Another paragraph, edited.");
     const result = resolveOrRebase(EDITED, anchor);
     expect(result.state).toBe("rebased");
@@ -454,7 +411,6 @@ describe("prose transforms in anchor space", () => {
     const block = blockContaining(DOC, "Run");
     expect(block.text).toBe("Run bun --watch or pass --verbose to see pages 3–5.");
 
-    // Anchor spanning the inline-code flag: raw double dash preserved.
     const anchor = anchorFor(DOC, "bun --watch");
     expect(anchor.exact).toBe("bun --watch");
     const resolved = resolveAnchor(DOC, anchor);
@@ -568,7 +524,7 @@ describe("single-block contract", () => {
       suffix: " starts now.",
       start: 12,
       end: 34,
-      contentHash: "00000000", // force the rebase path
+      contentHash: "00000000",
     };
     expect(resolveOrRebase(DOC, crossBlock)).toEqual({
       state: "orphan",
@@ -587,8 +543,6 @@ describe("structural changes", () => {
     const result = resolveOrRebase(EDITED, anchor);
     expect(result.state).toBe("rebased");
     if (result.state !== "rebased") throw new Error("unreachable");
-    // Document tier finds the text in BOTH the ul and the li; dedupe must
-    // attribute it to the deepest stamped owner — the list item, not the list.
     expect(result.anchor.blockId).toMatch(/-list-item$/);
     expect(result.anchor.exact).toBe("Target sentence lives here.");
     expect(result.anchor.start).toBe(0);
@@ -601,7 +555,7 @@ describe("structural changes", () => {
     const alert = blocks.find((b) => b.text.includes("Remember to hydrate"))!;
     expect(alert.blockId).toMatch(/-blockquote$/);
     expect(alert.text).not.toContain("[!NOTE]");
-    expect(alert.startLine).toBe(1); // range still includes the marker line
+    expect(alert.startLine).toBe(1);
     expect(alert.endLine).toBe(2);
 
     const anchor = anchorFor(DOC, "hydrate the cache");
@@ -618,7 +572,7 @@ describe("structural changes", () => {
   it("resolves against pre text with the trailing-newline rule, at the block end", () => {
     const DOC = ["```js", "first();", "second();", "```"].join("\n");
     const block = blockContaining(DOC, "second");
-    expect(block.text).toBe("first();\nsecond();"); // no trailing \n
+    expect(block.text).toBe("first();\nsecond();");
 
     const start = block.text.indexOf("second();");
     const anchor = createAnchor(DOC, block.blockId, start, block.text.length)!;
@@ -635,7 +589,7 @@ describe("structural changes", () => {
     const DOC = ["```mermaid", "graph TD", "A-->B", "```"].join("\n");
     const block = blockContaining(DOC, "graph TD");
     expect(block.nonPaintable).toBe(true);
-    expect(block.text).toBe("graph TD\nA-->B"); // code text untouched by transforms
+    expect(block.text).toBe("graph TD\nA-->B");
 
     const anchor = anchorFor(DOC, "A-->B");
     expect(resolveAnchor(DOC, anchor).state).toBe("exact");
@@ -655,14 +609,11 @@ describe("structural changes", () => {
     ].join("\n");
     const blocks = extractBlockTexts(DOC);
 
-    // The mermaid pre is NOT stamped (nested in an li), but its code text
-    // lands in the li's and ul's text — both must be flagged.
     const li = blockContaining(DOC, "graph TD");
     expect(li.nonPaintable).toBe(true);
     const ul = blocks.find((b) => b.blockId === li.parentId)!;
     expect(ul.nonPaintable).toBe(true);
 
-    // Sibling items are unaffected (they own their own text slices).
     expect(blockContaining(DOC, "plain item").nonPaintable).toBeUndefined();
     expect(blockContaining(DOC, "trailing item").nonPaintable).toBeUndefined();
   });
@@ -672,7 +623,7 @@ describe("whitespace-normalized tier", () => {
   it("rescues a rewrapped hard-wrapped paragraph and re-baselines exact to the new raw text", () => {
     const DOC = ["Alpha intro.", "", "wrap line one", "wrap line two", "", "Omega tail."].join("\n");
     const block = blockContaining(DOC, "wrap line one");
-    expect(block.text).toBe("wrap line one\nwrap line two"); // softbreak = \n text node
+    expect(block.text).toBe("wrap line one\nwrap line two");
 
     const anchor = createAnchor(DOC, block.blockId, 0, block.text.length)!;
     expect(anchor.exact).toContain("\n");
@@ -681,8 +632,8 @@ describe("whitespace-normalized tier", () => {
     const rebased = rebaseAnchor(anchor, EDITED);
     expect(rebased.state).toBe("rebased");
     if (rebased.state !== "rebased") throw new Error("unreachable");
-    expect(rebased.tier).toBe("normalized"); // tiers a/b must miss (\n vs space)
-    expect(rebased.anchor.exact).toBe("wrap line one wrap line two"); // NEW raw text
+    expect(rebased.tier).toBe("normalized");
+    expect(rebased.anchor.exact).toBe("wrap line one wrap line two");
     expect(rebased.anchor.start).toBe(0);
     expectBaselined(rebased.anchor, EDITED);
   });

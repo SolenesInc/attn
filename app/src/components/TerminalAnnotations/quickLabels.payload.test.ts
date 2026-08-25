@@ -17,8 +17,7 @@ describe('QUICK_LABEL_GROUPS', () => {
 
 describe('buildAnnotationPayload', () => {
   it('leads each item with the words it is about', () => {
-    // The agent cannot see the highlight. The quote is the only thing that
-    // tells it which part of its own answer the feedback lands on.
+    // The agent cannot see the highlight; the quote is what locates the feedback.
     const payload = buildAnnotationPayload([
       { start: 40, quickLabelId: 'show-the-receipt', comment: '', quote: 'ship it without tests' },
     ]);
@@ -28,8 +27,6 @@ describe('buildAnnotationPayload', () => {
   });
 
   it('sends the label instruction, not the label name', () => {
-    // "Verify this" is a chip. What the agent has to act on is the sentence
-    // behind it.
     const verify = QUICK_LABELS.find((label) => label.id === 'verify-this')!;
 
     const payload = buildAnnotationPayload([
@@ -68,9 +65,6 @@ describe('buildAnnotationPayload', () => {
   });
 
   it('says what the payload is without instructing the agent how to behave', () => {
-    // The preamble names the thing so the agent knows these are marks on its
-    // own last message. Telling it to "address each annotation" on top of that
-    // is an instruction the annotations already are.
     const payload = buildAnnotationPayload([
       { start: 0, quickLabelId: 'clarify-this', comment: '', quote: 'always safe' },
     ]);
@@ -89,9 +83,7 @@ describe('buildAnnotationPayload', () => {
     ];
 
     it('puts the note ahead of the marks it qualifies', () => {
-      // The note is the instruction and the marks are where it lands. Sent
-      // after them it reads as an afterthought, which is the ordering that has
-      // people typing "…and also consider the feedback below".
+      // The note is the instruction and the marks are where it lands, so it leads.
       const payload = buildAnnotationPayload(MARKS, 'Split this into two PRs.');
       const lines = payload.split('\n').filter((line) => line !== '');
 

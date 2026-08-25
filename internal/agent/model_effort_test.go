@@ -5,9 +5,8 @@ import (
 	"testing"
 )
 
-// The model/effort pins ride SpawnOpts into each driver's launch argv. Claude
-// has native --model/--effort flags; codex takes -m/--model and the
-// model_reasoning_effort config override (quoted so the -c value parses as TOML).
+// The model/effort pins ride SpawnOpts into each driver's launch argv: claude has native
+// --model/--effort, codex takes -m plus a quoted model_reasoning_effort -c override.
 func TestClaudeBuildCommand_ModelAndEffortPins(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:  "sess-1",

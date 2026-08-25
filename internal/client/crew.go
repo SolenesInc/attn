@@ -6,7 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// CrewList reads the crew roster: every registered member, awake or asleep.
 func (c *Client) CrewList() (*protocol.CrewListResult, error) {
 	resp, err := c.send(protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
 	if err != nil {
@@ -18,8 +17,6 @@ func (c *Client) CrewList() (*protocol.CrewListResult, error) {
 	return resp.CrewListResult, nil
 }
 
-// CrewWake starts a member's day. agent is optional; empty launches the
-// default harness.
 func (c *Client) CrewWake(member, agent string) (*protocol.CrewWakeResult, error) {
 	msg := protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: member}
 	if agent != "" {
@@ -35,9 +32,6 @@ func (c *Client) CrewWake(member, agent string) (*protocol.CrewWakeResult, error
 	return resp.CrewWakeResult, nil
 }
 
-// CrewSleep asks an awake member to write its handoff and close its day with
-// `attn handoff --sleep`. The member chooses when to comply; this command does
-// not kill its session.
 func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 	resp, err := c.send(protocol.CrewSleepMessage{Cmd: protocol.CmdCrewSleep, Member: member})
 	if err != nil {
@@ -49,10 +43,7 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 	return resp.CrewSleepResult, nil
 }
 
-// CrewSet records where a member's sessions launch, which harness and model it
-// lives on, and what its charter is about. A nil field is left as it was;
-// awarenessDirs non-nil and empty clears the list, which travels as its own
-// flag because an empty list marshals away.
+// awarenessDirs non-nil and empty clears the list, and travels as its own flag because an empty list marshals away.
 func (c *Client) CrewSet(member string, cwd, agent, model *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
 	msg := protocol.CrewSetMessage{
 		Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, AwarenessDirs: awarenessDirs,
@@ -70,8 +61,6 @@ func (c *Client) CrewSet(member string, cwd, agent, model *string, awarenessDirs
 	return resp.CrewSetResult, nil
 }
 
-// CrewPrime asks what a launching session must be primed with to be its
-// member. Every launch asks; a session that is nobody gets an empty answer.
 func (c *Client) CrewPrime(sessionID string) (*protocol.CrewPrimeResult, error) {
 	resp, err := c.send(protocol.CrewPrimeMessage{Cmd: protocol.CmdCrewPrime, SessionID: sessionID})
 	if err != nil {
@@ -83,11 +72,6 @@ func (c *Client) CrewPrime(sessionID string) (*protocol.CrewPrimeResult, error) 
 	return resp.CrewPrimeResult, nil
 }
 
-// CrewHandoff files the calling session's member letter and ends its day. The
-// note is the member's own prose; the daemon names the file, refuses to
-// overwrite one, and wakes the successor. retry turns the day over with the
-// letter this day already filed and ignores note. close insists on what the
-// filing does to the day; empty lets the daemon decide from presence.
 func (c *Client) CrewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note}
 	if retry {

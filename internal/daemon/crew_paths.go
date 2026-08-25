@@ -24,9 +24,8 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 	return root, nil
 }
 
-// validateCrewMemberPaths is the copied-database fence. A registry row may be
-// carried between profiles, but the absolute filesystem addresses inside it
-// never gain authority in the receiving daemon.
+// validateCrewMemberPaths is the copied-database fence: absolute paths stored in
+// a registry row never gain authority in the receiving daemon.
 func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 	root, err := d.resolvedCrewRoot()
 	if err != nil {
@@ -105,10 +104,8 @@ func profileCrewRootContaining(userHome, target string) string {
 	target = filepath.Clean(target)
 	rel, err := filepath.Rel(home, target)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		// The caller may already have canonicalized target while userHome still
-		// uses a platform alias such as /var. Compare both canonically as the
-		// fallback; the lexical pass above deliberately preserves a symlinked
-		// .attn-<profile> component long enough to identify it.
+		// The lexical pass deliberately preserves a symlinked .attn-<profile>
+		// component; retry canonically when only one side used a platform alias.
 		home, err = config.CanonicalRuntimePath(home)
 		if err != nil {
 			return ""
@@ -155,8 +152,6 @@ func canonicalProfileCrewRootContaining(userHome, target string) string {
 	return ""
 }
 
-// resolveCrewWorkDir keeps ordinary project directories open while refusing a
-// cwd or awareness directory inside another profile's member homes.
 func (d *Daemon) resolveCrewWorkDir(dir string) (string, error) {
 	userHome, err := os.UserHomeDir()
 	if err != nil {
@@ -199,8 +194,6 @@ func (d *Daemon) resolveCrewWorkDirForHome(dir, userHome string) (string, error)
 	return original, nil
 }
 
-// resolveCrewRecordedDir keeps the existing crew-set contract: new cwd and
-// awareness values must name directories that exist when they are recorded.
 func (d *Daemon) resolveCrewRecordedDir(dir string) (string, error) {
 	resolved, err := resolveCrewDir(dir)
 	if err != nil || resolved == "" {

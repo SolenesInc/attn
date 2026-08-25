@@ -23,8 +23,6 @@ func writeTranscript(t *testing.T, lines ...string) string {
 	return path
 }
 
-// The window is a delta: a cursor that has already consumed the transcript
-// yields nothing, which is what lets an idle session cost zero.
 func TestReadIsADelta(t *testing.T) {
 	path := writeTranscript(t,
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}`,
@@ -45,10 +43,6 @@ func TestReadIsADelta(t *testing.T) {
 	}
 }
 
-// A delta larger than one page is read to its end, and what comes back is its
-// NEWEST events. Returning the first page instead would answer "what is this
-// agent doing right now" with the oldest thing it did while nobody was looking —
-// and would leave the cursor mid-backlog, so the next window would be stale too.
 func TestReadKeepsTheNewestEventsOfALongDelta(t *testing.T) {
 	lines := make([]string, 0, MaxEvents*3)
 	for i := 0; i < MaxEvents*3; i++ {
@@ -73,8 +67,6 @@ func TestReadKeepsTheNewestEventsOfALongDelta(t *testing.T) {
 		t.Errorf("first event = %q, want %q", got, oldest)
 	}
 
-	// The report counts against the whole delta, not against one page: a caller
-	// told "dropped 1 of 201" about a backlog of 600 would believe it had the story.
 	if window.Report.TotalEvents != MaxEvents*3 {
 		t.Errorf("TotalEvents = %d, want %d", window.Report.TotalEvents, MaxEvents*3)
 	}
@@ -82,7 +74,6 @@ func TestReadKeepsTheNewestEventsOfALongDelta(t *testing.T) {
 		t.Errorf("DroppedOld = %d, want %d", window.Report.DroppedOld, want)
 	}
 
-	// And the cursor is past the end, so the next read is a genuine delta.
 	next, err := Read(path, "claude", window.NextCursor)
 	if err != nil {
 		t.Fatal(err)
@@ -92,9 +83,6 @@ func TestReadKeepsTheNewestEventsOfALongDelta(t *testing.T) {
 	}
 }
 
-// Thinking is why this package exists: it is the densest statement of intent and
-// it must survive into the rendered window with its own label, distinct from
-// what the user was actually shown.
 func TestRenderLabelsThinkingSeparatelyFromProse(t *testing.T) {
 	window := Window{Events: []transcript.Event{
 		{Kind: transcript.EventKindThinking, Text: "I should fix the migration first"},
@@ -117,9 +105,6 @@ func TestRenderLabelsThinkingSeparatelyFromProse(t *testing.T) {
 	}
 }
 
-// A limit someone can hit is a limit they must see: the event cap keeps the
-// newest events and says how many it dropped, rather than presenting a silently
-// short window as the whole story.
 func TestCapKeepsNewestAndReportsTheDrop(t *testing.T) {
 	events := make([]transcript.Event, MaxEvents+5)
 	for i := range events {
@@ -148,8 +133,6 @@ func TestCapKeepsNewestAndReportsTheDrop(t *testing.T) {
 	}
 }
 
-// Clip budgets are per kind. Thinking gets the largest because it is where
-// intent lives, but it is still bounded — it is the longest content type.
 func TestClipIsPerKind(t *testing.T) {
 	long := strings.Repeat("x", 5000)
 	for _, tc := range []struct {
@@ -161,15 +144,12 @@ func TestClipIsPerKind(t *testing.T) {
 		{transcript.EventKindToolResult, ClipToolResult},
 	} {
 		got := clip(transcript.Event{Kind: tc.kind, Text: long})
-		if len([]rune(got)) > tc.limit+1 { // +1 for the ellipsis
+		if len([]rune(got)) > tc.limit+1 {
 			t.Errorf("%s clipped to %d, want <= %d", tc.kind, len(got), tc.limit)
 		}
 	}
 }
 
-// The prompt must keep state, window, and the previous line apart, and must
-// degrade readably when the optional ones are absent — the first line for a
-// session has no previous, and a breakthrough can have an empty window.
 func TestTemplateRenderSubstitutesAndDegrades(t *testing.T) {
 	template := Template{Name: "t", Body: "S={{STATE}} R={{STATE_REASON}} P={{PREVIOUS}} W={{WINDOW}}"}
 	got := template.Render(Input{State: "working"})
@@ -186,9 +166,6 @@ func TestTemplateRenderSubstitutesAndDegrades(t *testing.T) {
 	}
 }
 
-// The marker is what lets the invariant half ride --system-prompt and replace the
-// CLI's own, which is where nearly all the per-run cost lived. A template without
-// it must still render — as an all-user prompt, paying the full prefix.
 func TestTemplateRenderSplitsOnTheSystemMarker(t *testing.T) {
 	template := Template{Name: "t", Body: "the rules\n" + SystemMarker + "\nstate: {{STATE}}"}
 	got := template.Render(Input{State: "working"})
@@ -207,8 +184,8 @@ func TestTemplateRenderSplitsOnTheSystemMarker(t *testing.T) {
 		t.Errorf("an unmarked template must be all user prompt; got %+v", unmarked)
 	}
 
-	// The shipped baseline must actually carry the marker — losing it is a silent
-	// 10x cost regression, not a test failure anywhere else.
+	// The shipped baseline must carry the marker: losing it is a silent 10x cost
+	// regression, not a test failure anywhere else.
 	baseline, err := LoadTemplate("baseline", filepath.Join("prompts", "baseline.md"))
 	if err != nil {
 		t.Fatalf("load baseline: %v", err)
@@ -222,9 +199,6 @@ func TestTemplateRenderSplitsOnTheSystemMarker(t *testing.T) {
 	}
 }
 
-// The load-bearing check. A spike produced a fluent line describing active work
-// for a pending_approval session because the state was withheld from the prompt.
-// Anything that regresses that must fail here.
 func TestCheckCatchesALineThatContradictsABlockedState(t *testing.T) {
 	violations := Check("Running the frontend test suite in attn--brisk-toucan", "pending_approval")
 	if !hasCheck(violations, "state_consistency") {
@@ -233,13 +207,9 @@ func TestCheckCatchesALineThatContradictsABlockedState(t *testing.T) {
 	if v := Check("Awaiting approval to delete migrations/0042.sql", "pending_approval"); len(v) != 0 {
 		t.Errorf("a line that acknowledges the block must pass; got %v", v)
 	}
-	// working is not a blocked state, so the same line is fine there.
 	if v := Check("Running the frontend test suite in attn--brisk-toucan", "working"); len(v) != 0 {
 		t.Errorf("active narration is correct for working; got %v", v)
 	}
-	// A false positive here is worse than a miss: it makes a good line look like a
-	// model failure and sends prompt tuning after a phantom. These are real lines
-	// the harness generated and the check wrongly rejected.
 	for _, line := range []string{
 		"Completed activity-bench harness; cost error requires design revision",
 		"Halted on a failing migration in internal/store",
@@ -268,7 +238,6 @@ func TestCheckCatchesFormatFailures(t *testing.T) {
 			}
 		})
 	}
-	// A colon mid-line is normal phrasing, not a preamble.
 	if hasCheck(Check("Fixing auth: token refresh loops", "working"), "no_preamble") {
 		t.Error("a mid-line colon must not read as a preamble")
 	}

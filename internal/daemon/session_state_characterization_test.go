@@ -78,8 +78,6 @@ func assertCharacterizationLiveEffects(t *testing.T, d *Daemon, capture *broadca
 	}
 }
 
-// The worker poll is the last live signal: the one claim from outside the
-// resolver that still commits, because it is what ends `launching`.
 func TestSessionStateCharacterization_TheWorkerPollIsTheLastLiveSignal(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
 	sessionID := "session-worker-poll"
@@ -96,9 +94,6 @@ func TestSessionStateCharacterization_TheWorkerPollIsTheLastLiveSignal(t *testin
 	assertCharacterizationLiveEffects(t, d, capture, sessionID)
 }
 
-// A hook reports evidence. It refreshes LastSeen — a hook firing is proof the
-// session is alive, which is the one thing the reaper reads — and changes nothing
-// else until the resolver's tick.
 func TestSessionStateCharacterization_AHookOnlyFilesEvidence(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
 	sessionID := "session-hook"
@@ -121,7 +116,6 @@ func TestSessionStateCharacterization_AHookOnlyFilesEvidence(t *testing.T) {
 		t.Fatalf("filing evidence broadcast a state change: %+v", events)
 	}
 
-	// And the resolver is what turns it into a color.
 	d.resolveAllSessions(time.Now())
 	if state := d.store.Get(sessionID).State; state != protocol.SessionStateWorking {
 		t.Fatalf("state=%q after the tick, want working", state)
@@ -252,10 +246,6 @@ func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
 	}
 }
 
-// evidenceObs builds a title-glyph observation. The heartbeat is the only PTY
-// source that is evidence rather than a writer, so it is what these tests use to
-// exercise the daemon's handling of one; its claims are levels in its own
-// vocabulary ("busy"), not protocol state names.
 func evidenceObs(claim string) pty.Observation {
 	return pty.Observation{
 		Source: pty.SourceHeartbeat,

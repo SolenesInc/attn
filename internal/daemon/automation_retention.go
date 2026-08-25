@@ -16,9 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A3's retention policy: per definition, keep the newest N runs; a run is
-// prunable only once outside that window, terminal, and older than the age
-// floor. All three are env-overridable so tests can shrink them.
 const (
 	defaultAutomationRetentionKeep          = 200
 	defaultAutomationRetentionMinAge        = 14 * 24 * time.Hour
@@ -52,8 +49,7 @@ func automationRetentionSweepInterval() time.Duration {
 	return defaultAutomationRetentionSweepInterval
 }
 
-// runAutomationRetentionSweep is A3's periodic backstop. No initial pass at
-// boot — retention must not compete with startup churn.
+// No initial pass at boot: retention must not compete with startup churn.
 func (d *Daemon) runAutomationRetentionSweep() {
 	ticker := time.NewTicker(automationRetentionSweepInterval())
 	defer ticker.Stop()
@@ -67,9 +63,6 @@ func (d *Daemon) runAutomationRetentionSweep() {
 	}
 }
 
-// automationRetentionSweepPass prunes every definition's (including
-// soft-deleted) prunable runs; automationRunCleanupSafety gates each before the
-// worktree, occurrence artifact, and run+occurrence rows are removed.
 func (d *Daemon) automationRetentionSweepPass(now time.Time) {
 	if d.store == nil {
 		return
@@ -81,8 +74,6 @@ func (d *Daemon) automationRetentionSweepPass(now time.Time) {
 	}
 	keep := automationRetentionKeep()
 	cutoff := now.Add(-automationRetentionMinAge())
-	// boundThread is counted so a sweep that skipped everything for that reason
-	// does not read as "nothing to do".
 	pruned, keptDirty, boundThread := 0, 0, 0
 	for _, defID := range ids {
 		candidates, err := d.store.ListPrunableAutomationRuns(defID, keep, cutoff)
@@ -127,28 +118,16 @@ func (d *Daemon) automationRetentionSweepPass(now time.Time) {
 	}
 }
 
-// automationRunCleanupBlock reports why a terminal run's on-disk footprint
-// (if any) is not safe to remove yet.
 type automationRunCleanupBlock int
 
 const (
-	// automationRunCleanupOK: safe to remove (or nothing to remove).
 	automationRunCleanupOK automationRunCleanupBlock = iota
-	// automationRunCleanupLiveSession: the run's session still exists; skip
-	// until that changes. Routine, so not logged per-run.
 	automationRunCleanupLiveSession
-	// automationRunCleanupBoundThread: the session row is gone but a continuity
-	// binding still references its id — a thread reuses one session id and shared
-	// worktree across occurrences, so removing it bricks the next continue.
-	// Callers must surface it as "examined and kept", never silently skip it.
+	// A thread reuses one session id and worktree across occurrences, so removing it bricks the next continue. Callers must surface it as "examined and kept", never silently skip it.
 	automationRunCleanupBoundThread
-	// automationRunCleanupDirtyWorktree: uncommitted changes. Dirty evidence is
-	// never deleted — logged so it's visible.
 	automationRunCleanupDirtyWorktree
 )
 
-// automationRunCleanupSafety is the shared safety predicate the sweep and the
-// explicit cleanup both use before touching a run's disk footprint; never mutates.
 func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automationRunCleanupBlock, error) {
 	if run.SessionID != "" && d.store.Get(run.SessionID) != nil {
 		return automationRunCleanupLiveSession, nil
@@ -185,9 +164,7 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 	return automationRunCleanupOK, nil
 }
 
-// automationRunWorktreePath resolves a run's worktree from its persisted
-// ResolvedLocationJSON, never by path convention: an absent resolved worktree
-// means nothing to remove, not a signal to guess.
+// Resolve from the run's persisted ResolvedLocationJSON, never by path convention: an absent resolved worktree means nothing to remove, not a signal to guess.
 func automationRunWorktreePath(run store.AutomationRun) (string, error) {
 	if strings.TrimSpace(run.ResolvedLocationJSON) == "" {
 		return "", nil
@@ -199,10 +176,7 @@ func automationRunWorktreePath(run store.AutomationRun) (string, error) {
 	return resolved.Worktree, nil
 }
 
-// removeAutomationRunWorktree removes a run's worktree, assuming the safety
-// predicate returned OK. Automation worktrees are never registered in the
-// store's worktree registry, so this goes through git.DeleteWorktree directly —
-// Daemon.doDeleteWorktree's registry-aware path would no-op on them.
+// Automation worktrees are never registered in the store's worktree registry, so this goes through git.DeleteWorktree directly: doDeleteWorktree's registry-aware path would no-op on them.
 func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	if strings.TrimSpace(run.ResolvedLocationJSON) == "" {
 		return nil
@@ -223,9 +197,7 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	return git.DeleteWorktree(resolved.MainRepository, resolved.Worktree, false)
 }
 
-// removeAutomationOccurrenceArtifact removes a run's durable occurrence payload,
-// ignoring not-exist. Must mirror ensureAutomationOccurrenceInput's dataRoot
-// fallback exactly, or the sweep and the writer disagree about the file's home.
+// Must mirror ensureAutomationOccurrenceInput's dataRoot fallback exactly, or the sweep and the writer disagree about the file's home.
 func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {
 	root := strings.TrimSpace(d.dataRoot)
 	if root == "" {
@@ -238,10 +210,6 @@ func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {
 	return nil
 }
 
-// automationCleanup is the on-demand counterpart to the sweep: every terminal run
-// for id, no keep-window or age floor, and disk-only, so run history survives.
-// keptActive merges live-session and bound-thread — both mean "not reclaimable
-// yet" — and runs skipped for any other reason land in no bucket.
 func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, keptDirty, keptActive []string, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, fmt.Errorf("deadline exceeded waiting to run automation cleanup: %w", err)
@@ -267,7 +235,6 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 			continue
 		}
 		if _, statErr := os.Stat(worktree); statErr != nil {
-			// Already gone (or inaccessible): nothing new to report either way.
 			continue
 		}
 		block, safetyErr := d.automationRunCleanupSafety(run)
@@ -277,8 +244,6 @@ func (d *Daemon) automationCleanup(ctx context.Context, id string) (cleaned, kep
 		}
 		switch block {
 		case automationRunCleanupLiveSession:
-			// Both reasons merge into kept_active on the wire; the daemon log is
-			// where they are told apart.
 			d.logf("automation cleanup %s: run %s: kept active (live session)", id, run.ID)
 			keptActive = append(keptActive, run.ID)
 			continue

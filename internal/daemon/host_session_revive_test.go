@@ -13,13 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Slice 4: a conversation survives its host. Everything here is about the two
-// moments that used to lose one — the host dying, and the daemon coming back up
-// without it.
-
-// registerConversationDriver registers a driver shaped like attn-pi's: it
-// declares `conversation` and deliberately NOT `resume`, which is the PTY
-// agents' capability and the one the recovery rules used to key on.
 func registerConversationDriver(t *testing.T, d *Daemon, agent string) {
 	t.Helper()
 	plugin := &pluginConnection{name: agent + "-plugin"}
@@ -34,9 +27,6 @@ func registerConversationDriver(t *testing.T, d *Daemon, agent string) {
 	}
 }
 
-// A host that died left the whole conversation behind in its session file, so
-// the session is not finished — it is waiting. `recoverable` is what puts the
-// way back in front of the user instead of a dead pane.
 func TestHostExitMakesTheSessionRecoverable(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-r1")
@@ -49,8 +39,6 @@ func TestHostExitMakesTheSessionRecoverable(t *testing.T) {
 	}
 }
 
-// A reload owns its own teardown: the kill it performs must not broadcast an
-// exit or park the session it is in the middle of bringing back.
 func TestHostExitDuringAReloadIsSuppressed(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-r2")
@@ -64,7 +52,6 @@ func TestHostExitDuringAReloadIsSuppressed(t *testing.T) {
 	}
 }
 
-// A closed session has no row to move, and nothing should resurrect one.
 func TestHostExitForAClosedSessionMovesNothing(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 
@@ -75,17 +62,11 @@ func TestHostExitForAClosedSessionMovesNothing(t *testing.T) {
 	}
 }
 
-// The daemon restarting is the other way a host dies. A conversation session
-// must come back as recoverable rather than be reaped: its history is on disk
-// under attn's data dir, and a replacement host reopens it. Nothing about that
-// needs the plugin to have reconnected — the file is the evidence.
 func TestConversationSessionSurvivesADaemonRestart(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-r3")
 	d.store.SetLaunchIntent("conv-r3", store.LaunchIntent{ApprovalRoute: launchcontract.ApprovalRouteUser})
 	writeHostConversationFile(t, "conv-r3")
-	// The exit path already closed the driver run, which is what made this
-	// session look like an ordinary agent with nothing behind it.
 	d.store.EndAgentDriverRun("conv-r3")
 
 	session := d.store.Get("conv-r3")
@@ -94,9 +75,6 @@ func TestConversationSessionSurvivesADaemonRestart(t *testing.T) {
 	}
 }
 
-// The same rule must not sweep up an ordinary plugin agent with nothing behind
-// it. The launch intent is there, so what is being asserted is the second half
-// of the decision: how to relaunch is known, what to relaunch into is not.
 func TestNonConversationPluginSessionIsStillReaped(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	plugin := &pluginConnection{name: "snipe-plugin"}
@@ -121,8 +99,6 @@ func TestNonConversationPluginSessionIsStillReaped(t *testing.T) {
 	}
 }
 
-// writeHostConversationFile puts a pi session file where a replacement host
-// looks for one, which is what makes the conversation survive its host.
 func writeHostConversationFile(t *testing.T, sessionID string) {
 	t.Helper()
 	dir := hostSessionStateDir(sessionID)
@@ -135,9 +111,6 @@ func writeHostConversationFile(t *testing.T, sessionID string) {
 	}
 }
 
-// A reload with nothing to relaunch from must leave the live host alone. This
-// is the conversation half of the PTY reload's fail-safe: a running agent that
-// kept going beats one that was killed and could not be brought back.
 func TestConversationReloadWithoutALaunchIntentKeepsTheHost(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	registerConversationDriver(t, d, "nisse")
@@ -154,11 +127,6 @@ func TestConversationReloadWithoutALaunchIntentKeepsTheHost(t *testing.T) {
 	}
 }
 
-// The one outcome a reload must never leave behind: a session that reads as
-// live over a host that is gone. The kill has already happened by the time the
-// respawn is refused, and its exit was suppressed — so nothing else will ever
-// say the host died unless this path does. What the user is told is the truth:
-// recoverable, with the way back still in front of them.
 func TestConversationReloadThatCannotRespawnParksTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	registerConversationDriver(t, d, "nisse")
@@ -178,8 +146,6 @@ func TestConversationReloadThatCannotRespawnParksTheSession(t *testing.T) {
 	}
 }
 
-// The attach verb crosses the same one-way pipe the others do; the snapshot
-// comes back as an envelope, so what is asserted is that the ask arrived.
 func TestAgentAttachReachesTheHost(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addHostSession(t, d, "conv-r6")
@@ -209,8 +175,6 @@ func TestAgentAttachReachesTheHost(t *testing.T) {
 	}
 }
 
-// A client asking a session with no host must be told, or it draws an empty
-// conversation forever and calls that the truth.
 func TestAgentAttachWithoutAHostIsAnError(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	client := &wsClient{send: make(chan outboundMessage, 10)}
@@ -227,8 +191,6 @@ func TestAgentAttachWithoutAHostIsAnError(t *testing.T) {
 	}
 }
 
-// echoHostScript writes a host that answers every verb it is handed with an
-// envelope carrying that verb, so a test can assert on what crossed the pipe.
 func echoHostScript(t *testing.T, sessionID string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "echo-host.sh")
@@ -242,8 +204,6 @@ func echoHostScript(t *testing.T, sessionID string) string {
 	return path
 }
 
-// spawnStubHost gives the daemon a live host that outlives nothing but the
-// test: it reads its stdin until the pipe closes, so a Kill is what ends it.
 func spawnStubHost(t *testing.T, d *Daemon, sessionID string) *hostsession.Manager {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "stub-host.sh")

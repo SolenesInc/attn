@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
-// baseSchema creates the core tables. Column additions are handled by migrations.
-// This schema represents the initial state (version 0).
 const baseSchema = `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY,
@@ -91,7 +89,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 `
 
-// migration represents a database schema migration
 type migration struct {
 	version int
 	desc    string
@@ -120,9 +117,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_delegation_operations_active_ticket
 	ON delegation_operations(ticket_id)
 	WHERE ticket_id != '' AND state IN ('accepted', 'preparing');`
 
-// migrations defines all schema migrations in order.
-// Each migration is applied exactly once, tracked in schema_migrations table.
-// To add a new migration: append to this slice with the next version number.
+// Never reuse a version number, even one only claimed on another branch: migrateDB skips
+// `version <= max(applied)`. Burned: 50, 98, 108, 111, 112, 113.
 var migrations = []migration{
 	{1, "add head_sha to prs", "ALTER TABLE prs ADD COLUMN head_sha TEXT"},
 	{2, "add head_branch to prs", "ALTER TABLE prs ADD COLUMN head_branch TEXT"},
@@ -425,10 +421,8 @@ var migrations = []migration{
 	`},
 	{48, "drop label from recent_locations", "ALTER TABLE recent_locations DROP COLUMN label"},
 	{49, "add rank to workspaces", `ALTER TABLE workspaces ADD COLUMN rank TEXT NOT NULL DEFAULT ''`},
-	// Migration 50 is dispatched to applyMigration49 (see the version==49||50 branch),
-	// so this SQL is never executed; it is a harmless no-op kept only so the slice
-	// length stays equal to the schema version. A literal ADD COLUMN here would be a
-	// duplicate-column landmine if the routing ever changed.
+	// Dispatched to applyMigration49; this SQL never runs. Real DDL here would
+	// be a duplicate-column landmine.
 	{50, "repair missing workspace rank", `SELECT 1`},
 	{51, "create workflow engine journal tables", `CREATE TABLE IF NOT EXISTS workflow_runs (
     run_id TEXT PRIMARY KEY,
@@ -473,13 +467,6 @@ CREATE TABLE IF NOT EXISTS workflow_agent_calls (
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_agent_calls_run_id
     ON workflow_agent_calls(run_id, id ASC);`},
-	// The keeper rename originally targeted 51 (versions 49/50 were burned on early
-	// keeper pre-release DBs). The merge onto main reclaimed 49/50/51 for the
-	// workspace-rank (applyMigration49) and workflow-engine migrations above, so the
-	// keeper rename now lands at 52 — the first version above main's migration 51.
-	// applyMigration52 is idempotent, so it stays safe on a DB that already recorded a
-	// phantom 51 or 52. NOTE: confirm MAX(version) on the real prod/dev DBs before
-	// install — if either build burned 51/52 there, these may need to move higher.
 	{52, "rename workspace context janitor backups to keeper compact backups", ""},
 	{53, "add closed_state to chief of staff dispatches", ""},
 	{54, "add pinned to workspaces", ""},
@@ -546,16 +533,7 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
     PRIMARY KEY (identity, ticket_id),
     FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
 );`},
-	// Mirror of the bound session's agent-native resume id, kept on the ticket so
-	// it survives the session row being deleted on close — that is what lets the
-	// ticket "Resume" affordance reattach the prior conversation directly instead
-	// of dropping into the agent's resume picker.
 	{57, "add resume_session_id to tickets", "ALTER TABLE tickets ADD COLUMN resume_session_id TEXT NOT NULL DEFAULT ''"},
-	// A third participation source beside assignment and non-comment authorship: an
-	// explicit, opt-in subscription. Mirrors ticket_event_cursors (PK (identity,
-	// ticket_id), CASCADE on ticket delete) but carries no cursor — subscribing only
-	// adds the identity to the ticket's participant set; its cursor stays wherever it
-	// was (0 if never read), so the first inbox after subscribing delivers history.
 	{58, "create ticket subscriptions", `CREATE TABLE IF NOT EXISTS ticket_subscriptions (
     identity   TEXT NOT NULL,
     ticket_id  TEXT NOT NULL,
@@ -570,17 +548,7 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 		DROP TABLE IF EXISTS session_review_loops;
 		DELETE FROM settings WHERE key IN ('review_loop_prompt_presets','review_loop_last_preset','review_loop_last_prompt','review_loop_last_iterations','review_loop_model');
 	`},
-	// Machine-reconciliation flag for orphaned-ticket reconciliation (see
-	// docs/plans/2026-07-01-orphaned-ticket-reconciliation.md). Non-empty means a
-	// dead owning session's outcome was judged once by the reconciliation
-	// classifier; the timestamp is both provenance (this verdict was machine
-	// reconciliation, not agent self-report) and the set-if-unset dedupe lock
-	// between the death-hook and the sweep backstop.
 	{60, "add reconciled_at to tickets", "ALTER TABLE tickets ADD COLUMN reconciled_at TEXT NOT NULL DEFAULT ''"},
-	// The durable task runner persisted its records here instead of one JSON file
-	// per task under the notebook root. See docs/plans/2026-07-02-bg-task-notifications.md.
-	// The table is retired: the job queue (migration 87) replaced it, and the daemon
-	// drains whatever it still held at startup. Nothing writes it anymore.
 	{61, "create tasks table", `CREATE TABLE IF NOT EXISTS tasks (
 		id TEXT PRIMARY KEY,
 		kind TEXT NOT NULL,
@@ -644,11 +612,6 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 	`},
 	{64, "add closed_intentionally_at to sessions", "ALTER TABLE sessions ADD COLUMN closed_intentionally_at TEXT NOT NULL DEFAULT ''"},
 	{65, "add verdict to presentation_rounds", ""},
-	// Chief ticket awareness belongs to the durable profile role, not to whichever
-	// session happened to fill it when the ticket was delegated. Existing product
-	// data is safe to identify by its born-assigned shape: delegation is the only
-	// create path that persists an assignee before the created event lands. Do not
-	// seed a cursor here — a backfill must preserve every unread event.
 	{66, "add durable ticket role ownership", `
 		CREATE TABLE IF NOT EXISTS ticket_role_owners (
 			role TEXT NOT NULL,
@@ -782,9 +745,6 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 	{77, "automations v2: explicit run and binding state", ""},
 	{78, "add launch_intent to sessions", ""},
 	{79, "convert recoverable flag to session state", ""},
-	// File activity is a log of what happened to a file, keyed by (path, source),
-	// so a future source ("edited" by an agent) accumulates alongside "opened"
-	// instead of overwriting it.
 	{80, "create file_activity table", `CREATE TABLE IF NOT EXISTS file_activity (
 		path TEXT NOT NULL,
 		source TEXT NOT NULL,
@@ -794,20 +754,7 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 		PRIMARY KEY(path, source)
 	);
 	CREATE INDEX IF NOT EXISTS idx_file_activity_last_at ON file_activity(last_at DESC);`},
-	// A session owes the user a turn iff turn_opened_at > turn_settled_at. The
-	// backfill stamps sessions already sitting in a turn-opening state so the
-	// first queue is the honest outstanding board at sensible ages, rather than
-	// starting empty and hiding live turns.
-	{81, "add turn stamps to sessions", ""}, // see applyMigration81
-	// One definition of "who participates in a ticket". The rule had been
-	// hand-written in SQL three times — once per question asked of it (tickets for
-	// an identity, identities for a ticket, this identity on this one ticket) — in
-	// three different idioms, with nothing enforcing that they agreed. The view
-	// materializes the four participation sources once; every caller joins against
-	// it, so adding a fifth source is a single edit here.
-	//
-	// DROP first so re-running the migration on a database that already carries an
-	// older definition of the view replaces it rather than silently keeping it.
+	{81, "add turn stamps to sessions", ""},
 	{82, "define the ticket participant rule once as a view", `
 		DROP VIEW IF EXISTS ticket_participants;
 		CREATE VIEW ticket_participants (ticket_id, identity) AS
@@ -830,14 +777,6 @@ CREATE TABLE IF NOT EXISTS ticket_event_cursors (
 			ON delegation_operations(ticket_id)
 			WHERE ticket_id != '' AND state IN ('accepted', 'preparing');
 	`},
-	// The durable event bus: the internal spine every consumer reads, generalizing
-	// the ticket event log's (append-only + monotonic seq as cursor space) shape to
-	// the whole daemon. See docs/plans/2026-08-01-ext-a1-event-bus.md.
-	//
-	// Events are domain FACTS, not WebSocket payloads: a name, an indexed subject,
-	// and a small payload. Consumers are registered by name and hold a cursor into
-	// the same seq space; the WebSocket hub is deliberately absent from that table
-	// because it is ephemeral (it starts at head and holds no row).
 	{84, "create event bus log and consumer cursors", `CREATE TABLE IF NOT EXISTS bus_events (
     seq        INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
@@ -855,11 +794,7 @@ CREATE TABLE IF NOT EXISTS bus_consumers (
     enabled    INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL DEFAULT ''
 );`},
-	{85, "add the snooze deadline to sessions", ""}, // see applyMigration85
-	// Never reuse a number, even one only claimed on another branch: the runner
-	// skips `version <= max(applied)`, so of two migrations sharing a number the
-	// one that lands second never runs on a database that saw the first — a
-	// table that silently never exists.
+	{85, "add the snooze deadline to sessions", ""},
 	{86, "create session annotation drafts table", `CREATE TABLE IF NOT EXISTS session_annotation_drafts (
 		session_id TEXT PRIMARY KEY,
 		annotations_json TEXT NOT NULL,
@@ -908,100 +843,17 @@ CREATE TABLE IF NOT EXISTS document_collections (
     updated_at  TEXT NOT NULL,
     PRIMARY KEY (namespace, collection)
 );`},
-	// Migration 88's shared table is replaced by a table per collection: the
-	// measurement that overturned it, and the shape that replaces it, are in
-	// docs/plans/2026-08-03-ext-a3.1-doc-store-physical-schema.md. It carries
-	// v88's declarations and documents across rather than dropping them — the
-	// CLI's `attn doc define` and `attn doc put` shipped with migration 88, so
-	// any installed profile may already hold records a user put there by hand.
-	// Applied by applyMigration89.
 	{89, "rebuild the document store as a table per collection", ``},
-	// Gives every document a revision, so a caller can say which version it
-	// meant to overwrite and a write built on a stale read is refused instead of
-	// silently winning. Existing documents start at the first revision: nothing
-	// has ever been written against a revision, so there is no earlier history to
-	// preserve. Applied by applyMigration90.
 	{90, "give every document a revision", ``},
-	// Rewrites every stored document stamp into docstore.TimeFormat's
-	// fixed-width encoding. The stamps are TEXT columns ordered and filtered as
-	// text, and the encoding they were written in stripped trailing zeros from
-	// the fraction, so within any one second text order and time order disagreed
-	// — sorts came back scrambled and "changed since" filters dropped rows in
-	// silence. Applied by applyMigration91.
 	{91, "store document timestamps in an encoding that sorts", ``},
-	// The queue's two per-session columns: the pin that takes one agent out of
-	// the queue without dragging its workspace along, and the satellite link
-	// from a shell to the agent it was split from. Applied by applyMigration92.
 	{92, "add the session pin and the satellite parent to sessions", ``},
-	// The annotation draft's note: what the user says about the turn as a
-	// whole, saved and cleared with the marks on its parts. Applied by
-	// applyMigration93.
 	{93, "add the note to session annotation drafts", ``},
-	// The same rewrite migration 91 did for documents, for the two other TEXT
-	// stamp columns this package compares as text: the job queue's and the
-	// notifications feed's. A job's scheduled_at is compared against now on every
-	// dispatch sweep, and both feeds list by a stamp, so a variable-width fraction
-	// held a job scheduled on a whole second back until the next second and
-	// scrambled rows written inside one second. Applied by applyMigration94.
 	{94, "store job and notification timestamps in an encoding that sorts", ``},
-	// The last of the rewrite migrations 91 and 94 began, for every remaining TEXT
-	// stamp this package compares or orders as text: the turn stamps that decide
-	// whether a session owes the user a turn, the automation provider cursor that
-	// gates a review-request observation, and the created_at that orders
-	// delegations, endpoints, workspaces and workspace panes. Applied by
-	// applyMigration95.
 	{95, "store turn, cursor and listing timestamps in an encoding that sorts", ``},
-	// The per-session context-window cap pin, in tokens. 0 means no pin — the
-	// launch falls back to the chief or per-agent default settings. Owned by
-	// SetSessionContextWindowCap, absent from the session upsert, so a respawn
-	// cannot clear it — the same contract as pinned_at. Applied by
-	// applyMigration96.
 	{96, "add the context-window cap pin to sessions", ``},
-	// The session's activity line: one short present-tense sentence saying what
-	// the agent is doing right now, generated from its transcript. The cursor
-	// beside it is the transcript offset the line was generated through, which is
-	// what makes a refresh read only the appended bytes and what tells the
-	// generator that a session has written nothing new and needs no run at all.
-	// Applied by applyMigration97. See docs/plans/2026-08-07-session-activity.md.
 	{97, "add the activity line and its transcript cursor to sessions", ``},
-	// 98 is burned: the app registry held it on the A4 epic branch until this
-	// ladder overtook it. Do not reuse it.
-	//
-	// Participation earned by acting as a durable role belongs to the ROLE, not
-	// to the session that filled it at the time. The event now says so directly:
-	// author stays the session for audit provenance, author_role names the role
-	// it acted as, and the view attributes participation accordingly. That
-	// replaces migration 82's approximation — "a created event on a
-	// role-owned ticket is the role's" — which was right for a ticket the chief
-	// minted and wrong for a backlog ticket the chief later adopted, where it
-	// silently dropped the original author's participation.
-	//
-	// The backfill recognizes the delegating transaction by its timestamp: the
-	// role owner row is written in the same transaction as the events the acting
-	// session wrote (created when the chief minted the ticket, assigned plus
-	// status_changed when it adopted one), so all of them share a second. Only
-	// those three kinds are considered, so a comment or an attach that happened to
-	// land in the same second on the same ticket is not swept up with them.
-	//
-	// Rows are carried, never recreated; the only DELETE removes the acting
-	// session's personal subscription — the session-bound second copy of an
-	// attachment the role already holds. It is recognized by the same shared
-	// second, so a subscription the chief made by hand at some other time
-	// survives, and a bystander who happened to write in the delegating second
-	// keeps theirs.
-	// Applied by applyMigration99, whose ALTER is column-guarded.
 	{99, "attribute role-acted ticket events to the role", ``},
-	// How much a notification wants the user: info, warning, or critical. Rows
-	// written before this migration are all task failures, which the producer now
-	// stamps warning, but they are carried at the column default rather than
-	// rewritten — a notification already sitting in the feed has been seen at its
-	// old weight, and promoting it retroactively would raise an alarm about
-	// something the user already dealt with.
-	// Applied by applyMigration100, whose ALTER is column-guarded.
 	{100, "add the severity level to notifications", ``},
-	// chief_of_staff_dispatch_messages (migration 46) never had a writer, so no
-	// user state exists to carry; its dispatch-scoped shape does not fit agent
-	// messages. Drop approved by Victor 2026-08-10.
 	{101, "create agent messages and drop the dispatch message table", `
 		CREATE TABLE IF NOT EXISTS agent_messages (
 			id TEXT PRIMARY KEY,
@@ -1017,29 +869,6 @@ CREATE TABLE IF NOT EXISTS document_collections (
 			ON agent_messages(sender_session_id, target_session_id, created_at);
 		DROP TABLE IF EXISTS chief_of_staff_dispatch_messages;
 	`},
-	// The app registry (A4). Three tables, and their absences are as decided as
-	// their columns:
-	//
-	//   - apps has NO enabled column. An app's enabled state IS its bus
-	//     consumer's enabled bit, which is what both stops delivery and releases
-	//     the retention floor. A mirrored column here would be a drift class
-	//     with no job to do.
-	//   - app_versions rows are immutable. Apply inserts, rollback moves
-	//     apps.current_version_id; nothing rewrites a version, and removing an
-	//     app leaves its versions behind as history.
-	//   - app_invocations records the version that actually ran, not the pointer
-	//     the app happens to be on now, so the log stays honest across a
-	//     rollback.
-	//
-	// UNIQUE(app_name, content_hash) is what makes "re-applying byte-identical
-	// content mints no new row" a property of the database rather than a
-	// convention in the apply pipeline.
-	//
-	// Numbered 96, then 97, then 98, then 101 on the epic branch, and now 102:
-	// each main sync found the number taken. A hole is not a free slot — the
-	// runner keeps one scalar version and skips anything at or below it, so a
-	// database that already ran 99 and 100 would never have created these
-	// tables from 98.
 	{102, "create the app registry", `CREATE TABLE IF NOT EXISTS apps (
     name               TEXT PRIMARY KEY,
     current_version_id INTEGER,
@@ -1075,18 +904,6 @@ CREATE TABLE IF NOT EXISTS app_invocations (
 -- order.
 CREATE INDEX IF NOT EXISTS idx_app_invocations_app ON app_invocations(app_name, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_invocations_started ON app_invocations(started_at);`},
-	// What was serving immediately before the version an app is on now. Bare
-	// `attn app rollback <name>` follows it, because "the version before this
-	// one" is the operator's get-me-back-to-what-worked, and the numerically
-	// previous id is a different question with a different answer — the app that
-	// went good, broken, fixed rolls back onto the broken one under the old rule.
-	//
-	// Nothing backfills it: what was serving before is history the registry never
-	// recorded, and inventing it from ids would reproduce the bug this fixes. An
-	// app carried across this migration has no recorded previous until its next
-	// pointer move, and bare rollback says so rather than guessing.
-	// Applied by applyMigration103, whose ALTER is column-guarded. Migration 105
-	// replaces the column it adds with a walkable chain.
 	{103, "record the previously-serving version of each app", ``},
 	{104, "remember a parked supervised child across daemon restarts", `CREATE TABLE IF NOT EXISTS supervised_parks (
     child           TEXT PRIMARY KEY,
@@ -1097,33 +914,9 @@ CREATE INDEX IF NOT EXISTS idx_app_invocations_started ON app_invocations(starte
     exit_signal     TEXT NOT NULL DEFAULT '',
     exit_error      TEXT NOT NULL DEFAULT ''
 );`},
-	// An app's serving history, as a chain a bare rollback walks down one step at
-	// a time. A step names the version that started serving and the step it was
-	// pushed onto; apps.serving_step_id is where the app stands on it. One
-	// pointer could only ever express one step back, so a second bare rollback
-	// returned to where the first started; a chain answers "one step further
-	// back" however many times it is asked.
-	//
-	// Applied by applyMigration105, which also carries every recorded
-	// previously-serving version into the chain before dropping the column that
-	// held it — an app on version B with A behind it becomes the two-step chain
-	// A → B, which walks exactly as it did before.
 	{105, "walk an app's serving history as a chain", ``},
-	// Applied by applyMigration106, whose ALTER is column-guarded.
 	{106, "add durable per-session token cost state", ``},
 	{107, "record which ticket event a delivery covered", ``},
-	// Auto mode's home, at 109 because 108 is burned: a branch still in flight
-	// applied it to a production database before merging, and migrateDB skips
-	// anything at or below the highest version already applied. That cuts both
-	// ways — a database created after this lands sits at 109, so a later 108
-	// would be skipped there too. Whatever that branch ships must renumber
-	// above this one.
-	//
-	// One promoted config row, the proposals waiting on a human, and the denials
-	// slice 5 reports. The split is the security design: the CLI writes
-	// proposals, only the app promotes one into the config row, so an agent
-	// cannot write its own leash. Empty model columns mean "whichever default
-	// ships" — automode.Defaults() resolves them at read.
 	{109, "auto mode config, proposals and denials", `CREATE TABLE IF NOT EXISTS automode_config (
     id               INTEGER PRIMARY KEY CHECK (id = 1),
     enabled_default  INTEGER NOT NULL DEFAULT 1,
@@ -1155,26 +948,12 @@ CREATE TABLE IF NOT EXISTS automode_denials (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_automode_denials_recent ON automode_denials(id DESC);`},
-	// Applied by applyMigration110, whose ALTER is column-guarded.
 	{110, "record which rule denied an auto mode call", ``},
-	// The review list says who asked, so one asker's pending row is what the
-	// dedupe collapses — a second session asking the same thing is a second ask.
-	// The index is what makes that true against the database rather than only
-	// inside the process that happens to hold the store's lock.
 	{111, "one pending auto mode proposal per asker", `CREATE UNIQUE INDEX IF NOT EXISTS
     idx_automode_proposals_pending_ask
     ON automode_proposals(kind, target, value, proposed_by)
     WHERE state = 'pending';`},
-	// Applied by applyMigration114, which carries each single model into its
-	// layer's list and drops the column it came from.
 	{114, "auto mode judges from an ordered model list per layer", ``},
-	// The reconcile tables, at 115 rather than the 108 they were written as.
-	// 108, 111, 112 and 113 are all burned — each was applied to a production
-	// database by a branch still in flight — and migrateDB skips anything at or
-	// below the highest version a database already carries, so a database that
-	// took auto mode's 109/110/114 first would never see a lower number. Every
-	// statement here is IF NOT EXISTS, so a database that did apply an earlier
-	// number re-runs this to the same shape.
 	{115, "record app reconciliation owed across cursor fences", `CREATE TABLE IF NOT EXISTS app_reconcile_requests (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     app_name            TEXT NOT NULL,
@@ -1197,18 +976,6 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
     completed_request_id INTEGER NOT NULL,
     updated_at           TEXT NOT NULL
 );`},
-	// Reconcile attempts are long-lived enough to cross a daemon restart, unlike
-	// the terminal-only handler rows the invocation log held before. The claim
-	// boundary and reason make a retry reconstruct the exact attempt it owes;
-	// finished_at distinguishes a live attempt from one startup must interrupt.
-	//
-	// Existing event columns stay NOT NULL. Older readers and every existing
-	// append call already use their empty-string/zero representation for commands
-	// and view crashes, and rebuilding this history table only to turn those values
-	// into NULL would add migration risk without adding information.
-	// Applied by applyMigration116, whose ALTERs are column-guarded. Besides
-	// tolerating a schema-version rewind in recovery tests, the guard prevents a
-	// rerun from reclassifying reconcile rows as subscriptions.
 	{116, "record app reconcile invocation lifecycles", ``},
 	{117, "index automation provenance lookups", `
 		CREATE INDEX IF NOT EXISTS idx_automation_runs_session_created
@@ -1216,22 +983,12 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		CREATE INDEX IF NOT EXISTS idx_automation_runs_ticket_created
 			ON automation_runs(ticket_id, created_at DESC, id DESC);
 	`},
-	// The garden replaced the ticket board; the independent font scale moved
-	// with it. Carry the stored value over rather than resetting anyone who
-	// had set one, and only when the new key is not already written.
 	{118, "the ticket board's font scale becomes the garden's", `
 		INSERT OR IGNORE INTO settings (key, value)
 			SELECT 'gardenScale', value FROM settings WHERE key = 'ticketBoardScale';
 		DELETE FROM settings WHERE key = 'ticketBoardScale';
 	`},
-	// Current review demand establishes a newly activated automation's baseline;
-	// only a later request cycle is eligible to launch. Existing rows default to
-	// zero so upgrading does not suppress demand already tracked by a live
-	// definition.
 	{119, "record review automation activation baselines", ``},
-	// A watch is standing interest in one seed. A bell is the unread fence for
-	// one watcher and one moved seed; its agent-message id lets a read cancel a
-	// doorbell that was queued but had not reached the session yet.
 	{120, "watch seeds and coalesce their unread bells", `
 		CREATE TABLE IF NOT EXISTS garden_seed_watches (
 			watcher_session_id TEXT NOT NULL,
@@ -1257,7 +1014,6 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	`},
 }
 
-// migration99SQL is everything migration 99 does after its guarded ALTER.
 const migration99SQL = `
 		UPDATE ticket_events SET author_role = (
 			SELECT ro.role FROM ticket_role_owners ro
@@ -1295,10 +1051,6 @@ const migration99SQL = `
 			SELECT ticket_id, ('role:' || role) FROM ticket_role_owners WHERE role != '';
 `
 
-// applyMigration99 adds ticket_events.author_role, then backfills and redefines
-// the participant view from migration99SQL. The ALTER is column-guarded so a
-// rewound schema_migrations table re-runs it without failing on work already
-// done; the rest is idempotent on its own.
 func applyMigration99(tx *sql.Tx) error {
 	has, err := columnExists(tx, "ticket_events", "author_role")
 	if err != nil {
@@ -1313,10 +1065,7 @@ func applyMigration99(tx *sql.Tx) error {
 	return err
 }
 
-// OpenDB opens a SQLite database at the given path, creating it if necessary.
-// It also creates the schema if the database is new.
 func OpenDB(dbPath string) (*sql.DB, error) {
-	// Create parent directories if they don't exist
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
@@ -1327,19 +1076,15 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// For in-memory databases, ensure we use a single connection to avoid
-	// connection pooling issues (each :memory: connection is a separate DB)
 	if dbPath == ":memory:" {
 		db.SetMaxOpenConns(1)
 	}
 
-	// Create base schema (includes schema_migrations table)
 	if _, err := db.Exec(baseSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
 
-	// Run versioned migrations
 	if err := migrateDB(db, dbPath); err != nil {
 		db.Close()
 		return nil, err
@@ -1348,36 +1093,21 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-// migrateDB runs all pending migrations in order.
-// It tracks applied migrations in the schema_migrations table. dbPath is used
-// only to locate a pre-migration backup directory alongside the database
-// file; it is ignored (no backup attempted) for the in-memory database.
 func migrateDB(db *sql.DB, dbPath string) error {
-	// Detect and handle legacy databases (created before migration system existed)
 	if err := seedLegacyDB(db); err != nil {
 		return fmt.Errorf("seeding legacy db: %w", err)
 	}
 
-	// Get current schema version
 	currentVersion, err := getCurrentVersion(db)
 	if err != nil {
 		return fmt.Errorf("getting schema version: %w", err)
 	}
 
-	// Take a pre-migration snapshot before mutating an existing, non-empty
-	// database. A brand-new DB (currentVersion 0) has nothing to protect, and
-	// :memory: has no on-disk directory to snapshot into — both are skipped.
-	// A failed backup must never block startup: log and proceed with
-	// migrations regardless.
 	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" && len(migrations) > 0 {
 		latest := migrations[len(migrations)-1].version
 		if currentVersion < latest {
 			if path, err := backupPreMigration(db, dbPath, currentVersion); err != nil {
 				if path != "" {
-					// The snapshot itself was written; only pruning old
-					// pre-migration snapshots afterward failed. Report it as
-					// such — the operator needs to know the protective
-					// snapshot exists, not that the backup failed outright.
 					log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d), but pruning old pre-migration snapshots failed: %v", path, currentVersion, latest, err)
 				} else {
 					log.Printf("[store] pre-migration backup failed (schema v%d -> v%d): %v; proceeding with migrations", currentVersion, latest, err)
@@ -1388,13 +1118,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
-	// Run pending migrations
 	for _, m := range migrations {
 		if m.version <= currentVersion {
 			continue
 		}
 
-		// Execute migration in a transaction
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
@@ -1686,7 +1414,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		}
 
-		// Record migration
 		if _, err := tx.Exec(
 			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
 			m.version,
@@ -1718,10 +1445,6 @@ func applyMigration121(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration107 records the newest ticket event covered by a delivery. Old
-// rows stay at zero because the prior schema cannot prove which event was covered;
-// guessing could suppress unread activity, while the next delivery self-heals.
-// The guard keeps migration-rewind tests and branch databases with the column safe.
 func applyMigration107(tx *sql.Tx) error {
 	has, err := columnExists(tx, "ticket_delivery_attention", "delivered_through_seq")
 	if err != nil {
@@ -1786,9 +1509,6 @@ func applyMigration119(tx *sql.Tx) error {
 }
 
 func applyMigration73(tx *sql.Tx) error {
-	// The first Automations slice used migration 70 on its non-production
-	// profile before main independently assigned 70 to delegation operations.
-	// Repair that branch-only collision while applying the renumbered migration.
 	if _, err := tx.Exec(delegationOperationsSchema); err != nil {
 		return err
 	}
@@ -1877,9 +1597,6 @@ func applyMigration23(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration60 adds reconciled_at to tickets idempotently — guarded by
-// columnExists so a re-run (or a DB that already has the column) is a no-op,
-// mirroring applyMigration57.
 func applyMigration60(tx *sql.Tx) error {
 	hasReconciledAt, err := columnExists(tx, "tickets", "reconciled_at")
 	if err != nil {
@@ -1894,9 +1611,6 @@ func applyMigration60(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration64 adds closed_intentionally_at to sessions idempotently —
-// guarded by columnExists so a re-run (or a DB that already has the column) is
-// a no-op, mirroring applyMigration60.
 func applyMigration64(tx *sql.Tx) error {
 	hasClosedIntentionallyAt, err := columnExists(tx, "sessions", "closed_intentionally_at")
 	if err != nil {
@@ -1911,9 +1625,6 @@ func applyMigration64(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration57 adds resume_session_id to tickets idempotently — guarded by
-// columnExists so a re-run (or a DB that already has the column) is a no-op,
-// mirroring applyMigration23 for the same column on sessions.
 func applyMigration57(tx *sql.Tx) error {
 	hasResumeSessionID, err := columnExists(tx, "tickets", "resume_session_id")
 	if err != nil {
@@ -1943,9 +1654,6 @@ func applyMigration45(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration48 drops the label column from recent_locations. Labels are
-// derived from the path now. Skips databases (including partial test
-// fixtures) where the table or column never existed.
 func applyMigration48(tx *sql.Tx) error {
 	hasLabel, err := columnExists(tx, "recent_locations", "label")
 	if err != nil {
@@ -1958,10 +1666,6 @@ func applyMigration48(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration49 adds the rank column to workspaces and backfills it for any
-// existing rows in created_at (opening) order using rankkey.Seed. It is
-// idempotent: the ALTER is guarded by columnExists, and the backfill only
-// touches rows whose rank is still the empty default.
 func applyMigration49(tx *sql.Tx) error {
 	hasRank, err := columnExists(tx, "workspaces", "rank")
 	if err != nil {
@@ -2005,17 +1709,6 @@ func applyMigration49(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration52 retires the last "janitor" identifiers from the live schema:
-// it renames the keeper's compaction-backup table and realigns the persisted
-// context-updater sentinel. Guarded so it is idempotent and safe on every DB
-// shape, including a migration rewind that re-runs migration 47's
-// CREATE-IF-NOT-EXISTS after the rename already happened:
-//   - only the legacy table exists (normal upgrade): rename it, preserving data.
-//   - both exist (47 recreated an empty legacy table beside the authoritative
-//     keeper-named one): drop the spurious legacy duplicate.
-//   - only the keeper-named table exists (already migrated): no-op.
-//
-// The UPDATE rewrites historical rows the keeper stamped before this rename.
 func applyMigration52(tx *sql.Tx) error {
 	oldExists, err := tableExists(tx, "workspace_context_janitor_backups")
 	if err != nil {
@@ -2035,9 +1728,6 @@ func applyMigration52(tx *sql.Tx) error {
 			return err
 		}
 	}
-	// Realign the persisted updater sentinel, but only if workspace_contexts is
-	// present. In a real DB it always is; guarding keeps the migration safe on a
-	// partial schema (e.g. an isolated test DB that seeds only the workspaces table).
 	contextsExist, err := tableExists(tx, "workspace_contexts")
 	if err != nil {
 		return err
@@ -2052,9 +1742,6 @@ func applyMigration52(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration54 adds the pinned column to workspaces, allowing users to pin
-// workspaces so they stay visible at the top of the list. Guarded with
-// tableExists and columnExists for idempotent re-run safety.
 func applyMigration54(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "workspaces")
 	if err != nil {
@@ -2074,10 +1761,6 @@ func applyMigration54(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration65 adds the verdict column to presentation_rounds, recording
-// whether a submitted round was "approved" or "feedback". Guarded with
-// tableExists and columnExists for idempotent re-run safety (see
-// applyMigration54 for the same pattern).
 func applyMigration65(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "presentation_rounds")
 	if err != nil {
@@ -2135,11 +1818,6 @@ func applyMigration72(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration75 adds spec_yaml to automation_definitions, persisting the
-// user's own applied YAML (not just its canonical JSON re-derivation) so a
-// later edit round-trips through the editor without silently discarding
-// comments and formatting. Guarded with tableExists (a partial-schema test DB
-// may seed only some tables) and columnExists (idempotent re-run safety).
 func applyMigration75(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "automation_definitions")
 	if err != nil {
@@ -2159,26 +1837,6 @@ func applyMigration75(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration76 is the v2 clean-slate rebuild of automation_definitions
-// (docs/plans/2026-07-21-automations-v2-simplification.md): the automations
-// feature has zero production usage, so rather than evolve the v1 schema in
-// place, every automation row is wiped and automation_definitions is
-// recreated without spec_yaml — enabled becomes the column's sole authority,
-// with no spec-side echo to keep in sync. Children are cleared before
-// parents (automation_ticket_occurrence_events -> automation_runs ->
-// automation_occurrences, then the continuity/review-edge/cursor tables) so
-// no row survives referencing a row this migration is about to drop.
-// tickets.automation_run_id is nulled since every run it could reference is
-// gone. Guarded with tableExists (a partial-schema test DB may seed only
-// some tables) — if automation_definitions was never created, none of its
-// dependents exist either, so there is nothing to wipe.
-//
-// This must apply cleanly from a DB at version 73 and from one at 75: in
-// both cases migrations 74-75 have already run by the time 76 does (74
-// creates the dependent tables, 75 adds spec_yaml), so 76 always sees the
-// full v1 shape and drops spec_yaml with the table — production
-// ~/.attn/attn.db is at 73; the v1 automation migrations 74-75 never
-// reached production.
 func applyMigration76(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "automation_definitions")
 	if err != nil {
@@ -2214,33 +1872,6 @@ func applyMigration76(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration77 is the v2 clean-slate rebuild of runs and binding state
-// (docs/plans/2026-07-21-automations-v2-simplification.md, PR2b): like 76,
-// the automations feature has zero production usage, so every run/binding/
-// edge row is wiped rather than evolved in place. automation_runs gains
-// cancel_reason and attempts (attempts is populated by a later PR; the
-// column lands now to avoid a further migration). automation_continuity_bindings
-// becomes append-only: a surrogate id, a status (active|released), and
-// released_reason/released_at, with a unique index enforcing at most one
-// active row per (definition_id, continuity_key) — delivery reads binding
-// status directly instead of inferring it from run history.
-// automation_review_request_edges drops accepted_cycle: candidacy becomes
-// "no run exists for (subject, cycle), or one exists but is still pending"
-// (see store.ReconcileAutomationReviewRequests), so the column no longer has
-// a reader or writer.
-//
-// Children are cleared before automation_definitions could be touched (it
-// isn't, this time) so no row survives referencing a run/binding/edge this
-// migration is about to drop. tickets.automation_run_id is nulled since
-// every run it could reference is gone, mirroring migration 76's own
-// nulling. Guarded with tableExists (a partial-schema test DB may seed only
-// some tables) — if automation_runs was never created, none of its
-// dependents exist either, so there is nothing to wipe.
-//
-// This must apply cleanly from a DB at version 73 (production) and from one
-// freshly migrated through 76 in this same test run: migrations 74-76 have
-// already run by the time 77 does, so 77 always sees the full v1 runs/
-// bindings/edges shape.
 func applyMigration77(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "automation_runs")
 	if err != nil {
@@ -2321,8 +1952,6 @@ func applyMigration77(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration78 adds launch_intent to sessions. The column guard keeps
-// migration fixtures that replay migrations against a head schema idempotent.
 func applyMigration78(tx *sql.Tx) error {
 	hasLaunchIntent, err := columnExists(tx, "sessions", "launch_intent")
 	if err != nil {
@@ -2350,12 +1979,6 @@ func applyMigration79(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration53 adds the closed_state column to chief_of_staff_dispatches,
-// recording a delegated session's last attn-classified runtime state at close so
-// the dispatch signal classifier can tell a clean stop (idle / waiting_input)
-// from a crash or kill mid-flight (working / launching / pending_approval). It is
-// guarded with tableExists (a partial-schema test DB may seed only some tables)
-// and columnExists (idempotent re-run safety).
 func applyMigration53(tx *sql.Tx) error {
 	exists, err := tableExists(tx, "chief_of_staff_dispatches")
 	if err != nil {
@@ -2375,7 +1998,6 @@ func applyMigration53(tx *sql.Tx) error {
 	return err
 }
 
-// tableExists reports whether a table of the given name exists in the schema.
 func tableExists(tx *sql.Tx, name string) (bool, error) {
 	var got string
 	err := tx.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&got)
@@ -2663,10 +2285,6 @@ func applyMigration41(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration81 adds the turn stamps and backfills the open ones. It is
-// guarded on the columns already existing so a rewound schema_migrations table
-// re-runs it harmlessly — and, crucially, so the backfill does not overwrite
-// live stamps with state_since on a re-run.
 func applyMigration81(tx *sql.Tx) error {
 	hasOpened, err := columnExists(tx, "sessions", "turn_opened_at")
 	if err != nil {
@@ -2693,10 +2311,6 @@ func applyMigration81(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration85 adds the snooze deadline. Nothing is backfilled: no snooze
-// has ever been expressed, so every existing session is correctly not deferred.
-// Guarded on the column existing so a rewound schema_migrations table re-runs it
-// without erroring on the duplicate.
 func applyMigration85(tx *sql.Tx) error {
 	has, err := columnExists(tx, "sessions", "turn_snoozed_until")
 	if err != nil || has {
@@ -2706,18 +2320,6 @@ func applyMigration85(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration89 rebuilds the document store as a table per collection and
-// carries migration 88's contents across. `attn doc define` and `attn doc put`
-// shipped together with 88, so an installed profile can already hold
-// declarations and documents someone wrote by hand: this is an upgrade, not a
-// replace. The shape it upgrades to, and the measurement that chose it, are in
-// docs/plans/2026-08-03-ext-a3.1-doc-store-physical-schema.md.
-//
-// Every v88 document lands in exactly one new table or the migration fails
-// rather than committing a partial carry — the count is checked, not assumed.
-//
-// Guarded on the new registry's minting column, so a rewound schema_migrations
-// table re-runs it without erroring on work already done.
 func applyMigration89(tx *sql.Tx) error {
 	migrated, err := columnExists(tx, "document_collections", "id")
 	if err != nil || migrated {
@@ -2727,15 +2329,8 @@ func applyMigration89(tx *sql.Tx) error {
 	if _, err := tx.Exec(`ALTER TABLE document_collections RENAME TO document_collections_v88`); err != nil {
 		return err
 	}
-	// id is the mint: a collection's table is doc_<id>, so no identifier the
-	// store executes is ever a function of a namespace or collection name.
-	//
-	// AUTOINCREMENT, so an id is never reused. A plain rowid hands the next
-	// declaration the id a dropped one just freed, which would point a table name
-	// that is still held somewhere — an in-flight subscription's schema, a
-	// compiled query — at a different collection's documents. Undefine then
-	// define is a normal thing to do, so that has to be impossible rather than
-	// unlikely.
+	// AUTOINCREMENT, not rowid: a collection's table is doc_<id>, so a reused id
+	// would point a name still held by an in-flight query at another collection.
 	if _, err := tx.Exec(`CREATE TABLE document_collections (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     namespace   TEXT NOT NULL,
@@ -2778,19 +2373,6 @@ func applyMigration89(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration90 gives every document a revision, so a write can say which
-// version it meant to replace. Each collection is its own table, so this walks
-// the registry and alters them one by one — the registry is the only list of
-// them, and reading the schema for `doc_%` tables would pick up any table that
-// happened to be named like one.
-//
-// Existing documents start at docstore.FirstRev rather than at zero: a revision
-// is the version a reader was handed, and every document already stored has been
-// readable all along at whatever version it is on now, which is its first.
-//
-// Guarded per table rather than once, so a rewound schema_migrations table
-// finishes a run that stopped part way instead of erroring on the first table it
-// already did.
 func applyMigration90(tx *sql.Tx) error {
 	rows, err := tx.Query(`SELECT id FROM document_collections`)
 	if err != nil {
@@ -2827,21 +2409,6 @@ func applyMigration90(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration92 adds the two per-session queue columns.
-//
-// pinned_at is the individual pin: presence means pinned out of the queue, and
-// the instant is the pinned band's sort key, so one column answers both
-// questions. parent_session_id is the satellite link a shell carries to the
-// agent session it was split from — spawn-time provenance, always an agent id,
-// so there is never a chain to walk.
-//
-// Nothing is backfilled in either direction. No pin has ever been expressed, so
-// every existing session is correctly unpinned; and which agent an existing
-// shell was opened beside is unknowable after the fact, so every shell alive at
-// migration time is correctly an orphan and keeps its own row.
-//
-// Each ALTER is guarded on the column existing, so a rewound schema_migrations
-// table re-runs the migration without erroring on the duplicate.
 func applyMigration92(tx *sql.Tx) error {
 	hasPinned, err := columnExists(tx, "sessions", "pinned_at")
 	if err != nil {
@@ -2860,9 +2427,6 @@ func applyMigration92(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration96 adds the per-session context-window cap pin. Guarded on the
-// column existing, so a rewound schema_migrations table re-runs it without
-// erroring on the duplicate.
 func applyMigration96(tx *sql.Tx) error {
 	has, err := columnExists(tx, "sessions", "context_window_cap")
 	if err != nil || has {
@@ -2872,15 +2436,6 @@ func applyMigration96(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration97 adds the activity line, when it was generated, and the
-// transcript cursor it was generated through.
-//
-// All three are owned by UpdateSessionActivity alone and are absent from the
-// session upsert, so a respawn or a state re-add cannot clear them — the same
-// arrangement pinned_at has, and for the same reason.
-//
-// Guarded per column, so a rewound schema_migrations table re-runs it without
-// failing on work already done.
 func applyMigration97(tx *sql.Tx) error {
 	for _, column := range []string{"activity", "activity_at", "activity_cursor"} {
 		has, err := columnExists(tx, "sessions", column)
@@ -2897,8 +2452,6 @@ func applyMigration97(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration100 adds the notification severity column. Guarded on the
-// column, and the DEFAULT is what carries every existing row to 'info'.
 func applyMigration100(tx *sql.Tx) error {
 	has, err := columnExists(tx, "notifications", "severity")
 	if err != nil || has {
@@ -2908,10 +2461,6 @@ func applyMigration100(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration103 adds the previously-serving version pointer to the app
-// registry. Guarded on the column, and NULL is the honest carried value: an app
-// that existed before this migration has no recorded predecessor until its next
-// pointer move.
 func applyMigration103(tx *sql.Tx) error {
 	has, err := columnExists(tx, "apps", "previous_version_id")
 	if err != nil || has {
@@ -2921,16 +2470,6 @@ func applyMigration103(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration106 adds the opaque per-session cost ledger. The guard makes
-// schema-migration rewind tests and interrupted upgrade recovery idempotent.
-// applyMigration110 records who refused an auto mode call: a static envelope
-// rule ("hard-deny", "unknown-tool"), the classifier layer that answered
-// ("classifier-2a", "classifier-2b"), "classifier-unavailable" when no
-// classifier model could be reached, or the circuit breaker.
-//
-// Guarded because a database can reach this with the column already there: a
-// migration test builds the current schema and rewinds the recorded version,
-// which replays this ALTER against a table that already carries it.
 func applyMigration110(tx *sql.Tx) error {
 	has, err := columnExists(tx, "automode_denials", "rule")
 	if err != nil || has {
@@ -2940,15 +2479,6 @@ func applyMigration110(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration114 gives each classifier layer an ordered model list. The
-// single model a machine had promoted becomes that list's one entry, and the
-// column it came from goes: two spellings of the same setting is how one of
-// them ends up stale, and the read resolves an empty list to the shipped
-// default exactly as it resolved an empty string.
-//
-// Every step is guarded on what the database actually has, because a migration
-// test builds the current schema and rewinds the recorded version, replaying
-// this against a table that already carries the lists.
 func applyMigration114(tx *sql.Tx) error {
 	for _, layer := range []struct{ single, list string }{
 		{"classifier_model", "classifier_models"},
@@ -2992,18 +2522,6 @@ func applyMigration106(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration105 turns each app's single previously-serving pointer into a
-// chain bare rollback can walk down repeatedly.
-//
-// The carry is the whole reason this is Go and not SQL in the table: an app on
-// version B with A recorded behind it becomes the chain A → B standing on B, so
-// the first bare rollback after the upgrade lands exactly where it would have
-// landed before, and the next one continues down instead of bouncing back. An
-// app with no recorded predecessor becomes a one-step chain and says there is
-// nothing below it, as it did. Nothing is invented from version ids.
-//
-// It all runs in the migration's transaction, so a failure anywhere leaves the
-// old column and its data untouched rather than half-carried.
 func applyMigration105(tx *sql.Tx) error {
 	if _, err := tx.Exec(`
 -- No index beyond the primary key: every reader arrives holding a step id —
@@ -3032,9 +2550,6 @@ CREATE TABLE IF NOT EXISTS app_serving_steps (
 		return err
 	}
 	if carried {
-		// The bottom step of a carried chain: what was serving before the version
-		// the app is on. The table is empty here, so the next statement can find
-		// this row by app name alone.
 		if _, err := tx.Exec(`
 			INSERT INTO app_serving_steps (app_name, version_id, parent_id, created_at)
 			SELECT name, previous_version_id, NULL, updated_at FROM apps
@@ -3065,9 +2580,6 @@ CREATE TABLE IF NOT EXISTS app_serving_steps (
 	return err
 }
 
-// applyMigration93 adds the note a user writes alongside a session's
-// annotation marks. Guarded on the column, so a rewound schema_migrations
-// table re-runs it without failing on work already done.
 func applyMigration93(tx *sql.Tx) error {
 	has, err := columnExists(tx, "session_annotation_drafts", "note")
 	if err != nil || has {
@@ -3077,24 +2589,6 @@ func applyMigration93(tx *sql.Tx) error {
 	return err
 }
 
-// applyMigration91 rewrites every stored document stamp into
-// docstore.TimeFormat's fixed-width encoding, so that comparing the stamps as
-// text — which is the only way a TEXT column is compared, and what every sort
-// and "changed since" filter on created_at/updated_at does — orders them by
-// time. The encoding they were written in stripped trailing zeros, so within one
-// second the two orders disagreed.
-//
-// The rewrite is a decode and re-encode rather than SQL string surgery: the
-// stamps that need fixing are exactly the ones whose shape varies, which is what
-// makes them awkward to recognise in SQL and trivial to normalize in Go.
-//
-// Idempotent by construction — re-encoding an already-converted stamp yields
-// itself — so a rewound schema_migrations table re-runs it harmlessly and a run
-// that stopped part way finishes.
-//
-// A stamp that does not decode is left alone and reported. Nothing the store
-// writes can produce one, so it means a hand-edited database, and turning an
-// unreadable stamp into year 1 loses more than leaving it unreadable does.
 func applyMigration91(tx *sql.Tx) error {
 	ids, err := collectionTableIDs(tx)
 	if err != nil {
@@ -3120,9 +2614,6 @@ func applyMigration91(tx *sql.Tx) error {
 	return nil
 }
 
-// collectionTableIDs lists the collections the registry knows about. The
-// registry is the only list of them: reading the schema for `doc_%` tables would
-// pick up anything that happened to be named like one.
 func collectionTableIDs(tx *sql.Tx) ([]int64, error) {
 	rows, err := tx.Query(`SELECT id FROM document_collections`)
 	if err != nil {
@@ -3140,23 +2631,6 @@ func collectionTableIDs(tx *sql.Tx) ([]int64, error) {
 	return ids, rows.Err()
 }
 
-// applyMigration94 rewrites the job queue's and the notifications feed's stored
-// stamps into sortableTimeFormat, for the same reason migration 91 rewrote the
-// document store's: they are TEXT columns compared as text, and the encoding
-// they were written in stripped trailing zeros from the fraction, so text order
-// was not time order inside any one second.
-//
-// The two surfaces move together because they always shared one encoding, and
-// what the wrong one cost them differed: a job scheduled on a whole second sorted
-// above every stamp within that second, so `scheduled_at <= now` did not claim it
-// until the next second, and both feeds' listings (jobs by updated_at,
-// notifications by created_at) came back out of order among rows written
-// together.
-//
-// Idempotent by construction — re-encoding an already-converted stamp yields
-// itself — and an undecodable stamp is left alone and reported, both properties
-// inherited from restampTable. An unread notification's read_at is ” by design;
-// restampTable skips a blank without counting it.
 func applyMigration94(tx *sql.Tx) error {
 	unreadable, err := restampTable(tx, "jobs", "id",
 		[]string{"scheduled_at", "created_at", "updated_at"})
@@ -3174,46 +2648,6 @@ func applyMigration94(tx *sql.Tx) error {
 	return nil
 }
 
-// applyMigration95 finishes what migrations 91 and 94 started: after it, no TEXT
-// stamp this package compares or orders as text is written in an encoding whose
-// text order is not time order.
-//
-// What each column cost while it was wrong:
-//
-//   - sessions.turn_opened_at / turn_settled_at are compared against each other
-//     ("a turn is open iff opened > settled"), so a turn settled inside the
-//     second it was opened in read as still open and the next turn silently never
-//     opened. Whole-second opens are routine, not a coincidence: a day-named
-//     snooze wakes on an exact second and the woken turn is stamped with that
-//     deadline. turn_snoozed_until is only ever compared for equality, but it
-//     rides along because WakeTurnAt matches the stored deadline against a
-//     freshly formatted one — restamping it in the same breath as changing the
-//     writer is what keeps a snooze written before this migration wakeable after
-//     it.
-//   - automation_provider_cursors.observed_at gates the cursor advance
-//     (`excluded.observed_at >= ...observed_at`), so an observation could fail to
-//     advance the cursor past one taken microseconds earlier.
-//   - delegation_operations.created_at, workspaces.created_at and
-//     workspace_layout_panes.created_at each order a listing, so rows written
-//     together came back in an arbitrary order.
-//   - workflow_runs.created_at orders the run listing and is written by the CLI
-//     rather than by this package, so the store normalizes whatever spelling a
-//     caller hands it (normalizeWorkflowStamp) instead of the writers being asked
-//     to agree. Its callers reach it through protocol.TimestampNow() too.
-//   - endpoints.created_at / updated_at were the worst of them: written through
-//     protocol.TimestampNow(), which renders the local zone, so the stored values
-//     carry an offset like "+02:00" and the listing misordered across a zone or
-//     DST change as well as across a fraction width. Restamping normalizes them
-//     to UTC, which is why the decode has to be the tolerant one.
-//
-// Idempotent by construction — re-encoding an already-converted stamp yields
-// itself — and an undecodable stamp is left alone and reported, both inherited
-// from restampTable, which also skips the ” that means "no stamp here" on the
-// turn columns and on an unclaimed cursor.
-//
-// The composite-key tables are keyed by rowid: every table here is an ordinary
-// rowid table, and restampTable needs one column that names a row, not the
-// primary key it happens to have.
 func applyMigration95(tx *sql.Tx) error {
 	restamps := []struct {
 		table   string
@@ -3231,10 +2665,6 @@ func applyMigration95(tx *sql.Tx) error {
 	}
 	unreadable := 0
 	for _, r := range restamps {
-		// A table the base schema creates rather than a migration is absent from a
-		// database built up from an older hand-written schema. There is nothing to
-		// rewrite in a table that does not exist yet, and whatever creates it later
-		// writes the new encoding from the start.
 		present, err := tableExists(tx, r.table)
 		if err != nil {
 			return fmt.Errorf("checking for %s: %w", r.table, err)
@@ -3254,12 +2684,8 @@ func applyMigration95(tx *sql.Tx) error {
 	return nil
 }
 
-// restampTable re-encodes the named stamp columns of every row, returning how
-// many values it could not decode and therefore did not touch. A blank value is
-// skipped and not counted: it is a column's own "no time here" sentinel, not a
-// timestamp that failed to parse. Rows are read out before any are written back,
-// because the driver holds one connection and a write issued while a read is
-// still streaming deadlocks against it.
+// Rows are read out fully before any is written back: the driver holds one
+// connection, and a write issued while a read is still streaming deadlocks.
 func restampTable(tx *sql.Tx, table, key string, columns []string) (int, error) {
 	rows, err := tx.Query(fmt.Sprintf(`SELECT %s, %s FROM %s`, key, strings.Join(columns, ", "), table))
 	if err != nil {
@@ -3320,8 +2746,6 @@ func restampTable(tx *sql.Tx, table, key string, columns []string) (int, error) 
 	return unreadable, nil
 }
 
-// v88Collection is one collection to carry across: its declaration as v88
-// recorded it, and the address its documents are stored under.
 type v88Collection struct {
 	namespace  string
 	collection string
@@ -3330,14 +2754,6 @@ type v88Collection struct {
 	updatedAt  string
 }
 
-// readV88Collections lists what migration 89 has to carry: every declared
-// collection, plus any address holding documents that no declaration names.
-//
-// The second group cannot arise through the API — a put resolves the
-// declaration before it writes — but carrying it costs one query and the
-// alternative is deleting documents. Such an address arrives with an empty
-// declaration, which leaves its documents readable by id and queryable on
-// created_at/updated_at, and one `doc_define` away from queryable by field.
 func readV88Collections(tx *sql.Tx) ([]v88Collection, error) {
 	rows, err := tx.Query(`SELECT namespace, collection, fields_json, updated_at
         FROM document_collections_v88 ORDER BY namespace, collection`)
@@ -3362,8 +2778,6 @@ func readV88Collections(tx *sql.Tx) ([]v88Collection, error) {
 		return nil, err
 	}
 
-	// An undeclared address is dated by its newest document: the migration has no
-	// clock, and that timestamp is both real and already in the stored format.
 	orphans, err := tx.Query(`SELECT d.namespace, d.collection, MAX(d.updated_at)
         FROM documents d
        WHERE NOT EXISTS (SELECT 1 FROM document_collections_v88 c
@@ -3384,16 +2798,9 @@ func readV88Collections(tx *sql.Tx) ([]v88Collection, error) {
 	return out, orphans.Err()
 }
 
-// carryV88Collection mints a collection's registry row, builds its table from
-// the declaration, and moves its documents in. It returns how many it moved, so
-// the caller can prove nothing was left behind.
-//
-// The declaration is validated before any of its field names reach DDL. They
-// were validated when they were written, so a failure here means the database
-// was edited outside attn — worth stopping for, since the alternative is
-// splicing unchecked text into a CREATE TABLE.
 func carryV88Collection(tx *sql.Tx, c v88Collection) (int, error) {
 	schema := docstore.CollectionSchema{Namespace: c.namespace, Collection: c.collection, Fields: c.fields}
+	// Validate before any field name reaches the CREATE TABLE below.
 	if err := schema.Validate(); err != nil {
 		return 0, err
 	}
@@ -3411,8 +2818,6 @@ func carryV88Collection(tx *sql.Tx, c v88Collection) (int, error) {
 	if err := createCollectionTable(tx, table, c.fields); err != nil {
 		return 0, err
 	}
-	// The bodies move byte for byte; the generated columns compute from them on
-	// read, so this is the whole of the carry.
 	moved, err := tx.Exec(`INSERT INTO `+table+` (id, body, created_at, updated_at)
         SELECT id, body, created_at, updated_at FROM documents WHERE namespace = ? AND collection = ?`,
 		c.namespace, c.collection)
@@ -3449,21 +2854,15 @@ func columnExists(tx *sql.Tx, table, column string) (bool, error) {
 	return false, rows.Err()
 }
 
-// seedLegacyDB detects databases created before the migration system existed
-// and seeds schema_migrations to prevent duplicate column errors.
-// Legacy DBs have all columns (up to migration 10) but no migration history.
 func seedLegacyDB(db *sql.DB) error {
-	// Check if schema_migrations is empty
 	currentVersion, err := getCurrentVersion(db)
 	if err != nil {
 		return err
 	}
 	if currentVersion > 0 {
-		return nil // Already has migration history
+		return nil
 	}
 
-	// Check if this is a legacy DB by looking for a column that only exists
-	// in legacy DBs (head_sha was in the original schema before migrations)
 	var colCount int
 	err = db.QueryRow(`
 		SELECT COUNT(*) FROM pragma_table_info('prs') WHERE name = 'head_sha'
@@ -3472,11 +2871,9 @@ func seedLegacyDB(db *sql.DB) error {
 		return err
 	}
 	if colCount == 0 {
-		return nil // Fresh DB, no legacy columns
+		return nil
 	}
 
-	// Legacy DB detected - seed migrations 1-10 (all columns that existed before migration system)
-	// Migration 11+ were added after the migration system, so they need to run normally
 	const legacyMaxVersion = 10
 	tx, err := db.Begin()
 	if err != nil {
@@ -3500,7 +2897,6 @@ func seedLegacyDB(db *sql.DB) error {
 	return nil
 }
 
-// getCurrentVersion returns the highest applied migration version, or 0 if none.
 func getCurrentVersion(db *sql.DB) (int, error) {
 	var version int
 	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
@@ -3510,8 +2906,6 @@ func getCurrentVersion(db *sql.DB) (int, error) {
 	return version, nil
 }
 
-// GetSchemaVersion returns the current schema version for the database.
-// Exported for testing and diagnostics.
 func GetSchemaVersion(db *sql.DB) (int, error) {
 	return getCurrentVersion(db)
 }

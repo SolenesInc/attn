@@ -80,11 +80,7 @@ function emitInitialState(ws: FakeWebSocket) {
   });
 }
 
-// The daemon hangs up on a client it cannot keep fed, and the close status
-// saying so cannot outrun the backlog that caused the hangup. The reason
-// therefore arrives on the *next* connection, addressed to the client id the
-// app repeats across reconnects — so the app has to send that id and has to
-// surface what comes back, or the user is left with an unexplained blink.
+// The close status cannot outrun the backlog that caused the hangup, so the eviction reason arrives on the *next* connection, addressed to the client id the app repeats across reconnects.
 describe('useDaemonSocket eviction notice', () => {
   let originalWebSocket: typeof WebSocket;
 
@@ -110,8 +106,6 @@ describe('useDaemonSocket eviction notice', () => {
     const hello = ws.sent.map((entry) => JSON.parse(entry)).find((entry) => entry.cmd === 'client_hello');
     expect(hello?.client_id).toBeTruthy();
 
-    // Same app process, new socket — which is exactly the shape of an eviction:
-    // the id has to match or the daemon cannot recognise the client it dropped.
     act(() => {
       ws.close();
     });

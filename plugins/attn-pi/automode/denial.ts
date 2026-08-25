@@ -1,12 +1,8 @@
-// The denial contract: the text a blocked tool call hands back to the model.
-// It is the whole model-facing API of auto mode, so it says four things and
-// nothing else — that auto mode blocked this, what was blocked, why, and
-// that the user's approval in the conversation is what unblocks it.
+// The whole model-facing API of auto mode: it says that auto mode blocked this,
+// what was blocked, why, and that the user's approval unblocks it — nothing else.
 
 export type Denial = {
-  /** The call, one line (see policy.ts's describeCall). */
   action: string;
-  /** Why it was refused, in the reader's terms. */
   reason: string;
 };
 

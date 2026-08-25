@@ -1,18 +1,12 @@
-// The labels offered by both annotation surfaces: marks on an agent's terminal
-// output (`components/TerminalAnnotations`) and marks on a document in the
-// Markdown reader (`components/MarkdownReader/annotations`).
 
 export interface QuickLabel {
   id: string;
   emoji: string;
   text: string;
-  // Key into LABEL_COLOR_MAP.
   color: string;
-  // Sent to the agent under the label.
   tip?: string;
 }
 
-/** Inline color values per label (light/dark text pair). */
 export const LABEL_COLOR_MAP: Record<string, { bg: string; text: string; darkText: string }> = {
   blue: { bg: 'rgba(59,130,246,0.15)', text: '#2563eb', darkText: '#60a5fa' },
   red: { bg: 'rgba(239,68,68,0.15)', text: '#dc2626', darkText: '#f87171' },
@@ -26,7 +20,6 @@ export const LABEL_COLOR_MAP: Record<string, { bg: string; text: string; darkTex
   amber: { bg: 'rgba(180,83,9,0.15)', text: '#b45309', darkText: '#fbbf24' },
 };
 
-// The label row. A group is what both pickers draw a divider between.
 export const QUICK_LABEL_GROUPS: QuickLabel[][] = [
   [
     { id: 'i-agree', emoji: '👍', text: 'I agree', color: 'green' },
@@ -76,7 +69,6 @@ export const QUICK_LABEL_GROUPS: QuickLabel[][] = [
   ],
 ];
 
-// Every label, in row order.
 export const QUICK_LABELS: QuickLabel[] = QUICK_LABEL_GROUPS.flat();
 
 const PROMOTED_LABEL_IDS = ['i-agree', 'this-is-wrong', 'clarify-this'] as const;

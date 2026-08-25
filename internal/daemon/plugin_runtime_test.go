@@ -181,8 +181,8 @@ func TestDaemon_StartInstalledPlugins_RestartsCleanExitWithNewGeneration(t *test
 
 	d := NewForTesting(sockPath)
 	d.pluginDir = pluginDir
-	// Isolate process launching from the daemon's asynchronous login-shell env
-	// prewarm so every generation resolves the same fake bun fixture.
+	// Isolate process launching from the daemon's asynchronous login-shell env prewarm
+	// so every generation resolves the same fake bun fixture.
 	d.pluginSupervisor = newPluginSupervisor(
 		execPluginProcessLauncher{},
 		nil,
@@ -329,11 +329,6 @@ func dialPluginHelper(socketPath string, timeout time.Duration) (net.Conn, error
 	return nil, os.ErrDeadlineExceeded
 }
 
-// A daemon that was SIGKILLed leaves its plugin runtimes running, and a live pi
-// session keeps talking to one of them over the relay socket it still holds. The
-// replacement daemon reaps them before starting any plugin, and — unlike profile
-// clean, which deletes the whole data dir — retires the records it acted on so
-// the registry does not grow one file per crash forever.
 func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T) {
 	dataDir := t.TempDir()
 	registryDir := plugins.RuntimeRegistryDir(dataDir)
@@ -349,8 +344,7 @@ func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T)
 	}
 	pid := cmd.Process.Pid
 	// A stranded runtime is init's child, not ours. Waiting here keeps the test
-	// process from holding it as a zombie, which answers signal 0 and would make
-	// the reap report a process that survived SIGKILL.
+	// process from holding it as a zombie, which answers signal 0.
 	exited := make(chan struct{})
 	go func() {
 		_ = cmd.Wait()

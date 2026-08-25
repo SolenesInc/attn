@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// envHasCap reports whether env carries any CLAUDE_CODE_AUTO_COMPACT_WINDOW entry.
 func envHasCap(env []string) bool {
 	for _, e := range env {
 		if strings.HasPrefix(e, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=") {
@@ -17,15 +16,6 @@ func envHasCap(env []string) bool {
 	return false
 }
 
-// --- Interactive cap: BuildEnv / BuildCommand emission ---
-
-// The cap rides SpawnOpts.AutoCompactWindow into the launch. Claude emits the
-// CLAUDE_CODE_AUTO_COMPACT_WINDOW env var; codex emits the
-// model_auto_compact_token_limit config override. The daemon owns the policy
-// of who gets a cap (chief_context_window_cap on chief launches,
-// default_context_window_cap_<agent> on every other launch — see
-// launchContextWindowCap), so the drivers apply whatever it resolved on every
-// launch shape rather than re-gating on the chief branch.
 func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	t.Run("chief launch emits the cap", func(t *testing.T) {
 		env := (&Claude{}).BuildEnv(SpawnOpts{NotebookRoot: "/nb", AutoCompactWindow: 200000})
@@ -35,8 +25,6 @@ func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	})
 
 	t.Run("delegated launch emits the cap too", func(t *testing.T) {
-		// A delegated interactive agent carries WorkspaceContextPath, not
-		// NotebookRoot; a resolved cap applies to it all the same.
 		env := (&Claude{}).BuildEnv(SpawnOpts{WorkspaceContextPath: "/ws", AutoCompactWindow: 800000})
 		if !slices.Contains(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=800000") {
 			t.Fatalf("delegated env missing the cap: %#v", env)
@@ -55,11 +43,8 @@ func TestClaudeBuildEnv_ContextWindowCap(t *testing.T) {
 	})
 }
 
-// The spawn environment alone does not settle the cap: Claude Code copies each
-// settings file's `env` block over its own process environment, so a user with
-// "env": {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": ...} in ~/.claude/settings.json
-// replaces whatever attn exported. The generated --settings file is applied
-// after the user's, so the cap must appear there too.
+// Claude Code copies each settings file's `env` block over its own environment, and
+// the generated --settings is applied after the user's, so the cap must appear there.
 func TestClaudeGenerateHooksConfig_ContextWindowCap(t *testing.T) {
 	parseEnv := func(t *testing.T, content string) map[string]string {
 		t.Helper()
@@ -140,8 +125,6 @@ func TestCodexBuildCommand_ContextWindowCap(t *testing.T) {
 	})
 }
 
-// --- Headless cap: process-global injected at the spawn seam ---
-
 func TestSetHeadlessContextWindowCap_ClampsNegative(t *testing.T) {
 	t.Cleanup(func() { SetHeadlessContextWindowCap(0) })
 	SetHeadlessContextWindowCap(-5)
@@ -162,8 +145,6 @@ func TestHeadlessEnvironment_ClaudeContextWindowCap(t *testing.T) {
 	if !slices.Contains(claudeEnv, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000") {
 		t.Fatalf("claude headless env missing the cap: %#v", claudeEnv)
 	}
-	// The cap is a Claude env var; codex must not receive it (it uses a config
-	// override applied in the arg builders instead).
 	if envHasCap(headlessEnvironment("codex")) {
 		t.Fatalf("codex headless env unexpectedly carried the Claude cap")
 	}

@@ -1,13 +1,5 @@
-/**
- * Detects GitHub-style alert blockquotes and tags them for the reader's
- * blockquote renderer. A blockquote whose first paragraph's FIRST LINE is
- * exactly `[!NOTE|TIP|WARNING|CAUTION|IMPORTANT]` (case-insensitive, marker
- * owning the whole line, as GitHub does) loses that line and gains
- * `dataAlertKind`.
- *
- * Runs AFTER rehypeSourceAnchors, so the blockquote keeps its stamped
- * `data-block-id`/`data-source-line*` and its range covers the marker line.
- */
+/** Tags GitHub-style alert blockquotes with `dataAlertKind`. Runs AFTER
+ * rehypeSourceAnchors, so the blockquote keeps its stamped block id. */
 
 import type { Element, ElementContent, Root, RootContent } from "hast";
 

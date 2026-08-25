@@ -21,12 +21,10 @@ func TestGenerateSessionID(t *testing.T) {
 }
 
 func TestDefaultLabel(t *testing.T) {
-	// Create temp directory with known name
 	tmpDir := t.TempDir()
 	testDir := filepath.Join(tmpDir, "my-project")
 	os.Mkdir(testDir, 0755)
 
-	// Change to that directory temporarily
 	oldDir, _ := os.Getwd()
 	os.Chdir(testDir)
 	defer os.Chdir(oldDir)
@@ -47,12 +45,10 @@ func TestWriteHooksConfig(t *testing.T) {
 		t.Fatalf("WriteHooksConfig error: %v", err)
 	}
 
-	// Verify file was created
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Fatalf("config file not created: %s", configPath)
 	}
 
-	// Read and verify content
 	content, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read config error: %v", err)
@@ -68,14 +64,12 @@ func TestCleanupHooksConfig(t *testing.T) {
 
 	configPath, _ := WriteHooksConfig(tmpDir, "test", "/tmp/test.sock", "/tmp/attn")
 
-	// Verify file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Fatal("config file should exist before cleanup")
 	}
 
 	CleanupHooksConfig(configPath)
 
-	// Verify file is gone
 	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
 		t.Error("config file should be deleted after cleanup")
 	}

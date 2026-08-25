@@ -10,10 +10,6 @@ export interface WorkspaceSelectionState {
 interface BuildWorkspaceSelectionArgs<TSession extends WorkspaceViewSession> {
   workspaces: WorkspaceWithSessions<TSession>[];
   activeSessionId: string | null;
-  // An explicitly selected workspace. Only takes effect for a sessionless
-  // (tile-only) workspace, which has no session id to activate through. When the
-  // selected workspace has sessions — or no longer exists — the session-derived
-  // active workspace wins, so a stale selection can never shadow real sessions.
   selectedWorkspaceId?: string | null;
   previousFocusedSessionIdByWorkspace?: Record<string, string | null | undefined>;
 }

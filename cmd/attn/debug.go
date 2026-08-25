@@ -17,10 +17,6 @@ const (
 	defaultDebugTail     = 50
 )
 
-// runDebug routes `attn debug <command>`: single, typo-proof probes over the
-// known debug artifacts (frontend disk-based diagnostics under the profile's
-// app-support "debug" directory, and the profile's daemon.log) so nobody has
-// to hand-roll cd+tail+jq/grep into `~/Library/Application Support/com.attn.manager*`.
 func runDebug() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeDebugHelp(os.Stdout)
@@ -84,9 +80,6 @@ All commands honor the active ATTN_PROFILE, the same as the rest of the CLI.
 `)
 }
 
-// runDebugLs lists the profile's known debug artifacts and prints the
-// resolved directory paths so users learn where things live instead of
-// hand-rolling the path themselves.
 func runDebugLs(args []string) {
 	fs := flag.NewFlagSet("debug ls", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -133,10 +126,6 @@ func runDebugLs(args []string) {
 	}
 }
 
-// runDebugJSONL implements the shared shape of `debug incidents` and
-// `debug diagnostics`: tail/grep raw JSONL lines. --json is accepted as a
-// no-op forward-compat alias, documented in writeDebugHelp — the lines are
-// already machine-readable JSON, so there is nothing to re-wrap.
 func runDebugJSONL(fileName, cmdName string, args []string) {
 	fs := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -169,11 +158,8 @@ func runDebugJSONL(fileName, cmdName string, args []string) {
 	}
 }
 
-// runDebugDaemonLog reads the profile's daemon.log with tail/grep/since
-// filters. --since parses a Go duration and filters lines whose leading
-// "[2006-01-02 15:04:05]" timestamp (see internal/logging/logging.go) is
-// within that duration of now; untimestamped continuation lines follow the
-// most recent timestamped line's match state (see filterSinceLines).
+// runDebugDaemonLog filters daemon.log by tail/grep/since. --since matches the leading
+// "[2006-01-02 15:04:05]" stamp (internal/logging/logging.go); untimestamped continuation lines follow the last stamped line's match state.
 func runDebugDaemonLog(args []string) {
 	fs := flag.NewFlagSet("debug daemon-log", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

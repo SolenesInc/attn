@@ -51,10 +51,8 @@ import { AutomationProvenance } from '../AutomationProvenance';
 
 const ZOOM_PATH_RATIO = 0.76;
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
-// After a drag ends the active-resize token is cleared, so suppression no longer
-// rides on it; we only need to briefly swallow the trailing pointerup/synthetic
-// click from the release itself. Keep this short so a deliberate click, select,
-// or scroll right after resizing is not dropped.
+// Only swallows the trailing pointerup/synthetic click from the release itself,
+// so a deliberate click right after resizing is not dropped.
 const RESIZE_MOUSE_RELEASE_GUARD_MS = 150;
 
 function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION_MS): void {
@@ -63,8 +61,7 @@ function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION
   );
 }
 
-// The tile's content request is an effect dependency, so the no-op stand-in
-// has to keep one identity.
+// An effect dependency, so the no-op stand-in has to keep one identity.
 const noRequestContent = () => {};
 
 function zoomLayoutTowardLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode {
@@ -116,8 +113,6 @@ export interface SessionTerminalWorkspaceHandle {
 
 interface SessionTerminalWorkspaceProps {
   workspaceId: string;
-  // The owning workspace's directory (Workspace.directory). Threaded down to
-  // WorkspaceDockTile's notebook root switcher's "Workspace — <dir>" option.
   workspaceDirectory?: string;
   workspaceSessions?: Array<{
     id: string;
@@ -130,41 +125,21 @@ interface SessionTerminalWorkspaceProps {
     costUnknown?: boolean;
     ticketUnread?: boolean;
     nudgeFiresAt?: string;
-    // The deadline an auto-settle countdown will close this session's turn at.
-    // Present only while one is running; the daemon owns the timer.
     autoSettleFiresAt?: string;
-    // True while that countdown is frozen because the user is typing or moving
-    // the pointer in this session. Mutually exclusive with the deadline above.
     autoSettleHeld?: boolean;
-    // True while the user's standing dismissal covers this session's next
-    // auto-settle. Excludes both of the above: arming is what stops the timer.
     autoSettleDismissArmed?: boolean;
-    // True when this session's pty-worker holds a different libghostty-vt than
-    // the app, which happens when the app updates under a running session. The
-    // daemon judges it; the pane only offers the reload that fixes it.
     terminalBuildStale?: boolean;
     isActive?: boolean;
     presentation?: Presentation;
-    // The seed this session reports to, when a delegation bound one. Drives the
-    // pane-header seed chip.
     seedId?: string;
     automation?: AutomationProvenanceValue;
   }>;
-  // A seed may be tended outside the workspace where its reading tile sits.
   seedTargetSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
-  // Opens a seed as its annotated reading tile. Absent means the pane header
-  // shows the seed chip as unclickable chrome nothing can act on, so it is not
-  // rendered at all.
   onOpenSeed?: (seedId: string) => void;
-  // Agents whose sessions are conversations, not terminals: their panes draw
-  // the host's message stream instead of a PTY. The daemon decides this (the
-  // driver's `conversation` capability) and publishes it in settings; this is
-  // that answer, not a second one.
+  // The daemon decides this from the driver's `conversation` capability; never
+  // recompute it here.
   conversationAgents?: ReadonlySet<string>;
-  // Reads a session's last assistant message for annotation. Absent means the
-  // pane's terminal offers no annotation surface at all.
-  // The daemon calls the annotation surface needs. Absent disables it.
   annotationApi?: SessionAnnotationApi;
   workspace: TerminalWorkspaceState;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
@@ -175,9 +150,6 @@ interface SessionTerminalWorkspaceProps {
   enabled: boolean;
   isActiveSession: boolean;
   isSessionViewVisible?: boolean;
-  // When false, this workspace is virtualized: its terminals are not mounted
-  // (freeing the Ghostty WASM model + WebGL renderer) and a placeholder is shown
-  // instead. The terminal rehydrates from daemon replay when it remounts.
   terminalsLive?: boolean;
   eventRouter: PaneRuntimeEventRouter;
   onSplitPane: (targetPaneId: string, direction: TerminalSplitDirection) => void;
@@ -185,25 +157,17 @@ interface SessionTerminalWorkspaceProps {
   onFocusPane: (paneId: string) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onTriggerNudge?: (sessionId: string) => void;
-  // Keep the turn an auto-settle countdown is about to close. Clicking the chip
-  // is the pointer equivalent of the ⌘. shortcut.
   onCancelCountdown?: (sessionId: string) => void;
   onTerminalPointerActivity?: (sessionId: string) => void;
   onOpenPresentation?: (presentationId: string) => void;
-  // Cmd+click on a markdown path inside a pane's terminal: dock it as a
-  // markdown tile bound to that pane's session (empty sessionId = let the
-  // daemon use the selected session).
+  // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onTerminalModelRecovered?: () => void;
-  // Zoom is a mode, not a target: it always widens whichever leaf is focused,
-  // so it is a flag rather than a leaf id that has to chase focus. App owns it
-  // because the dock's zoom chip reads it too.
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;
   onResizeSplit?: (splitId: string, ratio: number) => Promise<unknown> | void;
-  // Move an existing leaf (terminal pane or docked tile) beside an anchor leaf,
-  // or against the whole workspace when anchorId is ''. ratio is the moved leaf's
+  // anchorId '' docks against the whole workspace; ratio is the moved leaf's
   // fraction of the new split.
   onMoveLeaf?: (leafId: string, anchorId: string, edge: TerminalDockEdge, ratio: number) => void;
   getActiveLeafDropSnapshot?: () => LeafDropSnapshot | null;
@@ -217,8 +181,6 @@ interface SessionTerminalWorkspaceProps {
     ghostPos: { x: number; y: number } | null;
   } | null;
   onUndockTile?: (tileId: string) => void;
-  // tileSessionId, when set, rebinds the tile's session binding (markdown
-  // tiles' Send target) alongside the (unchanged) tile_params.
   onUpdateTile?: (tileId: string, tileParams: string, tileSessionId?: string) => Promise<unknown> | void;
   tileContents?: Record<string, TileContentState>;
   allowLocalTileTargets?: boolean;
@@ -277,37 +239,20 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     onRequestTileContent,
   }, ref) {
     const [maximizedLeafId, setMaximizedLeafId] = useState<string | null>(null);
-    // The docked tile that currently owns workspace focus, or null when a
-    // terminal pane does. `activePaneId` is derived from the focused session, so
-    // it can only ever name an agent pane; this is the other half of the focus
-    // model, and the two combine into `activeLeafId` below.
     const [activeTile, setActiveTile] = useState<{ tileId: string; whileActivePaneId: string } | null>(null);
-    // Bumped when a terminal announces readiness; re-runs the leaf focus effect so
-    // the committed active leaf, not the mounting terminal, decides where focus goes.
     const [paneReadyFocusRequest, setPaneReadyFocusRequest] = useState(0);
     const [renamePane, setRenamePane] = useState<{
       sessionId: string;
       name: string;
       anchor: { top: number; left: number };
     } | null>(null);
-    // Live, optimistic split ratios while dragging a divider. Reconciled against
-    // the daemon layout once it echoes the persisted (locked) ratio back.
     const [ratioOverrides, setRatioOverrides] = useState<Map<string, number>>(() => new Map());
     const [resizingSplit, setResizingSplit] = useState<{ splitId: string; direction: TerminalSplitDirection } | null>(null);
-    // Drag-to-dock state. The tile stays docked in the daemon tree throughout
-    // the drag — this is a transient preview (ghost + target highlight) that
-    // resolves to a single dock command on drop.
-    // Sessions whose older-terminal notice the user has waved off. Local and
-    // per-mount on purpose: the daemon's verdict is the durable half, and the
-    // condition ends for good the moment the session is reloaded.
     const [staleBuildDismissed, setStaleBuildDismissed] = useState<ReadonlySet<string>>(() => new Set());
     const [draggingLeafId, setDraggingLeafId] = useState<string | null>(null);
     const [dockTarget, setDockTarget] = useState<DockTarget | null>(null);
     const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
     const tileDragCleanupRef = useRef<(() => void) | null>(null);
-    // Scrollable body of every docked tile, keyed by tile id. Focusing one is
-    // how a tile takes real DOM focus (keyboard scrolling, ⌘Enter send, and the
-    // shortcut dispatcher's terminal-target check all depend on it).
     const tileBodyRefs = useRef(new Map<string, HTMLDivElement>());
     const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
     const panesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -318,8 +263,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
 
     activePaneIdRef.current = activePaneId;
     isActiveSessionRef.current = isActiveSession;
-    // Read by callbacks that fire outside render (terminal ready) to avoid
-    // stealing focus from a focused tile.
     sessionViewVisibleRef.current = isSessionViewVisible;
 
     const paneIds = useMemo(() => {
@@ -352,9 +295,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       [agentPanes],
     );
 
-    // Send-target options for markdown tiles: the workspace's agent sessions
-    // (deduped — a session can own several panes), labeled from the session
-    // list with the pane title as fallback.
     const tileSessionOptions = useMemo(() => {
       const seen = new Set<string>();
       const options: { sessionId: string; label: string; state?: string }[] = [];
@@ -373,16 +313,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return options;
     }, [agentPanes, sessionById]);
 
-    // The session this workspace has selected — what an app's view is given as
-    // `sessionId`. Derived from the active pane rather than the tile's own
-    // binding: a view is a function of where the user is, and a tile-only
-    // workspace legitimately has none.
     const activePaneSessionId = useMemo(
       () => agentPaneById.get(activePaneId)?.sessionId ?? null,
       [agentPaneById, activePaneId],
     );
 
-    // Docked tiles keyed by tile id, walked from the authoritative layout tree.
     const tileLeafById = useMemo(() => {
       const map = new Map<string, TileLeaf>();
       const walk = (node: TerminalLayoutNode | null) => {
@@ -402,21 +337,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return map;
     }, [workspace.layoutTree]);
 
-    // First tile in tree order (DFS-left). The focus fallback for a workspace
-    // with no terminal pane to own focus.
     const firstTileId = useMemo(
       () => (tileLeafById.size > 0 ? tileLeafById.keys().next().value ?? null : null),
       [tileLeafById],
     );
 
-    // The focused leaf. A tile wins while one is focused; otherwise the
-    // session-derived active pane; otherwise (a tile-only workspace) the first
-    // tile. Every leaf-scoped action — close, zoom, maximize, directional
-    // navigation — and the `active` focus chrome key off this, not activePaneId.
-    // A focused tile is recorded against the pane that was active when it took
-    // focus, so session-derived pane focus moving (sidebar select, pane click,
-    // close) takes focus back from the tile by simply no longer matching — no
-    // reset effect, and no frame where the stale tile still reads as focused.
     const focusedTileId = activeTile
       && activeTile.whileActivePaneId === activePaneId
       && tileLeafById.has(activeTile.tileId)
@@ -425,10 +350,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const activeLeafId = focusedTileId || activePaneId || firstTileId || '';
     const activeLeafIsTile = tileLeafById.has(activeLeafId);
 
-    // Conversation panes are deliberately absent: the runtime's whole job is
-    // attaching a terminal to a PTY, and a conversation session has neither.
-    // Leaving one in would attach against a session the daemon has no PTY for,
-    // which fails and takes the pane down with it.
+    // Conversation panes are deliberately absent: they have no PTY, and attaching
+    // against a session the daemon has none for fails and takes the pane down.
     const runtimePanes = useMemo(() => {
       const panes = [];
       for (const pane of agentPanes) {
@@ -482,18 +405,12 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const setPaneSurfaceReleased = runtime.setPaneSurfaceReleased;
     const paneOverflowsContainer = runtime.paneOverflowsContainer;
     const splitLayoutActive = workspace.layoutTree?.type === 'split';
-    // Show the pane header (which doubles as the drag-to-move handle) whenever the
-    // workspace holds more than one leaf — including tiles, so a lone pane sharing
-    // space with a docked tile is still draggable.
     const showPaneHeader = paneIds.length + tileLeafById.size > 1;
-    // Every leaf slot in the layout — panes and tiles both zoom and maximize.
     const leafIds = useMemo(
       () => [...paneIds, ...tileLeafById.keys()],
       [paneIds, tileLeafById],
     );
     const effectivePaneId = maximizedLeafId && leafIds.includes(maximizedLeafId) ? maximizedLeafId : null;
-    // Zoom follows focus by construction: the widened leaf is the focused one,
-    // and it stops zooming on its own once that leaf leaves the layout.
     const effectiveZoomedPaneId = zoomActive && leafIds.includes(activeLeafId) ? activeLeafId : null;
     const baseLayoutTree = useMemo(() => (
       workspace.layoutTree ? applyRatioOverrides(workspace.layoutTree, ratioOverrides) : null
@@ -503,8 +420,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         return null;
       }
       if (effectivePaneId) {
-        // Maximizing renders the leaf alone: its own tile node when it is a
-        // tile, so the tile keeps its identity (params, session binding).
         return tileLeafById.get(effectivePaneId)
           ?? ({ type: 'pane', paneId: effectivePaneId } satisfies TerminalLayoutNode);
       }
@@ -526,8 +441,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       });
     }, []);
 
-    // Any daemon layout broadcast is authoritative after a completed drag. Drop
-    // stale local overrides whether persistence landed or another client won.
     // Never drop the split currently being dragged.
     useEffect(() => {
       setRatioOverrides((prev) => {
@@ -553,7 +466,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       effectiveZoomedPaneId,
     });
 
-    // Track each pane's tree path so we can detect which panes moved after a topology change.
     const panePaths = useMemo(() => {
       const paths = new Map<string, string>();
       if (!renderedLayoutTree) {
@@ -565,7 +477,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           walk(node.children[1], path + '/1');
           return;
         }
-        // Leaf: terminal panes and docked tiles both occupy a slot to render.
         paths.set(leafSlotId(node), path);
       };
       walk(renderedLayoutTree, 'root');
@@ -614,22 +525,15 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       }
     }, [maximizedLeafId, leafIds]);
 
-    // Focusing the terminal is a leaf handoff, not just a DOM focus call: it
-    // has to release any focused tile. `activePaneId` does not change here (the
-    // pane was already the session's active one), so without the release the
-    // tile would stay the active leaf and Cmd+W would undock it while you are
-    // typing in the terminal.
+    // activePaneId does not change here, so without releasing the focused tile it
+    // stays the active leaf and Cmd+W undocks it while you type in the terminal.
     const focusActivePane = useCallback(() => {
       setActiveTile(null);
-      // Single attempt — terminal is already mounted in every case this fires.
       runtime.focusPane(activePaneId, 0);
     }, [activePaneId, runtime]);
 
-    // Focusing a tile means focusing its scrollable body: that is what enables
-    // keyboard scrolling, satisfies the shortcut dispatcher's terminal-target
-    // check (so ⌘W reaches the workspace instead of falling through to
-    // session.close), and lets the tile's own focus-within gates arm.
-    // preventScroll keeps the body's scroll position from jumping on focus.
+    // The scrollable body is what satisfies the shortcut dispatcher's
+    // terminal-target check, so ⌘W reaches the workspace, not session.close.
     const focusTile = useCallback((tileId: string) => {
       tileBodyRefs.current.get(tileId)?.focus({ preventScroll: true });
     }, []);
@@ -661,12 +565,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       }
     }, [activeLeafId, activeLeafIsTile, activePaneId, focusActivePane, focusTile, focusRequestToken, isActiveSession, isSessionViewVisible, paneReadyFocusRequest, workspaceId, sessionVisible]);
 
-    // After relaunch, first-show, or split topology changes, the terminal can briefly keep
-    // stale narrow geometry from the previous layout. Re-fitting immediately and then
-    // once (or twice) more after layout settles preserves restored headers/content width —
-    // and catches a pane whose grid overflows its container (e.g. the window shrank while
-    // the pane was hidden), which fit()'s reveal path does not retry on its own and would
-    // otherwise stay clipped until something unrelated re-triggers a fit.
+    // A pane whose grid overflows its container is not retried by fit()'s reveal
+    // path — it stays clipped until something unrelated refits it.
     const refitPanesNowAndIfStillWrong = useCallback((targetPaneIds: string[]) => {
       const paneIdsToFit = Array.from(new Set(targetPaneIds));
       if (paneIdsToFit.length === 0) {
@@ -690,8 +590,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         }
       }, 75);
 
-      // A second, later check covers slower layout settles the 75ms tick can
-      // miss — cheap insurance for a bug that otherwise persists indefinitely.
+      // Covers layout settles the 75ms tick misses.
       const secondLateRefitTimeout = window.setTimeout(() => {
         for (const paneId of paneIdsToFit) {
           if (stillWrong(paneId)) {
@@ -706,13 +605,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       };
     }, [fitPane, getPaneSize, paneOverflowsContainer]);
 
-    // An inactive session's wrapper is display:none, so its panes hold two
-    // window-sized GPU surfaces each for frames nobody can see. Hand those back
-    // while hidden; the model and its scrollback stay warm, so switching back
-    // still costs one repaint rather than a replay. The trigger is
-    // `isActiveSession` and not `sessionVisible`, which also goes false behind a
-    // modal that leaves the panes on screen. Declared before the refit effect so
-    // a revealed pane has its buffer back before anything measures or paints it.
+    // Keyed on `isActiveSession`, not `sessionVisible` (which also goes false behind a
+    // modal), and declared before the refit effect so a revealed pane measures with its buffer.
     useLayoutEffect(() => {
       for (const paneId of renderedPaneIds) {
         setPaneSurfaceReleased(paneId, !isActiveSession);
@@ -736,8 +630,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         prevPanePathsRef.current = panePaths;
         return;
       }
-      // Find panes whose tree position changed — only those need re-fitting
-      // after a topology change (e.g. closing a split sibling).
       const prev = prevPanePathsRef.current;
       prevPanePathsRef.current = panePaths;
       const movedPanes: string[] = [];
@@ -752,9 +644,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return refitPanesNowAndIfStillWrong(movedPanes);
     }, [panePaths, refitPanesNowAndIfStillWrong, sessionVisible, workspaceTopologyKey]);
 
-    // Splitting is a terminal operation: the daemon splits beside an agent pane.
-    // With a tile focused there is no such anchor, so the shortcut does nothing
-    // rather than silently splitting whichever terminal was focused before.
+    // Splitting needs an agent pane to anchor on: with a tile focused this is
+    // deliberately a no-op.
     const handleSplit = useCallback((direction: TerminalSplitDirection) => {
       if (activeLeafIsTile || !activeLeafId) {
         return;
@@ -766,7 +657,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onClosePane(paneId);
     }, [onClosePane]);
 
-    // Cmd+W closes the focused leaf: undock a focused tile, close a focused pane.
     const handleCloseFocusedLeaf = useCallback(() => {
       if (!activeLeafId) {
         return;
@@ -788,8 +678,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onSetZoomActive?.(!zoomActive);
     }, [onSetZoomActive, zoomActive]);
 
-    // Focus a leaf by id: a tile takes DOM focus in place (the session's pane
-    // focus is left alone), a pane goes through the session-level focus path.
     const focusLeaf = useCallback((leafId: string) => {
       if (tileLeafById.has(leafId)) {
         setActiveTile({ tileId: leafId, whileActivePaneId: activePaneId });
@@ -802,8 +690,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     }, [activePaneId, focusTile, onFocusPane, runtime, tileLeafById]);
 
     const handleMovePane = useCallback((direction: TerminalNavigationDirection) => {
-      // In maximize mode renderedLayoutTree is already the lone visible leaf, so
-      // navigation off it correctly leaves the session.
       if (!renderedLayoutTree) {
         return;
       }
@@ -815,13 +701,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onNavigateOutOfSession(direction);
     }, [activeLeafId, focusLeaf, onNavigateOutOfSession, renderedLayoutTree]);
 
-    // A mounting terminal asks for focus, it does not take it: the leaf effect
-    // above owns the decision and reads committed state, so a terminal that comes
-    // back while a tile is the focused leaf leaves the tile alone. Deciding here
-    // instead would mean reading leaf state from a ref that a child's ready
-    // callback can observe before the parent has mirrored it, leaving DOM focus
-    // and the active leaf disagreeing — which is what makes Cmd+W act on the
-    // wrong leaf.
+    // Deciding here would read leaf state from a ref a child's ready callback can
+    // observe before the parent mirrors it, leaving Cmd+W on the wrong leaf.
     const requestFocusForReadyPane = useCallback((paneId: string) => {
       if (!isActiveSessionRef.current || !sessionViewVisibleRef.current || activePaneIdRef.current !== paneId) {
         return;
@@ -853,10 +734,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       height: `${bounds.height * 100}%`,
     }), []);
 
-    // Drag any leaf's header (terminal pane or docked tile) to relocate it. The
-    // daemon tree is untouched until drop, when a single move command sends it to
-    // the previewed target. The dragged leaf is excluded from the drop targets so
-    // hovering it is a no-op (self-drop).
     const beginLeafDrag = useCallback((leafId: string, event: React.PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) {
         return;
@@ -866,9 +743,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       if (!container) {
         return;
       }
-      // The press only becomes a drag once the pointer crosses the activation
-      // threshold (see startLeafDrag). Defer every visual side effect to
-      // onActivate so a plain header click leaves no trace and never docks.
+      // The press only becomes a drag past startLeafDrag's activation threshold,
+      // so every visual side effect is deferred to onActivate.
       let releaseSelectionLock: (() => void) | null = null;
       const teardown = startLeafDrag(leafId, event.clientX, event.clientY, container, renderedPaneBounds, {
         onActivate: () => {
@@ -927,16 +803,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           : null;
         const paneSeedId = paneSession?.seedId;
         const paneSeed = paneSeedId ? gardenSeeds.find((candidate) => candidate.id === paneSeedId) : undefined;
-        // The pane header is always on for an agent pane. It carries the
-        // session's name — generated from the conversation, so it says what this
-        // agent is actually doing — alongside the presentation chip, the
-        // auto-settle countdown, the nudge indicator, and the seed chip.
-        // Which agent you are looking at is not something to hide behind a split,
-        // and the chips it hosts (a turn about to be closed for you, an unread
-        // seed) are exactly the things that must never be invisible.
-        //
-        // Only dragging stays split-only: a lone tile has nowhere to move to, so
-        // it gets the non-draggable variant.
         const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
         const autoSettleHeld = paneSession?.autoSettleHeld;
         const autoSettleDismissArmed = paneSession?.autoSettleDismissArmed;
@@ -960,9 +826,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               onPointerDown={showPaneHeader ? (event) => beginLeafDrag(agentPane.id, event) : undefined}
               title={showPaneHeader ? 'Drag to move' : undefined}
             >
-              {/* The same dot the sidebar puts beside this session, so the header
-                  reads as that row's counterpart rather than a second, unrelated
-                  naming of the pane. */}
+              {/* The same dot the sidebar puts beside this session. */}
               {paneSession?.state ? (
                 <StateIndicator
                   state={paneSession.state}
@@ -985,7 +849,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   type="button"
                   className="workspace-pane-rename-btn"
                   data-testid={`rename-pane-${agentPane.id}`}
-                  // Stop the header's pointerdown drag from starting on the button.
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -1015,8 +878,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   onCancel={() => onCancelCountdown?.(agentPane.sessionId)}
                 />
               ) : autoSettleDismissArmed ? (
-                // The same command both ways: the daemon reads the standing
-                // dismissal it owns and undoes it.
                 <HeaderSettleKeptChip onDisarm={() => onCancelCountdown?.(agentPane.sessionId)} />
               ) : null}
               {nudgeMode ? (
@@ -1049,10 +910,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   <span>{isPaneFailed ? (agentPane.error || 'Session failed to start') : `Starting ${paneTitle}...`}</span>
                 </div>
               ) : conversationAgents?.has(paneSession?.agent ?? '') ? (
-                // A conversation session: no PTY, no grid, nothing to
-                // virtualize. Its whole surface is the host's message stream,
-                // which lives in a store rather than in a terminal model, so it
-                // costs nothing to keep mounted.
                 <ConversationPane
                   sessionId={agentPane.sessionId}
                   paneActive={isActiveSession && sessionVisible && activeLeafId === agentPane.id}
@@ -1060,17 +917,13 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   resolvedTheme={resolvedTheme}
                 />
               ) : !terminalsLive ? (
-                // Virtualized: terminal unmounted to free WASM model + WebGL
-                // renderer. Rehydrates from daemon replay when it remounts.
                 <div className="workspace-pane-virtualized" aria-hidden="true" data-testid={`pane-virtualized-${agentPane.id}`} />
               ) : (
                 <AnnotatedTerminal
                   ref={terminalRefForPane(agentPane.id)}
                   sessionId={agentPane.sessionId}
                   annotationApi={annotationApi}
-                  // Gates the annotation send shortcut. The focused leaf of the
-                  // visible session, so ⌘Enter belongs to at most one pane and
-                  // stays with the PTY everywhere else.
+                  // At most one pane owns ⌘Enter for the annotation send shortcut.
                   paneActive={isActiveSession && sessionVisible && activeLeafId === agentPane.id}
                   fontSize={fontSize}
                   resolvedTheme={resolvedTheme}
@@ -1096,10 +949,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           <div
             key={`tile:${tileLeaf.tileId}`}
             className={`workspace-pane workspace-pane--tile ${activeLeafId === tileLeaf.tileId ? 'active' : ''}`.trim()}
-            // Clicking anywhere in the tile makes it the focused leaf, exactly
-            // like clicking a terminal pane. Focus then lands on whatever the
-            // click targets (the body, an input in the header) via the default
-            // action, so this never fights the click.
             onMouseDown={() => focusLeaf(tileLeaf.tileId)}
             data-pane-id={tileLeaf.tileId}
             data-pane-kind="tile"
@@ -1194,8 +1043,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return 'Pane';
     }, [agentPaneById, effectivePaneId, sessionById, tileLeafById]);
 
-    // Label shown in the drag ghost: the dragged leaf's session/title (pane) or
-    // file name/kind (tile).
     const draggingLeafLabel = useMemo(() => {
       if (!effectiveDraggingLeafId) {
         return '';
@@ -1212,8 +1059,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return 'Pane';
     }, [effectiveDraggingLeafId, agentPaneById, sessionById, tileLeafById]);
 
-    // Draggable dividers, one per split. Hidden in focus/zoom mode where there
-    // is no real split to resize.
     const splitDividers = useMemo<SplitDivider[]>(() => {
       if (!renderedLayoutTree || effectivePaneId || effectiveZoomedPaneId) {
         return [];
@@ -1221,8 +1066,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return getSplitDividers(renderedLayoutTree);
     }, [renderedLayoutTree, effectivePaneId, effectiveZoomedPaneId]);
 
-    // rAF-coalesced override updates keep terminal re-fits to ~one per frame
-    // while dragging.
     const ratioRafRef = useRef<number | null>(null);
     const pendingRatioRef = useRef<{ splitId: string; ratio: number } | null>(null);
     const dragCleanupRef = useRef<(() => void) | null>(null);
@@ -1259,7 +1102,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         try {
           dividerElement.setPointerCapture(pointerId);
         } catch {
-          // The pointer can already be gone if the app loses focus mid-press.
         }
       }
       const rect = container.getBoundingClientRect();
@@ -1315,7 +1157,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           try {
             dividerElement.releasePointerCapture(pointerId);
           } catch {
-            // Nothing to release if the browser already cancelled capture.
           }
         }
         if (ratioRafRef.current != null) {
@@ -1331,8 +1172,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
           delete document.documentElement.dataset.attnWorkspaceResizing;
           delete document.documentElement.dataset.attnWorkspaceResizeToken;
         }
-        // Only a short trailing-event guard here — the long during-drag window
-        // would otherwise outlive the drag and swallow normal interaction.
+        // The long during-drag window would outlive the drag and swallow normal
+        // interaction.
         suppressTerminalMouseDuringResize(RESIZE_MOUSE_RELEASE_GUARD_MS);
         releaseSelectionLock();
         setResizingSplit((current) => (current?.splitId === splitId ? null : current));

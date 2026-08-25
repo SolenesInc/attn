@@ -14,24 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn app` is the whole surface an app has: what is installed and what state
-// it is in (`list`, `status`), the lifecycle verbs (`enable`, `disable`,
-// `remove`), and the pipeline that produces a version in the first place
-// (`new`, `apply`, `rollback`, `dev` — those live in app_build.go).
-//
-// An app is a manifest-declared automation running in attn's shared runtime: it
-// consumes facts from the durable bus as `app:<name>`, keeps its state in the
-// document namespace `app/<name>`, and is versioned by the content hash of its
-// built artifact. A plugin is a different thing — an integration with its own
-// supervised process — and shares no surface with this one.
-//
-// Everything here goes through the daemon, like `attn doc` and unlike `attn
-// bus`: removing an app has to stop a delivery loop before its row goes, and
-// flipping the enabled bit publishes a fact the runtime hears. The
-// daemon-independent kill switch still exists one level down, on purpose: an
-// app's enabled bit IS its bus consumer's, so `attn bus disable app:<name>`
-// kills an app straight against the database, whether or not a daemon is up.
-
 func runApp() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeAppHelp(os.Stdout)
@@ -164,9 +146,6 @@ func appFail(verb string, err error) {
 	os.Exit(1)
 }
 
-// appName reads the single <name> argument the per-app commands take, and
-// validates it here rather than only at the daemon: a typo should not need a
-// round trip to be told it is one.
 func appName(verb string, args []string) (string, []string) {
 	rest := make([]string, 0, len(args))
 	name := ""
@@ -213,9 +192,6 @@ func runAppList(args []string) {
 	w.Flush()
 }
 
-// The four cells `list` renders say "none" rather than a blank or a guess: an
-// app without a version and an app without a consumer are both real states, and
-// an empty column reads as a rendering bug.
 func appVersionCell(app protocol.AppSummary) string {
 	if app.CurrentVersion == nil {
 		return "none"
@@ -276,25 +252,17 @@ func runAppStatus(args []string) {
 		case "":
 			filter = "everything"
 		case apps.NoSubscriptionsPattern:
-			// An app can declare a view and no subscriptions, and its filter is
-			// then a fact name nothing publishes. Printing that name sends the
-			// reader looking for an event that does not exist.
 			filter = "nothing — it declares no subscriptions"
 		}
 		fmt.Printf("  consumer:   %s — %s, cursor %d, %d event(s) behind\n",
 			app.Consumer.Name, state, app.Consumer.Cursor, app.Consumer.Lag)
 		fmt.Printf("  subscribes: %s\n", filter)
 	} else {
-		// Naming the consumer that is missing is what makes this actionable:
-		// `attn bus status` is where the reader looks next.
 		fmt.Printf("  consumer:   none — %s is not registered, so no facts are delivered to this app\n",
 			apps.ConsumerName(app.Name))
 	}
 	fmt.Printf("  documents:  %s\n", apps.Namespace(app.Name))
 	if len(app.Views) > 0 {
-		// One line per view, naming how it docks: an author reading this needs
-		// the tile kind to place it, and a person reading it needs to see that a
-		// view they declared actually made it into the serving version.
 		fmt.Println("  views:")
 		for _, v := range app.Views {
 			line := fmt.Sprintf("              %s (%s) — %s", v.Name, v.Kind, v.Title)
@@ -306,9 +274,6 @@ func runAppStatus(args []string) {
 		}
 	}
 	if len(app.Commands) > 0 {
-		// A command is invoked from one of this app's views, so there is no CLI
-		// verb that runs one — this line is how an author confirms the command
-		// they declared reached the version that is serving.
 		fmt.Println("  commands:")
 		for _, c := range app.Commands {
 			line := fmt.Sprintf("              %s", c.Name)
@@ -321,8 +286,6 @@ func runAppStatus(args []string) {
 	fmt.Printf("  runtime:    %s\n", appRuntimeCell(result.Runtime))
 	printAppReconcileStatus(result.Reconcile)
 	if result.Stall != nil {
-		// The stall clock is the only thing here that ends with the app being
-		// switched off, so it says when, not just that.
 		if result.Stall.Kind == "reconcile" {
 			fmt.Printf("  stalled:    reconcile request %s since %s, %d attempt(s)\n",
 				optionalIntCell(result.Stall.ThroughRequestID), result.Stall.Since, result.Stall.Attempts)
@@ -335,8 +298,6 @@ func runAppStatus(args []string) {
 	}
 	fmt.Printf("  history:    %d version(s), %d invocation(s)\n", result.Versions, result.Invocations)
 	if len(result.RecentVersions) > 0 {
-		// The ids, because `attn app rollback` takes one and its refusals name
-		// them. A count alone leaves the reader with no way to find a target.
 		fmt.Printf("  versions:   %s\n", versionIDList(result.RecentVersions, app.CurrentVersion))
 		if result.Versions > len(result.RecentVersions) {
 			fmt.Printf("              newest %d of %d; older ones are named by a rollback refusal\n",
@@ -352,10 +313,6 @@ func runAppStatus(args []string) {
 	w := tabwriter.NewWriter(os.Stdout, 4, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "\tSTARTED\tVERSION\tKIND\tWORK\tHANDLER\tSTATUS\tMS\tERROR")
 	for _, inv := range result.Recent {
-		// One line per invocation, so the error is its first line only — a
-		// JavaScript stack pasted into a column destroys the table it is in. The
-		// stall block above carries the whole thing for the failure that matters,
-		// and `attn app logs <name>` has what the handler printed.
 		fmt.Fprintf(w, "\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			inv.StartedAt, inv.VersionID, inv.Kind, appInvocationWork(inv), inv.Handler,
 			inv.Status, optionalIntCell(inv.DurationMs), firstErrorLine(protocol.Deref(inv.Error)))
@@ -432,8 +389,6 @@ func optionalIntCell(value *int) string {
 	return fmt.Sprintf("%d", *value)
 }
 
-// firstErrorLine is one row's worth of an error, with a marker when there is
-// more. Without the marker a reader has no way to know a stack was cut.
 func firstErrorLine(text string) string {
 	line, rest, found := strings.Cut(strings.TrimRight(text, "\n"), "\n")
 	if found && strings.TrimSpace(rest) != "" {
@@ -442,10 +397,6 @@ func firstErrorLine(text string) string {
 	return line
 }
 
-// indentBlock puts prefix in front of every line of text, so a multi-line value
-// in an aligned block stays inside its column. A handler's error carries the
-// JavaScript stack that threw it, which is the most useful thing on the screen
-// and also the only value here that is never one line.
 func indentBlock(prefix, text string) string {
 	var b strings.Builder
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
@@ -456,12 +407,6 @@ func indentBlock(prefix, text string) string {
 	return b.String()
 }
 
-// versionIDList is the line `attn app rollback` sends people looking for: the
-// ids, marked so the one serving is obvious.
-// rollbackPath says where bare `attn app rollback` goes from here, and how far
-// it can keep going — the one question the walk otherwise only answers by being
-// run. The first entry of the serving history is the version serving now, so
-// the path is what follows it.
 func rollbackPath(result *protocol.AppStatusResult) string {
 	if len(result.ServingHistory) < 2 {
 		return "nothing further back — name a version to move onto one the walk went past"
@@ -472,8 +417,6 @@ func rollbackPath(result *protocol.AppStatusResult) string {
 		parts = append(parts, fmt.Sprintf("%d (%s)", v.ID, appbuild.ShortHash(v.ContentHash)))
 	}
 	line := "walks back to " + strings.Join(parts, ", then ")
-	// The history is capped on the wire; saying so is what keeps a walk longer
-	// than the cap from reading as a walk that ends here.
 	if steps := protocol.Deref(result.ServingHistorySteps); steps > len(result.ServingHistory) {
 		line += fmt.Sprintf(", then %d older step(s)", steps-len(result.ServingHistory))
 	}
@@ -492,21 +435,8 @@ func versionIDList(versions []protocol.AppVersionInfo, current *protocol.AppVers
 	return strings.Join(parts, ", ")
 }
 
-// appRuntimeNeverStarted is what a daemon with no supervised runtime says.
-//
-// It does not name a cause, because from here the two are indistinguishable: a
-// daemon whose apps are all quiet never starts a runtime, and a daemon whose
-// host binary is missing never gets far enough to supervise one — the resolve
-// fails before the supervisor is touched, so both arrive here with nothing to
-// report. Claiming the first would be a lie exactly when an app is failing every
-// dispatch. `attn app runtime status` resolves the binary itself and is where
-// the difference lives.
 const appRuntimeNeverStarted = "not started — nothing has run one on this daemon yet; `attn app runtime status` says whether it can be started"
 
-// appRuntimeCell says where this app's handlers actually run. It is one line
-// because `attn app runtime status` is the full picture; what belongs here is
-// the answer to "is my app not running because of my app, or because of the
-// runtime" — and a parked runtime is the loudest form of the second.
 func appRuntimeCell(info *protocol.AppRuntimeInfo) string {
 	if info == nil {
 		return appRuntimeNeverStarted
@@ -552,14 +482,10 @@ func runAppRemove(args []string) {
 		consumer = "stopped and deleted its bus consumer " + apps.ConsumerName(result.Name)
 	}
 	fmt.Printf("removed app %s: %s\n", result.Name, consumer)
-	// Saying what survived is the point: removal is not a data-deleting act, and
-	// a reader who wanted it to be needs to know it did not happen.
 	fmt.Printf("kept: %d version(s), %d invocation(s), and every document under %s\n",
 		result.VersionsKept, result.InvocationsKept, result.NamespaceKept)
 }
 
-// appOutputFlags reads the flags shared by these commands. There is one, and it
-// is rejected loudly where it means nothing rather than being ignored.
 func appOutputFlags(verb string, args []string) bool {
 	asJSON := false
 	for _, a := range args {

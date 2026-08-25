@@ -15,20 +15,11 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// pinUTCSlot configures the daily-narrate cron to use the shared nightly slot in a
-// fixed UTC timezone, so schedule math in tests is independent of the machine's local
-// time. The frequency default ("0 3 * * *") is used; only the timezone is pinned.
 func pinUTCSlot(t *testing.T, d *Daemon) {
 	t.Helper()
 	d.store.SetSetting(SettingNotebookCronTimezone, "UTC")
 }
 
-// --- enqueueDueDailyNarrates cron due-math ---
-
-// The first tick anchors the schedule at "now" and does NOT enqueue, so daemon
-// startup never fires an immediate daily narrate; the first real pass lands at the
-// next scheduled slot. NOTE: the daily narrate has no enabled gate and uses its own
-// state file.
 func TestEnqueueDueDailyNarratesFirstObservationAnchorsWithoutFiring(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -46,15 +37,12 @@ func TestEnqueueDueDailyNarratesFirstObservationAnchorsWithoutFiring(t *testing.
 		if taskExists(t, d, notebookNarrateWorkspaceKind, "ws-A") {
 			t.Fatal("first observation enqueued a narrate before the first scheduled slot")
 		}
-		// The activity set must NOT be drained when the cron only anchors (no fire).
 		if got := d.drainNotebookNarrateActivity(); len(got) != 1 || got[0] != "ws-A" {
 			t.Fatalf("first observation drained the activity set: %v", got)
 		}
 	})
 }
 
-// An anchored schedule whose next slot is still in the future does not enqueue, and
-// leaves the anchor untouched.
 func TestEnqueueDueDailyNarratesNotDueLeavesAnchor(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -63,7 +51,6 @@ func TestEnqueueDueDailyNarratesNotDueLeavesAnchor(t *testing.T) {
 		pinUTCSlot(t, d)
 		d.markNotebookWorkspaceActivity("ws-A")
 
-		// Anchor at 04:00 UTC; the next "0 3 * * *" slot is the following day 03:00.
 		if err := notebook.SaveNarrateCronState(root, notebook.NarrateCronState{ScheduledFrom: "2026-06-14T04:00:00Z"}); err != nil {
 			t.Fatalf("seed state: %v", err)
 		}
@@ -80,23 +67,16 @@ func TestEnqueueDueDailyNarratesNotDueLeavesAnchor(t *testing.T) {
 	})
 }
 
-// A due schedule fires once: it enqueues narrate_workspace for the active workspace
-// (with the daily Meta flag set) and advances the anchor; a second tick the same day
-// does NOT re-fire, and — because the set was cleared on the first fire — a later due
-// day with no new activity enqueues nothing.
 func TestEnqueueDueDailyNarratesDueFiresOnceAndClearsActivity(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
 		root := installNotebookNarrationRunner(t, d)
 		pinUTCSlot(t, d)
-		// Live workspace row so the drain does not skip it as removed.
 		d.store.AddWorkspace(&protocol.Workspace{ID: "ws-A", Title: "ws-A", Directory: t.TempDir()})
 		d.markNotebookWorkspaceActivity("ws-A")
-		// Block the narrate so the enqueued record stays observable.
 		d.narrateWorkspaceExecution = blockingExecution(t)
 
-		// Anchor a day back so 2026-06-14T03:00 is the due slot.
 		if err := notebook.SaveNarrateCronState(root, notebook.NarrateCronState{ScheduledFrom: "2026-06-13T03:00:00Z"}); err != nil {
 			t.Fatalf("seed state: %v", err)
 		}
@@ -123,8 +103,6 @@ func TestEnqueueDueDailyNarratesDueFiresOnceAndClearsActivity(t *testing.T) {
 			t.Fatalf("daily narrate job missing the daily-pass flag: %s", task.Payload)
 		}
 
-		// The activity set was cleared on the fire, so a later due day with no new
-		// activity advances the anchor but enqueues nothing new.
 		d.store.AddWorkspace(&protocol.Workspace{ID: "ws-B", Title: "ws-B", Directory: t.TempDir()})
 		d.enqueueDueDailyNarrates(mustTime(t, "2026-06-15T12:00:00Z"))
 		if taskExists(t, d, notebookNarrateWorkspaceKind, "ws-B") {
@@ -133,8 +111,6 @@ func TestEnqueueDueDailyNarratesDueFiresOnceAndClearsActivity(t *testing.T) {
 	})
 }
 
-// The gate is exact: only workspaces in the activity set are narrated. A due fire
-// narrates the active ws-A and NOT the idle ws-B.
 func TestEnqueueDueDailyNarratesGatesOnActivity(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -145,7 +121,6 @@ func TestEnqueueDueDailyNarratesGatesOnActivity(t *testing.T) {
 		d.store.AddWorkspace(&protocol.Workspace{ID: "ws-B", Title: "ws-B", Directory: t.TempDir()})
 		d.narrateWorkspaceExecution = blockingExecution(t)
 
-		// Only ws-A saw activity. ws-B is idle.
 		d.markNotebookWorkspaceActivity("ws-A")
 
 		if err := notebook.SaveNarrateCronState(root, notebook.NarrateCronState{ScheduledFrom: "2026-06-13T03:00:00Z"}); err != nil {
@@ -156,7 +131,6 @@ func TestEnqueueDueDailyNarratesGatesOnActivity(t *testing.T) {
 		if !taskExists(t, d, notebookNarrateWorkspaceKind, "ws-A") {
 			t.Fatal("active workspace ws-A was not narrated")
 		}
-		// taskExists already settled the bubble, so ws-B's absence is final.
 		task, err := d.jobQueue.GetByKey(notebookNarrateWorkspaceKind, "ws-B")
 		if err != nil {
 			t.Fatalf("get ws-B narrate: %v", err)
@@ -167,8 +141,6 @@ func TestEnqueueDueDailyNarratesGatesOnActivity(t *testing.T) {
 	})
 }
 
-// A workspace in the activity set whose row was removed before the fire is skipped:
-// its removal-boundary final retrospective already ran. The anchor still advances.
 func TestEnqueueDueDailyNarratesSkipsRemovedWorkspace(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -176,7 +148,6 @@ func TestEnqueueDueDailyNarratesSkipsRemovedWorkspace(t *testing.T) {
 		root := installNotebookNarrationRunner(t, d)
 		pinUTCSlot(t, d)
 		d.narrateWorkspaceExecution = blockingExecution(t)
-		// ws-gone was active but its row is gone (no AddWorkspace).
 		d.markNotebookWorkspaceActivity("ws-gone")
 
 		if err := notebook.SaveNarrateCronState(root, notebook.NarrateCronState{ScheduledFrom: "2026-06-13T03:00:00Z"}); err != nil {
@@ -200,10 +171,6 @@ func TestEnqueueDueDailyNarratesSkipsRemovedWorkspace(t *testing.T) {
 	})
 }
 
-// --- activity hooks ---
-
-// A session Stop marks its workspace active (the handleStop path), so the daily cron
-// will narrate it.
 func TestHandleStopMarksWorkspaceActivity(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -223,9 +190,6 @@ func TestHandleStopMarksWorkspaceActivity(t *testing.T) {
 	})
 }
 
-// A content-CHANGING context update marks the workspace active; a no-op update
-// (changed == false) does NOT — driven through the real updateWorkspaceContext
-// handler so the hook is exercised at the genuine chokepoint.
 func TestContextWriteMarksActivityOnlyWhenChanged(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
@@ -235,7 +199,6 @@ func TestContextWriteMarksActivityOnlyWhenChanged(t *testing.T) {
 		t.Fatalf("checkout: %v", err)
 	}
 
-	// A no-op update (nothing edited) does NOT mark activity.
 	if _, changed, err := d.updateWorkspaceContext(&protocol.WorkspaceContextUpdateMessage{SourceSessionID: "session-1"}); err != nil || changed {
 		t.Fatalf("expected no-op update (changed=false), got changed=%v err=%v", changed, err)
 	}
@@ -243,7 +206,6 @@ func TestContextWriteMarksActivityOnlyWhenChanged(t *testing.T) {
 		t.Fatalf("a no-op context update marked activity: %v", got)
 	}
 
-	// A real edit -> changed -> marks activity.
 	if err := os.WriteFile(checkout.Path, []byte("# Real shared goal\n"), 0o600); err != nil {
 		t.Fatalf("edit checkout: %v", err)
 	}
@@ -256,10 +218,6 @@ func TestContextWriteMarksActivityOnlyWhenChanged(t *testing.T) {
 	}
 }
 
-// --- executor relaxation (daily pass success semantics) ---
-
-// A daily-flagged narrate whose agent leaves the block UNCHANGED goes DONE (not
-// failed): a daily refresh that finds nothing new is a clean no-op.
 func TestNarrateWorkspaceDailyPassUnchangedIsDone(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -277,7 +235,6 @@ func TestNarrateWorkspaceDailyPassUnchangedIsDone(t *testing.T) {
 			t.Fatalf("seed prior entry: %v", err)
 		}
 
-		// Daily-pass agent no-ops: leaves the block exactly as-is.
 		d.narrateWorkspaceExecution = func(context.Context, agentdriver.HeadlessTaskProvider, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 			return agentdriver.HeadlessTaskResult{Diagnostics: "nothing new"}, nil
 		}
@@ -292,8 +249,6 @@ func TestNarrateWorkspaceDailyPassUnchangedIsDone(t *testing.T) {
 	})
 }
 
-// A daily-flagged narrate whose agent writes NO entry at all goes DONE (not failed):
-// an absent block on a daily refresh is also a clean no-op.
 func TestNarrateWorkspaceDailyPassAbsentIsDone(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -302,7 +257,6 @@ func TestNarrateWorkspaceDailyPassAbsentIsDone(t *testing.T) {
 		installNotebookNarrationRunner(t, d)
 		d.narrationNowOverride = func() time.Time { return time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC) }
 
-		// Daily-pass agent writes nothing.
 		d.narrateWorkspaceExecution = func(context.Context, agentdriver.HeadlessTaskProvider, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 			return agentdriver.HeadlessTaskResult{Diagnostics: "no entry"}, nil
 		}
@@ -317,14 +271,10 @@ func TestNarrateWorkspaceDailyPassAbsentIsDone(t *testing.T) {
 	})
 }
 
-// A daily-flagged REMOVAL pass keeps STRICT gating: an unchanged/absent block still
-// FAILS, because the removal retrospective must actually be written.
 func TestNarrateWorkspaceDailyFlagRemovalPassStillStrict(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
-		// No workspace row for ws-removed -> IS_REMOVAL_PASS derived true; the daily flag
-		// must not relax a removal pass.
 		root := installNotebookNarrationRunner(t, d)
 		d.narrationNowOverride = func() time.Time { return time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC) }
 
@@ -354,8 +304,6 @@ func TestNarrateWorkspaceDailyFlagRemovalPassStillStrict(t *testing.T) {
 	})
 }
 
-// A NON-flagged routine (session-end) pass with an unchanged block still FAILS —
-// unchanged behavior, preserving the retry-until-the-digest-lands property.
 func TestNarrateWorkspaceRoutinePassUnchangedStillFails(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -377,7 +325,6 @@ func TestNarrateWorkspaceRoutinePassUnchangedStillFails(t *testing.T) {
 			return agentdriver.HeadlessTaskResult{Diagnostics: "no-op"}, nil
 		}
 
-		// No daily-pass payload -> strict gating.
 		if _, err := d.jobQueue.Enqueue(notebookNarrateWorkspaceKind, jobs.EnqueueOptions{UniqueKey: "ws-1"}); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}

@@ -9,15 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// TestAutomationApplyContractEditRotatesContinuityBindings covers A1's core
-// semantic and its singleton-scheduled special case in one test (they are
-// the same mechanism): editing a scheduled singleton definition's prompt is
-// a ContinuationContract change, so automationApply must drop its
-// continuity binding. The next occurrence then mints a brand-new
-// ticket/session reservation (rather than reusing the pre-edit one) and
-// validateAutomationContinuation must accept it — no "contract changed"
-// refusal, and (per the hasPriorAutomationContinuityRun fix this rotation
-// required) no spurious "ticket is missing" refusal either.
 func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -52,7 +43,6 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Contract edit: prompt changes.
 	v2 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Updated prompt.")
 	def2, err := d.automationApply(v2)
 	if err != nil {
@@ -91,11 +81,6 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	}
 }
 
-// TestAutomationApplyNonContractEditPreservesContinuityBindings pins the
-// other half of A1: editing only cron/catch_up (not Prompt/Launch/Location)
-// leaves the ContinuationContract unchanged, so the binding — and its
-// ticket/session ids — must survive the edit, and the next occurrence
-// continues the same thread instead of starting a fresh one.
 func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -130,7 +115,6 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 		t.Fatal(err)
 	}
 
-	// Non-contract edit: cron and catch_up change, prompt/launch/location don't.
 	v2 := scheduledDefinitionYAML(dir, "*/10 * * * *", "singleton", "skip", "Sweep.")
 	def2, err := d.automationApply(v2)
 	if err != nil {
@@ -152,13 +136,6 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 	}
 }
 
-// TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun pins the A1
-// investigation finding: a run's snapshot_json is captured once at claim
-// time (automation.Effective) and deliverAutomationRun/validateAutomationContinuation
-// read only that pinned copy, never a live re-read of the current spec. So a
-// run claimed before a contract-changing edit keeps delivering under its own
-// old snapshot regardless of any edit made after it was claimed — apply
-// never mutates an existing run's snapshot_json.
 func TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -205,13 +182,6 @@ func TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun(t *testing.T)
 	}
 }
 
-// TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives pins
-// scenario 3 of the A1-fix matrix: edit A→B→A (revert). The reverted
-// contract now equals the original A thread's (run1/ticket T1) contract
-// again, but T1's own ticket is still alive — it was merely rotated away
-// from, not swept. A fresh post-revert thread (run3/ticket T3) must be
-// allowed to deliver: hasPriorAutomationContinuityRun must not treat "some
-// same-contract history exists" as disqualifying on its own.
 func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -242,12 +212,10 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
-	// T1 stays alive throughout — it was rotated away from, never swept.
 	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: run1.TicketID, Title: "Nightly", Status: store.TicketStatusDone, Assignee: run1.SessionID, AutomationRunID: run1.ID}, "automation:nightly", store.TicketRoleChiefOfStaff, now); err != nil {
 		t.Fatal(err)
 	}
 
-	// Edit to B: rotates the binding.
 	v2 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Prompt B.")
 	def2, err := d.automationApply(v2)
 	if err != nil {
@@ -276,8 +244,6 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 		t.Fatal(err)
 	}
 
-	// Revert back to A: rotates the binding again. The reverted contract
-	// now equals run1's (T1's) contract.
 	v3 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Prompt A.")
 	def3, err := d.automationApply(v3)
 	if err != nil {
@@ -297,23 +263,6 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	}
 }
 
-// TestAutomationApplyRevertAllowsFreshThreadEvenWhenOldTicketWasSwept pins
-// scenario 4 of the A1-fix matrix: edit A→B→A (revert), but the original A
-// thread's ticket (T1) was itself later swept (removed) rather than merely
-// rotated away from.
-//
-// This used to assert a refusal ("refuse if ANY prior same-contract thread's
-// own ticket is missing"). That was the exact bug the ticket TTL sweep's
-// wiring-up exposed: T1 being swept is now the ROUTINE, designed outcome of
-// its own thread aging out (store.SweepExpiredTickets releases a thread's
-// continuity binding along with its ticket — see the comment there), not
-// evidence about T3. T3 (run3) got a demonstrably fresh session via the
-// revert rotation (asserted via `fresh` below) — nothing of T1's is being
-// reused — so refusing here would permanently brick every future revert to
-// contract A once T1's ticket aged out, for no safety reason. See
-// hasPriorAutomationContinuityRun's point 3 for the general argument, and
-// TestValidateAutomationContinuationRefusesOnlyForItsOwnVanishedTicket for
-// the hazard this must still catch (same session, not a different one).
 func TestAutomationApplyRevertAllowsFreshThreadEvenWhenOldTicketWasSwept(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -344,10 +293,7 @@ func TestAutomationApplyRevertAllowsFreshThreadEvenWhenOldTicketWasSwept(t *test
 	if err := s.MarkAutomationRunDelivered(run1.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
-	// T1 is deliberately never created here (or was created and later
-	// removed by a sweep) — simulate the "genuinely gone" case.
 
-	// Edit to B: rotates the binding.
 	v2 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Prompt B.")
 	def2, err := d.automationApply(v2)
 	if err != nil {
@@ -376,8 +322,6 @@ func TestAutomationApplyRevertAllowsFreshThreadEvenWhenOldTicketWasSwept(t *test
 		t.Fatal(err)
 	}
 
-	// Revert back to A: rotates the binding again. The reverted contract
-	// now equals run1's (T1's) contract, but T1 was swept.
 	v3 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Prompt A.")
 	def3, err := d.automationApply(v3)
 	if err != nil {
@@ -397,34 +341,6 @@ func TestAutomationApplyRevertAllowsFreshThreadEvenWhenOldTicketWasSwept(t *test
 	}
 }
 
-// TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket pins the
-// hazard that req's own thread — not some unrelated rotated-away thread —
-// can lose its own ticket. Unlike the revert scenario above, there is no
-// contract edit here, so the continuity binding never rotates; run2 is a
-// second occurrence of the exact same thread as run1, inheriting its session
-// and ticket id. That models the real race this exists for: a claim reads
-// the binding (inheriting session-1/ticket-1) just before the TTL sweep
-// removes that same ticket out from under it.
-//
-// This exercises store.SweepExpiredTickets' ticket sweep releasing the
-// active binding alongside it (see tickets.go's SweepExpiredTickets), not
-// automation.ResolveContinuation's own dangling-binding self-heal branch: the
-// sweep atomically releases the binding when it removes its ticket, so by
-// the time req validates, GetActiveContinuityBinding already returns nil —
-// the "no active binding" Fresh path, not SelfHealedDanglingBinding. (A
-// binding that stays active while its own ticket is independently gone —
-// ResolveContinuation's actual self-heal branch — has no reachable trigger
-// via the public Store API today, since the only ticket-removing path
-// releases the binding with it; that branch is pinned directly against
-// automation.BindingStore instead, see
-// TestResolveContinuationDanglingBindingSelfHeals.) What this test actually
-// pins: after that release, delivery must not treat req's own now-nil
-// identifiers as a refusal — it must proceed fresh, since there is nothing
-// left of that thread to reuse. It is independent of the ownTicketID fix in
-// automation.ResolveContinuation (see TestResolveContinuationOwnBindingIsFreshWithoutRelease
-// and TestScheduledSingletonSecondOccurrenceContinuesFirstOccurrencesThread for
-// that): with no active binding at all, ResolveContinuation never reaches the
-// ownTicketID comparison.
 func TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -460,10 +376,6 @@ func TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket(t *testing.
 		t.Fatal(err)
 	}
 
-	// No contract edit: run2 is the same thread's next occurrence. Its
-	// reservation deliberately omits ticket/session/workspace/pane — the
-	// still-live binding must supply run1's, exactly as it would for a real
-	// second occurrence with nothing to reuse itself.
 	run2, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:2", "singleton", def.Revision, `{}`, string(snapshotJSON), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
 	if err != nil {
 		t.Fatal(err)
@@ -472,9 +384,6 @@ func TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket(t *testing.
 		t.Fatalf("run2 ids=%s/%s, want inherited from run1 (%s/%s)", run2.SessionID, run2.TicketID, run1.SessionID, run1.TicketID)
 	}
 
-	// The TTL sweep races the claim above: it fires before delivery gets a
-	// chance to validate, removing run1/run2's shared ticket and releasing
-	// its binding out from under req.
 	if removed, err := s.SweepExpiredTickets(now.Add(6*time.Hour), time.Hour); err != nil || removed != 1 {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
@@ -488,10 +397,6 @@ func TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket(t *testing.
 	}
 }
 
-// TestAutomationApplyLocationEditRotatesContinuityBindings pins the Location
-// third of ContinuationContract.Equal's comparison. Editing just the
-// location path (prompt and launch held fixed) must still be treated as a
-// contract change and rotate the continuity binding.
 func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}
@@ -525,8 +430,6 @@ func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Contract edit: location path changes (a different directory), prompt
-	// and launch don't.
 	v2 := scheduledDefinitionYAML(t.TempDir(), "*/5 * * * *", "singleton", "latest", "Sweep.")
 	def2, err := d.automationApply(v2)
 	if err != nil {

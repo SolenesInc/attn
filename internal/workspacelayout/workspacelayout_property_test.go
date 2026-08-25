@@ -11,29 +11,12 @@ import (
 	"pgregory.net/rapid"
 )
 
-// The example tests in workspacelayout_test.go, tile_test.go and moveleaf_test.go
-// pin the shapes we thought of: a split here, a dock there, the three or four
-// move cases that once broke. This one explores the shapes we did not. A real
-// workspace is not one operation, it is a day of them — split, dock a markdown
-// tile, drag a pane across the tree, close something, drag it back — and the
-// layout that wedges is the one reached by a sequence nobody wrote down.
-//
-// rapid drives a random sequence of the real operations and re-checks the whole
-// tree contract after every single one, so a failure names the shortest sequence
-// that reaches the broken tree rather than the tree itself.
-
-// tileMeta is what the model expects a docked tile to still carry. Kind, params
-// and session id are opaque to this package but must survive every move: a tile
-// that loses its params renders the no-selection picker, which reads to the user
-// as the file having been closed.
 type tileMeta struct {
 	kind    string
 	params  string
 	session string
 }
 
-// layoutModel is the shadow state the property checks the tree against: which
-// leaves should exist, and what each tile should still hold.
 type layoutModel struct {
 	tree  Node
 	panes map[string]bool
@@ -46,8 +29,6 @@ func (m *layoutModel) mint(prefix string) string {
 	return fmt.Sprintf("%s%d", prefix, m.next)
 }
 
-// leafIDs is every leaf the model believes is in the tree, in a stable order so
-// a rapid draw over it reproduces.
 func (m *layoutModel) leafIDs() []string {
 	ids := make([]string, 0, len(m.panes)+len(m.tiles))
 	for id := range m.panes {
@@ -78,11 +59,7 @@ func (m *layoutModel) tileIDs() []string {
 	return ids
 }
 
-// cloneNode deep-copies a tree so an operation can be checked for having left
-// its input alone. Every function here takes a Node by value and returns a new
-// one, which only holds if the children slices are copied rather than written
-// through — a caller that still holds the pre-operation layout (the daemon reads
-// a snapshot, edits it, and writes it back) must see what it read.
+// A Node value shares its children's backing array with every copy of itself.
 func cloneNode(node Node) Node {
 	out := node
 	if node.Children == nil {
@@ -95,9 +72,6 @@ func cloneNode(node Node) Node {
 	return out
 }
 
-// checkWellFormed asserts the structural contract every consumer relies on: the
-// renderer walks this tree, the daemon derives pane bookkeeping from it, and
-// both assume a split is a split.
 func checkWellFormed(t *rapid.T, node Node, path string) {
 	switch node.Type {
 	case "pane":
@@ -131,7 +105,6 @@ func checkWellFormed(t *rapid.T, node Node, path string) {
 	}
 }
 
-// splitIDs collects every split id in the tree so an op can aim at one.
 func splitIDs(node Node) []string {
 	var ids []string
 	var walk func(Node)
@@ -171,8 +144,6 @@ var (
 	tileSessions = []string{"", "sess-a", "  sess-b  "}
 )
 
-// drawRatio spans past both ends so the clamping every constructor does is part
-// of what is under test: a ratio outside (0,1) collapses a pane to nothing.
 func drawRatio(t *rapid.T, label string) float64 {
 	return rapid.Float64Range(-1, 2).Draw(t, label)
 }
@@ -186,9 +157,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 			tiles: map[string]tileMeta{},
 		}
 
-		// apply runs one operation and holds it to the contract every operation
-		// here shares: it returns a new tree and does not write through the one
-		// it was given.
 		apply := func(t *rapid.T, op func(Node) (Node, bool)) (Node, bool) {
 			before := cloneNode(m.tree)
 			next, ok := op(m.tree)
@@ -199,7 +167,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 		}
 
 		t.Repeat(map[string]func(*rapid.T){
-			// Cmd+D: split a terminal pane in two.
 			"split_pane": func(t *rapid.T) {
 				panes := m.paneIDs()
 				if len(panes) == 0 {
@@ -221,8 +188,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.panes[newPane] = true
 			},
 
-			// Dock a tile beside a leaf — or, for a tile already in the tree,
-			// move it there, since docking doubles as a move.
 			"dock_tile": func(t *rapid.T) {
 				anchor := rapid.SampledFrom(m.leafIDs()).Draw(t, "anchor")
 				candidates := append([]string{""}, m.tileIDs()...)
@@ -249,8 +214,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				}
 				m.tree = next
 
-				// An empty session id carries the tile's existing binding
-				// forward, so moving a tile never silently unbinds it.
 				want := tileMeta{kind: strings.TrimSpace(kind), params: strings.TrimSpace(params), session: strings.TrimSpace(session)}
 				if want.session == "" {
 					if prev, ok := m.tiles[tileID]; ok {
@@ -260,8 +223,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tiles[tileID] = want
 			},
 
-			// Drag a pane or tile somewhere else in the tree, including onto the
-			// workspace itself (an empty anchor), which re-roots the layout.
 			"move_leaf": func(t *rapid.T) {
 				leaves := m.leafIDs()
 				if len(leaves) < 2 {
@@ -289,9 +250,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tree = next
 			},
 
-			// Close a pane, or undock a tile. The last leaf is left alone: a
-			// layout with nothing in it is the workspace being torn down, which
-			// is the caller's decision and not this tree's state.
 			"remove_leaf": func(t *rapid.T) {
 				leaves := m.leafIDs()
 				if len(leaves) < 2 {
@@ -308,8 +266,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				delete(m.tiles, leaf)
 			},
 
-			// A tile consumer rebinds an open tile: the browser tile follows a
-			// navigation, a markdown tile follows the file it was opened from.
 			"update_tile": func(t *rapid.T) {
 				ids := m.tileIDs()
 				if len(ids) == 0 {
@@ -341,8 +297,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tiles[tileID] = meta
 			},
 
-			// Drag a divider. The ratio is clamped so neither side collapses,
-			// and locked so normalization stops rebalancing that split.
 			"set_ratio": func(t *rapid.T) {
 				ids := splitIDs(m.tree)
 				if len(ids) == 0 {
@@ -369,9 +323,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				}
 			},
 
-			// The daemon normalizes before persisting and after loading, so
-			// every tree above has to survive a round through it unchanged in
-			// content — and a second round unchanged in full.
 			"normalize": func(t *rapid.T) {
 				snapshot := WorkspaceLayout{
 					WorkspaceID:  "ws",
@@ -399,7 +350,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tree = normalized.Layout
 			},
 
-			// Runs before and after every action above.
 			"": func(t *rapid.T) {
 				checkWellFormed(t, m.tree, "root")
 
@@ -422,8 +372,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 					t.Fatalf("tree holds tiles %v, want %v", tiles, want)
 				}
 
-				// A tile's kind, params and session survive every move: they are
-				// the tile's whole identity to the consumer that renders it.
 				for _, leaf := range TileLeaves(m.tree) {
 					want := m.tiles[leaf.TileID]
 					got := tileMeta{kind: leaf.TileKind, params: leaf.TileParams, session: leaf.TileSessionID}
@@ -436,16 +384,7 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 	})
 }
 
-// Every operation in this package takes a Node by value and returns a new one.
-// That is only true if the children slices are copied rather than written
-// through — a Node value shares its children's backing array with every copy of
-// itself, so writing into it reaches the caller's tree.
-//
-// The stateful property above holds every operation to this through apply. This
-// one pins the two that once did not, UpdateTileParams and UpdateTileSessionID,
-// on the smallest tree that shows it: a caller that keeps reading the layout it
-// handed in must see what it read. The seed under testdata/rapid replays the
-// counterexample rapid shrank to.
+// The seed under testdata/rapid replays the counterexample rapid shrank to.
 func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		tree, _ := DockTile(DefaultLayout("p0"), "p0", DirectionVertical, false, "s1",
@@ -472,8 +411,6 @@ func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
 	})
 }
 
-// modelPanes builds the pane records the daemon would have stored beside the
-// tree, so normalization has something to reconcile against.
 func modelPanes(m *layoutModel) []Pane {
 	panes := make([]Pane, 0, len(m.panes))
 	for _, id := range m.paneIDs() {
@@ -489,8 +426,6 @@ func modelPanes(m *layoutModel) []Pane {
 	return panes
 }
 
-// sameIDs compares two sorted id lists, treating a nil list and an empty one as
-// the same thing: a tree with no tiles reports nil, and the model reports empty.
 func sameIDs(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

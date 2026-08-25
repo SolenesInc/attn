@@ -1,7 +1,3 @@
-/**
- * Smoke test for extractBlockTexts output shape — the full anchoring fixture
- * suite (pipeline parity, resolve/rebase cases) lands separately.
- */
 
 import { describe, expect, it } from "vitest";
 import { extractBlockTexts } from "./extractBlocks";
@@ -35,12 +31,9 @@ describe("extractBlockTexts — smoke", () => {
       "b5-code",
     ]);
 
-    // Prose transforms already applied: emoji shortcode + curly quotes.
     expect(byId.get("b0-heading")!.text).toBe("Title 🚀");
     expect(byId.get("b1-paragraph")!.text).toBe("A paragraph with “quotes” and code.");
 
-    // List items nest inside the list: depth, parentId, startInParent, and
-    // the containment contract (child text is a slice of the parent's).
     const list = byId.get("b2-list")!;
     const first = byId.get("b3-list-item")!;
     expect(list.depth).toBe(0);
@@ -52,10 +45,8 @@ describe("extractBlockTexts — smoke", () => {
       list.text.slice(first.startInParent, first.startInParent + first.text.length),
     ).toBe(first.text);
 
-    // pre trailing-newline rule: hast keeps a trailing \n, the DOM does not.
     expect(byId.get("b5-code")!.text).toBe("const x = 1;");
 
-    // Raw-file line stamps.
     expect(byId.get("b1-paragraph")!.startLine).toBe(3);
     expect(byId.get("b5-code")!.startLine).toBe(8);
     expect(byId.get("b5-code")!.endLine).toBe(10);
@@ -80,11 +71,11 @@ describe("extractBlockTexts — smoke", () => {
   });
 
   it("createAnchor rejects whitespace-only selections", () => {
-    expect(createAnchor(DOC, "b1-paragraph", 0, 1)).not.toBeNull(); // "A"
+    expect(createAnchor(DOC, "b1-paragraph", 0, 1)).not.toBeNull();
     const blocks = extractBlockTexts(DOC);
     const paragraph = blocks.find((b) => b.blockId === "b1-paragraph")!;
     const spaceAt = paragraph.text.indexOf(" ");
     expect(createAnchor(DOC, "b1-paragraph", spaceAt, spaceAt + 1)).toBeNull();
-    expect(createAnchor(DOC, "b1-paragraph", 3, 3)).toBeNull(); // empty
+    expect(createAnchor(DOC, "b1-paragraph", 3, 3)).toBeNull();
   });
 });

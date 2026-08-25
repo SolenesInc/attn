@@ -4,14 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotebookSurface, type NotebookSurfaceHandle } from './NotebookSurface';
 import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
 
-// Off-root gating (editor-arbitrary-roots PR6): backlinksNotebook and sendToChief
-// are OPTIONAL on NotebookSurface. NotebookTile omits both when a tile is bound to
-// a filesystem root other than the Notebook's — this file proves the surface itself
-// (root-unaware; it just renders the affordances it's handed) actually withholds
-// the rail and the floating chief button when they're absent, and keeps rendering
-// them when they're provided. NotebookBrowser.test.tsx already covers the
-// always-both-provided modal path in depth; this file exercises the tile variant,
-// which is the one real caller that can omit them.
 
 const editorMock = vi.hoisted(() => ({
   current: null as null | {
@@ -113,8 +105,7 @@ async function waitForNoteLoaded() {
 
 describe('NotebookSurface off-root gating (tile variant)', () => {
   // The tile variant runs useTileAutoFold, which observes its body via a real
-  // ResizeObserver — not present under happy-dom. A no-op stub is enough; the
-  // fold ladder itself is unit-tested separately (useTileAutoFold.test.ts).
+  // ResizeObserver — not present under happy-dom.
   beforeEach(() => {
     globalThis.ResizeObserver = class {
       observe() {}
@@ -133,7 +124,6 @@ describe('NotebookSurface off-root gating (tile variant)', () => {
     render(<NotebookSurface {...props} />);
     await waitForNoteLoaded();
 
-    // Give any (incorrect) fetch a chance to fire before asserting its absence.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(backlinksNotebook).not.toHaveBeenCalled();
     expect(document.querySelector('.notebook-browser-rail')).toBeNull();
@@ -171,11 +161,8 @@ describe('NotebookSurface off-root gating (tile variant)', () => {
 });
 
 describe('NotebookSurface flushPendingSave handle (root-switch flush, PR #588 second review round)', () => {
-  // NotebookTile keys NotebookSurface on `root`, so a root switch remounts it —
-  // dropping any not-yet-autosaved edit (the autosave debounce is 700ms with no
-  // unmount flush). flushPendingSave is the imperative escape hatch the root
-  // switcher calls BEFORE swapping params, so the outgoing edit persists to the
-  // OLD root's file instead of vanishing.
+  // NotebookTile keys NotebookSurface on `root`, so a root switch remounts it and drops
+  // any not-yet-autosaved edit; flushPendingSave must run BEFORE swapping params.
   beforeEach(() => {
     globalThis.ResizeObserver = class {
       observe() {}
@@ -197,8 +184,6 @@ describe('NotebookSurface flushPendingSave handle (root-switch flush, PR #588 se
 
     fireEvent.change(editor(), { target: { value: 'edited body' } });
 
-    // Called before the 700ms debounce would fire — writeFile must not have
-    // been called yet via the autosave path.
     expect(writeFile).not.toHaveBeenCalled();
 
     let outcome: string | undefined;

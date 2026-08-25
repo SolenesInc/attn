@@ -102,9 +102,6 @@ func TestAttachReviveRespawnsRecoverableSessionFromStoredIntent(t *testing.T) {
 	}
 }
 
-// Mounting the pane is what brings a crashed codex session back, and it has to
-// come back to the same conversation: the native rollout id attn persisted is
-// what the relaunch resumes, under the launch policy the session already had.
 func TestAttachReviveResumesCodexFromItsNativeRolloutID(t *testing.T) {
 	home := newRecoveryHome(t)
 	home.resumableCodex(t, "native-rollout-1")

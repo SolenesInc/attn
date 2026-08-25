@@ -19,17 +19,11 @@ func (d *Daemon) recoverAutomations() {
 			d.logf("automation recovery occurrence %s: %v", runs[i].OccurrenceID, occurrenceErr)
 			continue
 		}
+		// Review-request demand must be refreshed before recovery decides to deliver
+		// or cancel; generic recovery must not race that snapshot with a stale edge.
 		if occurrence != nil && occurrence.Provider == "github" {
-			// Review-request demand must be refreshed before recovery decides whether
-			// to deliver or cancel. The next successful provider observation retries
-			// an accepted pending run or settles an inactive edge; generic startup
-			// recovery must not race that snapshot using yesterday's active edge.
 			continue
 		}
-		// Scheduled runs (occurrence.Provider == "schedule") fall through to
-		// generic recovery: their payload is self-contained (the intended
-		// instant, immutably snapshotted at claim time), so a pending run can
-		// be delivered directly without refreshing any external demand first.
 		d.automationMu.Lock()
 		run, err := d.store.GetAutomationRun(runs[i].ID)
 		if err == nil && run.State == store.AutomationRunStatePending {

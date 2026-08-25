@@ -22,9 +22,6 @@ func evidenceOf(t *testing.T, d *Daemon, sessionID string) sessionstate.Evidence
 	return got
 }
 
-// The heartbeat is a level with its own vocabulary. It has to land in the
-// heartbeat slot with its observation time intact, because its freshness — not
-// its arrival — is what the resolver reads.
 func TestHeartbeatEvidenceKeepsItsObservationTime(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-hb-evidence"
@@ -50,9 +47,6 @@ func TestHeartbeatEvidenceKeepsItsObservationTime(t *testing.T) {
 	}
 }
 
-// An unreadable title is liveness and nothing else. Filing it as a level would
-// let a subprocess's title settle a running turn; dropping it is what let a
-// changed spinner glyph run a working session into `unknown`.
 func TestAnUnclassifiedTitleMovesEvidenceWithoutClaimingALevel(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-hb-unclassified"
@@ -86,8 +80,6 @@ func TestNotBusyHeartbeatEvidenceIsSettled(t *testing.T) {
 	}
 }
 
-// The brackets are levels: a turn opens and stays open until something closes
-// it. Getting this wrong is the whole stuck class.
 func TestBracketEvidenceOpensAndCloses(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-bracket"
@@ -105,9 +97,6 @@ func TestBracketEvidenceOpensAndCloses(t *testing.T) {
 	}
 }
 
-// The Stop facts are the ones the CLI used to collapse into a state string
-// before they crossed the socket, which is exactly why the resolver could not
-// see them.
 func TestStopFactsBecomeEvidence(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-stop-facts"
@@ -118,15 +107,12 @@ func TestStopFactsBecomeEvidence(t *testing.T) {
 		t.Fatalf("got %+v, want background work only", got)
 	}
 
-	// They are levels, so a later stop with nothing outstanding clears them.
 	d.recordStopFacts(id, false, false)
 	if got := evidenceOf(t, d, id); got.BackgroundWork {
 		t.Fatalf("background work outlived the stop that cleared it: %+v", got)
 	}
 }
 
-// "default" is the one mode that means the user answers. Everything else puts
-// something between the agent and the user.
 func TestReviewerEvidenceReadsThePermissionMode(t *testing.T) {
 	for _, tc := range []struct {
 		mode string
@@ -147,9 +133,6 @@ func TestReviewerEvidenceReadsThePermissionMode(t *testing.T) {
 	}
 }
 
-// An agent that reports no mode must not be recorded as having no reviewer:
-// silence is not a claim, and treating it as one would remove the dwell from
-// every codex session.
 func TestAnAbsentPermissionModeRecordsNothing(t *testing.T) {
 	d := newTraceDaemon(t)
 	addCharacterizationSession(t, d, "sess-no-mode", protocol.SessionAgentClaude, protocol.SessionStateWorking)
@@ -159,8 +142,6 @@ func TestAnAbsentPermissionModeRecordsNothing(t *testing.T) {
 	}
 }
 
-// Every write stamps LastMovement, so stuck detection cannot drift out of sync
-// with the writes it is watching.
 func TestEveryEvidenceWriteStampsMovement(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-movement"
@@ -178,8 +159,6 @@ func TestEveryEvidenceWriteStampsMovement(t *testing.T) {
 	}
 }
 
-// The tick publishes state. A session sitting in a state no source will ever
-// contradict is moved by the resolver alone.
 func TestTheResolveTickPublishesTheResolution(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-flip"
@@ -205,17 +184,11 @@ func TestTheResolveTickPublishesTheResolution(t *testing.T) {
 	if got.Source != stateSourceResolver {
 		t.Fatalf("source %q, want %q", got.Source, stateSourceResolver)
 	}
-	// The reason names the clause that won, which is the whole diagnostic value
-	// of the row: "working" alone never explains a wrong color.
 	if !strings.Contains(got.Detail, string(sessionstate.ReasonHeartbeatBusy)) {
 		t.Fatalf("detail %q does not name the winning clause", got.Detail)
 	}
 }
 
-// States outside the resolver's remit describe the session's lifecycle, not its
-// agent. `recoverable` is the dangerous one: the revive path sets it precisely
-// because the worker died, so the process evidence the resolver would read is
-// both present and meaningless.
 func TestTheResolveTickLeavesAnUnownedStateAlone(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-unowned"
@@ -229,16 +202,11 @@ func TestTheResolveTickLeavesAnUnownedStateAlone(t *testing.T) {
 	}
 }
 
-// A session the evidence table has barely heard of resolves to unknown for want
-// of evidence. Publishing that would repaint healthy sessions grey on the first
-// tick after any single observation.
 func TestTheResolveTickDoesNotPublishAnAbsenceOfEvidence(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-no-evidence"
 	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
 
-	// A reviewer report is evidence of who answers approvals and nothing else,
-	// so it creates the table entry without supporting any state.
 	d.recordReviewerEvidenceFromPermissionMode(id, "acceptEdits")
 	d.resolveAllSessions(time.Now())
 
@@ -247,9 +215,6 @@ func TestTheResolveTickDoesNotPublishAnAbsenceOfEvidence(t *testing.T) {
 	}
 }
 
-// The settle-flicker gate, end to end through the daemon: while a classification
-// is running, a settled turn holds its pre-settle state rather than flashing
-// idle and being corrected when the verdict lands.
 func TestARunningClassificationHoldsTheSettle(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-classifying"
@@ -257,8 +222,6 @@ func TestARunningClassificationHoldsTheSettle(t *testing.T) {
 
 	now := time.Now()
 	d.recordClassifierStarted(id, now)
-	// The turn is over as far as every other source is concerned: the Stop hook
-	// closed the bracket and the agent stopped painting spinner frames.
 	d.recordBracketEvidence(id, protocol.StateIdle)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
 
@@ -268,7 +231,6 @@ func TestARunningClassificationHoldsTheSettle(t *testing.T) {
 		t.Fatalf("state %q, want working held while the classifier runs", state)
 	}
 
-	// The verdict lands and the hold ends on the same evidence.
 	d.recordClassifierEvidence(id, protocol.StateWaitingInput, now)
 	d.recordClassifierFinished(id)
 	d.resolveAllSessions(now.Add(2 * time.Second))
@@ -278,16 +240,12 @@ func TestARunningClassificationHoldsTheSettle(t *testing.T) {
 	}
 }
 
-// A classifier that never returns must not be able to freeze a color, which is
-// what an unbounded hold would allow.
 func TestAHungClassifierStopsHoldingTheSettle(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-classifier-hung"
 	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
 
 	now := time.Now()
-	// The turn opened and ran before it settled, which is what makes the settle
-	// a settle rather than a session that has not started.
 	d.recordBracketEvidence(id, protocol.StateWorking)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
 	d.recordClassifierStarted(id, now)
@@ -302,9 +260,6 @@ func TestAHungClassifierStopsHoldingTheSettle(t *testing.T) {
 	}
 }
 
-// A verdict belongs to the turn it judged. Turn A's answer must never be
-// published as turn B's state, which is what a verdict left in the table does
-// the moment B settles with its own classification still in flight.
 func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-cross-turn"
@@ -312,7 +267,6 @@ func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 
 	now := time.Now()
 
-	// Turn A ends waiting on the user, and that verdict is published.
 	d.recordBracketEvidence(id, protocol.StateIdle)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
 	d.recordClassifierEvidence(id, protocol.StateWaitingInput, now)
@@ -322,7 +276,6 @@ func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 		t.Fatalf("state %q, want turn A's verdict published", state)
 	}
 
-	// Turn B opens and the agent goes busy.
 	openedAt := now.Add(2 * time.Second)
 	d.recordBracketEvidence(id, protocol.StateWorking)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: openedAt})
@@ -332,7 +285,6 @@ func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 		t.Fatalf("state %q, want working for turn B", state)
 	}
 
-	// Turn B settles and begins its own classification.
 	settledAt := now.Add(10 * time.Second)
 	d.recordClassifierStarted(id, settledAt)
 	d.recordBracketEvidence(id, protocol.StateIdle)
@@ -343,7 +295,6 @@ func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 		t.Fatalf("state %q, want the settle held for turn B's own verdict", state)
 	}
 
-	// And turn B's own answer is what lands.
 	d.recordClassifierEvidence(id, protocol.StateIdle, settledAt)
 	d.recordClassifierFinished(id)
 	d.resolveAllSessions(settledAt.Add(2 * time.Second))
@@ -353,10 +304,6 @@ func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
 	}
 }
 
-// The other half of the same rule. A turn short enough that the agent never
-// paints a busy frame leaves the previous verdict newer than the last busy
-// heartbeat, so freshness alone cannot tell it is spent — the opening bracket
-// has to retire it.
 func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-cross-turn-quiet"
@@ -364,7 +311,6 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 
 	now := time.Now()
 
-	// Turn A: busy, settles, verdict lands after the last busy frame.
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
 	d.recordBracketEvidence(id, protocol.StateIdle)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now.Add(time.Second)})
@@ -375,8 +321,6 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 		t.Fatalf("state %q, want turn A's verdict published", state)
 	}
 
-	// Turn B opens — still inside the busy window, so no new busy frame is
-	// needed to hold it working.
 	openedAt := now.Add(3 * time.Second)
 	d.recordBracketEvidence(id, protocol.StateWorking)
 	d.resolveAllSessions(openedAt)
@@ -385,8 +329,6 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 		t.Fatalf("state %q, want working for turn B", state)
 	}
 
-	// It settles with its own classification in flight, having never painted a
-	// busy frame of its own.
 	settledAt := now.Add(3500 * time.Millisecond)
 	d.recordClassifierStarted(id, settledAt)
 	d.recordBracketEvidence(id, protocol.StateIdle)
@@ -397,8 +339,6 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 	}
 }
 
-// A tick that agreed every second would bury every other observation in a ring
-// that holds 256 of them.
 func TestTheResolveTickIsSilentWhenItAgrees(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-shadow-agree"
@@ -415,8 +355,6 @@ func TestTheResolveTickIsSilentWhenItAgrees(t *testing.T) {
 	}
 }
 
-// A removed session must stop being resolved, or the table grows for the
-// lifetime of the daemon — the same leak the trace ring was fixed for.
 func TestTheResolveTickForgetsARemovedSession(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-shadow-gone"
@@ -431,10 +369,6 @@ func TestTheResolveTickForgetsARemovedSession(t *testing.T) {
 	}
 }
 
-// LastBusyAt is what the resolver measures staleness from, so it must advance
-// only on busy frames. Advancing it on any heartbeat would make a mid-turn idle
-// blip look like fresh proof of work; not advancing it at all would settle every
-// turn after one window.
 func TestOnlyABusyHeartbeatAdvancesLastBusy(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-lastbusy"
@@ -451,16 +385,11 @@ func TestOnlyABusyHeartbeatAdvancesLastBusy(t *testing.T) {
 	if !got.LastBusyAt.Equal(busy) {
 		t.Fatalf("a not-busy frame moved LastBusyAt to %s", got.LastBusyAt)
 	}
-	// The latest frame is still recorded — it is the detail and freshness the
-	// heartbeat-fresh clause reads.
 	if got.Heartbeat.Claim != sessionstate.ClaimSettled {
 		t.Fatalf("latest heartbeat %+v, want the settled frame", got.Heartbeat)
 	}
 }
 
-// An id with no store row can never be read back — the tick resolves against a
-// store row — and can never be cleaned up, because cleanup hangs off session
-// removal. Ringing one would leak an entry per stale id for the daemon's life.
 func TestEvidenceIsNotRecordedForAnUnknownSession(t *testing.T) {
 	d := newTraceDaemon(t)
 
@@ -475,16 +404,7 @@ func TestEvidenceIsNotRecordedForAnUnknownSession(t *testing.T) {
 	}
 }
 
-// The stale-worker race: a session is removed while one of its observations is
-// still in flight. The write's liveness check and its append have to be one
-// atomic step, or the late writer recreates an entry for an id that will never
-// be removed again.
-//
-// The hook parks the writer *after* it has read the store row and *before* it
-// appends — the exact window that leaks when the check sits outside the lock.
-// Boundary-bound: the removal is supposed to park on the evidence table's lock
-// while the writer holds it, and a mutex wait is invisible to a bubble — there
-// is no settled instant that means "the removal got as far as it can".
+// Not a synctest bubble: the removal parks on a mutex, and a mutex wait is invisible to one.
 func TestEvidenceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-evidence-race"
@@ -511,19 +431,13 @@ func TestEvidenceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	}()
 
 	<-paused
-	// Removal runs entirely while the writer is parked mid-write. With admission
-	// inside the lock it cannot interleave here at all — it blocks until the
-	// writer finishes and then forgets whatever the writer left.
 	go func() {
 		d.dropSessionRecord(id)
 	}()
-	// Give the removal a chance to reach the table before the writer resumes, so
-	// the ordering under test is the hostile one rather than a lucky one.
 	time.Sleep(20 * time.Millisecond)
 	close(release)
 	<-wrote
 
-	// Whichever order won, no entry may survive the session.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		got, ok := d.evidenceTable().snapshot(id)
@@ -537,9 +451,6 @@ func TestEvidenceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	}
 }
 
-// The two Notification types are different signals and must not land in the same
-// slot. permission_prompt is a leading edge the resolver acts on; idle_prompt is
-// a late confirmation that only says the agent stopped.
 func TestNotificationEvidenceSplitsByType(t *testing.T) {
 	t.Run("a permission prompt becomes an open approval", func(t *testing.T) {
 		d := newTraceDaemon(t)
@@ -569,9 +480,6 @@ func TestNotificationEvidenceSplitsByType(t *testing.T) {
 		if got.PromptIdleAt.IsZero() {
 			t.Fatal("idle_prompt did not confirm the prompt")
 		}
-		// The message says "waiting for your input", but the signal fires for a
-		// finished task too. Turning it into a claim would invent a distinction
-		// it does not carry, and would outrank the classifier that can tell.
 		if got.LastHarnessEvent != nil {
 			t.Fatalf("idle_prompt became a %q claim; it is a confirmation, not a verdict",
 				got.LastHarnessEvent.Claim)
@@ -590,9 +498,6 @@ func TestNotificationEvidenceSplitsByType(t *testing.T) {
 	})
 }
 
-// The socket handler has to reach the evidence table, not only the trace ring.
-// Recording to the trace alone leaves the resolver blind to the strongest
-// approval signal either agent emits.
 func TestTheNotificationHandlerReachesTheEvidenceTable(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-notify-wire"
@@ -615,10 +520,6 @@ func TestTheNotificationHandlerReachesTheEvidenceTable(t *testing.T) {
 	}
 }
 
-// A codex approval arrives on the heartbeat channel, because codex announces it
-// in its title. It has to become an approval claim and simultaneously stop
-// looking busy: leaving the heartbeat busy would let the fresh-busy clause,
-// which outranks the approval clause, hide the approval entirely.
 func TestACodexApprovalTitleBecomesAnApproval(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-codex-approval"
@@ -636,9 +537,6 @@ func TestACodexApprovalTitleBecomesAnApproval(t *testing.T) {
 		t.Fatal("the codex approval title recorded no approval")
 	}
 	if got.Heartbeat == nil || got.Heartbeat.Claim != sessionstate.ClaimBusy {
-		// Guard the exact hazard: an approval title that still reads busy is
-		// invisible, because ReasonHeartbeatBusy returns before the approval
-		// clause is reached.
 	} else {
 		t.Fatal("the approval title left the heartbeat busy, which hides the approval")
 	}
@@ -646,15 +544,12 @@ func TestACodexApprovalTitleBecomesAnApproval(t *testing.T) {
 		t.Fatal("an approval title advanced LastBusyAt; it is not a running turn")
 	}
 
-	// End to end through the resolver, which is the claim that matters.
 	res := sessionstate.Resolve(got, sessionstate.PolicyFor(string(protocol.SessionAgentCodex)), at)
 	if res.State != protocol.SessionStatePendingApproval {
 		t.Fatalf("resolved %q (%s), want pending_approval", res.State, res.Reason)
 	}
 }
 
-// stateChangesSince counts the session.state.changed facts the bus logged past
-// cursor, and returns the new cursor.
 func stateChangesSince(t *testing.T, d *Daemon, cursor int64) (int, int64) {
 	t.Helper()
 	events, err := d.store.BusEventsSince(cursor, 1000)
@@ -671,19 +566,7 @@ func stateChangesSince(t *testing.T, d *Daemon, cursor int64) (int, int64) {
 	return count, cursor
 }
 
-// The evidence tick is the daemon's loudest publisher: it re-resolves every live
-// session once a second and broadcasts whenever the answer is news. A busy claude
-// session repaints its title about once a second too, so the tick samples the
-// newest frame at every age between two of them, walking across the 1.5s
-// precedence TTL and back all turn long.
-//
-// While the reason named the window that age happened to land in, every one of
-// those crossings was news: a durable bus row and a decorated snapshot pushed to
-// every connected client, once a second, for a session that never moved.
-// Measured over 8.4 production days, session.state.changed was 73.7% of the whole
-// bus log (233,497 of 316,721 facts), and 81.6% of consecutive facts for one
-// session landed within a second of the previous one — the tick period, not
-// anything a session did.
+// Measured over 8.4 production days before the gate: session.state.changed was 73.7% of the whole bus log (233,497 of 316,721 facts), and 81.6% of consecutive facts for one session landed within a second of the previous one.
 func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 	d := newTraceDaemon(t)
 	t.Cleanup(d.stopEventBus)
@@ -692,14 +575,10 @@ func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 	d.recordBracketEvidence(id, protocol.StateWorking)
 
 	base := time.Now()
-	// The first tick is where the reason becomes known, so it is legitimately
-	// news. The sweep is counted from after it.
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", Detail: "⠐ working", At: base})
 	d.resolveAllSessions(base)
 	_, cursor := stateChangesSince(t, d, 0)
 
-	// Ten ticks of a turn that never stops, sampled alternately inside and
-	// outside the TTL — the drift between a 1s tick and a ~1s repaint.
 	for tick := 1; tick <= 10; tick++ {
 		now := base.Add(time.Duration(tick) * time.Second)
 		age := 1200 * time.Millisecond
@@ -720,10 +599,6 @@ func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 	}
 }
 
-// The other half of the same gate: quiet is only correct while nothing changes.
-// A reason that moves without the state — the session is now compacting, which
-// is still `working` but a different account of it — is what the tooltip is for,
-// and it has to reach the client.
 func TestTheEvidenceTickPublishesAReasonThatMovesOnItsOwn(t *testing.T) {
 	d := newTraceDaemon(t)
 	t.Cleanup(d.stopEventBus)
@@ -736,8 +611,6 @@ func TestTheEvidenceTickPublishesAReasonThatMovesOnItsOwn(t *testing.T) {
 	d.resolveAllSessions(base)
 	_, cursor := stateChangesSince(t, d, 0)
 
-	// Compaction outranks the bracket, and paints no frames of its own, so the
-	// heartbeat has to be past the TTL for it to be reached.
 	d.recordCompactionEvidence(id, true)
 	now := base.Add(2 * time.Second)
 	d.resolveAllSessions(now)
@@ -753,8 +626,6 @@ func TestTheEvidenceTickPublishesAReasonThatMovesOnItsOwn(t *testing.T) {
 		t.Fatalf("state %q, want working: compaction is work", state)
 	}
 
-	// And a state that moves publishes too, which is the case the gate exists to
-	// let through.
 	d.recordProcessEvidence(id, true)
 	d.resolveAllSessions(now.Add(time.Second))
 

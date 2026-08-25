@@ -5,15 +5,9 @@ import (
 	"strings"
 )
 
-// The two narration prompts are the load-bearing intelligence of the pipeline.
-// This file is the source of truth for their exact wording — do NOT paraphrase
-// the briefs. Each brief ends by referring to inputs/outputs "given to you below
-// this brief"; the builder funcs append the concrete absolute INPUT/OUTPUT path
-// block at run time.
+// This file is the source of truth for the two narration prompts' exact
+// wording — do NOT paraphrase the briefs.
 
-// summarizeSessionPromptBrief is prompt 8A (summarize_session, cheap tier),
-// verbatim. The absolute TRANSCRIPT_PATH / SESSION_ID / RAW_DIGEST_PATH block is
-// appended by buildSummarizeSessionPrompt.
 const summarizeSessionPromptBrief = `You are the attn keeper, performing your session-summary duty. Your job is to read
 ONE agent session's transcript and write a faithful, compact digest of it to attn's
 raw tier. This digest is your own machine input — later, in your stronger narrate
@@ -147,12 +141,6 @@ with your fresh, faithful version), and write again. Do not append duplicate
 digests; this file holds exactly one digest for this session. The written file is
 the only evidence that you succeeded — make sure the write lands.`
 
-// narrateWorkspacePromptBrief is prompt 8B (narrate_workspace, strong tier). This
-// const is the source of truth for its exact wording, including the removal-pass
-// knowledge-base archive step. The absolute INPUT/OUTPUT path block (WORKSPACE_TITLE, WORKSPACE_ID,
-// CONTEXT_SNAPSHOT_PATH, RAW_SESSIONS_DIR, TRANSCRIPT_PATHS,
-// JOURNAL_PATH, JOURNAL_DIR, KNOWLEDGE_DIR, IS_REMOVAL_PASS) is appended by
-// buildNarrateWorkspacePrompt.
 const narrateWorkspacePromptBrief = `You are the attn keeper, narrating this workspace's work into the journal. The
 Notebook is a durable HUMAN work-journal: the user's lasting record of what they
 decided, built, fought, shipped, and learned while driving agents — read back later
@@ -354,9 +342,6 @@ match is ambiguous (more than one candidate folder, or you are unsure of the
 WORKSPACE_ID), do nothing and leave the knowledge base untouched rather than risk a
 wrong move.`
 
-// buildSummarizeSessionPrompt assembles the full positional prompt for the
-// summarize_session agent: the verbatim brief followed by the concrete absolute
-// INPUT/OUTPUT path block the brief promises is "given to you below this brief".
 func buildSummarizeSessionPrompt(transcriptPath, sessionID, rawDigestPath string) string {
 	var b strings.Builder
 	b.WriteString(summarizeSessionPromptBrief)
@@ -367,8 +352,6 @@ func buildSummarizeSessionPrompt(transcriptPath, sessionID, rawDigestPath string
 	return b.String()
 }
 
-// narrateWorkspacePromptInputs carries the concrete run-time values appended below
-// the narrate brief.
 type narrateWorkspacePromptInputs struct {
 	WorkspaceTitle      string
 	WorkspaceID         string
@@ -381,9 +364,6 @@ type narrateWorkspacePromptInputs struct {
 	IsRemovalPass       bool
 }
 
-// buildNarrateWorkspacePrompt assembles the full positional prompt for the
-// narrate_workspace agent: the verbatim brief followed by the concrete absolute
-// INPUT/OUTPUT path block and the run-time IS_REMOVAL_PASS flag.
 func buildNarrateWorkspacePrompt(in narrateWorkspacePromptInputs) string {
 	var b strings.Builder
 	b.WriteString(narrateWorkspacePromptBrief)

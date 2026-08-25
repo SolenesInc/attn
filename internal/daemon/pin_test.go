@@ -15,9 +15,6 @@ func pinnedAt(t *testing.T, d *Daemon, id string) string {
 	return protocol.Deref(session.PinnedAt)
 }
 
-// The point of the individual pin: one agent leaves the queue and its siblings
-// stay in it. Pinning the workspace was the only way to do this before, and it
-// took everything with it.
 func TestPinningOneSessionLeavesItsSiblingsInTheQueue(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "pinned", protocol.SessionAgentCodex, "ws1")
@@ -43,9 +40,6 @@ func TestPinningOneSessionLeavesItsSiblingsInTheQueue(t *testing.T) {
 	}
 }
 
-// Pinning filters at read, so the turn goes on accruing underneath. Releasing
-// the pin has to surface it at the age it has really been owed — not restart the
-// clock, which would tell the user a two-hour-old turn is new.
 func TestUnpinningSurfacesTheOutstandingTurnAtItsTrueAge(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -74,8 +68,6 @@ func TestUnpinningSurfacesTheOutstandingTurnAtItsTrueAge(t *testing.T) {
 	}
 }
 
-// A state that would open a turn still opens it while pinned; the pin only
-// hides it. That is what makes the age above real rather than reconstructed.
 func TestAPinnedSessionStillAccumulatesTurns(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
@@ -95,8 +87,6 @@ func TestAPinnedSessionStillAccumulatesTurns(t *testing.T) {
 func TestPinningTheChiefIsRefused(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "chief", protocol.SessionAgentCodex, "ws1")
-	// The role registry is the authority; chief_of_staff on a session is a
-	// broadcast-time decoration and setting it on a stored record proves nothing.
 	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatalf("assign the chief role: %v", err)
 	}
@@ -116,8 +106,6 @@ func TestPinningReportsAMissingSession(t *testing.T) {
 	}
 }
 
-// Resolution is spawn-time and always lands on an agent, never on another
-// shell, so nothing downstream has a chain to walk.
 func TestResolveSpawnParent(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "agent", protocol.SessionAgentCodex, "ws1")
@@ -154,8 +142,6 @@ func TestResolveSpawnParent(t *testing.T) {
 	}
 }
 
-// A shell is excluded from the queue by its agent whether or not it has a
-// parent, so the satellite link never has to carry that weight as well.
 func TestASatelliteNeverOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "agent", protocol.SessionAgentCodex, "ws1")

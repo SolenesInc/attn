@@ -7,21 +7,16 @@ import (
 	"time"
 )
 
-// Annotation drafts (markdown and terminal) share one ordering rule: a save is
-// accepted only if its generation is strictly greater than both the stored
-// generation and the tombstone, so no out-of-order or in-flight save resurrects
-// cleared marks. Clearing is a tombstone, not a delete, for that reason.
+// A save is accepted only above both the stored generation and the tombstone, so no
+// in-flight save resurrects cleared marks. Clearing is a tombstone, not a delete.
 
-// ErrStaleAnnotationSave marks a save below the generation floor; the client
-// drops its pending list and re-hydrates.
 var ErrStaleAnnotationSave = errors.New("stale annotation save")
 
-// annotationDraftTable names one draft table and its key column.
 type annotationDraftTable struct {
 	table string
 	key   string
-	// Markdown drafts have no note column (a "global" annotation covers it) and
-	// read/write the empty string, keeping one query shape for both.
+	// Markdown drafts have no note column: they read/write the empty string so both
+	// tables keep one query shape.
 	note bool
 }
 
@@ -30,15 +25,13 @@ var (
 	sessionDraftTable  = annotationDraftTable{table: "session_annotation_drafts", key: "session_id", note: true}
 )
 
-// annotationDraft is one stored draft plus the floor a client must exceed.
 type annotationDraft struct {
-	Annotations string // raw JSON array
-	Note        string // always empty for a table without the column
-	Generation  int    // max(generation, tombstone_generation)
+	Annotations string
+	Note        string
+	Generation  int // max(generation, tombstone_generation)
 	UpdatedAt   string
 }
 
-// noteColumn is the note column, or a literal empty string on a table without one.
 func (t annotationDraftTable) noteColumn() string {
 	if t.note {
 		return "note"
@@ -46,8 +39,7 @@ func (t annotationDraftTable) noteColumn() string {
 	return "''"
 }
 
-// get returns the draft for key, missing rows included. The generation includes
-// any tombstone, so a re-mounting client seeds past a clear.
+// The generation includes any tombstone, so a re-mounting client seeds past a clear.
 func (t annotationDraftTable) get(s *Store, key string) (annotationDraft, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,7 +65,6 @@ func (t annotationDraftTable) get(s *Store, key string) (annotationDraft, error)
 	}, nil
 }
 
-// save upserts the full list, rejecting below the floor with ErrStaleAnnotationSave.
 func (t annotationDraftTable) save(s *Store, key, annotationsJSON, note string, generation int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -119,8 +110,7 @@ func (t annotationDraftTable) save(s *Store, key, annotationsJSON, note string, 
 	return nil
 }
 
-// clear empties the list and raises the tombstone past every save in flight.
-// Idempotent, and works on a missing row — the tombstone IS the row.
+// Works on a missing row — the tombstone IS the row.
 func (t annotationDraftTable) clear(s *Store, key string, generation int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -159,7 +149,6 @@ func (t annotationDraftTable) clear(s *Store, key string, generation int, now ti
 	return nil
 }
 
-// delete removes the row outright, for an owner that is gone for good.
 func (t annotationDraftTable) delete(s *Store, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

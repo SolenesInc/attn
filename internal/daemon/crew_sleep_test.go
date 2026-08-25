@@ -17,9 +17,6 @@ func crewSleepCall(t *testing.T, d *Daemon, member string) protocol.Response {
 	})
 }
 
-// The user-side verb asks rather than kills: the request reaches the member's
-// composer through the durable doorbell and names the only closure that keeps
-// the promise that nobody wakes behind it.
 func TestCrewSleep_DeliversAUserRequestForSleep(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")
@@ -81,10 +78,6 @@ func TestCrewSleep_AlreadyAsleepIsANamedNoOp(t *testing.T) {
 	}
 }
 
-// The roster shows a member as awake as soon as wake claims its binding, before
-// the agent has crossed priming and its trust dialog. A sleep click in that
-// window must wait behind the greeting instead of pasting into startup and
-// claiming delivery for words the member never read.
 func TestCrewSleep_QueuesUntilAWakingMemberTakesItsFirstPrompt(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	woken, err := d.crewWake("trellis", "")

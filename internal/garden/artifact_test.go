@@ -9,8 +9,6 @@ func TestValidateArtifactAcceptsEachKindAndRefusesTheRest(t *testing.T) {
 	cases := []struct {
 		name string
 		in   ArtifactReference
-		// want is empty when the reference should be accepted; otherwise the
-		// substring the refusal must carry, so the caller can fix the call.
 		want string
 	}{
 		{name: "notebook", in: ArtifactReference{Kind: ArtifactNotebook, NotebookDocumentID: "nb-7"}},
@@ -67,9 +65,6 @@ func TestValidateArtifactAcceptsEachKindAndRefusesTheRest(t *testing.T) {
 	}
 }
 
-// The projection is the only definition of "current artifacts", so it is
-// exercised over the shapes a real log produces — including the two that a
-// naive replay gets wrong.
 func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 	plan := ArtifactReference{Kind: ArtifactMarkdownFile, Path: "docs/plans/plan.md"}
 	notes := ArtifactReference{Kind: ArtifactNotebook, NotebookDocumentID: "nb-7"}
@@ -108,9 +103,6 @@ func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 			want: []ArtifactReference{notes},
 		},
 		{
-			// The newest verb decides. Replaying newest-first without reversing
-			// would let the older detach win and lose the re-attach; keeping the
-			// detached key in the order would list it twice.
 			name: "re-attaching after a detach brings it back once",
 			log: []Note{
 				{Kind: NoteKindAttach, Artifact: &plan},
@@ -124,8 +116,6 @@ func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 			log:  []Note{{Kind: NoteKindDetach, Artifact: &pr}},
 		},
 		{
-			// Oldest first, so the set reads in the order the work produced it
-			// rather than in the reverse order the log is read in.
 			name: "the set keeps the order things were attached in",
 			log: []Note{
 				{Kind: NoteKindAttach, Artifact: &pr},
@@ -136,8 +126,6 @@ func TestCurrentArtifactsProjectsAttachMinusDetach(t *testing.T) {
 			want: []ArtifactReference{plan, notes, pr},
 		},
 		{
-			// Same path, different repository: two documents, so a detach of one
-			// must not take the other.
 			name: "a repository tells two identical paths apart",
 			log: []Note{
 				{Kind: NoteKindDetach, Artifact: &ArtifactReference{Kind: ArtifactMarkdownFile, Path: "plan.md", Repository: "other"}},

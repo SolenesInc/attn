@@ -2,42 +2,6 @@
 
 package pty
 
-// Randomized search for a stream the feeder rewrites into something the client
-// reads differently. The corpus next door pins the cases we thought of; this
-// looks for the ones we did not.
-//
-// The property is the same one the mirror gate asserts, weakened only by the
-// escape hatch: after an arbitrary stream split into arbitrary chunks, either
-// some chunk reported a resync — the wire carried nothing for it and the
-// snapshot re-push makes the client whole — or the two terminals agree on their
-// whole text, their viewport, and the cursor. Anything else is a silent
-// divergence between the worker grid and the client's, which is the bug class
-// the phase exists to remove.
-//
-// Seeds carry real kitty escapes so mutation lands inside a protocol the
-// terminal still parses; random bytes alone would spend the whole budget on
-// streams with no APC in them at all.
-//
-// This is the search that drove kittyseg.go's framing rules. It used to reach,
-// in about a second, a class of malformed stream where a byte-pattern search
-// for the introducer disagreed with ghostty's parser about which bytes belong
-// to a kitty APC — an APC pattern inside a string ghostty was consuming
-// opaquely, or a C1 control that ended the APC early. The segmenter now tracks
-// where ghostty's parser stands and extracts only from ground, with every
-// transition measured against the terminal rather than read off the spec, and
-// the two smallest streams it found are corpus entries next door.
-//
-// What it reaches now is a different kind of defect: divergences in what the
-// feed path DOES with a correctly framed sequence, not in where it cuts one.
-// Those belong to the configuration that has kitty live, which is why the
-// property runs as two targets — FuzzKittyWireMirror, which since the A4 flip is
-// the shipping configuration, and FuzzKittyWireMirrorShipping, whose name
-// predates that flip and which now guards the storage-off escape hatch.
-//
-// The client in both is a native terminal standing in for the frontend's wasm
-// model, fed through writeAsClient. Both runtimes use ghostty-vt.pin; the real
-// WASM corpus test remains the authority on cross-target agreement.
-
 import (
 	"strings"
 	"testing"
@@ -45,10 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// fuzzKittyMaxInput bounds one input so a mutation that grows the payload
-// cannot walk the segmenter to its 72 MiB tripwire inside the fuzzing loop.
-// Real transmissions chunk at 4 KiB; 64 KiB clears any single escape a seed can
-// grow into while keeping an iteration cheap enough to run millions of times.
+// fuzzKittyMaxInput: real transmissions chunk at 4 KiB; 64 KiB clears any single
+// escape a seed can grow into, without walking the segmenter to its 72 MiB tripwire.
 const fuzzKittyMaxInput = 64 << 10
 
 const (
@@ -56,57 +18,14 @@ const (
 	fuzzKittyRows = 8
 )
 
-// fuzzKittyFlush is fed as a final chunk so the comparison happens on a
-// quiesced stream. Both scanners in the feed path hold a trailing partial
-// escape back from the TERMINAL while the wire already carries it, so a stream
-// that stops mid-escape leaves the worker a few bytes behind the client by
-// design — a state no attach can observe, since the next chunk resolves it. ST
-// resolves every hold: it terminates an open APC or OSC, and its bytes are
-// neither an introducer prefix nor a possible continuation, so nothing is held
-// after it on either side.
 var fuzzKittyFlush = []byte("\x1b\\")
 
-// FuzzKittyWireMirrorShipping runs the mirror property with the worker's kitty
-// storage limit at zero — no longer production, but the escape hatch production
-// can be put back into with ATTN_KITTY_STORAGE_LIMIT=0. Ghostty refuses every
-// transmission there, so nothing is stamped and writeAPC returns early: the
-// property under test is the DISPOSAL alone — which bytes reach the terminal,
-// which reach the wire, and whether the two grids still agree afterwards.
-//
-// It stays because the hatch has to keep working. A counterexample here is a
-// live defect for anyone who turned images off.
 func FuzzKittyWireMirrorShipping(f *testing.F) {
 	fuzzKittyWireMirror(f, 0)
 }
 
-// FuzzKittyWireMirror runs the same property with kitty LIVE, which since the
-// A4 flip is the SHIPPING configuration: a session's terminal is built with
-// kittyStorageLimitDefault unless the environment says otherwise. It exercises
-// synthesis — the observed scroll and cursor written in an APC's place — and it
-// has no knowingly-red class left. All seven recorded under A4 in
-// docs/plans/2026-08-02-terminal-kitty-images.md are closed:
-//
-//   - an image that appeared and died inside one chunk, and the `Updated`-blind
-//     end-of-feed check, both settled by unaccountedResync;
-//   - a described APC absorbing an undescribed one's stamp move, settled by
-//     settleUnaccounted running before every described dispatch;
-//   - the absolute column move a client with left/right margins measured from
-//     the MARGIN, now relative like the row;
-//   - a scroll one `SU` cannot carry, a scroll confined to the margin box, and a
-//     dispatch on a cursor carrying a deferred wrap — all three limits of what
-//     writeAPC can MEASURE rather than describe, so all three answered with a
-//     tripwire resync (kittyResyncScrollClamped, kittyResyncMarginMode,
-//     kittyResyncPendingWrap) instead of cleverer synthesis.
-//
-// Measured on the pin in ghostty-vt.pin: 15m / 38.1M execs green, then
-// the deferred-wrap class 97s into the next soak, then 15m / 42.5M execs green
-// again with its tripwire in.
-//
-// Both targets are gated the same way, which is the way every fuzz target in
-// this repo is gated: their seeds run on every `go test ./internal/pty`, in CI
-// through scripts/test-go.sh. Nothing in .github/workflows spends `-fuzz` time
-// on any target, so there is no separate budget for the live one to join —
-// soaking stays a deliberate act, and the recorded corpus is what CI enforces.
+// Measured on the pin in ghostty-vt.pin: 15m / 38.1M execs green, then the deferred-wrap
+// class 97s into the next soak, then 15m / 42.5M execs green again with its tripwire in.
 func FuzzKittyWireMirror(f *testing.F) {
 	fuzzKittyWireMirror(f, mirrorStorageLimit)
 }
@@ -159,9 +78,6 @@ func fuzzKittyWireMirror(f *testing.F, storageLimit uint64) {
 			}
 		}
 
-		// The feeder pins a tracked ref around every APC and the block table
-		// holds more; all of them are the terminal's native memory, which the
-		// process never gets back if a path forgets to free one.
 		feeder.close()
 		if got := ghosttyvt.LiveTrackedRefs(); got != baseline {
 			t.Errorf("LiveTrackedRefs() = %d after the run, want the %d it started at", got, baseline)
@@ -169,20 +85,6 @@ func fuzzKittyWireMirror(f *testing.F, storageLimit uint64) {
 	})
 }
 
-// FuzzKittySegmenterFraming soaks the segmenter's framing rules on their own,
-// without the rest of the feed path in the loop.
-//
-// It exists because framing and disposal fail differently, and a whole-path
-// counterexample does not say which one broke. This target asks the one question
-// kittyseg.go answers — would ghostty's parser be in ground after these bytes? —
-// and asserts the segmenter agrees, under an arbitrary chunking, while
-// reconstructing every byte it was handed. A framing regression lands here as a
-// minimal input naming the exact transition, rather than as a grid diff two
-// layers away.
-//
-// Both halves matter. Agreement alone would pass for a segmenter that tracked
-// state perfectly and dropped a byte; reconstruction alone would pass for one
-// that never extracted anything.
 func FuzzKittySegmenterFraming(f *testing.F) {
 	for _, c := range kittySegBattery {
 		f.Add([]byte(c.input), uint16(3))
@@ -204,7 +106,7 @@ func FuzzKittySegmenterFraming(f *testing.F) {
 		rebuilt := make([]byte, 0, len(data))
 		for start := 0; start < len(data); start += size {
 			chunk := data[start:min(start+size, len(data))]
-			// A copy per chunk, because an emission may alias the chunk and the
+			// A copy per chunk: an emission may alias the chunk, and the
 			// segmenter is allowed to reuse its own buffer afterwards.
 			seg.Feed(append([]byte(nil), chunk...), func(e feedSegment) {
 				rebuilt = append(rebuilt, e.Bytes...)

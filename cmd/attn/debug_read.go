@@ -11,21 +11,14 @@ import (
 	"time"
 )
 
-// daemonLogTimestampPattern matches the leading "[2006-01-02 15:04:05]"
-// timestamp internal/logging writes at the start of every log line (see
-// internal/logging/logging.go's log() and truncationMarker()). Lines that
-// don't start with a bracketed timestamp (e.g. a multi-line value logged
-// mid-message) are treated as continuations of the most recent timestamped
-// line — see filterSinceLines.
+// Matches the leading "[2006-01-02 15:04:05]" internal/logging writes on every
+// line; a line without one is a continuation (see filterSinceLines).
 var daemonLogTimestampPattern = regexp.MustCompile(`^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]`)
 
 const daemonLogTimestampLayout = "2006-01-02 15:04:05"
 
-// readLinesFile reads every line of path without bufio.Scanner's default token
-// size limit, which is too small for some diagnostic lines (e.g. an incident
-// record's embedded ring-buffer context can exceed 64KiB). Modeled on
-// internal/transcript/parser.go's readJSONLLines, reimplemented locally here
-// since that helper is unexported.
+// readLinesFile reads every line without bufio.Scanner's default token size limit,
+// which some diagnostic lines (an incident record's ring buffer) exceed.
 func readLinesFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -57,8 +50,6 @@ func readLines(r io.Reader) ([]string, error) {
 	}
 }
 
-// tailLines returns at most the last n entries of lines, preserving order.
-// n <= 0 returns lines unchanged (no tail limit applied).
 func tailLines(lines []string, n int) []string {
 	if n <= 0 || len(lines) <= n {
 		return lines
@@ -66,8 +57,6 @@ func tailLines(lines []string, n int) []string {
 	return lines[len(lines)-n:]
 }
 
-// grepLines filters lines to those matching the Go regexp pattern. An empty
-// pattern is a no-op (returns lines unchanged).
 func grepLines(lines []string, pattern string) ([]string, error) {
 	if pattern == "" {
 		return lines, nil
@@ -85,11 +74,6 @@ func grepLines(lines []string, pattern string) ([]string, error) {
 	return out, nil
 }
 
-// filterSinceLines keeps lines whose leading daemon.log timestamp is at or
-// after cutoff. A line with no parseable leading timestamp is a continuation
-// of the most recently seen timestamped line (e.g. a wrapped/multi-line log
-// value), so it is included only when that most recent timestamped line
-// matched — never on its own.
 func filterSinceLines(lines []string, cutoff time.Time) []string {
 	var out []string
 	matching := false
@@ -97,9 +81,6 @@ func filterSinceLines(lines []string, cutoff time.Time) []string {
 		if m := daemonLogTimestampPattern.FindStringSubmatch(line); m != nil {
 			ts, err := time.ParseInLocation(daemonLogTimestampLayout, m[1], time.Local)
 			if err != nil {
-				// Looked timestamped but didn't parse; treat like an
-				// untimestamped continuation line rather than dropping it
-				// silently.
 				if matching {
 					out = append(out, line)
 				}

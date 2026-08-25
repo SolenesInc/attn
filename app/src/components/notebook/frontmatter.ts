@@ -1,30 +1,18 @@
-// Parse a note's leading YAML frontmatter block for the in-editor frontmatter card.
-// No DOM; only a type-only CodeMirror import for parseFrontmatterFromDoc's `Text`
-// parameter, so it still runs in headless unit tests. The card widget and its
-// cursor/focus-gated reveal are layered on top in frontmatterCard.ts.
-//
-// The notebook's frontmatter is keeper-written and structured, so we parse the small
-// YAML subset it actually uses — `key: value`, flow lists `[a, b]`, and block lists
-// (`key:` then indented `- item` lines) — rather than pulling in a full YAML parser.
-// Anything fancier (nested maps, block scalars) is out of scope; escalate to js-yaml
-// if notes ever need it.
+// Parses only the YAML subset notebook frontmatter uses: `key: value`, flow lists
+// `[a, b]`, block lists. Nested maps and block scalars are out of scope.
 
 import type { Text } from '@codemirror/state';
 
 export type FrontmatterValue = string | string[];
 
 export interface Frontmatter {
-  // The parsed top-level fields. Scalars are strings; list values are string[].
   fields: Record<string, FrontmatterValue>;
-  // Source range of the whole `---\n…\n---` block. `from` is always 0 (frontmatter is
-  // only frontmatter at the very top of the file); `to` is the start of the body (just
-  // past the closing fence's newline) — the exact whole-line boundary a CodeMirror
-  // block decoration needs.
+  // `from` is always 0; `to` is the start of the body, the whole-line boundary a
+  // CodeMirror block decoration needs.
   from: number;
   to: number;
 }
 
-// A frontmatter fence is a line that is exactly `---` (open) or `---`/`...` (close).
 function isFence(line: string): boolean {
   const t = line.trim();
   return t === '---' || t === '...';
@@ -42,15 +30,12 @@ function parseFields(lines: string[]): Record<string, FrontmatterValue> {
   const out: Record<string, FrontmatterValue> = {};
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    if (!line.trim() || line.trimStart().startsWith('#')) continue; // blank / comment
-    // A top-level `key:` starts at column 0; indented lines are list items consumed
-    // by the block-list look-ahead below.
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
     const m = /^([A-Za-z0-9_][\w-]*):[ \t]?(.*)$/.exec(line);
     if (!m) continue;
     const key = m[1];
     const rest = m[2].trim();
     if (rest === '') {
-      // Block list: consume the following indented `- item` lines.
       const items: string[] = [];
       while (i + 1 < lines.length && /^\s*-\s+/.test(lines[i + 1])) {
         items.push(stripQuotes(lines[i + 1].replace(/^\s*-\s+/, '').trim()));
@@ -58,7 +43,6 @@ function parseFields(lines: string[]): Record<string, FrontmatterValue> {
       }
       out[key] = items.length ? items : '';
     } else if (rest.startsWith('[') && rest.endsWith(']')) {
-      // Flow list: `[a, b, c]`.
       out[key] = rest
         .slice(1, -1)
         .split(',')
@@ -73,10 +57,8 @@ function parseFields(lines: string[]): Record<string, FrontmatterValue> {
 
 export function parseFrontmatter(doc: string): Frontmatter | null {
   const lines = doc.split('\n');
-  // Frontmatter must OPEN on the very first line with an exact `---` (otherwise a `---`
-  // mid-document is a horizontal rule, not frontmatter).
+  // Frontmatter must OPEN on the very first line; a `---` mid-document is a rule.
   if (lines.length === 0 || lines[0].trim() !== '---') return null;
-  // Find the closing fence on its own line.
   let close = -1;
   for (let i = 1; i < lines.length; i += 1) {
     if (isFence(lines[i])) {
@@ -85,17 +67,14 @@ export function parseFrontmatter(doc: string): Frontmatter | null {
     }
   }
   if (close === -1) return null; // unterminated → treat as ordinary content, not frontmatter
-  // Body starts just past the closing fence line (sum of each line + its '\n').
   let to = 0;
   for (let i = 0; i <= close; i += 1) to += lines[i].length + 1;
-  to = Math.min(to, doc.length); // no trailing newline after the close → clamp
+  to = Math.min(to, doc.length);
   return { fields: parseFields(lines.slice(1, close)), from: 0, to };
 }
 
-// Frontmatter always lives in a small leading prefix; materializing the whole
-// document to parse it is wasted work on a large note. The bound is shared by
-// every editor extension so they all agree on what counts as frontmatter — a
-// fence that closes beyond it is treated as not-frontmatter everywhere.
+// Shared by every editor extension, so a fence that closes beyond it is
+// not-frontmatter everywhere.
 export const FRONTMATTER_SCAN_LIMIT = 4096;
 
 export function parseFrontmatterFromDoc(doc: Text): Frontmatter | null {

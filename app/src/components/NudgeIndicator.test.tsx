@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { deriveNudgeMode, SidebarNudgeBar, HeaderNudgeIndicator } from './NudgeIndicator';
 
-const FIRES_AT = '2999-01-01T00:00:00.000Z'; // far future so the bar is mid-countdown
+const FIRES_AT = '2999-01-01T00:00:00.000Z';
 
 describe('deriveNudgeMode', () => {
   it('returns null when there is no unread activity and no countdown', () => {
@@ -17,8 +17,6 @@ describe('deriveNudgeMode', () => {
   });
 
   it('pauses the selected idle/waiting session even while a stale fires_at is in flight', () => {
-    // A just-selected session: the daemon will clear fires_at a beat later, but the
-    // UI must read it as paused immediately, never as a running countdown.
     expect(
       deriveNudgeMode({ ticketUnread: true, nudgeFiresAt: FIRES_AT, state: 'idle', isActive: true }),
     ).toBe('paused');
@@ -28,44 +26,32 @@ describe('deriveNudgeMode', () => {
   });
 
   it('lets the user deliver on demand even on a working session they are focused on', () => {
-    // "Always click on the nudge on demand": the focused session reads as the clickable
-    // paused chip in every deliverable state, including working — the click is explicit
-    // intent, not the idle-gated auto-countdown.
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'working', isActive: true }),
     ).toBe('paused');
-    // Off-screen it stays a static marker (no auto-countdown while working, nothing to
-    // click without selecting it first).
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'working', isActive: false }),
     ).toBe('marker');
   });
 
   it('keeps a pending_approval session as a non-clickable marker', () => {
-    // The one state a click must never reach: typing the doorbell's trailing Enter into
-    // a y/n approval prompt could answer it. So even the focused session stays a marker.
+    // The one state a click must never reach: the doorbell's trailing Enter could
+    // answer a y/n approval prompt, so even the focused session stays a marker.
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'pending_approval', isActive: true }),
     ).toBe('marker');
   });
 
   it('offers the clickable paused chip for an at-rest unknown session the user is on', () => {
-    // codex commonly rests in 'unknown' (its turn-end classifier can't find a
-    // transcript). An explicit click is unambiguous intent, so the selected session
-    // must read as paused (clickable) rather than a dead marker.
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'unknown', isActive: true }),
     ).toBe('paused');
-    // ...but only when it's the session you're looking at; otherwise it's a marker
-    // (there is no auto-countdown for unknown, so no clickable affordance off-screen).
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'unknown', isActive: false }),
     ).toBe('marker');
   });
 
   it('falls back to the marker for the post-fire transient (unread, idle, inactive, no fires_at)', () => {
-    // The timer entry is gone but the session has not flipped to working yet — the
-    // marker is the catch-all so the indicator never blinks out.
     expect(
       deriveNudgeMode({ ticketUnread: true, state: 'idle', isActive: false }),
     ).toBe('marker');
@@ -95,8 +81,6 @@ describe('SidebarNudgeBar', () => {
       </div>,
     );
     const button = screen.getByRole('button');
-    // The session row is a drag handle (handleSessionPointerDown); a press on the
-    // deliver-now button must not reach it or a sloppy click would start a drag.
     fireEvent.pointerDown(button);
     expect(onRowPointerDown).not.toHaveBeenCalled();
     fireEvent.click(button);
@@ -111,8 +95,6 @@ describe('HeaderNudgeIndicator', () => {
     expect(container.querySelector('.nudge-header--counting')).not.toBeNull();
     expect(container.querySelector('.nudge-header-track')).not.toBeNull();
     expect(screen.getByText('Incoming ticket nudge…')).toBeTruthy();
-    // A countdown announcing itself must also say how to call it off, on the chip
-    // rather than in a tooltip nobody hovers.
     expect(container.querySelector('.countdown-cancel-hint-key')?.textContent).toBe('⌘.');
     expect(screen.getByText('stop')).toBeTruthy();
   });
@@ -127,7 +109,6 @@ describe('HeaderNudgeIndicator', () => {
       </div>,
     );
     const button = screen.getByRole('button', { name: /incoming ticket nudge/i });
-    // Same drag guard as the deliver-now variant: the header is a leaf-drag handle.
     fireEvent.pointerDown(button);
     expect(onPanePointerDown).not.toHaveBeenCalled();
     fireEvent.click(button);
@@ -136,8 +117,6 @@ describe('HeaderNudgeIndicator', () => {
   });
 
   it('keeps counting and paused apart: a counting chip never delivers the nudge', () => {
-    // The two chips sit in the same slot and both are clickable, so the one that
-    // stops a doorbell must never be the one that rings it.
     const onTrigger = vi.fn();
     const onCancel = vi.fn();
     render(
@@ -169,8 +148,6 @@ describe('HeaderNudgeIndicator', () => {
       </div>,
     );
     const button = screen.getByRole('button', { name: /deliver/i });
-    // In a split the pane header is a leaf-drag handle (beginLeafDrag); a press on the
-    // deliver-now chip must not reach it or a sloppy click would relocate the pane.
     fireEvent.pointerDown(button);
     expect(onPanePointerDown).not.toHaveBeenCalled();
     fireEvent.click(button);

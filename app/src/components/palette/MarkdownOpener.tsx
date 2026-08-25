@@ -6,50 +6,25 @@ import { isPathQuery, toBrowseInput, descendQuery } from './pathMode';
 import { useFilesystemSuggestions } from '../../hooks/useFilesystemSuggestions';
 import type { BrowseDirectoryResult } from '../../hooks/useDaemonSocket';
 
-// Markdown only, for now: the pick opens a reader tile, and that tile renders
-// markdown. The caller passes this to fs_index and browse_directory so the
-// server-side entry cap and the directory listing both apply to markdown alone.
 export const OPENER_EXTENSIONS = ['md'];
 
 export interface MarkdownOpenerProps {
-  // The tree fuzzy mode searches: the selected session's working directory,
-  // falling back to the notebook root when no session is selected. null means
-  // neither is known, so only recents are available.
   root: string | null;
   loadRecents: () => Promise<{ path: string; lastAt: string }[]>;
   loadIndex: (root: string) => Promise<{ files: string[]; truncated: boolean }>;
-  // Lists one directory for path mode. Omitted, path mode is unavailable and a
-  // path query simply matches nothing.
   browseDirectory?: (inputPath: string, endpointId?: string, extensions?: string[]) => Promise<BrowseDirectoryResult>;
   onPick: (absPath: string) => void;
   onClose: () => void;
 }
 
-// A row is either a fuzzy/recents result or a path-mode entry. Directories are
-// the one thing that is picked without opening anything: picking one rewrites
-// the query to descend into it.
 interface OpenerRow {
   key: string;
   title: string;
   path: string;
   isDir: boolean;
-  /** Absolute for files; for directories, the query to descend with. */
   target: string;
 }
 
-// The global ⌘P file opener. Two modes behind one input:
-//
-//  - Fuzzy (default): recently opened markdown files on an empty query, a fuzzy
-//    filter over the workspace's markdown once you type, both in one ranked list.
-//  - Path: a query that starts with /, ~, ./ or ../ lists that directory one
-//    level at a time, so a file outside the workspace — or one .gitignore hides
-//    from the index — is still reachable. Picking a directory descends.
-//
-// The shared Palette owns the overlay, keyboard navigation, and selection; this
-// owns the data, the ranking, and the mode.
-//
-// Both fuzzy sources load asynchronously and independently: the palette opens on
-// whatever it has, so a cold index enumeration never delays ⌘P.
 export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, onPick, onClose }: MarkdownOpenerProps) {
   const [query, setQuery] = useState('');
   const [recents, setRecents] = useState<{ path: string; lastAt: string }[]>([]);
@@ -88,7 +63,6 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
 
   const browseInput = toBrowseInput(query, root);
   const pathMode = isPathQuery(query);
-  // Path mode is local-only, like the rest of the opener: no endpoint id.
   const { suggestions, loading: browseLoading, error: browseError } = useFilesystemSuggestions(
     browseInput || '',
     undefined,
@@ -124,8 +98,6 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
 
   const emptyLabel = pathMode
     ? pathModeEmptyLabel(browseInput, browseLoading, browseError, !!browseDirectory)
-    // The index is capped server-side; say so rather than implying the list is
-    // the whole tree.
     : indexLoading
       ? 'Loading files…'
       : query.trim() === ''
@@ -145,8 +117,6 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
       itemKey={(row) => row.key}
       emptyLabel={emptyLabel}
       onPick={(row) => {
-        // Descending is a query rewrite, not an open: the palette stays up and
-        // the next listing lands from the same input.
         if (row.isDir) setQuery(row.target);
         else onPick(row.target);
       }}
@@ -168,7 +138,6 @@ function pathModeEmptyLabel(
   hasBrowse: boolean,
 ): string {
   if (!hasBrowse) return 'Browsing paths is unavailable.';
-  // A relative query with no workspace root has nothing to resolve against.
   if (!browseInput) return 'No folder to resolve this path against.';
   if (loading) return 'Listing…';
   if (error) return 'That folder could not be listed.';

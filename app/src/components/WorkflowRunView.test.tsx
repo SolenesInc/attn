@@ -43,7 +43,6 @@ describe('WorkflowRunView', () => {
 
     expect(screen.getByText('Running')).toBeInTheDocument();
     expect(screen.getByText('phase: plan')).toBeInTheDocument();
-    // 1 of 2 calls terminal (ok) -> "1/2 calls"
     expect(screen.getByText('1/2 calls')).toBeInTheDocument();
 
     const callRow = screen.getByTestId('workflow-call-1');
@@ -73,12 +72,9 @@ describe('WorkflowRunView', () => {
     const callout = screen.getByTestId('workflow-current-step');
     expect(callout).toHaveTextContent('review changes');
     expect(callout).toHaveTextContent('gpt-5-codex');
-    // started ~65s ago -> elapsed renders as 1:0X (m:ss), proving the live clock.
     expect(callout.textContent).toMatch(/1:0\d/);
 
-    // The running row is emphasized for the eye.
     expect(screen.getByTestId('workflow-call-2')).toHaveAttribute('data-running', 'true');
-    // done still excludes the running call: 1 of 2 terminal.
     expect(screen.getByText('1/2 calls')).toBeInTheDocument();
   });
 

@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// segMarker mirrors one entry of the shared segmenter corpus's `markers`.
 type segMarker struct {
 	Kind     string  `json:"kind"`
 	Cmdline  *string `json:"cmdline,omitempty"`
@@ -58,9 +57,6 @@ func markerToSeg(m *osc133Marker) segMarker {
 	return sm
 }
 
-// collectMarkers feeds chunks to one segmenter and returns the markers it
-// extracted plus the bytes it would have written to the TERMINAL — plain runs
-// only, which is what makes the stripping assertion below meaningful.
 func collectMarkers(seg *feedSegmenter, chunks []string) (markers []segMarker, plain []byte) {
 	var buf bytes.Buffer
 	for _, chunk := range chunks {
@@ -109,10 +105,8 @@ func mustJSON(v any) string {
 	return string(b)
 }
 
-// TestOsc133SegmenterCorpus proves the Go segmenter extracts the same markers
-// as the shared corpus (which a frontend parity test proves against the client
-// parseOsc133). It also asserts the segmenter's extraction contract: no OSC 133
-// introducer remains in the plain segments beside the marker emissions.
+// The shared corpus is the only thing holding the client's parseOsc133 equal to
+// this one.
 func TestOsc133SegmenterCorpus(t *testing.T) {
 	for _, c := range loadSegCorpus(t) {
 		t.Run(c.Name, func(t *testing.T) {
@@ -128,10 +122,6 @@ func TestOsc133SegmenterCorpus(t *testing.T) {
 	}
 }
 
-// TestOsc133SegmenterByteSplitting feeds every corpus case one byte at a time.
-// The marker set must be identical to feeding whole chunks — the split-across-
-// chunk buffering is where a naive scanner breaks, and fish delivers markers in
-// arbitrarily small PTY reads.
 func TestOsc133SegmenterByteSplitting(t *testing.T) {
 	for _, c := range loadSegCorpus(t) {
 		t.Run(c.Name, func(t *testing.T) {
@@ -152,9 +142,6 @@ func TestOsc133SegmenterByteSplitting(t *testing.T) {
 	}
 }
 
-// TestOsc133SegmenterBrokenMarkerPassesThrough verifies the runaway-marker
-// guard: an introducer that never terminates within osc133MarkerMaxPendingBytes
-// is abandoned and its bytes flushed rather than buffered forever.
 func TestOsc133SegmenterBrokenMarkerPassesThrough(t *testing.T) {
 	seg := &feedSegmenter{}
 	broken := append([]byte{oscESC}, []byte("]133;C;cmdline_url=")...)

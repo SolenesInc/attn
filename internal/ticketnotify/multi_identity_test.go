@@ -7,17 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// ConsumeAll, UnreadAny, and NotifyAny exist for one reason: a session that
-// observes through more than one identity. Their example-based coverage used to
-// live three layers up in internal/daemon, which meant this package's own tests
-// only ever built single-identity observers. These pin the multi-identity contract
-// where the code lives.
-//
-// The concrete case is a chief of staff. It reads through its session identity AND
-// the durable role identity, whose per-ticket cursors survive the role moving to
-// another session. Since every delegation binds a ticket, a chief that delegates
-// holds both on the same ticket as a matter of course.
-
 const (
 	mixChiefSession = "chief-session-1"
 	mixWorker       = "worker-1"
@@ -25,8 +14,6 @@ const (
 
 var mixChiefRole = store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)
 
-// mixObservers is the two-identity view a chief session reads through: the role's
-// cursor, the session's authorship, the session as the nudge target.
 func mixObservers(sessionID string) []Observer {
 	return []Observer{
 		{ID: sessionID, AuthorID: sessionID, DeliveryID: sessionID},
@@ -34,10 +21,6 @@ func mixObservers(sessionID string) []Observer {
 	}
 }
 
-// mixWorld sets up a delegation that reaches the chief through BOTH identities at
-// once: the chief role durably owns the ticket, and the chief session is also
-// subscribed to it — the shape an ordinary session's delegation produces when the
-// delegator happens to be the chief.
 func mixWorld(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -63,13 +46,10 @@ func flatten(bundles []Bundle) []int64 {
 	return seqs
 }
 
-// TestConsumeAllDeliversOverlapOnce is the load-bearing property: an event visible
-// through two of a session's identities is delivered once, and both cursors move.
 func TestConsumeAllDeliversOverlapOnce(t *testing.T) {
 	h := mixWorld(t)
 	h.status("alpha", store.TicketStatusInReview, mixWorker, "ready for review")
 
-	// Both identities independently see the worker's report.
 	observers := mixObservers(mixChiefSession)
 	for _, obs := range observers {
 		n, err := Unread(h.s, obs)
@@ -97,7 +77,6 @@ func TestConsumeAllDeliversOverlapOnce(t *testing.T) {
 		t.Fatalf("bundles = %+v, want one for alpha", bundles)
 	}
 
-	// BOTH cursors advanced — not just the one that happened to be drained first.
 	for _, obs := range observers {
 		if n, err := Unread(h.s, obs); err != nil || n != 0 {
 			t.Fatalf("%s has %d unread after ConsumeAll (err %v), want 0", obs.ID, n, err)
@@ -108,9 +87,6 @@ func TestConsumeAllDeliversOverlapOnce(t *testing.T) {
 	}
 }
 
-// TestConsumeAllExcludesSelfAuthoredAcrossIdentities pins the AuthorID split: the
-// role's cursor is read, but the SESSION's authorship is what gets excluded, so a
-// chief is never delivered its own activity through the role identity.
 func TestConsumeAllExcludesSelfAuthoredAcrossIdentities(t *testing.T) {
 	h := mixWorld(t)
 	h.comment("alpha", mixChiefSession, "steering the worker")
@@ -128,9 +104,6 @@ func TestConsumeAllExcludesSelfAuthoredAcrossIdentities(t *testing.T) {
 	}
 }
 
-// TestRoleIdentitySurvivesSessionChange is why the role identity exists: its cursor
-// belongs to the role, so a new session filling it is neither replayed the history
-// the previous session already consumed nor cut off from new activity.
 func TestRoleIdentitySurvivesSessionChange(t *testing.T) {
 	h := mixWorld(t)
 	h.status("alpha", store.TicketStatusWorking, mixWorker, "starting")
@@ -139,7 +112,6 @@ func TestRoleIdentitySurvivesSessionChange(t *testing.T) {
 		t.Fatalf("first ConsumeAll: %v", err)
 	}
 
-	// The role moves. The role identity is unchanged; only the session differs.
 	const successor = "chief-session-2"
 	if n, err := UnreadAny(h.s, mixObservers(successor)); err != nil || n != 0 {
 		t.Fatalf("successor unread = %d (err %v), want 0 — history was replayed", n, err)
@@ -155,8 +127,6 @@ func TestRoleIdentitySurvivesSessionChange(t *testing.T) {
 	}
 }
 
-// TestNotifyAnyNudgesTheSessionNotTheRole pins the delivery target: a role identity
-// has no PTY, so the doorbell must land on the session currently filling it.
 func TestNotifyAnyNudgesTheSessionNotTheRole(t *testing.T) {
 	h := mixWorld(t)
 	h.status("alpha", store.TicketStatusInReview, mixWorker, "ready")
@@ -171,20 +141,13 @@ func TestNotifyAnyNudgesTheSessionNotTheRole(t *testing.T) {
 		t.Fatalf("nudges = %v, want [%s]", h.nudges, mixChiefSession)
 	}
 
-	// Notify does not consume, so the queue is still there for ConsumeAll — and one
-	// nudge per session, not one per identity.
 	if n, err := UnreadAny(h.s, observers); err != nil || n == 0 {
 		t.Fatalf("UnreadAny after a nudge = %d (err %v), want non-zero", n, err)
 	}
 }
 
-// TestUnreadAnyIsUnreadAcrossIdentities pins UnreadAny as a delivery PREDICATE:
-// unread on any one identity is enough to reach the session, and it stops
-// reporting only once every identity is drained.
 func TestUnreadAnyIsUnreadAcrossIdentities(t *testing.T) {
 	h := newHarness(t)
-	// Role-owned, and NOT subscribed by the session: only the role identity is a
-	// participant, so the session identity alone would report nothing.
 	if _, err := h.s.CreateRoleOwnedTicket(
 		store.Ticket{ID: "beta", Title: "beta", Assignee: mixWorker},
 		mixChiefSession, store.TicketRoleChiefOfStaff, h.tick(),

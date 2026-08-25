@@ -13,10 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Auto mode reaches a session through the launch, not through a live refresh: a
-// spawn carries the config that is promoted at that moment, and a change after
-// it applies to the next session.
-
 func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
@@ -64,8 +60,6 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			params.AutoMode.ClassifierModels[0] != automode.DefaultClassifierModel {
 			t.Errorf("classifier models = %v", params.AutoMode.ClassifierModels)
 		}
-		// The payload IS plugins/attn-pi/automode/config.ts's raw shape, so the
-		// wire keys are checked rather than only the decoded struct.
 		var raw struct {
 			AutoMode map[string]json.RawMessage `json:"auto_mode"`
 		}
@@ -94,9 +88,6 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	<-requestDone
 }
 
-// A reload replaces the runtime in place, so it resolves the config the same
-// way a spawn does — and that is where a session picks up a promotion made
-// while it was running.
 func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"snipe-session"},
@@ -195,9 +186,6 @@ func TestSpawnOmitsAutoModeForADriverThatDoesNotAskForIt(t *testing.T) {
 	<-requestDone
 }
 
-// The per-session override is the launcher's answer, not a default: it beats
-// enabled_default in the payload and it survives into the launch intent, which
-// is what a revive relaunches from.
 func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
@@ -268,8 +256,6 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 			if intent.AutoMode == nil || *intent.AutoMode != *tc.override {
 				t.Errorf("intent auto mode = %v, want %t", intent.AutoMode, *tc.override)
 			}
-			// A revive relaunches from the intent alone, so the override has to
-			// come back out of it.
 			session := &protocol.Session{ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe"}
 			revived, _ := buildStoredIntentSpawn(session, intent, 80, 24)
 			if revived.AutoMode == nil || *revived.AutoMode != *tc.override {
@@ -279,9 +265,6 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 	}
 }
 
-// A reload is the same session continuing. It must relaunch on the choice the
-// session was launched with, not on whatever enabled_default says today — and
-// it must not lose that choice when it rewrites the intent.
 func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"snipe-session"},

@@ -1,13 +1,3 @@
-/**
- * Annotation model — the frontend shape plus converters to/from the protocol
- * wire shape (snake_case `MarkdownAnnotation` in types/generated.ts).
- *
- * A quick-label annotation is `type: 'comment'` + `quickLabelId` (with the
- * label's tip text snapshotted at creation so the PR6 payload survives label
- * set edits); `text` stays empty for pure quick-labels. `anchor` is absent
- * ONLY for `type: 'global'`.
- */
-
 import type {
   MarkdownAnnotation as WireAnnotation,
   MarkdownAnnotationAnchor as WireAnchor,
@@ -29,11 +19,8 @@ export interface Annotation {
   quickLabelId?: string;
   /** Tip text snapshotted at creation so the payload survives label-set edits. */
   quickLabelTip?: string;
-  /**
-   * Display text ("emoji text", e.g. "👍 Looks good") snapshotted at creation.
-   * The daemon-side payload formatter renders this; it falls back to the raw
-   * quickLabelId for older drafts that lack it (mirroring the frontend rule).
-   */
+  /** Display text ("👍 Looks good") snapshotted at creation; the daemon-side
+   * formatter falls back to the raw quickLabelId for drafts that lack it. */
   quickLabelText?: string;
   createdAt: number; // epoch ms
 }
@@ -83,11 +70,8 @@ function isAnnotationType(value: string): value is AnnotationType {
   return value === 'comment' || value === 'deletion' || value === 'global';
 }
 
-/**
- * Wire → frontend. Returns null for records this build cannot represent
- * (unknown type, or a non-global annotation without an anchor) — hydration
- * drops them instead of crashing on forward-version drafts.
- */
+/** Wire → frontend. Returns null for records this build cannot represent, so
+ * hydration drops forward-version drafts instead of crashing. */
 export function annotationFromWire(wire: WireAnnotation): Annotation | null {
   if (!isAnnotationType(wire.type)) {
     return null;

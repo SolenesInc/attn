@@ -785,8 +785,6 @@ func TestBuildSpawnEnv_PinsTermProgramToGhosttyAndScrubsVersion(t *testing.T) {
 				"",
 				SpawnOptions{
 					ID: "session-1",
-					// Simulate an inherited TERM_PROGRAM and TERM_PROGRAM_VERSION
-					// that should be replaced and scrubbed.
 					LoginShellEnv: []string{
 						"TERM_PROGRAM=something-else",
 						"TERM_PROGRAM_VERSION=1.0.0",
@@ -824,14 +822,9 @@ func TestBuildSpawnEnv_PinsTermProgramToGhosttyAndScrubsVersion(t *testing.T) {
 	}
 }
 
-// TestBuildSpawnEnv_OmitsScrubbedAgentSessionEnv ties the daemon/worker startup
-// scrub to the real spawn-env builder: once the process env has been scrubbed
-// (as runDaemon/runPTYWorker do before spawning), a per-session agent var that
-// leaked into the process must not reappear in any spawned PTY's environment.
 func TestBuildSpawnEnv_OmitsScrubbedAgentSessionEnv(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_SESSION_ID", "cbcaa879-leaked")
 
-	// Simulate the daemon/worker scrubbing its inherited env at startup.
 	config.ScrubInheritedAgentSessionEnv()
 
 	for _, agent := range []string{"shell", "codex"} {

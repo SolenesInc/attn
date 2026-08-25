@@ -24,11 +24,8 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// Each attach gets its own subscriber id. The PTY session's subscriber map is
-// keyed by subscriber id, and a workerStream close emits a Detach RPC for the
-// id it registered. Reusing a subID on re-attach lets the dying stream's
-// Detach remove the freshly installed subscriber, silently starving the new
-// stream of output.
+// A fresh subscriber id per attach: reusing one lets the dying stream's Detach
+// remove the freshly installed subscriber and starve it of output.
 var wsSubscriberCounter atomic.Int64
 
 const maxInitialPromptBytes = 1 << 20
@@ -77,49 +74,26 @@ func wsSubscriberID(client *wsClient, sessionID string) string {
 }
 
 type attachReplayPayload struct {
-	// ghosttySnapshot, when non-nil, is a self-contained VT serialization of the
-	// worker's parsed terminal (server-authoritative restore). The client resets
-	// its model and replays it. Empty when the policy omits restore or no
-	// server-authoritative terminal is available (ghostty absent).
-	ghosttySnapshot []byte
-	// ghosttySnapshotFormat travels with the bytes so the client — the only
-	// participant that owns a decoder — can decline a format it cannot read.
-	// Empty from a worker that predates the field, which reads the same way.
+	ghosttySnapshot       []byte
 	ghosttySnapshotFormat string
 	ghosttyCols           uint16
 	ghosttyRows           uint16
-	// ghosttyBlocks are the worker's OSC 133 command blocks resolved atomically
-	// with ghosttySnapshot (Phase 3a). Carried only alongside a snapshot.
-	ghosttyBlocks []pty.AttachBlockData
-	// ghosttyPlacements are the kitty placements on that same screen, captured
-	// in the same hold. The dump has no images in it — the APC bytes were
-	// stripped before any of this — so without these a restore silently loses
-	// every image the session was showing.
+	ghosttyBlocks         []pty.AttachBlockData
+	// The dump carries no images, so without these a restore silently loses them.
 	ghosttyPlacements   []pty.KittyPlacement
 	scrollbackTruncated bool
 	decision            string
 }
 
-// shouldIncludeAttachReplay reports whether an attach under this policy should
-// restore prior terminal state. A fresh spawn has nothing to restore — the live
-// stream paints the first frame and the worker answers startup queries itself —
-// so it is the only policy that omits the snapshot.
 func shouldIncludeAttachReplay(policy protocol.AttachPolicy) bool {
 	return policy != protocol.AttachPolicyFreshSpawn
 }
 
-// buildAttachReplayPayload selects the server-authoritative restore for an
-// attach: the worker's serialized ghostty terminal. The client resets its model
-// and replays this stream — no mid-escape hazard, no oracle verification, no
-// replay-vs-snapshot decision tree.
 func buildAttachReplayPayload(info ptybackend.AttachInfo, policy protocol.AttachPolicy) attachReplayPayload {
 	if !shouldIncludeAttachReplay(policy) {
 		return attachReplayPayload{decision: "omit_replay_for_policy"}
 	}
 	if len(info.GhosttySnapshot) == 0 {
-		// No server-authoritative terminal to serialize (ghostty construction
-		// failed, or a non-macOS build's pure-Go stub). Nothing to restore; the
-		// client keeps whatever it has and dedups the live stream against LastSeq.
 		return attachReplayPayload{decision: "no_snapshot"}
 	}
 	return attachReplayPayload{
@@ -232,8 +206,8 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 		state = protocol.SessionStateIdle
 	}
 	stateSince, stateUpdatedAt := nowStr, nowStr
-	// A revive must re-enter the launch lifecycle; preserving recoverable would let
-	// commitSpawn's record overwrite the live state applied during spawn.
+	// Preserving recoverable would let commitSpawn's record overwrite the live
+	// state applied during spawn.
 	if existing != nil && existing.State != protocol.SessionStateRecoverable {
 		state, stateSince, stateUpdatedAt = existing.State, existing.StateSince, existing.StateUpdatedAt
 		if stateSince == "" {
@@ -247,14 +221,9 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 		state, stateSince, stateUpdatedAt = protocol.SessionStateWorking, nowStr, nowStr
 	}
 	session := &protocol.Session{ID: msg.ID, Label: label, Agent: protocol.SessionAgent(agent), Directory: cwd, State: state, StateSince: stateSince, StateUpdatedAt: stateUpdatedAt, LastSeen: nowStr, WorkspaceID: msg.WorkspaceID}
-	// The satellite link the caller resolved. It is already carried forward from
-	// the stored session on a respawn, so writing it unconditionally here cannot
-	// clear one.
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
 	}
-	// Endpoint binding: prefer the spawn message's explicit endpoint; a respawn
-	// with no endpoint in the message keeps the stored binding.
 	if id := strings.TrimSpace(protocol.Deref(msg.EndpointID)); id != "" {
 		session.EndpointID = protocol.Ptr(id)
 	} else if existing != nil {
@@ -278,9 +247,8 @@ func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSession
 	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{})
 }
 
-// handleSpawnSessionWithPolicy is reserved for daemon-owned launch paths. The
-// public workspace protocol must not be able to grant automatic approval or
-// working-directory trust independently of the user's daemon settings.
+// Daemon-owned launch paths only: the public workspace protocol must not grant
+// automatic approval or working-directory trust.
 func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
 	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
 		d.sendSpawnRejection(client, msg.ID, rejection)
@@ -297,9 +265,6 @@ func (d *Daemon) sendSpawnRejection(client *wsClient, sessionID string, rejectio
 	d.sendSpawnFailure(client, sessionID, rejection.err)
 }
 
-// buildStoredIntentSpawn reconstructs the spawn message and internal policy for
-// relaunching a session from its durable record and launch intent, with
-// client-supplied geometry. Shared by revive-on-attach and daemon-owned reload.
 func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent, cols, rows int) (*protocol.SpawnSessionMessage, internalSpawnPolicy) {
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:         protocol.CmdSpawnSession,
@@ -322,15 +287,9 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	if intent.Effort != "" {
 		spawnMsg.Effort = protocol.Ptr(intent.Effort)
 	}
-	// Only a conversation session ever stored one, and its host is what decides
-	// whether to say it again (LaunchIntent.InitialPrompt). Carrying it here is
-	// what makes a relaunch after a zero-file early crash a relaunch of the same
-	// task rather than of an empty session.
 	if intent.InitialPrompt != "" {
 		spawnMsg.InitialPrompt = protocol.Ptr(intent.InitialPrompt)
 	}
-	// Same reason, for the conversation this session was started from: a host
-	// that died before pi wrote anything has to be told again where to fork.
 	if intent.ResumeConversationFile != "" {
 		spawnMsg.ResumeConversationFile = protocol.Ptr(intent.ResumeConversationFile)
 	}
@@ -348,9 +307,6 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	}
 }
 
-// reviveSessionForAttach respawns a recoverable session from its durable record
-// so a revive-policy attach can proceed. It refuses (error, no spawn) unless the
-// stored session is recoverable, geometry is positive, and a LaunchIntent exists.
 func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) error {
 	session := d.store.Get(msg.ID)
 	if session == nil || session.State != protocol.SessionStateRecoverable {
@@ -448,8 +404,6 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	d.sendToClient(client, result)
 }
 
-// attachBlocksToProtocol converts the worker's resolved command blocks to their
-// wire form. nil in → nil out (the field is omitted when there are no blocks).
 func attachBlocksToProtocol(blocks []pty.AttachBlockData) []protocol.AttachBlock {
 	if len(blocks) == 0 {
 		return nil
@@ -479,9 +433,6 @@ func int32PtrToInt(v *int32) *int {
 	return &n
 }
 
-// handleGetScreenSnapshot serves a read-only snapshot of a session's current
-// screen. It registers no subscriber and starts no stream — purely a seed for
-// observers (grid tiles) that then dedup the live firehose against last_seq.
 func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScreenSnapshotMessage) {
 	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
 	if !ok {
@@ -496,8 +447,7 @@ func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScre
 
 	info, err := provider.ScreenSnapshot(context.Background(), msg.ID)
 	if err != nil {
-		// Graceful: a worker built before MethodScreenSnapshot answers "unknown
-		// method"; the observer stays unseeded rather than erroring loudly.
+		// A worker built before MethodScreenSnapshot answers "unknown method".
 		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
 			ID:      msg.ID,
@@ -539,11 +489,6 @@ func (d *Daemon) handleDetachSessionWS(client *wsClient, msg *protocol.DetachSes
 	d.detachSession(client, msg.ID)
 }
 
-// encodePtyOutputMessage builds the outbound frame for one PTY output chunk.
-// Clients that advertised CapabilityBinaryPtyOutput get a compact binary
-// frame; everyone else (daemon-to-daemon relays, automation clients) keeps the
-// base64-in-JSON pty_output event. The capability is re-read per chunk so a
-// re-sent client_hello takes effect immediately.
 func encodePtyOutputMessage(client *wsClient, sessionID string, event ptybackend.OutputEvent) (outboundMessage, error) {
 	if client.HasCapability(protocol.CapabilityBinaryPtyOutput) {
 		frame, err := protocol.EncodePtyOutputFrame(sessionID, event.Seq, event.Data)
@@ -581,9 +526,8 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 	for event := range stream.Events() {
 		switch event.Kind {
 		case ptybackend.OutputEventKindOutput:
-			// Hot path: one event per output chunk per attached client. Gate the
-			// verbose log (and its preview allocation) on debug so DEBUG-off runs
-			// don't take the global log mutex + a synchronous disk write per chunk.
+			// Hot path: the verbose log takes the global log mutex and a synchronous
+			// disk write per chunk, so gate it on debug.
 			if d.debugLogging {
 				d.logf(
 					"pty_output forward: id=%s seq=%d bytes=%d preview=%q",
@@ -604,11 +548,6 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				return
 			}
 		case ptybackend.OutputEventKindPlacements:
-			// Byte-stream companion, not a state change: the set describes the
-			// grid the same-seq output produces, so it rides this per-session
-			// path in order behind those bytes rather than the bus, exactly as
-			// pty_output does. Clients that cannot draw images never asked to
-			// hear about them.
 			if !client.HasCapability(protocol.CapabilityKittyImages) {
 				continue
 			}
@@ -617,9 +556,8 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				d.logf("kitty_placements marshal failed: id=%s seq=%d err=%v", sessionID, event.Seq, err)
 				continue
 			}
-			// Blocking, like the bytes: a dropped set leaves the client drawing
-			// an image that has moved or gone, and only the next change would
-			// heal it — which on an idle session never comes.
+			// Blocking, like the bytes: a dropped set leaves a stale image that only
+			// the next change heals, which on an idle session never comes.
 			if !d.sendOutboundBlocking(client, outbound, ptyOutputSendWait) {
 				d.logf("kitty_placements send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
 				_ = stream.Close()
@@ -689,10 +627,8 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 		d.sendToClient(client, result)
 	}
 
-	// After the bytes are away, never before: freezing a pending settle can
-	// broadcast a snapshot, and a keystroke must not wait on one to reach the
-	// agent. Nothing about the hold is ordered against the write — it moves a
-	// deadline seconds out.
+	// After the bytes are away: freezing a pending settle can broadcast a
+	// snapshot, and a keystroke must not wait on one.
 	if userTyped {
 		d.holdAutoSettle(msg.ID)
 	}
@@ -704,9 +640,7 @@ func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActi
 	}
 }
 
-// ptyGeometry is the payload of FactSessionPTYResized. The new size is not
-// derivable from the store, so the fact carries it. XPixel/YPixel are the
-// pane's total size in device pixels, 0 when the resizing client reported none.
+// XPixel/YPixel are the pane's total size in device pixels, 0 when unreported.
 type ptyGeometry struct {
 	Cols   int `json:"cols"`
 	Rows   int `json:"rows"`
@@ -739,13 +673,8 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		d.sendCommandError(client, protocol.CmdPtyResize, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", msg.Cols, msg.Rows, maxPTYDimValue))
 		return
 	}
-	// Pixel geometry is optional, so an unusable pair is dropped rather than
-	// refused — the resize itself is still valid. It is named in the log
-	// because a silently ignored geometry looks exactly like a client that
-	// never sent one. The bound is the kernel's own: ws_xpixel/ws_ypixel are
-	// uint16, so anything past it cannot be reported without truncating into a
-	// plausible-looking lie. A single axis is not geometry either; the cell
-	// derivation needs both.
+	// An unusable pair is dropped, not refused. The bound is the kernel's own:
+	// ws_xpixel/ws_ypixel are uint16.
 	xpixel, ypixel := protocol.Deref(msg.Xpixel), protocol.Deref(msg.Ypixel)
 	if xpixel < 0 || ypixel < 0 || xpixel > maxPTYPixelValue || ypixel > maxPTYPixelValue {
 		d.logf("pty_resize: id=%s ignoring pixel geometry xpixel=%d ypixel=%d (expected 0..%d)", msg.ID, xpixel, ypixel, maxPTYPixelValue)
@@ -765,8 +694,6 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 	if !changed {
 		return
 	}
-	// Broadcast the new geometry to all other attached clients so they can
-	// keep their local terminal models in sync.
 	d.publishFact(FactSessionPTYResized, msg.ID, ptyGeometry{
 		Cols: msg.Cols, Rows: msg.Rows, XPixel: xpixel, YPixel: ypixel,
 	})
@@ -774,8 +701,6 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 
 var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
-// sanitizeThemeColor blanks a field that isn't a valid "#rrggbb" hex color; an
-// empty field makes pty fall back to its built-in default for that channel.
 func sanitizeThemeColor(value string) string {
 	if hexColorPattern.MatchString(value) {
 		return value
@@ -796,10 +721,6 @@ func sanitizeANSIPalette(values []string) (palette [16]string, ok bool) {
 	return palette, true
 }
 
-// handleSetTerminalTheme stores the daemon-global terminal theme and fans it
-// out best-effort to every live session so already-running agents answer OSC
-// 10/11/12 color queries with the new colors immediately. Fire-and-forget, no
-// result event — mirrors pty_resize.
 func (d *Daemon) handleSetTerminalTheme(client *wsClient, msg *protocol.SetTerminalThemeMessage) {
 	ansiPalette, paletteOK := sanitizeANSIPalette(msg.AnsiPalette)
 	theme := pty.TerminalTheme{
@@ -839,9 +760,6 @@ func parseSignal(name string) syscall.Signal {
 func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMessage) {
 	d.detachSession(client, msg.ID)
 	sig := parseSignal(protocol.Deref(msg.Signal))
-	// A conversation session has no PTY to signal. Its host gets the same
-	// cooperative-then-group teardown whatever signal was asked for: the
-	// escalation is the host's contract, not the caller's choice.
 	if d.isHostSession(msg.ID) {
 		if err := d.killSessionRuntime(msg.ID); err != nil {
 			d.logf("kill_session failed for host %s: %v", msg.ID, err)

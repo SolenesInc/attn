@@ -1,6 +1,3 @@
-// The grid's "restore" affordance. Sessions removed from the grid still exist —
-// this top-right control surfaces how many are hidden and lets the user put any
-// of them back. It renders nothing when nothing is hidden.
 import { useEffect, useRef, useState } from 'react';
 
 export interface HiddenGridSession {
@@ -17,7 +14,6 @@ export function GridHiddenSessions({ sessions, onRestore }: GridHiddenSessionsPr
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement | null>(null);
 
-  // Close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -37,8 +33,6 @@ export function GridHiddenSessions({ sessions, onRestore }: GridHiddenSessionsPr
     };
   }, [open]);
 
-  // Nothing hidden → no control. Also collapse the popover if the last hidden
-  // session was just restored.
   if (sessions.length === 0) return null;
 
   return (

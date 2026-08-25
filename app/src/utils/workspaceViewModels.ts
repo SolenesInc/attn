@@ -39,9 +39,6 @@ export type WorkspaceChild<TSession extends WorkspaceViewSession = WorkspaceView
   | {
     kind: 'session';
     id: string;
-    // The layout pane (leaf) id wrapping this session, when the session is
-    // represented in the workspace layout. Undefined for sessions not yet in a
-    // pane. Drag-from-sidebar uses it as the leaf id for move/split commands.
     paneId?: string;
     session: TSession;
   }
@@ -142,11 +139,8 @@ export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
   return result;
 }
 
-// Workspaces are ordered by their lexicographic rank key (the daemon seeds it in
-// opening order and rewrites a single row per reorder). The rank is the sole
-// authority; id is only a deterministic tiebreaker for the rare case of equal or
-// missing ranks (e.g. an old daemon snapshot before the rank migration). The sort
-// is non-mutating so callers keep their original array.
+// The lexicographic rank key is the sole authority; id only breaks ties for equal or
+// missing ranks (an old daemon snapshot from before the rank migration).
 function sortWorkspacesByRank<TWorkspace extends WorkspaceViewWorkspace>(
   workspaces: TWorkspace[],
 ): TWorkspace[] {

@@ -1,6 +1,3 @@
-// Layers user overrides (one JSON settings blob) on the built-in SHORTCUTS
-// defaults. Defaults live in code, so a corrupt config can never orphan an id.
-// The only place dispatch, formatting, and the editor read bindings from.
 
 import {
   SHORTCUTS,
@@ -21,14 +18,10 @@ export interface DockConfig {
 
 export interface KeybindingsConfig {
   version: 1;
-  // Absent id -> use default.
-  // Binding   -> rebind to this combo or chord.
-  // null      -> explicitly unbound.
   overrides: Partial<Record<ShortcutId, Binding | null>>;
   dock: DockConfig;
 }
 
-// Default dock membership, in render order.
 export const DEFAULT_DOCK_ITEMS: ShortcutId[] = [
   'dock.attention',
   'terminal.splitVertical',
@@ -58,7 +51,6 @@ export function getShortcutOverrides(): Partial<Record<ShortcutId, Binding | nul
   return overrides;
 }
 
-/** The effective binding for an id, or null when unbound. */
 export function resolveBinding(id: ShortcutId): Binding | null {
   if (Object.prototype.hasOwnProperty.call(overrides, id)) {
     const ov = overrides[id];
@@ -75,7 +67,6 @@ export function isCustomized(id: ShortcutId): boolean {
   return Object.prototype.hasOwnProperty.call(overrides, id);
 }
 
-/** Bound shortcuts in registry order — the dispatch iteration source. */
 export function resolvedShortcutEntries(): Array<[ShortcutId, Binding]> {
   const entries: Array<[ShortcutId, Binding]> = [];
   for (const id of Object.keys(SHORTCUTS) as ShortcutId[]) {
@@ -85,7 +76,6 @@ export function resolvedShortcutEntries(): Array<[ShortcutId, Binding]> {
   return entries;
 }
 
-/** The already-bound shortcut conflicting with `binding`, or null. */
 export function findConflict(binding: Binding, excludeId: ShortcutId): ShortcutId | null {
   for (const [id, d] of resolvedShortcutEntries()) {
     if (id === excludeId) continue;
@@ -97,7 +87,6 @@ export function findConflict(binding: Binding, excludeId: ShortcutId): ShortcutI
   return null;
 }
 
-/** Modifier-only keys never form a binding on their own. */
 const MODIFIER_KEYS = new Set([
   'Meta', 'Control', 'Shift', 'Alt', 'AltGraph', 'OS', 'Hyper', 'Super',
   'CapsLock', 'Fn', 'FnLock', 'NumLock', 'ScrollLock', 'Dead',
@@ -108,11 +97,8 @@ export type CaptureResult =
   | { kind: 'ignored' }
   | { kind: 'error'; message: string };
 
-/**
- * Translate a keydown into a ShortcutDef for the editor's key-capture input.
- * Control is rejected on macOS: the matcher treats it as the accelerator only
- * off-Mac, so a Ctrl-only binding would never fire.
- */
+// Control is rejected on macOS: the matcher treats it as the accelerator only
+// off-Mac, so a Ctrl-only binding would never fire.
 export function eventToBinding(e: KeyboardEvent): CaptureResult {
   if (!e.key || MODIFIER_KEYS.has(e.key)) return { kind: 'ignored' };
 
@@ -133,10 +119,6 @@ export function eventToBinding(e: KeyboardEvent): CaptureResult {
   return { kind: 'binding', def };
 }
 
-/**
- * A binding with no accelerator collides with ordinary typing; the editor warns
- * softly. A chord is judged by its leader, the step that claims a keystroke.
- */
 export function isRiskyBinding(binding: Binding): boolean {
   const combo = isChord(binding) ? binding.leader : binding;
   return !combo.meta && !combo.ctrl && !combo.alt;
@@ -156,8 +138,6 @@ function sanitizeCombo(value: unknown): Combo | null {
   return def;
 }
 
-// Both steps of a chord must sanitize; otherwise the whole binding is dropped
-// and the id falls back to its default.
 function sanitizeBinding(value: unknown): Binding | null {
   if (value && typeof value === 'object' && ('leader' in value || 'then' in value)) {
     const v = value as Record<string, unknown>;
@@ -169,7 +149,6 @@ function sanitizeBinding(value: unknown): Binding | null {
   return sanitizeCombo(value);
 }
 
-/** A fresh empty config, with its own dock copy callers cannot mutate. */
 function emptyConfig(): KeybindingsConfig {
   return { version: 1, overrides: {}, dock: defaultDock() };
 }
@@ -178,8 +157,6 @@ function defaultDock(): DockConfig {
   return { collapsed: false, items: [...DEFAULT_DOCK_ITEMS] };
 }
 
-// A missing or malformed dock falls back to the default, so the sidebar always
-// has a usable one.
 function sanitizeDock(value: unknown): DockConfig {
   if (!value || typeof value !== 'object') return defaultDock();
   const v = value as Record<string, unknown>;
@@ -188,15 +165,14 @@ function sanitizeDock(value: unknown): DockConfig {
   const items: ShortcutId[] = [];
   for (const id of v.items) {
     if (typeof id !== 'string') continue;
-    if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue; // unknown id
-    if (seen.has(id)) continue; // dedup
+    if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue;
+    if (seen.has(id)) continue;
     seen.add(id);
     items.push(id as ShortcutId);
   }
   return { collapsed: v.collapsed === true, items };
 }
 
-/** Parse a persisted blob, dropping anything unrecognized so dispatch cannot crash. */
 export function parseKeybindingsConfig(raw: string | undefined | null): KeybindingsConfig {
   if (!raw) return emptyConfig();
   let parsed: unknown;
@@ -211,14 +187,13 @@ export function parseKeybindingsConfig(raw: string | undefined | null): Keybindi
   const overridesOut: Partial<Record<ShortcutId, Binding | null>> = {};
   if (rawOverrides && typeof rawOverrides === 'object') {
     for (const [id, value] of Object.entries(rawOverrides as Record<string, unknown>)) {
-      if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue; // unknown id
+      if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue;
       if (value === null) {
         overridesOut[id as ShortcutId] = null;
         continue;
       }
       const binding = sanitizeBinding(value);
       if (binding) overridesOut[id as ShortcutId] = binding;
-      // malformed override -> drop, so the id falls back to its default
     }
   }
 

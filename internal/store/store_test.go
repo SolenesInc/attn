@@ -232,9 +232,8 @@ func TestStore_ListAgentDriverRunsFiltersByOwnerAndIncludesMetadata(t *testing.T
 		t.Fatal("ApplyAgentDriverState failed")
 	}
 
-	// Seq is the run's report cursor: a driver process that replaces the one
-	// that opened the run has to continue from it, or every report it makes is
-	// discarded as stale.
+	// Seq is the run's report cursor: a driver process that replaces the one which opened the
+	// run has to continue from it, or every report it makes is discarded as stale.
 	if got := s.ListAgentDriverRuns("attn-example"); !reflect.DeepEqual(got, []ActiveAgentDriverRun{
 		{SessionID: "session-a", RunID: "run-a", Metadata: `{"native":"one"}`, Seq: 4},
 		{SessionID: "session-b", RunID: "run-b"},
@@ -258,9 +257,6 @@ func TestStore_ListActiveAgentDriverRunsNamesTheOwnerOfEveryRun(t *testing.T) {
 		t.Fatal("BeginAgentDriverRun failed")
 	}
 
-	// Across plugins and with the owner named: the caller is the daemon arming
-	// its silence alarms at startup, when nothing has registered yet and a run
-	// whose plugin is gone is exactly the one that needs one.
 	if got := s.ListActiveAgentDriverRuns(); !reflect.DeepEqual(got, []ActiveAgentDriverRun{
 		{SessionID: "other", RunID: "run-other", PluginName: "other-plugin"},
 		{SessionID: "session-a", RunID: "run-a", PluginName: "attn-example"},
@@ -269,8 +265,6 @@ func TestStore_ListActiveAgentDriverRunsNamesTheOwnerOfEveryRun(t *testing.T) {
 	}
 }
 
-// The daemon runs on SQLite, and a replacement driver reads its inherited
-// cursor from this list — so the persisted branch has to carry it too.
 func TestStore_ListAgentDriverRunsCarriesThePersistedReportCursor(t *testing.T) {
 	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -388,7 +382,6 @@ func TestStore_List_StableOrderForDuplicateLabels(t *testing.T) {
 		t.Fatalf("unexpected order: got [%s %s %s], want [a-id b-id c-id]", all[0].ID, all[1].ID, all[2].ID)
 	}
 
-	// Re-read to ensure deterministic ordering across calls.
 	all2 := s.List("")
 	if all2[0].ID != "a-id" || all2[1].ID != "b-id" || all2[2].ID != "c-id" {
 		t.Fatalf("order changed across calls: got [%s %s %s], want [a-id b-id c-id]", all2[0].ID, all2[1].ID, all2[2].ID)
@@ -459,7 +452,6 @@ func TestStore_UpdateSessionLabel(t *testing.T) {
 	if got == nil || got.Label != "renamed" {
 		t.Fatalf("label after rename = %+v, want renamed", got)
 	}
-	// Unrelated columns must survive the targeted update.
 	if got.Directory != "/tmp/project" || got.State != protocol.SessionStateIdle {
 		t.Fatalf("rename mutated unrelated fields: %+v", got)
 	}
@@ -476,7 +468,7 @@ func TestStore_Touch(t *testing.T) {
 
 	before := protocol.Timestamp(s.Get("abc123").LastSeen).Time()
 
-	time.Sleep(10 * time.Millisecond) // Ensure time passes
+	time.Sleep(10 * time.Millisecond)
 	s.Touch("abc123")
 
 	got := s.Get("abc123")
@@ -531,22 +523,18 @@ func TestStore_SetAndListPRs(t *testing.T) {
 func TestStore_SetPRs_PreservesMuted(t *testing.T) {
 	s := New()
 
-	// Initial PRs
 	prs := []*protocol.PR{
 		{ID: "github.com:owner/repo#1", State: protocol.PRStateWaiting, Muted: false},
 	}
 	s.SetPRs(prs)
 
-	// Mute it
 	s.ToggleMutePR("github.com:owner/repo#1")
 
-	// Set PRs again (simulating poll)
 	prs2 := []*protocol.PR{
 		{ID: "github.com:owner/repo#1", State: protocol.StateWorking, Muted: false},
 	}
 	s.SetPRs(prs2)
 
-	// Should still be muted
 	all := s.ListPRs("")
 	if !all[0].Muted {
 		t.Error("PR should still be muted after SetPRs")
@@ -556,28 +544,23 @@ func TestStore_SetPRs_PreservesMuted(t *testing.T) {
 func TestStore_SetPRs_PreservesApprovedByMe(t *testing.T) {
 	s := New()
 
-	// Initial PR
 	prs := []*protocol.PR{
 		{ID: "github.com:owner/repo#1", State: protocol.PRStateWaiting},
 	}
 	s.SetPRs(prs)
 
-	// Mark as approved
 	s.MarkPRApproved("github.com:owner/repo#1")
 
-	// Verify it's approved
 	pr := s.GetPR("github.com:owner/repo#1")
 	if !pr.ApprovedByMe {
 		t.Fatal("PR should be marked as approved")
 	}
 
-	// Set PRs again (simulating poll after approval action)
 	prs2 := []*protocol.PR{
-		{ID: "github.com:owner/repo#1", State: protocol.PRStateWaiting}, // ApprovedByMe not set in incoming data
+		{ID: "github.com:owner/repo#1", State: protocol.PRStateWaiting},
 	}
 	s.SetPRs(prs2)
 
-	// Should still be approved
 	pr = s.GetPR("github.com:owner/repo#1")
 	if !pr.ApprovedByMe {
 		t.Error("PR should still be approved after SetPRs")
@@ -587,31 +570,24 @@ func TestStore_SetPRs_PreservesApprovedByMe(t *testing.T) {
 func TestStore_SetPRs_PreservesDetailFields(t *testing.T) {
 	s := New()
 
-	// Initial PR
 	prs := []*protocol.PR{
 		{ID: "github.com:owner/repo#1", State: protocol.PRStateWaiting},
 	}
 	s.SetPRs(prs)
 
-	// Set detail fields (simulating fetchPRDetails)
 	mergeable := true
 	s.UpdatePRDetails("github.com:owner/repo#1", &mergeable, "clean", "success", "approved", "abc123", "feature-branch")
 
-	// Verify details are set
 	pr := s.GetPR("github.com:owner/repo#1")
 	if protocol.Deref(pr.CIStatus) != "success" {
 		t.Fatalf("CIStatus should be 'success', got '%s'", protocol.Deref(pr.CIStatus))
 	}
 
-	// Set PRs again (simulating poll after an action like approve)
-	// The incoming PR has a NEWER LastUpdated than DetailsFetchedAt
-	// This is what happens in real scenario - GitHub returns updated timestamp
 	prs2 := []*protocol.PR{
-		{ID: "github.com:owner/repo#1", State: protocol.StateWorking, LastUpdated: protocol.NewTimestamp(time.Now().Add(time.Hour)).String()}, // No detail fields, but newer timestamp
+		{ID: "github.com:owner/repo#1", State: protocol.StateWorking, LastUpdated: protocol.NewTimestamp(time.Now().Add(time.Hour)).String()},
 	}
 	s.SetPRs(prs2)
 
-	// Details should be preserved
 	pr = s.GetPR("github.com:owner/repo#1")
 	if protocol.Deref(pr.CIStatus) != "success" {
 		t.Errorf("CIStatus should still be 'success' after SetPRs, got '%s'", protocol.Deref(pr.CIStatus))
@@ -644,20 +620,16 @@ func TestStore_ToggleMutePR(t *testing.T) {
 }
 
 func TestStore_SQLitePersistence(t *testing.T) {
-	// Create temp directory for SQLite DB
 	tmpDir := t.TempDir()
 	dbPath := tmpDir + "/test.db"
 
-	// Create store with SQLite
 	s, err := NewWithDB(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
 
-	// Add a session (persisted immediately with SQLite)
 	s.Add(&protocol.Session{ID: "sqlite-test", Label: "sqlite-test"})
 
-	// Close and reopen to verify persistence
 	s.Close()
 
 	s2, err := NewWithDB(dbPath)
@@ -666,7 +638,6 @@ func TestStore_SQLitePersistence(t *testing.T) {
 	}
 	defer s2.Close()
 
-	// Verify session persisted
 	got := s2.Get("sqlite-test")
 	if got == nil {
 		t.Error("session should persist across store reopens")
@@ -752,13 +723,11 @@ func TestStore_LaunchIntentRejectsCorruptJSON(t *testing.T) {
 func TestStore_RepoState(t *testing.T) {
 	s := New()
 
-	// Initially no repo state
 	state := s.GetRepoState("owner/repo")
 	if state != nil {
 		t.Error("expected nil for unknown repo")
 	}
 
-	// Toggle mute creates state
 	s.ToggleMuteRepo("owner/repo")
 	state = s.GetRepoState("owner/repo")
 	if state == nil {
@@ -768,14 +737,12 @@ func TestStore_RepoState(t *testing.T) {
 		t.Error("repo should be muted")
 	}
 
-	// Toggle again unmutes
 	s.ToggleMuteRepo("owner/repo")
 	state = s.GetRepoState("owner/repo")
 	if state.Muted {
 		t.Error("repo should be unmuted")
 	}
 
-	// Set collapsed
 	s.SetRepoCollapsed("owner/repo", true)
 	state = s.GetRepoState("owner/repo")
 	if !state.Collapsed {
@@ -798,13 +765,11 @@ func TestStore_ListRepoStates(t *testing.T) {
 func TestStore_AuthorState(t *testing.T) {
 	s := New()
 
-	// Initially no author states
 	states := s.ListAuthorStates()
 	if len(states) != 0 {
 		t.Errorf("expected 0 author states, got %d", len(states))
 	}
 
-	// Toggle mute creates state
 	s.ToggleMuteAuthor("dependabot")
 	states = s.ListAuthorStates()
 	if len(states) != 1 {
@@ -814,7 +779,6 @@ func TestStore_AuthorState(t *testing.T) {
 		t.Error("author should be muted")
 	}
 
-	// Toggle again unmutes
 	s.ToggleMuteAuthor("dependabot")
 	states = s.ListAuthorStates()
 	if states[0].Muted {
@@ -862,10 +826,6 @@ func TestHasSessionInDirectoryIgnoresIdleSessions(t *testing.T) {
 	}
 }
 
-// The intentional-close mark is the durable half of the close-vs-crash signal:
-// it must survive a store reopen (daemon restart) so the startup reap's ticket
-// seam can still tell a user close from a spontaneous death, and clearing it
-// must fully re-arm crash detection.
 func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	dbPath := t.TempDir() + "/test.db"
 	s, err := NewWithDB(dbPath)
@@ -897,8 +857,6 @@ func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	}
 }
 
-// Unknown sessions must read as not-intentionally-closed (the seam's default is
-// crash detection).
 func TestSessionIntentionalCloseMark_UnknownSessionFalse(t *testing.T) {
 	s := New()
 	if s.SessionCloseIntentional("nope") {
