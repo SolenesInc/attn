@@ -12,7 +12,7 @@ import (
 
 // A bounded "go look" trigger, never event content: the daemon signals, it never
 // streams a ticket's content into the PTY.
-const ticketNudgePrompt = "📋 Activity on a ticket that predates the garden — read the board with `attn ticket list`."
+const ticketNudgePrompt = "📋 Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it."
 
 // Busy delegation tickets in the production event history had a median inter-event gap
 // of 9m49s (440 gaps across 67 tickets), so ten minutes sits just past the burst cadence.

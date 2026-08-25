@@ -267,7 +267,8 @@ its log, and every `attn ticket` write verb prints the garden command that
 replaced it and exits nonzero. Three things survive, on purpose:
 
 - `attn ticket show` and `attn ticket list` keep reading the archived board
-  forever — a done ticket has no garden equivalent to point at.
+  forever. `attn ticket inbox` consumes unread activity for participants in
+  tickets that predate the garden.
 - Work that was already ticket-bound at the cutover keeps moving on its ticket:
   the daemon mirrors its tender's garden moves and notes onto it, so an
   in-flight delegation still closes where it started.

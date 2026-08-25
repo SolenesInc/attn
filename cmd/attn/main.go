@@ -812,7 +812,13 @@ func runTicket() {
 			return
 		}
 		runTicketShow(os.Args[3:])
-	case "status", "inbox", "attach", "attach-plan", "new", "comment", "subscribe", "unsubscribe", "take":
+	case "inbox":
+		if hasHelpFlag(os.Args[3:]) {
+			writeTicketHelp(os.Stdout)
+			return
+		}
+		runTicketInbox(os.Args[3:])
+	case "status", "attach", "attach-plan", "new", "comment", "subscribe", "unsubscribe", "take":
 		signpostTicketVerb(os.Args[2])
 	default:
 		fmt.Fprintf(os.Stderr, "ticket: unknown command %q\n", os.Args[2])
@@ -1547,8 +1553,8 @@ func writeTicketHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn ticket <command>
 
 Tickets retired with the garden era. Work lives in the garden now: a seed is
-the unit of work, and `+"`attn seed --help`"+` is the whole surface. These two read
-verbs stay forever, because a done ticket has no garden equivalent to point at:
+the unit of work, and `+"`attn seed --help`"+` is the whole surface. These three read
+verbs remain for tickets that predate the garden:
 
   list [--status <col>] [--all] [--json]
         read the archived board: every ticket (id, column, assignee, title),
@@ -1556,7 +1562,10 @@ verbs stay forever, because a done ticket has no garden equivalent to point at:
         required.
   show <ticket-id> [--session <id>] [--json]
         print one ticket's full record — description, complete activity thread
-        with full bodies, current artifacts
+        with full bodies, current artifacts; non-consuming
+  inbox [--session <id>] [--json] [--watch [--interval <dur>]]
+        read and mark read this session's unread legacy ticket activity;
+        --watch blocks and prints new activity as it lands
 
 Every other verb (%s) is a signpost: run it
 to be told which garden command replaced it, or read `+"`attn skill --reference garden`"+`.

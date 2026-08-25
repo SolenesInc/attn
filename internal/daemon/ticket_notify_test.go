@@ -105,6 +105,15 @@ func wasNudged(inputs []string) bool {
 	return false
 }
 
+func TestTicketNudgeNamesTheConsumingLegacyRead(t *testing.T) {
+	if !strings.Contains(ticketNudgePrompt, "`attn ticket inbox`") {
+		t.Fatalf("ticket nudge = %q, want the consuming legacy read", ticketNudgePrompt)
+	}
+	if strings.Contains(ticketNudgePrompt, "`attn ticket list`") {
+		t.Fatalf("ticket nudge = %q, board reads do not acknowledge activity", ticketNudgePrompt)
+	}
+}
+
 func TestNotifyNudgesEligibleLeavesAcrossRuntimes(t *testing.T) {
 	states := []struct {
 		name  string

@@ -9,7 +9,7 @@ import (
 )
 
 // Tickets retired with the garden era: every `attn ticket` write verb is now a
-// signpost that exits nonzero. `show` and `list` are the deliberate exception.
+// signpost. `show`, `list`, and `inbox` remain as reads for legacy tickets.
 
 type ticketSignpost struct {
 	Lead  string
@@ -30,14 +30,6 @@ var ticketSignposts = map[string]ticketSignpost{
 			{"pausing", `attn seed park <seed-id>`},
 		},
 		Note: "Your seed id is in the brief you launched with; `attn seed ls` lists the garden.",
-	},
-	"inbox": {
-		Lead: "reading unread activity on your work",
-		Moves: [][2]string{
-			{"the whole log", `attn seed notes <seed-id>`},
-			{"the seed itself", `attn seed show <seed-id>`},
-		},
-		Note: "A seed's log is read, not delivered: there is no cursor to consume.",
 	},
 	"new": {
 		Lead: "creating a backlog item nobody is working on yet",
@@ -120,7 +112,7 @@ func fprintTicketSignpost(w io.Writer, verb string) {
 	if post.Note != "" {
 		fmt.Fprintf(w, "\n%s\n", post.Note)
 	}
-	fmt.Fprint(w, "\nDone tickets stay readable: `attn ticket show <id>` and `attn ticket list`.\n")
+	fmt.Fprint(w, "\nLegacy ticket reads still work: `attn ticket show <id>`, `attn ticket list`, and `attn ticket inbox`.\n")
 }
 
 func ticketSignpostVerbs() []string {
