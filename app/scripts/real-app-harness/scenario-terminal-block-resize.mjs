@@ -342,11 +342,11 @@ async function main() {
       await client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, '2-final.png') }).catch(() => {});
     });
 
-    const result = runner.finishSuccess({ shells: summary.shells });
+    const result = await runner.finishSuccess({ shells: summary.shells });
     console.log('[verify] PASS — fish/bash/zsh: replay intact, blocks correct-or-absent across resizes');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    const result = runner.finishFailure(error, { shells: summary.shells });
+    const result = await runner.finishFailure(error, { shells: summary.shells });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

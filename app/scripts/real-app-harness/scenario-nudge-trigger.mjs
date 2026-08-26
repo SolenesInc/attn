@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
@@ -15,16 +15,11 @@ import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-
-// Mirrors ticketNudgePrompt in internal/daemon/ticket_notify.go.
-const DOORBELL_PROMPT = '📋 New ticket activity — run `attn ticket inbox` to catch up.';
-const DOORBELL_SUBSTRING = 'New ticket activity';
-// The injected line minus the leading emoji, which the terminal grid can render
-// across cells.
-const DOORBELL_CORE = 'New ticket activity — run `attn ticket inbox` to catch up.';
+const DOORBELL_SUBSTRING = 'Activity on a ticket that predates the garden';
+// Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
+const DOORBELL_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -44,30 +39,97 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
-function resolveAttnBin() {
-  const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(HARNESS_DIR, '../../../attn')].filter(Boolean);
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
-}
-
-function makeAttnRunner(attnBin, profile) {
-  return function runAttn(args) {
-    const stdout = execFileSync(attnBin, args, {
-      encoding: 'utf8',
-      env: { ...process.env, ATTN_PROFILE: profile },
+async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(socketPath);
+    let raw = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timed out waiting for ${message.cmd}`));
+    }, timeoutMs);
+    socket.setEncoding('utf8');
+    socket.once('connect', () => socket.write(`${JSON.stringify(message)}\n`));
+    socket.on('data', (chunk) => {
+      raw += chunk;
+      if (!raw.includes('\n')) return;
+      clearTimeout(timer);
+      socket.end();
+      const value = JSON.parse(raw.split('\n', 1)[0]);
+      if (!value.ok) reject(new Error(value.error || `${message.cmd} failed`));
+      else resolve(value);
     });
-    const brace = stdout.indexOf('{');
-    return { stdout, json: brace >= 0 ? JSON.parse(stdout.slice(brace)) : null };
-  };
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 const IDLE_STATES = new Set(['idle', 'waiting_input']);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const normalizeWs = (text) => text.replace(/\s+/g, ' ');
+const squashWs = (text) => text.replace(/\s+/g, '');
+
+function writeMockCodex(root) {
+  const executable = path.join(root, 'mock-codex.mjs');
+  fs.writeFileSync(executable, `#!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import readline from 'node:readline';
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const title = (value) => process.stdout.write('\\u001b]0;' + value + '\\u0007');
+const prompt = () => {
+  title('nudge mock ready');
+  process.stdout.write('\\n› ');
+};
+const runAttn = (args, input = '') => spawnSync(process.env.ATTN_WRAPPER_PATH || 'attn', args, {
+  encoding: 'utf8',
+  env: process.env,
+  input,
+});
+
+async function answer(raw) {
+  const input = raw.replaceAll('\\u001b[200~', '').replaceAll('\\u001b[201~', '').trim();
+  if (!input) {
+    prompt();
+    return;
+  }
+  title('⠸ nudge mock working');
+  runAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
+  await delay(input.includes('sleep 8') ? 8_000 : 800);
+  if (input.includes('ticket that predates the garden')) {
+    const result = runAttn(['ticket', 'inbox']);
+    const output = ((result.stdout || '') + (result.stderr || '')).trim();
+    if (result.error || result.status !== 0) {
+      process.stdout.write('\\n• mock inbox failed: ' + (result.error?.message || output || 'unknown error') + '\\n');
+    } else {
+      process.stdout.write('\\n• ' + output.replaceAll('\\n', '\\n  ') + '\\n');
+    }
+  } else if (input.includes('initial turn ready')) {
+    process.stdout.write('\\n• initial turn ready\\n');
+  } else if (input.includes('foreground turn finished')) {
+    process.stdout.write('\\n• foreground turn finished\\n');
+  } else {
+    process.stdout.write('\\n• mock turn finished\\n');
+  }
+  runAttn(['_hook-state', 'idle']);
+  prompt();
+}
+
+process.stdout.write('OpenAI Codex mock agent\\n');
+prompt();
+const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false });
+let turns = Promise.resolve();
+lines.on('line', (line) => {
+  turns = turns.then(() => answer(line)).catch((error) => {
+    process.stdout.write('\\n• mock agent error: ' + error.message + '\\n');
+    prompt();
+  });
+});
+`, { mode: 0o700 });
+  return executable;
+}
 
 async function readPaneText(client, sessionId) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
@@ -81,13 +143,20 @@ async function readPaneText(client, sessionId) {
 // SEPARATE writes: a burst ending in CR is treated as a paste and never submits.
 async function driveAgentToIdle(client, observer, sessionId, note) {
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${sessionId}`, 20_000);
-  const prompt = 'Reply with the single word: ok';
+  const reply = 'initial turn ready';
+  const prompt = `Reply with the exact words: ${reply}`;
   await client.request('write_pane', { sessionId, paneId: pane.paneId, text: prompt, submit: false });
   await delay(1_200);
   await client.request('write_pane', { sessionId, paneId: pane.paneId, text: '\r', submit: false });
   const stateOf = () => observer.getSession(sessionId)?.state || 'unknown';
   await pollFor(() => (stateOf() === 'working' ? true : null), `${sessionId} to start working after the prompt`, 30_000, 500);
   note(`target started working (prompt accepted)`);
+  await pollFor(
+    async () => ((await readPaneText(client, sessionId)).text.includes(`\n• ${reply}`) ? true : null),
+    `${sessionId} to print its initial reply`,
+    90_000,
+    500,
+  );
   const idle = await pollFor(
     () => (IDLE_STATES.has(stateOf()) ? stateOf() : null),
     `${sessionId} to finish the turn and go idle/waiting`,
@@ -108,15 +177,14 @@ async function main() {
   if (!profile) {
     throw new Error('the nudge-trigger scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
   }
-  const attnBin = resolveAttnBin();
-  const runAttn = makeAttnRunner(attnBin, profile);
+  const socketPath = socketPathForProfile(profile);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'NUDGE-TRIGGER',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-fake-agent',
     prefix: 'nudge-trigger',
     metadata: {
-      agent: 'codex',
+      agent: 'mock-codex',
       focus: 'ticket-nudge deliver-now button, idle and busy delivery paths',
     },
   });
@@ -125,6 +193,8 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let targetId = null;
   let authorId = null;
+  let previousCodexExecutable = '';
+  let mockExecutableConfigured = false;
   const note = (m, extra) => runner.log(m, extra);
 
   // Runner cleanups run in REVERSE registration order: observer/app are
@@ -133,7 +203,7 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
 
   try {
-    const { repoDir } = await runner.step('create_repo_fixture', async () => {
+    const { repoDir, mockCodex } = await runner.step('create_repo_fixture', async () => {
       const dir = path.join(runner.sessionDir, 'target-repo');
       fs.mkdirSync(dir, { recursive: true });
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -141,11 +211,19 @@ async function main() {
         cwd: dir,
         env: { ...process.env, GIT_AUTHOR_NAME: 'attn', GIT_AUTHOR_EMAIL: 'attn@local', GIT_COMMITTER_NAME: 'attn', GIT_COMMITTER_EMAIL: 'attn@local' },
       });
-      return { repoDir: dir };
+      return { repoDir: dir, mockCodex: writeMockCodex(runner.sessionDir) };
     });
 
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      previousCodexExecutable = observer.getSetting('codex_executable');
+      await client.request('set_setting', { key: 'codex_executable', value: mockCodex });
+      mockExecutableConfigured = true;
+      await observer.waitFor(
+        () => (observer.getSetting('codex_executable') === mockCodex ? true : null),
+        'mock Codex executable setting',
+        20_000,
+      );
     });
 
     await runner.step('boot_target_and_drive_idle', async () => {
@@ -167,9 +245,13 @@ async function main() {
 
     const ticketId = await runner.step('create_ticket_fixture', async () => {
       const ticketTitle = `Nudge trigger fixture ${runner.runId.slice(-6)}`;
-      const created = runAttn(['ticket', 'new', '--title', ticketTitle, '--session', targetId, '--json']);
-      const id = created.json?.ticket_id;
-      runner.assert(typeof id === 'string' && id.length > 0, `ticket new returned an id (got ${JSON.stringify(created.json)})`, created.json);
+      const created = await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_create',
+        source_session_id: targetId,
+        title: ticketTitle,
+      });
+      const id = created.ticket_create_result?.ticket_id;
+      runner.assert(typeof id === 'string' && id.length > 0, `ticket_create returned an id (got ${JSON.stringify(created)})`, created);
       note(`ticket created by target (creator-participant)`, { ticketId: id });
 
       authorId = await createSessionAndWaitForInitialPane({
@@ -185,8 +267,18 @@ async function main() {
       await client.request('select_session', { sessionId: targetId });
       note(`author shell ready`, { authorId });
 
-      runAttn(['ticket', 'comment', id, '-m', 'Please take a look when you can.', '--session', authorId]);
-      runAttn(['ticket', 'comment', id, '-m', 'One more related note.', '--session', authorId]);
+      await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_comment',
+        source_session_id: authorId,
+        ticket_id: id,
+        comment: 'Please take a look when you can.',
+      });
+      await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_comment',
+        source_session_id: authorId,
+        ticket_id: id,
+        comment: 'One more related note.',
+      });
       note(`author posted overlapping ticket activity -> should produce one target doorbell`);
       return id;
     });
@@ -268,9 +360,9 @@ async function main() {
 
       afterText = (await readPaneText(client, targetId)).text;
       runner.writeText('pane-after-settle.txt', afterText);
-      const wantedCore = normalizeWs(DOORBELL_CORE);
+      const wantedCore = squashWs(DOORBELL_CORE);
       runner.assert(
-        normalizeWs(afterText).includes(wantedCore),
+        squashWs(afterText).includes(wantedCore),
         `the submitted transcript contains the complete doorbell message (see pane-after-settle.txt)`,
       );
       note(`nudge turn settled with inbox consumed and no stranded composer text`, { state: settledState });
@@ -289,7 +381,12 @@ async function main() {
         100,
       );
 
-      runAttn(['ticket', 'comment', ticketId, '-m', 'Busy-state follow-up.', '--session', authorId]);
+      await legacyTicketRequest(socketPath, {
+        cmd: 'ticket_comment',
+        source_session_id: authorId,
+        ticket_id: ticketId,
+        comment: 'Busy-state follow-up.',
+      });
       await pollFor(
         () => (observer.getSession(targetId)?.ticket_unread === true ? true : null),
         'busy target to show unread ticket activity',
@@ -320,22 +417,28 @@ async function main() {
       const afterBusy = (await readPaneText(client, targetId)).text;
       runner.writeText('pane-after-busy-nudge.txt', afterBusy);
       runner.assert(
-        normalizeWs(afterBusy).includes(normalizeWs('Busy-state follow-up.')),
+        squashWs(afterBusy).includes(squashWs('Busy-state follow-up.')),
         'the queued nudge turn read the busy-state ticket event (see pane-after-busy-nudge.txt)',
       );
       note(`busy-state nudge processed through Codex queue semantics`, { state: busySettledState });
     });
 
-    const summary = runner.finishSuccess({ targetId, authorId, ticketId });
+    const summary = await runner.finishSuccess({ targetId, authorId, ticketId });
     console.log('[nudge-trigger] Nudge trigger scenario passed: idle and busy Codex nudges submitted and consumed ticket activity.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { targetId, authorId });
+    const summary = await runner.finishFailure(error, { targetId, authorId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
     if (authorId) await client.request('close_session', { sessionId: authorId }).catch(() => {});
     if (targetId) await client.request('close_session', { sessionId: targetId }).catch(() => {});
+    if (mockExecutableConfigured) {
+      await client.request('set_setting', {
+        key: 'codex_executable',
+        value: previousCodexExecutable,
+      }).catch(() => {});
+    }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
   }

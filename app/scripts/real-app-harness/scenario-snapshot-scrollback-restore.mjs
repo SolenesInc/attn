@@ -118,9 +118,9 @@ async function main() {
     if (sessionId) {
       await cleanupSessionViaAppClose(runner, client, sessionId).catch(() => {});
     }
-    runner.finishSuccess({ sessionId, shellPaneId });
+    await runner.finishSuccess({ sessionId, shellPaneId });
   } catch (error) {
-    runner.finishFailure(error, { sessionId, shellPaneId });
+    await runner.finishFailure(error, { sessionId, shellPaneId });
     throw error;
   } finally {
     observer.close?.();

@@ -281,7 +281,7 @@ async function main() {
       return events;
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       profile,
       delegatorId,
       chiefId,
@@ -291,7 +291,7 @@ async function main() {
     console.log('[RealAppHarness] Ordinary-delegation ticket scenario passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { delegatorId, chiefId, workerId });
+    const summary = await runner.finishFailure(error, { delegatorId, chiefId, workerId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

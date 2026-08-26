@@ -143,9 +143,15 @@ export function createScenarioRunner(options, {
   prefix,
   metadata = {},
   preflightLaunchEnv = null,
+} = {}, {
+  assertBuildMatches = assertPackagedAppBuildMatchesCurrentSource,
+  createRecorder = createScenarioRecorder,
+  createRecordingDriver = (appPath) => new MacOSDriver({ appPath }),
+  emitRunnerVerdict = emitVerdict,
+  isRecordingEnabled = recordingEnabled,
 } = {}) {
   const runnerCreatedAt = Date.now();
-  assertPackagedAppBuildMatchesCurrentSource({
+  assertBuildMatches({
     appPath: options?.appPath,
     launchEnv: preflightLaunchEnv,
   });
@@ -169,7 +175,7 @@ export function createScenarioRunner(options, {
   const assertions = [];
   const cleanupHandlers = [];
   let cleanupPromise = null;
-  let finalized = false;
+  let finalizationPromise = null;
 
   const appendTrace = (message, details) => {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
@@ -178,9 +184,9 @@ export function createScenarioRunner(options, {
   };
 
   let recorder = null;
-  if (recordingEnabled()) {
-    const recordingDriver = new MacOSDriver({ appPath: options.appPath });
-    recorder = createScenarioRecorder({
+  if (isRecordingEnabled()) {
+    const recordingDriver = createRecordingDriver(options.appPath);
+    recorder = createRecorder({
       runDir,
       resolveWindowId: () => recordingDriver.mainWindowId(),
       log: appendTrace,
@@ -225,19 +231,25 @@ export function createScenarioRunner(options, {
     return cleanupPromise;
   };
 
-  const finalizeRunner = () => {
-    if (finalized) {
-      return;
-    }
-    finalized = true;
-    // Not awaited: the recorder's screencapture child keeps the event loop alive
-    // until it has finalized its file.
-    void recorder?.stop();
-    releaseScenarioLock?.();
-    process.removeListener('exit', exitHandler);
-    for (const [signal, handler] of signalHandlers.entries()) {
-      process.removeListener(signal, handler);
-    }
+  const finalizeRunner = async () => {
+    if (finalizationPromise) return finalizationPromise;
+    finalizationPromise = (async () => {
+      let recorderError = null;
+      try {
+        await recorder?.stop();
+      } catch (error) {
+        recorderError = error;
+        appendTrace('recording:error', { error: normalizeError(error) });
+      } finally {
+        releaseScenarioLock?.();
+        process.removeListener('exit', exitHandler);
+        for (const [signal, handler] of signalHandlers.entries()) {
+          process.removeListener(signal, handler);
+        }
+      }
+      return recorderError;
+    })();
+    return finalizationPromise;
   };
 
   const signalExitCode = {
@@ -261,7 +273,7 @@ export function createScenarioRunner(options, {
       try {
         await runRegisteredCleanup(`signal:${signal}`);
       } finally {
-        finalizeRunner();
+        await finalizeRunner();
         process.exit(signalExitCode[signal] || 1);
       }
     };
@@ -352,7 +364,9 @@ export function createScenarioRunner(options, {
         throw new Error(message);
       }
     },
-    finishSuccess(summary = {}) {
+    async finishSuccess(summary = {}) {
+      const recorderError = await finalizeRunner();
+      if (recorderError) throw recorderError;
       const finalSummary = {
         ok: true,
         scenarioId,
@@ -367,7 +381,7 @@ export function createScenarioRunner(options, {
       };
       const summaryPath = path.join(runDir, 'summary.json');
       writeJson(summaryPath, finalSummary);
-      emitVerdict({
+      emitRunnerVerdict({
         ok: true,
         scenarioId,
         runId,
@@ -377,10 +391,10 @@ export function createScenarioRunner(options, {
         summaryPath,
         durationMs: Date.now() - runnerCreatedAt,
       });
-      finalizeRunner();
       return finalSummary;
     },
-    finishFailure(error, summary = {}) {
+    async finishFailure(error, summary = {}) {
+      const recorderError = await finalizeRunner();
       const finalSummary = {
         ok: false,
         scenarioId,
@@ -392,6 +406,9 @@ export function createScenarioRunner(options, {
         steps,
         assertions,
         error: normalizeError(error),
+        ...(recorderError && recorderError !== error
+          ? { recordingError: normalizeError(recorderError) }
+          : {}),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'failure.json');
@@ -399,7 +416,7 @@ export function createScenarioRunner(options, {
       const digest = buildFailureDigest({ scenarioId, runId, steps, error, runDir });
       fs.writeFileSync(path.join(runDir, 'failure-digest.txt'), `${digest}\n`, 'utf8');
       process.stdout.write(`--- failure digest ---\n${digest}\n--- end digest ---\n`);
-      emitVerdict({
+      emitRunnerVerdict({
         ok: false,
         scenarioId,
         runId,
@@ -409,11 +426,11 @@ export function createScenarioRunner(options, {
         summaryPath,
         durationMs: Date.now() - runnerCreatedAt,
       });
-      finalizeRunner();
       return finalSummary;
     },
-    close() {
-      finalizeRunner();
+    async close() {
+      const recorderError = await finalizeRunner();
+      if (recorderError) throw recorderError;
     },
   };
 

@@ -166,11 +166,11 @@ async function main() {
       runner.assert(done.includes('is harvested'), 'harvest closed the seed', { done });
     });
 
-    const summary = runner.finishSuccess({ seedID, sessionB: paneB.sessionId });
+    const summary = await runner.finishSuccess({ seedID, sessionB: paneB.sessionId });
     console.log('[RealAppHarness] Garden seed handoff passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { seedID });
+    const summary = await runner.finishFailure(error, { seedID });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

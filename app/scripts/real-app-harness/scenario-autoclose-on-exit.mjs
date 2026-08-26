@@ -212,14 +212,14 @@ async function main() {
       return session;
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       cleanSessionId: clean.sessionId,
       failedSessionId: failed.sessionId,
     });
     console.log('[RealAppHarness] Auto-close-on-exit passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { createdSessionIds });
+    const summary = await runner.finishFailure(error, { createdSessionIds });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

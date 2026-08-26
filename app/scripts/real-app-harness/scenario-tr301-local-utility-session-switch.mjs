@@ -159,7 +159,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, 'secondary-baseline', secondarySessionId);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       primarySessionId,
       secondarySessionId,
       utilityPaneId,
@@ -179,7 +179,7 @@ async function main() {
     if (secondarySessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'secondary-failure', secondarySessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       primarySessionId,
       secondarySessionId,
       utilityPaneId,

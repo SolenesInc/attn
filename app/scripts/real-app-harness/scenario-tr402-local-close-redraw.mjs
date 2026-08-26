@@ -374,7 +374,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '03-after-close', sessionId);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       splitPaneId,
       agent: options.agent,
@@ -395,7 +395,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       splitPaneId,
       agent: options.agent,

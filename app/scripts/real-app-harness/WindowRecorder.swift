@@ -26,17 +26,19 @@ func fail(_ message: String, code: Int32) -> Never {
     exit(code)
 }
 
+// Establish the window-server connection before asking TCC on the main thread.
+_ = CGMainDisplayID()
+if !CGPreflightScreenCaptureAccess() {
+    _ = CGRequestScreenCaptureAccess()
+}
+
 guard CommandLine.arguments.count >= 3, let windowIdArg = UInt32(CommandLine.arguments[1]) else {
-    fail("usage: WindowRecorder <windowId> <outputPath> [fps]", code: 2)
+    fail("usage: WindowRecorder <windowId> <outputPath> [fps] [stopFilePath]", code: 2)
 }
 let targetWindowId = CGWindowID(windowIdArg)
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
 let fps = CommandLine.arguments.count > 3 ? Int32(CommandLine.arguments[3]) ?? 15 : 15
-
-// SkyLight asserts (CGS_REQUIRE_INIT) if ScreenCaptureKit touches the window
-// server from a background thread before the process has a connection; force
-// one on the main thread first.
-_ = CGMainDisplayID()
+let stopFilePath = CommandLine.arguments.count > 4 ? CommandLine.arguments[4] : nil
 
 final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var stream: SCStream?
@@ -147,6 +149,19 @@ for sig in [SIGINT, SIGTERM] {
     source.setEventHandler { recorder.stopAndFinalize() }
     source.resume()
     signalSources.append(source)
+}
+
+var stopFileSource: DispatchSourceTimer?
+if let stopFilePath {
+    let source = DispatchSource.makeTimerSource(queue: signalQueue)
+    source.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(100))
+    source.setEventHandler {
+        guard FileManager.default.fileExists(atPath: stopFilePath) else { return }
+        try? FileManager.default.removeItem(atPath: stopFilePath)
+        recorder.stopAndFinalize()
+    }
+    source.resume()
+    stopFileSource = source
 }
 
 Task {

@@ -316,10 +316,10 @@ async function main() {
       runner.assert(runs[0].navigable === true, 'the run is still navigable after restart', runs[0]);
     });
 
-    runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
+    await runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
+    await runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
     // Disable before the fixture directory disappears: an enabled
@@ -334,7 +334,7 @@ async function main() {
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
-    runner.close();
+    await runner.close();
   }
 }
 

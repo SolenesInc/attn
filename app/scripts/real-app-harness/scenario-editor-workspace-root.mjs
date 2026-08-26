@@ -278,7 +278,7 @@ async function main() {
       });
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       tempRoot,
       notebookRoot,
       offRoot: {
@@ -294,7 +294,7 @@ async function main() {
     console.log('[RealAppHarness] Editor tile over an arbitrary workspace root (off-root gating + positive control) passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { tempSessionId, notebookSessionId });
+    const summary = await runner.finishFailure(error, { tempSessionId, notebookSessionId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

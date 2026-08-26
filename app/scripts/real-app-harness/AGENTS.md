@@ -19,3 +19,8 @@ the production guard, recordings, and the remote VM. Rules that live only here:
 - A failure that looks like a product regression may be the display: the
   input driver refuses to post input to a dark or locked screen and names the
   condition; `pmset -g log | grep "Display is turned"` has the history.
+- Recorded runs use `~/Applications/attn-window-recorder.app`, installed with
+  `make install-window-recorder`. Its stable bundle id keeps the macOS Screen
+  Recording grant across worktrees; the harness refuses a stale install and
+  names that command instead of rebuilding a permission-sensitive binary in
+  the checkout.

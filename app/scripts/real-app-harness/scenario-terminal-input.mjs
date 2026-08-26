@@ -424,7 +424,7 @@ async function main() {
       runner.assert(exactLineCount(text, token) >= before + 1, 'grid history command did not rerun');
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       sessionId,
       paneId: pane.paneId,
       runtimeId: pane.runtimeId,
@@ -447,7 +447,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'terminal-input-failure', sessionId).catch(() => {});
     }
-    const result = runner.finishFailure(error, { sessionId, paneId: pane?.paneId ?? null });
+    const result = await runner.finishFailure(error, { sessionId, paneId: pane?.paneId ?? null });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

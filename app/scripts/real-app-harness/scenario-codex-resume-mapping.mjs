@@ -517,7 +517,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '03-after-reload', sessionId);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       initialPaneId,
       codexExecutable: realCodexExecutable,
@@ -528,7 +528,7 @@ async function main() {
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       initialPaneId,
       codexExecutable: realCodexExecutable,

@@ -18,7 +18,8 @@ func TestTicketSignpostsNameTheVerbAndItsGardenReplacement(t *testing.T) {
 		if !strings.Contains(text, "attn seed ") {
 			t.Errorf("signpost for %q names no garden command: %q", verb, text)
 		}
-		if !strings.Contains(text, "attn ticket show") || !strings.Contains(text, "attn ticket list") {
+		if !strings.Contains(text, "attn ticket show") || !strings.Contains(text, "attn ticket list") ||
+			!strings.Contains(text, "attn ticket inbox") {
 			t.Errorf("signpost for %q does not say the read verbs still work: %q", verb, text)
 		}
 	}
@@ -43,13 +44,44 @@ func TestEveryTicketWriteVerbSignposts(t *testing.T) {
 			t.Errorf("ticketSignposts covers %q but runTicket never routes it to a signpost", verb)
 		}
 	}
-	// The two read verbs must not be in the table: they keep serving the archived
-	// store forever.
-	for _, read := range []string{"list", "show"} {
+	// The legacy read verbs keep serving tickets that predate the garden.
+	for _, read := range []string{"list", "show", "inbox"} {
 		if _, ok := ticketSignposts[read]; ok {
 			t.Errorf("%q is a read verb and must not signpost", read)
 		}
 	}
+}
+
+func TestLegacyTicketReadVerbsRoute(t *testing.T) {
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	body, ok := functionBody(string(source), "func runTicket() {")
+	if !ok {
+		t.Fatal("could not find runTicket in main.go")
+	}
+	for verb, runner := range map[string]string{
+		"list": "runTicketList", "show": "runTicketShow", "inbox": "runTicketInbox",
+	} {
+		caseBody, ok := ticketRouterCaseBody(body, verb)
+		if !ok || !strings.Contains(caseBody, runner+"(") {
+			t.Errorf("ticket %s does not route to %s", verb, runner)
+		}
+	}
+}
+
+func ticketRouterCaseBody(body, verb string) (string, bool) {
+	startMarker := `case "` + verb + `":`
+	start := strings.Index(body, startMarker)
+	if start < 0 {
+		return "", false
+	}
+	rest := body[start+len(startMarker):]
+	if end := strings.Index(rest, "\n\tcase "); end >= 0 {
+		rest = rest[:end]
+	}
+	return rest, true
 }
 
 func ticketRouterSignpostCases(t *testing.T, source string) []string {
@@ -113,7 +145,7 @@ func TestTicketHelpNamesTheReadVerbsAndTheRetiredOnes(t *testing.T) {
 			t.Errorf("ticket help does not name the retired verb %q: %q", verb, help)
 		}
 	}
-	if !strings.Contains(help, "list") || !strings.Contains(help, "show") {
+	if !strings.Contains(help, "list") || !strings.Contains(help, "show") || !strings.Contains(help, "inbox") {
 		t.Errorf("ticket help does not document the surviving read verbs: %q", help)
 	}
 }

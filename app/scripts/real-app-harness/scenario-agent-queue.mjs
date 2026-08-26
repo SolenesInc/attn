@@ -757,14 +757,14 @@ async function main() {
       );
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       alphaSessionId: alpha.sessionId,
       betaSessionId: beta.sessionId,
     });
     console.log('[RealAppHarness] Agent queue passed.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    const result = runner.finishFailure(error, {
+    const result = await runner.finishFailure(error, {
       queue: await queueState(client).catch(() => null),
       sessions: (await client.request('get_state').catch(() => null))?.sessions?.map((session) => ({
         id: session.id,

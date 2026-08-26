@@ -466,9 +466,9 @@ async function main() {
       }, 'visible missing-worktree failure', 30_000);
       runner.assert(String(failed.last_error).includes('worktree') && String(failed.last_error).includes('missing'), 'missing delivered worktree fails without recreation', failed);
     });
-    runner.finishSuccess({ profile, definitionID, sessionID, ticketID, seedID, worktree, seed, continuation });
+    await runner.finishSuccess({ profile, definitionID, sessionID, ticketID, seedID, worktree, seed, continuation });
   } catch (error) {
-    runner.finishFailure(error, { profile, definitionID, sessionID, ticketID, seedID, worktree, seed });
+    await runner.finishFailure(error, { profile, definitionID, sessionID, ticketID, seedID, worktree, seed });
     throw error;
   } finally {
     await client.quitApp().catch(() => {});
@@ -476,7 +476,7 @@ async function main() {
     if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
     if (mock?.child) mock.child.kill('SIGTERM');
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
-    runner.close();
+    await runner.close();
   }
 }
 

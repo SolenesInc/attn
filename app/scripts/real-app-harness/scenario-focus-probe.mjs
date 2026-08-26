@@ -187,10 +187,10 @@ async function main() {
       observations,
     );
 
-    const summary = runner.finishSuccess({ sessionId, observations });
+    const summary = await runner.finishSuccess({ sessionId, observations });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionId, observations });
+    const summary = await runner.finishFailure(error, { sessionId, observations });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

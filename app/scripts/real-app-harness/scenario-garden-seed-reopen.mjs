@@ -195,11 +195,11 @@ async function main() {
         'the reopened session reports to the seed it was reopened from', { chip, seed });
     });
 
-    const summary = runner.finishSuccess({ seed, delegated, reopened });
+    const summary = await runner.finishSuccess({ seed, delegated, reopened });
     console.log('[RealAppHarness] Garden seed reopen passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { seed, delegated, reopened });
+    const summary = await runner.finishFailure(error, { seed, delegated, reopened });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

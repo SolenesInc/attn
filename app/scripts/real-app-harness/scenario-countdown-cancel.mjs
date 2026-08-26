@@ -334,11 +334,11 @@ async function main() {
       note('new activity re-armed the nudge', { firesAt: rearmed.nudge_fires_at });
     });
 
-    const summary = runner.finishSuccess({ agentId, authorId, ticketId });
+    const summary = await runner.finishSuccess({ agentId, authorId, ticketId });
     console.log('[countdown-cancel] PASS — a real Cmd+. cancelled both visible countdowns, and only what was pending.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { agentId, authorId });
+    const summary = await runner.finishFailure(error, { agentId, authorId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

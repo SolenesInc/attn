@@ -245,14 +245,14 @@ async function main() {
       note(`previous workspace selected and visible after switchback`, { sessionId: previous.sessionId });
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       previousSessionId: previous.sessionId,
       closedSessionId: closing.sessionId,
     });
     console.log('[RealAppHarness] Workspace close-last-session switchback passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionIds: createdSessionIds });
+    const summary = await runner.finishFailure(error, { sessionIds: createdSessionIds });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

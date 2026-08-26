@@ -305,7 +305,7 @@ async function main() {
       }
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       workspaceA: { firstSessionId: workspaceA.sessionId, splitSessionId: splitA.runtimeId },
       workspaceB: { firstSessionId: workspaceB.sessionId, closedSplitSessionId: splitB.runtimeId },
       tokens: [tokenA1, tokenA2, tokenB1, tokenB2],
@@ -313,7 +313,7 @@ async function main() {
     console.log('[RealAppHarness] Workspace switching passed.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    const result = runner.finishFailure(error, {});
+    const result = await runner.finishFailure(error, {});
     console.error(result.error);
     process.exitCode = 1;
   } finally {

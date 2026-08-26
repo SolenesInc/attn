@@ -45,5 +45,6 @@ is blocked or complete. Untracked delegation — no seed in your prompt — has
 nowhere to report and needs none of this.
 
 `attn ticket` retired: every write verb prints the garden command that replaced
-it and exits nonzero. Only `attn ticket show` and `attn ticket list` still read.
-See [garden.md](garden.md).
+it and exits nonzero. `show` and `list` read legacy records; `inbox` reads and
+acknowledges unread activity on tickets that predate the garden. See
+[garden.md](garden.md).

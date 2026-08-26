@@ -393,7 +393,7 @@ async function main() {
       runner.writeJson('captures.json', captures);
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       sessionId: darkSessionId,
       darkLimit: STORAGE_OFF,
       placed: placed.placement,
@@ -412,7 +412,7 @@ async function main() {
     await client.request('capture_native_window_screenshot', {
       path: path.join(runner.runDir, 'failure.png'),
     }).catch(() => {});
-    const result = runner.finishFailure(error, { sessionId, darkSessionId });
+    const result = await runner.finishFailure(error, { sessionId, darkSessionId });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

@@ -230,11 +230,11 @@ async function main() {
       note(`remaining workspace session selected after close`, { initialSessionId });
     });
 
-    const summary = runner.finishSuccess({ initialSessionId, closedSessionId: splitSessionId });
+    const summary = await runner.finishSuccess({ initialSessionId, closedSessionId: splitSessionId });
     console.log('[RealAppHarness] Workspace close-one-session selection passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { initialSessionId, closedSessionId: splitSessionId });
+    const summary = await runner.finishFailure(error, { initialSessionId, closedSessionId: splitSessionId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

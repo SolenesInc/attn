@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -38,6 +39,17 @@ func ticketsByID(tickets []protocol.Ticket) map[string]protocol.Ticket {
 	return out
 }
 
+func decoratedTicketUnread(t *testing.T, d *Daemon, sessionID string) bool {
+	t.Helper()
+	session := d.store.Get(sessionID)
+	if session == nil {
+		t.Fatalf("session %s not found", sessionID)
+	}
+	clone := *session
+	d.decorateSessionWithNudge(&clone)
+	return protocol.Deref(clone.TicketUnread)
+}
+
 func TestHandleTicketListReturnsBoardWithoutSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	_, agents, _ := delegateMany(t, d, "codex", "Task Y", "Task X")
@@ -60,6 +72,50 @@ func TestHandleTicketListReturnsBoardWithoutSession(t *testing.T) {
 		if ticket.Description == "" {
 			t.Fatalf("ticket %s row has empty description; list should carry the brief", id)
 		}
+	}
+}
+
+func TestHandleTicketListLeavesLegacyActivityForInbox(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.nudgeWindowOverride = time.Hour
+	t.Cleanup(d.stopNudgeCountdowns)
+	backend := &fakeSpawnBackend{}
+	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
+	consumeDelegatedPrompt(t, backend)
+	result, err := d.delegate(&protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, SourceSessionID: chiefSessionID,
+		Brief: "Migrate the store to X", Agent: protocol.Ptr("codex"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentSession := result.SessionID
+	ticketID := bindLegacyTicketTitled(t, d, agentSession, chiefSessionID, "Migrate the store to X")
+	if bundles := callTicketInbox(t, d, agentSession); len(bundles) != 0 {
+		t.Fatalf("initial inbox = %+v, want delivered brief consumed", bundles)
+	}
+	commentOnTicket(t, d, ticketID, "one more thing to check")
+
+	resp := callTicketList(t, d, agentSession, "", false)
+	if !resp.Ok || resp.TicketListResult == nil {
+		t.Fatalf("ticket list response = %+v, want board", resp)
+	}
+	if unread, err := d.ticketUnreadForSession(agentSession); err != nil || unread == 0 {
+		t.Fatalf("unread after list = %d, %v; board read consumed activity", unread, err)
+	}
+	if !decoratedTicketUnread(t, d, agentSession) {
+		t.Fatal("ticket list cleared the app-visible unread marker")
+	}
+
+	bundles := callTicketInbox(t, d, agentSession)
+	if len(bundles) != 1 || bundles[0].TicketID != ticketID || len(bundles[0].Events) != 1 {
+		t.Fatalf("inbox after list = %+v, want the unread comment", bundles)
+	}
+	if unread, err := d.ticketUnreadForSession(agentSession); err != nil || unread != 0 {
+		t.Fatalf("unread after inbox = %d, %v; consume did not acknowledge activity", unread, err)
+	}
+	if decoratedTicketUnread(t, d, agentSession) {
+		t.Fatal("ticket inbox left the app-visible unread marker set")
 	}
 }
 

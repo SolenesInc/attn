@@ -235,10 +235,10 @@ async function main() {
       runner.assert(json.markdown.includes(REVIEWER_COMMENT), 'waiting CLI feedback includes the reviewer note', json.markdown);
     });
 
-    const summary = runner.finishSuccess({ sessionId, presentationId, window: presentWindow, submittedAt, baseSha, headSha });
+    const summary = await runner.finishSuccess({ sessionId, presentationId, window: presentWindow, submittedAt, baseSha, headSha });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionId, presentationId });
+    const summary = await runner.finishFailure(error, { sessionId, presentationId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

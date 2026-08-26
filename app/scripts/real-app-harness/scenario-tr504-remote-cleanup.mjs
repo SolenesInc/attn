@@ -293,7 +293,7 @@ async function main() {
       runner.writeJson('04-post-endpoint-remove-processes.json', postEndpointRemovalProcessSnapshot);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       endpointId: endpoint?.id || null,
       splitPaneId,
@@ -321,7 +321,7 @@ async function main() {
     runner.writeJson('failure-post-close-processes.json', postCloseProcessSnapshot);
     runner.writeJson('failure-cleaned-processes.json', cleanedProcessSnapshot);
     runner.writeJson('failure-post-endpoint-remove-processes.json', postEndpointRemovalProcessSnapshot);
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       endpointId: endpoint?.id || null,
       splitPaneId,

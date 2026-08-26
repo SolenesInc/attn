@@ -348,11 +348,11 @@ async function main() {
       return { killedPid: host.pid, filesAtKill, ticket: earlyTicket.id };
     });
 
-    const summary = runner.finishSuccess({ profile, delegatorId, workerId, earlyWorkerId, ticketId });
+    const summary = await runner.finishSuccess({ profile, delegatorId, workerId, earlyWorkerId, ticketId });
     console.log('[RealAppHarness] nisse delegation scenario passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { delegatorId, workerId, earlyWorkerId });
+    const summary = await runner.finishFailure(error, { delegatorId, workerId, earlyWorkerId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

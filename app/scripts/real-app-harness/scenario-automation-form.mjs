@@ -594,10 +594,10 @@ async function main() {
       runner.assert(showFailsWithDaemonError(binary, deleteID, daemonEnv), 'the definition is gone after the confirmed delete', deleteID);
     });
 
-    runner.finishSuccess({ profile, primaryID, renamedID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });
+    await runner.finishSuccess({ profile, primaryID, renamedID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    runner.finishFailure(error, { profile, primaryID, renamedID, appBuild, protocolVersion });
+    await runner.finishFailure(error, { profile, primaryID, renamedID, appBuild, protocolVersion });
     throw error;
   } finally {
     await client.quitApp().catch(() => {});
@@ -605,7 +605,7 @@ async function main() {
     if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
     if (fixturePath) { try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {} }
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
-    runner.close();
+    await runner.close();
   }
 }
 

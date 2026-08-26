@@ -308,7 +308,7 @@ async function main() {
       }
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       codexSessionId,
       claudeSessionId,
       token,
@@ -320,7 +320,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, 'failure', codexSessionId).catch(() => {});
     }
     runner.writeText('daemon-on-failure.log', daemonLogTail(dataDir, 400));
-    const summary = runner.finishFailure(error, { codexSessionId, claudeSessionId, token });
+    const summary = await runner.finishFailure(error, { codexSessionId, claudeSessionId, token });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

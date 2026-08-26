@@ -324,7 +324,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '03-after-close', sessionId);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       endpointId: endpoint?.id || null,
       sshTarget: options.sshTarget,
@@ -347,7 +347,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId);
     }
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       endpointId: endpoint?.id || null,
       splitPaneId,

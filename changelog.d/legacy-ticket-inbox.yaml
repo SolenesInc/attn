@@ -1,0 +1,6 @@
+kind: fixed
+area: cli
+change: >
+  Legacy ticket nudges now point to `attn ticket inbox`, which remains available
+  to read and acknowledge unread activity on tickets that predate the garden.
+  `attn ticket list` stays a non-consuming board read.
