@@ -3,7 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createScenarioRecorder, recordingEnabled, startWindowRecording } from './windowRecording.mjs';
+import {
+  defaultWindowRecorderAppPath,
+  installWindowRecorder,
+  requireInstalledWindowRecorderLaunch,
+  WINDOW_RECORDER_BUNDLE_ID,
+  windowRecorderCommand,
+} from './windowRecorderApp.mjs';
+import { createScenarioRecorder, ensureWindowRecorder, recordingEnabled, startWindowRecording } from './windowRecording.mjs';
 
 const FAKE_RECORDER = '/fake/attn-window-recorder';
 
@@ -56,7 +63,151 @@ describe('recordingEnabled', () => {
   });
 });
 
+describe('installed window recorder', () => {
+  async function makeInstalledBundle({
+    source = 'print("hello")\n',
+    installedSource = source,
+    installer = 'export const installerVersion = 1;\n',
+    installedInstaller = installer,
+  } = {}) {
+    const sourcePath = path.join(tmpDir, 'WindowRecorder.swift');
+    const installerPath = path.join(tmpDir, 'windowRecorderApp.mjs');
+    const appPath = path.join(tmpDir, 'Applications', 'attn-window-recorder.app');
+    fs.writeFileSync(sourcePath, installedSource);
+    fs.writeFileSync(installerPath, installedInstaller);
+    await installWindowRecorder({
+      appPath,
+      sourcePath,
+      installerPath,
+      codesignIdentity: 'TEST-IDENTITY',
+      platform: 'darwin',
+      execFileFn: async (command, args) => {
+        if (command === '/usr/bin/swiftc') {
+          fs.writeFileSync(args[args.indexOf('-o') + 1], 'compiled-recorder');
+        }
+        return { stdout: '' };
+      },
+      launchServicesRegisterPath: null,
+    });
+    fs.writeFileSync(sourcePath, source);
+    fs.writeFileSync(installerPath, installer);
+    return { appPath, command: windowRecorderCommand(appPath), installerPath, sourcePath };
+  }
+
+  it('uses a stable app location outside the checkout', () => {
+    expect(defaultWindowRecorderAppPath('/Users/tester')).toBe(
+      '/Users/tester/Applications/attn-window-recorder.app'
+    );
+  });
+
+  it('launches the installed bundle through Launch Services when its source matches', async () => {
+    const { appPath, installerPath, sourcePath } = await makeInstalledBundle();
+
+    await expect(ensureWindowRecorder({ appPath, sourcePath, installerPath })).resolves.toEqual({
+      command: '/usr/bin/open',
+      argsPrefix: ['-n', '-W', '-a', appPath],
+      captureLaunchedStderr: true,
+      stopWithFile: true,
+    });
+  });
+
+  it('names the install target when the bundle is missing or stale', async () => {
+    const missingSource = path.join(tmpDir, 'missing-source.swift');
+    fs.writeFileSync(missingSource, 'print("hello")\n');
+    await expect(ensureWindowRecorder({ appPath: path.join(tmpDir, 'missing.app'), sourcePath: missingSource }))
+      .rejects.toThrow('make install-window-recorder');
+
+    const { appPath, installerPath, sourcePath } = await makeInstalledBundle({ installedSource: 'old source\n' });
+    await expect(ensureWindowRecorder({ appPath, sourcePath, installerPath })).rejects.toThrow('is stale');
+  });
+
+  it('rejects a bundle installed by an older installer', async () => {
+    const installed = await makeInstalledBundle({ installedInstaller: 'export const installerVersion = 0;\n' });
+
+    await expect(ensureWindowRecorder(installed)).rejects.toThrow('is stale');
+  });
+
+  it('builds, signs, and replaces the stable app bundle', async () => {
+    const sourcePath = path.join(tmpDir, 'WindowRecorder.swift');
+    const installerPath = path.join(tmpDir, 'windowRecorderApp.mjs');
+    const appPath = path.join(tmpDir, 'Applications', 'attn-window-recorder.app');
+    fs.writeFileSync(sourcePath, 'print("first")\n');
+    fs.writeFileSync(installerPath, 'export const installerVersion = 1;\n');
+    fs.mkdirSync(appPath, { recursive: true });
+    fs.writeFileSync(path.join(appPath, 'old-marker'), 'old');
+    const calls = [];
+    const execFileFn = async (command, args) => {
+      calls.push({ command, args });
+      if (command === '/usr/bin/swiftc') {
+        fs.writeFileSync(args[args.indexOf('-o') + 1], 'compiled-recorder');
+      }
+      return { stdout: '' };
+    };
+
+    const installed = await installWindowRecorder({
+      appPath,
+      sourcePath,
+      installerPath,
+      codesignIdentity: 'TEST-IDENTITY',
+      platform: 'darwin',
+      execFileFn,
+      launchServicesRegisterPath: null,
+    });
+
+    expect(installed).toMatchObject({ appPath, bundleId: WINDOW_RECORDER_BUNDLE_ID });
+    expect(fs.existsSync(path.join(appPath, 'old-marker'))).toBe(false);
+    expect(fs.readFileSync(installed.command, 'utf8')).toBe('compiled-recorder');
+    expect(fs.readFileSync(path.join(appPath, 'Contents', 'Info.plist'), 'utf8'))
+      .toContain(`<string>${WINDOW_RECORDER_BUNDLE_ID}</string>`);
+    expect(calls.map((call) => call.command)).toEqual([
+      '/usr/bin/swiftc',
+      '/usr/bin/codesign',
+      '/usr/bin/codesign',
+    ]);
+    expect(requireInstalledWindowRecorderLaunch({ appPath, sourcePath, installerPath })).toMatchObject({
+      command: '/usr/bin/open',
+      stopWithFile: true,
+    });
+  });
+});
+
 describe('startWindowRecording', () => {
+  it('launches an app bundle and asks it to stop through a file', async () => {
+    const { calls, spawnFn } = makeSpawnFn();
+    const outputPath = path.join(tmpDir, 'launch-services.mp4');
+    const stopFilePath = `${outputPath}.stop`;
+    fs.writeFileSync(stopFilePath, 'stale stop request\n');
+    const handle = startWindowRecording({
+      windowId: 42,
+      outputPath,
+      command: {
+        command: '/usr/bin/open',
+        argsPrefix: ['-n', '-W', '-a', '/Applications/recorder.app'],
+        captureLaunchedStderr: true,
+        stopWithFile: true,
+      },
+      spawnFn,
+    });
+
+    expect(fs.existsSync(stopFilePath)).toBe(false);
+    expect(calls[0].command).toBe('/usr/bin/open');
+    expect(calls[0].args).toEqual([
+      '-n', '-W', '-a', '/Applications/recorder.app',
+      '--stderr', `${outputPath}.stderr`, '--args',
+      '42', outputPath, '15', stopFilePath,
+    ]);
+
+    fs.writeFileSync(outputPath, 'movie-bytes');
+    const stopPromise = handle.stop();
+    expect(fs.readFileSync(stopFilePath, 'utf8')).toBe('stop\n');
+    expect(calls[0].child.signals).toEqual([]);
+    calls[0].child.emit('exit', 0);
+
+    const result = await stopPromise;
+    expect(result.failure).toBeNull();
+    expect(fs.existsSync(stopFilePath)).toBe(false);
+  });
+
   it('records the window id and SIGINTs the child on stop', async () => {
     const { calls, spawnFn } = makeSpawnFn();
     const outputPath = path.join(tmpDir, 'segment.mp4');

@@ -1,55 +1,34 @@
-import { execFile, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const RECORDER_SOURCE = path.join(SCRIPT_DIR, 'WindowRecorder.swift');
-const RECORDER_BUILD_DIR = path.join(SCRIPT_DIR, '.build');
-const RECORDER_BINARY = path.join(RECORDER_BUILD_DIR, 'attn-window-recorder');
-const CODESIGN_IDENTITY_SCRIPT = path.resolve(SCRIPT_DIR, '..', '..', '..', 'scripts', 'macos-codesign-identity.sh');
+import { requireInstalledWindowRecorderLaunch } from './windowRecorderApp.mjs';
 
 export function recordingEnabled(env = process.env) {
   const value = String(env.ATTN_HARNESS_RECORD ?? '').trim().toLowerCase();
   return value === '1' || value === 'true' || value === 'on';
 }
 
-// A stable signature keeps the TCC screen-recording grant attached to the
-// binary across rebuilds, so the rebuild is content-hashed and re-signed.
-export async function ensureWindowRecorder() {
-  fs.mkdirSync(RECORDER_BUILD_DIR, { recursive: true });
-  const sourceHash = createHash('sha256').update(fs.readFileSync(RECORDER_SOURCE)).digest('hex');
-  const fingerprintPath = `${RECORDER_BINARY}.fingerprint`;
-  const builtFromHash = fs.existsSync(fingerprintPath)
-    ? fs.readFileSync(fingerprintPath, 'utf8').trim()
-    : null;
-  if (!fs.existsSync(RECORDER_BINARY) || builtFromHash !== sourceHash) {
-    await execFileAsync('/usr/bin/swiftc', ['-O', RECORDER_SOURCE, '-o', RECORDER_BINARY], {
-      timeout: 120_000,
-    });
-    fs.writeFileSync(fingerprintPath, `${sourceHash}\n`);
-    if (process.platform === 'darwin' && fs.existsSync(CODESIGN_IDENTITY_SCRIPT)) {
-      const { stdout } = await execFileAsync('bash', [CODESIGN_IDENTITY_SCRIPT, 'find'], { timeout: 5_000 });
-      const identity = stdout.toString().trim();
-      if (identity && identity !== '-') {
-        await execFileAsync('/usr/bin/codesign', ['--force', '--sign', identity, RECORDER_BINARY], {
-          timeout: 10_000,
-        });
-      }
-    }
-  }
-  return RECORDER_BINARY;
+export async function ensureWindowRecorder(options) {
+  return requireInstalledWindowRecorderLaunch(options);
 }
 
-// SIGINT-to-exit was <1s in every measured finalization; 10s only catches a
+// Graceful stop-to-exit was <1s in every measured finalization; 10s catches a
 // recorder that will never finalize, and then SIGKILL abandons the file.
 const FINALIZE_TRIPWIRE_MS = 10_000;
 
 export function startWindowRecording({ windowId, outputPath, command, spawnFn = spawn }) {
-  const child = spawnFn(command, [String(windowId), outputPath], {
+  const launch = typeof command === 'string'
+    ? { command, argsPrefix: [], captureLaunchedStderr: false, stopWithFile: false }
+    : command;
+  const stopFilePath = launch.stopWithFile ? `${outputPath}.stop` : null;
+  const launchedStderrPath = launch.captureLaunchedStderr ? `${outputPath}.stderr` : null;
+  if (stopFilePath) fs.rmSync(stopFilePath, { force: true });
+  if (launchedStderrPath) fs.rmSync(launchedStderrPath, { force: true });
+  const args = [...launch.argsPrefix];
+  if (launchedStderrPath) args.push('--stderr', launchedStderrPath, '--args');
+  args.push(String(windowId), outputPath);
+  if (stopFilePath) args.push('15', stopFilePath);
+  const child = spawnFn(launch.command, args, {
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let stderr = '';
@@ -68,7 +47,11 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
     async stop() {
       let forced = false;
       try {
-        child.kill('SIGINT');
+        if (stopFilePath) {
+          fs.writeFileSync(stopFilePath, 'stop\n', 'utf8');
+        } else {
+          child.kill('SIGINT');
+        }
       } catch {
       }
       const tripwire = setTimeout(() => {
@@ -80,6 +63,17 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
       tripwire.unref();
       const { code, spawnError } = await exited;
       clearTimeout(tripwire);
+      if (launchedStderrPath) {
+        try {
+          stderr += fs.readFileSync(launchedStderrPath, 'utf8');
+          fs.rmSync(launchedStderrPath, { force: true });
+        } catch {}
+      }
+      if (stopFilePath) {
+        try {
+          fs.rmSync(stopFilePath, { force: true });
+        } catch {}
+      }
 
       let bytes = 0;
       try {
@@ -88,7 +82,7 @@ export function startWindowRecording({ windowId, outputPath, command, spawnFn = 
       const failure = spawnError
         ? `recorder failed to spawn: ${spawnError.message}`
         : forced
-          ? `recorder ignored SIGINT for ${FINALIZE_TRIPWIRE_MS}ms and was SIGKILLed; the file is likely unplayable`
+          ? `recorder ignored the stop request for ${FINALIZE_TRIPWIRE_MS}ms and was SIGKILLed; the file is likely unplayable`
           : bytes === 0
             ? `recorder exited ${code} with no output${stderr ? `: ${stderr.trim()}` : ''}`
             : code !== 0
