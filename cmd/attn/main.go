@@ -971,6 +971,142 @@ func parseTicketIDArgs(name string, args []string) (ticketIDArgs, error) {
 	return result, nil
 }
 
+func runTicketInbox(args []string) {
+	fs := flag.NewFlagSet("ticket inbox", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	sessionID := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
+	jsonOutput := fs.Bool("json", false, "print the unread bundles as JSON")
+	watch := fs.Bool("watch", false, "block and print new ticket activity as it lands; silent until something changes")
+	interval := fs.Duration("interval", ticketWatchInterval, "poll interval in --watch mode")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "ticket inbox: %v\n", err)
+		os.Exit(2)
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "ticket inbox: unexpected arguments: %v\n", fs.Args())
+		os.Exit(2)
+	}
+	source, err := resolveDispatchSession(*sessionID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ticket inbox: %v\n", err)
+		os.Exit(2)
+	}
+	if *watch {
+		runTicketInboxWatch(source, *interval, *jsonOutput)
+		return
+	}
+	result, err := client.New("").TicketInbox(source)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ticket inbox: %v\n", err)
+		os.Exit(1)
+	}
+	if *jsonOutput {
+		printJSON(result)
+		return
+	}
+	printTicketInbox(result)
+}
+
+const ticketWatchInterval = 3 * time.Second
+
+func runTicketInboxWatch(source string, interval time.Duration, jsonOutput bool) {
+	if interval <= 0 {
+		interval = ticketWatchInterval
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	c := client.New("")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	watchTicketInbox(ctx, ticker.C, func() (*protocol.TicketInboxResult, error) {
+		return c.TicketInboxWatch(source, interval)
+	}, os.Stdout, os.Stderr, jsonOutput)
+}
+
+// Report a daemon error once per outage: a wrapping Monitor treats every printed line as new activity.
+func watchTicketInbox(
+	ctx context.Context,
+	tick <-chan time.Time,
+	fetch func() (*protocol.TicketInboxResult, error),
+	out, errOut io.Writer,
+	jsonOutput bool,
+) {
+	var lastErr string
+	for {
+		result, err := fetch()
+		if err != nil {
+			if msg := err.Error(); msg != lastErr {
+				fmt.Fprintf(errOut, "ticket inbox --watch: %s\n", msg)
+				lastErr = msg
+			}
+		} else {
+			lastErr = ""
+			if result != nil && len(result.Bundles) > 0 {
+				if jsonOutput {
+					if encErr := fprintJSON(out, result); encErr != nil {
+						fmt.Fprintf(errOut, "ticket inbox --watch: %v\n", encErr)
+					}
+				} else {
+					fprintTicketInbox(out, result)
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick:
+		}
+	}
+}
+
+func printTicketInbox(result *protocol.TicketInboxResult) {
+	fprintTicketInbox(os.Stdout, result)
+}
+
+func fprintTicketInbox(w io.Writer, result *protocol.TicketInboxResult) {
+	if result == nil {
+		fmt.Fprintln(w, "no unread ticket activity")
+		return
+	}
+	if result.LastUserActivityAt != nil {
+		if lastActive, err := time.Parse(time.RFC3339, *result.LastUserActivityAt); err == nil {
+			fmt.Fprintf(w, "user: active %s ago\n", humanizeDuration(time.Since(lastActive)))
+		}
+	}
+	bundles := result.Bundles
+	if len(bundles) == 0 {
+		fmt.Fprintln(w, "no unread ticket activity")
+		return
+	}
+	for _, b := range bundles {
+		fmt.Fprintf(w, "%s\n", b.TicketID)
+		for _, e := range b.Events {
+			line := fmt.Sprintf("  [%s] %s by %s", e.CreatedAt, e.Kind, e.Author)
+			if e.FromStatus != nil && e.ToStatus != nil {
+				line += fmt.Sprintf(" (%s → %s)", *e.FromStatus, *e.ToStatus)
+			}
+			fmt.Fprintln(w, line)
+			if e.Comment != nil && *e.Comment != "" {
+				fmt.Fprintf(w, "    %s\n", *e.Comment)
+			}
+		}
+	}
+}
+
+func humanizeDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	default:
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	}
+}
+
 func writeTicketHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn ticket <command>
 
