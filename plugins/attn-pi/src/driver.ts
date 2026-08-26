@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { availableModels, type AvailableModels } from "../automode/models";
 import type { AttnRPCClient } from "./attn-rpc";
 import type { RelayConnection, RelayServer } from "./relay";
 import type {
@@ -63,6 +64,8 @@ const defaultRunCommand: RunCommand = async (argv) => {
 export class PiDriver {
   private readonly rpc: AttnRPCClient;
   private readonly runCommand: RunCommand;
+  private readonly env: Record<string, string | undefined>;
+  private readonly readFile: (path: string) => string | undefined;
   private readonly executable: string;
   private readonly relay: RelayServer;
   private readonly suitePath: string;
@@ -78,6 +81,8 @@ export class PiDriver {
     relay: RelayServer;
     suitePath: string;
     runCommand?: RunCommand;
+    env?: Record<string, string | undefined>;
+    readFile?: (path: string) => string | undefined;
     executable?: string;
     unbackedGraceMs?: number;
   }) {
@@ -85,6 +90,8 @@ export class PiDriver {
     this.relay = options.relay;
     this.suitePath = options.suitePath;
     this.runCommand = options.runCommand ?? defaultRunCommand;
+    this.env = options.env ?? process.env;
+    this.readFile = options.readFile ?? readCatalogFile;
     this.executable = options.executable?.trim() || process.env.ATTN_PI_EXECUTABLE?.trim() || "pi";
     this.unbackedGraceMs = options.unbackedGraceMs ?? unbackedRunGraceMs;
   }
@@ -109,6 +116,29 @@ export class PiDriver {
     // known, so a suite re-dialing the instant the path appears is never refused.
     this.adoptActiveRuns(result.active_runs ?? []);
     await this.relay.listen();
+  }
+
+  models(): Promise<AvailableModels> {
+    return availableModels(this.env, this.readFile, (provider) => this.providerReadiness(provider));
+  }
+
+  private async providerReadiness(provider: string): Promise<{ ready: boolean; detail?: string }> {
+    const argv = [this.executable, "auth", "check", "--provider", provider, "--json", "--no-refresh"];
+    let result: { exitCode: number; stdout: string; stderr: string };
+    try {
+      result = await this.runCommand(argv);
+    } catch (error) {
+      return { ready: false, detail: describeError(error) };
+    }
+    const answer = parseJSONObject(result.stdout);
+    if (answer === undefined) {
+      const detail = firstLine(result.stderr) ?? `pi auth check exited ${result.exitCode}`;
+      return { ready: false, detail };
+    }
+    if (answer.status === "ready") return { ready: true };
+    const reason = typeof answer.reason === "string" ? answer.reason : "";
+    const status = typeof answer.status === "string" ? answer.status : "";
+    return { ready: false, detail: reason || status || "pi did not say it was ready" };
   }
 
   health(): { ok: boolean; message: string } {
@@ -580,5 +610,34 @@ function requireText(value: string, field: string): string {
 }
 
 function safeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function readCatalogFile(path: string): string | undefined {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function parseJSONObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstLine(text: string): string | undefined {
+  const line = text.split("\n").map((entry) => entry.trim()).find((entry) => entry !== "");
+  return line;
+}
+
+function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
