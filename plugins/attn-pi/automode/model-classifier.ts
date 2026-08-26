@@ -117,7 +117,7 @@ export class ModelClassifier implements Classifier {
       systemPrompt: harmPrompt.system,
       messages: harmMessages,
       maxTokens: harmMaxTokens,
-      ...(this.sessionId() ?? {}),
+      ...this.sessionId(),
       signal: request.signal,
     });
     if (harm.answered === false) return unansweredVerdict(harm, harmPrompt);
@@ -137,7 +137,7 @@ export class ModelClassifier implements Classifier {
       systemPrompt: intentPrompt.system,
       messages: intentMessages,
       maxTokens: intentMaxTokens,
-      ...(this.sessionId() ?? {}),
+      ...this.sessionId(),
       signal: request.signal,
     });
     if (intent.answered === false) return unansweredVerdict(intent, intentPrompt);

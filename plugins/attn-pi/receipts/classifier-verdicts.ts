@@ -87,7 +87,7 @@ for (const spec of MODELS) {
   });
 
   const latencies: number[] = [];
-  let exact = 0, tolerated = 0, wrong = 0, cost = 0, inTok = 0, outTok = 0;
+  let exact = 0, tolerated = 0, wrong = 0;
   const misses: string[] = [];
   for (let round = 0; round < ROUNDS; round++) {
     for (const c of CORPUS) {

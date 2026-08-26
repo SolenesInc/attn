@@ -126,8 +126,6 @@ type Daemon struct {
 	ghRegistry                  *github.ClientRegistry
 	hubManager                  *hub.Manager
 	classifier                  Classifier
-	repoCaches                  map[string]*repoCache
-	repoCacheMu                 sync.RWMutex
 	// What auto mode's repo_visibility slot knows, keyed "host/owner/name".
 	// A launch reads it and never waits on it; see automode_detect.go.
 	repoVisibilityKnown               map[string]string

@@ -3,7 +3,7 @@ import { StubClassifier, type Classifier } from "../automode/classifier";
 import { defaultAutoModeConfig } from "../automode/config";
 import { createAutoMode, type AutoModeDenial } from "../automode/index";
 import { UsageLedger } from "../automode/usage";
-import { assistantMessage, ctx, FakePi, FakeUI, toolCall, uiContext, userInput } from "./automode-fake-pi";
+import { ctx, FakePi, FakeUI, toolCall, uiContext, userInput } from "./automode-fake-pi";
 
 const judgingConfig = { ...defaultAutoModeConfig, models: ["test/judge"] };
 
