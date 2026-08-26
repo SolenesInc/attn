@@ -69,6 +69,8 @@ function Harness({
     addPattern: vi.fn().mockResolvedValue(edited()),
     removePattern: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot,
+    setModels: vi.fn().mockResolvedValue(edited()),
+    loadModels: vi.fn().mockResolvedValue({ providers: [], problem: null }),
   });
   return <AutoModeSettings policy={policy} />;
 }

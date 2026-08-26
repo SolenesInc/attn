@@ -7,11 +7,13 @@ import type {
   AutoModeEnvironmentSlot,
   AutoModeEnvironmentSlotValue,
   AutoModeProposalInfo,
+  AutoModeModelProvider,
 } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useAutoModePushStore } from '../store/autoMode';
 
 export type {
+  AutoModeModelProvider,
   AutoModeConfigInfo,
   AutoModeDenialInfo,
   AutoModeEnvironmentInfo,
@@ -29,6 +31,11 @@ export interface AutoModeState {
 
 export interface AutoModePatternEdit {
   config: AutoModeConfigInfo;
+}
+
+export interface AutoModeModelCatalog {
+  providers: AutoModeModelProvider[];
+  problem: string | null;
 }
 
 export interface AutoModePromotion {
@@ -52,6 +59,11 @@ const emptyConfig = (): AutoModeConfigInfo => ({
   hard_deny: [],
   shipped_hard_deny: [],
   models: [],
+});
+
+const toModelCatalog = (event: AutoModeDaemonEvent): AutoModeModelCatalog => ({
+  providers: list<AutoModeModelProvider>(event.providers),
+  problem: typeof event.problem === 'string' ? event.problem : null,
 });
 
 const toEnvironment = (value: unknown): AutoModeEnvironmentInfo => {
@@ -155,6 +167,24 @@ export function handleAutoModeDaemonEvent(
       }
       return true;
     }
+    case 'automode_model_set_result':
+      settlePendingRequest(
+        pending,
+        'automode_model_set',
+        event,
+        toPatternEdit,
+        'Saving the models failed',
+      );
+      return true;
+    case 'automode_models_result':
+      settlePendingRequest(
+        pending,
+        'automode_models',
+        event,
+        toModelCatalog,
+        'Asking pi which models it can reach failed',
+      );
+      return true;
     case 'automode_state_changed':
       useAutoModePushStore.getState().push(toState(event));
       return true;

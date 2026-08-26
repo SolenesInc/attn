@@ -76,6 +76,7 @@ import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
   type AutoModePatternEdit,
+  type AutoModeModelCatalog,
   type AutoModePromotion,
   type AutoModeState,
 } from './daemonAutoModeEvents';
@@ -3104,6 +3105,28 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
+  const sendAutoModeModelSet = useCallback(
+    (models: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_model_set',
+        { models },
+        'Saving the models timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  // pi is asked per provider and each ask spawns a process, so this waits far
+  // longer than a command the daemon answers on its own.
+  const sendAutoModeModels = useCallback((): Promise<AutoModeModelCatalog> => {
+    return sendRequest<AutoModeModelCatalog>(
+      'automode_models',
+      {},
+      'Asking pi which models it can reach timed out',
+      30000,
+    );
+  }, [sendRequest]);
+
   const sendAutoModeEnvSlot = useCallback(
     (slot: string, values: string[]): Promise<AutoModePatternEdit> => {
       return sendRequest<AutoModePatternEdit>(
@@ -5149,6 +5172,8 @@ export function useDaemonSocket({
     sendAutoModePromote,
     sendAutoModeDiscard,
     sendAutoModePatternAdd,
+    sendAutoModeModelSet,
+    sendAutoModeModels,
     sendAutoModeEnvSlot,
     sendAutoModeEnvNotes,
     sendAutoModePatternRemove,

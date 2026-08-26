@@ -146,6 +146,19 @@
   gap: 6px;
 }
 
+.automode-models-catalog {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.automode-models-catalog .settings-hint,
+.automode-models-catalog .settings-warning {
+  grid-column: 1 / -1;
+}
+
 /* The denial ledger: what was refused, who decided, when. */
 .automode-denials {
   display: grid;

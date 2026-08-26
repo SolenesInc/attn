@@ -218,6 +218,8 @@ export function SettingsModal({
     sendAutoModePatternAdd,
     sendAutoModePatternRemove,
     sendAutoModeEnvSlot,
+    sendAutoModeModelSet,
+    sendAutoModeModels,
   } = useDaemonApi();
   const autoModePolicy = useAutoModePolicy({
     enabled: isOpen,
@@ -227,6 +229,8 @@ export function SettingsModal({
     addPattern: sendAutoModePatternAdd,
     removePattern: sendAutoModePatternRemove,
     setEnvironmentSlot: sendAutoModeEnvSlot,
+    setModels: sendAutoModeModelSet,
+    loadModels: sendAutoModeModels,
   });
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');

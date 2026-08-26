@@ -5,6 +5,7 @@ import type {
   AutoModeEnvironmentSlot,
   AutoModeProposalInfo,
 } from '../hooks/daemonAutoModeEvents';
+import type { AutoModeModelProvider } from '../hooks/daemonAutoModeEvents';
 import type { AutoModePatternList, AutoModePolicy } from '../hooks/useAutoModePolicy';
 import { setAutoModeAutomationHandle } from './autoModeAutomation';
 import './AutoModeSettings.css';
@@ -55,8 +56,7 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
         <div className="automode-section-head">
           <h4>Effective policy</h4>
           <p className="settings-description">
-            What a pi session launches with today. Models are edited from{' '}
-            <code>attn automode</code>.
+            What a pi session launches with today.
           </p>
         </div>
 
@@ -72,8 +72,17 @@ export function AutoModeSettings({ policy }: AutoModeSettingsProps) {
               </span>
             </span>
           </div>
-          {renderModels('Models', 'automode-models', config.models)}
         </div>
+
+        <div className="automode-section-head">
+          <h4>Models</h4>
+          <p className="settings-description">
+            The classifier's models, primary first. The one on top judges; the
+            rest are tried only when the one before it cannot be reached. No
+            model at all leaves auto mode off.
+          </p>
+        </div>
+        <ModelEditor policy={policy} models={config.models} />
 
         <div className="automode-section-head">
           <h4>This machine</h4>
@@ -495,29 +504,6 @@ function PatternEditor({
   );
 }
 
-function renderModels(label: string, testID: string, models: string[]) {
-  return (
-    <div className="automode-field">
-      <span className="automode-field-label">{label}</span>
-      <span className="automode-field-value" data-testid={testID}>
-        {models.length === 0 ? (
-          <span className="settings-hint">
-            No model, so auto mode stays off. Name one with <code>attn automode model</code>.
-          </span>
-        ) : (
-          <ul className="automode-patterns">
-            {models.map((model, index) => (
-              <li key={model}>
-                <code className="automode-value automode-mono">{model}</code>
-                <span className="settings-hint"> {index === 0 ? 'judges' : 'fallback'}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </span>
-    </div>
-  );
-}
 
 function renderDenials(denials: AutoModeDenialInfo[]) {
   if (denials.length === 0) {
@@ -552,4 +538,222 @@ function formatStamp(value: string): string {
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return value;
   return at.toLocaleString();
+}
+
+interface ModelEditorProps {
+  policy: AutoModePolicy;
+  models: string[];
+}
+
+function ModelEditor({ policy, models }: ModelEditorProps) {
+  const [draft, setDraft] = useState('');
+  const [failure, setFailure] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const busy = policy.savingModels;
+  const catalog = policy.modelCatalog;
+
+  const write = async (next: string[], whenItFails: string) => {
+    setFailure(null);
+    try {
+      await policy.setModels(next);
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : whenItFails);
+    }
+  };
+
+  const add = async (model: string) => {
+    const wanted = model.trim();
+    if (wanted === '') return;
+    if (models.includes(wanted)) {
+      setFailure(`${wanted} is already in the list; a pass walks each model once`);
+      return;
+    }
+    await write([...models, wanted], 'Could not add the model');
+    setDraft('');
+  };
+
+  const openPicker = async () => {
+    setPicking(true);
+    if (!catalog) await policy.loadModelCatalog();
+  };
+
+  return (
+    <div className="automode-editor" data-testid="automode-models">
+      {models.length === 0 ? (
+        <span className="settings-hint">No model, so auto mode stays off.</span>
+      ) : (
+        <ul className="automode-patterns">
+          {models.map((model, index) => (
+            <li key={model} className="automode-pattern-row" data-testid="automode-models-entry">
+              <code className="automode-value automode-mono">{model}</code>
+              <span className="settings-hint">{index === 0 ? 'judges' : 'fallback'}</span>
+              {index > 0 && (
+                <button
+                  type="button"
+                  className="settings-action"
+                  data-testid="automode-models-primary"
+                  aria-label={`Make ${model} the model that judges`}
+                  disabled={busy}
+                  onClick={() => void write(
+                    [model, ...models.filter((entry) => entry !== model)],
+                    'Could not reorder the models',
+                  )}
+                >
+                  Make primary
+                </button>
+              )}
+              <button
+                type="button"
+                className="settings-action danger"
+                data-testid="automode-models-remove"
+                aria-label={`Remove ${model}`}
+                disabled={busy}
+                onClick={() => void write(
+                  models.filter((entry) => entry !== model),
+                  'Could not remove the model',
+                )}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="automode-pattern-add">
+        <input
+          type="text"
+          className="settings-input"
+          data-testid="automode-models-input"
+          value={draft}
+          placeholder="provider/id, such as opencode-go/glm-5.3"
+          aria-label="Model"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          disabled={busy}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void add(draft);
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="settings-action"
+          data-testid="automode-models-add"
+          disabled={busy || draft.trim() === ''}
+          onClick={() => void add(draft)}
+        >
+          Add
+        </button>
+        {!picking && (
+          <button
+            type="button"
+            className="settings-action"
+            data-testid="automode-models-browse"
+            disabled={busy}
+            onClick={() => void openPicker()}
+          >
+            Models pi can reach
+          </button>
+        )}
+      </div>
+
+      {picking && <ModelCatalog policy={policy} models={models} onPick={(model) => void add(model)} />}
+      {failure && <span className="settings-warning">{failure}</span>}
+    </div>
+  );
+}
+
+interface ModelCatalogProps {
+  policy: AutoModePolicy;
+  models: string[];
+  onPick: (model: string) => void;
+}
+
+function ModelCatalog({ policy, models, onPick }: ModelCatalogProps) {
+  const { modelCatalog: catalog, catalogLoading, catalogError } = policy;
+
+  if (catalogLoading) {
+    return <span className="settings-hint" data-testid="automode-models-catalog-loading">Asking pi…</span>;
+  }
+  if (catalogError) {
+    return (
+      <div className="automode-models-catalog" data-testid="automode-models-catalog-error">
+        <span className="settings-warning">{catalogError}</span>
+        <button type="button" className="settings-action" onClick={() => void policy.loadModelCatalog()}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+  if (!catalog) return null;
+
+  const reachable = catalog.providers.filter((provider) => provider.models.length > 0);
+  if (reachable.length === 0) {
+    return (
+      <span className="settings-hint" data-testid="automode-models-catalog-empty">
+        pi has no model catalog yet. `pi update` fetches one.
+      </span>
+    );
+  }
+
+  return (
+    <div className="automode-models-catalog" data-testid="automode-models-catalog">
+      <select
+        className="settings-input"
+        data-testid="automode-models-select"
+        aria-label="Models pi can reach"
+        value=""
+        onChange={(event) => {
+          if (event.target.value !== '') onPick(event.target.value);
+        }}
+      >
+        <option value="">Pick a model…</option>
+        {reachable.map((provider) => (
+          <optgroup
+            key={provider.provider}
+            label={provider.ready
+              ? provider.provider
+              : `${provider.provider} — ${provider.detail ?? 'pi cannot use this one'}`}
+          >
+            {provider.models.map((model) => {
+              const value = `${provider.provider}/${model.id}`;
+              return (
+                <option key={value} value={value} disabled={!provider.ready || models.includes(value)}>
+                  {model.name ?? model.id}
+                </option>
+              );
+            })}
+          </optgroup>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="settings-action"
+        data-testid="automode-models-refresh"
+        onClick={() => void policy.loadModelCatalog()}
+      >
+        Refresh
+      </button>
+      <CatalogFreshness providers={reachable} />
+      {catalog.problem && <span className="settings-warning">{catalog.problem}</span>}
+    </div>
+  );
+}
+
+function CatalogFreshness({ providers }: { providers: AutoModeModelProvider[] }) {
+  const stamps = providers
+    .map((provider) => provider.checked_at)
+    .filter((stamp): stamp is number => typeof stamp === 'number' && stamp > 0);
+  if (stamps.length === 0) return null;
+  const oldest = new Date(Math.min(...stamps));
+  return (
+    <span className="settings-hint" data-testid="automode-models-checked-at">
+      Catalog read {oldest.toLocaleDateString()}.
+    </span>
+  );
 }

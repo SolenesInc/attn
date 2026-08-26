@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AutoModeSettings } from './AutoModeSettings';
 import type {
@@ -64,6 +64,8 @@ function Harness(props: {
     addPattern: vi.fn().mockResolvedValue(edited()),
     removePattern: vi.fn().mockResolvedValue(edited()),
     setEnvironmentSlot: vi.fn().mockResolvedValue(edited()),
+    setModels: vi.fn(async () => ({ config: config() })),
+    loadModels: vi.fn(async () => ({ providers: [], problem: null })),
     ...props,
   });
   return <AutoModeSettings policy={policy} />;
@@ -140,8 +142,12 @@ describe('AutoModeSettings', () => {
       config: config({ models: ['opencode-go/glm-5.3', 'vendor/backup'] }),
     }));
     const models = await screen.findByTestId('automode-models');
-    expect(models).toHaveTextContent('opencode-go/glm-5.3 judges');
-    expect(models).toHaveTextContent('vendor/backup fallback');
+    const rows = within(models).getAllByTestId('automode-models-entry');
+    expect(rows[0]).toHaveTextContent('opencode-go/glm-5.3');
+    expect(rows[0]).toHaveTextContent('judges');
+    expect(rows[1]).toHaveTextContent('vendor/backup');
+    expect(rows[1]).toHaveTextContent('fallback');
+    expect(within(rows[0]).queryByTestId('automode-models-primary')).toBeNull();
   });
 
   it('says auto mode stays off while no model can judge a call', async () => {
@@ -192,8 +198,9 @@ describe('AutoModeSettings', () => {
     const shown = await screen.findByTestId('automode-config');
 
     expect(shown).toHaveTextContent('Auto mode off');
-    expect(shown).toHaveTextContent('opencode-go/glm-5.3');
-    expect(shown).toHaveTextContent('opencode-go/qwen3.8-max');
+    const models = screen.getByTestId('automode-models');
+    expect(models).toHaveTextContent('opencode-go/glm-5.3');
+    expect(models).toHaveTextContent('opencode-go/qwen3.8-max');
     // The shipped denies are resolved in daemon-side, so they show up without anyone promoting them.
     expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('*attn automode env*');
     expect(screen.getByTestId('automode-allow')).toHaveTextContent('git push origin*');

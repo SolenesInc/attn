@@ -1,0 +1,10 @@
+kind: added
+area: automode
+change: >
+  Auto mode's models are set in Settings instead of only from the command
+  line. The list is edited in place: add one, remove one, or move one into
+  the seat that judges. A picker offers the models pi can actually reach,
+  grouped by provider, with the ones pi cannot use closed off and its reason
+  shown; the field still takes any provider/id, so the pane is no stricter
+  than `attn automode model`. That command still records a proposal, and an
+  agent still cannot write the list.

@@ -50,6 +50,8 @@ function Harness({ getState }: { getState: () => Promise<AutoModeState> }) {
     addPattern: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
     removePattern: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
     setEnvironmentSlot: vi.fn().mockResolvedValue({ config: config() } as AutoModePatternEdit),
+    setModels: vi.fn(async () => ({ config: config() })),
+    loadModels: vi.fn(async () => ({ providers: [], problem: null })),
   });
   return <AutoModeSettings policy={policy} />;
 }
