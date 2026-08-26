@@ -27,10 +27,6 @@ func (d *Daemon) nudgeWindow() time.Duration {
 	return defaultNudgeCountdownWindow
 }
 
-func (d *Daemon) armNudgeCountdown(sessionID string) {
-	d.armNudgeCountdownAt(sessionID, time.Now().Add(d.nudgeWindow()))
-}
-
 func (d *Daemon) armNudgeCountdownAt(sessionID string, deadline time.Time) {
 	if sessionID == "" {
 		return

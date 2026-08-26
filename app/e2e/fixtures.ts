@@ -525,6 +525,7 @@ export const test = base.extend<Fixtures>({
     await use(page);
   },
 
+  // oxlint-disable-next-line no-empty-pattern -- Playwright rejects a fixture whose first param is not an object destructuring pattern
   mockGitHub: async ({}, use) => {
     const mock = new MockGitHubServer();
     await mock.start();

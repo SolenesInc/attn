@@ -277,49 +277,6 @@ func newWorkspaceLayoutEntityID(prefix string) string {
 	return prefix + "-" + uuid.NewString()
 }
 
-func (d *Daemon) ensureAgentPaneInWorkspace(workspaceID, sessionID, title string) error {
-	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
-	if err != nil {
-		return err
-	}
-	for _, pane := range snapshot.Panes {
-		if pane.Kind == workspacelayout.PaneKindAgent && pane.SessionID == sessionID {
-			return nil
-		}
-	}
-
-	paneID := newWorkspaceLayoutEntityID("agent")
-	splitID := newWorkspaceLayoutEntityID("split")
-	targetPaneID := snapshot.ActivePaneID
-	if !workspacelayout.HasPane(snapshot.Layout, targetPaneID) {
-		targetPaneID = firstWorkspaceLayoutPaneID(*snapshot)
-	}
-	layout, changed := workspacelayout.Split(
-		snapshot.Layout,
-		targetPaneID,
-		paneID,
-		splitID,
-		workspacelayout.DirectionVertical,
-		workspacelayout.DefaultSplitRatio,
-	)
-	if !changed {
-		return fmt.Errorf("active pane not found: %s", targetPaneID)
-	}
-	if strings.TrimSpace(title) == "" {
-		title = workspacelayout.DefaultPaneTitle
-	}
-	snapshot.Layout = layout
-	snapshot.ActivePaneID = paneID
-	snapshot.Panes = append(snapshot.Panes, workspacelayout.Pane{
-		PaneID:    paneID,
-		RuntimeID: sessionID,
-		SessionID: sessionID,
-		Kind:      workspacelayout.PaneKindAgent,
-		Title:     title,
-	})
-	return d.store.SaveWorkspaceLayout(*snapshot)
-}
-
 func workspaceLayoutHasLeaf(layout workspacelayout.Node, leafID string) bool {
 	if strings.TrimSpace(leafID) == "" {
 		return false

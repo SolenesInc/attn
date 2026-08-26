@@ -191,6 +191,7 @@ lint: lint-go lint-frontend
 
 lint-go:
 	go run ./cmd/commentlint ./...
+	go tool staticcheck ./...
 
 lint-frontend:
 	cd app && pnpm run lint

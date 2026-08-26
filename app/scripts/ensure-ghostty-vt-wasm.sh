@@ -11,7 +11,9 @@
 # Maintainers move the pin and re-mirror with `make publish-ghostty-vt-wasm`.
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/lib/ghostty-vt-wasm.sh"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$repo_root/scripts/lib/ghostty-vt-wasm.sh"
+source "$repo_root/scripts/lib/release-asset.sh"
 
 want_sha="$(vtw_lock_field sha256)"
 lock_pin="$(vtw_lock_field pin)"
@@ -38,13 +40,11 @@ if [[ -f "$vtw_output" && "$(vtw_sha256 "$vtw_output")" == "$want_sha" ]]; then
 fi
 
 asset="$(vtw_asset_name)"
-url="https://github.com/${VTW_REPO}/releases/download/${VTW_RELEASE_TAG}/${asset}"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/attn-vtw-dl.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 echo "==> downloading ghostty-vt.wasm (pin ${pin:0:12})"
-echo "    $url"
-if ! curl -fL --retry 3 --retry-delay 1 -o "$tmp/$asset" "$url"; then
+if ! release_asset_download "$VTW_REPO" "$VTW_RELEASE_TAG" "$asset" "$tmp/$asset"; then
   echo "error: could not download $asset" >&2
   echo "       if you just moved ghostty-vt.pin, mirror it first:" >&2
   echo "       make publish-ghostty-vt-wasm" >&2

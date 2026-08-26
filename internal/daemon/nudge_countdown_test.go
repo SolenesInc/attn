@@ -40,15 +40,6 @@ func settledNudgeDeadline(t *testing.T, d *Daemon, sessionID string) time.Time {
 	return deadline
 }
 
-func settledNudgeDeadlineBefore(t *testing.T, d *Daemon, sessionID string, before time.Time) time.Time {
-	t.Helper()
-	deadline := settledNudgeDeadline(t, d, sessionID)
-	if !deadline.Before(before) {
-		t.Fatalf("%s deadline = %s, want before %s", sessionID, deadline, before)
-	}
-	return deadline
-}
-
 // Tests that use it set an hour-long window override so the real timer never races it.
 func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()

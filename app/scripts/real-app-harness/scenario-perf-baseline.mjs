@@ -610,7 +610,7 @@ async function main() {
       await closeSessions(client, sessionIds);
       sessionIds.length = 0;
       await delay(options.settleMs);
-      const after = await snapshot(appPid, daemonPid, webkitBaseline);
+      await snapshot(appPid, daemonPid, webkitBaseline);
       const afterRegions = await readRegionFootprint(pid);
       const afterSurfaces = await readGraphicsRegions(pid);
       summary.closeProbe = {

@@ -67,13 +67,6 @@ func (d *Daemon) ticketDeadline(sessionID string, newestPendingSeq int64, now ti
 	return deadline, false, nil
 }
 
-type ticketNudger struct{ d *Daemon }
-
-func (n ticketNudger) Nudge(observerID string) error {
-	n.d.armNudgeCountdown(observerID)
-	return nil
-}
-
 func (d *Daemon) notifyTicketObservers(ticketID string) {
 	if d.ptyBackend == nil || d.store == nil {
 		return

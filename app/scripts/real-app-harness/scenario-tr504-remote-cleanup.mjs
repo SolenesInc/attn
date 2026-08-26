@@ -18,7 +18,6 @@ import {
   waitForFirstWorkspacePane,
   waitForNewShellPane,
   waitForPaneVisible,
-  waitForSessionWorkspace,
 } from './scenarioAssertions.mjs';
 import {
   buildRemoteHarnessPaths,

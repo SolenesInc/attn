@@ -161,7 +161,6 @@ async function main() {
 
   const token = `CRASHREC${Date.now()}`;
   let codexSessionId = null;
-  let codexPaneId = null;
   let codexResumeId = null;
   let claudeSessionId = null;
 
@@ -180,7 +179,6 @@ async function main() {
         promptReadyFn: ensureCodexInitialPanePromptReady,
       });
       const pane = await waitForFirstWorkspacePane(client, sessionId, 'codex pane', 20_000);
-      codexPaneId = pane.paneId;
       codexResumeId = await waitFor(
         'codex to report its native resume id',
         async () => (await readPersistedResumeId(dataDir, sessionId)) || null,

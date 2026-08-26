@@ -15,7 +15,7 @@ async function main() {
 		await session.prompt("Reply with the single word: ok");
 		if (global.gc) global.gc(); // only runs if bun started with --expose-gc; otherwise noise is part of the receipt
 		const mem = process.memoryUsage();
-		const rec = logger.log("harness", "memory_sample", {
+		logger.log("harness", "memory_sample", {
 			note: `turn=${i} rss=${mem.rss} heapUsed=${mem.heapUsed} heapTotal=${mem.heapTotal} external=${mem.external}`,
 		});
 		samples.push({ turn: i, rss: mem.rss, heapUsed: mem.heapUsed });

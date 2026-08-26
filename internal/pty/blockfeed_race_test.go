@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-var testPromptMark = []byte("\x1b]133;A\x07")
-
 // under replayMu (blockFeeder's contract), so no internal locking.
 type pinningBlockTable struct {
 	refs []blockRef

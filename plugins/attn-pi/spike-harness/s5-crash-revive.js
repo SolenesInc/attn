@@ -22,7 +22,6 @@ async function main() {
 	logger.log("harness", "child_spawned", { note: `pid=${childPid}` });
 
 	let sessionFilePath;
-	let killedAt;
 	const toolStartSeen = new Promise((resolve) => {
 		let buf = "";
 		child.stdout.on("data", (chunk) => {
@@ -48,7 +47,6 @@ async function main() {
 	await toolStartSeen;
 	await sleep(3000);
 	psSnapshot("before_kill", "sleep 15");
-	killedAt = performance.now();
 	logger.log("harness", "kill_sent", { note: `pid=${childPid}` });
 	process.kill(childPid, "SIGKILL");
 	await sleep(500);

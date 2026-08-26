@@ -517,7 +517,7 @@ export class WebGlTerminalRenderer {
     fgVertices.reset();
     const glyphCountBefore = this.glyphs.size;
     const atlasGenerationBefore = this.atlasGeneration;
-    const spansByRow: Array<OverlaySpan[] | undefined> = new Array(terminal.rows);
+    const spansByRow: Array<OverlaySpan[] | undefined> = Array.from({ length: terminal.rows }, () => undefined);
     const outlines: Array<{ startRow: number; startCol: number; endRow: number; endCol: number; rgb: PackedRgb; alpha: number }> = [];
     for (const overlay of overlays ?? []) {
       const rgb = parsePackedColor(overlay.color);

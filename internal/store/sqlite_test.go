@@ -972,6 +972,9 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rerun migration 79 without column: %v", err)
 	}
+	if err := migrated.Close(); err != nil {
+		t.Fatalf("close reopened database: %v", err)
+	}
 }
 
 func TestMigration37_ConvertsSessionLayoutToWorkspaceLayout(t *testing.T) {

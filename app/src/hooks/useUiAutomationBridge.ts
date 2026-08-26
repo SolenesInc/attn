@@ -3052,7 +3052,7 @@ export function useUiAutomationBridge({
           paneId,
           viewSessionId,
           available: blockState !== null,
-          ...(blockState ?? {}),
+          ...blockState,
         };
       }
       case 'get_pane_placement_state': {
@@ -3069,7 +3069,7 @@ export function useUiAutomationBridge({
           paneId,
           viewSessionId,
           available: placementState !== null,
-          ...(placementState ?? {}),
+          ...placementState,
         };
       }
       case 'get_pane_state': {

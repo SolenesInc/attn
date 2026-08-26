@@ -240,11 +240,6 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) runAutoSettle(sessionID string, phase, resume autoSettlePhase) string {
-	run, _ := d.sessionInputs().currentUserRun(sessionID)
-	return d.runAutoSettleFor(sessionID, phase, resume, run, d.store.TurnStamps(sessionID).OpenedAt)
-}
-
 func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
 	// applyState takes this lock around its store write: without it the timer can
 	// settle a turn a transition opened between the check and the settle.

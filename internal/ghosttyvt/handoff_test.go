@@ -96,7 +96,7 @@ func TestHandoffVTReplaysTheScreen(t *testing.T) {
 			term.Write([]byte("\x1b]8;;https://example.com\x07hyperlink\x1b]8;;\x07\r\n"))
 		}},
 		{"wide chars and emoji", func(term *Terminal) {
-			term.Write([]byte("日本語のテキスト\r\nemoji: \U0001F41B \U0001F468‍\U0001F4BB\r\ncombining: é\r\n"))
+			term.Write([]byte("日本語のテキスト\r\nemoji: \U0001F41B \U0001F468\u200d\U0001F4BB\r\ncombining: é\r\n"))
 		}},
 		{"soft wrap", func(term *Terminal) {
 			term.Write([]byte(strings.Repeat("x", 117) + "\r\n"))

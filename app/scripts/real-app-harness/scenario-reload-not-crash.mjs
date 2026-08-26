@@ -143,7 +143,7 @@ async function main() {
   let sessionId = null;
   let crashSessionId = null;
   const evidence = { runId, profile, steps: [] };
-  const note = (m, extra) => { console.log(`[reload-not-crash] ${m}`); evidence.steps.push({ t: Date.now(), m, ...(extra || {}) }); };
+  const note = (m, extra) => { console.log(`[reload-not-crash] ${m}`); evidence.steps.push({ t: Date.now(), m, ...extra }); };
   const saveEvidence = (verdict) => {
     evidence.verdict = verdict;
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');

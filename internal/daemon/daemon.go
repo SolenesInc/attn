@@ -47,11 +47,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-type repoCache struct {
-	fetchedAt time.Time
-	branches  []protocol.Branch
-}
-
 type workerReconcileReport struct {
 	Created           int
 	StateUpdated      int
@@ -131,8 +126,6 @@ type Daemon struct {
 	ghRegistry                        *github.ClientRegistry
 	hubManager                        *hub.Manager
 	classifier                        Classifier
-	repoCaches                        map[string]*repoCache
-	repoCacheMu                       sync.RWMutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
@@ -607,7 +600,6 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		repoCaches:          make(map[string]*repoCache),
 		gitCoord:            newGitCoordinator(),
 		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
@@ -650,7 +642,6 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		repoCaches:          make(map[string]*repoCache),
 		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
@@ -694,7 +685,6 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		logger:              nil,
 		ghRegistry:          registry,
 		hubManager:          nil,
-		repoCaches:          make(map[string]*repoCache),
 		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
@@ -882,13 +872,12 @@ func (d *Daemon) Start() error {
 		if d.listener != nil {
 			_ = d.listener.Close()
 			d.listener = nil
+			os.Remove(d.socketPath)
 		}
 		d.releasePIDLock()
 	}()
 
-	os.Remove(d.socketPath)
-
-	listener, err := net.Listen("unix", d.socketPath)
+	listener, err := listenUnixAtomically(d.socketPath)
 	if err != nil {
 		return err
 	}

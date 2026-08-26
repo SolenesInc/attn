@@ -86,7 +86,7 @@ export function GridView({
 
   const reconcileSeeding = useRef((grid: TerminalGrid) => {
     const liveIds = new Set(tilesRef.current.map((t) => t.runtimeId));
-    for (const id of [...seedGenRef.current.keys()]) {
+    for (const id of seedGenRef.current.keys()) {
       if (!liveIds.has(id)) seedGenRef.current.delete(id);
     }
     const fetchSnapshot = getSnapshotRef.current;

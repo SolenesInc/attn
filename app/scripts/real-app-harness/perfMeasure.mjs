@@ -150,7 +150,7 @@ export function parseVmmapSummary(text) {
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trimEnd();
     if (/^\s*MALLOC ZONE/.test(line)) break;
-    if (!line || /^[=\s]+$/.test(line) || /^REGION TYPE/.test(line)) continue;
+    if (!line || /^[=\s]+$/.test(line) || line.startsWith('REGION TYPE')) continue;
     const columns = line.trim().split(/\s+/);
     if (columns.length < 9) continue;
     const start = findSizeWindow(columns);

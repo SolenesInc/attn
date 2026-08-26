@@ -388,8 +388,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 						s.emitSignal(obs)
 					}
 				}
-				if len(data) > 0 {
-				}
 			}
 		}
 		if err != nil {

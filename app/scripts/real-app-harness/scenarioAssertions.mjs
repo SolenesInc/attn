@@ -1,5 +1,4 @@
 import {
-  comparePaneNativePaintCoverage,
   comparePaneNativePaintRegression,
   evaluatePaneNativePaintCoverage,
 } from './paneNativeAnalysis.mjs';
@@ -164,7 +163,7 @@ export async function waitForPaneShellReady(
   {
     timeoutMs = 15_000,
     idleMs = 400,
-    promptRegex = /[\$#%❯>»⟫]\s*$/,
+    promptRegex = /[$#%❯>»⟫]\s*$/,
     description,
   } = {},
 ) {
@@ -838,69 +837,6 @@ export async function assertPaneNativePaintCoverage(
   throw new Error(
     `${description} failed: ${(lastEvaluation?.failures || []).join(', ')}.\n${JSON.stringify(lastMetrics, null, 2)}`
   );
-}
-
-function assertPaneNativePaintDelta(
-  baselineMetrics,
-  candidateMetrics,
-  {
-    maxBusyColumnRatioDelta = 0.08,
-    maxBusyRowRatioDelta = 0.08,
-    maxBBoxWidthRatioDelta = 0.08,
-    maxBBoxHeightRatioDelta = 0.08,
-    maxActivePixelRatioDelta = 0.03,
-    description = 'pane native paint delta',
-  } = {},
-) {
-  const evaluation = comparePaneNativePaintCoverage(
-    baselineMetrics?.analysis || null,
-    candidateMetrics?.analysis || null,
-    {
-      maxBusyColumnRatioDelta,
-      maxBusyRowRatioDelta,
-      maxBBoxWidthRatioDelta,
-      maxBBoxHeightRatioDelta,
-      maxActivePixelRatioDelta,
-    },
-  );
-
-  if (!evaluation.ok) {
-    throw new Error(
-      `${description} failed: ${evaluation.failures.join(', ')}.\n${JSON.stringify({
-        baseline: baselineMetrics,
-        candidate: candidateMetrics,
-        comparison: evaluation,
-      }, null, 2)}`
-    );
-  }
-
-  return evaluation;
-}
-
-async function assertPaneNativePaintStable(
-  client,
-  runDir,
-  prefix,
-  sessionId,
-  paneId,
-  baselineMetrics,
-  options = {},
-) {
-  const candidateMetrics = await capturePaneNativeMetrics(
-    client,
-    runDir,
-    prefix,
-    sessionId,
-    paneId,
-    { target: options.target || 'paneBody' },
-  );
-
-  const comparison = assertPaneNativePaintDelta(baselineMetrics, candidateMetrics, options);
-  return {
-    baselineMetrics,
-    candidateMetrics,
-    comparison,
-  };
 }
 
 function assertPaneNativePaintNotWorse(

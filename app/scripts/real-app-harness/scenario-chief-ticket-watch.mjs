@@ -133,7 +133,7 @@ function freshWatchProcesses(baselinePids) {
   return watchProcessLines().filter((l) => !baselinePids.has(pidOf(l))).join('\n');
 }
 
-function chiefGuidanceProcesses(agent) {
+function chiefGuidanceProcesses() {
   const marker = "Rely on attn's ticket nudges";
   return shell(`ps -Awwo pid=,command= | grep -- '${marker}' | grep -v grep`).trim();
 }
@@ -219,7 +219,7 @@ async function main() {
   let chiefId = null;
   let workerId = null;
   const evidence = { runId, profile, agent, steps: [] };
-  const note = (m, extra) => { console.log(`[chief-watch] ${m}`); evidence.steps.push({ t: Date.now(), m, ...(extra || {}) }); };
+  const note = (m, extra) => { console.log(`[chief-watch] ${m}`); evidence.steps.push({ t: Date.now(), m, ...extra }); };
   const saveEvidence = (verdict) => {
     evidence.verdict = verdict;
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
@@ -276,11 +276,11 @@ async function main() {
     }
 
     await pollFor(
-      () => Boolean(chiefGuidanceProcesses(agent)),
+      () => Boolean(chiefGuidanceProcesses()),
       'chief agent launched with ChiefGuidance',
       30_000,
     );
-    const guidanceProc = chiefGuidanceProcesses(agent);
+    const guidanceProc = chiefGuidanceProcesses();
     evidence.guidanceProcess = guidanceProc;
     if (!guidanceProc) {
       await dumpPane('00-chief-no-guidance');

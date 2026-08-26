@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -64,11 +63,6 @@ function readNonEmptyString(value) {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function readTruthyEnv(value) {
-  const normalized = readNonEmptyString(value)?.toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'yes';
 }
 
 function bundledDaemonPathForApp(appPath) {
@@ -137,7 +131,7 @@ export class UiAutomationClient {
     const parkPxStr = process.env.ATTN_HARNESS_PARK_VISIBLE_PX ?? HARNESS_PARK_VISIBLE_PX_DEFAULT;
     const effectiveLaunchEnv = alwaysOnTop
       ? {
-          ...(this.launchEnv || {}),
+          ...this.launchEnv,
           ATTN_HARNESS_ALWAYS_ON_TOP: '1',
           ATTN_HARNESS_PARK_VISIBLE_PX: parkPxStr,
         }

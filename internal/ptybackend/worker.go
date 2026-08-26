@@ -1504,10 +1504,6 @@ func (b *WorkerBackend) ensurePersistentControlConnLocked(ctx context.Context, s
 	return nil
 }
 
-func (b *WorkerBackend) callSimpleOnPersistentConnLocked(ctx context.Context, session *workerSession, method string, params any) error {
-	return b.callResultOnPersistentConnLocked(ctx, session, method, params, nil)
-}
-
 func (b *WorkerBackend) callResultOnPersistentConnLocked(ctx context.Context, session *workerSession, method string, params, result any) error {
 	if session.controlConn == nil || session.controlEnc == nil || session.controlDec == nil {
 		return errors.New("worker backend persistent control connection not initialized")

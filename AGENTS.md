@@ -344,6 +344,9 @@ every comment body, verdict, and failing check URL, so act on it.
   drain battery.
 - Conventional commit titles with a scope, in plain language:
   `fix(queue): hand over the next agent however a turn closes`.
+- `make lint-go` runs the comment linter and staticcheck (pinned by the `tool`
+  directive in `go.mod`, configured by `staticcheck.conf`); CI runs both beside
+  `go vet`.
 
 ## Comments
 

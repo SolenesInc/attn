@@ -80,7 +80,7 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 	if err != nil {
 		if held >= protocol.DocSubscriptionsPerClient {
 			d.endDocSubscriptionWS(client, id, fmt.Errorf(
-				"docstore: this client already holds %d live subscriptions, which is the limit (%d), so %q was refused. Unsubscribe what is no longer on screen; a tile that unmounts must send doc_unsubscribe.",
+				"docstore: this client already holds %d live subscriptions, which is the limit (%d), so %q was refused. Unsubscribe what is no longer on screen; a tile that unmounts must send doc_unsubscribe",
 				held, protocol.DocSubscriptionsPerClient, id), protocol.ErrorCodeSubscriptionLimit)
 			return
 		}

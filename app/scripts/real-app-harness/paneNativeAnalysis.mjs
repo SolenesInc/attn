@@ -178,8 +178,8 @@ export function analyzePaneTextCoverage(
     };
   }
 
-  const rowActivity = new Array(totalRows).fill(0);
-  const columnActivity = new Array(totalCols).fill(0);
+  const rowActivity = Array.from({ length: totalRows }, () => 0);
+  const columnActivity = Array.from({ length: totalCols }, () => 0);
   let activeCellCount = 0;
   let firstCol = null;
   let firstRow = null;

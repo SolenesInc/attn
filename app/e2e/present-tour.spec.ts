@@ -240,7 +240,7 @@ test.describe('PresentTour multiple simultaneous drafts across files', () => {
     await expect.poll(() => calls(page, 'addComment')).toHaveLength(2);
 
     const added = (await calls(page, 'addComment')) as Array<[string, number, number, string]>;
-    const byContent = Object.fromEntries(added.map(([filepath, start, , content]) => [content, filepath]));
+    const byContent = Object.fromEntries(added.map(([filepath, , , content]) => [content, filepath]));
     expect(byContent['Comment on beta']).toBe('src/beta.ts');
     expect(byContent['Comment on alpha']).toBe('src/alpha.ts');
   });

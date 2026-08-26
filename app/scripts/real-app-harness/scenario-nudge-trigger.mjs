@@ -17,9 +17,9 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
-const DOORBELL_SUBSTRING = 'Activity on a ticket that predates the garden';
+const DOORBELL_SUBSTRING = 'New ticket activity';
 // Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
-const DOORBELL_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
+const DOORBELL_CORE = 'New ticket activity — run `attn ticket inbox` to catch up.';
 
 function parseArgs(argv) {
   const args = [...argv];

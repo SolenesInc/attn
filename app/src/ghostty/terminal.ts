@@ -741,12 +741,10 @@ export class GhosttyTerminal {
     if (offset < 0 || offset >= this.getScrollbackLength()) return null;
     const defaults = this.defaultColors();
     const palette = this.renderPalette();
-    const line: GhosttyCell[] = new Array(this._cols);
-    for (let x = 0; x < this._cols; x += 1) {
+    const line: GhosttyCell[] = Array.from({ length: this._cols }, (_unused, x) => {
       const cell = newCell();
       this.blank(cell, defaults);
-      line[x] = cell;
-      if (!this.ref(POINT_TAG_HISTORY, x, offset)) continue;
+      if (!this.ref(POINT_TAG_HISTORY, x, offset)) return cell;
       this.e.ghostty_grid_ref_cell(this.pRef, this.pScratch);
       const value = this.dv().getBigUint64(this.pScratch, true);
       this.e.ghostty_cell_get(value, CELL_DATA_CODEPOINT, this.pScratch);
@@ -765,7 +763,8 @@ export class GhosttyTerminal {
       }
       const graphemes = this.graphemeCodepoints(this.pRef);
       cell.grapheme_len = Math.max(0, graphemes - 1);
-    }
+      return cell;
+    });
     return line;
   }
 

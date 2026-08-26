@@ -5,13 +5,8 @@ import path from 'node:path';
 import {
   waitForFirstWorkspacePane,
   waitForPaneInputFocus,
-  waitForPaneText,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
-
-function compact(text) {
-  return text.replace(/\s+/g, '');
-}
 
 // Writes into the real ~/.claude.json. Safe only because the harness session dir
 // is fresh per run, so the entry cannot shadow a user-curated trust decision.

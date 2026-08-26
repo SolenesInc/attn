@@ -245,12 +245,3 @@ func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
 		t.Fatalf("session_exited events=%d, want 1; events=%+v", got, events)
 	}
 }
-
-func evidenceObs(claim string) pty.Observation {
-	return pty.Observation{
-		Source: pty.SourceHeartbeat,
-		Claim:  claim,
-		Detail: "test",
-		At:     time.Now(),
-	}
-}

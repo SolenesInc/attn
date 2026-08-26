@@ -338,7 +338,8 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	}
 	defer foreign.Close()
 
-	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
+	socketPath := filepath.Join(shortTempDir(t), "test.sock")
+	d := NewForTesting(socketPath)
 	t.Cleanup(d.Stop)
 
 	// Start() blocks on its accept loop, so race its return against the
@@ -355,6 +356,9 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("Start() error = %q, want it to name %q", err, want)
 			}
+		}
+		if _, statErr := os.Stat(socketPath); !os.IsNotExist(statErr) {
+			t.Errorf("failed start left %s behind (stat: %v); a socket path with no listener is a false ready signal", socketPath, statErr)
 		}
 	case <-d.startedCh:
 		t.Fatal("daemon reported itself started while another process held the WebSocket port; the bind failure must be fatal, not logged")
@@ -1566,17 +1570,17 @@ type fakeSpawnBackend struct {
 	upgradeGate        chan struct{}
 }
 
-func (f *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
-	f.mu.Lock()
-	f.upgraded = append(f.upgraded, sessionID)
-	err := f.upgradeErr
-	if err == nil && f.onUpgrade != nil {
-		f.onUpgrade(f)
+func (b *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
+	b.mu.Lock()
+	b.upgraded = append(b.upgraded, sessionID)
+	err := b.upgradeErr
+	if err == nil && b.onUpgrade != nil {
+		b.onUpgrade(b)
 	}
-	done := f.upgradeDone
-	entered := f.upgradeEntered
-	gate := f.upgradeGate
-	f.mu.Unlock()
+	done := b.upgradeDone
+	entered := b.upgradeEntered
+	gate := b.upgradeGate
+	b.mu.Unlock()
 	if entered != nil {
 		entered <- sessionID
 	}
@@ -1589,10 +1593,10 @@ func (f *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) er
 	return err
 }
 
-func (f *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.terminalBuild, f.terminalBuildKnown
+func (b *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.terminalBuild, b.terminalBuildKnown
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ string) (pty.ScreenSnapshotInfo, error) {
@@ -3136,20 +3140,6 @@ func TestDaemon_AttachFlowOverWebSocket(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("detach write failed: %v", err)
 	}
-}
-
-func extractGhosttySidecarPath(bundle string) string {
-	const prefix = "./__vite-browser-external-"
-	start := strings.Index(bundle, prefix)
-	if start == -1 {
-		return ""
-	}
-	rest := bundle[start+2:]
-	end := strings.Index(rest, ".js")
-	if end == -1 {
-		return ""
-	}
-	return rest[:end+3]
 }
 
 func waitForDaemonWebSocketEvent(
@@ -4900,8 +4890,8 @@ func TestHandleStop_SkipsClassificationForForcedStopSession(t *testing.T) {
 	})
 }
 
-func (f *fakeSpawnBackend) upgradedSessions() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]string(nil), f.upgraded...)
+func (b *fakeSpawnBackend) upgradedSessions() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.upgraded...)
 }

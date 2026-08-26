@@ -30,11 +30,6 @@ type pluginListResult struct {
 	Issues  []protocol.PluginIssue `json:"issues,omitempty"`
 }
 
-type pluginManifestIssue struct {
-	Path  string `json:"path"`
-	Error string `json:"error"`
-}
-
 func runPluginCommand() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|install-bundled|list|uninstall|remove> ...")

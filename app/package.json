@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "pnpm run verify:ghostty-vt && vitest run",
-    "lint": "cd .. && app/node_modules/.bin/oxlint app plugins sdk",
+    "lint": "cd .. && app/node_modules/.bin/oxlint --deny-warnings app plugins sdk",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "real-app:smoke": "node scripts/real-app-harness/smoke.mjs",
