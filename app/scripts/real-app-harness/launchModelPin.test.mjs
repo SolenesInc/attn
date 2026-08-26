@@ -38,41 +38,62 @@ afterEach(async () => {
 });
 
 describe('launch model pinning', () => {
-  it('pins every agent to its cheap model without the scenario asking', async () => {
+  it('pins every agent to its cheap model and low effort without the scenario asking', async () => {
     const client = fakeClient();
     await launchFreshAppAndConnect(client, fakeObserver(), { sweepStaleSessions: false });
 
     expect(client.settingWrites()).toEqual([
       { key: 'default_model_claude', value: 'haiku' },
+      { key: 'default_effort_claude', value: 'low' },
       { key: 'default_model_codex', value: 'gpt-5.4-mini' },
+      { key: 'default_effort_codex', value: 'low' },
     ]);
   });
 
-  it('puts back what it found, not a blank', async () => {
+  it('puts back the models and efforts it found, not blanks', async () => {
     const client = fakeClient();
-    const observer = fakeObserver({ default_model_claude: 'opus', default_model_codex: '' });
+    const observer = fakeObserver({
+      default_model_claude: 'opus',
+      default_effort_claude: 'high',
+      default_model_codex: '',
+      default_effort_codex: 'max',
+    });
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
 
     const writer = recordingWriter();
-    expect(await restoreHarnessSettings({ write: writer.write })).toBe(2);
+    expect(await restoreHarnessSettings({ write: writer.write })).toBe(4);
     expect(writer.written).toEqual([
       { key: 'default_model_claude', value: 'opus' },
+      { key: 'default_effort_claude', value: 'high' },
       { key: 'default_model_codex', value: '' },
+      { key: 'default_effort_codex', value: 'max' },
     ]);
   });
 
-  it('restores the value the run started with, not its own pin, after a relaunch', async () => {
+  it('restores the recipe the run started with, not its own pin, after a relaunch', async () => {
     const client = fakeClient();
-    const observer = fakeObserver({ default_model_claude: 'sonnet', default_model_codex: 'gpt-5.5' });
+    const observer = fakeObserver({
+      default_model_claude: 'sonnet',
+      default_effort_claude: 'medium',
+      default_model_codex: 'gpt-5.5',
+      default_effort_codex: 'xhigh',
+    });
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
-    const afterPin = fakeObserver({ default_model_claude: 'haiku', default_model_codex: 'gpt-5.4-mini' });
+    const afterPin = fakeObserver({
+      default_model_claude: 'haiku',
+      default_effort_claude: 'low',
+      default_model_codex: 'gpt-5.4-mini',
+      default_effort_codex: 'low',
+    });
     await launchFreshAppAndConnect(client, afterPin, { sweepStaleSessions: false });
 
     const writer = recordingWriter();
     await restoreHarnessSettings({ write: writer.write });
     expect(writer.written).toEqual([
       { key: 'default_model_claude', value: 'sonnet' },
+      { key: 'default_effort_claude', value: 'medium' },
       { key: 'default_model_codex', value: 'gpt-5.5' },
+      { key: 'default_effort_codex', value: 'xhigh' },
     ]);
   });
 
@@ -83,23 +104,51 @@ describe('launch model pinning', () => {
 
     expect(client.settingWrites()).toEqual([
       { key: 'default_model_claude', value: 'sonnet' },
+      { key: 'default_effort_claude', value: 'low' },
       { key: 'default_model_codex', value: 'gpt-5.4-mini' },
+      { key: 'default_effort_codex', value: 'low' },
     ]);
   });
 
-  it('leaves a setting alone only when inheriting is asked for by name', async () => {
+  it('leaves both settings alone only when inheriting is asked for by name', async () => {
     process.env.ATTN_HARNESS_LAUNCH_MODEL_CLAUDE = 'inherit';
     const client = fakeClient();
     await launchFreshAppAndConnect(client, fakeObserver(), { sweepStaleSessions: false });
 
     expect(client.settingWrites()).toEqual([
       { key: 'default_model_codex', value: 'gpt-5.4-mini' },
+      { key: 'default_effort_codex', value: 'low' },
     ]);
   });
 
-  it('writes nothing when the pin is already what it wants', async () => {
+  it('repairs an incompatible effort when the model is already pinned', async () => {
     const client = fakeClient();
-    const observer = fakeObserver({ default_model_claude: 'haiku', default_model_codex: 'gpt-5.4-mini' });
+    const observer = fakeObserver({
+      default_model_claude: 'haiku',
+      default_effort_claude: 'low',
+      default_model_codex: 'gpt-5.4-mini',
+      default_effort_codex: 'max',
+    });
+    await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
+
+    expect(client.settingWrites()).toEqual([
+      { key: 'default_effort_codex', value: 'low' },
+    ]);
+    const writer = recordingWriter();
+    expect(await restoreHarnessSettings({ write: writer.write })).toBe(1);
+    expect(writer.written).toEqual([
+      { key: 'default_effort_codex', value: 'max' },
+    ]);
+  });
+
+  it('writes nothing when both recipes are already what it wants', async () => {
+    const client = fakeClient();
+    const observer = fakeObserver({
+      default_model_claude: 'haiku',
+      default_effort_claude: 'low',
+      default_model_codex: 'gpt-5.4-mini',
+      default_effort_codex: 'low',
+    });
     await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
 
     expect(client.settingWrites()).toEqual([]);

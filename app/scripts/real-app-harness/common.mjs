@@ -159,36 +159,46 @@ export async function sweepStaleHarnessSessions(observer, {
   return { swept: stale.length };
 }
 
-// Mirrors the "(cheap)" entries in app/src/components/automations/launchCatalog.ts.
-const CHEAP_LAUNCH_MODELS = { claude: 'haiku', codex: 'gpt-5.4-mini' };
+// Models mirror the "(cheap)" launch-catalog entries. Low effort keeps each
+// pinned recipe compatible and cheap regardless of the user's defaults.
+const CHEAP_LAUNCH_RECIPES = {
+  claude: { model: 'haiku', effort: 'low' },
+  codex: { model: 'gpt-5.4-mini', effort: 'low' },
+};
 
-function launchModelFor(agent) {
+function launchRecipeFor(agent) {
   const override = (process.env[`ATTN_HARNESS_LAUNCH_MODEL_${agent.toUpperCase()}`] || '').trim();
   if (override === 'inherit') {
     return null;
   }
-  return override || CHEAP_LAUNCH_MODELS[agent];
+  const recipe = CHEAP_LAUNCH_RECIPES[agent];
+  return { ...recipe, model: override || recipe.model };
 }
 
 // Restores go straight to the daemon, not through the app: by the time the
 // last scenario cleanup runs the app is usually gone.
 const pendingSettingRestores = [];
 
-async function pinCheapLaunchModels(client, observer) {
-  for (const agent of Object.keys(CHEAP_LAUNCH_MODELS)) {
-    const model = launchModelFor(agent);
-    if (!model) {
+async function pinCheapLaunchRecipes(client, observer) {
+  for (const agent of Object.keys(CHEAP_LAUNCH_RECIPES)) {
+    const recipe = launchRecipeFor(agent);
+    if (!recipe) {
       continue;
     }
-    const key = `default_model_${agent}`;
-    const previous = observer.getSetting(key);
-    if (previous === model) {
-      continue;
-    }
-    await client.request('set_setting', { key, value: model });
-    console.log(`[harness] pinned ${key}=${model} (was ${previous ? previous : 'unconfigured'})`);
-    if (!pendingSettingRestores.some((restore) => restore.key === key)) {
-      pendingSettingRestores.push({ key, value: previous });
+    const settings = [
+      { key: `default_model_${agent}`, value: recipe.model },
+      { key: `default_effort_${agent}`, value: recipe.effort },
+    ];
+    for (const { key, value } of settings) {
+      const previous = observer.getSetting(key);
+      if (previous === value) {
+        continue;
+      }
+      await client.request('set_setting', { key, value });
+      console.log(`[harness] pinned ${key}=${value} (was ${previous ? previous : 'unconfigured'})`);
+      if (!pendingSettingRestores.some((restore) => restore.key === key)) {
+        pendingSettingRestores.push({ key, value: previous });
+      }
     }
   }
   installSettingRestoreHook();
@@ -273,7 +283,7 @@ export async function launchFreshAppAndConnect(client, observer, { sweepStaleSes
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();
-  await pinCheapLaunchModels(client, observer);
+  await pinCheapLaunchRecipes(client, observer);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
   }

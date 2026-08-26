@@ -1,0 +1,6 @@
+kind: fixed
+area: testing
+change: >
+  The real-app harness now pins low effort with each cheap launch model and
+  restores both settings, so incompatible user defaults cannot fail a scenario
+  before its behavior runs.

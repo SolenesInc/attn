@@ -6,10 +6,11 @@ the production guard, recordings, and the remote VM. Rules that live only here:
 - A scenario models what a user can do in the app, in the app's order. When
   the product flow changes, the scenario changes in the same PR. A scenario
   that passes while a user can reproduce the error is a test bug.
-- Never pin `fable`. `launchFreshAppAndConnect` pins the cheapest model per
-  agent and restores the prior value at exit; `ATTN_HARNESS_LAUNCH_MODEL_<AGENT>=inherit`
-  is the expensive path and has to be asked for by name. A scenario that needs
-  a stronger model pins it after the launch helper with a comment saying why.
+- Never pin `fable`. `launchFreshAppAndConnect` pins each agent's cheapest
+  model with low effort and restores both prior values at exit;
+  `ATTN_HARNESS_LAUNCH_MODEL_<AGENT>=inherit` is the expensive path and has to
+  be asked for by name. A scenario that needs a stronger model pins it after
+  the launch helper with a comment saying why.
 - A visible pane is a session pane. Resolve pane ids from daemon or app state.
   An empty workspace is invalid state; a scenario that creates one asserts it
   is removed. Shortcut scenarios use the app's shortcut registry ids.
