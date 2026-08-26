@@ -423,11 +423,11 @@ async function main() {
       note(`busy-state nudge processed through Codex queue semantics`, { state: busySettledState });
     });
 
-    const summary = runner.finishSuccess({ targetId, authorId, ticketId });
+    const summary = await runner.finishSuccess({ targetId, authorId, ticketId });
     console.log('[nudge-trigger] Nudge trigger scenario passed: idle and busy Codex nudges submitted and consumed ticket activity.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { targetId, authorId });
+    const summary = await runner.finishFailure(error, { targetId, authorId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

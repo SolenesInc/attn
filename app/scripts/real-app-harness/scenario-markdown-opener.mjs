@@ -362,12 +362,12 @@ async function main() {
       );
     });
 
-    const result = runner.finishSuccess({ sessionId, workspaceId, cwd });
+    const result = await runner.finishSuccess({ sessionId, workspaceId, cwd });
     console.log('[verify] PASS — markdown opener: fuzzy (git-enumerated, gitignore-respecting), recents, and path mode all worked.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     await captureFrontWindowScreenshot(path.join(runner.runDir, 'failure.png'), { client }).catch(() => {});
-    const result = runner.finishFailure(error, { sessionId });
+    const result = await runner.finishFailure(error, { sessionId });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

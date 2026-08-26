@@ -323,11 +323,11 @@ async function main() {
       note('automation write left the countdown alone', { firesAt: after?.auto_settle_fires_at });
     });
 
-    const summary = runner.finishSuccess({ agentId });
+    const summary = await runner.finishSuccess({ agentId });
     console.log('[settle-typing-hold] PASS — typing and pointer movement froze the countdown, and going quiet handed back a whole one.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { agentId });
+    const summary = await runner.finishFailure(error, { agentId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

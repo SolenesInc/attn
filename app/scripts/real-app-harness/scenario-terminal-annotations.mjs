@@ -606,14 +606,14 @@ async function main() {
       );
     });
 
-    const result = runner.finishSuccess({ sessionId, paneId, quote, anchoredRowText });
+    const result = await runner.finishSuccess({ sessionId, paneId, quote, anchoredRowText });
     console.log('[verify] PASS — terminal annotations: a past turn stayed annotated across a new turn and an app relaunch.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'terminal-annotations-failure', sessionId).catch(() => {});
     }
-    const result = runner.finishFailure(error, { sessionId, quote });
+    const result = await runner.finishFailure(error, { sessionId, quote });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

@@ -582,7 +582,7 @@ async function main() {
       });
     }
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       profile,
       trimWindow: TRIM_WINDOW,
       gap: evidence.gap,
@@ -599,7 +599,7 @@ async function main() {
     await client.request('capture_native_window_screenshot', {
       path: path.join(runner.runDir, 'failure.png'),
     }).catch(() => {});
-    const result = runner.finishFailure(error, { profile });
+    const result = await runner.finishFailure(error, { profile });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

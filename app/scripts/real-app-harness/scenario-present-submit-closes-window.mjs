@@ -198,10 +198,10 @@ async function main() {
       runner.assert(result.visible === false, `present window reported hidden after submit (got ${JSON.stringify(result)})`, result);
     });
 
-    const summary = runner.finishSuccess({ sessionId, presentationId });
+    const summary = await runner.finishSuccess({ sessionId, presentationId });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionId });
+    const summary = await runner.finishFailure(error, { sessionId });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

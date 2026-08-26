@@ -361,19 +361,20 @@ describe('createScenarioRecorder', () => {
     expect(logs.some((entry) => entry.message === 'recording:done')).toBe(true);
   });
 
-  it('starts nothing after stop and writes no manifest without a window', async () => {
+  it('fails an explicitly recorded run when no window produced a segment', async () => {
     const { recorder, calls } = makeRecorder({ windowIds: [null] });
     recorder.start();
     await vi.advanceTimersByTimeAsync(2_000);
-    const segments = await recorder.stop();
+    const stopPromise = recorder.stop();
+    const stopped = expect(stopPromise).rejects.toThrow('produced no usable segments');
     await vi.advanceTimersByTimeAsync(2_000);
 
     expect(calls).toHaveLength(0);
-    expect(segments).toHaveLength(0);
+    await stopped;
     expect(fs.existsSync(path.join(tmpDir, 'recording.json'))).toBe(false);
   });
 
-  it('disables itself when the recorder binary cannot build', async () => {
+  it('fails an explicitly recorded run when the installed recorder is stale', async () => {
     vi.useFakeTimers();
     const { calls, spawnFn } = makeSpawnFn();
     const logs = [];
@@ -383,16 +384,30 @@ describe('createScenarioRecorder', () => {
       log: (message, details) => logs.push({ message, details }),
       spawnFn,
       commandFn: async () => {
-        throw new Error('swiftc exploded');
+        throw new Error('window recorder is stale');
       },
     });
     recorder.start();
     await vi.advanceTimersByTimeAsync(3_000);
 
     expect(calls).toHaveLength(0);
-    expect(logs.filter((entry) => entry.message === 'recording:disabled')).toHaveLength(1);
-    const segments = await recorder.stop();
-    expect(segments).toHaveLength(0);
+    expect(logs.filter((entry) => entry.message === 'recording:setup-failed')).toHaveLength(1);
+    await expect(recorder.stop()).rejects.toThrow('window recorder setup failed: window recorder is stale');
+  });
+
+  it('fails an explicitly recorded run when a segment cannot finalize', async () => {
+    const { recorder, calls, logs } = makeRecorder({ windowIds: [11] });
+    recorder.start();
+    await vi.advanceTimersByTimeAsync(500);
+
+    const stopPromise = recorder.stop();
+    await Promise.resolve();
+    calls[0].child.emit('exit', 1);
+
+    await expect(stopPromise).rejects.toThrow('could not finalize');
+    expect(logs.some((entry) => entry.message === 'recording:segment-failed')).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'recording.json'), 'utf8'));
+    expect(manifest.segments[0].failure).toContain('no output');
   });
 
   it('tolerates resolveWindowId failures and keeps polling', async () => {

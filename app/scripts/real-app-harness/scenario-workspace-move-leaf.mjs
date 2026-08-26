@@ -192,7 +192,7 @@ async function main() {
       });
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       source,
       target,
       move,
@@ -207,7 +207,7 @@ async function main() {
     console.log('[RealAppHarness] Workspace pane move between workspaces passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionIds: createdSessionIds });
+    const summary = await runner.finishFailure(error, { sessionIds: createdSessionIds });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

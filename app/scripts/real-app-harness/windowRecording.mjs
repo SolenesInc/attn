@@ -108,15 +108,38 @@ export function createScenarioRecorder({
   const segments = [];
   let timer = null;
   let commandPromise = null;
+  let fatalError = null;
+  let stopPromise = null;
+
+  const fail = (message, cause) => {
+    if (!fatalError) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      fatalError = new Error(`${message}: ${detail}`, { cause });
+    }
+    stopped = true;
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    return fatalError;
+  };
 
   const finalizeActive = async () => {
     if (!active) return;
     const handle = active;
     active = null;
-    const result = await handle.stop();
+    let result;
+    try {
+      result = await handle.stop();
+    } catch (error) {
+      const failure = fail(`window recorder could not finalize ${handle.outputPath}`, error);
+      log('recording:segment-failed', { path: handle.outputPath, failure: failure.message });
+      return;
+    }
     segments.push(result);
     if (result.failure) {
       log('recording:segment-failed', { path: result.outputPath, failure: result.failure });
+      fail(`window recorder could not finalize ${result.outputPath}`, result.failure);
     } else {
       log('recording:segment', { path: result.outputPath, bytes: result.bytes });
     }
@@ -131,13 +154,8 @@ export function createScenarioRecorder({
         try {
           command = await commandPromise;
         } catch (error) {
-          // A recorder binary that cannot build will never build this run.
-          log('recording:disabled', { error: error instanceof Error ? error.message : String(error) });
-          stopped = true;
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
+          const failure = fail('window recorder setup failed', error);
+          log('recording:setup-failed', { error: failure.message });
           return;
         }
         const windowId = await resolveWindowId();
@@ -166,28 +184,35 @@ export function createScenarioRecorder({
       void poll();
     },
     async stop() {
-      if (stopped) return segments;
-      stopped = true;
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      if (pollPromise) {
-        await pollPromise.catch(() => {});
-      }
-      await finalizeActive();
-      const usable = segments.filter((s) => !s.failure);
-      if (usable.length > 0) {
-        try {
-          fs.writeFileSync(
-            path.join(runDir, 'recording.json'),
-            `${JSON.stringify({ segments }, null, 2)}\n`,
-            'utf8'
-          );
-        } catch {}
-      }
-      log('recording:done', { segments: segments.length, usable: usable.length });
-      return segments;
+      if (stopPromise) return stopPromise;
+      stopPromise = (async () => {
+        stopped = true;
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        if (pollPromise) {
+          await pollPromise.catch((error) => fail('window recorder polling failed', error));
+        }
+        await finalizeActive();
+        const usable = segments.filter((s) => !s.failure);
+        if (segments.length > 0) {
+          try {
+            fs.writeFileSync(
+              path.join(runDir, 'recording.json'),
+              `${JSON.stringify({ segments }, null, 2)}\n`,
+              'utf8'
+            );
+          } catch {}
+        }
+        if (!fatalError && usable.length === 0) {
+          fatalError = new Error('window recorder produced no usable segments');
+        }
+        log('recording:done', { segments: segments.length, usable: usable.length });
+        if (fatalError) throw fatalError;
+        return segments;
+      })();
+      return stopPromise;
     },
   };
 }

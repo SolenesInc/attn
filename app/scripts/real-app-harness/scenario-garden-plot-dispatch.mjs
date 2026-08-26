@@ -280,11 +280,11 @@ async function main() {
       await client.request('close_session', { sessionId: fresh.sessionId }).catch(() => {});
     });
 
-    const summary = runner.finishSuccess({ crown, children, delegated, second });
+    const summary = await runner.finishSuccess({ crown, children, delegated, second });
     console.log('[RealAppHarness] Garden plot dispatch passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { crown, children, delegated, second });
+    const summary = await runner.finishFailure(error, { crown, children, delegated, second });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

@@ -325,7 +325,7 @@ async function main() {
       );
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       workspaceId,
       tileId: docked.tileIds[0],
       probeFilePath,
@@ -333,7 +333,7 @@ async function main() {
     console.log('[RealAppHarness] Notebook editor native Cmd+Z undo / Shift+Cmd+Z redo passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionId, probeFilePath });
+    const summary = await runner.finishFailure(error, { sessionId, probeFilePath });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

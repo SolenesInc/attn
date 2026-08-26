@@ -581,10 +581,10 @@ async function main() {
       disableDefinition(binary, cleanupID, daemonEnv);
     });
 
-    runner.finishSuccess({ profile, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
+    await runner.finishSuccess({ profile, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    runner.finishFailure(error, { profile, editID, deleteID, cleanupID });
+    await runner.finishFailure(error, { profile, editID, deleteID, cleanupID });
     throw error;
   } finally {
     // An enabled definition keeps ticking against a torn-down fixture and spams
@@ -601,7 +601,7 @@ async function main() {
     if (editFixture) { try { fs.rmSync(editFixture, { recursive: true, force: true }); } catch {} }
     if (deleteFixture) { try { fs.rmSync(deleteFixture, { recursive: true, force: true }); } catch {} }
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
-    runner.close();
+    await runner.close();
   }
 }
 

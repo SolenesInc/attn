@@ -253,7 +253,7 @@ async function main() {
       note(`horizontal split created via Cmd+Shift+N`, { sessionId: horizontal.session.id });
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       workspaceId,
       sessionIds: createdSessionIds,
       paneIds: workspace.panes.map((pane) => pane.paneId),
@@ -261,7 +261,7 @@ async function main() {
     console.log('[RealAppHarness] Workspace creation shortcuts passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { sessionIds: createdSessionIds });
+    const summary = await runner.finishFailure(error, { sessionIds: createdSessionIds });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

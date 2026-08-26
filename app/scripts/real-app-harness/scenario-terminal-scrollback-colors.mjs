@@ -134,13 +134,13 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '01-scrolled-to-top-colored', sessionId);
     });
 
-    const summary = runner.finishSuccess({ sessionId, shellPaneId, seedEnd });
+    const summary = await runner.finishSuccess({ sessionId, shellPaneId, seedEnd });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, { sessionId, shellPaneId, seedEnd });
+    const summary = await runner.finishFailure(error, { sessionId, shellPaneId, seedEnd });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

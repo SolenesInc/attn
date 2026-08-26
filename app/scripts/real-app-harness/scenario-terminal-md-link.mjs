@@ -309,7 +309,7 @@ async function main() {
       }).catch(() => {});
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       sessionId,
       workspaceId,
       paneId: pane.paneId,
@@ -325,7 +325,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'md-link-failure', sessionId).catch(() => {});
     }
-    const result = runner.finishFailure(error, { sessionId });
+    const result = await runner.finishFailure(error, { sessionId });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

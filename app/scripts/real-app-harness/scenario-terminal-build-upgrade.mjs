@@ -244,17 +244,15 @@ async function main() {
     // Before finishSuccess, which releases the single-tenant scenario lock: the
     // restore reinstalls the daemon, and the next run must not overlap it.
     await cleanUp();
-    runner.finishSuccess();
+    await runner.finishSuccess();
   } catch (error) {
-    runner.finishFailure(error);
+    await runner.finishFailure(error);
     throw error;
   } finally {
     await cleanUp();
   }
 }
 
-// No process.exit on the way out: the runner does not await recorder.stop(),
-// and exiting here truncates the mp4 into an unplayable file.
 main().catch((error) => {
   console.error(error);
   process.exit(1);

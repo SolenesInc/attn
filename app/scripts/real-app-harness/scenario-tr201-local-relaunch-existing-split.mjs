@@ -259,7 +259,7 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '02-post-relaunch', sessionId);
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       utilityPaneId,
       tokens: {
@@ -276,7 +276,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       utilityPaneId,
       tokens: {

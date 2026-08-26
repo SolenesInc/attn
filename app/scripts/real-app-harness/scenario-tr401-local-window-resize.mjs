@@ -650,7 +650,7 @@ async function main() {
       return nextWindow;
     });
 
-    const summary = runner.finishSuccess({
+    const summary = await runner.finishSuccess({
       sessionId,
       utilityPaneId,
       tokens: { agentToken, shellToken },
@@ -677,7 +677,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, {
+    const summary = await runner.finishFailure(error, {
       sessionId,
       utilityPaneId,
       tokens: { agentToken, shellToken },

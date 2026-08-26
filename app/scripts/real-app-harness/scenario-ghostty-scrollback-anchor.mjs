@@ -149,13 +149,13 @@ async function main() {
       });
     });
 
-    const summary = runner.finishSuccess({ sessionId, shellPaneId, seedAnchor, seedEnd, streamEnd });
+    const summary = await runner.finishSuccess({ sessionId, shellPaneId, seedAnchor, seedEnd, streamEnd });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
-    const summary = runner.finishFailure(error, { sessionId, shellPaneId, seedAnchor, seedEnd, streamEnd });
+    const summary = await runner.finishFailure(error, { sessionId, shellPaneId, seedAnchor, seedEnd, streamEnd });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {

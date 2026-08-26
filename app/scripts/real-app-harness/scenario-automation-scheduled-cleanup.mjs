@@ -363,9 +363,9 @@ async function main() {
       });
     });
 
-    runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
+    await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
   } catch (error) {
-    runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
+    await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupTicketID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
     // An enabled `directory` definition re-validates its path every tick, so one
@@ -376,7 +376,7 @@ async function main() {
     }
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
-    runner.close();
+    await runner.close();
   }
 }
 

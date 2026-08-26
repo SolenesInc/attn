@@ -175,7 +175,7 @@ async function main() {
       await waitForClipboard(`echo ${token}\n${token}`, 'Cmd+C copies command+output');
     });
 
-    const result = runner.finishSuccess({
+    const result = await runner.finishSuccess({
       sessionId,
       paneId: pane.paneId,
       token,
@@ -188,7 +188,7 @@ async function main() {
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'block-copy-failure', sessionId).catch(() => {});
     }
-    const result = runner.finishFailure(error, { sessionId });
+    const result = await runner.finishFailure(error, { sessionId });
     console.error(result.error);
     process.exitCode = 1;
   } finally {

@@ -171,11 +171,11 @@ async function main() {
       if (PACE_MS > 0) await delay(PACE_MS);
     });
 
-    const summary = runner.finishSuccess({ seed, delegated });
+    const summary = await runner.finishSuccess({ seed, delegated });
     console.log('[RealAppHarness] Garden seed nudges passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = runner.finishFailure(error, { seed, delegated });
+    const summary = await runner.finishFailure(error, { seed, delegated });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
