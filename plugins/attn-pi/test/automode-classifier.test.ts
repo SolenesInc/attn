@@ -140,8 +140,6 @@ describe("classifier prompt", () => {
     const registry = new FakeRegistry([routine()]);
     await classifierWith(registry).classify(request({ transcript: [], environment: { slots: {}, notes: [] } }));
     const [call] = registry.calls;
-    // Nothing filled in still renders every slot, saying what the rules fall
-    // back to: a slot that vanished would read as an omission.
     expect(call?.context.systemPrompt).toContain("**Trusted internal domains**: None configured");
     expect(call?.context.systemPrompt).toContain("**Sensitive remote targets**: any name carrying prod");
     expect(messagesOf(call)[0]).toContain("(nothing said yet in this session)");

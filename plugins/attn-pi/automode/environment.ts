@@ -91,8 +91,6 @@ export function readEnvironment(raw: unknown): Environment {
   return { slots, notes };
 }
 
-// renderEnvironment writes the block the rulebook's {{ENVIRONMENT}} carries.
-// Every slot renders, filled or not: a vanished slot reads as an omission.
 export function renderEnvironment(env: Environment): string {
   const lines: string[] = [];
   for (const slot of environmentSlots) {

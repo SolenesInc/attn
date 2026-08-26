@@ -5313,8 +5313,6 @@ model AppRollbackResult {
 // human in the app is the trust boundary no CLI caller can fake. An agent must
 // not be able to write its own leash.
 
-// What a pi session launches with. An empty model list is auto mode off.
-// Models are ordered, primary first; pi falls through to the next one.
 model AutoModeConfigInfo {
   "enabled_default": boolean;
   "environment": AutoModeEnvironmentInfo;
@@ -5328,28 +5326,19 @@ model AutoModeConfigInfo {
   "models": string[];
 }
 
-// One question the rulebook asks about this machine. Rules reach a slot by
-// its label, so "read_by" and the slot move together.
 model AutoModeEnvironmentSlot {
   "id": string;
   "label": string;
-  // "list" | "choice".
   "kind": string;
-  // The closed set a "choice" slot picks from. Empty for a list.
   "choices": string[];
   "detail": string;
-  // What the environment renders when nobody filled it in.
   "unset": string;
-  // Filled from the session at launch. A value the user set wins.
   "detected": boolean;
   "read_by": string[];
 }
 
-// What the user filled in. Untouched slots are absent, so the classifier
-// reads "unset" for them.
 model AutoModeEnvironmentInfo {
   "slots": AutoModeEnvironmentSlotValue[];
-  // Prose no rule reads; it is never a trust list.
   "notes": string[];
 }
 
@@ -5401,12 +5390,9 @@ model AutoModeShowResult {
   "proposals": AutoModeProposalInfo[];
 }
 
-// Environment edits are direct writes, not proposals: a session under auto mode
-// cannot reach them, and the person in the app is who fills them in.
 model AutoModeEnvSlotMessage {
   "cmd": "automode_env_slot";
   "slot": string;
-  // The slot's whole content. An empty list clears it back to "unset".
   "values": string[];
   "request_id"?: string;
 }

@@ -141,7 +141,6 @@ func repoNameFromRemote(remote string) string {
 }
 
 // RemoteHostOwnerRepos returns "host/owner/name" for every remote in dir, origin
-// first, deduplicated. An unparseable URL or a non-repository yields nothing.
 func RemoteHostOwnerRepos(dir string) []string {
 	out, err := runGitOutput(OpMetadata, dir, "remote", "-v")
 	if err != nil {

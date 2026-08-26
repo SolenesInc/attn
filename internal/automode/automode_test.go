@@ -50,7 +50,6 @@ func TestValidateProposalChecksModelShape(t *testing.T) {
 			t.Errorf("ValidateProposal(model, %q, %q) was accepted", tc.target, tc.value)
 		}
 	}
-	// Naming nothing is how a user proposes turning auto mode off again.
 	if err := ValidateProposal(KindModel, TargetModels, ""); err != nil {
 		t.Errorf("an empty model list was refused: %v", err)
 	}
@@ -79,7 +78,6 @@ func TestParseModelListRefusesWhatNoLayerCouldRunOn(t *testing.T) {
 			t.Errorf("%s (%q) was accepted", name, value)
 		}
 	}
-	// An empty list parses to no models, which is auto mode turned off.
 	for name, value := range map[string]string{"nothing named": "  ", "only separators": ",,"} {
 		models, err := ParseModelList(value)
 		if err != nil || len(models) != 0 {

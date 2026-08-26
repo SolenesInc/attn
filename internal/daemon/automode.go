@@ -98,7 +98,6 @@ func cleanEnvironmentLines(lines []string) []string {
 }
 
 // autoModeEnvironmentInfo puts the slots on the wire in the schema's order, so
-// a client renders them without knowing the order itself.
 func autoModeEnvironmentInfo(env automode.Environment) protocol.AutoModeEnvironmentInfo {
 	values := []protocol.AutoModeEnvironmentSlotValue{}
 	for _, id := range automode.SlotIDs() {

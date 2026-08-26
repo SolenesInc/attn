@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Detection is what a session launching here hands the classifier, so it is
-// tested against a real repository rather than a parser.
 func TestDetectFromRepoNamesTheRepoAndItsRemotes(t *testing.T) {
 	dir := t.TempDir()
 	run := func(args ...string) {

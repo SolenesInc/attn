@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// SlotKind says how a slot holds its answer.
 const (
 	SlotList   = "list"
 	SlotChoice = "choice"
@@ -20,11 +19,9 @@ type Slot struct {
 	Kind    string   `json:"kind"`
 	Choices []string `json:"choices,omitempty"`
 	Detail  string   `json:"detail"`
-	// Unset is what the environment renders when nobody filled the slot in.
 	Unset string `json:"unset"`
 	// Detected slots are filled from the session at launch; a user value wins.
 	Detected bool `json:"detected,omitempty"`
-	// ReadBy names the rulebook rules that look this slot up.
 	ReadBy []string `json:"read_by"`
 }
 
@@ -111,7 +108,6 @@ func FindSlot(id string) (Slot, bool) {
 	return Slot{}, false
 }
 
-// SlotIDs lists the schema's ids in render order.
 func SlotIDs() []string {
 	slots := Slots()
 	ids := make([]string, 0, len(slots))
@@ -121,11 +117,8 @@ func SlotIDs() []string {
 	return ids
 }
 
-// Environment is what the user filled in: slot id to entries, plus prose that
-// no rule reads. Slots the user left alone are absent rather than empty.
 type Environment struct {
 	Slots map[string][]string `json:"slots"`
-	// Notes is prose no rule reads; it is never a trust list.
 	Notes []string `json:"notes"`
 }
 
@@ -133,8 +126,6 @@ func NewEnvironment() Environment {
 	return Environment{Slots: map[string][]string{}, Notes: []string{}}
 }
 
-// SetSlot replaces one slot's entries. An empty list clears it back to its
-// unset meaning. Entries are trimmed, de-duplicated and kept in the order given.
 func (e *Environment) SetSlot(id string, values []string) error {
 	slot, ok := FindSlot(id)
 	if !ok {
@@ -168,7 +159,6 @@ func (e *Environment) SetSlot(id string, values []string) error {
 	return nil
 }
 
-// Filled reports how many slots carry a value, and how many the schema has.
 func (e Environment) Filled() (int, int) {
 	filled := 0
 	for _, id := range SlotIDs() {
@@ -179,8 +169,6 @@ func (e Environment) Filled() (int, int) {
 	return filled, len(Slots())
 }
 
-// Normalize drops entries for slots the schema no longer has and orders what
-// remains, so a config written by a newer build reads cleanly on an older one.
 func (e Environment) Normalize() Environment {
 	out := NewEnvironment()
 	for _, id := range SlotIDs() {
@@ -192,8 +180,6 @@ func (e Environment) Normalize() Environment {
 	return out
 }
 
-// UnknownSlots names ids in this environment the schema does not have, so a
-// downgrade says what it is ignoring instead of dropping it silently.
 func (e Environment) UnknownSlots() []string {
 	unknown := []string{}
 	for id := range e.Slots {
@@ -214,8 +200,6 @@ func contains(values []string, want string) bool {
 	return false
 }
 
-// WithDetected fills the detected slots left empty; a user value wins. A slot
-// the schema does not detect is ignored, so user-owned slots stay closed.
 func (e Environment) WithDetected(detected map[string][]string) Environment {
 	out := e.Normalize()
 	if len(detected) == 0 {
@@ -248,7 +232,6 @@ func (e Environment) WithDetected(detected map[string][]string) Environment {
 	return out
 }
 
-// DetectedSlotIDs lists the slots a session fills from where it is running.
 func DetectedSlotIDs() []string {
 	ids := []string{}
 	for _, slot := range Slots() {

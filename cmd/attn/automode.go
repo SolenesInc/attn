@@ -177,7 +177,6 @@ func runAutoModeEnvList(args []string) {
 	printAutoModeEnvironment(result.Config.Environment)
 }
 
-// Every slot, filled or not: what an empty slot means is what a caller cannot guess.
 func printAutoModeEnvironment(env protocol.AutoModeEnvironmentInfo) {
 	held := map[string][]string{}
 	for _, slot := range env.Slots {

@@ -59,7 +59,6 @@ func TestAutoModeEnvironmentRoundTrips(t *testing.T) {
 	if len(read.Environment.Notes) != 1 {
 		t.Errorf("notes = %v, want the line that was written", read.Environment.Notes)
 	}
-	// Editing the environment must not disturb the models a promote set.
 	if len(read.Models) != 0 {
 		t.Errorf("models drifted to %v", read.Models)
 	}
@@ -438,8 +437,6 @@ func TestMigration122DropsModelsNobodyPromoted(t *testing.T) {
 	}
 }
 
-// Migration 114 turns the single promoted model into its layer's one-entry list.
-// A machine that promoted one must launch on it, not on the shipped default.
 func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)

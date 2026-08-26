@@ -540,7 +540,6 @@ const (
 const AutoModeConfigSubject = "config"
 
 // wireEqual reports whether two values reach clients as the same JSON —
-// "changed" means the client would see something different.
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)
 	rawB, errB := json.Marshal(b)

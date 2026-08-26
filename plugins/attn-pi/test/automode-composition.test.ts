@@ -25,7 +25,6 @@ import { FakePi, FakeUI, toolCall, uiContext } from "./automode-fake-pi";
 
 const judgingConfig = { ...defaultAutoModeConfig, models: ["test/judge"] };
 
-/** Answers every completion with one verdict, and counts what it was asked. */
 class CountingRegistry implements ModelRegistryLike {
   calls = 0;
 

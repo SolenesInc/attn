@@ -7,7 +7,6 @@ import (
 )
 
 // DetectFromRepo answers the slots a directory settles on its own, plus the
-// remote identities: visibility is a network hop the daemon serves separately.
 func DetectFromRepo(dir string) (slots map[string][]string, identities []string) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {

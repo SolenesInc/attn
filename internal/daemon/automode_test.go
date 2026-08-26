@@ -109,8 +109,6 @@ func TestAutoModeEnvironmentSlotWritesAndClears(t *testing.T) {
 		t.Fatalf("domains = %v after clearing it", got)
 	}
 
-	// A slot the schema does not have names what it wanted instead of writing
-	// something no rule would ever read.
 	resp = docCall(t, func(c net.Conn) {
 		d.handleAutoModeEnvSlot(c, &protocol.AutoModeEnvSlotMessage{
 			Cmd: protocol.CmdAutoModeEnvSlot, Slot: "intranet", Values: []string{"acme.corp"}})

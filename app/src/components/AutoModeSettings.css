@@ -167,9 +167,6 @@
   white-space: nowrap;
 }
 
-/* The environment. One row per slot, the label wide enough that the labels line
-   up as a column: they are the words the rules use to reach a slot, so they
-   have to be readable as a list rather than hunted for. */
 .automode-slot-summary {
   color: var(--color-text-tertiary);
   font-size: 12px;
@@ -227,15 +224,11 @@
   color: var(--color-error);
 }
 
-/* An unfilled slot shows what the rules fall back to. It is quieter than a
-   filled one and never blank: blank would read as "this does not matter". */
 .automode-slot-unset {
   color: var(--color-text-dimmed);
   font-size: 12px;
 }
 
-/* A detected slot fills itself from the session's repository, so the row says
-   so rather than reading as one more thing the user forgot. */
 .automode-slot-detected {
   margin-left: 6px;
   padding: 1px 5px;
@@ -258,4 +251,3 @@
   display: flex;
   gap: 6px;
 }
-

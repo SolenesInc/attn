@@ -135,7 +135,6 @@ describe('AutoModeSettings', () => {
     expect(model).toHaveTextContent('unattributed');
   });
 
-  // difference between a fallback list and a list somebody reads as a pool.
   it('shows the models in order, marking the one that judges', async () => {
     renderPane(state({
       config: config({ models: ['opencode-go/glm-5.3', 'vendor/backup'] }),

@@ -369,8 +369,6 @@ func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
 		if detected[1] != "github.com/acme/widgets" {
 			t.Errorf("trusted_repo remote = %q, want the origin identity", detected[1])
 		}
-		// Nobody looked this repo up on GitHub, so the slot stays unset and the
-		// rules fall back to assuming private rather than to a guess.
 		if got := params.AutoMode.Environment.Slots["repo_visibility"]; len(got) != 0 {
 			t.Errorf("repo_visibility = %v, want nothing until a lookup answers", got)
 		}

@@ -305,7 +305,6 @@ const EventAutoModeEnvSetResult = "automode_env_set_result"
 const EventAutoModeStateChanged = "automode_state_changed"
 
 // Per-action automations result events (socket + WS share one command set;
-// see the Cmd constants above and internal/daemon/automations_actions.go).
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
 	EventAutomationValidateResult    = "automation_validate_result"
