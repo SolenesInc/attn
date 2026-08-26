@@ -582,45 +582,49 @@ function ModelEditor({ policy, models }: ModelEditorProps) {
       {models.length === 0 ? (
         <span className="settings-hint">No model, so auto mode stays off.</span>
       ) : (
-        <ul className="automode-patterns">
+        <ul className="automode-models-list">
           {models.map((model, index) => (
-            <li key={model} className="automode-pattern-row" data-testid="automode-models-entry">
+            <li key={model} className="automode-model-row" data-testid="automode-models-entry">
               <code className="automode-value automode-mono">{model}</code>
-              <span className="settings-hint">{index === 0 ? 'judges' : 'fallback'}</span>
-              {index > 0 && (
+              <span className={`settings-pill${index === 0 ? ' good' : ''}`}>
+                {index === 0 ? 'judges' : 'fallback'}
+              </span>
+              <span className="automode-model-actions">
+                {index > 0 && (
+                  <button
+                    type="button"
+                    className="settings-action"
+                    data-testid="automode-models-primary"
+                    aria-label={`Make ${model} the model that judges`}
+                    disabled={busy}
+                    onClick={() => void write(
+                      [model, ...models.filter((entry) => entry !== model)],
+                      'Could not reorder the models',
+                    )}
+                  >
+                    Make primary
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="settings-action"
-                  data-testid="automode-models-primary"
-                  aria-label={`Make ${model} the model that judges`}
+                  className="settings-action danger"
+                  data-testid="automode-models-remove"
+                  aria-label={`Remove ${model}`}
                   disabled={busy}
                   onClick={() => void write(
-                    [model, ...models.filter((entry) => entry !== model)],
-                    'Could not reorder the models',
+                    models.filter((entry) => entry !== model),
+                    'Could not remove the model',
                   )}
                 >
-                  Make primary
+                  Remove
                 </button>
-              )}
-              <button
-                type="button"
-                className="settings-action danger"
-                data-testid="automode-models-remove"
-                aria-label={`Remove ${model}`}
-                disabled={busy}
-                onClick={() => void write(
-                  models.filter((entry) => entry !== model),
-                  'Could not remove the model',
-                )}
-              >
-                Remove
-              </button>
+              </span>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="automode-pattern-add">
+      <div className="automode-model-add">
         <input
           type="text"
           className="settings-input"

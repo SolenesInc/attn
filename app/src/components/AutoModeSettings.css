@@ -146,12 +146,71 @@
   gap: 6px;
 }
 
+/* The list is one grid and each row contributes its cells, so the pill and the
+   buttons line up down the column whether or not a row can be promoted. */
+.automode-models-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.automode-model-row {
+  display: contents;
+}
+
+.automode-model-row .automode-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automode-model-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* A row action repeats down the list, so it is smaller and quieter than a
+   standalone button: a full-weight Remove three times over reads as an alarm. */
+.automode-editor .automode-model-actions .settings-action,
+.automode-editor .automode-pattern-row .settings-action {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--font-size-xs);
+}
+
+.automode-editor .settings-action.danger {
+  color: var(--color-text-secondary);
+  border-color: var(--color-border-hover);
+}
+
+.automode-editor .settings-action.danger:hover:not(:disabled) {
+  color: #ff746c;
+  border-color: rgba(255, 116, 108, 0.38);
+  background: rgba(255, 116, 108, 0.08);
+}
+
+.automode-model-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
 .automode-models-catalog {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .automode-models-catalog .settings-hint,
