@@ -184,9 +184,9 @@ describe('ShortcutEditorModal', () => {
 
   it('filters rows to matching labels and hides the dock while searching', () => {
     renderEditor();
-    fireEvent.change(filterInput(), { target: { value: 'maximize' } });
+    fireEvent.change(filterInput(), { target: { value: 'focus active' } });
 
-    expect(screen.getByText('Maximize active pane')).toBeInTheDocument();
+    expect(screen.getByText('Focus active pane')).toBeInTheDocument();
     expect(screen.queryByText('New session in this workspace')).toBeNull();
     expect(screen.queryByText('Dock')).toBeNull();
     expect(screen.queryByText('Workspaces & Sessions')).toBeNull();
@@ -219,13 +219,13 @@ describe('ShortcutEditorModal', () => {
 
   it('clears recording when the filter is focused, so the first keystroke is not captured as a binding', () => {
     const { setSetting } = renderEditor();
-    fireEvent.click(row('Maximize active pane').querySelector('.key-capture-button')!);
-    expect(within(row('Maximize active pane')).queryByLabelText('Record a chord')).toBeNull();
+    fireEvent.click(row('Focus active pane').querySelector('.key-capture-button')!);
+    expect(within(row('Focus active pane')).queryByLabelText('Record a chord')).toBeNull();
 
     // A recording row owns a capture-phase window keydown listener: focusing the filter
     // must tear it down BEFORE any keystroke, or the first character rebinds the row.
     fireEvent.focus(filterInput());
-    expect(within(row('Maximize active pane')).getByLabelText('Record a chord')).toBeInTheDocument();
+    expect(within(row('Focus active pane')).getByLabelText('Record a chord')).toBeInTheDocument();
 
     fireEvent.change(filterInput(), { target: { value: 'zoom' } });
     expect(filterInput().value).toBe('zoom');
@@ -265,7 +265,7 @@ describe('ShortcutEditorModal', () => {
 
   it('badges only the shortcuts gated behind an open terminal', () => {
     renderEditor();
-    expect(within(row('Maximize active pane')).getByText('Needs terminal')).toBeInTheDocument();
+    expect(within(row('Focus active pane')).getByText('Needs terminal')).toBeInTheDocument();
     expect(within(row('New session in this workspace')).queryByText('Needs terminal')).toBeNull();
     expect(within(row('Collapse utility terminal')).queryByText('Needs terminal')).toBeNull();
   });

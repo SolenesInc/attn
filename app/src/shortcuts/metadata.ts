@@ -64,7 +64,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'terminal.splitVertical': { label: 'Split pane down', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
   'terminal.splitHorizontal': { label: 'Split pane sideways', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
   'terminal.toggleZoom': { label: 'Zoom active pane', category: 'panes', dockLabel: 'zoom', requiresTerminal: true },
-  'terminal.toggleMaximize': { label: 'Maximize active pane', category: 'panes', requiresTerminal: true },
+  'terminal.toggleMaximize': { label: 'Focus active pane', category: 'panes', requiresTerminal: true },
   'terminal.close': { label: 'Close focused pane', category: 'panes', requiresTerminal: true },
   'terminal.focusLeft': { label: 'Move focus left', category: 'panes', requiresTerminal: true },
   'terminal.focusRight': { label: 'Move focus right', category: 'panes', requiresTerminal: true },

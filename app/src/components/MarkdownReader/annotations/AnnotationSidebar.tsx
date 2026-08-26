@@ -12,7 +12,7 @@ export interface AnnotationSidebarProps {
   onClearAll: () => void;
   /** Opens the global-comment popover anchored to the clicked button. */
   onGlobalComment: (anchorEl: HTMLElement) => void;
-  /** Collapses the sidebar (count-pill toggle). */
+  /** Closes the floating inspector. */
   onToggle: () => void;
 }
 
@@ -106,13 +106,13 @@ export function AnnotationSidebar({
   };
 
   return (
-    <aside className="md-annotations-sidebar">
+    <aside className="md-annotations-sidebar" role="dialog" aria-label="Review notes">
       <div className="md-sidebar-header">
-        <span className="md-sidebar-title">Annotations</span>
+        <span className="md-sidebar-title">Review notes</span>
         <button
           type="button"
           className="md-sidebar-count"
-          title="Collapse annotations sidebar"
+          title="Close review notes"
           onClick={onToggle}
         >
           {annotations.length}
@@ -121,10 +121,10 @@ export function AnnotationSidebar({
         <button
           type="button"
           className="md-sidebar-action"
-          title="Add a document-wide comment"
+          title="Add an overall note"
           onClick={(e) => onGlobalComment(e.currentTarget)}
         >
-          + Global comment
+          + Overall note
         </button>
         {annotations.length > 0 && (
           <button

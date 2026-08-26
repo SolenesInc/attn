@@ -114,14 +114,14 @@ describe('AnnotationPopover', () => {
     expect(textarea().value).toBe('x');
   });
 
-  it('shows the truncated quote header; "Global Comment" for globals (E13 surface)', () => {
+  it('shows the truncated quote header; "Overall Note" for document-wide notes (E13 surface)', () => {
     const long = 'q'.repeat(60);
     const first = renderPopover({ quote: long });
     expect(screen.getByText(`"${'q'.repeat(50)}..."`)).not.toBeNull();
     first.view.unmount();
 
     renderPopover({ isGlobal: true, quote: '' });
-    expect(screen.getByText('Global Comment')).not.toBeNull();
-    expect(textarea().placeholder).toBe('Add a global comment...');
+    expect(screen.getByText('Overall Note')).not.toBeNull();
+    expect(textarea().placeholder).toBe('Add an overall note...');
   });
 });

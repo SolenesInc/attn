@@ -151,14 +151,14 @@ describe('AnnotationSidebar', () => {
 
   it('global comment button hands its element to the popover opener (E13 wiring)', () => {
     const { props } = renderSidebar();
-    const button = screen.getByTitle('Add a document-wide comment');
+    const button = screen.getByTitle('Add an overall note');
     fireEvent.click(button);
     expect(props.onGlobalComment).toHaveBeenCalledWith(button);
   });
 
-  it('the count pill toggles (collapses) the sidebar', () => {
+  it('the count pill closes the inspector', () => {
     const { props } = renderSidebar({ annotations: [ann('a1', { anchor: anchor(1, 0) })] });
-    fireEvent.click(screen.getByTitle('Collapse annotations sidebar'));
+    fireEvent.click(screen.getByTitle('Close review notes'));
     expect(props.onToggle).toHaveBeenCalledTimes(1);
   });
 

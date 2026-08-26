@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { resolveDomRange } from '../anchoring/domRange';
+import { useEscapeStack } from '../../../hooks/useEscapeStack';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationSidebar } from './AnnotationSidebar';
 import { SelectionToolbar } from './SelectionToolbar';
@@ -32,31 +33,25 @@ export interface AnnotationLayerProps {
   source: MarkdownDocumentSource;
 }
 
+export interface AnnotationLayerHandle {
+  openInspector(): void;
+  openGlobalComment(anchorEl: HTMLElement): void;
+}
+
 function pendingDraftKey(documentUri: string, pending: PendingSelection): string {
   const { anchor } = pending;
   return `${documentUri}#${anchor.blockId}:${anchor.start}:${anchor.end}`;
 }
 
-export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) {
+export const AnnotationLayer = forwardRef<AnnotationLayerHandle, AnnotationLayerProps>(function AnnotationLayer(
+  { api, rootRef, source },
+  ref,
+) {
   const { pending, annotations, orphans, selectedId } = api;
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [hoverBlock, setHoverBlock] = useState<HoverBlock | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const autoOpenedRef = useRef(false);
   const hoverHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (annotations.length > 0 && !autoOpenedRef.current) {
-      autoOpenedRef.current = true;
-      setSidebarOpen(true);
-    }
-  }, [annotations.length]);
-
-  useEffect(() => {
-    if (selectedId !== null) {
-      setSidebarOpen(true);
-    }
-  }, [selectedId]);
 
   // Scope the hook's mouseup guard to THIS tile, not a document-wide popover query.
   useEffect(() => {
@@ -213,6 +208,15 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
     setPopover({ kind: 'global', anchorEl });
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    openInspector: () => setSidebarOpen(true),
+    openGlobalComment: handleGlobalComment,
+  }), [handleGlobalComment]);
+
+  // The composer owns Escape while it is open; the inspector becomes the next
+  // layer in the stack after the composer closes.
+  useEscapeStack(() => setSidebarOpen(false), sidebarOpen && popover === null);
+
 
   const popoverRef = useRef(popover);
   popoverRef.current = popover;
@@ -303,23 +307,16 @@ export function AnnotationLayer({ api, rootRef, source }: AnnotationLayerProps) 
           annotations={annotations}
           orphans={orphans}
           selectedId={selectedId}
-          onCardClick={api.focusAnnotation}
+          onCardClick={(id) => {
+            api.focusAnnotation(id);
+            setSidebarOpen(false);
+          }}
           onDelete={api.deleteAnnotation}
           onClearAll={api.clearAll}
           onGlobalComment={handleGlobalComment}
           onToggle={() => setSidebarOpen(false)}
         />
-      ) : (
-        <button
-          type="button"
-          className="md-sidebar-rail"
-          title="Show annotations"
-          onClick={() => setSidebarOpen(true)}
-        >
-          <span className="md-sidebar-rail-count">{annotations.length}</span>
-          <span className="md-sidebar-rail-label">Annotations</span>
-        </button>
-      )}
+      ) : null}
     </>
   );
-}
+});

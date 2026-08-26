@@ -131,7 +131,7 @@ export function AnnotationPopover({
   };
 
   const headerLabel = isGlobal
-    ? 'Global Comment'
+    ? 'Overall Note'
     : quote
       ? `"${quote.length > 50 ? `${quote.slice(0, 50)}...` : quote}"`
       : 'Comment';
@@ -161,7 +161,7 @@ export function AnnotationPopover({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={isGlobal ? 'Add a global comment...' : 'Add a comment...'}
+        placeholder={isGlobal ? 'Add an overall note...' : 'Add a comment...'}
         rows={3}
       />
       <div className="md-popover-footer">

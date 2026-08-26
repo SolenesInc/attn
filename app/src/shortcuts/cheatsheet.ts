@@ -52,7 +52,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           note: 'Crosses into the next workspace at an edge.',
         },
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
-        { label: 'Maximize active pane', combos: [fromId('terminal.toggleMaximize')] },
+        { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },
         { label: 'Focus utility terminal', combos: [fromId('terminal.open')] },
       ],
     },

@@ -61,6 +61,17 @@ async function waitForWorkspaceUi(client, workspaceId, predicate, description, t
   throw new Error(`Timed out waiting for ${description}. Last workspace UI state:\n${JSON.stringify(last, null, 2)}`);
 }
 
+async function waitForSessionUi(client, sessionId, predicate, description, timeoutMs = 10_000) {
+  const startedAt = Date.now();
+  let last = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    last = await client.request('get_session_ui_state', { sessionId }).catch((error) => ({ error: String(error) }));
+    if (predicate(last)) return last;
+    await delay(150);
+  }
+  throw new Error(`Timed out waiting for ${description}. Last session UI state:\n${JSON.stringify(last, null, 2)}`);
+}
+
 function markdownTileIds(state) {
   return (state?.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
 }
@@ -228,7 +239,54 @@ async function main() {
         (state) => markdownTileIds(state).length === 1,
         'picking a file docks its markdown tile',
       );
-      runner.log(`[RealAppHarness] docked ${markdownTileIds(ui)[0]} for ${beta}`);
+      const openedTileId = markdownTileIds(ui)[0];
+      runner.log(`[RealAppHarness] docked ${openedTileId} for ${beta}`);
+
+      await client.request('dom_click', {
+        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-focus-action`,
+      });
+      const focused = await waitForSessionUi(
+        client,
+        sessionId,
+        (state) => state.workspace?.view?.maximizedPaneId === openedTileId,
+        'the new document to enter Focus',
+      );
+      runner.assert(
+        focused.workspace?.view?.maximizedPaneId === openedTileId,
+        `The newly opened document must be visible and enter Focus: ${JSON.stringify(focused.workspace?.view)}`,
+      );
+
+      await client.request('dom_click', {
+        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button--overall`,
+      });
+      await client.request('dom_focus', { selector: '.md-annotation-popover .md-popover-textarea' });
+      await driver.pressKeyCode(53);
+      await client.request('dom_click', {
+        selector: `[data-pane-id="${openedTileId}"] .workspace-dock-tile-review-button:not(.workspace-dock-tile-review-button--overall)`,
+      });
+      await client.request('dom_click', { selector: '.md-annotations-sidebar .md-sidebar-title' });
+      await driver.pressKeyCode(53);
+      const stillFocused = await waitForSessionUi(
+        client,
+        sessionId,
+        (state) => state.workspace?.view?.maximizedPaneId === openedTileId,
+        'Escape to close the review inspector without leaving Focus',
+      );
+      runner.assert(
+        stillFocused.workspace?.view?.maximizedPaneId === openedTileId,
+        `Floating review layers must unwind before Focus: ${JSON.stringify(stillFocused.workspace?.view)}`,
+      );
+      await driver.pressKeyCode(53);
+      const restored = await waitForSessionUi(
+        client,
+        sessionId,
+        (state) => state.workspace?.view?.maximizedPaneId === null,
+        'Escape returns from document Focus',
+      );
+      runner.assert(
+        restored.workspace?.view?.maximizedPaneId === null,
+        `Escape must leave document Focus: ${JSON.stringify(restored.workspace?.view)}`,
+      );
     });
 
     await runner.step('fuzzy_opens_tracked_file', async () => {

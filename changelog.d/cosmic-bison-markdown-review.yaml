@@ -1,0 +1,3 @@
+kind: changed
+area: markdown review
+change: Markdown reviews keep the document wide with floating notes, balance open documents against agent panes, suspend crowded peers as restorable state slivers, and offer a tabbed Focus view.

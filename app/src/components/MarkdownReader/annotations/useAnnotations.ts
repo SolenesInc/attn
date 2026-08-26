@@ -113,6 +113,7 @@ export function useAnnotations({
   const mountedRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pendingClearRafRef = useRef<number | null>(null);
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const justCreatedIdRef = useRef<string | null>(null);
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
@@ -231,6 +232,10 @@ export function useAnnotations({
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      if (pendingClearRafRef.current !== null) {
+        cancelAnimationFrame(pendingClearRafRef.current);
+        pendingClearRafRef.current = null;
+      }
       // Stale Ranges reference detached nodes after the body remount: always
       // clear before repainting.
       painter.clearAll();
@@ -340,6 +345,10 @@ export function useAnnotations({
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+      if (pendingClearRafRef.current !== null) {
+        cancelAnimationFrame(pendingClearRafRef.current);
+        pendingClearRafRef.current = null;
       }
       painterRef.current?.clearAll();
       rangesRef.current.clear();
@@ -471,13 +480,26 @@ export function useAnnotations({
 
 
   const clearPendingSelection = useCallback(() => {
-    painterRef.current?.clear(PENDING_PAINT_ID);
+    const painter = painterRef.current;
+    const clearNativeSelection = () => {
+      try {
+        window.getSelection()?.removeAllRanges();
+      } catch {
+      }
+    };
+    painter?.clear(PENDING_PAINT_ID);
     pendingRef.current = null;
     setPending(null);
-    try {
-      window.getSelection()?.removeAllRanges();
-    } catch {
+    clearNativeSelection();
+    if (pendingClearRafRef.current !== null) {
+      cancelAnimationFrame(pendingClearRafRef.current);
     }
+    // WKWebView can retain a same-frame selection paint until its next commit.
+    pendingClearRafRef.current = requestAnimationFrame(() => {
+      pendingClearRafRef.current = null;
+      painter?.clear(PENDING_PAINT_ID);
+      clearNativeSelection();
+    });
   }, []);
 
   const paintPending = useCallback(

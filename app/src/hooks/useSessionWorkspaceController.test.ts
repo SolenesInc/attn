@@ -101,6 +101,7 @@ describe('useSessionWorkspaceController', () => {
   it('stores workspace handles and exposes imperative pane helpers', () => {
     const session = buildSession();
     const fitActivePane = vi.fn();
+    const focusLeaf = vi.fn();
     const getPaneText = vi.fn(() => 'pane text');
     const getPaneSize = vi.fn(() => ({ cols: 80, rows: 24 }));
     const getPaneVisibleContent = vi.fn(() => buildVisibleContent('pane text'));
@@ -117,6 +118,7 @@ describe('useSessionWorkspaceController', () => {
       result.current.setWorkspaceRef(session.workspaceId)({
         fitPane: vi.fn(),
         fitActivePane,
+        focusLeaf,
         focusPane: vi.fn(),
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),
@@ -138,9 +140,11 @@ describe('useSessionWorkspaceController', () => {
 
     act(() => {
       result.current.fitSessionActivePane(session.id);
+      result.current.focusWorkspaceLeaf(session.workspaceId, 'document');
     });
 
     expect(fitActivePane).toHaveBeenCalledOnce();
+    expect(focusLeaf).toHaveBeenCalledWith('document');
     expect(result.current.getPaneText(session.id, SESSION_PANE_ID)).toBe('pane text');
     expect(result.current.getPaneSize(session.id, SESSION_PANE_ID)).toEqual({ cols: 80, rows: 24 });
   });
@@ -153,6 +157,7 @@ describe('useSessionWorkspaceController', () => {
       result.current.setWorkspaceRef(session.workspaceId)({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
+        focusLeaf: vi.fn(),
         focusPane: vi.fn(),
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),
@@ -189,6 +194,7 @@ describe('useSessionWorkspaceController', () => {
       result.current.setWorkspaceRef('session-1')({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
+        focusLeaf: vi.fn(),
         focusPane,
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),

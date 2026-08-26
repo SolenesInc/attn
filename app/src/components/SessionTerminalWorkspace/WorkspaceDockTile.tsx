@@ -70,6 +70,7 @@ interface WorkspaceDockTileProps {
   workspaceSessionId?: string | null;
   workspaceDirectory?: string;
   onClose: () => void;
+  onFocusDocument?: () => void;
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -100,6 +101,7 @@ export function WorkspaceDockTile({
   workspaceSessionId = null,
   workspaceDirectory,
   onClose,
+  onFocusDocument,
   onUpdateParams,
   onRetargetTile,
   onHeaderPointerDown,
@@ -162,6 +164,8 @@ export function WorkspaceDockTile({
     : boundInWorkspace
       ? boundSessionId
       : '';
+  const targetSession = workspaceSessions.find((session) => session.sessionId === targetSessionId);
+  const targetSessionLabel = targetSession?.label ?? 'No session';
   const seedTenderSessionId = seedDocument?.tender_holds
     ? seedDocument.seed.tender_session.trim()
     : '';
@@ -242,33 +246,85 @@ export function WorkspaceDockTile({
 
   const sending = sendStatus.kind === 'sending';
   const sendDisabled = sending || annotationCount === 0 || !primaryDestination || !transportAvailable;
-  const seedDestinationMenuKey = seedTenderSessionId && seedDocument
-    ? `${seedTenderSessionId}:${seedDocument.seed.rev}`
-    : null;
-  const [openSeedDestinationMenuKey, setOpenSeedDestinationMenuKey] = useState<string | null>(null);
-  const seedDestinationMenuOpen = seedDestinationMenuKey !== null
-    && openSeedDestinationMenuKey === seedDestinationMenuKey;
-  const seedDestinationGroupRef = useRef<HTMLDivElement>(null);
-  const seedDestinationCaretRef = useRef<HTMLButtonElement>(null);
-  const seedDestinationItemRef = useRef<HTMLButtonElement>(null);
-  const closeSeedDestinationMenu = useCallback((restoreFocus = false) => {
-    setOpenSeedDestinationMenuKey(null);
+  const destinationMenuKey = isSeed
+    ? seedTenderSessionId && seedDocument
+      ? `seed:${seedTenderSessionId}:${seedDocument.seed.rev}`
+      : null
+    : workspaceSessions.length > 0
+      ? `session:${workspaceSessions.map((session) => `${session.sessionId}:${session.state ?? ''}`).join('|')}`
+      : null;
+  const [openDestinationMenuKey, setOpenDestinationMenuKey] = useState<string | null>(null);
+  const destinationMenuOpen = destinationMenuKey !== null
+    && openDestinationMenuKey === destinationMenuKey;
+  const destinationGroupRef = useRef<HTMLDivElement>(null);
+  const destinationCaretRef = useRef<HTMLButtonElement>(null);
+  const destinationMenuRef = useRef<HTMLDivElement>(null);
+  const closeDestinationMenu = useCallback((restoreFocus = false) => {
+    setOpenDestinationMenuKey(null);
     if (restoreFocus) {
-      window.requestAnimationFrame(() => seedDestinationCaretRef.current?.focus());
+      window.requestAnimationFrame(() => destinationCaretRef.current?.focus());
     }
   }, []);
-  useEscapeStack(() => closeSeedDestinationMenu(true), seedDestinationMenuOpen);
+  useEscapeStack(() => closeDestinationMenu(true), destinationMenuOpen);
   useEffect(() => {
-    if (!seedDestinationMenuOpen) return;
-    seedDestinationItemRef.current?.focus();
+    if (!destinationMenuOpen) return;
+    destinationMenuRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')
+      ?.focus();
     const handleMouseDown = (event: MouseEvent) => {
-      if (!seedDestinationGroupRef.current?.contains(event.target as Node)) {
-        closeSeedDestinationMenu();
+      if (!destinationGroupRef.current?.contains(event.target as Node)) {
+        closeDestinationMenu();
       }
     };
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, [closeSeedDestinationMenu, seedDestinationMenuOpen]);
+  }, [closeDestinationMenu, destinationMenuOpen]);
+
+  const retargetSession = useCallback((sessionId: string) => {
+    closeDestinationMenu();
+    if (!sessionId || sessionId === targetSessionId) {
+      return;
+    }
+    setPendingTargetSessionId(sessionId);
+    clearSendOutcome();
+    void Promise.resolve(onRetargetTile?.(sessionId)).catch((error) => {
+      console.warn('[WorkspaceDockTile] Failed to retarget tile session:', error);
+      setPendingTargetSessionId((prev) => (prev === sessionId ? null : prev));
+    });
+  }, [clearSendOutcome, closeDestinationMenu, onRetargetTile, targetSessionId]);
+  const sendHasProblem = sendStatus.kind === 'skipped'
+    || sendStatus.kind === 'warning'
+    || sendStatus.kind === 'error';
+  const sendStatusMessage = sendStatus.kind === 'sending'
+    ? (isSeed && !seedTenderSessionId ? 'Noting…' : 'Sending…')
+    : sendStatus.kind === 'sent'
+      ? (sendStatus.destination === 'seed' ? 'Noted ✓' : 'Sent ✓')
+      : sendStatus.kind === 'skipped'
+        ? SKIPPED_APPROVAL_MESSAGE
+        : sendStatus.kind === 'warning' || sendStatus.kind === 'error'
+          ? sendStatus.message
+          : null;
+  const sendActionLabel = sendStatus.kind === 'sending' || sendStatus.kind === 'sent'
+    ? (sendStatusMessage as string)
+    : sendStatus.kind === 'skipped'
+      ? 'Approval needed'
+      : sendStatus.kind === 'warning'
+        ? 'Needs attention'
+        : sendStatus.kind === 'error'
+          ? 'Send failed'
+          : isSeed && !seedTenderSessionId
+            ? `Note on seed ${annotationCount}`
+            : `Send ${annotationCount}`;
+  const showSessionSendAction = annotationCount > 0 || sendStatus.kind !== 'idle';
+  const sendButtonTitle = sendHasProblem
+    ? sendStatusMessage ?? undefined
+    : isSeed
+      ? seedTenderSessionId
+        ? 'Send annotations to the tending session (⌘Enter)'
+        : 'Leave annotations as a note on the seed (⌘Enter)'
+      : targetSessionId
+        ? `Send annotations to ${targetSessionLabel} (⌘Enter)`
+        : 'Choose a session before sending annotations';
 
   useEffect(() => {
     setBrowserAddress(tile.tileParams || '');
@@ -433,79 +489,77 @@ export function WorkspaceDockTile({
             // The header is the drag handle; interacting with the send controls must not start a drag.
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {sendStatus.kind === 'sending' ? (
-              <span className="workspace-dock-tile-send-status" role="status">Sending…</span>
-            ) : sendStatus.kind === 'sent' ? (
-              <span className="workspace-dock-tile-send-status workspace-dock-tile-send-status--ok" role="status">
-                {sendStatus.destination === 'seed' ? 'Noted ✓' : 'Sent ✓'}
-              </span>
-            ) : sendStatus.kind === 'skipped' ? (
-              <span className="workspace-dock-tile-send-status workspace-dock-tile-send-status--warn" role="status">
-                {SKIPPED_APPROVAL_MESSAGE}
-              </span>
-            ) : sendStatus.kind === 'warning' ? (
-              <span
-                className="workspace-dock-tile-send-status workspace-dock-tile-send-status--warn"
-                role="status"
-                title={sendStatus.message}
-              >
-                {sendStatus.message}
-              </span>
-            ) : sendStatus.kind === 'error' ? (
-              <span
-                className="workspace-dock-tile-send-status workspace-dock-tile-send-status--error"
-                role="status"
-                title={sendStatus.message}
-              >
-                {sendStatus.message}
-              </span>
+            <button
+              type="button"
+              className="workspace-dock-tile-review-button workspace-dock-tile-review-button--overall"
+              title="Add an overall note"
+              onClick={(event) => annotationsSendRef.current?.openGlobalComment(event.currentTarget)}
+            >
+              Overall note
+            </button>
+            <button
+              type="button"
+              className="workspace-dock-tile-review-button"
+              title="Show review notes"
+              aria-label={`Notes ${annotationCount}`}
+              onClick={() => annotationsSendRef.current?.openInspector()}
+            >
+              <NotesIcon />
+              <span className="workspace-dock-tile-review-label">Notes</span>
+              <span className="workspace-dock-tile-review-count">{annotationCount}</span>
+            </button>
+            {sendStatusMessage ? (
+              <span className="workspace-dock-tile-send-status" role="status">{sendStatusMessage}</span>
             ) : null}
             {isSeed ? (
               <div
-                ref={seedDestinationGroupRef}
-                className="workspace-dock-tile-seed-submit"
+                ref={destinationGroupRef}
+                className="workspace-dock-tile-destination-submit"
                 role="group"
                 aria-label="Submit seed annotations"
               >
                 <button
                   type="button"
-                  className={`workspace-dock-tile-send-button${seedTenderSessionId ? ' workspace-dock-tile-send-button--split-primary' : ''}`}
+                  className={[
+                    'workspace-dock-tile-send-button',
+                    seedTenderSessionId ? 'workspace-dock-tile-send-button--split-primary' : '',
+                    sendStatus.kind === 'sent' ? 'workspace-dock-tile-send-button--ok' : '',
+                    sendHasProblem ? `workspace-dock-tile-send-button--${sendStatus.kind}` : '',
+                  ].filter(Boolean).join(' ')}
                   disabled={sendDisabled}
-                  title={seedTenderSessionId
-                    ? 'Send annotations to the tending session (⌘Enter)'
-                    : 'Leave annotations as a note on the seed (⌘Enter)'}
+                  title={sendButtonTitle}
                   onClick={sendNow}
                 >
-                  {sending
-                    ? (seedTenderSessionId ? 'Sending…' : 'Noting…')
-                    : seedTenderSessionId
-                      ? `Send ${annotationCount}`
-                      : `Note on seed ${annotationCount}`}
+                  {sendActionLabel}
+                  {sendHasProblem ? <span className="workspace-dock-tile-send-alert" aria-hidden="true">!</span> : null}
                 </button>
                 {seedTenderSessionId ? (
                   <>
                     <button
-                      ref={seedDestinationCaretRef}
+                      ref={destinationCaretRef}
                       type="button"
                       className="workspace-dock-tile-send-button workspace-dock-tile-send-button--split-caret"
                       aria-label="More annotation destinations"
                       aria-haspopup="menu"
-                      aria-expanded={seedDestinationMenuOpen}
+                      aria-expanded={destinationMenuOpen}
                       disabled={sendDisabled}
-                      onClick={() => setOpenSeedDestinationMenuKey((openKey) => (
-                        openKey === seedDestinationMenuKey ? null : seedDestinationMenuKey
+                      onClick={() => setOpenDestinationMenuKey((openKey) => (
+                        openKey === destinationMenuKey ? null : destinationMenuKey
                       ))}
                     >
                       ▾
                     </button>
-                    {seedDestinationMenuOpen ? (
-                      <div className="workspace-dock-tile-seed-submit-menu" role="menu">
+                    {destinationMenuOpen ? (
+                      <div
+                        ref={destinationMenuRef}
+                        className="workspace-dock-tile-destination-menu"
+                        role="menu"
+                      >
                         <button
-                          ref={seedDestinationItemRef}
                           type="button"
                           role="menuitem"
                           onClick={() => {
-                            closeSeedDestinationMenu();
+                            closeDestinationMenu();
                             sendAlternative(() => performAnnotationSend({ kind: 'seed', seedId: path }));
                           }}
                         >
@@ -517,50 +571,127 @@ export function WorkspaceDockTile({
                 ) : null}
               </div>
             ) : (
-              <>
-                <select
-                  className="workspace-dock-tile-session-picker"
-                  aria-label="Send annotations to session"
-                  value={targetSessionId}
-                  onChange={(event) => {
-                    const sessionId = event.target.value;
-                    if (!sessionId || sessionId === targetSessionId) {
-                      return;
-                    }
-                    setPendingTargetSessionId(sessionId);
-                    clearSendOutcome();
-                    void Promise.resolve(onRetargetTile?.(sessionId)).catch((error) => {
-                      console.warn('[WorkspaceDockTile] Failed to retarget tile session:', error);
-                      setPendingTargetSessionId((prev) => (prev === sessionId ? null : prev));
-                    });
-                  }}
-                >
-                  {!targetSessionId && (
-                    <option value="" disabled>
-                      No session
-                    </option>
-                  )}
-                  {workspaceSessions.map((session) => (
-                    <option key={session.sessionId} value={session.sessionId}>
-                      {session.label}
-                      {session.state === 'pending_approval' ? ' ⏸ approval' : ''}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="workspace-dock-tile-send-button"
-                  disabled={sendDisabled}
-                  title="Send annotations to the selected session (⌘Enter)"
-                  onClick={sendNow}
-                >
-                  {sending ? 'Sending…' : `Send ${annotationCount}`}
-                </button>
-              </>
+              <div
+                ref={destinationGroupRef}
+                className="workspace-dock-tile-destination-submit"
+                role="group"
+                aria-label="Send annotation destination"
+              >
+                {showSessionSendAction ? (
+                  <button
+                    type="button"
+                    className={[
+                      'workspace-dock-tile-send-button',
+                      destinationMenuKey ? 'workspace-dock-tile-send-button--split-primary' : '',
+                      sendStatus.kind === 'sent' ? 'workspace-dock-tile-send-button--ok' : '',
+                      sendHasProblem ? `workspace-dock-tile-send-button--${sendStatus.kind}` : '',
+                    ].filter(Boolean).join(' ')}
+                    disabled={sendDisabled}
+                    title={sendButtonTitle}
+                    aria-label={sendStatus.kind === 'sending' || sendStatus.kind === 'sent'
+                      ? sendActionLabel
+                      : targetSessionId
+                        ? `${sendActionLabel} to ${targetSessionLabel}`
+                        : sendActionLabel}
+                    onClick={sendNow}
+                  >
+                    <span className="workspace-dock-tile-send-action">{sendActionLabel}</span>
+                    {sendStatus.kind !== 'sending' && sendStatus.kind !== 'sent' ? (
+                      <span className="workspace-dock-tile-send-target">
+                        <span className="workspace-dock-tile-send-target-prefix">to</span>
+                        <span className="workspace-dock-tile-send-target-name">{targetSessionLabel}</span>
+                      </span>
+                    ) : null}
+                    {sendHasProblem ? <span className="workspace-dock-tile-send-alert" aria-hidden="true">!</span> : null}
+                  </button>
+                ) : (
+                  <button
+                    ref={destinationCaretRef}
+                    type="button"
+                    className="workspace-dock-tile-target-button"
+                    title={`Annotations will be sent to ${targetSessionLabel}`}
+                    aria-label={`Annotation destination: ${targetSessionLabel}`}
+                    aria-haspopup="menu"
+                    aria-expanded={destinationMenuOpen}
+                    disabled={!destinationMenuKey}
+                    onClick={() => setOpenDestinationMenuKey((openKey) => (
+                      openKey === destinationMenuKey ? null : destinationMenuKey
+                    ))}
+                  >
+                    <span className="workspace-dock-tile-send-target-prefix">To</span>
+                    <span className="workspace-dock-tile-send-target-name">{targetSessionLabel}</span>
+                    <span aria-hidden="true">▾</span>
+                  </button>
+                )}
+                {showSessionSendAction && destinationMenuKey ? (
+                  <button
+                    ref={destinationCaretRef}
+                    type="button"
+                    className="workspace-dock-tile-send-button workspace-dock-tile-send-button--split-caret"
+                    aria-label="Change annotation destination"
+                    aria-haspopup="menu"
+                    aria-expanded={destinationMenuOpen}
+                    onClick={() => setOpenDestinationMenuKey((openKey) => (
+                      openKey === destinationMenuKey ? null : destinationMenuKey
+                    ))}
+                  >
+                    ▾
+                  </button>
+                ) : null}
+                {destinationMenuOpen ? (
+                  <div
+                    ref={destinationMenuRef}
+                    className="workspace-dock-tile-destination-menu"
+                    role="menu"
+                    aria-label="Send annotations to session"
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                      event.preventDefault();
+                      const items = Array.from(
+                        event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+                      );
+                      const current = items.indexOf(document.activeElement as HTMLButtonElement);
+                      const step = event.key === 'ArrowDown' ? 1 : -1;
+                      items[(current + step + items.length) % items.length]?.focus();
+                    }}
+                  >
+                    {workspaceSessions.map((session) => (
+                      <button
+                        key={session.sessionId}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={session.sessionId === targetSessionId}
+                        onClick={() => retargetSession(session.sessionId)}
+                      >
+                        <span className="workspace-dock-tile-destination-check" aria-hidden="true">
+                          {session.sessionId === targetSessionId ? '✓' : ''}
+                        </span>
+                        <span className="workspace-dock-tile-destination-label">{session.label}</span>
+                        {session.state === 'pending_approval' ? (
+                          <span className="workspace-dock-tile-destination-state">approval</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
         ) : null}
         <div className="workspace-dock-tile-actions">
+          {isAnnotatedDocument && onFocusDocument ? (
+            <button
+              type="button"
+              className="workspace-dock-tile-focus-action"
+              title="Focus document (⌘⇧Enter)"
+              aria-label="Focus document"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={onFocusDocument}
+            >
+              <FocusDocumentIcon />
+              <span className="workspace-dock-tile-focus-label">Focus</span>
+            </button>
+          ) : null}
           {tile.tileKind === 'browser' ? (
             <button
               type="button"
@@ -647,6 +778,36 @@ export function WorkspaceDockTile({
         )}
       </div>
     </div>
+  );
+}
+
+function NotesIcon() {
+  return (
+    <svg
+      className="workspace-dock-tile-review-icon"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <path d="M3.25 3.25h9.5v7H7l-3.75 2.5v-9.5Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FocusDocumentIcon() {
+  return (
+    <svg
+      className="workspace-dock-tile-focus-icon"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      aria-hidden="true"
+    >
+      <path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10" />
+    </svg>
   );
 }
 

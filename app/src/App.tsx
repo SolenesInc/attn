@@ -1179,6 +1179,7 @@ function AppContent({
     setWorkspaceRef,
     removeWorkspaceRef,
     getWorkspaceLeafDropSnapshot,
+    focusWorkspaceLeaf,
     focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
@@ -3079,10 +3080,14 @@ function AppContent({
   }, [getPaneSize, reloadSession, sessions, showError]);
 
   const handleOpenSeedTile = useCallback((seedId: string) => {
-    void sendOpenSeed(seedId, activeSessionId || '').catch((error) => {
-      showError(error instanceof Error ? error.message : 'Could not open the seed');
-    });
-  }, [sendOpenSeed, activeSessionId, showError]);
+    void sendOpenSeed(seedId, activeSessionId || '')
+      .then(({ workspaceId, tileId }) => {
+        if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+      })
+      .catch((error) => {
+        showError(error instanceof Error ? error.message : 'Could not open the seed');
+      });
+  }, [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, showError]);
 
   const checkArtifactPath = useCallback((path: string) => {
     const slash = path.lastIndexOf('/');
@@ -3091,10 +3096,14 @@ function AppContent({
   }, [sendFsExists]);
 
   const handleOpenMarkdownArtifact = useCallback((path: string) => {
-    void sendOpenMarkdown(path, '').catch((error) => {
-      showError(error instanceof Error ? error.message : 'Could not open the document');
-    });
-  }, [sendOpenMarkdown, showError]);
+    void sendOpenMarkdown(path, '')
+      .then(({ workspaceId, tileId }) => {
+        if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+      })
+      .catch((error) => {
+        showError(error instanceof Error ? error.message : 'Could not open the document');
+      });
+  }, [focusWorkspaceLeaf, sendOpenMarkdown, showError]);
 
   const handleResumeSeed = useCallback((seedId: string) => {
     sendSeedResume(seedId)
@@ -3585,12 +3594,16 @@ function AppContent({
                     onTerminalPointerActivity={sendTerminalPointerActivity}
                     onOpenPresentation={handleOpenPresentationWindow}
                     onOpenMarkdown={(path, sessionId) => {
-                      void sendOpenMarkdown(path, sessionId).catch((error) => {
-                        console.error('[Markdown] in-app open failed, falling back to OS open:', error);
-                        void openPath(path).catch((openError) => {
-                          console.error('[Markdown] OS open fallback failed:', openError);
+                      void sendOpenMarkdown(path, sessionId)
+                        .then(({ workspaceId, tileId }) => {
+                          if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+                        })
+                        .catch((error) => {
+                          console.error('[Markdown] in-app open failed, falling back to OS open:', error);
+                          void openPath(path).catch((openError) => {
+                            console.error('[Markdown] OS open fallback failed:', openError);
+                          });
                         });
-                      });
                     }}
                     onTerminalModelRecovered={handleTerminalModelRecovered}
                     workspace={workspaceState}
@@ -3902,12 +3915,16 @@ function AppContent({
               });
               return;
             }
-            void sendOpenMarkdown(path, bindTo).catch((error) => {
-              console.error('[MarkdownOpener] in-app open failed, falling back to OS open:', error);
-              void openPath(path).catch((openError) => {
-                console.error('[MarkdownOpener] OS open fallback failed:', openError);
+            void sendOpenMarkdown(path, bindTo)
+              .then(({ workspaceId, tileId }) => {
+                if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
+              })
+              .catch((error) => {
+                console.error('[MarkdownOpener] in-app open failed, falling back to OS open:', error);
+                void openPath(path).catch((openError) => {
+                  console.error('[MarkdownOpener] OS open fallback failed:', openError);
+                });
               });
-            });
           }}
         />
       )}

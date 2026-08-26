@@ -67,8 +67,10 @@ export class CustomHighlightPainter implements HighlightPainter {
       if (this.entries.size === 0) {
         livePainters.delete(this);
       }
-      rebuildSharedRegistry();
     }
+    // Rebuild even after an idempotent clear: a second commit is used to make
+    // WKWebView drop stale same-frame selection paint.
+    rebuildSharedRegistry();
   }
 
   clearAll(): void {
