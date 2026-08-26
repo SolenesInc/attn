@@ -811,3 +811,54 @@ func TestAutoModeDirectEditAndPromotionShareTheList(t *testing.T) {
 		t.Fatalf("allow after removal = %v", cfg.Allow)
 	}
 }
+
+func TestSetAutoModeModelsReplacesTheWholeListAndKeepsTheOrder(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+
+	cfg, err := s.SetAutoModeModels([]string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"}, now)
+	if err != nil {
+		t.Fatalf("set models: %v", err)
+	}
+	if len(cfg.Models) != 2 || cfg.Models[0] != "opencode/claude-opus-4-6" {
+		t.Fatalf("models = %v", cfg.Models)
+	}
+
+	if cfg, err = s.SetAutoModeModels([]string{"openai-codex/gpt-5.6-luna"}, now); err != nil {
+		t.Fatalf("replace models: %v", err)
+	}
+	if len(cfg.Models) != 1 || cfg.Models[0] != "openai-codex/gpt-5.6-luna" {
+		t.Errorf("replacement did not drop the old list: %v", cfg.Models)
+	}
+
+	read, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(read.Models) != 1 || read.Models[0] != "openai-codex/gpt-5.6-luna" {
+		t.Errorf("stored models = %v", read.Models)
+	}
+}
+
+func TestSetAutoModeModelsTakesNoneAndRefusesWhatCannotBeReached(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	if _, err := s.SetAutoModeModels([]string{"opencode-go/glm-5.3"}, now); err != nil {
+		t.Fatalf("seed models: %v", err)
+	}
+
+	cfg, err := s.SetAutoModeModels(nil, now)
+	if err != nil {
+		t.Fatalf("clearing the list is how auto mode is turned off: %v", err)
+	}
+	if len(cfg.Models) != 0 {
+		t.Errorf("models = %v, want none", cfg.Models)
+	}
+
+	if _, err := s.SetAutoModeModels([]string{"noprovider"}, now); err == nil {
+		t.Error("a model with no provider was accepted")
+	}
+	if _, err := s.SetAutoModeModels([]string{"a/one", "a/one"}, now); err == nil {
+		t.Error("the same model twice was accepted; a pass walks each model once")
+	}
+}

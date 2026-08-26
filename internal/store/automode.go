@@ -137,6 +137,19 @@ func (s *Store) SetAutoModeEnabledDefault(enabled bool, now time.Time) (automode
 	})
 }
 
+// SetAutoModeModels replaces the ordered model list. An empty list is auto mode
+// off, which is a thing a caller may mean, so it is not an error.
+func (s *Store) SetAutoModeModels(models []string, now time.Time) (automode.Config, error) {
+	parsed, err := automode.ParseModelList(automode.FormatModelList(models))
+	if err != nil {
+		return automode.Config{}, err
+	}
+	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		cfg.Models = parsed
+		return nil
+	})
+}
+
 func (s *Store) AddAutoModePattern(list, pattern string, now time.Time) (automode.Config, error) {
 	pattern = strings.TrimSpace(pattern)
 	if err := automode.ValidatePattern(list, pattern); err != nil {

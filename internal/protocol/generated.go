@@ -931,6 +931,17 @@ type AuthorsUpdatedMessage struct {
 	Event string `json:"event"`
 }
 
+type AutoModeCatalogModel struct {
+	// ContextWindow corresponds to the JSON schema field "context_window".
+	ContextWindow *int `json:"context_window,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+}
+
 type AutoModeConfigInfo struct {
 	// Allow corresponds to the JSON schema field "allow".
 	Allow []string `json:"allow"`
@@ -1113,6 +1124,79 @@ type AutoModeGetMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelProvider struct {
+	// CheckedAt corresponds to the JSON schema field "checked_at".
+	CheckedAt *int `json:"checked_at,omitempty,omitzero"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []AutoModeCatalogModel `json:"models"`
+
+	// Provider corresponds to the JSON schema field "provider".
+	Provider string `json:"provider"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
+}
+
+type AutoModeModelSetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []string `json:"models"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelSetResultMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AutoModeModelsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Problem corresponds to the JSON schema field "problem".
+	Problem *string `json:"problem,omitempty,omitzero"`
+
+	// Providers corresponds to the JSON schema field "providers".
+	Providers []AutoModeModelProvider `json:"providers,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AutoModePatternAddMessage struct {

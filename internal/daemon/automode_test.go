@@ -581,3 +581,82 @@ func TestPatternEditingIsNotReachableOverTheUnixSocket(t *testing.T) {
 		t.Fatalf("allow = %v after a socket edit attempt", got.Config.Allow)
 	}
 }
+
+func automodeModelSet(t *testing.T, d *Daemon, models []string) protocol.AutoModeModelSetResultMessage {
+	t.Helper()
+	client := busTestClient()
+	d.handleAutoModeModelSet(client, &protocol.AutoModeModelSetMessage{
+		Cmd: protocol.CmdAutoModeModelSet, Models: models, RequestID: "r1",
+	})
+	var result protocol.AutoModeModelSetResultMessage
+	nextBusMessage(t, client, &result)
+	return result
+}
+
+func TestAutoModeModelSetFromTheAppRoundTrips(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+
+	set := automodeModelSet(t, d, []string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"})
+	if !set.Success || set.Config == nil {
+		t.Fatalf("set failed: %q", protocol.Deref(set.Error))
+	}
+	if len(set.Config.Models) != 2 || set.Config.Models[0] != "opencode/claude-opus-4-6" {
+		t.Fatalf("models after set = %v", set.Config.Models)
+	}
+	if got := automodeShow(t, d).Config.Models; len(got) != 2 || got[1] != "opencode-go/glm-5.3" {
+		t.Fatalf("show after a direct set: %v", got)
+	}
+
+	cleared := automodeModelSet(t, d, nil)
+	if !cleared.Success || len(cleared.Config.Models) != 0 {
+		t.Fatalf("clearing the list is how auto mode is turned off: %+v", cleared)
+	}
+
+	refused := automodeModelSet(t, d, []string{"noprovider"})
+	if refused.Success {
+		t.Fatal("a model with no provider was accepted")
+	}
+	if !strings.Contains(protocol.Deref(refused.Error), "provider/id") {
+		t.Fatalf("refusal did not name the shape it wanted: %q", protocol.Deref(refused.Error))
+	}
+}
+
+func TestAutoModeModelsSaysWhenPiIsNotConnected(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	d.answerAutoModeModels(client, "r1")
+
+	var result protocol.AutoModeModelsResultMessage
+	nextBusMessage(t, client, &result)
+	if result.Success {
+		t.Fatal("the catalog answered with no pi plugin connected")
+	}
+	if got := protocol.Deref(result.Error); !strings.Contains(got, "attn-pi") || !strings.Contains(got, "not connected") {
+		t.Fatalf("error must name the plugin and what is wrong with it: %q", got)
+	}
+}
+
+func TestModelSettingIsNotReachableOverTheUnixSocket(t *testing.T) {
+	d := newDaemonForTest(t)
+	for _, payload := range []string{
+		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
+		`{"cmd":"automode_models","request_id":"r1"}`,
+	} {
+		client, server := net.Pipe()
+		go func() { d.handleConnection(server) }()
+		if _, err := client.Write([]byte(payload)); err != nil {
+			t.Fatalf("write %s: %v", payload, err)
+		}
+		var resp protocol.Response
+		if err := json.NewDecoder(client).Decode(&resp); err != nil {
+			t.Fatalf("decode response to %s: %v", payload, err)
+		}
+		client.Close()
+		if resp.Ok {
+			t.Fatalf("%s was answered over the unix socket", payload)
+		}
+		if got := protocol.Deref(resp.Error); !strings.Contains(got, "unknown command") {
+			t.Fatalf("%s was refused for the wrong reason: %q", payload, got)
+		}
+	}
+}

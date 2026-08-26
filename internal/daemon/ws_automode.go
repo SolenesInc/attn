@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -204,6 +205,113 @@ func (d *Daemon) editAutoModePattern(
 	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
 	info := autoModeConfigInfo(cfg)
 	result.Config = &info
+	result.Success = true
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) handleAutoModeModelSet(client *wsClient, msg *protocol.AutoModeModelSetMessage) {
+	requestID := strings.TrimSpace(msg.RequestID)
+	if requestID == "" {
+		d.sendCommandError(client, protocol.CmdAutoModeModelSet, "automode_model_set is missing a request id")
+		return
+	}
+	result := protocol.AutoModeModelSetResultMessage{
+		Event:     protocol.EventAutoModeModelSetResult,
+		RequestID: requestID,
+	}
+	cfg, err := d.store.SetAutoModeModels(msg.Models, time.Now())
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
+	}
+	d.logf("automode: models are now %v", cfg.Models)
+	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
+	info := autoModeConfigInfo(cfg)
+	result.Config = &info
+	result.Success = true
+	d.sendToClient(client, result)
+}
+
+const autoModeModelsPlugin = "attn-pi"
+
+// pi is asked about each provider in turn and each ask spawns a process: five
+// providers measured at 0.7s worst, so this is a tripwire, not a deadline.
+const autoModeModelsTimeout = 20 * time.Second
+
+type pluginCatalogModel struct {
+	ID            string `json:"id"`
+	Name          string `json:"name,omitempty"`
+	ContextWindow int    `json:"contextWindow,omitempty"`
+}
+
+type pluginModelProvider struct {
+	Provider  string               `json:"provider"`
+	Ready     bool                 `json:"ready"`
+	Detail    string               `json:"detail,omitempty"`
+	CheckedAt int                  `json:"checkedAt,omitempty"`
+	Models    []pluginCatalogModel `json:"models"`
+}
+
+type pluginAvailableModels struct {
+	Providers []pluginModelProvider `json:"providers"`
+	Problem   string                `json:"problem,omitempty"`
+}
+
+func (d *Daemon) handleAutoModeModels(client *wsClient, msg *protocol.AutoModeModelsMessage) {
+	requestID := strings.TrimSpace(msg.RequestID)
+	if requestID == "" {
+		d.sendCommandError(client, protocol.CmdAutoModeModels, "automode_models is missing a request id")
+		return
+	}
+	go d.answerAutoModeModels(client, requestID)
+}
+
+func (d *Daemon) answerAutoModeModels(client *wsClient, requestID string) {
+	result := protocol.AutoModeModelsResultMessage{
+		Event:     protocol.EventAutoModeModelsResult,
+		RequestID: requestID,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), autoModeModelsTimeout)
+	defer cancel()
+
+	var answer pluginAvailableModels
+	if err := d.callPlugin(ctx, autoModeModelsPlugin, "automode.models", struct{}{}, &answer); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
+	}
+
+	providers := make([]protocol.AutoModeModelProvider, 0, len(answer.Providers))
+	for _, provider := range answer.Providers {
+		models := make([]protocol.AutoModeCatalogModel, 0, len(provider.Models))
+		for _, model := range provider.Models {
+			entry := protocol.AutoModeCatalogModel{ID: model.ID}
+			if model.Name != "" {
+				entry.Name = protocol.Ptr(model.Name)
+			}
+			if model.ContextWindow > 0 {
+				entry.ContextWindow = protocol.Ptr(model.ContextWindow)
+			}
+			models = append(models, entry)
+		}
+		out := protocol.AutoModeModelProvider{
+			Provider: provider.Provider,
+			Ready:    provider.Ready,
+			Models:   models,
+		}
+		if provider.Detail != "" {
+			out.Detail = protocol.Ptr(provider.Detail)
+		}
+		if provider.CheckedAt > 0 {
+			out.CheckedAt = protocol.Ptr(provider.CheckedAt)
+		}
+		providers = append(providers, out)
+	}
+	if answer.Problem != "" {
+		result.Problem = protocol.Ptr(answer.Problem)
+	}
+	result.Providers = providers
 	result.Success = true
 	d.sendToClient(client, result)
 }

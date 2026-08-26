@@ -1239,6 +1239,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModePatternAdd(client, msg.(*protocol.AutoModePatternAddMessage))
 	case protocol.CmdAutoModePatternRemove: // wire: automode_pattern_remove
 		d.handleAutoModePatternRemove(client, msg.(*protocol.AutoModePatternRemoveMessage))
+	case protocol.CmdAutoModeModelSet: // wire: automode_model_set
+		d.handleAutoModeModelSet(client, msg.(*protocol.AutoModeModelSetMessage))
+	case protocol.CmdAutoModeModels: // wire: automode_models
+		d.handleAutoModeModels(client, msg.(*protocol.AutoModeModelsMessage))
 	case protocol.CmdPtyResize: // wire: pty_resize
 		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
 	case protocol.CmdKillSession: // wire: kill_session
