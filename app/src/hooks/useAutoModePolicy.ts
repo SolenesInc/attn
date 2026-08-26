@@ -156,8 +156,7 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     }
   }, [writeModels, refresh]);
 
-  // A catalog nobody could read is not an error on the config: the field still
-  // takes a typed model, so the failure is the picker's alone.
+  // A catalog nobody could read is the picker's failure, not the config's.
   const loadModelCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setCatalogError(null);

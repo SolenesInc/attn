@@ -90,14 +90,12 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 	return cfg, nil
 }
 
-// An empty list clears the slot back to its unset meaning.
 func (s *Store) SetAutoModeEnvironmentSlot(id string, values []string, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
 		return cfg.Environment.SetSlot(id, values)
 	})
 }
 
-// Prose beside the slots. No rule reads it.
 func (s *Store) SetAutoModeEnvironmentNotes(notes []string, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
 		cfg.Environment.Notes = append([]string{}, notes...)
@@ -137,8 +135,7 @@ func (s *Store) SetAutoModeEnabledDefault(enabled bool, now time.Time) (automode
 	})
 }
 
-// SetAutoModeModels replaces the ordered model list. An empty list is auto mode
-// off, which is a thing a caller may mean, so it is not an error.
+// An empty list is auto mode off, which a caller may mean; it is not an error.
 func (s *Store) SetAutoModeModels(models []string, now time.Time) (automode.Config, error) {
 	parsed, err := automode.ParseModelList(automode.FormatModelList(models))
 	if err != nil {

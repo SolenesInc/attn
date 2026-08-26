@@ -175,8 +175,6 @@
   gap: 6px;
 }
 
-/* A row action repeats down the list, so it is smaller and quieter than a
-   standalone button: a full-weight Remove three times over reads as an alarm. */
 .automode-editor .automode-model-actions .settings-action,
 .automode-editor .automode-pattern-row .settings-action {
   min-height: 28px;

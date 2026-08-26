@@ -5512,8 +5512,6 @@ model AutoModePatternResultMessage {
   config?: AutoModeConfigInfo;
 }
 
-// Replace the classifier's model list, primary first. App-only for the reason
-// the pattern edits are: an empty list is auto mode off, so a human sets it.
 model AutoModeModelSetMessage {
   cmd: "automode_model_set";
   models: string[];
@@ -5528,7 +5526,6 @@ model AutoModeModelSetResultMessage {
   config?: AutoModeConfigInfo;
 }
 
-// What pi can reach right now, asked of the pi plugin when the client asks.
 model AutoModeModelsMessage {
   cmd: "automode_models";
   request_id: string;
@@ -5543,9 +5540,7 @@ model AutoModeCatalogModel {
 model AutoModeModelProvider {
   provider: string;
   ready: boolean;
-  // Why pi cannot use it, in pi's own words.
   detail?: string;
-  // Epoch milliseconds pi last refreshed this provider's catalog.
   checked_at?: safeint;
   models: AutoModeCatalogModel[];
 }
@@ -5556,7 +5551,6 @@ model AutoModeModelsResultMessage {
   success: boolean;
   error?: string;
   providers?: AutoModeModelProvider[];
-  // A catalog that could not be read, when the rest still answered.
   problem?: string;
 }
 
