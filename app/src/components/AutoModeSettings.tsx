@@ -223,10 +223,12 @@ function EnvironmentEditor({ config, slots, policy }: EnvironmentEditorProps) {
   const filled = slots.filter((slot) => slotValues(config, slot.id).length > 0).length;
   const busy = policy.savingEnvironment;
 
-  // The automation handle reads the last render through a ref, so registering it
-  // once keeps the pane from re-registering on every render.
+  // The handle registers once and reads this ref, so it must hold committed
+  // state: a discarded render must not leak into it.
   const latest = useRef({ config, slots, policy, filled, editing, failure, busy });
-  latest.current = { config, slots, policy, filled, editing, failure, busy };
+  useEffect(() => {
+    latest.current = { config, slots, policy, filled, editing, failure, busy };
+  });
 
   useEffect(() => {
     setAutoModeAutomationHandle({

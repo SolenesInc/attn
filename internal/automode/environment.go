@@ -8,32 +8,23 @@ import (
 
 // SlotKind says how a slot holds its answer.
 const (
-	// SlotList holds any number of entries, and every rule reading one asks
-	// whether a thing is among them.
-	SlotList = "list"
-	// SlotChoice holds one of Choices, or nothing.
+	SlotList   = "list"
 	SlotChoice = "choice"
 )
 
-// Slot is one question the rulebook asks about this machine. Each is read by a
-// rule in rulebook.md by name; TestEverySlotIsReadByARule fails on an unread one.
+// Slot is one question the rulebook asks about this machine.
+// TestEverySlotIsReadByARule fails on a slot no rule in rulebook.md reads.
 type Slot struct {
-	ID string `json:"id"`
-	// Label is what the rendered environment calls it, so it matches the words
-	// the rules use to reach it.
-	Label string `json:"label"`
-	Kind  string `json:"kind"`
-	// Choices is the closed set SlotChoice picks from, empty for SlotList.
+	ID      string   `json:"id"`
+	Label   string   `json:"label"`
+	Kind    string   `json:"kind"`
 	Choices []string `json:"choices,omitempty"`
-	// Detail is the one line the app and the CLI show under the label.
-	Detail string `json:"detail"`
-	// Unset is what the rendered environment says when nobody filled it in. A
-	// working assumption is stated, because silence reads as an omission.
+	Detail  string   `json:"detail"`
+	// Unset is what the environment renders when nobody filled the slot in.
 	Unset string `json:"unset"`
-	// Detected slots are filled from the session at launch. A user value wins.
+	// Detected slots are filled from the session at launch; a user value wins.
 	Detected bool `json:"detected,omitempty"`
-	// ReadBy names the rulebook rules that look this slot up. It is the reason
-	// the slot exists, and the test that keeps the two in step reads it.
+	// ReadBy names the rulebook rules that look this slot up.
 	ReadBy []string `json:"read_by"`
 }
 
@@ -111,7 +102,6 @@ func Slots() []Slot {
 	}
 }
 
-// FindSlot resolves a slot id.
 func FindSlot(id string) (Slot, bool) {
 	for _, slot := range Slots() {
 		if slot.ID == id {
@@ -135,12 +125,10 @@ func SlotIDs() []string {
 // no rule reads. Slots the user left alone are absent rather than empty.
 type Environment struct {
 	Slots map[string][]string `json:"slots"`
-	// Notes carries context in the user's own words, never a trust list: no rule
-	// can look anything up in prose.
+	// Notes is prose no rule reads; it is never a trust list.
 	Notes []string `json:"notes"`
 }
 
-// NewEnvironment is an environment nobody has filled in.
 func NewEnvironment() Environment {
 	return Environment{Slots: map[string][]string{}, Notes: []string{}}
 }

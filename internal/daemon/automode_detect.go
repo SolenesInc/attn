@@ -6,8 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/automode"
 )
 
-// detectAutoModeEnvironment answers the detected slots for a session in cwd. Git
-// answers now; visibility comes from an earlier lookup, unset meaning private.
+// Git answers now; visibility comes from an earlier lookup, unset meaning private.
 func (d *Daemon) detectAutoModeEnvironment(cwd string) map[string][]string {
 	detected, identities := automode.DetectFromRepo(cwd)
 	if detected == nil {
@@ -67,7 +66,6 @@ func (d *Daemon) lookUpRepoVisibility(identity string) {
 	d.repoVisibilityMu.Unlock()
 }
 
-// splitRepoIdentity cuts "host/owner/name" into its host and its "owner/name".
 func splitRepoIdentity(identity string) (host, ownerRepo string, ok bool) {
 	parts := strings.Split(identity, "/")
 	if len(parts) != 3 {
@@ -81,8 +79,7 @@ func splitRepoIdentity(identity string) (host, ownerRepo string, ok bool) {
 	return parts[0], parts[1] + "/" + parts[2], true
 }
 
-// autoModeConfigForSession is the promoted config as the session in cwd reads
-// it: the user's slots, with the detected ones filling what they left empty.
+// The user's slots, with the detected ones filling what they left empty.
 func (d *Daemon) autoModeConfigForSession(cfg automode.Config, cwd string) automode.Config {
 	cfg.Environment = cfg.Environment.WithDetected(d.detectAutoModeEnvironment(cwd))
 	return cfg

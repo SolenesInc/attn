@@ -132,7 +132,6 @@ describe('AutoModeSettings', () => {
 
     const model = screen.getByTestId('automode-proposal-8');
     expect(model).toHaveTextContent('models');
-    // A CLI caller that named nobody is still shown, rather than left blank.
     expect(model).toHaveTextContent('unattributed');
   });
 
@@ -214,8 +213,6 @@ describe('AutoModeSettings', () => {
     await waitFor(() => expect(setEnvironmentSlot).toHaveBeenCalledWith('domains', ['grafana.acme.corp']));
   });
 
-  // An empty slot is not a blank: it is the rule's fallback, and reading it is
-  // how someone finds out why a call was blocked.
   it('shows an unfilled slot as what the rules assume', async () => {
     renderPane(state());
     expect(await screen.findByTestId('automode-slot-domains')).toHaveTextContent('None configured');

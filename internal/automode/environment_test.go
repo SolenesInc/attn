@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// A slot exists because a rule looks it up. This walks the rulebook so a slot
-// cannot outlive its rule, nor a renamed rule leave a slot pointing at nothing.
 func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
 	source, err := os.ReadFile("../../plugins/attn-pi/automode/rulebook.md")
 	if err != nil {
@@ -27,8 +25,6 @@ func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
 	}
 }
 
-// The rulebook sends the classifier to this section by name, so every phrase
-// that does has to land on a slot; otherwise the rule asks an unanswerable question.
 func TestEveryEnvironmentLookupHasSomewhereToLand(t *testing.T) {
 	source, err := os.ReadFile("../../plugins/attn-pi/automode/rulebook.md")
 	if err != nil {
@@ -69,8 +65,6 @@ func TestSlotIDsAreStableAndUnique(t *testing.T) {
 	}
 }
 
-// Detection describes the machine; the user decides it. A slot they filled keeps
-// what they wrote, and an undetected slot is never reachable this way.
 func TestDetectedValuesNeverOverwriteTheUser(t *testing.T) {
 	env := NewEnvironment()
 	if err := env.SetSlot("trusted_repo", []string{"github.com/acme/only-this"}); err != nil {

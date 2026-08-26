@@ -2651,8 +2651,7 @@ func applyMigration124(tx *sql.Tx) error {
 	return nil
 }
 
-// aModelWasEverPromoted reads the only historical witness that a human picked
-// the models this database carries: promotion is the one way one reaches the config.
+// A promotion row is the only witness that a human picked these models.
 func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	has, err := tableExists(tx, "automode_proposals")
 	if err != nil || !has {
@@ -2667,8 +2666,7 @@ func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	return count > 0, nil
 }
 
-// applyMigration123 rewrites the environment column from the prose lines it held
-// into the slot document. The prose lands in notes rather than being discarded.
+// Prose lines become the slot document; the prose lands in notes, not discarded.
 func applyMigration125(tx *sql.Tx) error {
 	has, err := columnExists(tx, "automode_config", "environment")
 	if err != nil || !has {
@@ -2687,8 +2685,7 @@ func applyMigration125(tx *sql.Tx) error {
 	}
 	var lines []string
 	if err := json.Unmarshal([]byte(raw), &lines); err != nil {
-		// Already a document, or something this cannot read; either way there is
-		// no prose to carry and the reader falls back to an empty environment.
+		// No prose to carry; the reader falls back to an empty environment.
 		return nil
 	}
 	env := automode.NewEnvironment()

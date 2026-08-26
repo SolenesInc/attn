@@ -5313,11 +5313,8 @@ model AppRollbackResult {
 // human in the app is the trust boundary no CLI caller can fake. An agent must
 // not be able to write its own leash.
 
-// Auto mode's promoted config: what a pi session actually launches with. The
-// model list is empty until a human names one, and an empty list is auto mode
-// off — nothing judges a call, so nothing runs under it. Models are ordered,
-// primary first: pi walks the rest only when the one before it cannot be
-// reached.
+// What a pi session launches with. An empty model list is auto mode off.
+// Models are ordered, primary first; pi falls through to the next one.
 model AutoModeConfigInfo {
   "enabled_default": boolean;
   "environment": AutoModeEnvironmentInfo;
@@ -5331,9 +5328,8 @@ model AutoModeConfigInfo {
   "models": string[];
 }
 
-// One question the rulebook asks about this machine. The rules reach a slot by
-// its label, so a rule and its slot move together; "read_by" names the rules
-// that look this one up, which is the reason the slot exists at all.
+// One question the rulebook asks about this machine. Rules reach a slot by
+// its label, so "read_by" and the slot move together.
 model AutoModeEnvironmentSlot {
   "id": string;
   "label": string;
@@ -5342,20 +5338,18 @@ model AutoModeEnvironmentSlot {
   // The closed set a "choice" slot picks from. Empty for a list.
   "choices": string[];
   "detail": string;
-  // What the rendered environment says when nobody filled it in: nothing
-  // trusted for a trust slot, or the working assumption the rules fall back to.
+  // What the environment renders when nobody filled it in.
   "unset": string;
   // Filled from the session at launch. A value the user set wins.
   "detected": boolean;
   "read_by": string[];
 }
 
-// What the user filled in. Slots nobody touched are absent rather than empty,
-// so "unset" is what the classifier reads for them.
+// What the user filled in. Untouched slots are absent, so the classifier
+// reads "unset" for them.
 model AutoModeEnvironmentInfo {
   "slots": AutoModeEnvironmentSlotValue[];
-  // Context in the user's own words. No rule reads it: prose cannot be looked
-  // up, which is why the slots exist.
+  // Prose no rule reads; it is never a trust list.
   "notes": string[];
 }
 

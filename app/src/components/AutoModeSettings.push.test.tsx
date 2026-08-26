@@ -86,8 +86,6 @@ describe('AutoModeSettings and a config change from elsewhere', () => {
     expect(getState).toHaveBeenCalledTimes(1);
   });
 
-  // An entry someone is halfway through typing is theirs, not the daemon's.
-  // A push replaces what is stored and must not reach into the open editor.
   it('leaves a half-typed entry alone', async () => {
     render(<Harness getState={vi.fn().mockResolvedValue(state())} />);
     await waitFor(() => screen.getByTestId('automode-config'));

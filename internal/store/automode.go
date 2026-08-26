@@ -90,16 +90,14 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 	return cfg, nil
 }
 
-// SetAutoModeEnvironmentSlot replaces one slot's entries; an empty list clears
-// it back to the meaning the rulebook gives an unset slot.
+// An empty list clears the slot back to its unset meaning.
 func (s *Store) SetAutoModeEnvironmentSlot(id string, values []string, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
 		return cfg.Environment.SetSlot(id, values)
 	})
 }
 
-// SetAutoModeEnvironmentNotes replaces the prose beside the slots. No rule
-// reads it.
+// Prose beside the slots. No rule reads it.
 func (s *Store) SetAutoModeEnvironmentNotes(notes []string, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
 		cfg.Environment.Notes = append([]string{}, notes...)

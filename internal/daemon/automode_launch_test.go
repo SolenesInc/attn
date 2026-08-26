@@ -323,8 +323,6 @@ func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 	}
 }
 
-// A session's own repository is the one thing the environment answers without
-// the user, so a destination rule has something to read on a fresh machine.
 func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
@@ -392,7 +390,6 @@ func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
 	<-requestDone
 }
 
-// The user's own entry is the whole answer: detection does not append to it.
 func TestSpawnKeepsTheUsersTrustedRepoOverDetection(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}

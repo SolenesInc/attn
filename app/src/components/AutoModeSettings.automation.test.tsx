@@ -95,8 +95,6 @@ describe('AutoModeSettings automation handle', () => {
     expect(getAutoModeAutomationHandle()).toBeNull();
   });
 
-  // A slot nobody filled has to say what the rules fall back to; rendering
-  // nothing reads as "this does not matter", when it is why a call gets blocked.
   it('shows an unfilled slot as what the rules assume instead of blank', async () => {
     render(<Harness setEnvironmentSlot={vi.fn().mockResolvedValue(edited())} />);
     await waitFor(() => screen.getByTestId('automode-slot-repo_visibility'));
@@ -106,8 +104,6 @@ describe('AutoModeSettings automation handle', () => {
     );
   });
 
-  // A detected slot fills itself from the session's repository. Left looking
-  // like every other empty row, it reads as one more thing the user forgot.
   it('says which empty slots a session fills for itself', async () => {
     render(<Harness setEnvironmentSlot={vi.fn().mockResolvedValue(edited())} />);
     await waitFor(() => screen.getByTestId('automode-slot-repo_visibility'));

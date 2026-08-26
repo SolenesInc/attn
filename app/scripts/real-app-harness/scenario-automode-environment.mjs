@@ -117,8 +117,6 @@ async function main() {
       await hold();
     });
 
-    // What an unfilled slot says is the half nobody can guess, and it is the
-    // reason a call gets blocked. A blank row would read as "does not matter".
     await runner.step('an_unfilled_slot_says_what_the_rules_assume', async () => {
       const text = await client.request('dom_text', {
         selector: '[data-testid="automode-slot-registry"]',
@@ -128,8 +126,6 @@ async function main() {
       await hold();
     });
 
-    // Two slots fill themselves from the session's repository. Left looking
-    // like every other empty row, they read as one more thing to configure.
     await runner.step('a_detected_slot_says_it_fills_itself', async () => {
       const text = await client.request('dom_text', {
         selector: '[data-testid="automode-slot-trusted_repo"]',
