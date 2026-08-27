@@ -318,6 +318,19 @@ func TestGardenGuidanceRequiresReadingUpdateNotificationsWithoutActing(t *testin
 	}
 }
 
+func TestGardenGuidanceMirrorsJiraVocabularyPerConcept(t *testing.T) {
+	for _, want := range []string{
+		"seed = ticket, ready = todo, plot = epic, harvested = done",
+		"Use the Garden word by default",
+		"mirror it for that concept for the rest of the exchange",
+		"do not switch the other concepts unless they do",
+	} {
+		if !strings.Contains(GardenGuidance, want) {
+			t.Fatalf("garden guidance dropped %q:\n%s", want, GardenGuidance)
+		}
+	}
+}
+
 func TestGenerateCodexConfigOverrides_InjectsWorkflowGuidanceWhenEnabled(t *testing.T) {
 	off := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{WorkspaceContextPath: "/tmp/context.md"}), "\n")
 	if strings.Contains(off, "hypercode") {

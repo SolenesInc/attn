@@ -1,6 +1,4 @@
-/* GardenBoard.css — the garden as columns.
-   Token-only. Hierarchy is type, spacing and alignment: no card borders, no
-   column rules, no fills that are not saying something. */
+/* The board uses colour for work state and shape for board structure. */
 
 .garden-board {
   display: flex;
@@ -19,6 +17,35 @@
   --font-size: calc(14px * var(--garden-scale));
   --font-size-lg: calc(18px * var(--garden-scale));
   --font-size-xl: calc(24px * var(--garden-scale));
+  --garden-board-ready: #58c98b;
+  --garden-board-progress: #74a7f7;
+  --garden-board-attention: #dda75b;
+  --garden-board-parked: #8c96a3;
+  --garden-board-lane: #161619;
+  --garden-board-card: #1c1c20;
+  --garden-board-card-border: #303034;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .garden-board {
+    --garden-board-ready: #227d4d;
+    --garden-board-progress: #356fbd;
+    --garden-board-attention: #94600d;
+    --garden-board-parked: #65717e;
+    --garden-board-lane: #f1f1f3;
+    --garden-board-card: #ffffff;
+    --garden-board-card-border: #d9d9de;
+  }
+}
+
+:root[data-theme='light'] .garden-board {
+  --garden-board-ready: #227d4d;
+  --garden-board-progress: #356fbd;
+  --garden-board-attention: #94600d;
+  --garden-board-parked: #65717e;
+  --garden-board-lane: #f1f1f3;
+  --garden-board-card: #ffffff;
+  --garden-board-card-border: #d9d9de;
 }
 
 /* Header — the panel's, to the pixel, so switching views moves nothing. */
@@ -169,17 +196,29 @@
 .garden-board__columns {
   display: flex;
   flex: 1 1 auto;
-  gap: 28px;
+  gap: 12px;
   min-height: 0;
 }
 
 .garden-board__column {
+  background: var(--garden-board-lane);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+  padding: 10px;
   position: relative;
+}
+
+.garden-board__column[data-column='ready'] {
+  flex-grow: 1.18;
+}
+
+.garden-board__column[data-column='parked'] {
+  flex-grow: 0.86;
 }
 
 .garden-board__column.is-collapsed {
@@ -207,26 +246,40 @@
 
 .garden-board__head {
   align-items: baseline;
-  border-bottom: 1px solid var(--color-border-subtle);
   display: flex;
   gap: 8px;
-  padding-bottom: 6px;
+  padding: 1px 2px 7px;
 }
 
 .garden-board__label {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.garden-board__count {
   color: var(--color-text-secondary);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-sm);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.garden-board__count {
+  background: var(--color-bg-button);
+  border-radius: 999px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  min-width: 1.8em;
+  padding: 0 6px;
+  text-align: center;
+}
+
+[data-column='ready'] .garden-board__label,
+[data-column='ready'] .garden-board__count {
+  color: var(--garden-board-ready);
+}
+
+[data-column='parked'] .garden-board__label {
+  color: var(--garden-board-parked);
 }
 
 .garden-board__reveal {
@@ -264,7 +317,7 @@
 .garden-board__cards {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 7px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -278,8 +331,8 @@
   display: flex;
   font-size: var(--font-size-sm);
   gap: 8px;
-  margin: 8px 0 3px;
-  padding: 0 8px;
+  margin: 10px 0 4px;
+  padding: 0 2px;
 }
 
 .garden-board__split::after {
@@ -318,29 +371,32 @@
 }
 
 .garden-card__body {
-  background: transparent;
-  border: none;
-  border-radius: 5px;
+  background: var(--garden-board-card);
+  border: 1px solid var(--garden-board-card-border);
+  border-radius: 7px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
   color: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   /* A constant right gutter for the drill chevron and the ⏎ hint. Reserved on
      every card, not only the ones showing them, so selecting a card never
      reflows the ids and ages under it. */
-  padding: 5px 26px 5px 8px;
+  min-height: 58px;
+  padding: 9px 28px 9px 11px;
   text-align: left;
   width: 100%;
 }
 
 .garden-card__body:hover {
-  background: var(--color-bg-elevated);
+  background: color-mix(in srgb, var(--garden-board-card) 82%, var(--color-bg-selected));
 }
 
 .garden-card.is-selected .garden-card__body {
-  background: var(--color-bg-elevated);
-  box-shadow: inset 2px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--garden-board-card) 82%, var(--color-bg-selected));
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .garden-card__body:focus-visible {
@@ -349,9 +405,9 @@
 }
 
 .garden-card__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 520;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .garden-card.is-harvested .garden-card__title,
@@ -392,7 +448,8 @@
 }
 
 .garden-card__ready {
-  color: var(--accent);
+  color: var(--garden-board-ready);
+  font-weight: 600;
 }
 
 .garden-card__held,
@@ -407,11 +464,11 @@
 /* A tender whose session is gone is the one thing on this board somebody has
    to act on: the seed reads as claimed and nobody is holding it. */
 .garden-card__tender.is-gone {
-  color: var(--color-warning);
+  color: var(--garden-board-attention);
 }
 
 .garden-card__gone {
-  color: var(--color-warning);
+  color: var(--garden-board-attention);
 }
 
 .garden-card__closed {
@@ -420,6 +477,54 @@
 
 .garden-card__closed.is-withered {
   color: var(--color-text-dimmed);
+}
+
+.garden-card.is-ready .garden-card__body {
+  border-color: color-mix(in srgb, var(--garden-board-ready) 38%, var(--garden-board-card-border));
+  box-shadow: inset 3px 0 0 var(--garden-board-ready), 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+[data-column='growing'] .garden-card__body {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--garden-board-progress) 72%, transparent), 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+[data-column='growing'] .garden-card__tender {
+  color: var(--garden-board-progress);
+}
+
+.garden-card:has(.garden-card__tender.is-gone) .garden-card__body {
+  border-color: color-mix(in srgb, var(--garden-board-attention) 48%, var(--garden-board-card-border));
+  box-shadow: inset 3px 0 0 var(--garden-board-attention), 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+[data-column='ready'] .garden-card.is-not-ready .garden-card__body,
+[data-column='parked'] .garden-card__body,
+[data-column='closed'] .garden-card__body {
+  background: color-mix(in srgb, var(--garden-board-card) 62%, var(--garden-board-lane));
+  box-shadow: none;
+}
+
+[data-column='ready'] .garden-card.is-not-ready .garden-card__title,
+[data-column='parked'] .garden-card__title,
+[data-column='closed'] .garden-card__title {
+  color: var(--color-text-secondary);
+}
+
+[data-column='parked'] .garden-card__body {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--garden-board-parked) 64%, transparent);
+}
+
+[data-column='parked'] .garden-card__held {
+  color: var(--garden-board-parked);
+}
+
+[data-column='ready'] .garden-card.is-not-ready .garden-card__body:hover,
+[data-column='parked'] .garden-card__body:hover,
+[data-column='closed'] .garden-card__body:hover,
+[data-column='ready'] .garden-card.is-not-ready.is-selected .garden-card__body,
+[data-column='parked'] .garden-card.is-selected .garden-card__body,
+[data-column='closed'] .garden-card.is-selected .garden-card__body {
+  background: color-mix(in srgb, var(--garden-board-card) 72%, var(--color-bg-selected));
 }
 
 .garden-card__drill {
@@ -557,7 +662,7 @@
 .garden-board__zones {
   /* Opaque: the zones replace the column's contents while a card is over it.
      Letting the cards show through put two lines of type in the same place. */
-  background: var(--color-bg-panel);
+  background: var(--garden-board-lane);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -628,7 +733,8 @@
 
 .garden-compose {
   align-items: baseline;
-  background: var(--color-bg-elevated);
+  background: var(--garden-board-card);
+  border: 1px solid var(--garden-board-card-border);
   border-radius: 6px;
   display: flex;
   flex: none;
@@ -814,4 +920,21 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .garden-board__columns {
+    gap: 8px;
+  }
+
+  .garden-board__column {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+}
+
+@media (max-width: 900px) {
+  .garden-card__id {
+    display: none;
+  }
 }

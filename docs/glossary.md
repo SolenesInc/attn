@@ -557,6 +557,12 @@ the same live answer SessionStart injects, including after compaction. The
 garden is one space: it has no workspace dimension at all, and plots are its
 only grouping (ruled 2026-08-13).
 
+In conversation, **ticket**, **todo**, **epic**, and **done** are Jira-style
+semantic aliases for **seed**, **ready**, **plot**, and **harvested**. Agents use
+the Garden word by default, then mirror whichever alias the user chooses for
+that concept for the rest of the exchange. The aliases are conversational: they
+do not add a stored todo state or revive the retired Ticket entity above.
+
 **Dispatch-at-plot** aims a delegation at an existing seed (`attn delegate
 --plot <seed>`). The delegate becomes that seed's tender — its launch prompt
 says so, so the claim has to match — and the dispatch refuses before creating

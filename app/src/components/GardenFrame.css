@@ -43,6 +43,10 @@
   transform: translateX(calc(100% + 18px));
 }
 
+.garden-frame.is-closed.is-full-dismissal {
+  transform: none;
+}
+
 .garden-frame.is-dock {
   --gf-flight: 150ms;
 }

@@ -1,0 +1,10 @@
+kind: changed
+area: garden
+change: >
+  The Garden now returns to the sidebar or fullscreen frame the user last chose,
+  and fullscreen returns to its last list or board view. Escape dismisses the
+  Garden from either frame. The board uses task-shaped cards and semantic colors
+  in both themes: ready work is green, in-progress work is blue, missing tenders
+  use amber, parked work uses quiet slate, and other unavailable work stays gray.
+  Agents still speak in Garden terms by default, then mirror ticket, todo, epic,
+  or done when the user chooses that word for a concept.

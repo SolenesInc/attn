@@ -134,8 +134,8 @@ describe('GardenPanel in its frame', () => {
     });
   });
 
-  describe('the escape ladder', () => {
-    function ladder() {
+  describe('frame dismissal', () => {
+    function framedPanel() {
       const onEscapeFloor = vi.fn();
       const onClose = vi.fn();
       boxWidth = 520;
@@ -152,39 +152,28 @@ describe('GardenPanel in its frame', () => {
     }
     const escape = () => fireEvent.keyDown(window, { key: 'Escape' });
 
-    it('clears the query, then climbs the trail, then hands the frame down', () => {
-      const { onEscapeFloor, onClose } = ladder();
+    it('hands the first Escape to the frame without changing the walk or query', () => {
+      const { onEscapeFloor, onClose } = framedPanel();
       open(/the migration/);
       open(/one panel/);
       const field = screen.getByRole('combobox') as HTMLInputElement;
       fireEvent.change(field, { target: { value: 'work' } });
 
       escape();
-      expect(field.value).toBe('');
-      expect(screen.getByRole('heading', { name: 'one panel' })).toBeInTheDocument();
-      expect(onEscapeFloor).not.toHaveBeenCalled();
-
-      escape();
-      expect(screen.getByRole('heading', { name: 'the migration' })).toBeInTheDocument();
-      expect(onEscapeFloor).not.toHaveBeenCalled();
-
-      escape();
-      expect(screen.queryByRole('heading', { name: 'the migration' })).toBeNull();
-      expect(onEscapeFloor).not.toHaveBeenCalled();
-
-      escape();
+      expect(field.value).toBe('work');
+      expect(useGardenWalk.getState().trail).toEqual(['s-crown1', 's-mid111']);
       expect(onEscapeFloor).toHaveBeenCalledTimes(1);
       expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('climbs rather than demotes when both rungs arm at once', () => {
+    it('dismisses from a restored trail without climbing it first', () => {
       useGardenWalk.setState({ trail: ['s-crown1', 's-mid111'] });
-      const { onEscapeFloor } = ladder();
+      const { onEscapeFloor } = framedPanel();
       expect(screen.getByRole('heading', { name: 'one panel' })).toBeInTheDocument();
 
       escape();
-      expect(screen.getByRole('heading', { name: 'the migration' })).toBeInTheDocument();
-      expect(onEscapeFloor).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { name: 'one panel' })).toBeInTheDocument();
+      expect(onEscapeFloor).toHaveBeenCalledTimes(1);
     });
 
     it('leaves Escape alone when there is no frame under it', () => {

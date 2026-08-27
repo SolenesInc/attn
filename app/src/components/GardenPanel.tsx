@@ -576,11 +576,8 @@ export function GardenPanel({
     focusSearch();
   }, [focusSearch]);
 
-  // Source order decides the Escape ladder, and HERE rather than in GardenFrame,
-  // since React runs child effects before parent ones.
+  // Keep the frame below controls that register after opening, such as a lightbox.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);
-  useEscapeStack(climbOne, isOpen && livingTrail.length > 0);
-  useEscapeStack(() => setQuery(''), isOpen && query !== '');
 
   const hereId = here?.id ?? '';
   useEffect(() => {

@@ -3,6 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { GardenFrame, type FrameRect } from './GardenFrame';
 import { useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';
+import {
+  GARDEN_FRAME_MODE_STORAGE_KEY,
+  GARDEN_FULLSCREEN_VIEW_STORAGE_KEY,
+} from '../hooks/useGardenPresentation';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
@@ -43,7 +47,11 @@ function props(mode: 'closed' | 'dock' | 'full') {
 }
 
 describe('GardenFrame', () => {
-  beforeEach(() => useGardenWalk.setState({ trail: [] }));
+  beforeEach(() => {
+    useGardenWalk.setState({ trail: [] });
+    window.localStorage.removeItem(GARDEN_FRAME_MODE_STORAGE_KEY);
+    window.localStorage.removeItem(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY);
+  });
   afterEach(() => vi.restoreAllMocks());
 
   it('carries the very same panel across the promotion', () => {
@@ -79,6 +87,18 @@ describe('GardenFrame', () => {
     expect(document.querySelector('.garden-panel')).toBeNull();
   });
 
+  it('dismisses fullscreen in place instead of collapsing toward the dock', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1670);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1008);
+    const base = props('full');
+    const { rerender } = render(<GardenFrame {...base} />);
+
+    rerender(<GardenFrame {...base} mode="closed" />);
+    expect(frameEl()).toHaveClass('is-full-dismissal');
+    expect(frameEl().style.left).toBe('12px');
+    expect(frameEl().style.width).toBe('1646px');
+  });
+
   it('is a modal only while it holds the window', () => {
     const { rerender } = render(<GardenFrame {...props('dock')} />);
     expect(frameEl().getAttribute('aria-modal')).toBeNull();
@@ -103,21 +123,41 @@ describe('GardenFrame', () => {
       expect(screen.getByRole('group', { name: 'Garden view' })).toBeInTheDocument();
     });
 
-    it('promotes onto the list, and hands the board back to it on the way down', () => {
-      const { rerender } = render(<GardenFrame {...props('full')} {...board} />);
+    it('keeps the chosen fullscreen view through dismissal and a sidebar visit', () => {
+      const base = props('full');
+      const { rerender, unmount } = render(<GardenFrame {...base} {...board} />);
       expect(document.querySelector('.garden-panel')).not.toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'board' }));
       expect(document.querySelector('.garden-panel')).toBeNull();
       expect(document.querySelector('.garden-board')).not.toBeNull();
+      expect(window.localStorage.getItem(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY)).toBe('board');
 
-      rerender(<GardenFrame {...props('dock')} {...board} />);
+      rerender(<GardenFrame {...base} {...board} mode="closed" />);
+      expect(document.querySelector('.garden-board')).toBeNull();
+
+      rerender(<GardenFrame {...base} {...board} mode="full" />);
+      expect(document.querySelector('.garden-board')).not.toBeNull();
+
+      rerender(<GardenFrame {...base} {...board} mode="dock" />);
       expect(document.querySelector('.garden-board')).toBeNull();
       expect(document.querySelector('.garden-panel')).not.toBeNull();
 
-      rerender(<GardenFrame {...props('full')} {...board} />);
-      expect(document.querySelector('.garden-board')).toBeNull();
-      expect(document.querySelector('.garden-panel')).not.toBeNull();
+      rerender(<GardenFrame {...base} {...board} mode="full" />);
+      expect(document.querySelector('.garden-board')).not.toBeNull();
+
+      unmount();
+      render(<GardenFrame {...base} {...board} />);
+      expect(document.querySelector('.garden-board')).not.toBeNull();
+    });
+
+    it('hands Escape from the board directly to frame dismissal', () => {
+      const base = props('full');
+      window.localStorage.setItem(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY, 'board');
+      render(<GardenFrame {...base} {...board} />);
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(base.onEscapeFloor).toHaveBeenCalledTimes(1);
     });
   });
 });

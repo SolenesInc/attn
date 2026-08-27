@@ -30,8 +30,7 @@ interface KeyboardShortcutsConfig {
   onOpenNotebookTile?: () => void;
   onOpenNotebookFullscreen?: () => void;
   onOpenGarden?: () => void;
-  /** The garden's window frame is the same garden at a different size, not a
-   *  modal over it, so the key that promotes it must also bring it back. */
+  /** Keep the Garden shortcut live fullscreen so the same key can switch frames. */
   gardenShortcutEnabled?: boolean;
   onQuit?: () => void;
   enabled: boolean;
