@@ -795,7 +795,9 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       onFocusPane(leafId);
       runtime.focusPane(leafId);
     }, [activePaneId, attentionActiveLeafId, focusTile, onFocusPane, runtime, tileLeafById]);
-    focusLeafRequestRef.current = focusLeaf;
+    useLayoutEffect(() => {
+      focusLeafRequestRef.current = focusLeaf;
+    }, [focusLeaf]);
 
     const annotatedTileIds = useMemo(() => (
       [...tileLeafById.values()]
