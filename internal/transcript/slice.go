@@ -82,13 +82,21 @@ type sliceLine struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 
-	// event_msg envelope only; response_item is ignored here so the same turn is
-	// not double-counted.
+	// Codex event_msg and response_item envelopes carry their records here.
 	Payload json.RawMessage `json:"payload"`
 
 	Data struct {
 		Content string `json:"content"`
 	} `json:"data"`
+}
+
+type sliceCodexResponseMessage struct {
+	Type     string          `json:"type"`
+	Role     string          `json:"role"`
+	Content  json.RawMessage `json:"content"`
+	Metadata *struct {
+		ContentItemKinds []string `json:"content_item_kinds"`
+	} `json:"internal_chat_message_metadata_passthrough"`
 }
 
 type humanTurns struct {
@@ -131,16 +139,23 @@ type sliceBuilder struct {
 
 	lastSummary string
 
-	tailAgent []string
+	tailAgent         []string
+	responseTailAgent []string
 
-	agentCount int
+	agentCount         int
+	responseAgentCount int
+
+	responseStrict     humanTurns
+	responsePermissive humanTurns
 }
 
 func newSliceBuilder(opts SliceOptions) *sliceBuilder {
 	return &sliceBuilder{
-		opts:       opts,
-		strict:     humanTurns{maxTail: opts.MaxRescopingTurns},
-		permissive: humanTurns{maxTail: opts.MaxRescopingTurns},
+		opts:               opts,
+		strict:             humanTurns{maxTail: opts.MaxRescopingTurns},
+		permissive:         humanTurns{maxTail: opts.MaxRescopingTurns},
+		responseStrict:     humanTurns{maxTail: opts.MaxRescopingTurns},
+		responsePermissive: humanTurns{maxTail: opts.MaxRescopingTurns},
 	}
 }
 
@@ -179,6 +194,40 @@ func (b *sliceBuilder) addAgent(text string) {
 	if len(b.tailAgent) > b.opts.MaxAgentTurns {
 		b.tailAgent = b.tailAgent[len(b.tailAgent)-b.opts.MaxAgentTurns:]
 	}
+}
+
+func (b *sliceBuilder) addResponseHuman(text string, stamped bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	if stamped {
+		b.responseStrict.add(text)
+	}
+	b.responsePermissive.add(text)
+}
+
+func (b *sliceBuilder) addResponseAgent(text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	b.responseAgentCount++
+	b.responseTailAgent = append(b.responseTailAgent, text)
+	if len(b.responseTailAgent) > b.opts.MaxAgentTurns {
+		b.responseTailAgent = b.responseTailAgent[len(b.responseTailAgent)-b.opts.MaxAgentTurns:]
+	}
+}
+
+func responseItemIsHuman(metadata *struct {
+	ContentItemKinds []string `json:"content_item_kinds"`
+}) bool {
+	for _, kind := range metadata.ContentItemKinds {
+		if kind == "user.text" {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *sliceBuilder) setSummary(text string) {
@@ -223,6 +272,23 @@ func (b *sliceBuilder) processLine(line []byte) {
 			b.addAgent(payload.Message)
 		}
 		return
+	case "response_item":
+		var payload sliceCodexResponseMessage
+		if err := json.Unmarshal(e.Payload, &payload); err != nil || payload.Type != "message" {
+			return
+		}
+		content := extractTextContent(payload.Content)
+		switch payload.Role {
+		case "user":
+			if payload.Metadata == nil {
+				b.addResponseHuman(content, false)
+			} else if responseItemIsHuman(payload.Metadata) {
+				b.addResponseHuman(content, true)
+			}
+		case "assistant":
+			b.addResponseAgent(content)
+		}
+		return
 	case "user.message":
 		b.addHuman(e.Data.Content)
 		return
@@ -253,13 +319,26 @@ func capTexts(items []string, n int) []string {
 
 func (b *sliceBuilder) toSlice(opts SliceOptions) ConversationSlice {
 	h := b.humans()
+	if h.count == 0 {
+		if b.responseStrict.count > 0 {
+			h = &b.responseStrict
+		} else {
+			h = &b.responsePermissive
+		}
+	}
+	tailAgent := b.tailAgent
+	agentCount := b.agentCount
+	if agentCount == 0 {
+		tailAgent = b.responseTailAgent
+		agentCount = b.responseAgentCount
+	}
 	return ConversationSlice{
 		Brief:      capText(h.first, opts.TurnCharCap),
 		Rescoping:  capTexts(h.tail, opts.TurnCharCap),
 		Summary:    capText(b.lastSummary, opts.SummaryCharCap),
-		AgentTurns: capTexts(b.tailAgent, opts.TurnCharCap),
+		AgentTurns: capTexts(tailAgent, opts.TurnCharCap),
 		HumanCount: h.count,
-		AgentCount: b.agentCount,
+		AgentCount: agentCount,
 	}
 }
 

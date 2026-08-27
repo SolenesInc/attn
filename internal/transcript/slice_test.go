@@ -208,6 +208,7 @@ func TestExtractConversationSlice_Codex(t *testing.T) {
 		`{"type":"event_msg","payload":{"type":"user_message","message":"please fix the bug"}}`,
 		`{"type":"event_msg","payload":{"type":"agent_message","message":"on it"}}`,
 		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"please fix the bug"}]}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"duplicate on it"}]}}`,
 		`{"type":"event_msg","payload":{"type":"user_message","message":"actually also check the tests"}}`,
 	}
 	path := writeJSONL(t, lines...)
@@ -225,12 +226,67 @@ func TestExtractConversationSlice_Codex(t *testing.T) {
 		t.Errorf("Rescoping = %v, want %v", got.Rescoping, wantRescoping)
 	}
 	if got.HumanCount != 2 {
-		t.Errorf("HumanCount = %d, want 2 (consecutive dup deduped, response_item ignored)", got.HumanCount)
+		t.Errorf("HumanCount = %d, want 2 (consecutive dup deduped, event_msg preferred)", got.HumanCount)
 	}
 	if got.AgentCount != 1 {
 		t.Errorf("AgentCount = %d, want 1", got.AgentCount)
 	}
 	if len(got.AgentTurns) != 1 || got.AgentTurns[0] != "on it" {
+		t.Errorf("AgentTurns = %v", got.AgentTurns)
+	}
+}
+
+func TestExtractConversationSlice_CodexResponseItems(t *testing.T) {
+	lines := []string{
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"injected agent instructions"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["agents_md.instructions"]}}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"please fix auto titles"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["user.text"]}}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"found the transcript drift"}]}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"support both formats"}],"internal_chat_message_metadata_passthrough":{"content_item_kinds":["user.text"]}}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"adding the fallback"}]}}`,
+	}
+	path := writeJSONL(t, lines...)
+
+	got, err := ExtractConversationSlice(path, DefaultSliceOptions())
+	if err != nil {
+		t.Fatalf("ExtractConversationSlice: %v", err)
+	}
+	if got.Brief != "please fix auto titles" {
+		t.Errorf("Brief = %q", got.Brief)
+	}
+	if len(got.Rescoping) != 1 || got.Rescoping[0] != "support both formats" {
+		t.Errorf("Rescoping = %v", got.Rescoping)
+	}
+	if got.HumanCount != 2 {
+		t.Errorf("HumanCount = %d, want 2", got.HumanCount)
+	}
+	wantAgent := []string{"found the transcript drift", "adding the fallback"}
+	if len(got.AgentTurns) != len(wantAgent) {
+		t.Fatalf("AgentTurns = %v, want %v", got.AgentTurns, wantAgent)
+	}
+	for i, want := range wantAgent {
+		if got.AgentTurns[i] != want {
+			t.Errorf("AgentTurns[%d] = %q, want %q", i, got.AgentTurns[i], want)
+		}
+	}
+	if got.AgentCount != 2 {
+		t.Errorf("AgentCount = %d, want 2", got.AgentCount)
+	}
+}
+
+func TestExtractConversationSlice_CodexResponseItemsWithoutMetadata(t *testing.T) {
+	path := writeJSONL(t,
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"legacy response-only prompt"}]}}`,
+		`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"legacy response-only answer"}]}}`,
+	)
+
+	got, err := ExtractConversationSlice(path, DefaultSliceOptions())
+	if err != nil {
+		t.Fatalf("ExtractConversationSlice: %v", err)
+	}
+	if got.Brief != "legacy response-only prompt" || got.HumanCount != 1 {
+		t.Errorf("Brief = %q, HumanCount = %d", got.Brief, got.HumanCount)
+	}
+	if len(got.AgentTurns) != 1 || got.AgentTurns[0] != "legacy response-only answer" {
 		t.Errorf("AgentTurns = %v", got.AgentTurns)
 	}
 }
