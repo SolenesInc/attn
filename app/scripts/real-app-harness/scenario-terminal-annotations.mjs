@@ -13,6 +13,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
+import { configureMockAgent, writeMockAgentFixture } from './mockAgent.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
@@ -23,10 +24,8 @@ import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { harnessClientHello } from './harnessProfile.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
-// Generous on purpose: how long a live agent takes to stop says nothing about
-// whether an annotation survived it.
-const SETTLE_TIMEOUT_MS = 240_000;
-const TURN_START_TIMEOUT_MS = 90_000;
+const SETTLE_TIMEOUT_MS = 30_000;
+const TURN_START_TIMEOUT_MS = 15_000;
 const ANCHOR_TIMEOUT_MS = 30_000;
 const SETTLED_STATES = new Set(['idle', 'waiting_input', 'pending_approval']);
 
@@ -71,6 +70,39 @@ function prosePrompt(sentence) {
     `Reply with exactly this sentence: ${sentence}`,
     'Use no tools, lists, code, or headings.',
   ].join(' ');
+}
+
+function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
+  const { width, height } = windowBounds.logicalBounds;
+  const chromeX = Math.max(0, width - innerWidth);
+  const chromeY = Math.max(0, height - innerHeight);
+  return {
+    relativeX: (chromeX / 2 + pageX) / width,
+    relativeY: (chromeY + pageY) / height,
+  };
+}
+
+function inside(rect, point) {
+  return Boolean(rect)
+    && point.x >= rect.left
+    && point.x <= rect.left + rect.width
+    && point.y >= rect.top
+    && point.y <= rect.top + rect.height;
+}
+
+function terminalPointOutside(paneRects, ...avoid) {
+  for (const pane of paneRects) {
+    const inset = Math.min(24, pane.width / 4, pane.height / 4);
+    const candidates = [
+      { x: pane.left + inset, y: pane.top + inset },
+      { x: pane.left + pane.width - inset, y: pane.top + inset },
+      { x: pane.left + inset, y: pane.top + pane.height - inset },
+      { x: pane.left + pane.width - inset, y: pane.top + pane.height - inset },
+    ];
+    const point = candidates.find((candidate) => avoid.every((rect) => !inside(rect, candidate)));
+    if (point) return point;
+  }
+  return null;
 }
 
 function workingCommentaryPrompt(sentence, startedMarker, releaseMarker) {
@@ -228,11 +260,18 @@ async function main() {
     return;
   }
 
+  // HID clicks land at absolute screen positions, so the default 20px-visible
+  // window park would put every click off-window.
+  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
+    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
+  }
+
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-ANNOTATIONS',
-    tier: 'tier3-local-agent',
+    tier: 'tier2-local-fake-agent',
     prefix: 'terminal-annotations',
     metadata: {
+      agent: 'mock-codex',
       focus: 'completed commentary is annotatable while a tool runs; a past turn stays annotated and outlives the app',
     },
   });
@@ -240,8 +279,10 @@ async function main() {
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = new MacOSDriver({ appPath: options.appPath });
+  const cwd = path.join(runner.sessionDir, 'annotated');
   let sessionId = null;
   let paneId = null;
+  let mockAgent = null;
   const toolGateDir = path.join(runner.sessionDir, 'tool-gate');
   const toolStartedMarker = path.join(toolGateDir, 'started');
   const toolReleaseMarker = path.join(toolGateDir, 'release');
@@ -265,13 +306,37 @@ async function main() {
   });
 
   try {
+    await runner.step('create_mock_agent_fixture', async () => {
+      writeMockAgentFixture(cwd, {
+        name: 'terminal annotations mock',
+        turns: [
+          {
+            includes: 'Before using a tool',
+            actions: [
+              { type: 'reply', text: FIRST_MESSAGE },
+              { type: 'touch', path: toolStartedMarker },
+              { type: 'wait_for_file', path: toolReleaseMarker },
+            ],
+          },
+          {
+            includes: 'Reply with exactly this sentence',
+            actions: [
+              { type: 'reply', text: SECOND_MESSAGE },
+            ],
+          },
+        ],
+        defaultActions: [
+          { type: 'reply', text: 'Feedback received.' },
+        ],
+      });
+    });
+
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      mockAgent = await configureMockAgent({ client, observer, runner });
     });
 
     await runner.step('create_agent_session', async () => {
-      const cwd = path.join(runner.sessionDir, 'annotated');
-      fs.mkdirSync(cwd, { recursive: true });
       sessionId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -496,6 +561,120 @@ async function main() {
 
       const comment = 'checked against the real behaviour';
       await client.request('dom_type', { selector: '.anno-popup-text', text: comment });
+
+      const typed = await client.request('get_annotation_state', {});
+      const windowBounds = await client.request('get_window_bounds', {});
+      runner.assert(Boolean(windowBounds?.logicalBounds), `No window bounds: ${JSON.stringify(windowBounds)}`);
+      const outside = terminalPointOutside(typed.paneRects, typed.popupRect, typed.panelRect);
+      runner.assert(Boolean(outside), `No terminal point clears the editor and panel: ${JSON.stringify(typed)}`);
+      const outsideWindow = windowRelativePoint(
+        outside.x,
+        outside.y,
+        windowBounds,
+        typed.viewport.width,
+        typed.viewport.height,
+      );
+      await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+
+      const afterOutside = await client.request('get_annotation_state', {});
+      runner.assert(
+        afterOutside.popupOpen && afterOutside.popupDraft === comment,
+        `Clicking outside lost the open comment draft: ${JSON.stringify(afterOutside)}`,
+      );
+      runner.assert(
+        !afterOutside.commentFocused,
+        'The outside terminal click did not take focus away from the comment box',
+      );
+
+      const quoteRect = afterOutside.popupQuoteRect;
+      runner.assert(Boolean(quoteRect), `The open editor has no quote background: ${JSON.stringify(afterOutside)}`);
+      const quoteWindow = windowRelativePoint(
+        quoteRect.left + quoteRect.width / 2,
+        quoteRect.top + quoteRect.height / 2,
+        windowBounds,
+        afterOutside.viewport.width,
+        afterOutside.viewport.height,
+      );
+      await driver.clickWindow(quoteWindow.relativeX, quoteWindow.relativeY);
+      let refocused = await client.request('get_annotation_state', {});
+      runner.assert(
+        refocused.commentFocused && refocused.popupDraft === comment,
+        `Clicking the editor background did not restore its focus and draft: ${JSON.stringify(refocused)}`,
+      );
+
+      await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      refocused = await client.request('get_annotation_state', {});
+      const commentRect = refocused.popupCommentRect;
+      runner.assert(Boolean(commentRect), `The open editor has no comment box: ${JSON.stringify(refocused)}`);
+      const commentWindow = windowRelativePoint(
+        commentRect.left + commentRect.width / 2,
+        commentRect.top + commentRect.height / 2,
+        windowBounds,
+        refocused.viewport.width,
+        refocused.viewport.height,
+      );
+      await driver.clickWindow(commentWindow.relativeX, commentWindow.relativeY);
+      refocused = await client.request('get_annotation_state', {});
+      runner.assert(
+        refocused.commentFocused && refocused.popupDraft === comment,
+        `Clicking the comment box did not restore its focus and draft: ${JSON.stringify(refocused)}`,
+      );
+
+      const beforeDrag = refocused.popupRect;
+      const handleRect = refocused.popupDragHandleRect;
+      runner.assert(Boolean(beforeDrag && handleRect), `The open editor has no drag handle: ${JSON.stringify(refocused)}`);
+      const dragFrom = windowRelativePoint(
+        handleRect.left + handleRect.width / 2,
+        handleRect.top + handleRect.height / 2,
+        windowBounds,
+        refocused.viewport.width,
+        refocused.viewport.height,
+      );
+      const dragTo = windowRelativePoint(
+        handleRect.left + handleRect.width / 2 + 48,
+        handleRect.top + handleRect.height / 2 + 36,
+        windowBounds,
+        refocused.viewport.width,
+        refocused.viewport.height,
+      );
+      await driver.dragWindow(
+        dragFrom.relativeX,
+        dragFrom.relativeY,
+        dragTo.relativeX,
+        dragTo.relativeY,
+        { steps: 6 },
+      );
+      const afterDrag = await client.request('get_annotation_state', {});
+      runner.assert(
+        afterDrag.popupOpen
+          && afterDrag.popupDraft === comment
+          && (Math.abs(afterDrag.popupRect.left - beforeDrag.left) > 8
+            || Math.abs(afterDrag.popupRect.top - beforeDrag.top) > 8),
+        `Dragging did not move the comment editor with its draft: ${JSON.stringify({ beforeDrag, afterDrag })}`,
+      );
+      const owningPane = afterDrag.paneRects.find((pane) => contains(pane, afterDrag.popupRect));
+      runner.assert(
+        Boolean(owningPane),
+        `Dragging moved the comment editor outside its terminal pane: ${JSON.stringify(afterDrag)}`,
+      );
+
+      await client.request('dom_focus', { selector: '.anno-popup-drag-handle' });
+      const moveRight = afterDrag.popupRect.left + afterDrag.popupRect.width / 2
+        < owningPane.left + owningPane.width / 2;
+      await driver.pressKeyCode(moveRight ? 124 : 123);
+      const afterKeyboardMove = await pollFor(
+        async () => {
+          const current = await client.request('get_annotation_state', {});
+          return Math.abs(current.popupRect.left - afterDrag.popupRect.left) >= 8 ? current : null;
+        },
+        'an arrow key on the move control to reposition the editor',
+        5_000,
+      );
+      runner.assert(
+        afterKeyboardMove.paneRects.some((pane) => contains(pane, afterKeyboardMove.popupRect)),
+        `Keyboard movement moved the comment editor outside its terminal pane: ${JSON.stringify(afterKeyboardMove)}`,
+      );
+
       await client.request('dom_click', { selector: '.anno-popup-save' });
 
       const withComment = await pollFor(
@@ -584,10 +763,10 @@ async function main() {
       await waitForTurn(observer, sessionId, 'the turn the annotation feedback opened');
 
       const lines = await readVisibleLines(client, sessionId, paneId);
-      // Codex renders the live composer as the final `›` block. Horizontal
-      // rules also surround assistant output, so they cannot delimit input.
+      // The agent renders the live composer as the final `›` block. Trailing
+      // spaces disappear when the grid is read, so a bare marker is valid.
       const prompts = lines
-        .map((line, index) => (/^›\s/.test(line) ? index : -1))
+        .map((line, index) => (/^›(?:\s|$)/.test(line) ? index : -1))
         .filter((index) => index >= 0);
       const composer = prompts.length > 0 ? lines.slice(prompts[prompts.length - 1]) : [];
       runner.assert(
@@ -623,6 +802,7 @@ async function main() {
         await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
       }
     }
+    if (mockAgent) await mockAgent.restore().catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();
   }

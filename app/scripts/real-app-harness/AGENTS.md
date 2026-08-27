@@ -11,6 +11,11 @@ the production guard, recordings, and the remote VM. Rules that live only here:
   `ATTN_HARNESS_LAUNCH_MODEL_<AGENT>=inherit` is the expensive path and has to
   be asked for by name. A scenario that needs a stronger model pins it after
   the launch helper with a comment saying why.
+- Use `mockAgent.mjs` for every scenario whose result does not depend on a real
+  provider. `writeMockAgentFixture` scripts its turns and `configureMockAgent`
+  swaps the executable for the run. The daemon, worker PTY, hooks, transcript,
+  and renderer stay real. A real agent belongs only in a scenario that tests
+  that provider integration, and the scenario says why.
 - A visible pane is a session pane. Resolve pane ids from daemon or app state.
   An empty workspace is invalid state; a scenario that creates one asserts it
   is removed. Shortcut scenarios use the app's shortcut registry ids.

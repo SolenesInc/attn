@@ -48,6 +48,15 @@ export function clampToViewport(at: Placement, size: Size, viewport: Size): Plac
   return clampToRect(at, size, sizeToRect(viewport));
 }
 
+export function clampToBounds(
+  at: Placement,
+  size: Size,
+  viewport: Size,
+  bounds?: Rect | null,
+): Placement {
+  return clampToRect(at, size, regionFor(size, viewport, bounds));
+}
+
 function regionFor(size: Size, viewport: Size, preferred?: Rect | null): Rect {
   if (!preferred) return sizeToRect(viewport);
   const fits = preferred.width >= size.width + MARGIN * 2

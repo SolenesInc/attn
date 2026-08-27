@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AnnotatedTerminal, type SessionAnnotationApi } from './AnnotatedTerminal';
 import type {
   AnnotatableMessage,
@@ -22,6 +22,7 @@ interface CapturedProps {
 
 let terminal: CapturedProps = {};
 let terminalFocusCalls = 0;
+let terminalBounds: DOMRect | null = null;
 
 vi.mock('../GhosttyTerminal', () => ({
   GhosttyTerminal: React.forwardRef(function MockTerminal(props: CapturedProps, ref: React.Ref<unknown>) {
@@ -31,7 +32,7 @@ vi.mock('../GhosttyTerminal', () => ({
         terminalFocusCalls += 1;
         return true;
       },
-      getBounds: () => null,
+      getBounds: () => terminalBounds,
     }), []);
     return <div data-testid="terminal" />;
   }),
@@ -220,6 +221,7 @@ function card(index = 0) {
 beforeEach(() => {
   terminal = {};
   terminalFocusCalls = 0;
+  terminalBounds = null;
 });
 
 afterEach(() => {
@@ -552,6 +554,116 @@ describe('AnnotatedTerminal', () => {
     fireEvent.pointerDown(screen.getByLabelText('This is wrong'));
 
     expect(screen.getByTestId('annotation-popup')).toBeTruthy();
+  });
+
+  it('keeps a comment draft open until it is explicitly closed', async () => {
+    renderTerminal();
+    await windowReady('turn-1');
+
+    anchor('turn-1', 0, 26);
+    fireEvent.click(screen.getByLabelText('Write a comment'));
+    const box = screen.getByPlaceholderText('What should change here?') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'keep this in app memory' } });
+
+    fireEvent.pointerDown(screen.getByTestId('terminal'));
+    anchor('turn-1', 31, 55);
+
+    expect(screen.getByTestId('annotation-popup')).toBeTruthy();
+    expect(box.value).toBe('keep this in app memory');
+    expect(stored()).toHaveLength(1);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('annotation-popup')).toBeNull();
+    expect(stored()).toHaveLength(0);
+  });
+
+  it('lets the comment box regain focus and focuses it from the popup background', async () => {
+    renderTerminal();
+    await windowReady('turn-1');
+
+    anchor('turn-1', 0, 26);
+    fireEvent.click(screen.getByLabelText('Write a comment'));
+    const popup = screen.getByTestId('annotation-popup');
+    const box = screen.getByPlaceholderText('What should change here?') as HTMLTextAreaElement;
+    box.blur();
+
+    const boxPress = createEvent.mouseDown(box);
+    fireEvent(box, boxPress);
+    expect(boxPress.defaultPrevented).toBe(false);
+
+    const quote = popup.querySelector('.anno-popup-quote')!;
+    fireEvent.mouseDown(quote);
+    fireEvent.mouseUp(quote);
+    expect(document.activeElement).toBe(box);
+  });
+
+  it('moves the comment popup with its handle and keeps the manual position', async () => {
+    renderTerminal();
+    await windowReady('turn-1');
+
+    anchor('turn-1', 0, 26);
+    fireEvent.click(screen.getByLabelText('Write a comment'));
+    const popup = screen.getByTestId('annotation-popup');
+
+    fireEvent.mouseDown(screen.getByTestId('annotation-popup-drag-handle'), { clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(window, { clientX: 260, clientY: 340 });
+    fireEvent.mouseUp(window);
+
+    expect(popup.style.left).toBe('160px');
+    expect(popup.style.top).toBe('240px');
+
+    fireEvent.click(screen.getByLabelText('I agree'));
+    expect(screen.getByTestId('annotation-popup')).toBe(popup);
+    expect(popup.style.left).toBe('160px');
+    expect(popup.style.top).toBe('240px');
+  });
+
+  it('keeps a dragged comment popup inside its terminal pane', async () => {
+    terminalBounds = DOMRect.fromRect({ x: 300, y: 200, width: 500, height: 400 });
+    renderTerminal();
+    await windowReady('turn-1');
+
+    anchor('turn-1', 0, 26);
+    fireEvent.click(screen.getByLabelText('Write a comment'));
+    const popup = screen.getByRole('dialog', { name: 'Edit terminal annotation' });
+    vi.spyOn(popup, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({ x: 360, y: 260, width: 200, height: 120 }),
+    );
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Move comment editor with arrow keys' }), {
+      clientX: 400,
+      clientY: 280,
+    });
+    fireEvent.mouseMove(window, { clientX: 1200, clientY: 900 });
+    fireEvent.mouseUp(window);
+
+    expect(popup.style.left).toBe('592px');
+    expect(popup.style.top).toBe('472px');
+  });
+
+  it('moves the comment popup with the keyboard and keeps it inside its terminal pane', async () => {
+    terminalBounds = DOMRect.fromRect({ x: 300, y: 200, width: 500, height: 400 });
+    renderTerminal();
+    await windowReady('turn-1');
+
+    anchor('turn-1', 0, 26);
+    fireEvent.click(screen.getByLabelText('Write a comment'));
+    const popup = screen.getByRole('dialog', { name: 'Edit terminal annotation' });
+    vi.spyOn(popup, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({ x: 360, y: 260, width: 200, height: 120 }),
+    );
+    const handle = screen.getByRole('button', { name: 'Move comment editor with arrow keys' });
+
+    const initialLeft = Number.parseFloat(popup.style.left);
+    fireEvent.keyDown(handle, { key: 'ArrowRight' });
+    expect(Number.parseFloat(popup.style.left)).toBe(initialLeft + 10);
+    const initialTop = Number.parseFloat(popup.style.top);
+    fireEvent.keyDown(handle, { key: 'ArrowDown', shiftKey: true });
+    expect(Number.parseFloat(popup.style.top)).toBe(Math.min(initialTop + 40, 472));
+    for (let step = 0; step < 10; step += 1) {
+      fireEvent.keyDown(handle, { key: 'ArrowRight', shiftKey: true });
+    }
+    expect(popup.style.left).toBe('592px');
   });
 
   it('moves the panel with a drag on its header', async () => {

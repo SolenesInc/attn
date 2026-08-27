@@ -1,0 +1,10 @@
+kind: fixed
+area: app
+change: >
+  A terminal annotation comment editor now keeps its in-progress text when the
+  user clicks elsewhere, lets its text box regain focus, and can be dragged out
+  of the way. Cancel, Comment, Remove, and Escape still close it explicitly.
+symptom: >
+  Clicking outside an open terminal annotation comment discarded the text,
+  clicking the editor background could leave its text box impossible to focus
+  again, and the editor stayed fixed over the terminal text beneath it.
