@@ -142,12 +142,23 @@ import {
   placementSourceRect,
 } from '../utils/kittyPlacements';
 import { kittyImageCache, type KittyImageStatus } from '../utils/kittyImageCache';
-import type { PlacementElement } from '../types/generated';
+import type { PlacementElement, Seed } from '../types/generated';
 import {
   WebGlTerminalRenderer,
   type WebGlImageQuad,
   type WebGlOverlay,
 } from './GhosttyWebGlRenderer';
+import {
+  seedOccurrenceAtCell,
+  seedOccurrenceSegments,
+  seedOccurrencesInLine,
+  type TerminalSeedOccurrence,
+  type TerminalSeedSegment,
+} from '../utils/terminalSeedLinks';
+import {
+  TerminalSeedPreview,
+  type TerminalSeedAnchor,
+} from './TerminalSeedPreview';
 import './GhosttyTerminal.css';
 
 export interface GhosttyTerminalProps {
@@ -167,6 +178,8 @@ export interface GhosttyTerminalProps {
   onInput: (data: string, source?: string) => void;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
+  gardenSeeds?: readonly Seed[];
+  onOpenSeed?: (seedId: string) => void;
   onReady: (terminal: GhosttyTerminalHandle) => void;
   onResize: (cols: number, rows: number, options?: { reason?: string; xpixel?: number; ypixel?: number }) => void;
   onTerminalModelRecovered?: () => void;
@@ -305,6 +318,41 @@ interface HoverLinkState {
   endIndex: number;
   link: DetectedTerminalLink | null;
   linkSpan: LogicalSpan | null;
+}
+
+interface VisibleSeedOccurrences {
+  generation: number;
+  seeds: readonly Seed[];
+  occurrences: TerminalSeedOccurrence[];
+}
+
+interface SeedMarkLayout {
+  signature: string;
+  canvasLeft: number;
+  canvasTop: number;
+  cellWidth: number;
+  cellHeight: number;
+  segments: TerminalSeedSegment[];
+}
+
+interface SeedPreviewState {
+  seedId: string;
+  anchor: TerminalSeedAnchor;
+}
+
+const EMPTY_GARDEN_SEEDS: readonly Seed[] = [];
+const SEED_PREVIEW_OPEN_DELAY_MS = 105;
+const SEED_PREVIEW_CLOSE_DELAY_MS = 230;
+
+function sameSeedAnchor(a: TerminalSeedAnchor, b: TerminalSeedAnchor): boolean {
+  return a.left === b.left
+    && a.right === b.right
+    && a.top === b.top
+    && a.bottom === b.bottom
+    && a.bounds.left === b.bounds.left
+    && a.bounds.right === b.bounds.right
+    && a.bounds.top === b.bounds.top
+    && a.bounds.bottom === b.bounds.bottom;
 }
 
 const utf8Encoder = new TextEncoder();
@@ -462,7 +510,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, onReady, onResize, onTerminalModelRecovered, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, onTerminalModelRecovered, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -489,6 +537,16 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const hoverGenerationRef = useRef(0);
     const hoverLinkRef = useRef<HoverLinkState | null>(null);
     const refreshHoverLinkRef = useRef<(() => void) | null>(null);
+    const visibleSeedOccurrencesRef = useRef<VisibleSeedOccurrences | null>(null);
+    const refreshSeedOccurrencesRef = useRef<(() => void) | null>(null);
+    const syncSeedPreviewAfterRefreshRef = useRef<(() => void) | null>(null);
+    const gardenSeedsRef = useRef(gardenSeeds);
+    const onOpenSeedRef = useRef(onOpenSeed);
+    const seedPreviewRef = useRef<SeedPreviewState | null>(null);
+    const seedPreviewOpenTimerRef = useRef<number | null>(null);
+    const seedPreviewCloseTimerRef = useRef<number | null>(null);
+    const seedPreviewPendingIdRef = useRef<string | null>(null);
+    const seedPreviewPointerInsideRef = useRef(false);
     const homeDirRef = useRef<string | null | undefined>(undefined);
     const pathExistsCacheRef = useRef(new Map<string, boolean | Promise<boolean>>());
     const findOpenRef = useRef(false);
@@ -575,6 +633,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const modelRecoveryPendingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [linkCursorActive, setLinkCursorActive] = useState(false);
+    const [seedMarkLayout, setSeedMarkLayout] = useState<SeedMarkLayout | null>(null);
+    const [seedPreview, setSeedPreview] = useState<SeedPreviewState | null>(null);
     const [annotationCursorActive, setAnnotationCursorActive] = useState(false);
     const [findUi, setFindUi] = useState({ open: false, matchCount: 0, focusedIndex: -1, scanning: false, caseSensitive: false });
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; blockId: number | null } | null>(null);
@@ -609,6 +669,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     useEffect(() => {
       onPointerActivityRef.current = onPointerActivity;
     }, [onPointerActivity]);
+
+    useLayoutEffect(() => {
+      gardenSeedsRef.current = gardenSeeds;
+      onOpenSeedRef.current = onOpenSeed;
+    }, [gardenSeeds, onOpenSeed]);
 
     const recoverFromModelFault = useCallback((operation: string, reason: unknown) => {
       if (modelFaultDedupeRef.current?.rendererEpoch === rendererEpoch) return;
@@ -696,6 +761,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       if (runtimeMetaRef.current && !runtimeMetaRef.current.isActiveSession) return true;
       try {
       refreshHoverLinkRef.current?.();
+      refreshSeedOccurrencesRef.current?.();
       const range = selectionRef.current ? normalizeSelection(selectionRef.current) : null;
       const scrollbackLength = terminal.getScrollbackLength();
       const overlays: WebGlOverlay[] = [];
@@ -2449,6 +2515,79 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       return selectionLineAtBufferRow(bufferRow - 1, 0, terminal.cols).length === terminal.cols;
     }, [selectionLineAtBufferRow]);
 
+    const refreshSeedOccurrences = useCallback(() => {
+      const terminal = terminalRef.current;
+      const renderer = rendererRef.current;
+      const canvas = canvasRef.current;
+      const frame = containerRef.current?.parentElement;
+      if (!terminal || !renderer || !canvas || !frame) return;
+      const generation = hoverGenerationRef.current;
+      const seeds = gardenSeedsRef.current;
+      const current = visibleSeedOccurrencesRef.current;
+      if (current?.generation === generation && current.seeds === seeds) return;
+
+      const occurrences: TerminalSeedOccurrence[] = [];
+      if (seeds.length > 0) {
+        const knownSeedIds = new Set(seeds.map((seed) => seed.id));
+        for (let row = 0; row < terminal.rows;) {
+          const logical = logicalLineAt(
+            lineAtVisibleRow,
+            isContinuationRow,
+            row,
+            terminal.cols,
+            terminal.rows,
+          );
+          occurrences.push(...seedOccurrencesInLine(logical, knownSeedIds));
+          row = logical.firstRow + Math.max(1, logical.rowCount);
+        }
+      }
+      visibleSeedOccurrencesRef.current = { generation, seeds, occurrences };
+
+      const segments = occurrences.flatMap(seedOccurrenceSegments);
+      if (segments.length === 0) {
+        setSeedMarkLayout((layout) => layout === null ? layout : null);
+        syncSeedPreviewAfterRefreshRef.current?.();
+        return;
+      }
+      const canvasRect = canvas.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const canvasLeft = canvasRect.left - frameRect.left;
+      const canvasTop = canvasRect.top - frameRect.top;
+      const signature = [
+        canvasLeft,
+        canvasTop,
+        renderer.cellWidth,
+        renderer.cellHeight,
+        ...segments.map((segment) => (
+          `${segment.seedId}:${segment.row}:${segment.startCol}:${segment.endCol}`
+        )),
+      ].join('|');
+      setSeedMarkLayout((layout) => layout?.signature === signature ? layout : {
+        signature,
+        canvasLeft,
+        canvasTop,
+        cellWidth: renderer.cellWidth,
+        cellHeight: renderer.cellHeight,
+        segments,
+      });
+      syncSeedPreviewAfterRefreshRef.current?.();
+    }, [isContinuationRow, lineAtVisibleRow]);
+
+    useLayoutEffect(() => {
+      refreshSeedOccurrencesRef.current = refreshSeedOccurrences;
+      refreshSeedOccurrences();
+      return () => {
+        if (refreshSeedOccurrencesRef.current === refreshSeedOccurrences) {
+          refreshSeedOccurrencesRef.current = null;
+        }
+      };
+    }, [refreshSeedOccurrences]);
+
+    useEffect(() => {
+      visibleSeedOccurrencesRef.current = null;
+      refreshSeedOccurrencesRef.current?.();
+    }, [gardenSeeds]);
+
     const detectHoverLink = useCallback((
       cell: { row: number; col: number } | null,
       options: { force?: boolean; repaint?: boolean } = {},
@@ -2610,6 +2749,158 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         }
       };
     }, [detectHoverLink]);
+
+    const seedOccurrenceAt = useCallback((cell: { row: number; col: number } | null) => {
+      refreshSeedOccurrencesRef.current?.();
+      return seedOccurrenceAtCell(
+        visibleSeedOccurrencesRef.current?.occurrences ?? [],
+        cell,
+      );
+    }, []);
+
+    const seedAnchorFor = useCallback((
+      occurrence: TerminalSeedOccurrence,
+      cell: { row: number; col: number },
+    ): TerminalSeedAnchor | null => {
+      const renderer = rendererRef.current;
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const frameRect = containerRef.current?.parentElement?.getBoundingClientRect();
+      if (!renderer || !canvasRect || !frameRect) return null;
+      const segment = seedOccurrenceSegments(occurrence).find((candidate) => (
+        candidate.row === cell.row
+        && cell.col >= candidate.startCol
+        && cell.col < candidate.endCol
+      ));
+      if (!segment) return null;
+      return {
+        left: canvasRect.left + segment.startCol * renderer.cellWidth,
+        right: canvasRect.left + segment.endCol * renderer.cellWidth,
+        top: canvasRect.top + segment.row * renderer.cellHeight,
+        bottom: canvasRect.top + (segment.row + 1) * renderer.cellHeight,
+        bounds: {
+          left: frameRect.left,
+          right: frameRect.right,
+          top: frameRect.top,
+          bottom: frameRect.bottom,
+        },
+      };
+    }, []);
+
+    const closeSeedPreview = useCallback(() => {
+      if (seedPreviewOpenTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewOpenTimerRef.current);
+        seedPreviewOpenTimerRef.current = null;
+      }
+      if (seedPreviewCloseTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewCloseTimerRef.current);
+        seedPreviewCloseTimerRef.current = null;
+      }
+      seedPreviewPendingIdRef.current = null;
+      seedPreviewPointerInsideRef.current = false;
+      seedPreviewRef.current = null;
+      setSeedPreview((preview) => preview === null ? preview : null);
+    }, []);
+
+    const cancelSeedPreviewClose = useCallback(() => {
+      if (seedPreviewCloseTimerRef.current === null) return;
+      window.clearTimeout(seedPreviewCloseTimerRef.current);
+      seedPreviewCloseTimerRef.current = null;
+    }, []);
+
+    const scheduleSeedPreviewClose = useCallback((delay = SEED_PREVIEW_CLOSE_DELAY_MS) => {
+      if (seedPreviewOpenTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewOpenTimerRef.current);
+        seedPreviewOpenTimerRef.current = null;
+      }
+      seedPreviewPendingIdRef.current = null;
+      if (seedPreviewCloseTimerRef.current !== null) return;
+      seedPreviewCloseTimerRef.current = window.setTimeout(() => {
+        seedPreviewCloseTimerRef.current = null;
+        if (seedPreviewPointerInsideRef.current) return;
+        closeSeedPreview();
+      }, delay);
+    }, [closeSeedPreview]);
+
+    const syncSeedPreview = useCallback((cell: { row: number; col: number } | null) => {
+      const occurrence = seedOccurrenceAt(cell);
+      const anchor = occurrence && cell ? seedAnchorFor(occurrence, cell) : null;
+      if (!occurrence || !anchor) {
+        scheduleSeedPreviewClose();
+        return;
+      }
+      cancelSeedPreviewClose();
+      const active = seedPreviewRef.current;
+      if (active?.seedId === occurrence.seedId) {
+        if (!sameSeedAnchor(active.anchor, anchor)) {
+          const next = { seedId: occurrence.seedId, anchor };
+          seedPreviewRef.current = next;
+          setSeedPreview(next);
+        }
+        return;
+      }
+      if (seedPreviewPendingIdRef.current === occurrence.seedId) return;
+      if (active) {
+        seedPreviewRef.current = null;
+        setSeedPreview(null);
+      }
+      if (seedPreviewOpenTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewOpenTimerRef.current);
+      }
+      seedPreviewPendingIdRef.current = occurrence.seedId;
+      seedPreviewOpenTimerRef.current = window.setTimeout(() => {
+        seedPreviewOpenTimerRef.current = null;
+        seedPreviewPendingIdRef.current = null;
+        refreshSeedOccurrencesRef.current?.();
+        const hovered = hoveredCellRef.current;
+        const current = seedOccurrenceAtCell(
+          visibleSeedOccurrencesRef.current?.occurrences ?? [],
+          hovered,
+        );
+        if (!hovered || current?.seedId !== occurrence.seedId) return;
+        const currentAnchor = seedAnchorFor(current, hovered);
+        if (!currentAnchor) return;
+        const next = { seedId: current.seedId, anchor: currentAnchor };
+        seedPreviewRef.current = next;
+        setSeedPreview(next);
+      }, SEED_PREVIEW_OPEN_DELAY_MS);
+    }, [cancelSeedPreviewClose, scheduleSeedPreviewClose, seedAnchorFor, seedOccurrenceAt]);
+
+    const syncSeedPreviewAfterRefresh = useCallback(() => {
+      const active = seedPreviewRef.current;
+      if (!active || seedPreviewPointerInsideRef.current) return;
+      const hovered = hoveredCellRef.current;
+      const occurrence = seedOccurrenceAtCell(
+        visibleSeedOccurrencesRef.current?.occurrences ?? [],
+        hovered,
+      );
+      if (!hovered || occurrence?.seedId !== active.seedId) {
+        scheduleSeedPreviewClose();
+        return;
+      }
+      const anchor = seedAnchorFor(occurrence, hovered);
+      if (!anchor || sameSeedAnchor(active.anchor, anchor)) return;
+      const next = { seedId: active.seedId, anchor };
+      seedPreviewRef.current = next;
+      setSeedPreview(next);
+    }, [scheduleSeedPreviewClose, seedAnchorFor]);
+
+    useLayoutEffect(() => {
+      syncSeedPreviewAfterRefreshRef.current = syncSeedPreviewAfterRefresh;
+      return () => {
+        if (syncSeedPreviewAfterRefreshRef.current === syncSeedPreviewAfterRefresh) {
+          syncSeedPreviewAfterRefreshRef.current = null;
+        }
+      };
+    }, [syncSeedPreviewAfterRefresh]);
+
+    useEffect(() => () => {
+      if (seedPreviewOpenTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewOpenTimerRef.current);
+      }
+      if (seedPreviewCloseTimerRef.current !== null) {
+        window.clearTimeout(seedPreviewCloseTimerRef.current);
+      }
+    }, []);
 
     const linkAtCell = useCallback((cell: { row: number; col: number } | null): DetectedTerminalLink | null => {
       refreshHoverLinkRef.current?.();
@@ -3014,6 +3305,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       scrollToBufferRow(block.outputStartRow + delta + lineOffset);
     };
 
+    const previewSeed = seedPreview
+      ? gardenSeeds.find((seed) => seed.id === seedPreview.seedId) ?? null
+      : null;
+
     return (
       <div className="ghostty-terminal-frame">
       <div
@@ -3045,6 +3340,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             return;
           }
           if (event.defaultPrevented) return;
+          closeSeedPreview();
           const terminal = terminalRef.current;
           const renderer = rendererRef.current;
           if (!terminal || !renderer) return;
@@ -3101,6 +3397,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             event.stopPropagation();
             return;
           }
+          closeSeedPreview();
           containerRef.current?.focus();
           const terminal = terminalRef.current;
           const cell = cellFromPointer(event);
@@ -3161,6 +3458,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           altHeldRef.current = event.altKey;
           syncAnnotationHover(hoveredCell, event.altKey);
           detectHoverLink(hoveredCell);
+          syncSeedPreview(hoveredCell);
           updateLinkCursor(hoveredCell, acceleratorHeldRef.current);
           const hoveredLink = hoverLinkAtCell(hoveredCell);
           const hoveredUri = hoveredLink ? hoveredLink.uri ?? hoveredLink.absolutePath ?? null : null;
@@ -3176,6 +3474,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         onMouseLeave={() => {
           hoveredCellRef.current = null;
           detectHoverLink(null);
+          scheduleSeedPreviewClose();
           setLinkCursorActive(false);
           syncAnnotationHover(null, false);
         }}
@@ -3273,6 +3572,42 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         <canvas ref={canvasRef} key={rendererEpoch} />
         {error && <div className="ghostty-terminal-error">{error}</div>}
       </div>
+      {seedMarkLayout ? (
+        <div className="ghostty-terminal-seed-marks" aria-hidden="true">
+          {seedMarkLayout.segments.map((segment, index) => (
+            <span
+              key={`${segment.seedId}:${segment.row}:${segment.startCol}:${index}`}
+              className={`ghostty-terminal-seed-mark${seedPreview?.seedId === segment.seedId ? ' is-previewing' : ''}`}
+              data-terminal-seed-id={segment.seedId}
+              style={{
+                left: seedMarkLayout.canvasLeft + segment.startCol * seedMarkLayout.cellWidth,
+                top: seedMarkLayout.canvasTop + segment.row * seedMarkLayout.cellHeight,
+                width: (segment.endCol - segment.startCol) * seedMarkLayout.cellWidth,
+                height: seedMarkLayout.cellHeight,
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      {previewSeed && seedPreview ? (
+        <TerminalSeedPreview
+          seed={previewSeed}
+          anchor={seedPreview.anchor}
+          onOpen={(seedId) => {
+            onOpenSeedRef.current?.(seedId);
+            closeSeedPreview();
+          }}
+          onClose={closeSeedPreview}
+          onPointerEnter={() => {
+            seedPreviewPointerInsideRef.current = true;
+            cancelSeedPreviewClose();
+          }}
+          onPointerLeave={() => {
+            seedPreviewPointerInsideRef.current = false;
+            scheduleSeedPreviewClose();
+          }}
+        />
+      ) : null}
       {findUi.open && (
         <div className="ghostty-find-bar" data-testid="ghostty-find-bar">
           <input

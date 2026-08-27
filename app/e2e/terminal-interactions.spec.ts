@@ -180,6 +180,107 @@ async function openTerminalSession(
 }
 
 test.describe('Ghostty terminal interactions', () => {
+  test('marks and previews known seed ids before opening one as a tile', async ({ page, daemon }) => {
+    const sessionId = 's-seed-link';
+    const terminal = await openTerminalSession(page, daemon, sessionId);
+    const planted = await daemon.plantSeed(
+      'Make seed IDs navigable from terminals',
+      'Known seed IDs carry a restrained mark and open a compact preview on hover.',
+    );
+    const unknownSeedId = 's-000000';
+    await writeTerminalOutput(
+      page,
+      sessionId,
+      `\u001b[2J\u001b[Hknown ${planted.id}; unknown ${unknownSeedId}`,
+    );
+
+    const marker = page.locator(`[data-terminal-seed-id="${planted.id}"]`).first();
+    await expect(marker).toBeVisible();
+    await expect(page.locator(`[data-terminal-seed-id="${unknownSeedId}"]`)).toHaveCount(0);
+
+    const terminalBox = await terminal.boundingBox();
+    const markerBox = await marker.boundingBox();
+    expect(terminalBox).not.toBeNull();
+    expect(markerBox).not.toBeNull();
+    const seedPosition = {
+      x: markerBox!.x - terminalBox!.x + markerBox!.width / 2,
+      y: markerBox!.y - terminalBox!.y + markerBox!.height / 2,
+    };
+
+    await terminal.hover({ position: seedPosition });
+    const preview = page.locator(`[data-terminal-seed-preview="${planted.id}"]`);
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText('Make seed IDs navigable from terminals');
+    await preview.hover();
+    await page.waitForTimeout(220);
+    await expect(preview).toBeVisible();
+
+    await terminal.click({ position: seedPosition });
+    await expect(page.locator('[data-pane-kind="tile"][data-tile-kind="seed"]')).toHaveCount(0);
+
+    await terminal.hover({ position: seedPosition });
+    await expect(preview).toBeVisible();
+    await preview.getByRole('button', { name: 'Open as tile' }).click();
+
+    const tile = page.locator('[data-pane-kind="tile"][data-tile-kind="seed"]');
+    await expect(tile).toBeVisible();
+    await expect(tile.locator(`[data-seed-id="${planted.id}"]`)).toBeVisible();
+  });
+
+  test('places seed previews inward around every terminal edge', async ({ page, daemon }) => {
+    const sessionId = 's-seed-link-edges';
+    const terminal = await openTerminalSession(page, daemon, sessionId);
+    const planted = await daemon.plantSeed(
+      'Keep terminal seed previews on screen',
+      'The connector and panel mirror together when an ID is close to an edge.',
+    );
+    const size = await page.evaluate(
+      (id) => window.__TEST_GET_SESSION_PANE_SIZE?.(id) ?? null,
+      sessionId,
+    );
+    expect(size).not.toBeNull();
+    const centerCol = Math.max(2, Math.floor((size!.cols - planted.id.length) / 2));
+    const middleRow = Math.max(3, Math.floor(size!.rows / 2));
+    const rightCol = Math.max(2, size!.cols - planted.id.length);
+    const bottomRow = Math.max(3, size!.rows - 1);
+    await writeTerminalOutput(
+      page,
+      sessionId,
+      [
+        '\u001b[2J',
+        `\u001b[2;${centerCol}H${planted.id}`,
+        `\u001b[${middleRow};2H${planted.id}`,
+        `\u001b[${middleRow};${rightCol}H${planted.id}`,
+        `\u001b[${bottomRow};${centerCol}H${planted.id}`,
+      ].join(''),
+    );
+
+    const markers = page.locator(`[data-terminal-seed-id="${planted.id}"]`);
+    await expect(markers).toHaveCount(4);
+    const preview = page.locator(`[data-terminal-seed-preview="${planted.id}"]`);
+    const terminalBox = await terminal.boundingBox();
+    expect(terminalBox).not.toBeNull();
+    const placements = [
+      { index: 0, side: 'below' },
+      { index: 1, side: 'right' },
+      { index: 2, side: 'left' },
+      { index: 3, side: 'above' },
+    ] as const;
+
+    for (const { index, side } of placements) {
+      const markerBox = await markers.nth(index).boundingBox();
+      expect(markerBox).not.toBeNull();
+      await terminal.hover({
+        position: {
+          x: markerBox!.x - terminalBox!.x + markerBox!.width / 2,
+          y: markerBox!.y - terminalBox!.y + markerBox!.height / 2,
+        },
+      });
+      await expect(preview).toBeVisible();
+      await expect(preview).toHaveAttribute('data-placement', side);
+    }
+  });
+
   test('opens a visible URL only when cmd+clicked', async ({ page, daemon }) => {
     await installOpenerProbe(page);
     const terminal = await openTerminalSession(page, daemon, 's-link');

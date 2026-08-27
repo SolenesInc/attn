@@ -150,6 +150,104 @@
   display: block;
 }
 
+.ghostty-terminal-seed-marks {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ghostty-terminal-seed-mark {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: visible;
+  border-radius: 2px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+  transition: background 90ms ease, box-shadow 90ms ease;
+}
+
+.ghostty-terminal-seed-mark::before,
+.ghostty-terminal-seed-mark::after {
+  position: absolute;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ghostty-terminal-seed-mark::before {
+  inset: -4px -7px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left top / 6px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left top / 1px 5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 6px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 1px 5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 6px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 1px 5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 6px 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 1px 5px no-repeat;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 72%, transparent));
+}
+
+.ghostty-terminal-seed-mark::after {
+  top: 1px;
+  bottom: 2px;
+  left: 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 34%, white), transparent);
+  mix-blend-mode: screen;
+}
+
+.ghostty-terminal-seed-mark.is-previewing {
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 3%, transparent));
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.ghostty-terminal-seed-mark.is-previewing::before {
+  animation: ghostty-terminal-seed-focus-lock 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ghostty-terminal-seed-mark.is-previewing::after {
+  animation: ghostty-terminal-seed-glyph-scan 155ms steps(4, end) both;
+}
+
+@keyframes ghostty-terminal-seed-focus-lock {
+  from {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  to {
+    opacity: 0.88;
+    transform: scale(1);
+  }
+}
+
+@keyframes ghostty-terminal-seed-glyph-scan {
+  0% {
+    opacity: 0;
+    transform: translateX(-25%);
+  }
+  35% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(210%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostty-terminal-seed-mark.is-previewing::before {
+    animation: none;
+    opacity: 0.88;
+  }
+
+  .ghostty-terminal-seed-mark.is-previewing::after {
+    animation: none;
+  }
+}
+
 .ghostty-terminal-link-hover,
 .ghostty-terminal-annotation-hover {
   cursor: pointer;

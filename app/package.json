@@ -84,6 +84,7 @@
     "real-app:scenario-terminal-input": "node scripts/real-app-harness/scenario-terminal-input.mjs",
     "real-app:scenario-terminal-osc8-link": "node scripts/real-app-harness/scenario-terminal-osc8-link.mjs",
     "real-app:scenario-terminal-md-link": "node scripts/real-app-harness/scenario-terminal-md-link.mjs",
+    "real-app:scenario-terminal-seed-preview": "node scripts/real-app-harness/scenario-terminal-seed-preview.mjs",
     "real-app:scenario-terminal-kitty-image": "node scripts/real-app-harness/scenario-terminal-kitty-image.mjs",
     "real-app:scenario-app-reconcile": "node scripts/real-app-harness/scenario-app-reconcile.mjs",
     "real-app:scenario-terminal-block-resize": "node scripts/real-app-harness/scenario-terminal-block-resize.mjs",
