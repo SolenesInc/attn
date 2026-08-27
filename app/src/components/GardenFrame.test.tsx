@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { GardenFrame, type FrameRect } from './GardenFrame';
@@ -44,6 +45,12 @@ function props(mode: 'closed' | 'dock' | 'full') {
     seeds: world,
     seedsTotal: world.length,
   };
+}
+
+const pendingRender = new Promise<never>(() => {});
+function SuspendAfterFrame({ active }: { active: boolean }) {
+  if (active) throw pendingRender;
+  return null;
 }
 
 describe('GardenFrame', () => {
@@ -97,6 +104,24 @@ describe('GardenFrame', () => {
     expect(frameEl()).toHaveClass('is-full-dismissal');
     expect(frameEl().style.left).toBe('12px');
     expect(frameEl().style.width).toBe('1646px');
+  });
+
+  it('ignores an open mode from a discarded render', () => {
+    const scene = (mode: 'closed' | 'dock' | 'full', suspend: boolean) => (
+      <Suspense fallback={<div data-testid="discarded-render" />}>
+        <GardenFrame {...props(mode)} />
+        <SuspendAfterFrame active={suspend} />
+      </Suspense>
+    );
+    const { rerender } = render(scene('dock', false));
+
+    rerender(scene('full', true));
+    expect(screen.getByTestId('discarded-render')).toBeInTheDocument();
+
+    rerender(scene('closed', false));
+    expect(frameEl()).not.toHaveClass('is-full-dismissal');
+    expect(frameEl().style.left).toBe('1110px');
+    expect(frameEl().style.width).toBe('560px');
   });
 
   it('is a modal only while it holds the window', () => {

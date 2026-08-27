@@ -103,7 +103,10 @@ export function GardenFrame({
   const [flying, setFlying] = useState(false);
   const previousMode = useRef<GardenMode>(mode);
   const lastOpenMode = useRef<GardenOpenMode>(mode === 'full' ? 'full' : 'dock');
-  if (mode !== 'closed') lastOpenMode.current = mode;
+
+  useLayoutEffect(() => {
+    if (mode !== 'closed') lastOpenMode.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'full') return;
