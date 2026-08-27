@@ -1175,6 +1175,8 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                   onInput={runtime.handleTerminalInput(agentPane.id)}
                   onPointerActivity={() => onTerminalPointerActivity?.(agentPane.sessionId)}
                   onOpenMarkdown={onOpenMarkdown}
+                  gardenSeeds={gardenSeeds}
+                  onOpenSeed={onOpenSeed}
                   onReady={handleGhosttyTerminalReady(agentPane.id)}
                   onResize={runtime.handleTerminalResize(agentPane.id)}
                   onTerminalModelRecovered={onTerminalModelRecovered}

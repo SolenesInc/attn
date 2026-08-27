@@ -412,6 +412,34 @@ async function updateSessionState(
   });
 }
 
+async function plantTestSeed(
+  socketPath: string,
+  title: string,
+  body: string,
+): Promise<{ id: string }> {
+  return new Promise((resolve, reject) => {
+    const client = net.createConnection(socketPath, () => {
+      client.write(JSON.stringify({ cmd: 'seed_plant', title, body }));
+    });
+    client.on('data', (chunk) => {
+      try {
+        const response = JSON.parse(chunk.toString()) as {
+          error?: string;
+          seed_plant_result?: { seed?: { id?: string } };
+        };
+        const id = response.seed_plant_result?.seed?.id;
+        if (!id) throw new Error(response.error || `seed_plant returned ${chunk.toString()}`);
+        client.end();
+        resolve({ id });
+      } catch (error) {
+        client.destroy();
+        reject(error);
+      }
+    });
+    client.on('error', reject);
+  });
+}
+
 async function createTestGitRepo(): Promise<{ repoPath: string; cleanup: () => void }> {
   const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-test-repo-'));
 
@@ -504,6 +532,7 @@ type DaemonFixture = {
     main_repo?: string;
   }) => Promise<void>;
   updateSessionState: (id: string, state: string) => Promise<void>;
+  plantSeed: (title: string, body: string) => Promise<{ id: string }>;
   createTestRepo: () => Promise<{ repoPath: string; cleanup: () => void }>;
 };
 
@@ -589,6 +618,10 @@ export const test = base.extend<Fixtures>({
       updateSessionState: async (id, state) => {
         if (!started) throw new Error('Daemon not started');
         await updateSessionState(managed.socketPath, id, state);
+      },
+      plantSeed: async (title, body) => {
+        if (!started) throw new Error('Daemon not started');
+        return plantTestSeed(managed.socketPath, title, body);
       },
       createTestRepo: async () => {
         return createTestGitRepo();

@@ -1,0 +1,7 @@
+kind: added
+area: terminal
+change: >
+  Seed IDs that exist in the Garden now carry a quiet mark in terminal output.
+  Hovering one opens a compact seed preview whose icon action docks the seed as
+  a tile, while an ordinary terminal click keeps its existing selection and
+  input behavior.

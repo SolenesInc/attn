@@ -180,6 +180,53 @@ async function openTerminalSession(
 }
 
 test.describe('Ghostty terminal interactions', () => {
+  test('marks and previews known seed ids before opening one as a tile', async ({ page, daemon }) => {
+    const sessionId = 's-seed-link';
+    const terminal = await openTerminalSession(page, daemon, sessionId);
+    const planted = await daemon.plantSeed(
+      'Make seed IDs navigable from terminals',
+      'Known seed IDs carry a restrained mark and open a compact preview on hover.',
+    );
+    const unknownSeedId = 's-000000';
+    await writeTerminalOutput(
+      page,
+      sessionId,
+      `\u001b[2J\u001b[Hknown ${planted.id}; unknown ${unknownSeedId}`,
+    );
+
+    const marker = page.locator(`[data-terminal-seed-id="${planted.id}"]`).first();
+    await expect(marker).toBeVisible();
+    await expect(page.locator(`[data-terminal-seed-id="${unknownSeedId}"]`)).toHaveCount(0);
+
+    const terminalBox = await terminal.boundingBox();
+    const markerBox = await marker.boundingBox();
+    expect(terminalBox).not.toBeNull();
+    expect(markerBox).not.toBeNull();
+    const seedPosition = {
+      x: markerBox!.x - terminalBox!.x + markerBox!.width / 2,
+      y: markerBox!.y - terminalBox!.y + markerBox!.height / 2,
+    };
+
+    await terminal.hover({ position: seedPosition });
+    const preview = page.locator(`[data-terminal-seed-preview="${planted.id}"]`);
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText('Make seed IDs navigable from terminals');
+    await preview.hover();
+    await page.waitForTimeout(220);
+    await expect(preview).toBeVisible();
+
+    await terminal.click({ position: seedPosition });
+    await expect(page.locator('[data-pane-kind="tile"][data-tile-kind="seed"]')).toHaveCount(0);
+
+    await terminal.hover({ position: seedPosition });
+    await expect(preview).toBeVisible();
+    await preview.getByRole('button', { name: 'Open as tile' }).click();
+
+    const tile = page.locator('[data-pane-kind="tile"][data-tile-kind="seed"]');
+    await expect(tile).toBeVisible();
+    await expect(tile.locator(`[data-seed-id="${planted.id}"]`)).toBeVisible();
+  });
+
   test('opens a visible URL only when cmd+clicked', async ({ page, daemon }) => {
     await installOpenerProbe(page);
     const terminal = await openTerminalSession(page, daemon, 's-link');
