@@ -85,7 +85,7 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		fail("session_annotations_submit: unknown session " + sessionID)
 		return
 	}
-	delivery := userConversationSessionInput(msg.RequestID, sessionID, msg.Text, sessionInputAtTurnBoundary)
+	delivery := annotationSessionInput(msg.RequestID, sessionID, msg.Text)
 	attempt := d.sessionInputs().try(context.Background(), delivery)
 	if attempt.err != nil {
 		if sessionInputDeferredError(attempt.err) {

@@ -98,12 +98,13 @@ func (id sessionInputAttemptID) String() string {
 }
 
 type sessionInputDelivery struct {
-	id           sessionInputAttemptID
-	sessionID    string
-	text         string
-	origin       sessionInputOrigin
-	placement    sessionInputPlacement
-	hostDelivery hostsession.Delivery
+	id                sessionInputAttemptID
+	sessionID         string
+	text              string
+	origin            sessionInputOrigin
+	placement         sessionInputPlacement
+	hostDelivery      hostsession.Delivery
+	allowUserComposer bool
 }
 
 func maintenanceSessionInput(domain, key, sessionID, text string, placement sessionInputPlacement) sessionInputDelivery {
@@ -124,6 +125,12 @@ func userConversationSessionInput(key, sessionID, text string, placement session
 		origin:    userConversationInput(),
 		placement: placement,
 	}
+}
+
+func annotationSessionInput(key, sessionID, text string) sessionInputDelivery {
+	delivery := userConversationSessionInput(key, sessionID, text, sessionInputAtTurnBoundary)
+	delivery.allowUserComposer = true
+	return delivery
 }
 
 func peerAgentSessionInput(key, sourceSessionID, targetSessionID, text string) sessionInputDelivery {
@@ -160,11 +167,12 @@ type sessionInputAttempt struct {
 }
 
 type sessionInputFingerprint struct {
-	sessionID string
-	text      string
-	origin    sessionInputOrigin
-	placement sessionInputPlacement
-	host      hostsession.Delivery
+	sessionID         string
+	text              string
+	origin            sessionInputOrigin
+	placement         sessionInputPlacement
+	host              hostsession.Delivery
+	allowUserComposer bool
 }
 
 type sessionInputAttemptState struct {
@@ -308,11 +316,12 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	defer lane.mu.Unlock()
 
 	fingerprint := sessionInputFingerprint{
-		sessionID: delivery.sessionID,
-		text:      delivery.text,
-		origin:    delivery.origin,
-		placement: delivery.placement,
-		host:      delivery.hostDelivery,
+		sessionID:         delivery.sessionID,
+		text:              delivery.text,
+		origin:            delivery.origin,
+		placement:         delivery.placement,
+		host:              delivery.hostDelivery,
+		allowUserComposer: delivery.allowUserComposer,
 	}
 	if existing := lane.attempts[key]; existing != nil {
 		if existing.fingerprint != fingerprint {
@@ -338,7 +347,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 				}
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
-			if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane); err != nil {
+			if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
 			if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
@@ -427,7 +436,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		delete(lane.attempts, key)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonUnsupported, err: errors.New("session has no input route")}
 	}
-	if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane); err != nil {
+	if reason, err := m.ptySafetyLocked(ctx, delivery.sessionID, lane, delivery.allowUserComposer); err != nil {
 		delete(lane.attempts, key)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, route: sessionInputRoutePTY, reason: reason, err: err}
 	}
@@ -488,8 +497,8 @@ func sessionInputPhaseAllows(placement sessionInputPlacement, state protocol.Ses
 	return ok
 }
 
-func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane) (sessionInputReason, error) {
-	if lane.userDirty {
+func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID string, lane *sessionInputLane, allowUserComposer bool) (sessionInputReason, error) {
+	if lane.userDirty && !allowUserComposer {
 		return sessionInputReasonUserComposerDirty, errSessionInputComposerDirty
 	}
 	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)

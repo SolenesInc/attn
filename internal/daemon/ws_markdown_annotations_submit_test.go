@@ -132,6 +132,36 @@ func TestMarkdownAnnotationsSubmitDelivered(t *testing.T) {
 	}
 }
 
+func TestMarkdownAnnotationsSubmitDeliveredWithUserComposer(t *testing.T) {
+	d := newSubmitDaemon(t)
+	var mu sync.Mutex
+	var inputs []string
+	d.ptyBackend = recordingBackend(&inputs, &mu)
+	addIdleNotebookSession(d, "target", protocol.SessionStateWaitingInput)
+	if err := d.writeSessionPTY("target", []byte("existing words"), "user"); err != nil {
+		t.Fatalf("write existing composer: %v", err)
+	}
+	anns := submitTestAnnotations()
+	seedSubmitDraft(t, d, 5, anns)
+
+	res := sendSubmit(t, d, "target", nil)
+
+	if !res.Success || res.Status != annotationSubmitStatusDelivered || res.Error != nil {
+		t.Fatalf("result = %+v, want delivered", res)
+	}
+	wantPayload := formatMarkdownAnnotationPayload(fileAnnotationSource(submitTestPath), anns, map[string]bool{})
+	wantPaste := sessionInputPasteStart + wantPayload + sessionInputPasteEnd
+	mu.Lock()
+	got := append([]string(nil), inputs...)
+	mu.Unlock()
+	if len(got) != 3 || got[0] != "existing words" || got[1] != wantPaste || got[2] != "\r" {
+		t.Fatalf("PTY inputs = %q, want [%q, %q, %q]", got, "existing words", wantPaste, "\r")
+	}
+	if n := storedSubmitDraftCount(t, d); n != 0 {
+		t.Fatalf("draft not cleared after delivery: %d annotations remain", n)
+	}
+}
+
 func TestMarkdownAnnotationsSubmitCarriesOrphanedIds(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex

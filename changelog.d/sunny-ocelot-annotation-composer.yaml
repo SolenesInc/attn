@@ -1,0 +1,8 @@
+kind: fixed
+area: annotations
+change: >
+  User-triggered annotation delivery now proceeds when the target session
+  already has text in its composer.
+symptom: >
+  Typing or deleting composer text could make annotation delivery claim an
+  approval was pending and refuse the send.
