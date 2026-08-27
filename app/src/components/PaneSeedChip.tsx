@@ -16,7 +16,8 @@ export function PaneSeedChip({
   sessionId: string;
   onOpen: () => void;
 }) {
-  const label = seed?.title || seedId;
+  const title = seed?.title.trim();
+  const label = title || seedId;
   return (
     <button
       type="button"
@@ -28,10 +29,11 @@ export function PaneSeedChip({
         event.stopPropagation();
         onOpen();
       }}
-      title={`${label} (${seedId}) — click to open the seed`}
+      title={`${label} (${seedId}). Click to open the seed`}
     >
       <span className="pane-seed-chip-rule" aria-hidden="true" />
       <span className="pane-seed-chip-title">{label}</span>
+      {title ? <span className="pane-seed-chip-id">{seedId}</span> : null}
       {unread ? (
         <span
           className="pane-seed-chip-unread"
