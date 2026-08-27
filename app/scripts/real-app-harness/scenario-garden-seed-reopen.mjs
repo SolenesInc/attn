@@ -7,7 +7,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
+import { waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { delay } from './macosDriver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -117,7 +117,7 @@ async function main() {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --no-worktree --source-session ${pane.sessionId} ` +
+        text: `attn delegate --agent shell --model claude-haiku-4-5 --new-workspace --no-worktree --source-session ${pane.sessionId} ` +
           `--name gsreopen --brief "${BRIEF}"`,
       });
       let spawned = null;
@@ -125,7 +125,11 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
-      await runInPane(client, pane, 'true', '');
+      await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId, {
+        description: 'dispatcher shell after delegation',
+        timeoutMs: 30_000,
+      });
       return spawned;
     });
 
@@ -134,6 +138,7 @@ async function main() {
       const planted = seedIDs(listed)[0];
       runner.assert(Boolean(planted), 'the delegation planted a seed', { listed });
 
+      await client.request('select_session', { sessionId: delegated });
       const chip = await pollFor(
         async () => {
           const state = await client.request('session_seed_chip_get_state', { sessionId: delegated });
@@ -143,6 +148,8 @@ async function main() {
       );
       runner.assert(chip.hint.includes(planted),
         'the chip names the seed the session reports to', { chip, planted });
+      runner.assert(chip.id === planted,
+        'the chip visibly carries the seed id agents use', { chip, planted });
       runner.writeText('seed-chip.json', JSON.stringify(chip, null, 2) + '\n');
       return planted;
     });

@@ -25,7 +25,7 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
 }
 
 describe('PaneSeedChip', () => {
-  it('shows the seed title and opens it', () => {
+  it('shows the seed title and id, and opens it', () => {
     const onOpen = vi.fn();
     render(
       <PaneSeedChip
@@ -38,6 +38,7 @@ describe('PaneSeedChip', () => {
     );
 
     expect(screen.getByText('move the wire')).toBeInTheDocument();
+    expect(screen.getByText('s-work11')).toBeInTheDocument();
     expect(screen.queryByTestId('seed-chip-unread-sess-a')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('seed-chip-sess-a'));

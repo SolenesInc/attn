@@ -42,9 +42,23 @@
 }
 
 .pane-seed-chip-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pane-seed-chip-id {
+  flex: none;
+  color: var(--color-text-dimmed);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 0.9em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pane-seed-chip:hover .pane-seed-chip-id {
+  color: var(--color-text-secondary);
 }
 
 .pane-seed-chip-unread {

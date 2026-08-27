@@ -1,0 +1,5 @@
+kind: changed
+area: garden
+change: >
+  A session pane's seed chip now shows the stable seed ID beside the seed title,
+  so the header matches the ID agents use in garden commands.
