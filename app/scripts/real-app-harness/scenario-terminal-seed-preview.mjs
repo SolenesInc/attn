@@ -22,6 +22,7 @@ import { recordingEnabled } from './windowRecording.mjs';
 
 const UNKNOWN_SEED_ID = 's-000000';
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
+const PREVIEW_SETTLE_MS = 360;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -111,7 +112,7 @@ async function main() {
     tier: 'tier1-local-shell',
     prefix: 'terminal-seed-preview',
     metadata: {
-      focus: 'known seed mark, hover preview, terminal-owned click, icon-only tile action',
+      focus: 'known seed mark, four-way glow preview, terminal-owned click, icon-only tile action',
     },
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -201,13 +202,73 @@ async function main() {
       paneSize = read.size;
     });
 
+    await runner.step('preview_mirrors_around_terminal_edges', async () => {
+      const centerCol = Math.max(1, Math.floor((paneSize.cols - seedId.length) / 2));
+      const middleRow = Math.max(2, Math.floor(paneSize.rows / 2));
+      const rightCol = Math.max(seedId.length + 2, paneSize.cols - seedId.length - 1);
+      const bottomRow = Math.max(middleRow + 2, paneSize.rows - 6);
+      const sentinelRow = Math.min(paneSize.rows - 5, bottomRow + 1);
+      const screen = Array.from({ length: sentinelRow + 1 }, () => '');
+      screen[0] = `${' '.repeat(centerCol)}${seedId}`;
+      screen[middleRow] = `${seedId}${' '.repeat(rightCol - seedId.length)}${seedId}`;
+      screen[bottomRow] = `${' '.repeat(centerCol)}${seedId}`;
+      screen[sentinelRow] = 'EDGE_READY';
+      const payload = Buffer.from(screen.join('\n')).toString('base64');
+      const drawCommand = `clear; printf '%s' '${payload}' | /usr/bin/base64 -D`;
+      await runInPane(
+        client,
+        { sessionId, paneId: pane.paneId },
+        drawCommand,
+        'EDGE_READY',
+      );
+
+      const edgeCases = [
+        { name: 'top', placement: 'below', row: 0, col: centerCol },
+        { name: 'left', placement: 'right', row: middleRow, col: 0 },
+        { name: 'right', placement: 'left', row: middleRow, col: rightCol },
+        { name: 'bottom', placement: 'above', row: bottomRow, col: centerCol },
+      ];
+      for (const edge of edgeCases) {
+        await client.request('hover_pane_cell', {
+          sessionId,
+          paneId: pane.paneId,
+          cell: { row: edge.row, col: edge.col + Math.floor(seedId.length / 2) },
+        });
+        await delay(PREVIEW_SETTLE_MS);
+        const shot = await waitForSelectorShot(
+          client,
+          `${previewSelector()}[data-placement="${edge.placement}"]`,
+          `${edge.name}-edge ${edge.placement} seed preview`,
+        );
+        runner.assert(Boolean(shot?.bounds), `${edge.name}-edge preview opens ${edge.placement}`, {
+          bounds: shot?.bounds ?? null,
+        });
+        fs.writeFileSync(
+          path.join(runner.runDir, `seed-preview-${edge.name}.png`),
+          Buffer.from(shot.pngBase64, 'base64'),
+        );
+        if (PACE_MS > 0) await delay(PACE_MS);
+        await client.request('hover_pane_cell', {
+          sessionId,
+          paneId: pane.paneId,
+          cell: { row: sentinelRow, col: Math.max(0, paneSize.cols - 2) },
+        });
+        await delay(320);
+      }
+
+      seedCell = {
+        row: middleRow,
+        col: Math.floor(seedId.length / 2),
+      };
+    });
+
     await runner.step('hover_opens_preview_and_hands_off_to_card', async () => {
       await client.request('hover_pane_cell', {
         sessionId,
         paneId: pane.paneId,
         cell: seedCell,
       });
-      await delay(180);
+      await delay(PREVIEW_SETTLE_MS);
       const preview = await waitForSelectorShot(client, previewSelector(), 'seed hover preview');
       runner.assert(Boolean(preview?.bounds), 'seed hover preview has visible bounds', {
         bounds: preview?.bounds ?? null,
@@ -245,7 +306,7 @@ async function main() {
         paneId: pane.paneId,
         cell: seedCell,
       });
-      await delay(180);
+      await delay(PREVIEW_SETTLE_MS);
       await waitForSelectorShot(client, previewSelector(), 'seed preview reopened');
       await waitForSelectorShot(
         client,
@@ -261,7 +322,7 @@ async function main() {
     });
 
     const result = await runner.finishSuccess({ sessionId, paneId: pane.paneId, seedId });
-    console.log('[verify] PASS — terminal seed marks, hover preview, and tile action.');
+    console.log('[verify] PASS — terminal seed marks, four-way glow preview, and tile action.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {

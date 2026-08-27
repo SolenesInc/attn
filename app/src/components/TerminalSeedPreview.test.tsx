@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '../test/utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { Seed } from '../types/generated';
-import { TerminalSeedPreview, terminalSeedBodyExcerpt } from './TerminalSeedPreview';
+import { terminalSeedBodyExcerpt } from '../utils/terminalSeedPreviewText';
+import { TerminalSeedPreview } from './TerminalSeedPreview';
 
 function seed(overrides: Partial<Seed> = {}): Seed {
   return {
@@ -48,9 +49,11 @@ describe('TerminalSeedPreview', () => {
     );
 
     expect(screen.getByRole('heading')).toHaveTextContent('Make seed IDs navigable');
-    expect(screen.getByText('s-7k3f9m')).toBeInTheDocument();
+    expect(screen.queryByText('s-7k3f9m')).not.toBeInTheDocument();
     expect(screen.getByText(/Recognize valid seed IDs/)).toBeInTheDocument();
-    expect(screen.getByText('tended by Trellis')).toBeInTheDocument();
+    expect(screen.getByText('Trellis')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-placement', 'right');
+    expect(document.querySelector('.terminal-seed-preview-signal')).not.toBeNull();
     const open = screen.getByRole('button', { name: 'Open as tile' });
     expect(open).toHaveTextContent('');
     expect(open.querySelector('svg')).not.toBeNull();

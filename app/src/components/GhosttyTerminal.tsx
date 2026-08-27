@@ -342,7 +342,7 @@ interface SeedPreviewState {
 
 const EMPTY_GARDEN_SEEDS: readonly Seed[] = [];
 const SEED_PREVIEW_OPEN_DELAY_MS = 105;
-const SEED_PREVIEW_CLOSE_DELAY_MS = 170;
+const SEED_PREVIEW_CLOSE_DELAY_MS = 230;
 
 function sameSeedAnchor(a: TerminalSeedAnchor, b: TerminalSeedAnchor): boolean {
   return a.left === b.left
@@ -647,8 +647,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     onInputRef.current = onInput;
     onOpenMarkdownRef.current = onOpenMarkdown;
-    gardenSeedsRef.current = gardenSeeds;
-    onOpenSeedRef.current = onOpenSeed;
     onReadyRef.current = onReady;
     onResizeRef.current = onResize;
     onTerminalModelRecoveredRef.current = onTerminalModelRecovered;
@@ -671,6 +669,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     useEffect(() => {
       onPointerActivityRef.current = onPointerActivity;
     }, [onPointerActivity]);
+
+    useLayoutEffect(() => {
+      gardenSeedsRef.current = gardenSeeds;
+      onOpenSeedRef.current = onOpenSeed;
+    }, [gardenSeeds, onOpenSeed]);
 
     const recoverFromModelFault = useCallback((operation: string, reason: unknown) => {
       if (modelFaultDedupeRef.current?.rendererEpoch === rendererEpoch) return;
