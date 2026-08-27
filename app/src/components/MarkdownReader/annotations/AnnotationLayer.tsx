@@ -258,6 +258,11 @@ export const AnnotationLayer = forwardRef<AnnotationLayerHandle, AnnotationLayer
 
   const showSelectionToolbar = pending !== null && popover === null;
   const showHoverToolbar = !showSelectionToolbar && popover === null && hoverBlock !== null;
+  const popoverDraftKey = popover
+    ? popover.kind === 'global'
+      ? `${source.uri}#global`
+      : pendingDraftKey(source.uri, popover.pending)
+    : '';
 
   return (
     <>
@@ -289,15 +294,12 @@ export const AnnotationLayer = forwardRef<AnnotationLayerHandle, AnnotationLayer
       )}
       {popover && (
         <AnnotationPopover
+          key={popoverDraftKey}
           getAnchorRect={getPopoverRect}
           quote={popover.kind === 'selection' ? popover.pending.selectionText : ''}
           isGlobal={popover.kind === 'global'}
           initialText={popover.kind === 'selection' ? popover.initialText : undefined}
-          draftKey={
-            popover.kind === 'global'
-              ? `${source.uri}#global`
-              : pendingDraftKey(source.uri, popover.pending)
-          }
+          draftKey={popoverDraftKey}
           onSubmit={handlePopoverSubmit}
           onClose={handlePopoverClose}
         />

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { AnchorRecord } from '../anchoring';
-import { AnnotationSidebar, sortAnnotations, type AnnotationSidebarProps } from './AnnotationSidebar';
+import { AnnotationSidebar, type AnnotationSidebarProps } from './AnnotationSidebar';
 import { QUICK_LABELS } from './quickLabels';
+import { sortAnnotations } from './sortAnnotations';
 import type { Annotation } from './types';
 import type { AnnotationOrphanReason } from './useAnnotations';
 
@@ -85,6 +86,7 @@ describe('AnnotationSidebar', () => {
 
   it('shows the empty state and count', () => {
     renderSidebar();
+    expect(screen.getByRole('dialog', { name: 'Review notes' }).tagName).toBe('DIALOG');
     expect(screen.getByText('No annotations yet.')).not.toBeNull();
     expect(document.querySelector('.md-sidebar-count')!.textContent).toBe('0');
     // No clear-all button when there is nothing to clear.

@@ -1178,7 +1178,7 @@ describe('SessionTerminalWorkspace', () => {
     expect(mockTerminalFit).toHaveBeenCalled();
   });
 
-  it('re-fits a terminal when the attention ring expands its frame without moving it', async () => {
+  it('re-fits a terminal against the final attention layout when a document is suspended', async () => {
     class WorkspaceResizeObserver {
       constructor(private readonly callback: ResizeObserverCallback) {}
 
@@ -1256,8 +1256,12 @@ describe('SessionTerminalWorkspace', () => {
 
     await waitFor(() => {
       expect(container.querySelector('[data-pane-suspended="true"]')).not.toBeNull();
+      expect(container.querySelector('.session-terminal-workspace')).toHaveAttribute(
+        'data-active-leaf-id',
+        'latest',
+      );
     });
-    expect(mockTerminalFit).toHaveBeenCalledTimes(2);
+    expect(mockTerminalFit).toHaveBeenCalledTimes(1);
   });
 
   it('re-fits every visible pane when an inactive split session becomes active', () => {

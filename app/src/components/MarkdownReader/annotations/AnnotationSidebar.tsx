@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationOrphanReason } from './useAnnotations';
 import { LABEL_COLOR_MAP, quickLabelById } from './quickLabels';
+import { sortAnnotations } from './sortAnnotations';
 import type { Annotation } from './types';
 
 export interface AnnotationSidebarProps {
@@ -14,25 +15,6 @@ export interface AnnotationSidebarProps {
   onGlobalComment: (anchorEl: HTMLElement) => void;
   /** Closes the floating inspector. */
   onToggle: () => void;
-}
-
-/** Document-position sort: startLine, then start; globals last by createdAt. */
-export function sortAnnotations(annotations: Annotation[]): Annotation[] {
-  return [...annotations].sort((a, b) => {
-    if (!a.anchor && !b.anchor) {
-      return a.createdAt - b.createdAt;
-    }
-    if (!a.anchor) {
-      return 1;
-    }
-    if (!b.anchor) {
-      return -1;
-    }
-    if (a.anchor.startLine !== b.anchor.startLine) {
-      return a.anchor.startLine - b.anchor.startLine;
-    }
-    return a.anchor.start - b.anchor.start;
-  });
 }
 
 function CardBadge({ annotation }: { annotation: Annotation }) {
@@ -106,7 +88,7 @@ export function AnnotationSidebar({
   };
 
   return (
-    <aside className="md-annotations-sidebar" role="dialog" aria-label="Review notes">
+    <dialog open className="md-annotations-sidebar" aria-label="Review notes">
       <div className="md-sidebar-header">
         <span className="md-sidebar-title">Review notes</span>
         <button
@@ -186,6 +168,6 @@ export function AnnotationSidebar({
           })
         )}
       </div>
-    </aside>
+    </dialog>
   );
 }

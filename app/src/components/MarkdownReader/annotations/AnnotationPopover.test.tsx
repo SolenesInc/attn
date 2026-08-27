@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { AnnotationPopover, peekAnnotationDraft, type AnnotationPopoverProps } from './AnnotationPopover';
+import { AnnotationPopover, type AnnotationPopoverProps } from './AnnotationPopover';
+import { peekAnnotationDraft } from './annotationDrafts';
 
 function fakeRect(overrides: Partial<DOMRect> = {}): DOMRect {
   const base = { top: 100, bottom: 120, left: 100, right: 300, width: 200, height: 20, x: 100, y: 100 };

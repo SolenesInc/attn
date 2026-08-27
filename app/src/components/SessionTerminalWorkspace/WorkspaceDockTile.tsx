@@ -32,9 +32,8 @@ import type { NotebookSurfaceHandle } from '../NotebookSurface';
 import { SeedDocumentView, type SeedDocument } from '../SeedDocumentView';
 import { useDaemonApi, useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
+import { normalizeBrowserAddress } from './browserAddress';
 import './WorkspaceDockTile.css';
-
-export { resolveMarkdownTarget } from '../MarkdownReader/markdownLinks';
 
 function bodyKindModifier(tileKind: string): string {
   if (parseAppViewTileKind(tileKind)) return 'workspace-dock-tile-body--app';
@@ -43,13 +42,6 @@ function bodyKindModifier(tileKind: string): string {
   if (tileKind === 'markdown') return 'workspace-dock-tile-body--markdown';
   if (tileKind === 'seed') return 'workspace-dock-tile-body--markdown';
   return '';
-}
-
-export function normalizeBrowserAddress(value: string): string {
-  const trimmed = value.trim();
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
-  const localHost = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(trimmed);
-  return `${localHost ? 'http' : 'https'}://${trimmed}`;
 }
 
 export interface WorkspaceTileSessionOption {

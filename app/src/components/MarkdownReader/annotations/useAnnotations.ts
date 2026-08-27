@@ -3,14 +3,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import {
-  createAnchor,
-  extractBlockTexts,
-  createHighlightPainter,
-  resolveDomRange,
-  resolveOrRebase,
-} from '../anchoring';
-import type { BlockText, HighlightKind, HighlightPainter, OrphanReason } from '../anchoring';
+import { createAnchor } from '../anchoring/create';
+import { resolveDomRange } from '../anchoring/domRange';
+import { extractBlockTexts } from '../anchoring/extractBlocks';
+import { createHighlightPainter } from '../anchoring/painter';
+import type { HighlightKind, HighlightPainter } from '../anchoring/painter';
+import { resolveOrRebase } from '../anchoring/resolve';
+import type { BlockText, OrphanReason } from '../anchoring/types';
 import {
   registerMarkdownAnnotationsAutomationHandle,
   type MarkdownAnnotationsAutomationState,
