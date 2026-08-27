@@ -31,6 +31,7 @@ const SETTLED_STATES = new Set(['idle', 'waiting_input', 'pending_approval']);
 
 const LABEL = { name: 'Show the receipt', id: 'show-the-receipt', emoji: '🧾' };
 const NOTE = 'Prefer the smallest change that covers this.';
+const EXISTING_COMPOSER_TEXT = 'Please include the remaining case count. ';
 const FIRST_MESSAGE = 'A retry wrapper protects idempotent operations from duplicate network effects.';
 const SECOND_MESSAGE = 'A circuit breaker stops repeated calls while a dependency is failing.';
 const FIRST_MESSAGE_WORDS = ['retry', 'wrapper', 'idempotent', 'duplicate', 'network', 'effects'];
@@ -724,6 +725,13 @@ async function main() {
     });
 
     await runner.step('send_shortcut_submits_it_and_tombstones_it', async () => {
+      await client.request('write_pane', {
+        sessionId,
+        paneId,
+        text: EXISTING_COMPOSER_TEXT,
+        submit: false,
+      });
+      await sleep(300);
       // A real ⌘Return: the keystroke has to survive AppKit, reach the page's
       // capture-phase listener, and be claimed by this pane over the PTY.
       await driver.pressKeyCode(36, { command: true });
@@ -776,6 +784,7 @@ async function main() {
       const held = composer.filter((line) => (
         line.includes('Feedback on your last message')
         || line.includes(NOTE.slice(0, 24))
+        || line.includes(EXISTING_COMPOSER_TEXT.trim())
         || quote.trim().split(/\s+/).some((word) => word.length > 4 && line.includes(word))
       ));
       runner.assert(

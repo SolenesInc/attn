@@ -49,6 +49,29 @@ func TestSessionAnnotationsSubmitDelivers(t *testing.T) {
 	}
 }
 
+func TestSessionAnnotationsSubmitDeliversWithUserComposer(t *testing.T) {
+	d := newSubmitDaemon(t)
+	var mu sync.Mutex
+	var inputs []string
+	d.ptyBackend = recordingBackend(&inputs, &mu)
+	addIdleNotebookSession(d, "session-1", protocol.SessionStateWaitingInput)
+	if err := d.writeSessionPTY("session-1", []byte("existing words"), "user"); err != nil {
+		t.Fatalf("write existing composer: %v", err)
+	}
+
+	res := sendAnnotationSubmit(t, d, "session-1", submitAnnotationText)
+
+	if !res.Success || res.Status != annotationSubmitStatusDelivered || res.Error != nil {
+		t.Fatalf("result = %+v, want delivered", res)
+	}
+	wantPaste := sessionInputPasteStart + submitAnnotationText + sessionInputPasteEnd
+	mu.Lock()
+	defer mu.Unlock()
+	if len(inputs) != 3 || inputs[0] != "existing words" || inputs[1] != wantPaste || inputs[2] != "\r" {
+		t.Fatalf("PTY inputs = %q, want [%q, %q, %q]", inputs, "existing words", wantPaste, "\r")
+	}
+}
+
 func TestSessionAnnotationsSubmitSkipsPendingApproval(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex

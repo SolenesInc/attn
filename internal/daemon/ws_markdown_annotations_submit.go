@@ -79,7 +79,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			d.sendToClient(client, result)
 			return
 		}
-		delivery := userConversationSessionInput(msg.RequestID, targetSession, payload, sessionInputAtTurnBoundary)
+		delivery := annotationSessionInput(msg.RequestID, targetSession, payload)
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.err != nil {
 			if sessionInputDeferredError(attempt.err) {
