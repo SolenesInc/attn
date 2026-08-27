@@ -1,0 +1,8 @@
+kind: fixed
+area: sessions
+change: >
+  Codex sessions get an automatic title after their first completed turn with
+  both the current response-item transcript format and the older event format.
+symptom: >
+  Codex sessions kept their generated adjective-animal name after completing
+  a turn.

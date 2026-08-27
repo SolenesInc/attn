@@ -467,7 +467,7 @@ func extractTextContent(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &blocks); err == nil {
 		var texts []string
 		for _, block := range blocks {
-			if (block.Type == "text" || block.Type == "output_text") && block.Text != "" {
+			if (block.Type == "text" || block.Type == "input_text" || block.Type == "output_text") && block.Text != "" {
 				texts = append(texts, block.Text)
 			}
 		}
