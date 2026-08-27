@@ -1,9 +1,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
+import { createRef, useRef } from 'react';
+import type { RefObject } from 'react';
 import { MarkdownReader } from '../index';
-import { AnnotationLayer } from './AnnotationLayer';
+import { AnnotationLayer, type AnnotationLayerHandle } from './AnnotationLayer';
 import type { SelectionLike } from './selection';
 import type { MarkdownAnnotationsTransport } from './transport';
 import type { WireAnnotation } from './types';
@@ -67,11 +68,13 @@ function Harness({
   path,
   transport,
   apiRef,
+  layerRef,
 }: {
   content: string;
   path: string;
   transport: MarkdownAnnotationsTransport | null;
   apiRef: { current: UseAnnotationsApi | null };
+  layerRef: RefObject<AnnotationLayerHandle | null>;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const source = fileMarkdownSource('ws-test', path);
@@ -80,7 +83,7 @@ function Harness({
   return (
     <div ref={rootRef}>
       <MarkdownReader content={content} source={source} allowLocalTargets />
-      <AnnotationLayer api={api} rootRef={rootRef} source={source} />
+      <AnnotationLayer ref={layerRef} api={api} rootRef={rootRef} source={source} />
     </div>
   );
 }
@@ -97,12 +100,15 @@ let pathSeq = 0;
 async function mount(content = DOC) {
   const { transport, calls } = makeTransport();
   const apiRef: { current: UseAnnotationsApi | null } = { current: null };
+  const layerRef = createRef<AnnotationLayerHandle>();
   // Unique URI per mount: the popover draft store is module-level and keyed by
   // document identity, so tests must not leak drafts into each other.
   const path = `/tmp/project/layer-${pathSeq++}.md`;
-  const view = render(<Harness content={content} path={path} transport={transport} apiRef={apiRef} />);
+  const view = render(
+    <Harness content={content} path={path} transport={transport} apiRef={apiRef} layerRef={layerRef} />,
+  );
   await flush();
-  return { ...view, apiRef, calls, path };
+  return { ...view, apiRef, layerRef, calls, path };
 }
 
 function findTextNode(scope: Element, needle: string): { node: Text; index: number } {
@@ -248,21 +254,20 @@ describe('AnnotationLayer', () => {
     expect(document.querySelector('.md-quick-label-picker')).toBeNull();
   });
 
-  it('sidebar: collapsed rail at 0 annotations, auto-opens on the first one', async () => {
+  it('keeps the inspector closed while annotating and opens it on request', async () => {
     const view = await mount();
     expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
-    expect(document.querySelector('.md-sidebar-rail')).not.toBeNull();
 
     beginSelection(view, 'target words');
     fireEvent.click(screen.getByTitle('Delete'));
 
+    expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
+    act(() => view.layerRef.current!.openInspector());
     expect(document.querySelector('.md-annotations-sidebar')).not.toBeNull();
-    expect(document.querySelector('.md-sidebar-rail')).toBeNull();
     expect(document.querySelector('.md-sidebar-count')!.textContent).toBe('1');
 
-    fireEvent.click(screen.getByTitle('Collapse annotations sidebar'));
+    fireEvent.click(screen.getByTitle('Close review notes'));
     expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
-    expect(document.querySelector('.md-sidebar-rail-count')!.textContent).toBe('1');
   });
 
   it('global comment flows from the sidebar header button (E13)', async () => {
@@ -270,8 +275,9 @@ describe('AnnotationLayer', () => {
     beginSelection(view, 'target words');
     fireEvent.click(screen.getByTitle('Delete'));
 
-    fireEvent.click(screen.getByTitle('Add a document-wide comment'));
-    expect(screen.getByText('Global Comment')).not.toBeNull();
+    act(() => view.layerRef.current!.openInspector());
+    fireEvent.click(screen.getByTitle('Add an overall note'));
+    expect(screen.getByText('Overall Note')).not.toBeNull();
     fireEvent.change(popoverTextarea(), { target: { value: 'overall: tighten scope' } });
     fireEvent.keyDown(popoverTextarea(), { key: 'Enter', ctrlKey: true });
 
@@ -287,6 +293,7 @@ describe('AnnotationLayer', () => {
     fireEvent.click(screen.getByTitle('Delete'));
     expect(view.apiRef.current!.annotations).toHaveLength(1);
 
+    act(() => view.layerRef.current!.openInspector());
     fireEvent.click(screen.getByText('Clear all'));
     fireEvent.click(screen.getByText('Confirm?'));
     await flush();
@@ -304,13 +311,31 @@ describe('AnnotationLayer', () => {
     beginSelection(view, 'target words');
     fireEvent.click(screen.getByTitle('Delete'));
 
+    act(() => view.layerRef.current!.openInspector());
     fireEvent.click(document.querySelector('.md-annotation-card')!);
     expect(document.querySelector('[data-md-mark="md-focus-glow"]')).not.toBeNull();
     expect(scrollSpy).not.toHaveBeenCalled();
+    expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
 
+    act(() => view.layerRef.current!.openInspector());
     fireEvent.click(document.querySelector('.md-annotation-card')!);
     expect(scrollSpy).toHaveBeenCalledTimes(1);
     expect(view.apiRef.current!.selectedId).toBe(view.apiRef.current!.annotations[0].id);
+  });
+
+  it('Escape dismisses the composer before the inspector', async () => {
+    const view = await mount();
+    act(() => view.layerRef.current!.openInspector());
+    fireEvent.click(screen.getByTitle('Add an overall note'));
+
+    expect(document.querySelector('.md-annotation-popover')).not.toBeNull();
+    expect(document.querySelector('.md-annotations-sidebar')).not.toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('.md-annotation-popover')).toBeNull();
+    expect(document.querySelector('.md-annotations-sidebar')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('.md-annotations-sidebar')).toBeNull();
   });
 
   it('hovering a code block shows the top-right toolbar; Delete annotates the whole block (E27)', async () => {

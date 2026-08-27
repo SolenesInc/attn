@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationOrphanReason } from './useAnnotations';
 import { LABEL_COLOR_MAP, quickLabelById } from './quickLabels';
+import { sortAnnotations } from './sortAnnotations';
 import type { Annotation } from './types';
 
 export interface AnnotationSidebarProps {
@@ -12,27 +13,8 @@ export interface AnnotationSidebarProps {
   onClearAll: () => void;
   /** Opens the global-comment popover anchored to the clicked button. */
   onGlobalComment: (anchorEl: HTMLElement) => void;
-  /** Collapses the sidebar (count-pill toggle). */
+  /** Closes the floating inspector. */
   onToggle: () => void;
-}
-
-/** Document-position sort: startLine, then start; globals last by createdAt. */
-export function sortAnnotations(annotations: Annotation[]): Annotation[] {
-  return [...annotations].sort((a, b) => {
-    if (!a.anchor && !b.anchor) {
-      return a.createdAt - b.createdAt;
-    }
-    if (!a.anchor) {
-      return 1;
-    }
-    if (!b.anchor) {
-      return -1;
-    }
-    if (a.anchor.startLine !== b.anchor.startLine) {
-      return a.anchor.startLine - b.anchor.startLine;
-    }
-    return a.anchor.start - b.anchor.start;
-  });
 }
 
 function CardBadge({ annotation }: { annotation: Annotation }) {
@@ -106,13 +88,13 @@ export function AnnotationSidebar({
   };
 
   return (
-    <aside className="md-annotations-sidebar">
+    <dialog open className="md-annotations-sidebar" aria-label="Review notes">
       <div className="md-sidebar-header">
-        <span className="md-sidebar-title">Annotations</span>
+        <span className="md-sidebar-title">Review notes</span>
         <button
           type="button"
           className="md-sidebar-count"
-          title="Collapse annotations sidebar"
+          title="Close review notes"
           onClick={onToggle}
         >
           {annotations.length}
@@ -121,10 +103,10 @@ export function AnnotationSidebar({
         <button
           type="button"
           className="md-sidebar-action"
-          title="Add a document-wide comment"
+          title="Add an overall note"
           onClick={(e) => onGlobalComment(e.currentTarget)}
         >
-          + Global comment
+          + Overall note
         </button>
         {annotations.length > 0 && (
           <button
@@ -186,6 +168,6 @@ export function AnnotationSidebar({
           })
         )}
       </div>
-    </aside>
+    </dialog>
   );
 }

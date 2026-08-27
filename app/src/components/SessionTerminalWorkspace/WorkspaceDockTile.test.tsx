@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { normalizeBrowserAddress, WorkspaceDockTile, resolveMarkdownTarget } from './WorkspaceDockTile';
+import { resolveMarkdownTarget } from '../MarkdownReader/markdownLinks';
+import { normalizeBrowserAddress } from './browserAddress';
+import { WorkspaceDockTile } from './WorkspaceDockTile';
 import type { WorkspaceTileSessionOption } from './WorkspaceDockTile';
 import { deriveTileTitle } from '../../utils/tilePresentation';
 import { serializeNotebookTileParams, type TileLeaf } from '../../types/workspace';
@@ -608,7 +610,7 @@ function anchoredNote(content: string, needle: string): WireAnnotation {
 
 function makeSendTransport(seed: WireAnnotation[] = [globalNote()]) {
   const getSpy = vi.fn(async () => ({ annotations: seed, generation: 5 }));
-  const saveSpy = vi.fn(async () => ({ stale: false }));
+  const saveSpy = vi.fn(async (_source: unknown, _annotations: WireAnnotation[], _generation: number) => ({ stale: false }));
   const clearSpy = vi.fn(async (_source: unknown, generation: number) => ({ generation }));
   const submitSpy = vi.fn(
     async (): Promise<MarkdownAnnotationsSubmitResult> => ({ status: 'delivered', generation: 6 }),
@@ -669,11 +671,17 @@ function renderSendTile({
 }
 
 function sendButton() {
-  return screen.getByRole('button', { name: /^(Send \d+|Sending…)$/ });
+  return screen.getByRole('button', {
+    name: /^(Send \d+(?: to .+)?|Sending…|Sent ✓|Noted ✓|Approval needed to .+|Needs attention to .+|Send failed to .+)$/,
+  });
 }
 
-function picker() {
-  return screen.getByRole('combobox', { name: 'Send annotations to session' }) as HTMLSelectElement;
+function openSessionDestinations() {
+  fireEvent.click(screen.getByRole('button', { name: 'Change annotation destination' }));
+}
+
+function chooseSession(label: string) {
+  fireEvent.click(screen.getByRole('menuitemradio', { name: label }));
 }
 
 /** Dispatch ⌘Enter the way the real key arrives: a window-capture keydown. */
@@ -701,34 +709,54 @@ describe('WorkspaceDockTile markdown send flow', () => {
     setMarkdownAnnotationsTransport(null);
   });
 
-  it('defaults the picker to the bound session and flags approval-blocked options (E13)', async () => {
+  it('shows the bound session in Send and flags approval-blocked destinations (E13)', async () => {
     setMarkdownAnnotationsTransport(makeSendTransport().transport);
     renderSendTile();
 
-    expect(picker().value).toBe('sess-a');
-    expect(screen.getByRole('option', { name: 'alpha' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'beta ⏸ approval' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 1');
+      expect(sendButton()).toHaveAccessibleName('Send 1 to alpha');
     });
     expect(sendButton()).toBeEnabled();
+    openSessionDestinations();
+    expect(screen.getByRole('menuitemradio', { name: 'alpha' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'beta approval' })).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('retargets through onRetargetTile and follows the layout broadcast echo (E13)', async () => {
+  it('navigates destination choices with arrows and returns focus on Escape', async () => {
+    setMarkdownAnnotationsTransport(makeSendTransport().transport);
+    renderSendTile();
+    await waitFor(() => expect(sendButton()).toBeEnabled());
+
+    const caret = screen.getByRole('button', { name: 'Change annotation destination' });
+    fireEvent.click(caret);
+    const alpha = screen.getByRole('menuitemradio', { name: 'alpha' });
+    const beta = screen.getByRole('menuitemradio', { name: 'beta approval' });
+    await waitFor(() => expect(alpha).toHaveFocus());
+    fireEvent.keyDown(alpha, { key: 'ArrowDown' });
+    expect(beta).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('menu', { name: 'Send annotations to session' })).toBeNull();
+    await waitFor(() => expect(caret).toHaveFocus());
+  });
+
+  it('retargets through the destination menu and follows the layout broadcast echo (E13)', async () => {
     setMarkdownAnnotationsTransport(makeSendTransport().transport);
     const onRetargetTile = vi.fn(async () => {});
     const { rebind } = renderSendTile({ onRetargetTile });
     await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 1');
+      expect(sendButton()).toHaveAccessibleName('Send 1 to alpha');
     });
 
-    fireEvent.change(picker(), { target: { value: 'sess-b' } });
+    openSessionDestinations();
+    chooseSession('beta approval');
     expect(onRetargetTile).toHaveBeenCalledWith('sess-b');
+    expect(sendButton()).toHaveAccessibleName('Send 1 to beta');
     rebind('sess-b');
-    expect(picker().value).toBe('sess-b');
+    expect(sendButton()).toHaveAccessibleName('Send 1 to beta');
   });
 
-  it('a retarget takes effect immediately for both the picker and Send — no broadcast wait (E13)', async () => {
+  it('a retarget takes effect immediately for Send without waiting for a broadcast (E13)', async () => {
     const { transport, submitSpy } = makeSendTransport();
     setMarkdownAnnotationsTransport(transport);
     const onRetargetTile = vi.fn(async () => {});
@@ -737,9 +765,10 @@ describe('WorkspaceDockTile markdown send flow', () => {
       expect(sendButton()).toBeEnabled();
     });
 
-    fireEvent.change(picker(), { target: { value: 'sess-b' } });
+    openSessionDestinations();
+    chooseSession('beta approval');
     expect(onRetargetTile).toHaveBeenCalledWith('sess-b');
-    expect(picker().value).toBe('sess-b');
+    expect(sendButton()).toHaveAccessibleName('Send 1 to beta');
     fireEvent.click(sendButton());
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith(
@@ -750,10 +779,11 @@ describe('WorkspaceDockTile markdown send flow', () => {
     });
 
     rebind('sess-b');
-    expect(picker().value).toBe('sess-b');
+    openSessionDestinations();
+    expect(screen.getByRole('menuitemradio', { name: 'beta approval' })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('rolls the picker back to the persisted binding when the retarget request fails (E13)', async () => {
+  it('rolls Send back to the persisted binding when retargeting fails (E13)', async () => {
     setMarkdownAnnotationsTransport(makeSendTransport().transport);
     const onRetargetTile = vi.fn(async () => {
       throw new Error('retarget rejected');
@@ -763,34 +793,60 @@ describe('WorkspaceDockTile markdown send flow', () => {
       expect(sendButton()).toBeEnabled();
     });
 
-    fireEvent.change(picker(), { target: { value: 'sess-b' } });
-    expect(picker().value).toBe('sess-b');
+    openSessionDestinations();
+    chooseSession('beta approval');
+    expect(sendButton()).toHaveAccessibleName('Send 1 to beta');
     await waitFor(() => {
-      expect(picker().value).toBe('sess-a');
+      expect(sendButton()).toHaveAccessibleName('Send 1 to alpha');
     });
   });
 
-  it('shows a disabled No-session placeholder when the bound session left the workspace (E13)', async () => {
+  it('shows a disabled Send with No session when the bound session left the workspace (E13)', async () => {
     setMarkdownAnnotationsTransport(makeSendTransport().transport);
     renderSendTile({ tileSessionId: 'sess-gone' });
 
-    expect(picker().value).toBe('');
-    const placeholder = screen.getByRole('option', { name: 'No session' }) as HTMLOptionElement;
-    expect(placeholder.disabled).toBe(true);
     await waitFor(() => {
       expect(sendButton()).toHaveTextContent('Send 1');
     });
+    expect(sendButton()).toHaveTextContent('No session');
     expect(sendButton()).toBeDisabled();
   });
 
-  it('disables Send with zero annotations (E14)', async () => {
+  it('replaces Send 0 with the current destination (E14)', async () => {
     setMarkdownAnnotationsTransport(makeSendTransport([]).transport);
     renderSendTile();
 
-    await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 0');
+    expect(await screen.findByRole('button', { name: 'Annotation destination: alpha' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Send 0/ })).toBeNull();
+  });
+
+  it('opens overall notes and the floating review inspector from the tile header', async () => {
+    const { transport, saveSpy } = makeSendTransport([]);
+    setMarkdownAnnotationsTransport(transport);
+    renderSendTile();
+    await screen.findByRole('button', { name: 'Annotation destination: alpha' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
+    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
+      target: { value: 'First overall note' },
     });
-    expect(sendButton()).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
+    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
+      target: { value: 'Second overall note' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(screen.getByRole('button', { name: 'Notes 2' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Notes 2' }));
+    expect(screen.getByRole('dialog', { name: 'Review notes' })).toBeInTheDocument();
+    expect(screen.getByText('First overall note')).toBeInTheDocument();
+    expect(screen.getByText('Second overall note')).toBeInTheDocument();
+
+    fireEvent.click(sendButton());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalled());
+    const latest = saveSpy.mock.calls[saveSpy.mock.calls.length - 1]?.[1] as WireAnnotation[];
+    expect(latest.filter((annotation) => annotation.type === 'global')).toHaveLength(2);
   });
 
   it('delivers: Sending… → Sent ✓, list empties locally without re-fetch or second clear (E14)', async () => {
@@ -821,9 +877,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
       resolveSubmit({ status: 'delivered', generation: 9 });
     });
     expect(screen.getByRole('status')).toHaveTextContent('Sent ✓');
-    await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 0');
-    });
+    expect(sendButton()).toHaveTextContent('Sent ✓');
     expect(sendButton()).toBeDisabled();
     expect(getSpy).toHaveBeenCalledTimes(1);
     expect(clearSpy).not.toHaveBeenCalled();
@@ -845,7 +899,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('failed to clear drafts');
     });
-    expect(sendButton()).toHaveTextContent('Send 1');
+    expect(sendButton()).toHaveTextContent('Needs attention');
     expect(sendButton()).toBeEnabled();
     expect(screen.queryByText('Sent ✓')).toBeNull();
   });
@@ -856,9 +910,8 @@ describe('WorkspaceDockTile markdown send flow', () => {
     setMarkdownAnnotationsTransport(transport);
     renderSendTile();
 
-    fireEvent.click(screen.getByTitle('Show annotations'));
-    fireEvent.click(screen.getByTitle('Add a document-wide comment'));
-    fireEvent.change(screen.getByPlaceholderText('Add a global comment...'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
+    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
       target: { value: 'unsaved local note' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -871,7 +924,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
       expect(screen.getByRole('status')).toHaveTextContent('still syncing');
     });
     expect(submitSpy).not.toHaveBeenCalled();
-    expect(sendButton()).toHaveTextContent('Send 1');
+    expect(sendButton()).toHaveTextContent('Send failed');
   });
 
   it('keeps annotations and explains when the target is waiting on approval (E15)', async () => {
@@ -889,7 +942,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
         'Target is waiting for approval — not sent',
       );
     });
-    expect(sendButton()).toHaveTextContent('Send 1');
+    expect(sendButton()).toHaveTextContent('Approval needed');
     expect(sendButton()).toBeEnabled();
   });
 
@@ -906,7 +959,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('session not found');
     });
-    expect(sendButton()).toHaveTextContent('Send 1');
+    expect(sendButton()).toHaveTextContent('Send failed');
   });
 
   it('⌘Enter sends when focus is inside the tile and annotations exist (E18)', async () => {
@@ -953,9 +1006,7 @@ describe('WorkspaceDockTile markdown send flow', () => {
 
     setMarkdownAnnotationsTransport(makeSendTransport([]).transport);
     const zero = renderSendTile();
-    await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 0');
-    });
+    await screen.findByRole('button', { name: 'Annotation destination: alpha' });
     const zeroBody = zero.container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
     fireEvent.focusIn(zeroBody);
     event = pressCmdEnter();

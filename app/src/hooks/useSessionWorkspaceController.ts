@@ -24,6 +24,7 @@ interface SessionWorkspaceController {
   setWorkspaceRef: (workspaceId: string) => (ref: SessionTerminalWorkspaceHandle | null) => void;
   removeWorkspaceRef: (workspaceId: string) => void;
   getWorkspaceLeafDropSnapshot: (workspaceId: string | null | undefined) => LeafDropSnapshot | null;
+  focusWorkspaceLeaf: (workspaceId: string, leafId: string) => void;
   focusSessionPane: (sessionId: string, paneId: string, retries?: number) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
@@ -83,6 +84,10 @@ export function useSessionWorkspaceController(
   const getWorkspaceLeafDropSnapshot = useCallback((workspaceId: string | null | undefined) => (
     workspaceId ? workspaceRefs.current.get(workspaceId)?.getLeafDropSnapshot() ?? null : null
   ), []);
+
+  const focusWorkspaceLeaf = useCallback((workspaceId: string, leafId: string) => {
+    workspaceRefs.current.get(workspaceId)?.focusLeaf(leafId);
+  }, []);
 
   const prepareClosePaneFocus = useCallback((sessionId: string, paneId: string) => {
     const session = sessions.find((entry) => entry.id === sessionId);
@@ -177,6 +182,7 @@ export function useSessionWorkspaceController(
     setWorkspaceRef,
     removeWorkspaceRef,
     getWorkspaceLeafDropSnapshot,
+    focusWorkspaceLeaf,
     focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,

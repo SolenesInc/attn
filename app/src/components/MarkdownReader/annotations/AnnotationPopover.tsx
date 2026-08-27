@@ -2,6 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../../../hooks/useEscapeStack';
+import {
+  clearAnnotationDraft,
+  readAnnotationDraft,
+  writeAnnotationDraft,
+} from './annotationDrafts';
 
 export interface AnnotationPopoverProps {
   getAnchorRect: () => DOMRect | null;
@@ -16,12 +21,6 @@ export interface AnnotationPopoverProps {
 const MAX_POPOVER_WIDTH = 384;
 const GAP = 8;
 const FLIP_SPACE = 280;
-
-const draftStore = new Map<string, string>();
-
-export function peekAnnotationDraft(draftKey: string): string | undefined {
-  return draftStore.get(draftKey);
-}
 
 function computePosition(anchorRect: DOMRect): {
   top: number;
@@ -47,7 +46,7 @@ export function AnnotationPopover({
   onSubmit,
   onClose,
 }: AnnotationPopoverProps) {
-  const [text, setText] = useState(() => draftStore.get(draftKey) ?? initialText);
+  const [text, setText] = useState(() => readAnnotationDraft(draftKey) ?? initialText);
   const [position, setPosition] = useState<ReturnType<typeof computePosition> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -56,14 +55,10 @@ export function AnnotationPopover({
   hasUnsavedContentRef.current = hasUnsavedContent;
 
   useEffect(() => {
-    setText(draftStore.get(draftKey) ?? initialText);
-  }, [draftKey, initialText]);
-
-  useEffect(() => {
     if (text.trim().length > 0) {
-      draftStore.set(draftKey, text);
+      writeAnnotationDraft(draftKey, text);
     } else {
-      draftStore.delete(draftKey);
+      clearAnnotationDraft(draftKey);
     }
   }, [draftKey, text]);
 
@@ -117,7 +112,7 @@ export function AnnotationPopover({
     if (!hasUnsavedContentRef.current) {
       return;
     }
-    draftStore.delete(draftKey);
+    clearAnnotationDraft(draftKey);
     onSubmit(text);
   }, [draftKey, onSubmit, text]);
 
@@ -131,7 +126,7 @@ export function AnnotationPopover({
   };
 
   const headerLabel = isGlobal
-    ? 'Global Comment'
+    ? 'Overall Note'
     : quote
       ? `"${quote.length > 50 ? `${quote.slice(0, 50)}...` : quote}"`
       : 'Comment';
@@ -161,7 +156,7 @@ export function AnnotationPopover({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={isGlobal ? 'Add a global comment...' : 'Add a comment...'}
+        placeholder={isGlobal ? 'Add an overall note...' : 'Add a comment...'}
         rows={3}
       />
       <div className="md-popover-footer">

@@ -85,6 +85,19 @@ func TestFormatMarkdownAnnotationPayloadSingularNoSummary(t *testing.T) {
 	}
 }
 
+func TestFormatMarkdownAnnotationPayloadKeepsEveryGlobalComment(t *testing.T) {
+	anns := []protocol.MarkdownAnnotation{
+		{ID: "later", Type: "global", Text: protocol.Ptr("second overall note"), CreatedAt: 20},
+		{ID: "earlier", Type: "global", Text: protocol.Ptr("first overall note"), CreatedAt: 10},
+	}
+	got := formatMarkdownAnnotationPayload(fileAnnotationSource("/doc.md"), anns, nil)
+	first := strings.Index(got, "> first overall note")
+	second := strings.Index(got, "> second overall note")
+	if first < 0 || second < 0 || first >= second {
+		t.Fatalf("payload did not preserve both global comments in creation order:\n%s", got)
+	}
+}
+
 func TestFormatMarkdownAnnotationPayloadOrphaned(t *testing.T) {
 	anns := []protocol.MarkdownAnnotation{
 		{ID: "orph", Type: "comment", Anchor: mdAnchor(7, 9, 0, "moved text"), Text: protocol.Ptr("still relevant"), CreatedAt: 1},

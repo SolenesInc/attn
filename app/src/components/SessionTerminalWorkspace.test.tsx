@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionTerminalWorkspace } from './SessionTerminalWorkspace';
 import type { PaneRuntimeEventRouter } from './SessionTerminalWorkspace/paneRuntimeEventRouter';
-import { type TerminalWorkspaceState } from '../types/workspace';
+import { tileContentKey, type TerminalLayoutNode, type TerminalWorkspaceState } from '../types/workspace';
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../contexts/NotebookSurfaceContext';
 
 const testSurfaceValue: NotebookSurfaceContextValue = {
@@ -50,6 +50,31 @@ function createSplitWorkspace(ratio = 0.5): TerminalWorkspaceState {
         { type: 'pane', paneId: 'pane-session-2' },
       ],
     },
+  };
+}
+
+function createWorkspaceWithDocuments(documentIds: readonly string[]): TerminalWorkspaceState {
+  let layoutTree: TerminalLayoutNode = { type: 'pane', paneId: SESSION_PANE_ID };
+  for (const documentId of documentIds) {
+    layoutTree = {
+      type: 'split',
+      splitId: `split-${documentId}`,
+      direction: 'vertical',
+      ratio: 0.68,
+      children: [
+        layoutTree,
+        {
+          type: 'tile',
+          tileId: documentId,
+          tileKind: 'markdown',
+          tileParams: `/tmp/${documentId}.md`,
+        },
+      ],
+    };
+  }
+  return {
+    agents: [{ id: SESSION_PANE_ID, runtimeId: 'session-1', sessionId: 'session-1', title: 'Session 1' }],
+    layoutTree,
   };
 }
 
@@ -223,6 +248,7 @@ describe('SessionTerminalWorkspace', () => {
     delete document.documentElement.dataset.attnWorkspaceResizing;
     delete document.documentElement.dataset.attnWorkspaceResizeToken;
     delete document.documentElement.dataset.attnWorkspaceMouseSuppressUntil;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -1150,6 +1176,92 @@ describe('SessionTerminalWorkspace', () => {
     vi.runAllTimers();
 
     expect(mockTerminalFit).toHaveBeenCalled();
+  });
+
+  it('re-fits a terminal against the final attention layout when a document is suspended', async () => {
+    class WorkspaceResizeObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element): void {
+        this.callback([{
+          target,
+          contentRect: { width: 1816, height: 1258 } as DOMRectReadOnly,
+        } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+
+      disconnect(): void {}
+      unobserve(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', WorkspaceResizeObserver);
+    mockTerminalFit.mockReset();
+    const documentIds = ['oldest', 'older', 'middle', 'newer', 'newest', 'latest'];
+
+    const commonProps = {
+      workspaceId: 'workspace-attention-refit',
+      workspaceSessions: [{ id: 'session-1', label: 'Session 1', agent: 'codex' as const, cwd: '/tmp/repo' }],
+      activePaneId: SESSION_PANE_ID,
+      fontSize: 13,
+      enabled: true,
+      isActiveSession: true,
+      eventRouter: mockEventRouter,
+      onSplitPane: vi.fn(),
+      onClosePane: vi.fn(),
+      onFocusPane: vi.fn(),
+      onNavigateOutOfSession: vi.fn(),
+      onUndockTile: vi.fn(),
+      tileContents: Object.fromEntries(documentIds.map((documentId) => [
+        tileContentKey('workspace-attention-refit', documentId),
+        { path: `/tmp/${documentId}.md`, content: `# ${documentId}` },
+      ])),
+      onRequestTileContent: vi.fn(),
+    };
+    const { container, rerender } = render(
+      <SessionTerminalWorkspace
+        {...commonProps}
+        workspace={createWorkspaceWithDocuments([])}
+      />,
+      { wrapper: NotebookSurfaceTestWrapper },
+    );
+    await waitFor(() => expect(mockTerminalFit).toHaveBeenCalled());
+
+    for (let index = 0; index < documentIds.length - 1; index += 1) {
+      rerender(
+        <SessionTerminalWorkspace
+          {...commonProps}
+          workspace={createWorkspaceWithDocuments(documentIds.slice(0, index + 1))}
+        />,
+      );
+      await waitFor(() => {
+        expect(container.querySelector('.session-terminal-workspace')).toHaveAttribute(
+          'data-active-leaf-id',
+          documentIds[index],
+        );
+      });
+      fireEvent.mouseDown(container.querySelector(`[data-pane-id="${SESSION_PANE_ID}"]`)!);
+      await waitFor(() => {
+        expect(container.querySelector('.session-terminal-workspace')).toHaveAttribute(
+          'data-active-leaf-id',
+          SESSION_PANE_ID,
+        );
+      });
+    }
+    mockTerminalFit.mockClear();
+
+    rerender(
+      <SessionTerminalWorkspace
+        {...commonProps}
+        workspace={createWorkspaceWithDocuments(documentIds)}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-pane-suspended="true"]')).not.toBeNull();
+      expect(container.querySelector('.session-terminal-workspace')).toHaveAttribute(
+        'data-active-leaf-id',
+        'latest',
+      );
+    });
+    expect(mockTerminalFit).toHaveBeenCalledTimes(1);
   });
 
   it('re-fits every visible pane when an inactive split session becomes active', () => {

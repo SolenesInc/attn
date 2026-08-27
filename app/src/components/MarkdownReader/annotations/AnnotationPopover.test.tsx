@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { AnnotationPopover, peekAnnotationDraft, type AnnotationPopoverProps } from './AnnotationPopover';
+import { AnnotationPopover, type AnnotationPopoverProps } from './AnnotationPopover';
+import { peekAnnotationDraft } from './annotationDrafts';
 
 function fakeRect(overrides: Partial<DOMRect> = {}): DOMRect {
   const base = { top: 100, bottom: 120, left: 100, right: 300, width: 200, height: 20, x: 100, y: 100 };
@@ -114,14 +115,14 @@ describe('AnnotationPopover', () => {
     expect(textarea().value).toBe('x');
   });
 
-  it('shows the truncated quote header; "Global Comment" for globals (E13 surface)', () => {
+  it('shows the truncated quote header; "Overall Note" for document-wide notes (E13 surface)', () => {
     const long = 'q'.repeat(60);
     const first = renderPopover({ quote: long });
     expect(screen.getByText(`"${'q'.repeat(50)}..."`)).not.toBeNull();
     first.view.unmount();
 
     renderPopover({ isGlobal: true, quote: '' });
-    expect(screen.getByText('Global Comment')).not.toBeNull();
-    expect(textarea().placeholder).toBe('Add a global comment...');
+    expect(screen.getByText('Overall Note')).not.toBeNull();
+    expect(textarea().placeholder).toBe('Add an overall note...');
   });
 });

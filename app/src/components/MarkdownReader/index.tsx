@@ -25,7 +25,7 @@ import rehypeProseTransforms from './proseTransforms';
 import rehypeSourceAnchors from './rehypeSourceAnchors';
 import { readerSanitizeSchema } from './sanitizeSchema';
 import { scrollToAnchor } from './scrollToAnchor';
-import { AnnotationLayer } from './annotations/AnnotationLayer';
+import { AnnotationLayer, type AnnotationLayerHandle } from './annotations/AnnotationLayer';
 import { useAnnotations } from './annotations/useAnnotations';
 import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSource';
 import { tilePathBasename } from '../../utils/tilePresentation';
@@ -262,6 +262,8 @@ export interface MarkdownAnnotationsSendHandle {
   isHydrated(): boolean;
   applyDeliveredClear(generationFloor: number): void;
   getOrphanedIds(): string[];
+  openInspector(): void;
+  openGlobalComment(anchorEl: HTMLElement): void;
 }
 
 export interface MarkdownReaderProps {
@@ -316,6 +318,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   const path = markdownDocumentPath(source);
   const localTargetsEnabled = allowLocalTargets && source.kind === 'file';
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const annotationLayerRef = useRef<AnnotationLayerHandle | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   // Props of the memoized body: identities must never change (gate contract).
   const handleImageClick = useCallback((src: string, alt: string) => {
@@ -350,6 +353,8 @@ export const MarkdownReader = memo(function MarkdownReader({
     applyDeliveredClear: (generationFloor: number) =>
       annotationsApiRef.current.applyDeliveredClear(generationFloor),
     getOrphanedIds: () => Array.from(annotationsApiRef.current.orphans.keys()),
+    openInspector: () => annotationLayerRef.current?.openInspector(),
+    openGlobalComment: (anchorEl: HTMLElement) => annotationLayerRef.current?.openGlobalComment(anchorEl),
   }), []);
 
   return (
@@ -371,7 +376,9 @@ export const MarkdownReader = memo(function MarkdownReader({
           />
         </div>
       </div>
-      {annotationsEnabled && <AnnotationLayer api={annotationsApi} rootRef={rootRef} source={source} />}
+      {annotationsEnabled && (
+        <AnnotationLayer ref={annotationLayerRef} api={annotationsApi} rootRef={rootRef} source={source} />
+      )}
       {lightbox && (
         <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={handleLightboxClose} />
       )}
