@@ -20,7 +20,14 @@ import {
   QUICK_LABEL_PICKER_LABELS,
 } from '../../annotations/quickLabels';
 import { QuickLabelPicker } from '../../annotations/QuickLabelPicker';
-import { clampToViewport, placePopup, type PlaceOptions, type Placement } from './placement';
+import {
+  clampToBounds,
+  clampToViewport,
+  placePopup,
+  type PlaceOptions,
+  type Placement,
+  type Size,
+} from './placement';
 import { useAnnotationSend } from '../../annotations/useAnnotationSend';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -129,8 +136,11 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     }, []);
     const noteSaveTimerRef = useRef<number | null>(null);
     const commentRef = useRef<HTMLTextAreaElement>(null);
-    const popupRef = useRef<HTMLDivElement>(null);
+    const popupRef = useRef<HTMLDialogElement>(null);
     const [popupAt, setPopupAt] = useState<Placement | null>(null);
+    const [popupDragging, setPopupDragging] = useState(false);
+    const popupGrabRef = useRef<{ dx: number; dy: number } | null>(null);
+    const popupManuallyPlacedRef = useRef(false);
     const panelRef = useRef<HTMLDivElement>(null);
     const [panelAt, setPanelAt] = useState<Placement | null>(null);
     const [panelDragging, setPanelDragging] = useState(false);
@@ -243,6 +253,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       setLabelPickerOpen(false);
       setHint(null);
       setPopupAt(null);
+      setPopupDragging(false);
+      popupGrabRef.current = null;
+      popupManuallyPlacedRef.current = false;
       setDraft('');
       if (restoreFocus) terminalRef.current?.focus();
     }, []);
@@ -264,14 +277,19 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     const handleAnchor = useCallback(
       (anchor: MessageAnchor, at: { clientX: number; clientY: number }) => {
+        if (composer?.writing) {
+          commentRef.current?.focus();
+          return;
+        }
         const annotation = store.add(anchor.messageKey, anchor.start, anchor.end);
         if (!annotation) return;
         setDraft('');
         setPopupAt(null);
+        popupManuallyPlacedRef.current = false;
         setComposer({ annotationId: annotation.id, clientX: at.clientX, clientY: at.clientY, writing: false });
         bump();
       },
-      [bump],
+      [bump, composer?.writing, store],
     );
 
     const missSeqRef = useRef(0);
@@ -298,10 +316,15 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         at: { clientX: number; clientY: number },
         options?: { writing?: boolean },
       ) => {
+        if (composer?.writing) {
+          commentRef.current?.focus();
+          return;
+        }
         const annotation = store.list().find((entry) => entry.id === annotationId);
         if (!annotation) return;
         setDraft(annotation.comment);
         setPopupAt(null);
+        popupManuallyPlacedRef.current = false;
         setComposer({
           annotationId,
           clientX: at.clientX,
@@ -309,7 +332,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
           writing: options?.writing || Boolean(annotation.comment),
         });
       },
-      [store],
+      [composer?.writing, store],
     );
 
     // Capture phase, so the terminal's own pointerdown still runs and the click can
@@ -319,6 +342,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       const onDown = (event: PointerEvent) => {
         if (labelPickerOpen) return;
         if (popupRef.current?.contains(event.target as Node)) return;
+        if (composer.writing) return;
         dismissComposer(false);
       };
       window.addEventListener('pointerdown', onDown, true);
@@ -329,6 +353,13 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       bounds: terminalRef.current?.getBounds() ?? null,
       avoid: panelRef.current?.getBoundingClientRect() ?? null,
     }), []);
+
+    const clampPopupToTerminal = useCallback((at: Placement, size: Size) => clampToBounds(
+      at,
+      size,
+      { width: window.innerWidth, height: window.innerHeight },
+      terminalRef.current?.getBounds() ?? null,
+    ), []);
 
     const fitToPane = useCallback((
       node: HTMLElement | null,
@@ -354,8 +385,18 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     }, []);
 
     const repositionPopup = useCallback(() => {
+      const node = popupRef.current;
+      if (popupManuallyPlacedRef.current) {
+        if (!node) return;
+        const rect = node.getBoundingClientRect();
+        setPopupAt((current) => (current ? clampPopupToTerminal(
+          current,
+          { width: rect.width, height: rect.height },
+        ) : current));
+        return;
+      }
       fitToPane(popupRef.current, composerRef.current, applyPopupAt);
-    }, [applyPopupAt, fitToPane]);
+    }, [applyPopupAt, clampPopupToTerminal, fitToPane]);
 
     useLayoutEffect(() => {
       composerRef.current = composer;
@@ -396,10 +437,10 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       if (!composed) return;
       const next = composed.quickLabelId === quickLabelId ? '' : quickLabelId;
       store.update(composed.id, { quickLabelId: next });
-      if (!next && !composed.comment) store.remove(composed.id);
+      if (!next && !composed.comment && !composer?.writing) store.remove(composed.id);
       persist();
       bump();
-      if (!composed.comment) closeComposer();
+      if (!composed.comment && !composer?.writing) closeComposer();
     };
 
     const saveComment = () => {
@@ -425,6 +466,46 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     const reopenFromCard = (annotation: TerminalAnnotation, event: React.MouseEvent) => {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
       reopen(annotation, { clientX: rect.left + rect.width / 2, clientY: rect.top });
+    };
+
+    const startPopupDrag = (event: React.MouseEvent) => {
+      const node = popupRef.current;
+      if (!node || event.button !== 0) return;
+      const rect = node.getBoundingClientRect();
+      popupGrabRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+      popupManuallyPlacedRef.current = true;
+      setPopupAt({ left: rect.left, top: rect.top });
+      setPopupDragging(true);
+      event.preventDefault();
+    };
+
+    const focusCommentFromPopupBackground = (target: EventTarget) => {
+      if (!composer?.writing || !(target instanceof Element)) return;
+      if (target === commentRef.current || target.closest('button, .anno-popup-drag-handle')) return;
+      commentRef.current?.focus();
+    };
+
+    const movePopupWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      const directions: Partial<Record<string, Placement>> = {
+        ArrowLeft: { left: -1, top: 0 },
+        ArrowRight: { left: 1, top: 0 },
+        ArrowUp: { left: 0, top: -1 },
+        ArrowDown: { left: 0, top: 1 },
+      };
+      const direction = directions[event.key];
+      const node = popupRef.current;
+      if (!direction || !node) return;
+      const distance = event.shiftKey ? 40 : 10;
+      const rect = node.getBoundingClientRect();
+      popupManuallyPlacedRef.current = true;
+      setPopupAt((current) => clampPopupToTerminal(
+        {
+          left: (current?.left ?? rect.left) + direction.left * distance,
+          top: (current?.top ?? rect.top) + direction.top * distance,
+        },
+        { width: rect.width, height: rect.height },
+      ));
+      event.preventDefault();
     };
 
     const startPanelDrag = (event: React.MouseEvent) => {
@@ -515,6 +596,30 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     }, [composer]);
 
     useEffect(() => {
+      if (!popupDragging) return;
+      const onMove = (event: MouseEvent) => {
+        const grab = popupGrabRef.current;
+        const node = popupRef.current;
+        if (!grab || !node) return;
+        const rect = node.getBoundingClientRect();
+        setPopupAt(clampPopupToTerminal(
+          { left: event.clientX - grab.dx, top: event.clientY - grab.dy },
+          { width: rect.width, height: rect.height },
+        ));
+      };
+      const onUp = () => {
+        popupGrabRef.current = null;
+        setPopupDragging(false);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      return () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+    }, [clampPopupToTerminal, popupDragging]);
+
+    useEffect(() => {
       if (!panelDragging) return;
       const onMove = (event: MouseEvent) => {
         const grab = panelGrabRef.current;
@@ -591,15 +696,35 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
           </div>
         ) : null}
         {composed && composer ? (
-          <div
+          <dialog
+            open
             ref={popupRef}
-            className={`anno-popup${popupAt ? ' anno-popup--placed' : ''}`}
+            className={`anno-popup${popupAt ? ' anno-popup--placed' : ''}${popupDragging ? ' anno-popup--dragging' : ''}`}
             data-testid="annotation-popup"
+            aria-label="Edit terminal annotation"
             style={popupAt
               ? { left: popupAt.left, top: popupAt.top }
               : { left: composer.clientX, top: composer.clientY }}
-            onMouseDown={(event) => event.preventDefault()}
+            onMouseDown={(event) => {
+              if (event.target === commentRef.current) return;
+              event.preventDefault();
+              focusCommentFromPopupBackground(event.target);
+            }}
+            onMouseUp={(event) => focusCommentFromPopupBackground(event.target)}
           >
+            {composer.writing ? (
+              <button
+                type="button"
+                className="anno-popup-drag-handle"
+                data-testid="annotation-popup-drag-handle"
+                title="Drag to move; use arrow keys for precise movement"
+                aria-label="Move comment editor with arrow keys"
+                onMouseDown={startPopupDrag}
+                onKeyDown={movePopupWithKeyboard}
+              >
+                <span aria-hidden="true">⠿</span>
+              </button>
+            ) : null}
             <QuickLabelPicker
               mode="chips"
               className="anno-popup-labels"
@@ -697,7 +822,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
                 </div>
               </div>
             ) : null}
-          </div>
+          </dialog>
         ) : null}
           </>,
           document.body,

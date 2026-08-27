@@ -1,6 +1,6 @@
 
 import { describe, expect, it } from 'vitest';
-import { clampToViewport, placePopup } from './placement';
+import { clampToBounds, clampToViewport, placePopup } from './placement';
 
 const VIEWPORT = { width: 1200, height: 800 };
 const POPUP = { width: 320, height: 120 };
@@ -118,5 +118,24 @@ describe('clampToViewport', () => {
 
     expect(at.left).toBeGreaterThanOrEqual(0);
     expect(at.top).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('clampToBounds', () => {
+  it('keeps a dragged box inside its pane', () => {
+    const at = clampToBounds({ left: 1400, top: 900 }, POPUP, VIEWPORT, PANE);
+
+    expect(at.left).toBeGreaterThanOrEqual(PANE.left);
+    expect(at.left + POPUP.width).toBeLessThanOrEqual(PANE.left + PANE.width);
+    expect(at.top).toBeGreaterThanOrEqual(PANE.top);
+    expect(at.top + POPUP.height).toBeLessThanOrEqual(PANE.top + PANE.height);
+  });
+
+  it('uses the viewport when the pane cannot hold the box', () => {
+    const narrow = { left: 240, top: 0, width: 200, height: 80 };
+    const at = clampToBounds({ left: 1400, top: 900 }, POPUP, VIEWPORT, narrow);
+
+    expect(at.left + POPUP.width).toBeLessThanOrEqual(VIEWPORT.width);
+    expect(at.top + POPUP.height).toBeLessThanOrEqual(VIEWPORT.height);
   });
 });

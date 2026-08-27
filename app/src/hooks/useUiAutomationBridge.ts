@@ -976,7 +976,10 @@ function annotationSurfaceState() {
       .map((pane) => box(pane))
       .filter((rect): rect is NonNullable<typeof rect> => rect !== null),
     popupQuote: text(popup, '.anno-popup-quote'),
+    popupQuoteRect: box(popup?.querySelector('.anno-popup-quote') ?? null),
     popupDraft: (popup?.querySelector('.anno-popup-text') as HTMLTextAreaElement | null)?.value ?? null,
+    popupCommentRect: box(popup?.querySelector('.anno-popup-text') ?? null),
+    popupDragHandleRect: box(popup?.querySelector('.anno-popup-drag-handle') ?? null),
     commentFocused: Boolean(
       popup
       && popup.querySelector('.anno-popup-text')
