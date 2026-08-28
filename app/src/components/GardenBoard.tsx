@@ -33,6 +33,7 @@ export interface GardenBoardProps {
   onNote: (seedId: string, body: string) => Promise<unknown>;
   viewToggle?: ReactNode;
   onClose: () => void;
+  onEscapeFloor: () => void;
 }
 
 function carryTransform(point: { x: number; y: number }): string {
@@ -57,7 +58,7 @@ function crownOf(seed: Seed): string {
 
 const COLUMNS: Array<{ key: ColumnKey; label: string }> = [
   { key: 'ready', label: 'Ready' },
-  { key: 'growing', label: 'Growing' },
+  { key: 'growing', label: 'In progress' },
   { key: 'parked', label: 'Parked' },
   { key: 'closed', label: 'Closed' },
 ];
@@ -76,7 +77,7 @@ function plotCounts(seed: Seed): string {
   const p = seed.plot_progress;
   if (!p) return '';
   const parts: string[] = [];
-  if (p.growing) parts.push(`${p.growing} growing`);
+  if (p.growing) parts.push(`${p.growing} in progress`);
   if (p.ready) parts.push(`${p.ready} ready`);
   if (p.blocked) parts.push(`${p.blocked} blocked`);
   if (p.dormant) parts.push(`${p.dormant} parked`);
@@ -93,6 +94,7 @@ export function GardenBoard({
   onNote,
   viewToggle,
   onClose,
+  onEscapeFloor,
 }: GardenBoardProps) {
   const [trail, setTrail] = useState<string[]>([]);
   const [closedOpen, setClosedOpen] = useState(false);
@@ -185,6 +187,7 @@ export function GardenBoard({
     if (compose) composeInput.current?.focus();
   }, [compose]);
 
+  useEscapeStack(onEscapeFloor, true);
   useEscapeStack(() => setMenuFor(null), menuFor !== null);
   useEscapeStack(() => {
     setCompose(null);
@@ -202,8 +205,6 @@ export function GardenBoard({
     setMenuFor(null);
     setTrail((prev) => prev.slice(0, depth));
   }, []);
-
-  useEscapeStack(() => climbTo(livingTrail.length - 1), livingTrail.length > 0);
 
   const endDrag = useCallback(() => {
     setDragging(null);
@@ -636,6 +637,7 @@ function Card({
         'garden-card',
         selected ? 'is-selected' : '',
         seed.plot_progress ? 'is-crown' : '',
+        seed.ready ? 'is-ready' : 'is-not-ready',
         column === 'closed' ? `is-${seed.status}` : '',
       ].filter(Boolean).join(' ')}
       data-seed={seed.id}

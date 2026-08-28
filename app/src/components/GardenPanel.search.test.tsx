@@ -243,14 +243,22 @@ describe('GardenPanel search', () => {
       expect(field().getAttribute('aria-activedescendant')).toBe('garden-row-s-wire01');
     });
 
-    it('clears the query before it closes the panel', () => {
-      const onClose = vi.fn();
-      render(<GardenPanel isOpen onClose={onClose} seedsTotal={all.length} seeds={all} />);
+    it('hands Escape to the frame without clearing the query', () => {
+      const onEscapeFloor = vi.fn();
+      render(
+        <GardenPanel
+          isOpen
+          onClose={vi.fn()}
+          onEscapeFloor={onEscapeFloor}
+          seedsTotal={all.length}
+          seeds={all}
+        />,
+      );
       type('field');
 
       fireEvent.keyDown(window, { key: 'Escape' });
-      expect(field().value).toBe('');
-      expect(onClose).not.toHaveBeenCalled();
+      expect(field().value).toBe('field');
+      expect(onEscapeFloor).toHaveBeenCalledTimes(1);
     });
 
     it('widens the scope with one key, and narrows it back with the same one', () => {

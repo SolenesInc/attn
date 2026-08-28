@@ -5,6 +5,13 @@ follows while working, and `attn seed guide` for the craft of writing a body,
 planning a plot, deciding what done means, and handing work over. Syntax lives
 in `attn seed --help`.
 
+## Speaking the user's language
+
+Garden words have Jira-style equivalents: seed = ticket, ready = todo,
+plot = epic, harvested = done. Use the Garden word by default. When the user
+uses one of those Jira words, mirror it for that concept for the rest of the
+exchange. Do not correct them or switch the other concepts unless they do.
+
 ## Planting work
 
 Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.

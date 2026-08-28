@@ -130,15 +130,25 @@ describe('GardenPanel columns', () => {
     expect(trailSteps()).toEqual(['Garden']);
   });
 
-  it('climbs one level on escape, wherever the walk is', () => {
+  it('hands Escape to the frame without climbing the walk', () => {
     atWidth(1200);
-    render(<GardenPanel isOpen onClose={vi.fn()} seedsTotal={7} seeds={world} />);
+    const onEscapeFloor = vi.fn();
+    render(
+      <GardenPanel
+        isOpen
+        onClose={vi.fn()}
+        onEscapeFloor={onEscapeFloor}
+        seedsTotal={7}
+        seeds={world}
+      />,
+    );
 
     open(/the migration/);
     open(/one panel/);
     expect(screen.getByRole('heading', { name: 'one panel' })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.getByRole('heading', { name: 'the migration' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'one panel' })).toBeInTheDocument();
+    expect(onEscapeFloor).toHaveBeenCalledTimes(1);
   });
 });

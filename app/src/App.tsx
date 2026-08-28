@@ -18,7 +18,7 @@ import { ChiefOfStaffTransferPrompt } from './components/ChiefOfStaffTransferPro
 import { SessionContextCapPrompt } from './components/SessionContextCapPrompt';
 import { AppViewParamsPrompt } from './components/appViews/AppViewParamsPrompt';
 import { appViewTileKind } from './utils/appBundle';
-import { GardenFrame, useDockSlotRect, type GardenMode } from './components/GardenFrame';
+import { GardenFrame, useDockSlotRect } from './components/GardenFrame';
 import { WorkflowRunView } from './components/WorkflowRunView';
 import { AutomationsPanel } from './components/AutomationsPanel';
 import {
@@ -66,6 +66,7 @@ import {
 import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState } from './hooks/useDaemonSocket';
 import type { Presentation } from './types/generated';
 import { useSessionWorkspaceController } from './hooks/useSessionWorkspaceController';
+import { useGardenPresentation } from './hooks/useGardenPresentation';
 import { isAttentionSessionState, normalizeSessionState, type UISessionState } from './types/sessionState';
 import { GridView, type GridSessionTile } from './components/grid/GridView';
 import {
@@ -987,7 +988,6 @@ function AppContent({
   const [workspaceContextsOpen, setWorkspaceContextsOpen] = useState(false);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
-  const [gardenHoldsWindow, setGardenHoldsWindow] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const [workspaceContextsLoading, setWorkspaceContextsLoading] = useState(false);
   const [workspaceContextsError, setWorkspaceContextsError] = useState<string | null>(null);
@@ -1530,8 +1530,20 @@ function AppContent({
   const attentionPanelOpen = openDockPanels.attention;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
+  const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);
+  const closeGardenDock = useCallback(() => closeDockPanel('garden'), [closeDockPanel]);
+  const {
+    mode: gardenMode,
+    holdsWindow: gardenHoldsWindow,
+    toggleFrame: toggleGardenFrame,
+    toggleFromIcon: toggleGardenFromIcon,
+    close: closeGarden,
+  } = useGardenPresentation({
+    dockOpen: gardenPanelOpen,
+    openDock: openGardenDock,
+    closeDock: closeGardenDock,
+  });
   const [gardenSlotRef, gardenDockRect] = useDockSlotRect();
-  const gardenMode: GardenMode = gardenHoldsWindow ? 'full' : gardenPanelOpen ? 'dock' : 'closed';
   const blockingOverlayOpen = locationPickerOpen
     || whatsNew.isOpen
     || settingsOpen
@@ -1614,25 +1626,6 @@ function AppContent({
     [daemonSessions],
   );
 
-  const toggleGardenFrame = useCallback(() => {
-    if (gardenHoldsWindow) {
-      setGardenHoldsWindow(false);
-      openDockPanel('garden');
-      return;
-    }
-    setGardenHoldsWindow(true);
-  }, [gardenHoldsWindow, openDockPanel]);
-  const escapeGardenFrame = useCallback(() => {
-    if (gardenHoldsWindow) {
-      toggleGardenFrame();
-      return;
-    }
-    closeDockPanel('garden');
-  }, [gardenHoldsWindow, toggleGardenFrame, closeDockPanel]);
-  const closeGarden = useCallback(() => {
-    setGardenHoldsWindow(false);
-    closeDockPanel('garden');
-  }, [closeDockPanel]);
   const toggleNotificationsPanel = useCallback(() => {
     setNotificationsPanelOpen((open) => !open);
   }, []);
@@ -1775,7 +1768,11 @@ function AppContent({
     },
     {
       id: 'garden-frame',
-      title: gardenHoldsWindow ? 'Return the garden to the dock' : 'Open the garden in the window',
+      title: gardenMode === 'full'
+        ? 'Move the garden to the sidebar'
+        : gardenMode === 'dock'
+          ? 'Open the garden fullscreen'
+          : 'Open the garden',
       description: 'Seeds and plots, the trail beside what you are reading',
       keywords: ['garden', 'seed', 'seeds', 'plot', 'board', 'expand', 'fullscreen'],
       icon: <BoardActionIcon />,
@@ -1806,7 +1803,7 @@ function AppContent({
       icon: <KeyboardActionIcon />,
       run: () => setShortcutEditorOpen(true),
     },
-  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenHoldsWindow, settings, handleToggleQueueMode, sendSetSetting]);
+  ], [openDockPanel, openWorkspaceContextNavigator, handleOpenNotebookTile, toggleGardenFrame, gardenMode, settings, handleToggleQueueMode, sendSetSetting]);
 
   const handleToggleActionMenu = useCallback(() => {
     if (actionMenuOpen) {
@@ -3232,10 +3229,10 @@ function AppContent({
     },
     {
       id: 'garden',
-      title: gardenPanelOpen ? 'Hide the garden' : 'Show the garden',
+      title: gardenMode === 'closed' ? 'Show the garden' : 'Hide the garden',
       icon: <GardenIcon />,
-      active: gardenPanelOpen || gardenHoldsWindow,
-      onClick: () => toggleDockPanel('garden'),
+      active: gardenMode !== 'closed',
+      onClick: toggleGardenFromIcon,
     },
   ]), [
     activeSessionId,
@@ -3248,7 +3245,8 @@ function AppContent({
     toggleDockPanel,
     notebookOpen,
     openNotebookBrowser,
-    gardenHoldsWindow,
+    gardenMode,
+    toggleGardenFromIcon,
     notificationsPanelOpen,
     notificationsUnread,
     hasCriticalNotification,
@@ -3873,7 +3871,7 @@ function AppContent({
         mode={gardenMode}
         dockRect={gardenDockRect}
         onToggleFrame={toggleGardenFrame}
-        onEscapeFloor={escapeGardenFrame}
+        onEscapeFloor={closeGarden}
         onClose={closeGarden}
         seeds={seeds}
         seedsTotal={seedsTotal}

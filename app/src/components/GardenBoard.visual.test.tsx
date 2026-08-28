@@ -1,0 +1,81 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { GardenBoard } from './GardenBoard';
+import type { Seed } from '../hooks/useDaemonSocket';
+import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
+
+function seed(overrides: Partial<Seed> & Pick<Seed, 'id' | 'title'>): Seed {
+  return {
+    body: '',
+    status: 'planted',
+    step_slug: overrides.title,
+    planter_session: '',
+    planter_member: '',
+    tender_session: '',
+    tender_member: '',
+    edges: [],
+    ready: false,
+    template: false,
+    gate: false,
+    vars: [],
+    rev: 1,
+    created_at: '2026-08-27T09:00:00Z',
+    updated_at: '2026-08-27T09:00:00Z',
+    ...overrides,
+  };
+}
+
+const world = [
+  seed({ id: 's-ready1', title: 'pick this up', ready: true }),
+  seed({ id: 's-wait11', title: 'waiting on work' }),
+  seed({
+    id: 's-plot11',
+    title: 'a plot in motion',
+    ready: true,
+    plot_progress: { total: 3, done: 1, withered: 0, growing: 1, dormant: 0, ready: 1, blocked: 0 },
+  }),
+  seed({
+    id: 's-work11',
+    title: 'owned work',
+    status: 'growing',
+    tender_member: 'trellis',
+  }),
+  seed({ id: 's-park11', title: 'paused on purpose', status: 'dormant' }),
+  seed({ id: 's-done11', title: 'finished work', status: 'harvested' }),
+];
+
+function renderBoard() {
+  render(
+    <GardenBoard
+      seeds={world}
+      seedsTotal={world.length}
+      liveSessions={new Set()}
+      loaded
+      onTransition={vi.fn()}
+      onNote={vi.fn()}
+      onClose={vi.fn()}
+      onEscapeFloor={vi.fn()}
+    />,
+  );
+}
+
+afterEach(() => _resetEscapeStackForTest());
+
+describe('GardenBoard visual language', () => {
+  it('names active work In progress while keeping the Garden state internal', () => {
+    renderBoard();
+
+    expect(screen.getByRole('heading', { name: 'In progress' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Growing' })).not.toBeInTheDocument();
+    expect(screen.getByText('1 in progress · 1 ready · 1/3 done')).toBeInTheDocument();
+  });
+
+  it('marks ready and quiet work separately for the board palette', () => {
+    renderBoard();
+
+    expect(document.querySelector('[data-seed="s-ready1"]')).toHaveClass('is-ready');
+    expect(document.querySelector('[data-seed="s-wait11"]')).toHaveClass('is-not-ready');
+    expect(document.querySelector('[data-column="parked"] [data-seed="s-park11"]')).not.toBeNull();
+    expect(screen.getByText('parked')).toBeInTheDocument();
+  });
+});

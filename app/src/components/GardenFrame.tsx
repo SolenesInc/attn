@@ -1,14 +1,18 @@
 import FocusTrap from 'focus-trap-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
-import { useEscapeStack } from '../hooks/useEscapeStack';
+import {
+  useGardenFullscreenView,
+  type GardenMode,
+  type GardenOpenMode,
+} from '../hooks/useGardenPresentation';
 import { GardenBoard } from './GardenBoard';
 import type { Verb } from './gardenBoardModel';
 import { GardenPanel } from './GardenPanel';
 import type { SeedDocument } from './SeedDocumentView';
 import './GardenFrame.css';
 
-export type GardenMode = 'closed' | 'dock' | 'full';
+export type { GardenMode } from '../hooks/useGardenPresentation';
 
 export interface FrameRect {
   top: number;
@@ -92,16 +96,17 @@ export function GardenFrame({
   moveSeed,
   noteSeed,
 }: GardenFrameProps) {
-  // Reset during render: clearing the view from an effect paints the board once in a
-  // dock-sized box, and remounting under a key is what this component exists to avoid.
-  const [chosen, setChosen] = useState<{ mode: GardenMode; view: 'list' | 'board' }>({ mode, view: 'list' });
-  if (chosen.mode !== mode) setChosen({ mode, view: 'list' });
-  const view = chosen.mode === mode ? chosen.view : 'list';
-  const chooseView = (next: 'list' | 'board') => setChosen({ mode, view: next });
+  const [preferredView, chooseView] = useGardenFullscreenView();
+  const view = mode === 'full' ? preferredView : 'list';
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
   const [flying, setFlying] = useState(false);
   const previousMode = useRef<GardenMode>(mode);
+  const lastOpenMode = useRef<GardenOpenMode>(mode === 'full' ? 'full' : 'dock');
+
+  useLayoutEffect(() => {
+    if (mode !== 'closed') lastOpenMode.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== 'full') return;
@@ -112,7 +117,6 @@ export function GardenFrame({
   }, [mode]);
 
   const showingBoard = mode === 'full' && view === 'board' && Boolean(moveSeed && noteSeed);
-  useEscapeStack(onEscapeFloor, showingBoard);
 
   useLayoutEffect(() => {
     const was = previousMode.current;
@@ -137,7 +141,8 @@ export function GardenFrame({
     width: Math.max(0, viewport.w - FULL_INSET * 2),
     height: Math.max(0, viewport.h - FULL_INSET * 2),
   };
-  const rect = mode === 'full' ? full : dockRect;
+  const dismissingFullscreen = mode === 'closed' && lastOpenMode.current === 'full';
+  const rect = mode === 'full' || dismissingFullscreen ? full : dockRect;
   if (!rect) return null;
 
   const open = mode !== 'closed';
@@ -157,7 +162,7 @@ export function GardenFrame({
       <div className={`garden-frame-backdrop${mode === 'full' ? ' is-visible' : ''}`} aria-hidden="true" />
       <div
         ref={frameRef}
-        className={`garden-frame is-${mode}${flying ? ' is-flying' : ''}`}
+        className={`garden-frame is-${mode}${dismissingFullscreen ? ' is-full-dismissal' : ''}${flying ? ' is-flying' : ''}`}
         style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
         role={mode === 'full' ? 'dialog' : undefined}
         aria-modal={mode === 'full' ? true : undefined}
@@ -187,6 +192,7 @@ export function GardenFrame({
                 onNote={noteSeed!}
                 viewToggle={viewToggle}
                 onClose={onClose}
+                onEscapeFloor={onEscapeFloor}
               />
             ) : (
               <GardenPanel
