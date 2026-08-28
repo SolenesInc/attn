@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
 	"github.com/victorarias/attn/internal/workspacelayout"
@@ -602,6 +603,22 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			return
 		}
 	case string(workspacelayout.TileKindNotebook):
+		// tileParams is the open file's path — opaque here, already trimmed.
+	case string(workspacelayout.TileKindSeed):
+		if err := d.requireHome(garden.Surface); err != nil {
+			d.sendWorkspaceLayoutTileActionResultWithRequest(
+				client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID,
+				tileID, requestID, err,
+			)
+			return
+		}
+		if _, _, err := d.readSeed(tileParams); err != nil {
+			d.sendWorkspaceLayoutTileActionResultWithRequest(
+				client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID,
+				tileID, requestID, err,
+			)
+			return
+		}
 	default:
 		d.sendWorkspaceLayoutTileActionResultWithRequest(
 			client,

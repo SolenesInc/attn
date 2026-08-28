@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -578,7 +579,7 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 }
 
 func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d := newEnrolledDaemon(t, "")
 	client := newWorkspaceProtocolTestClient()
 	workspaceID := "workspace-dock-tile"
 	cwd := t.TempDir()
@@ -691,6 +692,46 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 	unchanged := d.store.GetWorkspaceLayout(workspaceID)
 	if params, ok := workspacelayout.TileParamsByID(unchanged.Layout, "tile-md"); !ok || params != "/tmp/notes.md" {
 		t.Fatalf("markdown tile params = (%q, %v), want (%q, true)", params, ok, "/tmp/notes.md")
+	}
+
+	d.ensureGardenCollections()
+	seedSchema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seedsCollection: %v", err)
+	}
+	for _, seed := range []garden.Seed{
+		{ID: "s-old001", Title: "Original seed", Status: garden.StatusPlanted},
+		{ID: "s-new002", Title: "Child seed", Status: garden.StatusPlanted},
+	} {
+		if _, err := d.plantSeed(*seedSchema, seed); err != nil {
+			t.Fatalf("plant seed %s: %v", seed.ID, err)
+		}
+	}
+	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-old001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+		t.Fatalf("dock seed tile: %v", err)
+	}
+	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
+		Cmd:         protocol.CmdWorkspaceLayoutUpdateTile,
+		WorkspaceID: workspaceID,
+		TileID:      "tile-seed",
+		TileParams:  "s-new002",
+		RequestID:   "request-update-seed",
+	})
+	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-seed", "request-update-seed", true)
+	seedUpdated := d.store.GetWorkspaceLayout(workspaceID)
+	if params, ok := workspacelayout.TileParamsByID(seedUpdated.Layout, "tile-seed"); !ok || params != "s-new002" {
+		t.Fatalf("seed tile params = (%q, %v), want (%q, true)", params, ok, "s-new002")
+	}
+	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
+		Cmd:         protocol.CmdWorkspaceLayoutUpdateTile,
+		WorkspaceID: workspaceID,
+		TileID:      "tile-seed",
+		TileParams:  "s-gone03",
+		RequestID:   "request-reject-missing-seed",
+	})
+	expectWorkspaceLayoutActionResultIDsAndRequestID(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", "tile-seed", "request-reject-missing-seed", false)
+	if params, ok := workspacelayout.TileParamsByID(d.store.GetWorkspaceLayout(workspaceID).Layout, "tile-seed"); !ok || params != "s-new002" {
+		t.Fatalf("missing seed retarget changed params = (%q, %v), want (%q, true)", params, ok, "s-new002")
 	}
 
 	d.store.Add(&protocol.Session{ID: "session-2", Label: "Two", WorkspaceID: workspaceID, Directory: cwd})

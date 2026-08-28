@@ -1,0 +1,8 @@
+kind: changed
+area: garden
+change: >
+  Seed tiles now put a plot's navigable work before its annotatable body, show
+  the containing plot in the tile header, climb and drill without opening new
+  tiles, unwind recursive plot trails with Escape while the tile is focused,
+  reveal the current seed in the main Garden, and keep the seed log available
+  behind a quiet disclosure.

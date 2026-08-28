@@ -5,6 +5,26 @@
   min-width: 0;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .seed-document[data-arrival='in'] {
+    animation: seed-document-in 160ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .seed-document[data-arrival='out'] {
+    animation: seed-document-out 160ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  @keyframes seed-document-in {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes seed-document-out {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
 /* The panel already supplies its own frame. Keep the shared reader card, but
    use its compact padding instead of letting container queries expand it. */
 .seed-document--compact .md-reader-card {
@@ -13,26 +33,47 @@
 
 .seed-document__empty-body,
 .seed-document__empty-ledger,
+.seed-document__empty-plot,
 .seed-document__withheld {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   margin: 0;
 }
 
+.seed-document__plot,
 .seed-document__artifacts,
 .seed-document__ledger {
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: 10px;
+  background: color-mix(in srgb, var(--color-bg-panel) 72%, transparent);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
 }
 
-.seed-document__artifacts h3,
-.seed-document__ledger h3 {
+.seed-document__plot,
+.seed-document__artifacts {
+  padding: 10px;
+}
+
+.seed-document__section-head {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 2px 8px;
+}
+
+.seed-document__section-head h3,
+.seed-document__ledger summary > span:first-child {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
-  margin: 0 0 8px;
+  margin: 0;
   text-transform: uppercase;
+}
+
+.seed-document__section-head > span,
+.seed-document__ledger summary > span:last-child {
+  color: var(--color-text-dimmed);
+  font-size: var(--font-size-sm);
 }
 
 .seed-document__children,
@@ -45,19 +86,38 @@
 .seed-document__children {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-bottom: 10px;
+  gap: 2px;
 }
 
-.seed-document__children li {
-  align-items: baseline;
+.seed-document__children button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
   display: flex;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
+  padding: 6px 7px;
+  text-align: left;
+  width: 100%;
+}
+
+.seed-document__children button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.seed-document__children button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.seed-document__children button:disabled {
+  cursor: default;
 }
 
 .seed-document__child-state {
-  align-self: center;
   background: var(--color-text-muted);
   border-radius: 50%;
   flex: none;
@@ -90,7 +150,8 @@
 }
 
 .seed-document__child-id,
-.seed-document__child-status {
+.seed-document__child-status,
+.seed-document__child-chevron {
   color: var(--color-text-muted);
   flex: none;
   font-size: var(--font-size-sm);
@@ -99,6 +160,107 @@
 .seed-document__child-id {
   font-family: var(--font-mono, ui-monospace, monospace);
   margin-left: auto;
+  opacity: 0;
+}
+
+.seed-document__children button:hover .seed-document__child-id,
+.seed-document__children button:focus-visible .seed-document__child-id {
+  opacity: 1;
+}
+
+.seed-document__child-chevron {
+  font-size: var(--font-size-lg);
+  line-height: 1;
+}
+
+.seed-document__meta {
+  align-items: baseline;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-size-sm);
+  gap: 6px 12px;
+  padding: 0 2px;
+}
+
+.seed-document__state {
+  align-items: center;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  gap: 6px;
+}
+
+.seed-document__state > span {
+  background: var(--color-text-muted);
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.seed-document__state.is-growing > span { background: var(--accent); }
+.seed-document__state.is-dormant > span { background: var(--color-warning); }
+.seed-document__state.is-withered > span { background: var(--color-error); }
+.seed-document__state.is-harvested > span { background: var(--color-text-tertiary); }
+
+.seed-document__id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  margin-left: auto;
+}
+
+.seed-document__reason {
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  margin: 0 2px;
+  padding-left: 9px;
+}
+
+.seed-document__ledger {
+  overflow: hidden;
+}
+
+.seed-document__ledger summary {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  padding: 10px 12px;
+}
+
+.seed-document__ledger summary::-webkit-details-marker {
+  display: none;
+}
+
+.seed-document__ledger summary::before {
+  color: var(--color-text-muted);
+  content: '›';
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  margin-right: 7px;
+  transform-origin: center;
+}
+
+.seed-document__ledger[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.seed-document__ledger summary > span:first-child {
+  margin-right: auto;
+}
+
+.seed-document__ledger summary:hover {
+  background: var(--color-bg-hover);
+}
+
+.seed-document__ledger summary:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.seed-document__ledger-body {
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 10px 12px 12px;
 }
 
 .seed-document__notes {
@@ -110,6 +272,10 @@
 .seed-document__notes > li {
   border-left: 2px solid var(--color-border);
   padding-left: 9px;
+}
+
+.seed-document__notes > li.is-handoff {
+  border-left-color: var(--accent);
 }
 
 .seed-document__note-head {
@@ -130,14 +296,48 @@
   margin-top: 3px;
 }
 
-.seed-document__note-body > :first-child {
-  margin-top: 0;
-}
+.seed-document__note-body > :first-child { margin-top: 0; }
+.seed-document__note-body > :last-child { margin-bottom: 0; }
+.seed-document__withheld { margin-top: 8px; }
 
-.seed-document__note-body > :last-child {
-  margin-bottom: 0;
-}
+@container (max-width: 260px) {
+  .seed-document {
+    gap: 10px;
+  }
 
-.seed-document__withheld {
-  margin-top: 8px;
+  .seed-document__plot,
+  .seed-document__artifacts {
+    padding: 8px 6px;
+  }
+
+  .seed-document__children button {
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 5px;
+  }
+
+  .seed-document__child-state {
+    margin-top: 5px;
+  }
+
+  .seed-document__child-title {
+    line-height: 1.3;
+    white-space: normal;
+  }
+
+  .seed-document__child-id {
+    display: none;
+  }
+
+  .seed-document__meta {
+    gap: 4px 8px;
+  }
+
+  .seed-document__id {
+    margin-left: 0;
+  }
+
+  .seed-document--compact .md-reader-card {
+    padding: 10px;
+  }
 }

@@ -1435,9 +1435,20 @@ function collectSeedDocumentState(scope: string, seedId: string) {
   if (!(root instanceof HTMLElement)) {
     return { present: false };
   }
+  const tile = root.closest('.workspace-dock-tile');
+  const plot = root.querySelector('.seed-document__plot');
+  const body = root.querySelector('.md-reader-wrap');
+  const log = root.querySelector('.seed-document__ledger');
   return {
     present: true,
-    body: root.querySelector('.md-reader-wrap')?.textContent?.trim() ?? '',
+    body: body?.textContent?.trim() ?? '',
+    children: Array.from(root.querySelectorAll<HTMLElement>('[data-seed-target]')).map((item) => ({
+      id: item.dataset.seedTarget ?? '',
+      title: item.querySelector('.seed-document__child-title')?.textContent?.trim() ?? '',
+    })),
+    plotBeforeBody: Boolean(plot && body && (plot.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    logOpen: log instanceof HTMLDetailsElement && log.open,
+    parent: tile?.querySelector('.workspace-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
     artifacts: Array.from(root.querySelectorAll('.seed-document__artifacts li')).map(
       (item) => item.textContent?.trim() ?? '',
     ),

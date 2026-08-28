@@ -147,6 +147,7 @@ interface SessionTerminalWorkspaceProps {
   seedTargetSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
+  onRevealSeedInGarden?: (seedId: string) => void;
   // The daemon decides this from the driver's `conversation` capability; never
   // recompute it here.
   conversationAgents?: ReadonlySet<string>;
@@ -208,6 +209,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     seedTargetSessions = EMPTY_SEED_TARGET_SESSIONS,
     gardenSeeds = EMPTY_GARDEN_SEEDS,
     onOpenSeed,
+    onRevealSeedInGarden,
     conversationAgents,
     annotationApi,
     workspace,
@@ -1257,6 +1259,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               onRetargetTile={(sessionId) => (
                 onUpdateTile?.(tileLeaf.tileId, tileLeaf.tileParams ?? '', sessionId)
               )}
+              onRevealSeedInGarden={onRevealSeedInGarden}
               onHeaderPointerDown={(event) => beginLeafDrag(tileLeaf.tileId, event)}
               onRequestContent={onRequestTileContent ?? noRequestContent}
               bodyRef={tileBodyRefFor(tileLeaf.tileId)}
@@ -1313,6 +1316,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       showPaneHeader,
       terminalsLive,
       onOpenSeed,
+      onRevealSeedInGarden,
       conversationAgents,
       annotationApi,
       onCancelCountdown,

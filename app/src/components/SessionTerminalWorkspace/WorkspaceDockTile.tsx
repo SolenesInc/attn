@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   FocusEvent as ReactFocusEvent,
@@ -33,6 +33,7 @@ import { SeedDocumentView, type SeedDocument } from '../SeedDocumentView';
 import { useDaemonApi, useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { normalizeBrowserAddress } from './browserAddress';
+import { gardenPathToSeed, seedParentID } from '../../store/gardenWalk';
 import './WorkspaceDockTile.css';
 
 function bodyKindModifier(tileKind: string): string {
@@ -40,7 +41,7 @@ function bodyKindModifier(tileKind: string): string {
   if (tileKind === 'browser') return 'workspace-dock-tile-body--browser';
   if (tileKind === 'notebook') return 'workspace-dock-tile-body--notebook';
   if (tileKind === 'markdown') return 'workspace-dock-tile-body--markdown';
-  if (tileKind === 'seed') return 'workspace-dock-tile-body--markdown';
+  if (tileKind === 'seed') return 'workspace-dock-tile-body--markdown workspace-dock-tile-body--seed';
   return '';
 }
 
@@ -65,6 +66,7 @@ interface WorkspaceDockTileProps {
   onFocusDocument?: () => void;
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
+  onRevealSeedInGarden?: (seedId: string) => void;
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRequestContent: (workspaceId: string, tileId: string) => void;
   bodyRef?: Ref<HTMLDivElement>;
@@ -81,6 +83,11 @@ const SKIPPED_APPROVAL_MESSAGE = 'Target is waiting for approval — not sent';
 const NOT_HYDRATED_MESSAGE = 'Annotations are still syncing — try again in a moment';
 const NO_GARDEN_SEEDS: Seed[] = [];
 
+interface PendingSeedNavigation {
+  targetID: string;
+  expectedPersistedPaths: string[];
+}
+
 export function WorkspaceDockTile({
   tile,
   workspaceId,
@@ -96,6 +103,7 @@ export function WorkspaceDockTile({
   onFocusDocument,
   onUpdateParams,
   onRetargetTile,
+  onRevealSeedInGarden,
   onHeaderPointerDown,
   onRequestContent,
   bodyRef,
@@ -108,9 +116,23 @@ export function WorkspaceDockTile({
 
   // Notebook tileParams may be the legacy bare-path string or the {root, path} JSON
   // envelope — parse either way so consumers see the plain open path, not raw JSON.
-  const path = content?.path
+  const persistedPath = content?.path
     || (tile.tileKind === 'notebook' ? parseNotebookTileParams(tile.tileParams).path : tile.tileParams)
     || '';
+  const isMarkdown = tile.tileKind === 'markdown';
+  const isSeed = tile.tileKind === 'seed';
+  const [pendingSeedNavigation, setPendingSeedNavigation] = useState<PendingSeedNavigation | null>(null);
+  const [seedNavigationFailure, setSeedNavigationFailure] = useState<{ path: string; message: string } | null>(null);
+  const [seedArrival, setSeedArrival] = useState<'in' | 'out'>('in');
+  const pendingSeedID = pendingSeedNavigation
+    && pendingSeedNavigation.targetID !== persistedPath
+    && pendingSeedNavigation.expectedPersistedPaths.includes(persistedPath)
+    ? pendingSeedNavigation.targetID
+    : null;
+  const path = isSeed && pendingSeedID ? pendingSeedID : persistedPath;
+  const seedNavigationError = seedNavigationFailure?.path === path
+    ? seedNavigationFailure.message
+    : '';
   const appView = parseAppViewTileKind(tile.tileKind);
   const appViewTitle = useAppViewTitleResolver();
   const baseTitle = deriveTileTitle(tile, content, appViewTitle);
@@ -121,14 +143,26 @@ export function WorkspaceDockTile({
   // params: the 700ms autosave debounce would otherwise lose an in-flight edit.
   const notebookSurfaceRef = useRef<NotebookSurfaceHandle | null>(null);
 
-  const isMarkdown = tile.tileKind === 'markdown';
-  const isSeed = tile.tileKind === 'seed';
   const isAnnotatedDocument = isMarkdown || isSeed;
   const {
     document: seedDocument,
     error: seedDocumentError,
   } = useLiveSeedDocument(path, gardenSeeds, isSeed);
-  const title = isSeed ? (seedDocument?.seed.title || path || baseTitle) : baseTitle;
+  const seedByID = useMemo(
+    () => new Map(gardenSeeds.map((seed) => [seed.id, seed])),
+    [gardenSeeds],
+  );
+  const title = isSeed ? (seedDocument?.seed.title || seedByID.get(path)?.title || path || baseTitle) : baseTitle;
+  const seedPath = useMemo(
+    () => (isSeed ? gardenPathToSeed(gardenSeeds, path) : []),
+    [gardenSeeds, isSeed, path],
+  );
+  const parentSeed = seedPath.length > 1
+    ? seedByID.get(seedPath[seedPath.length - 2]) ?? null
+    : null;
+  const seedLocationTitle = seedPath
+    .map((id) => seedByID.get(id)?.title || id)
+    .join(' › ');
   const documentSource = useMemo(
     () => (isSeed ? seedMarkdownSource(path) : fileMarkdownSource(workspaceId, path)),
     [isSeed, path, workspaceId],
@@ -424,6 +458,47 @@ export function WorkspaceDockTile({
     });
   };
 
+  const navigateSeed = useCallback((nextSeedID: string) => {
+    if (!isSeed || !onUpdateParams || !nextSeedID || nextSeedID === path) return;
+    const currentSeed = seedDocument?.seed ?? seedByID.get(path);
+    setSeedArrival(currentSeed && seedParentID(currentSeed) === nextSeedID ? 'out' : 'in');
+    setAnnotationCount(0);
+    clearSendOutcome();
+    setSeedNavigationFailure(null);
+    setPendingSeedNavigation((pending) => {
+      const expectedPersistedPaths = pending?.expectedPersistedPaths.includes(persistedPath)
+        ? [...pending.expectedPersistedPaths, pending.targetID]
+        : [persistedPath];
+      return { targetID: nextSeedID, expectedPersistedPaths };
+    });
+    void Promise.resolve(onUpdateParams(nextSeedID)).catch((navigationError) => {
+      setPendingSeedNavigation((pending) => (pending?.targetID === nextSeedID ? null : pending));
+      setSeedNavigationFailure({
+        path: persistedPath,
+        message: navigationError instanceof Error ? navigationError.message : `Could not open ${nextSeedID}`,
+      });
+    });
+  }, [clearSendOutcome, isSeed, onUpdateParams, path, persistedPath, seedByID, seedDocument]);
+
+  // Escape is ordinary input in the terminal next door, so claim it only while
+  // this tile has focus; the stack keeps popovers above trail navigation.
+  useEscapeStack(
+    () => {
+      if (parentSeed) navigateSeed(parentSeed.id);
+    },
+    isSeed && visible && hasFocusWithin && parentSeed !== null && Boolean(onUpdateParams),
+  );
+
+  const scrollBodyRef = useRef<HTMLDivElement | null>(null);
+  const setBodyRef = useCallback((node: HTMLDivElement | null) => {
+    scrollBodyRef.current = node;
+    if (typeof bodyRef === 'function') bodyRef(node);
+    else if (bodyRef) (bodyRef as { current: HTMLDivElement | null }).current = node;
+  }, [bodyRef]);
+  useLayoutEffect(() => {
+    if (isSeed && scrollBodyRef.current) scrollBodyRef.current.scrollTop = 0;
+  }, [isSeed, path]);
+
   return (
     <div
       className={`workspace-dock-tile ${dragging ? 'workspace-dock-tile--dragging' : ''}`.trim()}
@@ -453,6 +528,26 @@ export function WorkspaceDockTile({
               onFocus={(event) => event.currentTarget.select()}
             />
           </form>
+        ) : isSeed ? (
+          <div className="workspace-dock-tile-seed-location" title={seedLocationTitle || title}>
+            {parentSeed && (
+              <>
+                <button
+                  type="button"
+                  className="workspace-dock-tile-seed-parent"
+                  aria-label={`Back to ${parentSeed.title}`}
+                  title={`Back to ${parentSeed.title}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => navigateSeed(parentSeed.id)}
+                >
+                  <span aria-hidden="true">‹</span>
+                  <span>{parentSeed.title}</span>
+                </button>
+                <span className="workspace-dock-tile-seed-separator" aria-hidden="true">›</span>
+              </>
+            )}
+            <span className="workspace-dock-tile-title">{title}</span>
+          </div>
         ) : (
           <span className="workspace-dock-tile-title">{title}</span>
         )}
@@ -481,6 +576,15 @@ export function WorkspaceDockTile({
             // The header is the drag handle; interacting with the send controls must not start a drag.
             onPointerDown={(event) => event.stopPropagation()}
           >
+            {seedNavigationError && (
+              <span
+                className="workspace-dock-tile-send-status workspace-dock-tile-send-status--error"
+                role="alert"
+                title={seedNavigationError}
+              >
+                {seedNavigationError}
+              </span>
+            )}
             <button
               type="button"
               className="workspace-dock-tile-review-button workspace-dock-tile-review-button--overall"
@@ -684,6 +788,18 @@ export function WorkspaceDockTile({
               <span className="workspace-dock-tile-focus-label">Focus</span>
             </button>
           ) : null}
+          {isSeed && onRevealSeedInGarden ? (
+            <button
+              type="button"
+              className="workspace-dock-tile-action"
+              title="Reveal in Garden"
+              aria-label="Reveal in Garden"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onRevealSeedInGarden(path)}
+            >
+              <GardenGlyph />
+            </button>
+          ) : null}
           {tile.tileKind === 'browser' ? (
             <button
               type="button"
@@ -710,7 +826,7 @@ export function WorkspaceDockTile({
       </div>
       <div
         className={`workspace-dock-tile-body ${bodyKindModifier(tile.tileKind)}`.trim()}
-        ref={bodyRef}
+        ref={setBodyRef}
         tabIndex={-1}
       >
         {tile.tileKind === 'markdown' ? (
@@ -727,6 +843,8 @@ export function WorkspaceDockTile({
             error={seedDocumentError}
             onAnnotationsCountChange={setAnnotationCount}
             annotationsSendRef={annotationsSendRef}
+            onOpenSeed={onUpdateParams ? navigateSeed : undefined}
+            arrival={seedArrival}
           />
         ) : tile.tileKind === 'browser' ? (
           <BrowserTileBody
@@ -846,7 +964,10 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
     [gardenSeeds, seedId],
   );
   const displayedDocument = useMemo(() => {
-    if (!document || !liveSeed || liveSeed.rev < document.seed.rev) return document;
+    // A retarget is optimistic: tileParams catches up after the daemon persists
+    // it, so never paint the old seed while the new one's document is in flight.
+    if (!document || document.seed.id !== seedId) return null;
+    if (!liveSeed || liveSeed.rev < document.seed.rev) return document;
     const tenderChanged = liveSeed.tender_session !== document.seed.tender_session
       || liveSeed.tender_member !== document.seed.tender_member;
     return {
@@ -856,7 +977,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
         ? Boolean(liveSeed.tender_session || liveSeed.tender_member)
         : document.tender_holds,
     };
-  }, [document, liveSeed]);
+  }, [document, liveSeed, seedId]);
 
   // Every garden fact re-pushes the seeds snapshot, and notes or child changes need not
   // touch this seed's own revision, so the array identity is the live invalidation signal.
@@ -908,11 +1029,15 @@ function SeedTileBody({
   error,
   onAnnotationsCountChange,
   annotationsSendRef,
+  onOpenSeed,
+  arrival,
 }: {
   document: SeedDocument | null;
   error: string | null;
   onAnnotationsCountChange: (count: number) => void;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
+  onOpenSeed?: (seedId: string) => void;
+  arrival: 'in' | 'out';
 }) {
   const { sendOpenMarkdown } = useDaemonApi();
 
@@ -926,15 +1051,40 @@ function SeedTileBody({
 
   return (
     <SeedDocumentView
+      key={document.seed.id}
       document={document}
       annotationsEnabled
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
+      onOpenSeed={onOpenSeed}
+      arrival={arrival}
       onOpenMarkdownArtifact={(path) => {
         void sendOpenMarkdown(path, '').catch((openError) => {
           console.error('[SeedDocument] Could not open markdown artifact:', openError);
         });
       }}
     />
+  );
+}
+
+function GardenGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 14V7.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path
+        d="M8 7.4C8 5.3 6.4 3.6 4.2 3.6c0 2.1 1.6 3.8 3.8 3.8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 7.4c0-2.1 1.6-3.8 3.8-3.8 0 2.1-1.6 3.8-3.8 3.8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
