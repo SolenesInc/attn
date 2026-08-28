@@ -5,9 +5,9 @@ env:
 
 on:
   push:
-    branches: [main, 'epic/**']
+    branches: [main, next, 'epic/**']
   pull_request:
-    branches: [main, 'epic/**']
+    branches: [main, next, 'epic/**']
 
 jobs:
   changes:
@@ -17,11 +17,13 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
+      force_all: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')) || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
       tauri: ${{ steps.filter.outputs.tauri }}
       plugins: ${{ steps.filter.outputs.plugins }}
+      release_preflight: ${{ steps.filter.outputs.release_preflight }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +42,7 @@ jobs:
               - 'Makefile'
               - 'scripts/source-fingerprint.sh'
               - 'scripts/claude/**'
+              - 'scripts/ci-*.sh'
               - 'scripts/pr-evidence*.sh'
               - '.github/workflows/ci.yml'
             frontend:
@@ -82,9 +85,21 @@ jobs:
               - 'scripts/build-bundled-plugins.sh'
               - '.tool-versions'
               - '.github/workflows/ci.yml'
+            release_preflight:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
+              - '.github/workflows/release-preflight.yml'
+              - 'Makefile'
+              - 'go.mod'
+              - 'go.sum'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'apphost/**'
+              - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,8 +111,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Gate
+      - name: Gate pull request
+        if: github.event_name == 'pull_request'
         run: ./scripts/changelog-gate.sh "${{ github.base_ref }}" "${{ github.head_ref }}"
+
+      - name: Validate pending fragments
+        if: github.event_name == 'push'
+        run: go run ./cmd/changelog-check
 
   # generated.go and generated.ts are compiled from internal/protocol/schema, and
   # nothing was checking that the committed copies match. The other jobs cannot:
@@ -107,7 +127,7 @@ jobs:
   generated-types:
     name: Generated types
     needs: changes
-    if: needs.changes.outputs.generated == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +158,7 @@ jobs:
   backend:
     name: Daemon
     needs: changes
-    if: needs.changes.outputs.daemon == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -190,12 +210,12 @@ jobs:
         run: bash ./scripts/claude/attn-profile-nudge_test.sh
 
       - name: Test repository scripts
-        run: bash ./scripts/pr-evidence_test.sh
+        run: make test-scripts
 
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -239,7 +259,7 @@ jobs:
   frontend-e2e:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -321,7 +341,7 @@ jobs:
   rust:
     name: Tauri
     needs: changes
-    if: needs.changes.outputs.tauri == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
     runs-on: macos-14
     defaults:
       run:
@@ -369,7 +389,7 @@ jobs:
   plugins:
     name: Plugins
     needs: changes
-    if: needs.changes.outputs.plugins == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -393,3 +413,90 @@ jobs:
             echo ">>> ${plugin}"
             (cd "$plugin" && bun test)
           done
+
+  release-preflight:
+    name: Release preflight
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.release_preflight == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-preflight.yml
+
+  pr-gate:
+    name: PR gate
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - changes
+      - changelog
+      - generated-types
+      - backend
+      - frontend
+      - frontend-e2e
+      - frontend-e2e-gate
+      - rust
+      - plugins
+      - release-preflight
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate checks
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: >-
+          ./scripts/ci-gate.sh pr
+          changes changelog generated-types backend frontend frontend-e2e
+          frontend-e2e-gate rust plugins release-preflight
+
+  acceptance:
+    name: Acceptance
+    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    needs:
+      - changes
+      - changelog
+      - generated-types
+      - backend
+      - frontend
+      - frontend-e2e
+      - frontend-e2e-gate
+      - rust
+      - plugins
+      - release-preflight
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate exact-SHA acceptance
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: >-
+          ./scripts/ci-gate.sh acceptance
+          changes changelog generated-types backend frontend frontend-e2e
+          frontend-e2e-gate rust plugins release-preflight
+
+  branch-health:
+    name: Report branch health
+    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    needs: acceptance
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: branch-health-${{ github.ref_name }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update branch-health issue
+        env:
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          BRANCH_HEALTH_ASSIGNEE: victorarias
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL"

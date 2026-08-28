@@ -171,6 +171,7 @@ test-hooks:
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
 	@bash ./scripts/pr-evidence_test.sh
+	@bash ./scripts/ci-acceptance_test.sh
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
