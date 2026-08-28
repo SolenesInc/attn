@@ -157,13 +157,12 @@ EOF
 fi
 
 echo "Updating app versions to ${VERSION}..."
-perl -0pi -e 's/"version": "\d+\.\d+\.\d+"/"version": "'"${VERSION}"'"/' app/package.json
-perl -0pi -e 's/"version": "\d+\.\d+\.\d+"/"version": "'"${VERSION}"'"/' app/src-tauri/tauri.conf.json
-perl -0pi -e 's/^version = "\d+\.\d+\.\d+"/version = "'"${VERSION}"'"/m' app/src-tauri/Cargo.toml
+go run ./cmd/release-train version set "${VERSION_TAG}"
 
 echo "Refreshing lockfiles..."
 (cd app && pnpm install --frozen-lockfile)
 (cd app/src-tauri && cargo check -q)
+go run ./cmd/release-train version check "${VERSION_TAG}"
 
 if [[ "$SKIP_TESTS" -eq 0 ]]; then
   echo "Running validation..."
