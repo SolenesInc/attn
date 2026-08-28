@@ -249,6 +249,9 @@ func TestCodexWatcherNeverClassifies(t *testing.T) {
 	if _, isCodex := behavior.(*codexTranscriptWatcherBehavior); !isCodex {
 		t.Fatalf("codex got %T, want its own behavior", behavior)
 	}
+	if quietSince := behavior.QuietSince(time.Now()); !quietSince.IsZero() {
+		t.Fatalf("codex exposed a quiet window at %s; the daemon would poll classification forever", quietSince)
+	}
 	for _, state := range []protocol.SessionState{
 		protocol.SessionStateIdle,
 		protocol.SessionStateWorking,

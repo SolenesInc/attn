@@ -160,7 +160,7 @@ func (b *codexTranscriptWatcherBehavior) HandleAssistantMessage(now time.Time) {
 func (b *codexTranscriptWatcherBehavior) DeduplicateAssistantEvents() bool { return true }
 
 func (b *codexTranscriptWatcherBehavior) QuietSince(lastAssistantAt time.Time) time.Time {
-	return lastAssistantAt
+	return time.Time{}
 }
 
 func (b *codexTranscriptWatcherBehavior) Tick(now time.Time, sessionState protocol.SessionState) WatcherTickResult {

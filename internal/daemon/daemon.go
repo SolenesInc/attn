@@ -137,6 +137,7 @@ type Daemon struct {
 	hostSessionsMu                    sync.Mutex
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
+	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	classifiedMu                      sync.Mutex
 	classifiedTurn                    map[string]string
 	classifyingTurn                   map[string]string
@@ -1728,6 +1729,7 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 }
 
 func (d *Daemon) dropSessionRecord(sessionID string) {
+	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}

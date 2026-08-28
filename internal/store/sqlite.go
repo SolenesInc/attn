@@ -15,6 +15,10 @@ import (
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
+// A 14-watcher restore exposed sql.DB's two-idle default as schema-reparse churn.
+// Keep that measured burst resident and cap excess SQLite connection memory.
+const sqliteFileConnectionPoolSize = 16
+
 const baseSchema = `
 CREATE TABLE IF NOT EXISTS sessions (
 	id TEXT PRIMARY KEY,
@@ -1078,6 +1082,10 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 
 	if dbPath == ":memory:" {
 		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+	} else {
+		db.SetMaxOpenConns(sqliteFileConnectionPoolSize)
+		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
 
 	if _, err := db.Exec(baseSchema); err != nil {

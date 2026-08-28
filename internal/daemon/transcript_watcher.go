@@ -56,6 +56,7 @@ type transcriptWatcher struct {
 	transcriptPath string
 	window         *transcript.AssistantWindow
 	occupancy      *transcript.ContextObservation
+	sessionState   protocol.SessionState
 }
 
 type assistantWindowSnapshot struct {
@@ -148,6 +149,18 @@ func (w *transcriptWatcher) applyEvents(events []transcript.Event) bool {
 	return w.window.Apply(events)
 }
 
+func (w *transcriptWatcher) state() protocol.SessionState {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.sessionState
+}
+
+func (w *transcriptWatcher) setState(state protocol.SessionState) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.sessionState = state
+}
+
 func isDuplicateAssistantEvent(lastContent string, lastAt time.Time, content string, now time.Time) bool {
 	return content == lastContent && !lastAt.IsZero() && now.Sub(lastAt) <= assistantDedupWindow
 }
@@ -210,21 +223,45 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	if !ok {
 		return
 	}
-
-	d.stopTranscriptWatcher(sessionID)
+	d.watchersMu.Lock()
+	session := d.lookupTranscriptWatcherSession(sessionID)
+	if session == nil || session.Agent != agent {
+		d.watchersMu.Unlock()
+		return
+	}
 
 	watcher := newTranscriptWatcher(sessionID, agent, cwd, startedAt, behavior)
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
+	watcher.setState(session.State)
 
-	d.watchersMu.Lock()
 	if d.transcriptWatch == nil {
 		d.transcriptWatch = make(map[string]*transcriptWatcher)
 	}
+	previous := d.transcriptWatch[sessionID]
 	d.transcriptWatch[sessionID] = watcher
 	d.watchersMu.Unlock()
+	if previous != nil {
+		close(previous.stopCh)
+	}
 
 	d.logf("transcript watcher: started session=%s agent=%s cwd=%s", sessionID, agent, cwd)
 	go d.runTranscriptWatcher(watcher)
+}
+
+func (d *Daemon) lookupTranscriptWatcherSession(sessionID string) *protocol.Session {
+	if d.transcriptWatcherSessionLookup != nil {
+		return d.transcriptWatcherSessionLookup(sessionID)
+	}
+	return d.store.Get(sessionID)
+}
+
+func (d *Daemon) updateTranscriptWatcherState(sessionID string, state protocol.SessionState) {
+	d.watchersMu.Lock()
+	watcher := d.transcriptWatch[sessionID]
+	d.watchersMu.Unlock()
+	if watcher != nil {
+		watcher.setState(state)
+	}
 }
 
 func (d *Daemon) restoreTranscriptWatchers() {
@@ -421,6 +458,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		follower       *transcript.Follower
 		costFollower   *transcript.Follower
 		costFileSize   int64 = -1
+		readFileInfo   os.FileInfo
 
 		lastAssistantAt time.Time
 		lastAssistant   string
@@ -441,16 +479,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		case <-ticker.C:
 		}
 
-		session := d.store.Get(w.sessionID)
-		if session == nil {
-			d.logf("transcript watcher: session removed, stopping session=%s", w.sessionID)
-			return
-		}
-		if session.Agent != w.agent {
-			d.logf("transcript watcher: agent changed, stopping session=%s old=%s new=%s", w.sessionID, w.agent, session.Agent)
-			return
-		}
-		sessionState := session.State
+		sessionState := w.state()
 		windowChanged := false
 
 		if transcriptPath == "" {
@@ -483,6 +512,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				follower = nil
 				costFollower = nil
 				costFileSize = -1
+				readFileInfo = nil
 				discoverySince = time.Now()
 				w.behavior.Reset()
 				continue
@@ -524,12 +554,17 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			follower = nil
 			costFollower = nil
 			costFileSize = -1
+			readFileInfo = nil
 			discoverySince = time.Now()
 			w.behavior.Reset()
 			continue
 		}
 
-		if info.Size() > 0 && follower != nil {
+		transcriptMoved := readFileInfo == nil ||
+			info.Size() != readFileInfo.Size() ||
+			!info.ModTime().Equal(readFileInfo.ModTime()) ||
+			!os.SameFile(info, readFileInfo)
+		if follower != nil && transcriptMoved {
 			batch, readErr := follower.Read()
 			if errors.Is(readErr, transcript.ErrCursorMismatch) || errors.Is(readErr, transcript.ErrCursorPastEnd) {
 				d.logf("transcript watcher: transcript replaced, rediscovering session=%s path=%s", w.sessionID, transcriptPath)
@@ -539,6 +574,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				follower = nil
 				costFollower = nil
 				costFileSize = -1
+				readFileInfo = nil
 				discoverySince = time.Now()
 				w.behavior.Reset()
 				continue
@@ -551,6 +587,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				follower = nil
 				costFollower = nil
 				costFileSize = -1
+				readFileInfo = nil
 				discoverySince = time.Now()
 				w.behavior.Reset()
 				continue
@@ -607,6 +644,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 				}
 			}
 			windowChanged = w.applyEvents(batch.Events) || windowChanged
+			readFileInfo = info
 		}
 		// The watcher's stat is the movement gate: accounting opens the transcript
 		// only on a byte-length change, so an idle session adds no file reads.
