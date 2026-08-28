@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -99,6 +100,35 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	if baselineDefault != "0" {
 		t.Fatalf("baseline_cycle default=%q, want 0", baselineDefault)
+	}
+}
+
+func TestOpenDBRetainsMeasuredReadBurst(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "pool.db"))
+	if err != nil {
+		t.Fatalf("OpenDB() error = %v", err)
+	}
+	defer db.Close()
+
+	connections := make([]*sql.Conn, 0, sqliteFileConnectionPoolSize)
+	for range sqliteFileConnectionPoolSize {
+		connection, err := db.Conn(context.Background())
+		if err != nil {
+			t.Fatalf("acquire connection %d: %v", len(connections)+1, err)
+		}
+		connections = append(connections, connection)
+	}
+	if stats := db.Stats(); stats.OpenConnections != sqliteFileConnectionPoolSize || stats.InUse != sqliteFileConnectionPoolSize {
+		t.Fatalf("held connection stats = %+v, want %d open and in use", stats, sqliteFileConnectionPoolSize)
+	}
+
+	for _, connection := range connections {
+		if err := connection.Close(); err != nil {
+			t.Fatalf("release connection: %v", err)
+		}
+	}
+	if stats := db.Stats(); stats.Idle != sqliteFileConnectionPoolSize || stats.MaxIdleClosed != 0 {
+		t.Fatalf("released connection stats = %+v, want %d retained and none churned", stats, sqliteFileConnectionPoolSize)
 	}
 }
 

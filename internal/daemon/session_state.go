@@ -127,6 +127,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.traceStateChange(change, statetrace.OutcomeDiscarded, "store_rejected")
 		return false
 	}
+	d.updateTranscriptWatcherState(change.sessionID, protocol.SessionState(change.state))
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
 	// A snooze suppresses only the turn open: the state is still committed and
