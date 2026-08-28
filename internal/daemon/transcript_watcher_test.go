@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -66,6 +67,68 @@ func TestTranscriptWatcherStateTracksDaemonCommits(t *testing.T) {
 	if got := watcher.state(); got != protocol.SessionStateWorking {
 		t.Fatalf("watcher state = %q, want working after daemon commit", got)
 	}
+}
+
+func TestTranscriptWatcherInstallDoesNotMissConcurrentStateCommit(t *testing.T) {
+	d := newTraceDaemon(t)
+	id := "watcher-state-handoff"
+	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateIdle)
+
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		lookupCaptured := make(chan struct{})
+		releaseLookup := make(chan struct{})
+		var releaseOnce sync.Once
+		release := func() { releaseOnce.Do(func() { close(releaseLookup) }) }
+		d.transcriptWatcherSessionLookup = func(sessionID string) *protocol.Session {
+			session := d.store.Get(sessionID)
+			close(lookupCaptured)
+			<-releaseLookup
+			return session
+		}
+
+		startDone := make(chan struct{})
+		go func() {
+			d.startTranscriptWatcher(id, protocol.SessionAgentCodex, t.TempDir(), time.Now())
+			close(startDone)
+		}()
+		<-lookupCaptured
+
+		if d.watchersMu.TryLock() {
+			d.watchersMu.Unlock()
+			release()
+			<-startDone
+			d.stopTranscriptWatcher(id)
+			t.Fatal("watcher installation did not serialize the state handoff")
+		}
+		if !d.store.UpdateState(id, protocol.StateWorking) {
+			t.Fatal("durable state commit was rejected")
+		}
+
+		updateStarted := make(chan struct{})
+		updateDone := make(chan struct{})
+		go func() {
+			close(updateStarted)
+			d.updateTranscriptWatcherState(id, protocol.SessionStateWorking)
+			close(updateDone)
+		}()
+		<-updateStarted
+
+		release()
+		<-startDone
+		<-updateDone
+		d.watchersMu.Lock()
+		watcher := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+		if watcher == nil {
+			t.Fatal("watcher was not installed")
+		}
+		if got := watcher.state(); got != protocol.SessionStateWorking {
+			t.Fatalf("watcher state = %q, want concurrent durable state working", got)
+		}
+		d.stopTranscriptWatcher(id)
+		synctest.Wait()
+	})
 }
 
 func TestIsTranscriptWatchedAgent(t *testing.T) {

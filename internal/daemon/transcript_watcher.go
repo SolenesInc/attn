@@ -223,23 +223,26 @@ func (d *Daemon) startTranscriptWatcherAtPath(sessionID string, agent protocol.S
 	if !ok {
 		return
 	}
+	d.watchersMu.Lock()
 	session := d.lookupTranscriptWatcherSession(sessionID)
 	if session == nil || session.Agent != agent {
+		d.watchersMu.Unlock()
 		return
 	}
-
-	d.stopTranscriptWatcher(sessionID)
 
 	watcher := newTranscriptWatcher(sessionID, agent, cwd, startedAt, behavior)
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
 	watcher.setState(session.State)
 
-	d.watchersMu.Lock()
 	if d.transcriptWatch == nil {
 		d.transcriptWatch = make(map[string]*transcriptWatcher)
 	}
+	previous := d.transcriptWatch[sessionID]
 	d.transcriptWatch[sessionID] = watcher
 	d.watchersMu.Unlock()
+	if previous != nil {
+		close(previous.stopCh)
+	}
 
 	d.logf("transcript watcher: started session=%s agent=%s cwd=%s", sessionID, agent, cwd)
 	go d.runTranscriptWatcher(watcher)
