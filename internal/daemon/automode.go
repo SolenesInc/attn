@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Design: docs/plans/2026-08-16-pi-auto-mode.md.
-
 const automodeDenialsDefaultLimit = 20
 
 func (d *Daemon) sendAutoModeResponse(conn net.Conn, resp protocol.Response) {

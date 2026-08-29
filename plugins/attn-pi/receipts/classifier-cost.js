@@ -1,5 +1,4 @@
-// Receipt behind the model defaults in
-// docs/plans/2026-08-16-pi-auto-mode-superdraft.md.
+// Receipt behind the auto mode model defaults.
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { createLogger, LOGS_DIR } from "./common.js";

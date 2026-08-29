@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-06-the-garden-vertical-slices.md and
 // docs/plans/2026-08-10-home-garden-crew-arc.md.
 package garden
 

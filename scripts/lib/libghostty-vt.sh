@@ -3,8 +3,7 @@
 # worker's server-authoritative terminal restore path (internal/ghosttyvt).
 #
 # Sourced by scripts/build-libghostty-vt.sh (download-first consumer path) and
-# scripts/publish-libghostty-vt.sh (maintainer build+upload path). See the pin
-# file, the lock file, and docs/plans/2026-07-22-server-authoritative-terminal.md.
+# scripts/publish-libghostty-vt.sh (maintainer build+upload path).
 #
 # This file only defines functions and read-only vars; it performs no work and
 # is safe to source. Callers must set -euo pipefail themselves.

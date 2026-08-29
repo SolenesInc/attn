@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// See docs/plans/2026-06-26-work-tracker.md.
-
 type TicketStatus string
 
 const (

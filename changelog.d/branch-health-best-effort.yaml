@@ -1,0 +1,5 @@
+kind: internal
+area: release
+change: >
+  Keep an accepted branch green when GitHub refuses its health-issue update,
+  while surfacing the reporting failure as a workflow warning.

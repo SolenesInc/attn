@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-16-pi-auto-mode.md.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {

@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// docs/plans/2026-08-16-pi-auto-mode.md.
-
 func runAutoMode() {
 	if len(os.Args) < 3 || os.Args[2] == "-h" || os.Args[2] == "--help" {
 		writeAutoModeHelp(os.Stdout)

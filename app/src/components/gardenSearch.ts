@@ -1,4 +1,3 @@
-// See docs/plans/2026-08-20-garden-search.md.
 import type { Seed } from '../hooks/useDaemonSocket';
 
 /** Values `is:` accepts. Anything else is named back at the reader. */

@@ -17,7 +17,6 @@ export interface AttachGhosttySnapshot {
 }
 
 // An upgraded app is routinely offered bytes an older worker encoded.
-// Design: docs/plans/2026-08-16-snapshot-format-skew.md
 export const LOCAL_SNAPSHOT_FORMAT = __ATTN_SNAPSHOT_FORMAT__;
 
 export function snapshotIsDecodable(

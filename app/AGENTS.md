@@ -24,9 +24,7 @@ In `GhosttyTerminal.tsx` a resize goes model, then renderer, then paint, then
 
 ## GPU surfaces outnumber what you can see
 
-Three traps, each worth over 100MB at rest. Receipts and the measurement
-recipe:
-[docs/plans/2026-08-14-app-memory-floor.md](../docs/plans/2026-08-14-app-memory-floor.md).
+Three traps, each worth over 100MB at rest.
 
 - `will-change` on an always-mounted component. The right dock mounts all
   five panels and only toggles a class, so a permanent hint gives every closed

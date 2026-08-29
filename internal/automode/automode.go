@@ -77,8 +77,7 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-// Receipt: pi stops a session for a human question at 20 denials
-// (docs/plans/2026-08-16-pi-auto-mode.md), and a denial is what prompts a proposal.
+// Receipt: pi stops a session for a human question at 20 denials, and a denial is what prompts a proposal.
 const MaxPendingProposalsPerProposer = 20
 
 const (

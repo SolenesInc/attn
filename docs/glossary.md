@@ -631,9 +631,6 @@ looking. This is continuity along the *seed*: a crew member's handoff, filed in
 their home when they wrap, is continuity along the *member*, and the two are
 independent.
 
-Plan:
-[docs/plans/2026-08-06-the-garden-vertical-slices.md](plans/2026-08-06-the-garden-vertical-slices.md).
-
 ## The crew
 
 The **crew** is the roster of durable named identities. A **crew member** —
@@ -758,9 +755,6 @@ than spellings — but the registry is never a requirement to tend. The two
 handoffs stay apart on purpose: a **seed handoff** is the work item's thread,
 written by whoever tends it; a **crew handoff** is the member's day-line.
 
-Plan:
-[docs/plans/2026-08-11-the-crew-primitive.md](plans/2026-08-11-the-crew-primitive.md).
-
 ## Client token
 
 The credential a client presents in `client_hello` to speak the daemon's
@@ -782,8 +776,7 @@ the bearer is exempt from it, because that is the same question answered at the
 layer that fits a browser.
 
 `attn client-token` prints it. A refused hello names the file and the profile,
-so the fix is readable off the error. Plan:
-[docs/plans/2026-08-16-local-ws-client-token.md](plans/2026-08-16-local-ws-client-token.md).
+so the fix is readable off the error.
 
 ## Home daemon
 

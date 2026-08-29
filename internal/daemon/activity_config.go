@@ -13,7 +13,7 @@ import (
 
 const sessionActivityKind = "session_activity"
 
-// Measured (receipts in docs/plans/2026-08-07-session-activity.md): Codex/Luna 4.8s p50
+// Measured: Codex/Luna 4.8s p50
 // at $0.0027 a run, Claude/Haiku 11.7s at $0.011-0.017; effort measured inert on Claude.
 const (
 	activityClaudeDefaultModel = "claude-haiku-4-5"

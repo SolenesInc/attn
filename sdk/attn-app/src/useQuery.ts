@@ -1,5 +1,3 @@
-// Design: docs/plans/2026-08-05-ext-a3.4-doc-store-positions-and-windows.md and
-// docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
 
 import { useEffect, useMemo, useState } from "react"
 import type { Document, Filter } from "./index"
