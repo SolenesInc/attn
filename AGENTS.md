@@ -301,6 +301,9 @@ doubt, ask the maintainer.
 - **Prepare candidates from accepted `next`.** Run `make release
   VERSION_TAG=vX.Y.Z` from a clean, current `next`. It opens a draft candidate;
   it never merges, tags, or starts the release.
+- **Prepare post-release hotfixes from `main`.** Commit the fix and changelog
+  fragment on a clean `hotfix/*` branch, then run `make release-hotfix
+  VERSION_TAG=vX.Y.Z`. It adds fresh release metadata and opens the draft PR.
 - **Sync after every main change.** Run `./scripts/sync-main-to-next.sh`, then
   merge its PR with a merge commit. Never squash or rebase a sync PR: `main`
   must remain an ancestor of `next`. Routine cherry-pick sync is forbidden.

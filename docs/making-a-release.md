@@ -81,10 +81,13 @@ The `Changelog` job in CI fails any PR that neither adds a
 `CHANGELOG.md` directly is the escape hatch for the compilation PR itself and
 for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates are exempt
 because an all-internal release deletes its fragments without adding user-facing
-copy. Generated `sync/main-into-next-*` PRs are also exempt because they only
-reconcile fragments already represented in the released changelog. The
-candidate and sync validators enforce those narrower diffs. Run the gate locally
-with `./scripts/changelog-gate.sh next`.
+copy. A `hotfix/*` candidate gets the same exemption only after the candidate
+validator proves its recorded source and main, versions, absent tag, consumed
+fragments, and release-only preparation diff. An unprepared hotfix still needs
+a fragment or direct changelog edit. Generated `sync/main-into-next-*` PRs are
+also exempt because they only reconcile fragments already represented in the
+released changelog. The candidate and sync validators enforce those narrower
+diffs. Run the gate locally with `./scripts/changelog-gate.sh next`.
 
 The `Main route` job rejects ordinary PRs aimed at `main`. These are the only
 allowed routes:
@@ -119,6 +122,32 @@ reconstructing the candidate.
 
 If every pending fragment is `internal`, the script removes the fragments
 without adding a section.
+
+## Prepare a post-release hotfix
+
+A fix made after a version is published needs its own version and manifest.
+Start from current `main`, commit the product fix and its changelog fragment,
+then prepare the same branch as a hotfix candidate:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c hotfix/startup-crash
+# implement the fix, add changelog.d/startup-crash.yaml, and commit both
+make release-hotfix VERSION_TAG=v0.9.6
+```
+
+The command requires a clean `hotfix/*` branch containing current `main`. It
+records the fix commit as the hotfix source, compiles its changelog fragment,
+updates every committed version, writes a fresh `kind: hotfix` manifest, and
+adds one release-preparation commit in place. It opens a draft PR to `main`
+using the fix commit's title.
+
+A post-release hotfix does not inherit `next` Acceptance: its exact candidate
+head must earn `PR gate` and manual `App acceptance` before merge. Once merged,
+the resulting exact `main` SHA must earn `Acceptance` before the new tag and
+release can start. If `main` moves while the hotfix is open, close the candidate
+and prepare it again from current `main`.
 
 ## Record app acceptance
 
@@ -177,14 +206,14 @@ run for the same commit, so it cannot start a second release.
 The manifest stays in Git history so `next` can reconcile the release. Once its
 tag points to an earlier `main` SHA, release automation treats that manifest as
 consumed and exits cleanly. It never reuses a published version for a later
-`main` change. A post-release hotfix therefore needs a fresh version and
-manifest; the hotfix preparation path is an activation prerequisite.
+`main` change. A post-release hotfix therefore goes through
+`make release-hotfix VERSION_TAG=vX.Y.Z` with a fresh version and manifest.
 
 If `main` Acceptance fails, make the smallest `hotfix/*` PR from `main`, merge
 it after its PR gate and manual verification pass, and wait for the repaired
 `main` SHA to earn Acceptance. Update `CHANGELOG.md` directly for this
-pre-release repair; pending fragments make the accepted-main validator stop.
-Release that repaired SHA, not the failed one.
+pre-release repair of the still-unpublished version; pending fragments make the
+accepted-main validator stop. Release that repaired SHA, not the failed one.
 
 ## Sync main back into next
 
@@ -206,10 +235,11 @@ Merge that PR with a **merge commit**. Squashing or rebasing it loses the
 ancestry link, so another candidate must not be prepared until the merge-commit
 sync is complete and `next` earns Acceptance again.
 
-Routine fixes always go through `next`. For an urgent production fix, branch
-`hotfix/*` from `main`, target `main`, then run the same sync command. Do not
-cherry-pick the hotfix into `next`; the merge-commit sync is the single path
-back and prevents the two lines from silently diverging.
+Routine fixes always go through `next`. For an urgent production fix, prepare
+the `hotfix/*` branch with a fresh version, target `main`, then run the same sync
+command after release. Do not cherry-pick the hotfix into `next`; the
+merge-commit sync is the single path back and prevents the two lines from
+silently diverging.
 
 ## Release artifacts
 

@@ -26,11 +26,16 @@ jobs:
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Classify changed paths
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # PR API quota is shared by the installation. Full history lets the
+          # action use git instead, so an unrelated busy repo cannot break CI.
+          token: ''
           filters: |
             daemon:
               - '**/*.go'

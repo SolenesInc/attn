@@ -100,16 +100,20 @@ run_sync() {
 }
 
 setup_fixture success
-if run_sync $'release/v9.9.9\thttps://github.com/example/attn/pull/9' \
-  >"$work/active.out" 2>&1; then
-  echo "expected an active candidate to block sync" >&2
-  exit 1
-fi
+for active_candidate in \
+  $'release/v9.9.9\thttps://github.com/example/attn/pull/9' \
+  $'hotfix/startup-crash\thttps://github.com/example/attn/pull/10'; do
+  if run_sync "$active_candidate" >"$work/active.out" 2>&1; then
+    echo "expected an active candidate to block sync" >&2
+    exit 1
+  fi
+done
 if git --git-dir="$fixture_origin" for-each-ref --format='%(refname)' \
   'refs/heads/sync/main-into-next-*' | grep -q .; then
   echo "active candidate created a sync branch" >&2
   exit 1
 fi
+grep -Fq 'hotfix/.+' "$fixture_log"
 
 run_sync >"$work/success.out"
 sync_ref="$(

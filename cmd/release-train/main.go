@@ -92,7 +92,7 @@ commands:
   version check <vX.Y.Z>     require every version source to agree
   fragments render           render pending fragments for the release writer
   manifest write [flags]     write .github/release-candidate.yml
-  candidate validate [flags] validate an accepted frozen candidate
+  candidate validate [flags] validate a prepared release candidate
   accepted-main tag          print the manifest's release tag for main
   accepted-main validate     validate and print the release tag for main
   sync apply [flags]         consume released fragments after main is merged
@@ -442,7 +442,7 @@ func validateManifest(manifest candidateManifest) error {
 
 func runCandidate(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "validate" {
-		return errors.New("usage: release-train candidate validate --current-main <ref> --source-acceptance success --other-open-candidates 0 [--head ref] [--manifest path]")
+		return errors.New("usage: release-train candidate validate --current-main <ref> --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
 	}
 	flags := flag.NewFlagSet("candidate validate", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -475,7 +475,7 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err != nil {
 		return fmt.Errorf("manifest: %w", err)
 	}
-	if strings.ToLower(input.sourceAcceptance) != "success" {
+	if manifest.Kind == "promotion" && strings.ToLower(input.sourceAcceptance) != "success" {
 		if input.sourceAcceptance == "" {
 			return errors.New("source acceptance is missing")
 		}
@@ -500,10 +500,10 @@ func validateCandidate(root string, input candidateValidation) error {
 	if _, err := resolveCommit(root, manifest.SourceSHA); err != nil {
 		return fmt.Errorf("recorded source: %w", err)
 	}
-	if err := requireAncestor(root, manifest.MainSHA, manifest.SourceSHA, "recorded main is not an ancestor of the accepted source"); err != nil {
+	if err := requireAncestor(root, manifest.MainSHA, manifest.SourceSHA, "recorded main is not an ancestor of the candidate source"); err != nil {
 		return err
 	}
-	if err := requireAncestor(root, manifest.SourceSHA, headSHA, "accepted source is not an ancestor of the candidate head"); err != nil {
+	if err := requireAncestor(root, manifest.SourceSHA, headSHA, "recorded source is not an ancestor of the candidate head"); err != nil {
 		return err
 	}
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
