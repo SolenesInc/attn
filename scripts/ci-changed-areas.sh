@@ -16,8 +16,6 @@ frontend=(
   'app/index.html' 'app/package.json' 'app/pnpm-lock.yaml' 'app/playwright.config.ts'
   'app/tsconfig*.json' 'app/vite.config.ts' 'app/lint/**' '.oxlintrc.json' 'plugins/**'
   'app/pnpm-workspace.yaml'
-  # The app SDK is a workspace package of the frontend and the source its
-  # committed declarations are emitted from, so either edit reaches the typecheck.
   'sdk/attn-app/**' 'internal/appbuild/sdkdist/**' 'internal/protocol/schema/**'
   'scripts/ci-changed-areas.sh' '.github/workflows/ci.yml'
 )
