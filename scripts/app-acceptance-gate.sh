@@ -49,6 +49,6 @@ if [[ "$candidate_tree" != "$main_tree" ]]; then
 fi
 
 "$script_root/workflow-job-gate.sh" \
-  app-acceptance.yml "$candidate_sha" workflow_dispatch - 'App acceptance'
+  app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
 
 echo "app acceptance gate: PR #$candidate_number $candidate_branch passed at $candidate_sha ($candidate_url)"

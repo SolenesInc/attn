@@ -31,4 +31,14 @@ expect_failure "$script" "$sha" short passed profile scenarios evidence
 expect_failure "$script" "$sha" "$sha" failed profile scenarios evidence
 expect_failure "$script" "$sha" "$sha" unknown profile scenarios evidence
 
+for value in \
+  'run-name: App acceptance ${{ inputs.candidate_sha }}' \
+  'ref: ${{ github.sha }}' \
+  'path: authority' \
+  'ref: ${{ inputs.candidate_sha }}' \
+  'path: candidate' \
+  './authority/scripts/app-acceptance.sh'; do
+  grep -Fq "$value" "$root/.github/workflows/app-acceptance.yml"
+done
+
 echo "app acceptance: OK"

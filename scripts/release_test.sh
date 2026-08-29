@@ -260,8 +260,8 @@ fi
 grep -q 'pr create --draft --base main --head release/v99.98.97' "$FAKE_GH_LOG"
 for value in "$source_sha" "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
-  'candidate-fixture.yaml' 'candidate_sha='; do
-  grep -Fq "$value" "$FAKE_PR_BODY"
+  'candidate-fixture.yaml' '--ref main' 'candidate_sha='; do
+  grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
 grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
 [[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
@@ -316,7 +316,7 @@ fi
 grep -Fq 'pr create --draft --base main --head hotfix/startup-crash --title fix(app): repair startup crash' \
   "$FAKE_GH_LOG"
 for value in "$hotfix_source_sha" "$released_main_sha" "$hotfix_candidate_sha" \
-  'Final `PR gate` and `App acceptance`' '--ref hotfix/startup-crash' \
+  'Final `PR gate` and `App acceptance`' '--ref main' \
   'candidate_sha=' 'hotfix.yaml'; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done

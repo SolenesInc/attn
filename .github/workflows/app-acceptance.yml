@@ -1,4 +1,5 @@
 name: App Acceptance
+run-name: App acceptance ${{ inputs.candidate_sha }}
 
 on:
   workflow_dispatch:
@@ -36,15 +37,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: authority
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
 
       - name: Record exact-head receipt
         env:
-          ACTUAL_SHA: ${{ github.sha }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           EVIDENCE: ${{ inputs.evidence }}
           OUTCOME: ${{ inputs.outcome }}
           PROFILE: ${{ inputs.profile }}
           SCENARIOS: ${{ inputs.scenarios }}
-        run: >-
-          ./scripts/app-acceptance.sh "$ACTUAL_SHA" "$CANDIDATE_SHA"
-          "$OUTCOME" "$PROFILE" "$SCENARIOS" "$EVIDENCE"
+        run: |
+          CANDIDATE_CHECKOUT_SHA="$(git -C candidate rev-parse --verify 'HEAD^{commit}')"
+          ./authority/scripts/app-acceptance.sh \
+            "$CANDIDATE_CHECKOUT_SHA" "$CANDIDATE_SHA" \
+            "$OUTCOME" "$PROFILE" "$SCENARIOS" "$EVIDENCE"

@@ -28,6 +28,8 @@ It then:
 6. Pushes the branch and opens a draft PR to `main`.
 
 It does not merge the PR, create a tag, or start the release workflow.
+The compiled section carries a hidden SHA-256 receipt over the frozen fragment
+paths and Git blobs, which candidate validation checks before merge.
 
 ## Accept the candidate
 
@@ -37,7 +39,7 @@ manual receipt:
 
 ```bash
 gh workflow run app-acceptance.yml \
-  --ref release/v0.12.0 \
+  --ref main \
   -f candidate_sha=<full candidate SHA> \
   -f profile=<profile> \
   -f scenarios='<scenarios run>' \
@@ -45,9 +47,11 @@ gh workflow run app-acceptance.yml \
   -f outcome=passed
 ```
 
-`App acceptance` fails if the workflow ref resolves to a different SHA. Any
-candidate edit needs a new receipt. Make the PR ready only when `PR gate` and
-`App acceptance` are green on the same head.
+`App acceptance` loads its workflow and receipt script from protected `main`,
+then checks out the exact `candidate_sha` separately. Any candidate edit needs
+a new receipt. Make the PR ready only when `PR gate` and `App acceptance` are
+green for the same candidate head. The candidate's first CI run waits on this
+manual receipt; rerun it after recording acceptance.
 
 ## Release preflight
 
@@ -85,7 +89,7 @@ SHA that supplied the workflow; it never executes gate code from the tag under
 inspection. The workflow rebuilds only after it proves the tag is on `main`,
 its exact SHA has green `Acceptance` from
 `ci.yml`, its originating candidate has green exact-head `App acceptance` from
-`app-acceptance.yml` on the merged PR's recorded last commit, and its manifest
+the protected `main` copy of `app-acceptance.yml`, and its manifest
 and committed versions still agree.
 Every build checks out the validated commit SHA. Publication stops if the
 remote tag no longer resolves to that SHA.

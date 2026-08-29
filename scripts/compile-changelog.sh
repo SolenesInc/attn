@@ -39,15 +39,21 @@ TODAY="$(date +%Y-%m-%d)"
 # Include each fragment's introducing commit subject. A squash merge puts the PR
 # number there, which gives the release writer useful context.
 FACTS="$(go run ./cmd/release-train fragments render)"
+RECEIPT="$(go run ./cmd/release-train fragments receipt)"
 
 # If the top section already carries today's date (a second compile in one
 # day), hand it to the writer to fold the new facts into.
 TOP_DATE="$(grep -m1 -o '^## \[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\]' CHANGELOG.md | tr -d '#[] ' || true)"
 EXISTING_SECTION=""
+EXISTING_RECEIPTS=""
 REPLACE_TOP=0
 if [[ "$TOP_DATE" == "$TODAY" ]]; then
   REPLACE_TOP=1
   EXISTING_SECTION="$(awk '/^## \[/{n++} n==1 && !/^---$/' CHANGELOG.md)"
+  EXISTING_RECEIPTS="$(printf '%s\n' "$EXISTING_SECTION" | \
+    grep -E '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
+  EXISTING_SECTION="$(printf '%s\n' "$EXISTING_SECTION" | \
+    grep -Ev '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
 fi
 
 PROMPT="You are writing the changelog for attn, a macOS app that orchestrates
@@ -114,6 +120,11 @@ if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
   printf '%s\n' "$SECTION" >&2
   exit 1
 fi
+
+if [[ -n "$EXISTING_RECEIPTS" ]]; then
+  SECTION+=$'\n\n'"$EXISTING_RECEIPTS"
+fi
+SECTION+=$'\n\n'"$RECEIPT"
 
 SECTION="$SECTION" REPLACE_TOP="$REPLACE_TOP" python3 - <<'PY'
 import os, re

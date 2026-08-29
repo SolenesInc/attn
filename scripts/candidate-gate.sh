@@ -60,5 +60,10 @@ if [[ "$kind" == promotion ]]; then
   echo "candidate gate: source Acceptance is green"
 fi
 
+candidate_sha="$(git rev-parse --verify "${head_ref}^{commit}")"
+"$script_root/workflow-job-gate.sh" \
+  app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
+echo "candidate gate: protected-main App acceptance is green for $candidate_sha"
+
 go run ./cmd/release-train candidate validate "${candidate_args[@]}"
 echo "candidate gate: $head_branch is a valid $kind candidate"

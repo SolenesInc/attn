@@ -307,7 +307,7 @@ Run the packaged-app scenarios from this exact candidate, then attach the receip
 
 \`\`\`bash
 gh workflow run app-acceptance.yml \\
-  --ref ${release_branch} \\
+  --ref main \\
   -f candidate_sha=${candidate_sha} \\
   -f profile=<profile> \\
   -f scenarios='<scenarios run>' \\

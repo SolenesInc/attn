@@ -82,7 +82,10 @@ The `Changelog` job in CI fails any PR that neither adds a
 for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates get an
 exemption only after CI proves the exact source Acceptance, recorded source and
 main, versions, absent tag, consumed fragments, a `CHANGELOG.md` update when
-the source contains user-facing fragments, and a release-only preparation diff.
+the source contains user-facing fragments, a protected-main `App acceptance`
+receipt for the candidate head, and a release-only preparation diff. The first
+candidate CI run is expected to wait on that manual receipt; rerun it after
+recording acceptance.
 A prepared `hotfix/*` candidate proves the same facts except source
 Acceptance, because its final `PR gate` and `App acceptance` are the source
 gate. A hotfix without a fresh manifest is accepted only as a repair of the
@@ -123,7 +126,10 @@ starts a release.
 
 The draft PR links the source Acceptance and both frozen SHAs. It also carries
 the raw changelog inputs so the compiled copy can be reviewed without
-reconstructing the candidate.
+reconstructing the candidate. The compiled section includes a hidden SHA-256
+receipt over the frozen fragment paths and Git blobs; the candidate gate checks
+that receipt, so an unrelated `CHANGELOG.md` edit cannot stand in for compiling
+the release notes.
 
 If every pending fragment is `internal`, the script removes the fragments
 without adding a section.
@@ -161,7 +167,7 @@ profile, scenarios, and evidence with the command generated in the draft PR:
 
 ```bash
 gh workflow run app-acceptance.yml \
-  --ref release/v0.9.5 \
+  --ref main \
   -f candidate_sha=<full candidate SHA> \
   -f profile=<profile> \
   -f scenarios='<scenarios run>' \
@@ -169,10 +175,11 @@ gh workflow run app-acceptance.yml \
   -f outcome=passed
 ```
 
-The `App acceptance` check attaches to the commit selected by `--ref` and fails
-if it differs from `candidate_sha`. A failed manual run should be recorded with
-`outcome=failed`, which leaves a red receipt on that candidate. Any candidate
-edit creates a new head and requires a new receipt.
+The workflow and receipt script always load from protected `main`; they check
+out `candidate_sha` separately and fail if that checkout differs. This keeps a
+candidate from changing the workflow that accepts it. A failed manual run
+should be recorded with `outcome=failed`. Any candidate edit creates a new head
+and requires a new receipt.
 
 Make the PR ready for review only after the changelog reads well and the exact
 head has both `PR gate` and `App acceptance` green.
@@ -204,7 +211,8 @@ main SHA ──CI──▶ Acceptance green ──validate manifest + versions�
 `Release accepted main` is serialized across versions. It checks the triggering
 CI run's own `Acceptance` job, verifies that the SHA is still the current
 `main`, resolves the promotion or hotfix PR that produced that SHA, and requires
-green `App acceptance` on the last commit in the merged PR's commit record. The
+green `App acceptance` from the protected `main` workflow for the last commit
+in the merged PR's commit record. The
 app-accepted candidate and merged `main` must have the same Git tree, so a base
 change cannot add untested code during the squash merge. It then validates the
 candidate manifest and every committed version source before
@@ -218,8 +226,7 @@ start publication. The validation job runs the exact protected `main` commit
 that supplied the workflow and treats the tag only as data. Every dispatch
 independently proves that the tag is on `main`, the exact SHA has a green
 `Acceptance` job from `ci.yml`, the originating candidate has a green exact-head
-`App acceptance` job from
-`app-acceptance.yml` on the merged PR's recorded last commit, and the manifest
+receipt from the protected `main` copy of `app-acceptance.yml`, and the manifest
 and committed versions agree. Runs for the same tag are serialized. The
 accepted-main gate is the sole authority that dispatches a release
 automatically.

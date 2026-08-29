@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -92,11 +93,15 @@ func (repo *testRepository) prepareCandidate(kind string) (mainSHA, sourceSHA, h
 	}
 	sourceSHA = repo.commit("accepted source")
 	repo.git("switch", "-q", "-c", "release/v0.12.0")
+	receipt, err := fragmentReceipt(repo.root, sourceSHA)
+	if err != nil {
+		repo.t.Fatal(err)
+	}
 	if err := setVersions(repo.root, "0.12.0"); err != nil {
 		repo.t.Fatal(err)
 	}
 	repo.remove("changelog.d/accepted.yaml")
-	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Accepted change.\n")
+	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Accepted change.\n\n"+receipt+"\n")
 	repo.writeManifest(candidateManifest{Version: "0.12.0", Kind: kind, SourceSHA: sourceSHA, MainSHA: mainSHA})
 	headSHA = repo.commit("prepare release")
 	return mainSHA, sourceSHA, headSHA
@@ -299,6 +304,25 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 			},
 			wantErr: "fragments were removed without updating CHANGELOG.md",
 		},
+		{
+			name: "unrelated changelog edit does not compile fragments",
+			mutate: func(repo *testRepository, _, _ string) {
+				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				repo.write("CHANGELOG.md", string(data)+"\nUnrelated cleanup.\n")
+				repo.commit("edit changelog without compiling fragments")
+			},
+			input: func(main, _ string) candidateValidation {
+				return validCandidateInput(main, "HEAD", "success")
+			},
+			wantErr: "does not contain the frozen fragment receipt",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -456,6 +480,30 @@ func TestFragmentRenderingIsStableAndCarriesCommitSubjects(t *testing.T) {
 		if !strings.Contains(rendered, subject) {
 			t.Fatalf("rendered facts omit %q:\n%s", subject, rendered)
 		}
+	}
+}
+
+func TestFragmentReceiptBindsPathsAndBlobs(t *testing.T) {
+	repo := newTestRepository(t)
+	repo.write("changelog.d/b.yaml", "kind: fixed\narea: b\nchange: second\n")
+	repo.write("changelog.d/a.yaml", "kind: added\narea: a\nchange: first\n")
+	first := repo.commit("add receipt inputs")
+	receipt, err := fragmentReceipt(repo.root, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$`).MatchString(receipt) {
+		t.Fatalf("receipt = %q", receipt)
+	}
+
+	repo.write("changelog.d/a.yaml", "kind: added\narea: a\nchange: changed\n")
+	second := repo.commit("change one receipt input")
+	changed, err := fragmentReceipt(repo.root, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed == receipt {
+		t.Fatal("fragment receipt did not change with a source blob")
 	}
 }
 

@@ -28,7 +28,7 @@ if [[ "$1" == api ]] && [[ "$*" == *"/git/commits/$FAKE_MAIN_SHA"* ]]; then
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
   if [[ "${FAKE_APP_MODE:-success}" != missing ]]; then
-    printf '43\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_APP_SHA" \
+    printf '43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "$FAKE_APP_SHA" \
       'https://github.com/example/attn/actions/runs/43'
   fi
   exit 0

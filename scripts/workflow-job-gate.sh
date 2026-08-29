@@ -9,7 +9,7 @@ job="${5:?workflow job is required}"
 
 case "$workflow|$event|$branch|$job" in
   'ci.yml|push|main|Acceptance'|'ci.yml|push|next|Acceptance'|\
-  'app-acceptance.yml|workflow_dispatch|-|App acceptance') ;;
+  'app-acceptance.yml|workflow_dispatch|main|App acceptance') ;;
   *)
     echo "workflow job gate: unsupported receipt $workflow/$event/$branch/$job" >&2
     exit 2
@@ -25,21 +25,29 @@ command -v gh >/dev/null || {
   exit 2
 }
 
-runs_url="repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$sha&event=$event&per_page=100"
-if [[ "$branch" != - ]]; then
-  runs_url+="&branch=$branch"
+runs_url="repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?event=$event&per_page=100"
+run_binding="$sha"
+if [[ "$workflow" == app-acceptance.yml ]]; then
+  runs_url+="&branch=main"
+  run_binding="App acceptance $sha"
+  run_row="$({
+    gh api "$runs_url" \
+      --jq '.workflow_runs | map(select(.head_branch == "main" and .event == "workflow_dispatch" and .display_title == "'$run_binding'")) | sort_by(.created_at) | last | select(.) | [.id, .display_title, .status, (.conclusion // ""), .html_url] | @tsv'
+  } || true)"
+else
+  runs_url+="&head_sha=$sha&branch=$branch"
+  run_row="$({
+    gh api "$runs_url" \
+      --jq '.workflow_runs | map(select(.head_sha == "'$sha'" and .event == "'$event'")) | sort_by(.created_at) | last | select(.) | [.id, .head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
+  } || true)"
 fi
-run_row="$({
-  gh api "$runs_url" \
-    --jq '.workflow_runs | map(select(.head_sha == "'$sha'" and .event == "'$event'")) | sort_by(.created_at) | last | select(.) | [.id, .head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
-} || true)"
 if [[ -z "$run_row" ]]; then
   echo "workflow job gate: $sha has no $workflow $event run" >&2
   exit 1
 fi
-IFS=$'\t' read -r run_id run_sha run_status run_conclusion run_url <<<"$run_row"
-if [[ "$run_sha" != "$sha" ]]; then
-  echo "workflow job gate: $workflow run belongs to $run_sha, expected $sha" >&2
+IFS=$'\t' read -r run_id actual_binding run_status run_conclusion run_url <<<"$run_row"
+if [[ "$actual_binding" != "$run_binding" ]]; then
+  echo "workflow job gate: $workflow run belongs to $actual_binding, expected $run_binding" >&2
   exit 1
 fi
 if [[ "$run_status/$run_conclusion" != "completed/success" ]]; then

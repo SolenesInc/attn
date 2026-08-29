@@ -13,8 +13,8 @@ if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
   exit 1
 fi
 if [[ "$actual_sha" != "$candidate_sha" ]]; then
-  echo "app acceptance: workflow runs on ${actual_sha}, candidate is ${candidate_sha}" >&2
-  echo "dispatch the workflow with --ref pointing at the exact candidate head" >&2
+  echo "app acceptance: candidate checkout is ${actual_sha}, requested candidate is ${candidate_sha}" >&2
+  echo "dispatch the protected main workflow with the exact candidate SHA input" >&2
   exit 1
 fi
 if [[ "$outcome" != "passed" && "$outcome" != "failed" ]]; then

@@ -13,12 +13,24 @@ set -euo pipefail
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls?state=open&base=main&per_page=100'* ]]; then
   exit 0
 fi
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]] && \
+  [[ "$*" =~ App\ acceptance\ ([0-9a-f]{40}) ]]; then
+  printf '43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "${BASH_REMATCH[1]}" \
+    'https://github.com/example/attn/actions/runs/43'
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/43/jobs?'* ]]; then
+  printf 'completed\tsuccess\t%s\n' \
+    'https://github.com/example/attn/actions/runs/43/job/8'
+  exit 0
+fi
 echo "unexpected gh command: $*" >&2
 exit 2
 EOF
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 export GOCACHE="$work/go-cache"
+export GITHUB_REPOSITORY=example/attn
 
 git init -q -b main "$work/repo"
 git -C "$work/repo" config user.name 'Changelog Gate Test'

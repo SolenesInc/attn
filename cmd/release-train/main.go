@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -91,6 +92,7 @@ commands:
   version set <vX.Y.Z>       update every committed version source
   version check <vX.Y.Z>     require every version source to agree
   fragments render           render pending fragments for the release writer
+  fragments receipt          print the exact pending-fragment audit receipt
   manifest write [flags]     write .github/release-candidate.yml
   candidate validate [flags] validate a prepared release candidate
   accepted-main tag          print the manifest's release tag for main
@@ -293,8 +295,16 @@ func replaceVersion(data []byte, pattern *regexp.Regexp, version string) ([]byte
 }
 
 func runFragments(root string, args []string, stdout io.Writer) error {
-	if len(args) != 1 || args[0] != "render" {
-		return errors.New("usage: release-train fragments render")
+	if len(args) != 1 || (args[0] != "render" && args[0] != "receipt") {
+		return errors.New("usage: release-train fragments <render|receipt>")
+	}
+	if args[0] == "receipt" {
+		receipt, err := fragmentReceipt(root, "HEAD")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(stdout, receipt)
+		return err
 	}
 	rendered, err := renderFragments(root)
 	if err != nil {
@@ -591,6 +601,16 @@ func requireCompiledChangelog(root, source, head string) error {
 	if bytes.Equal(sourceChangelog, headChangelog) {
 		return errors.New("user-facing changelog fragments were removed without updating CHANGELOG.md")
 	}
+	receipt, err := fragmentReceipt(root, source)
+	if err != nil {
+		return err
+	}
+	if bytes.Contains(sourceChangelog, []byte(receipt)) {
+		return errors.New("source CHANGELOG.md already contains its pending-fragment receipt")
+	}
+	if !bytes.Contains(headChangelog, []byte(receipt)) {
+		return errors.New("updated CHANGELOG.md does not contain the frozen fragment receipt")
+	}
 	return nil
 }
 
@@ -823,6 +843,23 @@ func fragmentBlobs(root, ref string) (map[string]string, error) {
 		}
 	}
 	return fragments, nil
+}
+
+func fragmentReceipt(root, ref string) (string, error) {
+	fragments, err := fragmentBlobs(root, ref)
+	if err != nil {
+		return "", err
+	}
+	paths := make([]string, 0, len(fragments))
+	for path := range fragments {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	digest := sha256.New()
+	for _, path := range paths {
+		fmt.Fprintf(digest, "%s\x00%s\n", path, fragments[path])
+	}
+	return fmt.Sprintf("<!-- changelog-fragments-sha256: %x -->", digest.Sum(nil)), nil
 }
 
 func blobAt(root, ref, path string) (string, bool, error) {
