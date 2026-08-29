@@ -26,8 +26,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # git only: the Actions token's 1,000 requests/hour per repository ran
-      # out under a busy hour of pushes and took every gated job with it.
       - name: Classify changed paths
         id: filter
         env:
