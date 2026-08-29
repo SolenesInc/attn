@@ -886,7 +886,10 @@ async fn screenshot(
 // One message shape for both non-mac stubs, so an agent sees the platform and the action.
 #[cfg(not(target_os = "macos"))]
 fn unsupported_capture_message(action: &str) -> String {
-    format!("browser {action} is not supported on {}", std::env::consts::OS)
+    format!(
+        "browser {action} is not supported on {}",
+        std::env::consts::OS
+    )
 }
 
 #[cfg(not(target_os = "macos"))]
