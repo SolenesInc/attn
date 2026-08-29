@@ -79,10 +79,12 @@ the app and its harness run reliably on Linux CI.
 The `Changelog` job in CI fails any PR that neither adds a
 `changelog.d/*.yaml` fragment nor modifies `CHANGELOG.md`. Touching
 `CHANGELOG.md` directly is the escape hatch for the compilation PR itself and
-for hand-fixes to existing copy. Generated `sync/main-into-next-*` PRs are
-exempt because they only reconcile fragments already represented in the
-released changelog. Run the gate locally with `./scripts/changelog-gate.sh
-next`.
+for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates are exempt
+because an all-internal release deletes its fragments without adding user-facing
+copy. Generated `sync/main-into-next-*` PRs are also exempt because they only
+reconcile fragments already represented in the released changelog. The
+candidate and sync validators enforce those narrower diffs. Run the gate locally
+with `./scripts/changelog-gate.sh next`.
 
 The `Main route` job rejects ordinary PRs aimed at `main`. These are the only
 allowed routes:

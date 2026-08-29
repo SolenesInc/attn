@@ -172,6 +172,7 @@ test-hooks:
 test-scripts:
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
+	@bash ./scripts/changelog-gate_test.sh
 	@bash ./scripts/main-route_test.sh
 	@bash ./scripts/sync-main-to-next_test.sh
 
