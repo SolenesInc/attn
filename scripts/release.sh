@@ -1,209 +1,337 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+remote="${RELEASE_TRAIN_REMOTE:-origin}"
+
 usage() {
   cat <<EOF
-usage: $0 <version-tag> [--skip-tests] [--dry-run]
-example: $0 v0.1.1
+usage: $0 <version-tag> [--hotfix] [--dry-run]
+example: $0 v0.12.0
+         $0 v0.12.1 --hotfix
 
-Branch protection blocks direct pushes to main, so the release lands through a
-pull request: this script opens a release/<tag> branch, waits for the required
-CI checks to pass, merges the PR, then tags the merge commit and pushes the tag
-to trigger .github/workflows/release.yml.
+Freeze the accepted ${remote}/next head into release/vX.Y.Z, compile its
+changelog, bump versions, write the release manifest, and open a draft PR to
+main. With --hotfix, prepare the current hotfix/* branch in place from the
+current ${remote}/main instead. This command never merges, tags, or starts a
+release.
 EOF
 }
 
-# Poll the PR's status checks until they all complete. Succeeds only when at
-# least one check exists and none are pending; fails fast on any failure.
-wait_for_checks() {
-  local pr="$1"
-  local timeout="${RELEASE_CHECK_TIMEOUT:-1800}"
-  local interval=15
-  local waited=0
-
-  echo "Waiting for CI checks on ${pr} (timeout ${timeout}s)..."
-  while :; do
-    local summary total pending failed
-    summary="$(gh pr view "$pr" --json statusCheckRollup -q \
-      '.statusCheckRollup as $c | "\($c|length) \([$c[]|select(.status!="COMPLETED")]|length) \([$c[]|select((.conclusion//"")|test("FAILURE|CANCELLED|TIMED_OUT|STARTUP_FAILURE|ACTION_REQUIRED"))]|length)"' \
-      2>/dev/null || echo "0 0 0")"
-    read -r total pending failed <<<"$summary"
-    [[ "$total" =~ ^[0-9]+$ ]] || total=0
-    [[ "$pending" =~ ^[0-9]+$ ]] || pending=0
-    [[ "$failed" =~ ^[0-9]+$ ]] || failed=0
-
-    if (( failed > 0 )); then
-      echo "error: CI checks failed:"
-      gh pr checks "$pr" || true
-      return 1
-    fi
-
-    if (( total > 0 && pending == 0 )); then
-      echo "All required CI checks passed."
-      return 0
-    fi
-
-    if (( waited >= timeout )); then
-      echo "error: timed out after ${timeout}s waiting for CI checks"
-      gh pr checks "$pr" || true
-      return 1
-    fi
-
-    echo "  checks: ${total} total, ${pending} pending (waited ${waited}s)"
-    sleep "$interval"
-    waited=$(( waited + interval ))
-  done
-}
-
 if [[ $# -lt 1 ]]; then
-  usage
-  exit 1
+  usage >&2
+  exit 2
 fi
 
-VERSION_TAG="$1"
+version_tag="$1"
 shift
-SKIP_TESTS=0
-DRY_RUN=0
+dry_run=0
+kind=promotion
 
-if [[ ! "$VERSION_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "error: version tag must look like v1.2.3"
+if [[ ! "$version_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "prepare release: version tag must look like v1.2.3" >&2
   exit 1
 fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-tests)
-      SKIP_TESTS=1
-      ;;
-    --dry-run)
-      DRY_RUN=1
-      ;;
-    *)
-      usage
-      exit 1
-      ;;
+    --dry-run) dry_run=1 ;;
+    --hotfix) kind=hotfix ;;
+    *) usage >&2; exit 2 ;;
   esac
   shift
 done
 
-if ! command -v gh >/dev/null 2>&1; then
-  echo "error: gh (GitHub CLI) is required for the PR-based release flow"
-  echo "install: https://cli.github.com/"
+for command in git gh go; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "prepare release: ${command} is required" >&2
+    exit 1
+  fi
+done
+
+root="$(git rev-parse --show-toplevel)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$root"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "prepare release: working tree must be clean" >&2
   exit 1
 fi
-
+current_branch="$(git branch --show-current)"
+case "$kind" in
+  promotion)
+    if [[ "$current_branch" != "next" ]]; then
+      echo "prepare release: run a promotion from the local next branch" >&2
+      exit 1
+    fi
+    ;;
+  hotfix)
+    if [[ ! "$current_branch" =~ ^hotfix/.+ ]]; then
+      echo "prepare release: run --hotfix from a hotfix/* branch" >&2
+      exit 1
+    fi
+    ;;
+esac
 if ! gh auth status >/dev/null 2>&1; then
-  echo "error: gh is not authenticated; run 'gh auth login'"
+  echo "prepare release: gh is not authenticated; run 'gh auth login'" >&2
   exit 1
 fi
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "error: git working tree is not clean"
-  echo "commit or stash your changes before running release"
+repo_info="$(gh repo view --json nameWithOwner,url --jq '[.nameWithOwner, .url] | @tsv')"
+IFS=$'\t' read -r repo_name repo_url <<<"$repo_info"
+if [[ -z "$repo_name" || -z "$repo_url" ]]; then
+  echo "prepare release: could not resolve the GitHub repository" >&2
   exit 1
 fi
 
-shopt -s nullglob
-PENDING_FRAGMENTS=(changelog.d/*.yaml)
-shopt -u nullglob
-if (( ${#PENDING_FRAGMENTS[@]} > 0 )); then
-  echo "error: ${#PENDING_FRAGMENTS[@]} pending changelog fragment(s) in changelog.d/"
-  echo "compile the changelog first: ./scripts/compile-changelog.sh"
-  echo "(see docs/making-a-release.md)"
+echo "Fetching ${remote}/main and tags..."
+git fetch --tags "$remote" main
+if [[ "$kind" == promotion ]]; then
+  echo "Fetching ${remote}/next..."
+  git fetch "$remote" next
+fi
+
+main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
+local_sha="$(git rev-parse --verify HEAD)"
+if [[ "$kind" == promotion ]]; then
+  source_sha="$(git rev-parse --verify "${remote}/next^{commit}")"
+  release_branch="release/${version_tag}"
+else
+  source_sha="$local_sha"
+  release_branch="$current_branch"
+fi
+
+if [[ "$kind" == promotion && "$local_sha" != "$source_sha" ]]; then
+  echo "prepare release: local next is stale" >&2
+  echo "local:  ${local_sha}" >&2
+  echo "remote: ${source_sha}" >&2
+  echo "fast-forward next and wait for Acceptance on the new head" >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor "$main_sha" "$source_sha"; then
+  if [[ "$kind" == promotion ]]; then
+    echo "prepare release: current main is not an ancestor of accepted next" >&2
+    echo "sync main into next with ./scripts/sync-main-to-next.sh first" >&2
+  else
+    echo "prepare release: hotfix does not contain current main" >&2
+    echo "rebase or recreate the hotfix from ${remote}/main" >&2
+  fi
+  exit 1
+fi
+if git show-ref --verify --quiet "refs/tags/${version_tag}"; then
+  echo "prepare release: tag ${version_tag} already exists" >&2
+  exit 1
+fi
+if [[ "$kind" == promotion ]]; then
+  if git show-ref --verify --quiet "refs/heads/${release_branch}"; then
+    echo "prepare release: local branch ${release_branch} already exists" >&2
+    exit 1
+  fi
+  if git ls-remote --exit-code --heads "$remote" "$release_branch" >/dev/null 2>&1; then
+    echo "prepare release: remote branch ${release_branch} already exists" >&2
+    exit 1
+  fi
+else
+  remote_hotfix_sha="$(git ls-remote --heads "$remote" "refs/heads/${release_branch}" | awk '{print $1}')"
+  if [[ -n "$remote_hotfix_sha" ]]; then
+    git fetch "$remote" "$release_branch"
+    if ! git merge-base --is-ancestor FETCH_HEAD "$source_sha"; then
+      echo "prepare release: remote ${release_branch} is not an ancestor of the local hotfix" >&2
+      exit 1
+    fi
+  fi
+fi
+
+candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
+if [[ -n "$candidate_prs" ]]; then
+  echo "prepare release: another release candidate is open:" >&2
+  printf '  %s\n' "$candidate_prs" >&2
   exit 1
 fi
 
-if git rev-parse -q --verify "refs/tags/${VERSION_TAG}" >/dev/null; then
-  echo "error: tag ${VERSION_TAG} already exists locally"
-  exit 1
+acceptance_url=""
+if [[ "$kind" == promotion ]]; then
+  acceptance="$(
+    gh api --method GET \
+      "repos/{owner}/{repo}/commits/${source_sha}/check-runs?check_name=Acceptance&filter=latest" \
+      --jq '.check_runs | map(select(.name == "Acceptance" and .app.slug == "github-actions")) | sort_by(.started_at) | last | select(.) | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
+  )"
+  if [[ -z "$acceptance" ]]; then
+    echo "prepare release: ${source_sha} has no Acceptance check" >&2
+    exit 1
+  fi
+  IFS=$'\t' read -r acceptance_sha acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance"
+  if [[ "$acceptance_sha" != "$source_sha" ]]; then
+    echo "prepare release: Acceptance belongs to ${acceptance_sha}, expected ${source_sha}" >&2
+    exit 1
+  fi
+  if [[ "$acceptance_status" != "completed" || "$acceptance_conclusion" != "success" ]]; then
+    echo "prepare release: Acceptance is ${acceptance_status}/${acceptance_conclusion:-none}" >&2
+    echo "${acceptance_url}" >&2
+    exit 1
+  fi
 fi
 
-if git ls-remote --exit-code --tags origin "${VERSION_TAG}" >/dev/null 2>&1; then
-  echo "error: tag ${VERSION_TAG} already exists on origin"
-  exit 1
-fi
-
-RELEASE_BRANCH="release/${VERSION_TAG}"
-
-if git rev-parse -q --verify "refs/heads/${RELEASE_BRANCH}" >/dev/null; then
-  echo "error: branch ${RELEASE_BRANCH} already exists locally"
-  exit 1
-fi
-
-if git ls-remote --exit-code --heads origin "${RELEASE_BRANCH}" >/dev/null 2>&1; then
-  echo "error: branch ${RELEASE_BRANCH} already exists on origin"
-  exit 1
-fi
-
-VERSION="${VERSION_TAG#v}"
-CURRENT_BRANCH="$(git branch --show-current)"
-
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-  echo "error: release script must be run from main (current: ${CURRENT_BRANCH})"
-  exit 1
-fi
-
-if [[ "$DRY_RUN" -eq 1 ]]; then
+if [[ "$dry_run" -eq 1 ]]; then
+  if [[ "$kind" == promotion ]]; then
+    source_label="accepted next"
+    acceptance_line="- acceptance: ${acceptance_url}"
+  else
+    source_label="hotfix source"
+    acceptance_line="- source gate: final PR gate and App acceptance"
+  fi
   cat <<EOF
-Dry run for ${VERSION_TAG}
-- Would update versions to ${VERSION}
-- Would refresh lockfiles
-- Would run validation: $([[ "$SKIP_TESTS" -eq 1 ]] && echo "no (skip-tests)" || echo "yes")
-- Would create branch ${RELEASE_BRANCH} with the release commit and push it
-- Would open a PR to main and wait for required CI checks to pass
-- Would merge the PR, then tag ${VERSION_TAG} on the merge commit and push the tag
+Candidate preparation dry run
+- version: ${version_tag}
+- kind: ${kind}
+- ${source_label}: ${source_sha}
+${acceptance_line}
+- main baseline: ${main_sha}
+- branch: ${release_branch}
+- would compile the changelog, update versions, write the manifest, and open a draft PR
+- would not merge, tag, or dispatch a release
 EOF
   exit 0
 fi
 
-echo "Updating app versions to ${VERSION}..."
-perl -0pi -e 's/"version": "\d+\.\d+\.\d+"/"version": "'"${VERSION}"'"/' app/package.json
-perl -0pi -e 's/"version": "\d+\.\d+\.\d+"/"version": "'"${VERSION}"'"/' app/src-tauri/tauri.conf.json
-perl -0pi -e 's/^version = "\d+\.\d+\.\d+"/version = "'"${VERSION}"'"/m' app/src-tauri/Cargo.toml
+for command in claude pnpm cargo; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "prepare release: ${command} is required" >&2
+    exit 1
+  fi
+done
 
-echo "Refreshing lockfiles..."
-(cd app && pnpm install --frozen-lockfile)
-(cd app/src-tauri && cargo check -q)
+work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-candidate.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+facts="$work/fragments.md"
+body="$work/pr-body.md"
+go run ./cmd/release-train fragments render >"$facts"
 
-if [[ "$SKIP_TESTS" -eq 0 ]]; then
-  echo "Running validation..."
-  ./scripts/test-go.sh
-  (cd app && pnpm run build)
-  (cd app && pnpm test)
+if [[ "$kind" == promotion ]]; then
+  echo "Creating frozen candidate ${release_branch} from ${source_sha}..."
+  git switch -c "$release_branch" "$source_sha"
+else
+  echo "Preparing hotfix candidate ${release_branch} from ${source_sha}..."
 fi
 
-echo "Creating release branch ${RELEASE_BRANCH}..."
-git switch -c "${RELEASE_BRANCH}"
+./scripts/compile-changelog.sh
+go run ./cmd/release-train version set "$version_tag"
+(cd app && pnpm install --frozen-lockfile)
+(cd app/src-tauri && cargo check -q)
+go run ./cmd/release-train version check "$version_tag"
+go run ./cmd/release-train manifest write \
+  --version "$version_tag" --kind "$kind" \
+  --source "$source_sha" --main "$main_sha"
 
-echo "Committing release version changes..."
-git add app/package.json app/pnpm-lock.yaml app/src-tauri/tauri.conf.json app/src-tauri/Cargo.toml app/src-tauri/Cargo.lock
-git commit -m "release: ${VERSION_TAG}"
+git add -A CHANGELOG.md changelog.d .github/release-candidate.yml \
+  app/package.json app/pnpm-lock.yaml app/src-tauri/tauri.conf.json \
+  app/src-tauri/Cargo.toml app/src-tauri/Cargo.lock
+git commit -m "chore(release): prepare ${version_tag}"
+candidate_sha="$(git rev-parse HEAD)"
 
-echo "Pushing ${RELEASE_BRANCH}..."
-git push -u origin "${RELEASE_BRANCH}"
-
-echo "Opening release PR..."
-PR_URL="$(gh pr create --base main --head "${RELEASE_BRANCH}" \
-  --title "release: ${VERSION_TAG}" \
-  --body "Automated version bump for the **${VERSION_TAG}** release, generated by \`scripts/release.sh\`. Once CI is green this PR is merged automatically, then \`${VERSION_TAG}\` is tagged on the merge commit to trigger the release build.")"
-echo "Opened ${PR_URL}"
-
-if ! wait_for_checks "${PR_URL}"; then
-  echo "error: aborting release; ${PR_URL} is left open for inspection"
-  echo "the tag ${VERSION_TAG} was NOT created or pushed"
+echo "Rechecking the frozen baseline before publishing..."
+git fetch --tags "$remote" main
+current_main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
+if [[ "$current_main_sha" != "$main_sha" ]]; then
+  echo "prepare release: main moved during preparation" >&2
+  echo "recorded: ${main_sha}" >&2
+  echo "current:  ${current_main_sha}" >&2
+  exit 1
+fi
+if git show-ref --verify --quiet "refs/tags/${version_tag}"; then
+  echo "prepare release: tag ${version_tag} appeared during preparation" >&2
+  exit 1
+fi
+candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
+if [[ -n "$candidate_prs" ]]; then
+  echo "prepare release: another candidate opened during preparation:" >&2
+  printf '  %s\n' "$candidate_prs" >&2
   exit 1
 fi
 
-echo "Merging ${PR_URL}..."
-gh pr merge "${PR_URL}" --merge --delete-branch
+candidate_args=(
+  --current-main "$main_sha"
+  --head "$candidate_sha"
+  --other-open-candidates 0
+)
+if [[ "$kind" == promotion ]]; then
+  candidate_args+=(--source-acceptance success)
+fi
+go run ./cmd/release-train candidate validate "${candidate_args[@]}"
 
-echo "Updating local main..."
-git checkout main
-git pull --ff-only origin main
+manifest_version="$(awk '$1 == "version:" { print $2 }' .github/release-candidate.yml)"
+manifest_kind="$(awk '$1 == "kind:" { print $2 }' .github/release-candidate.yml)"
+manifest_source="$(awk '$1 == "source_sha:" { print $2 }' .github/release-candidate.yml)"
+manifest_main="$(awk '$1 == "main_sha:" { print $2 }' .github/release-candidate.yml)"
 
-echo "Tagging ${VERSION_TAG} on $(git rev-parse --short HEAD)..."
-git tag -a "${VERSION_TAG}" -m "${VERSION_TAG}"
-git push origin "${VERSION_TAG}"
+if [[ "$kind" == promotion ]]; then
+  candidate_tldr="Freezes accepted \`next\` commit [\`${manifest_source:0:12}\`](${repo_url}/commit/${manifest_source}) as ${version_tag}."
+  source_label="Accepted source"
+  source_gate_row="| Source Acceptance | [green check](${acceptance_url}) |"
+  movement_note="\`next\` may keep moving while this PR is reviewed. Those later changes are outside this frozen candidate."
+  pr_title="chore(release): prepare ${version_tag}"
+else
+  candidate_tldr="Packages hotfix commit [\`${manifest_source:0:12}\`](${repo_url}/commit/${manifest_source}) as ${version_tag}."
+  source_label="Hotfix source"
+  source_gate_row="| Source gate | Final \`PR gate\` and \`App acceptance\` on this candidate |"
+  movement_note="The hotfix starts from the recorded current \`main\` baseline. If \`main\` moves, close this candidate and prepare it again."
+  pr_title="$(git log -1 --format=%s "$manifest_source")"
+fi
 
-echo "Release automation complete for ${VERSION_TAG}"
-echo "Monitor workflow: .github/workflows/release.yml"
+cat >"$body" <<EOF
+## TL;DR
+
+${candidate_tldr} This PR includes the release metadata, but merging and release dispatch remain separate gates.
+
+## Frozen candidate
+
+| Field | Value |
+| --- | --- |
+| Version | \`${manifest_version}\` |
+| Kind | \`${manifest_kind}\` |
+| ${source_label} | [\`${manifest_source}\`](${repo_url}/commit/${manifest_source}) |
+${source_gate_row}
+| Main baseline | [\`${manifest_main}\`](${repo_url}/commit/${manifest_main}) |
+| Candidate head | [\`${candidate_sha}\`](${repo_url}/commit/${candidate_sha}) |
+
+${movement_note}
+
+## What changed
+
+- compiled the frozen source's changelog fragments into \`CHANGELOG.md\`
+- updated every committed app version to \`${manifest_version}\`
+- recorded the accepted source and main baseline in \`.github/release-candidate.yml\`
+
+## Manual app verification
+
+Run the packaged-app scenarios from this exact candidate, then attach the receipt to this SHA:
+
+\`\`\`bash
+gh workflow run app-acceptance.yml \\
+  --ref main \\
+  -f candidate_sha=${candidate_sha} \\
+  -f profile=<profile> \\
+  -f scenarios='<scenarios run>' \\
+  -f evidence='<recording URL or concise receipt>' \\
+  -f outcome=passed
+\`\`\`
+
+Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate_sha}\`.
+
+<details>
+<summary>Frozen changelog inputs</summary>
+
+EOF
+sed 's/^/    /' "$facts" >>"$body"
+cat >>"$body" <<'EOF'
+
+</details>
+EOF
+
+echo "Pushing ${release_branch}..."
+git push -u "$remote" "$release_branch"
+pr_url="$(gh pr create --draft --base main --head "$release_branch" \
+  --title "$pr_title" --body-file "$body")"
+
+echo "Opened draft candidate ${pr_url}"
+echo "Next: review the changelog, run the packaged app, and record App acceptance."
+echo "This command did not merge, tag, or start a release."

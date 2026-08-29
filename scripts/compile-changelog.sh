@@ -36,27 +36,24 @@ go run ./cmd/changelog-check
 
 TODAY="$(date +%Y-%m-%d)"
 
-# Each fragment plus the subject of the commit that added it — after a squash
-# merge the subject carries the PR number, which the writer can use for context.
-FACTS=""
-for f in "${fragments[@]}"; do
-  subject="$(git log --diff-filter=A --format=%s -1 -- "$f" 2>/dev/null || true)"
-  [[ -z "$subject" ]] && subject="(uncommitted)"
-  FACTS+="--- fragment: ${f}
---- introduced by: ${subject}
-$(cat "$f")
-
-"
-done
+# Include each fragment's introducing commit subject. A squash merge puts the PR
+# number there, which gives the release writer useful context.
+FACTS="$(go run ./cmd/release-train fragments render)"
+RECEIPT="$(go run ./cmd/release-train fragments receipt)"
 
 # If the top section already carries today's date (a second compile in one
 # day), hand it to the writer to fold the new facts into.
 TOP_DATE="$(grep -m1 -o '^## \[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\]' CHANGELOG.md | tr -d '#[] ' || true)"
 EXISTING_SECTION=""
+EXISTING_RECEIPTS=""
 REPLACE_TOP=0
 if [[ "$TOP_DATE" == "$TODAY" ]]; then
   REPLACE_TOP=1
   EXISTING_SECTION="$(awk '/^## \[/{n++} n==1 && !/^---$/' CHANGELOG.md)"
+  EXISTING_RECEIPTS="$(printf '%s\n' "$EXISTING_SECTION" | \
+    grep -E '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
+  EXISTING_SECTION="$(printf '%s\n' "$EXISTING_SECTION" | \
+    grep -Ev '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
 fi
 
 PROMPT="You are writing the changelog for attn, a macOS app that orchestrates
@@ -108,7 +105,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "writing section with claude..."
-SECTION="$(claude --strict-mcp-config -p "$PROMPT" < /dev/null)"
+SECTION="$(printf '%s' "$PROMPT" | claude --strict-mcp-config -p)"
 
 if [[ "$SECTION" == "EMPTY" ]]; then
   echo "no user-facing changes in pending fragments; removing them without a new section"
@@ -123,6 +120,11 @@ if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
   printf '%s\n' "$SECTION" >&2
   exit 1
 fi
+
+if [[ -n "$EXISTING_RECEIPTS" ]]; then
+  SECTION+=$'\n\n'"$EXISTING_RECEIPTS"
+fi
+SECTION+=$'\n\n'"$RECEIPT"
 
 SECTION="$SECTION" REPLACE_TOP="$REPLACE_TOP" python3 - <<'PY'
 import os, re

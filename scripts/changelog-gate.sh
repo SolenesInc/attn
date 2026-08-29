@@ -3,10 +3,10 @@ set -euo pipefail
 
 # PR changelog gate. Every PR must either add a fragment under changelog.d/ or
 # modify CHANGELOG.md directly (the release compilation PR does the latter;
-# hand-fixes to changelog copy also pass). release/* branches are the version
-# bump opened by scripts/release.sh and are exempt.
+# hand-fixes to changelog copy also pass). Prepared candidates and release sync
+# PRs may only delete already-accounted-for fragments, so they are exempt.
 #
-# usage: changelog-gate.sh <base-ref> [head-branch]
+# usage: changelog-gate.sh <base-ref> [head-branch] [head-ref]
 #
 # Runs in CI (.github/workflows/ci.yml, job "Changelog") and locally:
 #   ./scripts/changelog-gate.sh main
@@ -15,19 +15,55 @@ set -euo pipefail
 
 BASE_REF="${1:?usage: changelog-gate.sh <base-ref> [head-branch]}"
 HEAD_BRANCH="${2:-$(git branch --show-current)}"
+HEAD_REF="${3:-HEAD}"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$(git rev-parse --show-toplevel)"
-
-if [[ "$HEAD_BRANCH" == release/* ]]; then
-  echo "changelog gate: release branch ${HEAD_BRANCH}, skipping"
-  exit 0
-fi
 
 # Diff against the merge-base with the base branch; prefer origin/<base> when
 # it exists (CI checks out with full history).
 RANGE="${BASE_REF}...HEAD"
 if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
   RANGE="origin/${BASE_REF}...HEAD"
+fi
+
+main_ref="$BASE_REF"
+if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
+  main_ref="origin/${BASE_REF}"
+fi
+pre_release_repair=0
+
+if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
+  "$script_root/sync-candidate-gate.sh" origin/main "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
+  echo "changelog gate: validated release sync ${HEAD_BRANCH}, skipping"
+  exit 0
+fi
+
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  "$script_root/candidate-gate.sh" promotion "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
+  echo "changelog gate: validated promotion candidate ${HEAD_BRANCH}, skipping"
+  exit 0
+fi
+
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]]; then
+  if ! git diff --quiet "$RANGE" -- .github/release-candidate.yml; then
+    "$script_root/candidate-gate.sh" hotfix "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
+    echo "changelog gate: validated hotfix candidate ${HEAD_BRANCH}, skipping"
+    exit 0
+  fi
+
+  if ! base_tag="$(go run ./cmd/release-train accepted-main tag --head "$main_ref")"; then
+    echo "changelog gate: ${HEAD_BRANCH} must carry a fresh hotfix candidate manifest" >&2
+    echo "run make release-hotfix VERSION_TAG=vX.Y.Z before opening the PR" >&2
+    exit 1
+  fi
+  if git show-ref --verify --quiet "refs/tags/${base_tag}"; then
+    echo "changelog gate: ${base_tag} is already published; ${HEAD_BRANCH} must carry a fresh hotfix candidate manifest" >&2
+    echo "run make release-hotfix VERSION_TAG=vX.Y.Z before opening the PR" >&2
+    exit 1
+  fi
+  pre_release_repair=1
+  echo "changelog gate: ${HEAD_BRANCH} repairs the still-unpublished ${base_tag} candidate"
 fi
 
 # Committed additions, plus staged/untracked ones so the gate is honest when
@@ -41,6 +77,27 @@ touched_changelog="$(
   git diff --name-only "$RANGE" -- CHANGELOG.md
   git diff --name-only HEAD -- CHANGELOG.md
 )"
+fragment_changes="$(
+  git diff --name-only "$RANGE" -- 'changelog.d/*.yaml'
+  git diff --name-only HEAD -- 'changelog.d/*.yaml'
+  git ls-files --others --exclude-standard -- 'changelog.d/*.yaml'
+)"
+
+if [[ "$pre_release_repair" -eq 1 ]]; then
+  if [[ -n "$fragment_changes" ]]; then
+    echo "changelog gate: pre-release repair must not change changelog.d fragments" >&2
+    echo "update CHANGELOG.md directly so accepted main remains releasable" >&2
+    exit 1
+  fi
+  if [[ -z "$touched_changelog" ]]; then
+    echo "changelog gate: pre-release repair must update CHANGELOG.md directly" >&2
+    exit 1
+  fi
+  echo "changelog gate: validated direct changelog repair"
+  go run ./cmd/changelog-check
+  echo "changelog gate: OK"
+  exit 0
+fi
 
 if [[ -z "$added_fragment" && -z "$touched_changelog" ]]; then
   cat >&2 <<EOF
