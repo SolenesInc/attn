@@ -76,9 +76,16 @@ Homebrew path with `brew upgrade --cask victorarias/attn/attn`.
 If a release workflow needs to be rerun for an existing tag, dispatch it with:
 
 ```bash
-gh workflow run release.yml --ref v0.12.0 -f tag=v0.12.0
+gh workflow run release.yml --ref main -f tag=v0.12.0
 ```
 
-The workflow rebuilds only after it proves the tag is on `main`, its exact SHA
-has green `Acceptance`, its originating candidate has green exact-head
-`App acceptance`, and its manifest and committed versions still agree.
+Loading the workflow from protected `main` prevents an older tag from selecting
+an older release workflow. The validation job uses the exact protected `main`
+SHA that supplied the workflow; it never executes gate code from the tag under
+inspection. The workflow rebuilds only after it proves the tag is on `main`,
+its exact SHA has green `Acceptance` from
+`ci.yml`, its originating candidate has green exact-head `App acceptance` from
+`app-acceptance.yml` on the merged PR's recorded last commit, and its manifest
+and committed versions still agree.
+Every build checks out the validated commit SHA. Publication stops if the
+remote tag no longer resolves to that SHA.

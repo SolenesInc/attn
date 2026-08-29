@@ -26,6 +26,7 @@ for command in git gh go; do
 done
 
 root="$(git rev-parse --show-toplevel)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root"
 
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -39,8 +40,7 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 active_candidate="$(
-  gh pr list --base main --state open --limit 100 --json headRefName,url \
-    --jq '.[] | select(.headRefName | test("^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|hotfix/.+)$")) | "\(.headRefName)\t\(.url)"'
+  bash "$script_root/open-release-candidates.sh"
 )"
 if [[ -n "$active_candidate" ]]; then
   echo "sync main: a release candidate is still active:" >&2

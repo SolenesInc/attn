@@ -280,6 +280,25 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 			},
 			wantErr: "non-release file",
 		},
+		{
+			name: "user-facing fragments dropped without changelog",
+			mutate: func(repo *testRepository, _, _ string) {
+				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				repo.write("CHANGELOG.md", string(data))
+				repo.commit("drop release notes")
+			},
+			input: func(main, _ string) candidateValidation {
+				return validCandidateInput(main, "HEAD", "success")
+			},
+			wantErr: "fragments were removed without updating CHANGELOG.md",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -293,6 +312,25 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestCandidateValidationAllowsInternalFragmentsWithoutChangelogUpdate(t *testing.T) {
+	repo := newTestRepository(t)
+	mainSHA := repo.git("rev-parse", "main")
+	repo.git("switch", "-q", "-c", "next")
+	repo.write("changelog.d/internal.yaml", "kind: internal\narea: release\nchange: internal change\n")
+	sourceSHA := repo.commit("accepted internal source")
+	repo.git("switch", "-q", "-c", "release/v0.12.0")
+	if err := setVersions(repo.root, "0.12.0"); err != nil {
+		t.Fatal(err)
+	}
+	repo.remove("changelog.d/internal.yaml")
+	repo.writeManifest(candidateManifest{Version: "0.12.0", Kind: "promotion", SourceSHA: sourceSHA, MainSHA: mainSHA})
+	headSHA := repo.commit("prepare internal release")
+
+	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA, "success")); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -364,6 +402,21 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 				repo.writeManifest(manifest)
 			},
 			wantErr: "recorded main is not an ancestor",
+		},
+		{
+			name: "user-facing fragments dropped without changelog",
+			mutate: func(repo *testRepository) {
+				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				data, err := readRepositoryFile(repo.root, manifest.SourceSHA, "CHANGELOG.md")
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				repo.write("CHANGELOG.md", string(data))
+			},
+			wantErr: "fragments were removed without updating CHANGELOG.md",
 		},
 	}
 	for _, tc := range cases {

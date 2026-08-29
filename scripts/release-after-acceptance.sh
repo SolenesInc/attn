@@ -82,6 +82,12 @@ case "$remote_tag_status" in
     echo "release after acceptance: $tag already points to accepted main $sha"
     ;;
   2)
+    latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
+    latest_main_sha="${latest_main_line%%[[:space:]]*}"
+    if [ "$latest_main_sha" != "$sha" ]; then
+      echo "release after acceptance: main moved to $latest_main_sha before tagging; leaving $sha untagged"
+      exit 0
+    fi
     git tag "$tag" "$sha"
     git push origin "refs/tags/$tag"
     echo "release after acceptance: created $tag at $sha"
@@ -93,8 +99,10 @@ case "$remote_tag_status" in
 esac
 
 release_runs="$(
-  gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?head_sha=$sha&per_page=100" \
-    --jq '[.workflow_runs[] | select(.event == "workflow_dispatch" or .event == "push")] | length'
+  gh api --paginate \
+    "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=100" \
+    --jq ".workflow_runs[] | select(.event == \"workflow_dispatch\" and .display_title == \"$tag\") | .id" |
+    awk 'NF { count++ } END { print count + 0 }'
 )"
 if ! [[ "$release_runs" =~ ^[0-9]+$ ]]; then
   echo "release after acceptance: invalid release run count '$release_runs'" >&2
@@ -105,5 +113,5 @@ if [ "$release_runs" -gt 0 ]; then
   exit 0
 fi
 
-gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag" -f "tag=$tag"
+gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=$tag"
 echo "release after acceptance: dispatched release.yml for $tag after $acceptance_url"

@@ -25,8 +25,14 @@ fi
 
 tag_sha="$(git rev-parse --verify "${tag}^{commit}")"
 head_sha="$(git rev-parse --verify 'HEAD^{commit}')"
-if [[ "$head_sha" != "$tag_sha" ]]; then
-  echo "release tag gate: checkout is $head_sha, expected $tag at $tag_sha" >&2
+trusted_sha="${GITHUB_SHA:-$(git rev-parse --verify 'origin/main^{commit}')}"
+if [[ "$head_sha" != "$trusted_sha" ]]; then
+  echo "release tag gate: trusted checkout is $head_sha, expected $trusted_sha" >&2
+  exit 1
+fi
+main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+if [[ "$trusted_sha" != "$main_sha" ]]; then
+  echo "release tag gate: main moved from dispatch SHA $trusted_sha to $main_sha" >&2
   exit 1
 fi
 if ! git merge-base --is-ancestor "$tag_sha" origin/main; then
@@ -41,25 +47,9 @@ if [[ "$validated_tag" != "$tag" ]]; then
 fi
 
 "$script_root/app-acceptance-gate.sh" "$tag_sha"
+"$script_root/workflow-job-gate.sh" ci.yml "$tag_sha" push main Acceptance
 
-acceptance="$({
-  gh api --method GET \
-    "repos/$GITHUB_REPOSITORY/commits/${tag_sha}/check-runs?check_name=Acceptance&filter=latest" \
-    --jq '.check_runs | map(select(.name == "Acceptance" and .app.slug == "github-actions")) | sort_by(.started_at) | last | select(.) | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
-} || true)"
-if [[ -z "$acceptance" ]]; then
-  echo "release tag gate: $tag_sha has no Acceptance check" >&2
-  exit 1
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  echo "release_sha=$tag_sha" >>"$GITHUB_OUTPUT"
 fi
-IFS=$'\t' read -r acceptance_sha acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance"
-if [[ "$acceptance_sha" != "$tag_sha" ]]; then
-  echo "release tag gate: Acceptance belongs to $acceptance_sha, expected $tag_sha" >&2
-  exit 1
-fi
-if [[ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]]; then
-  echo "release tag gate: Acceptance is $acceptance_status/${acceptance_conclusion:-none}" >&2
-  echo "$acceptance_url" >&2
-  exit 1
-fi
-
-echo "release tag gate: $tag is accepted at $tag_sha ($acceptance_url)"
+echo "release tag gate: $tag is accepted at $tag_sha"

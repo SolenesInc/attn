@@ -10,8 +10,7 @@ mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1 $2" == "pr list" ]]; then
-  printf '%s\n' '[]'
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls?state=open&base=main&per_page=100'* ]]; then
   exit 0
 fi
 echo "unexpected gh command: $*" >&2

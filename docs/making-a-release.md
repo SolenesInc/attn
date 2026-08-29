@@ -81,8 +81,9 @@ The `Changelog` job in CI fails any PR that neither adds a
 `CHANGELOG.md` directly is the escape hatch for the compilation PR itself and
 for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates get an
 exemption only after CI proves the exact source Acceptance, recorded source and
-main, versions, absent tag, consumed fragments, and release-only preparation
-diff. A prepared `hotfix/*` candidate proves the same facts except source
+main, versions, absent tag, consumed fragments, a `CHANGELOG.md` update when
+the source contains user-facing fragments, and a release-only preparation diff.
+A prepared `hotfix/*` candidate proves the same facts except source
 Acceptance, because its final `PR gate` and `App acceptance` are the source
 gate. A hotfix without a fresh manifest is accepted only as a repair of the
 still-unpublished candidate on `main`, and must update `CHANGELOG.md` directly.
@@ -203,18 +204,31 @@ main SHA ──CI──▶ Acceptance green ──validate manifest + versions�
 `Release accepted main` is serialized across versions. It checks the triggering
 CI run's own `Acceptance` job, verifies that the SHA is still the current
 `main`, resolves the promotion or hotfix PR that produced that SHA, and requires
-green `App acceptance` on the PR's exact head. It then validates the candidate
-manifest and every committed version source before inspecting or creating the
-immutable tag, and explicitly dispatches `release.yml` from that tag. A retry
+green `App acceptance` on the last commit in the merged PR's commit record. The
+app-accepted candidate and merged `main` must have the same Git tree, so a base
+change cannot add untested code during the squash merge. It then validates the
+candidate manifest and every committed version source before
+inspecting or creating the immutable tag, and explicitly dispatches the
+protected `main` copy of `release.yml` with that tag as input. A retry
 recognizes both an existing exact tag and an existing release run for the same
 commit, so it cannot start a second release.
 
 `release.yml` accepts workflow dispatch only. Pushing a `v*` tag by hand cannot
-start publication. Every dispatch independently proves that the tag is on
-`main`, its exact SHA has green `Acceptance`, its originating candidate has
-green exact-head `App acceptance`, and its manifest and committed versions
-agree. Runs for the same tag are serialized. The accepted-main gate is the sole
-authority that dispatches a release automatically.
+start publication. The validation job runs the exact protected `main` commit
+that supplied the workflow and treats the tag only as data. Every dispatch
+independently proves that the tag is on `main`, the exact SHA has a green
+`Acceptance` job from `ci.yml`, the originating candidate has a green exact-head
+`App acceptance` job from
+`app-acceptance.yml` on the merged PR's recorded last commit, and the manifest
+and committed versions agree. Runs for the same tag are serialized. The
+accepted-main gate is the sole authority that dispatches a release
+automatically.
+
+The validation job passes the accepted commit SHA to every build job. Builds
+check out that SHA, and the publish job resolves the remote tag again before it
+makes the draft public. A moved tag cannot swap the code after validation.
+Once accepted-main creates the immutable tag, it dispatches that release even
+if a later `main` commit lands; abandoning the tag would strand that version.
 
 The manifest stays in Git history so `next` can reconcile the release. Once its
 tag points to an earlier `main` SHA, release automation treats that manifest as
@@ -263,7 +277,7 @@ of those has passed. A failed release run leaves any partial release as a
 private draft, not a half-built public release. `Release health` opens one issue
 for that tag with the exact run and draft receipt. Fix the cause and rerun the
 workflow on the same tag
-(`gh workflow run release.yml --ref <tag> -f tag=<tag>`); the rerun replaces
+(`gh workflow run release.yml --ref main -f tag=<tag>`); the rerun replaces
 the assets, publishes when the whole set is right, and closes the issue.
 
 ## What's New modal

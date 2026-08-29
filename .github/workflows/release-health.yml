@@ -6,7 +6,7 @@ on:
     types: [completed]
 
 concurrency:
-  group: release-health-${{ github.event.workflow_run.head_sha }}
+  group: release-health-${{ github.event.workflow_run.display_title }}
   cancel-in-progress: false
 
 jobs:
@@ -31,5 +31,4 @@ jobs:
           ./scripts/release-health.sh
           "${{ github.event.workflow_run.conclusion }}"
           "${{ github.event.workflow_run.display_title }}"
-          "${{ github.event.workflow_run.head_sha }}"
           "${{ github.event.workflow_run.html_url }}"

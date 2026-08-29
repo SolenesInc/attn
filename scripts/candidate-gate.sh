@@ -19,6 +19,7 @@ for tool in gh git go jq; do
 done
 
 root="$(git rev-parse --show-toplevel)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root"
 manifest=.github/release-candidate.yml
 if [[ ! -f "$manifest" ]]; then
@@ -37,16 +38,9 @@ if [[ ! "$source_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
   exit 1
 fi
 
-candidate_json="$(
-  gh pr list --base main --state open --limit 100 --json headRefName,url
-)"
 other_candidates="$(
-  jq -r --arg current "$head_branch" '
-    .[]
-    | select(.headRefName != $current)
-    | select(.headRefName | test("^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|hotfix/.+)$"))
-    | "\(.headRefName)\t\(.url)"
-  ' <<<"$candidate_json"
+  bash "$script_root/open-release-candidates.sh" |
+    awk -F '\t' -v current="$head_branch" '$1 != current'
 )"
 other_count="$(printf '%s\n' "$other_candidates" | awk 'NF { count++ } END { print count + 0 }')"
 if [[ "$other_count" -ne 0 ]]; then
@@ -61,27 +55,9 @@ candidate_args=(
   --other-open-candidates "$other_count"
 )
 if [[ "$kind" == promotion ]]; then
-  acceptance="$(
-    gh api --method GET \
-      "repos/{owner}/{repo}/commits/${source_sha}/check-runs?check_name=Acceptance&filter=latest" \
-      --jq '.check_runs | map(select(.name == "Acceptance" and .app.slug == "github-actions")) | sort_by(.started_at) | last | select(.) | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
-  )"
-  if [[ -z "$acceptance" ]]; then
-    echo "candidate gate: ${source_sha} has no Acceptance check" >&2
-    exit 1
-  fi
-  IFS=$'\t' read -r acceptance_sha acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance"
-  if [[ "$acceptance_sha" != "$source_sha" ]]; then
-    echo "candidate gate: Acceptance belongs to $acceptance_sha, expected $source_sha" >&2
-    exit 1
-  fi
-  if [[ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]]; then
-    echo "candidate gate: Acceptance is $acceptance_status/${acceptance_conclusion:-none}" >&2
-    echo "$acceptance_url" >&2
-    exit 1
-  fi
+  "$script_root/workflow-job-gate.sh" ci.yml "$source_sha" push next Acceptance
   candidate_args+=(--source-acceptance success)
-  echo "candidate gate: source Acceptance is green ($acceptance_url)"
+  echo "candidate gate: source Acceptance is green"
 fi
 
 go run ./cmd/release-train candidate validate "${candidate_args[@]}"

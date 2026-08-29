@@ -49,6 +49,7 @@ for command in git gh go; do
 done
 
 root="$(git rev-parse --show-toplevel)"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$root"
 
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -140,12 +141,7 @@ else
   fi
 fi
 
-open_candidates() {
-  gh pr list --base main --state open --limit 100 --json headRefName,url \
-    --jq '.[] | select(.headRefName | test("^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|hotfix/.+)$")) | "\(.headRefName)\t\(.url)"'
-}
-
-candidate_prs="$(open_candidates)"
+candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
 if [[ -n "$candidate_prs" ]]; then
   echo "prepare release: another release candidate is open:" >&2
   printf '  %s\n' "$candidate_prs" >&2
@@ -245,7 +241,7 @@ if git show-ref --verify --quiet "refs/tags/${version_tag}"; then
   echo "prepare release: tag ${version_tag} appeared during preparation" >&2
   exit 1
 fi
-candidate_prs="$(open_candidates)"
+candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
 if [[ -n "$candidate_prs" ]]; then
   echo "prepare release: another candidate opened during preparation:" >&2
   printf '  %s\n' "$candidate_prs" >&2

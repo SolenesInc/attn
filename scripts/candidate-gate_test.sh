@@ -13,30 +13,35 @@ cat >"$work/bin/gh" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_GH_LOG"
 
-case "$1 $2" in
-  "pr list")
-    printf '%s\n' "${FAKE_CANDIDATES:-[]}"
-    ;;
-  "api --method")
-    if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
-      printf '%s\t%s\t%s\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
-        "${FAKE_ACCEPTANCE_STATUS:-completed}" \
-        "${FAKE_ACCEPTANCE_CONCLUSION:-success}" \
-        'https://github.com/example/attn/actions/runs/42/job/7'
-    fi
-    ;;
-  *)
-    echo "unexpected gh command: $*" >&2
-    exit 2
-    ;;
-esac
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls?state=open&base=main&per_page=100'* ]]; then
+  printf '%s' "${FAKE_CANDIDATES_PAGE_1:-}"
+  printf '%s' "${FAKE_CANDIDATES_PAGE_2:-}"
+  exit 0
+fi
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
+  if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
+    printf '42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
+      'https://github.com/example/attn/actions/runs/42'
+  fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
+  printf '%s\t%s\t%s\n' "${FAKE_ACCEPTANCE_STATUS:-completed}" \
+    "${FAKE_ACCEPTANCE_CONCLUSION:-success}" \
+    'https://github.com/example/attn/actions/runs/42/job/7'
+  exit 0
+fi
+echo "unexpected gh command: $*" >&2
+exit 2
 EOF
 chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
 export GOCACHE="$work/go-cache"
+export GITHUB_REPOSITORY=example/attn
 export FAKE_GH_LOG="$work/gh.log"
-export FAKE_CANDIDATES='[]'
+export FAKE_CANDIDATES_PAGE_1=
+export FAKE_CANDIDATES_PAGE_2=
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
@@ -86,7 +91,7 @@ git -C "$repo" rm -q changelog.d/promotion.yaml
 git -C "$repo" add .github/release-candidate.yml app
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
 export FAKE_ACCEPTANCE_SHA="$promotion_source"
-export FAKE_CANDIDATES='[{"headRefName":"release/v99.98.97","url":"https://github.com/example/attn/pull/1"}]'
+export FAKE_CANDIDATES_PAGE_1=$'release/v99.98.97\thttps://github.com/example/attn/pull/1\n'
 run_gate promotion origin/main HEAD release/v99.98.97 >"$work/promotion.out"
 grep -Fq 'source Acceptance is green' "$work/promotion.out"
 (cd "$repo" && "$changelog_gate" main release/v99.98.97) >"$work/promotion-changelog.out"
@@ -97,10 +102,12 @@ expect_failure 'Acceptance is completed/failure' \
   run_gate promotion origin/main HEAD release/v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
-export FAKE_CANDIDATES='[{"headRefName":"hotfix/other","url":"https://github.com/example/attn/pull/2"}]'
+export FAKE_CANDIDATES_PAGE_2=$'hotfix/other\thttps://github.com/example/attn/pull/102\n'
 expect_failure 'another release candidate is open' \
   run_gate promotion origin/main HEAD release/v99.98.97
-export FAKE_CANDIDATES='[]'
+grep -Fq 'api --paginate --method GET repos/{owner}/{repo}/pulls?state=open&base=main&per_page=100' "$FAKE_GH_LOG"
+export FAKE_CANDIDATES_PAGE_1=
+export FAKE_CANDIDATES_PAGE_2=
 
 printf '%s\n' 'not release metadata' >"$repo/late-product-edit.txt"
 git -C "$repo" add late-product-edit.txt
@@ -125,7 +132,7 @@ git -C "$repo" add .github/release-candidate.yml app
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.98'
 : >"$FAKE_GH_LOG"
 run_gate hotfix origin/main HEAD hotfix/startup-crash >"$work/hotfix.out"
-if grep -q '^api --method ' "$FAKE_GH_LOG"; then
+if grep -q '/actions/workflows/ci.yml/runs?' "$FAKE_GH_LOG"; then
   echo "hotfix candidate queried next Acceptance" >&2
   exit 1
 fi

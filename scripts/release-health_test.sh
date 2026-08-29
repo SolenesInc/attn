@@ -59,32 +59,21 @@ export FAKE_ISSUE_BODY="$work/issue-body.md"
 export FAKE_REMOTE_TAG_SHA=0123456789abcdef0123456789abcdef01234567
 export FAKE_RELEASE_MODE=draft
 export FAKE_RELEASE_DRAFT=true
-sha="$FAKE_REMOTE_TAG_SHA"
 tag=v1.2.3
 run_url='https://github.com/example/attn/actions/runs/99'
 
 : >"$FAKE_GH_LOG"
-export FAKE_REMOTE_TAG_SHA=abcdef0123456789abcdef0123456789abcdef01
-"$script" failure "$tag" "$sha" "$run_url" >"$work/stale.out"
-grep -q 'ignoring stale result' "$work/stale.out"
-if grep -q '^issue ' "$FAKE_GH_LOG"; then
-  echo "stale release result updated an issue" >&2
-  exit 1
-fi
-
-: >"$FAKE_GH_LOG"
-export FAKE_REMOTE_TAG_SHA="$sha"
 export FAKE_ISSUE_STATE=
-"$script" failure "$tag" "$sha" "$run_url" >"$work/create.out"
+"$script" failure "$tag" "$run_url" >"$work/create.out"
 grep -q '^issue create ' "$FAKE_GH_LOG"
-for value in "$sha" "$run_url" 'private draft' \
-  "gh workflow run release.yml --ref $tag -f tag=$tag"; do
+for value in "$FAKE_REMOTE_TAG_SHA" "$run_url" 'private draft' \
+  "gh workflow run release.yml --ref main -f tag=$tag"; do
   grep -Fq "$value" "$FAKE_ISSUE_BODY"
 done
 
 : >"$FAKE_GH_LOG"
 export FAKE_ISSUE_STATE=open
-"$script" timed_out "$tag" "$sha" "$run_url" >"$work/update.out"
+"$script" timed_out "$tag" "$run_url" >"$work/update.out"
 grep -q '^issue edit 17 ' "$FAKE_GH_LOG"
 if grep -q '^issue comment ' "$FAKE_GH_LOG"; then
   echo "repeated release failure added a comment" >&2
@@ -92,7 +81,7 @@ if grep -q '^issue comment ' "$FAKE_GH_LOG"; then
 fi
 
 : >"$FAKE_GH_LOG"
-"$script" success "$tag" "$sha" "$run_url" >"$work/recovery.out"
+"$script" success "$tag" "$run_url" >"$work/recovery.out"
 grep -q '^issue close 17 ' "$FAKE_GH_LOG"
 grep -q 'closed #17 after recovery' "$work/recovery.out"
 

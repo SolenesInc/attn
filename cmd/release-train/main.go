@@ -515,6 +515,9 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err := requireNoFragments(root, headSHA); err != nil {
 		return err
 	}
+	if err := requireCompiledChangelog(root, manifest.SourceSHA, headSHA); err != nil {
+		return err
+	}
 	if err := requireReleaseOnlyChanges(root, manifest.SourceSHA, headSHA, input.manifestPath); err != nil {
 		return err
 	}
@@ -548,6 +551,45 @@ func requireNoFragments(root, ref string) error {
 	}
 	if len(fragments) > 0 {
 		return fmt.Errorf("candidate still contains pending changelog fragments: %s", strings.Join(fragments, ", "))
+	}
+	return nil
+}
+
+func requireCompiledChangelog(root, source, head string) error {
+	fragments, err := fragmentBlobs(root, source)
+	if err != nil {
+		return err
+	}
+	userFacing := false
+	for path := range fragments {
+		data, err := readRepositoryFile(root, source, path)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		var fragment struct {
+			Kind string `yaml:"kind"`
+		}
+		if err := yaml.Unmarshal(data, &fragment); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if fragment.Kind != "internal" {
+			userFacing = true
+			break
+		}
+	}
+	if !userFacing {
+		return nil
+	}
+	sourceChangelog, err := readRepositoryFile(root, source, "CHANGELOG.md")
+	if err != nil {
+		return err
+	}
+	headChangelog, err := readRepositoryFile(root, head, "CHANGELOG.md")
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(sourceChangelog, headChangelog) {
+		return errors.New("user-facing changelog fragments were removed without updating CHANGELOG.md")
 	}
 	return nil
 }
@@ -642,6 +684,9 @@ func validateAcceptedMain(root, headRef, manifestPath string) (candidateManifest
 		return candidateManifest{}, err
 	}
 	if err := requireNoFragments(root, headSHA); err != nil {
+		return candidateManifest{}, err
+	}
+	if err := requireCompiledChangelog(root, manifest.SourceSHA, headSHA); err != nil {
 		return candidateManifest{}, err
 	}
 	return manifest, nil

@@ -179,6 +179,7 @@ test-scripts:
 	@bash ./scripts/main-route_test.sh
 	@bash ./scripts/release_test.sh
 	@bash ./scripts/release-tag-gate_test.sh
+	@bash ./scripts/workflow-job-gate_test.sh
 	@bash ./scripts/release-after-acceptance_test.sh
 	@bash ./scripts/release-health_test.sh
 	@bash ./scripts/sync-main-to-next_test.sh
