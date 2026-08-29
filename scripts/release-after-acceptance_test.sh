@@ -73,8 +73,9 @@ EOF
   git -C "$fixture_repo" commit -q -m 'release: accepted main fixture'
   candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
   candidate_tag="v$version"
-  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
-  git -C "$fixture_repo" push -q -u origin main
+	  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
+	  git -C "$fixture_repo" push -q -u origin main
+	  git --git-dir="$fixture_origin" symbolic-ref HEAD refs/heads/main
 }
 
 run_release_after_acceptance() (
