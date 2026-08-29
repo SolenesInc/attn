@@ -53,12 +53,9 @@ setup_fixture() {
 
   git init -q --bare "$fixture_origin"
   git clone -q "$root" "$fixture_repo"
-  git -C "$fixture_repo" config user.name 'Release Test'
-  git -C "$fixture_repo" config user.email 'release@example.com'
-  git -C "$fixture_repo" switch -q -C main
-  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
-  git -C "$fixture_repo" add cmd/release-train/main.go
-  git -C "$fixture_repo" commit -q -m 'test(release): install accepted-main validator'
+	  git -C "$fixture_repo" config user.name 'Release Test'
+	  git -C "$fixture_repo" config user.email 'release@example.com'
+	  git -C "$fixture_repo" switch -q -C main
 	  baseline_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 
 	  find "$fixture_repo/changelog.d" -type f -name '*.yaml' -delete
