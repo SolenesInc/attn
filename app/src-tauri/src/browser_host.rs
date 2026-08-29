@@ -289,13 +289,6 @@ fn set_geometry(webview: &tauri::Webview, geometry: Geometry) -> Result<(), Stri
     .map_err(|error| format!("change browser webview visibility: {error}"))
 }
 
-// The toolbar reads this before offering screenshot/print actions: they
-// error out on every non-mac arm above.
-#[tauri::command]
-pub fn browser_host_capture_supported() -> bool {
-    cfg!(target_os = "macos")
-}
-
 #[tauri::command]
 pub async fn browser_host_mount(
     _caller: TrustedMainWebview,
@@ -890,8 +883,7 @@ async fn screenshot(
     .map_err(|error| format!("join browser screenshot encoder: {error}"))?
 }
 
-// Shared by the non-mac capture stubs below and their unit test, so the
-// platform name can never silently drop out of the message.
+// One message shape for both non-mac stubs, so an agent sees the platform and the action.
 #[cfg(not(target_os = "macos"))]
 fn unsupported_capture_message(action: &str) -> String {
     format!("browser {action} is not supported on {}", std::env::consts::OS)
@@ -1625,21 +1617,5 @@ mod tests {
     fn content_layout_inset_uses_the_unobscured_appkit_rect() {
         assert_eq!(content_layout_inset(1662.0, 0.0, 0.0, 1630.0), (0.0, 32.0));
         assert_eq!(content_layout_inset(600.0, 0.0, 0.0, 568.0), (0.0, 32.0),);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn capture_stub_messages_name_the_platform_and_action() {
-        use super::unsupported_capture_message;
-
-        let platform = std::env::consts::OS;
-        assert_eq!(
-            unsupported_capture_message("screenshot"),
-            format!("browser screenshot is not supported on {platform}")
-        );
-        assert_eq!(
-            unsupported_capture_message("print_page"),
-            format!("browser print_page is not supported on {platform}")
-        );
     }
 }

@@ -1093,7 +1093,6 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             get_browser_host_token,
             get_client_token,
             open_presentation_window,
-            browser_host::browser_host_capture_supported,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,

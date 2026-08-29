@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  browserCaptureSupported,
   isBrowserHostOwnedTarget,
   mountBrowserHost,
   serializeBrowserControlResultMessage,
   updateBrowserHost,
 } from './host';
 
-const invoke = vi.hoisted(() => vi.fn(async (): Promise<unknown> => undefined));
+const invoke = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock('@tauri-apps/api/core', () => ({ invoke, isTauri: () => true }));
 
 describe('serializeBrowserControlResultMessage', () => {
@@ -59,16 +58,6 @@ describe('browser host geometry payload', () => {
       label: 'browser-a-b',
       geometry: { ...rect, visible: false },
     });
-  });
-});
-
-describe('browserCaptureSupported', () => {
-  it('forwards the host platform check from Rust', async () => {
-    invoke.mockClear();
-    invoke.mockResolvedValueOnce(false);
-
-    await expect(browserCaptureSupported()).resolves.toBe(false);
-    expect(invoke).toHaveBeenCalledWith('browser_host_capture_supported');
   });
 });
 
