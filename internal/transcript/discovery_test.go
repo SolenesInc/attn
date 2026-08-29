@@ -218,6 +218,64 @@ func TestFindCodexTranscriptForResume_HonorsCodexHome(t *testing.T) {
 	}
 }
 
+func TestFindCodexTranscriptForResume_OpensOnlyFilenameCandidates(t *testing.T) {
+	sessionsDir := t.TempDir()
+	for i := range 512 {
+		path := filepath.Join(sessionsDir, fmt.Sprintf("rollout-native-decoy-%03d.jsonl", i))
+		if err := os.WriteFile(path, []byte(`{"type":"session_meta","payload":{"id":"decoy"}}`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := filepath.Join(sessionsDir, "rollout-2026-07-18-native-target.jsonl")
+	if err := os.WriteFile(want, []byte(`{"type":"session_meta","payload":{"id":"native-target"}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opened := 0
+	got := findCodexTranscriptForResumeIn(sessionsDir, "native-target", func(path string) ([]byte, error) {
+		opened++
+		return readFirstJSONLLine(path)
+	})
+	if got != want {
+		t.Fatalf("findCodexTranscriptForResumeIn() = %q, want %q", got, want)
+	}
+	if opened != 1 {
+		t.Fatalf("opened %d transcripts, want only the one filename candidate", opened)
+	}
+}
+
+func TestFindCodexTranscriptForResume_VerifiesCandidateMetadata(t *testing.T) {
+	sessionsDir := t.TempDir()
+	badDir := filepath.Join(sessionsDir, "2026", "07", "17")
+	goodDir := filepath.Join(sessionsDir, "2026", "07", "18")
+	if err := os.MkdirAll(badDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(goodDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bad := filepath.Join(badDir, "rollout-native-target.jsonl")
+	if err := os.WriteFile(bad, []byte(`not-json`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(goodDir, "rollout-native-target.jsonl")
+	if err := os.WriteFile(want, []byte(`{"type":"session_meta","payload":{"id":"native-target"}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opened := 0
+	got := findCodexTranscriptForResumeIn(sessionsDir, "native-target", func(path string) ([]byte, error) {
+		opened++
+		return readFirstJSONLLine(path)
+	})
+	if got != want {
+		t.Fatalf("findCodexTranscriptForResumeIn() = %q, want %q", got, want)
+	}
+	if opened != 2 {
+		t.Fatalf("opened %d transcripts, want both filename candidates", opened)
+	}
+}
+
 func TestFindCopilotTranscript_PrefersClosestStartTime(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv(toolhome.EnvVar, homeDir)

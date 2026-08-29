@@ -14,14 +14,22 @@ import (
 type fakeStore struct {
 	session *protocol.Session
 	resume  string
+	path    string
 }
 
-func (s fakeStore) Get(string) *protocol.Session     { return s.session }
-func (s fakeStore) GetResumeSessionID(string) string { return s.resume }
+func (s fakeStore) Get(string) *protocol.Session           { return s.session }
+func (s fakeStore) GetResumeSessionID(string) string       { return s.resume }
+func (s fakeStore) GetSessionTranscriptPath(string) string { return s.path }
 
 type fakeFinder struct{ path string }
 
 func (f fakeFinder) FindTranscriptForResume(string) string { return f.path }
+
+type panicFinder struct{}
+
+func (panicFinder) FindTranscriptForResume(string) string {
+	panic("persisted transcript path should avoid discovery")
+}
 
 type fakeModel struct {
 	answers  []ModelAnswer
@@ -49,6 +57,27 @@ func writeTranscript(t *testing.T, lines ...string) string {
 
 func testService(path string, model *fakeModel) Service {
 	return Service{Store: fakeStore{session: &protocol.Session{ID: "target", Agent: protocol.SessionAgentCodex}, resume: "native-target"}, Finder: fakeFinder{path: path}, Model: model}
+}
+
+func TestAskUsesPersistedTranscriptPathWithoutDiscovery(t *testing.T) {
+	path := writeTranscript(t, `{"type":"event_msg","payload":{"type":"user_message","message":"Use the exact binding."}}`)
+	model := &fakeModel{answers: []ModelAnswer{{
+		Answer:   "Yes. The exact binding was used.",
+		Evidence: []CandidateEvidence{{TurnID: "turn-1", Quote: "exact binding"}},
+	}}}
+	service := Service{
+		Store: fakeStore{
+			session: &protocol.Session{ID: "target", Agent: protocol.SessionAgentCodex},
+			resume:  "native-target",
+			path:    path,
+		},
+		Finder: panicFinder{},
+		Model:  model,
+	}
+
+	if _, err := service.Ask(context.Background(), Request{TargetSessionID: "target", Question: "Was the exact binding used?"}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAskProjectsOnlyConversationAndCopiesExactQuotes(t *testing.T) {

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   createSessionAndWaitForInitialPane,
@@ -60,6 +60,12 @@ function delay(ms) {
 }
 
 async function submitCodexPromptViaUi(client, sessionId, paneId, text) {
+  await client.request('write_pane', {
+    sessionId,
+    paneId,
+    text: '\u0015',
+    submit: false,
+  });
   await client.request('type_pane_via_ui', {
     sessionId,
     paneId,
@@ -134,6 +140,59 @@ async function queryStoredResumeId(dbPath, sessionId) {
   }
 }
 
+async function queryStoredTranscriptPath(dbPath, sessionId) {
+  const sql = `SELECT transcript_path FROM sessions WHERE id = ${sqlString(sessionId)} LIMIT 1;`;
+  try {
+    const { stdout } = await execFileAsync('sqlite3', [dbPath, sql], { timeout: 5_000 });
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
+
+async function queryStoredSessionCost(dbPath, sessionId) {
+  const sql = `SELECT session_cost_json FROM sessions WHERE id = ${sqlString(sessionId)} LIMIT 1;`;
+  try {
+    const { stdout } = await execFileAsync('sqlite3', [dbPath, sql], { timeout: 5_000 });
+    const raw = stdout.trim();
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function sessionCostObservationCount(cost) {
+  return Object.keys(cost?.observations || {}).length;
+}
+
+function sessionCostTokenTotal(cost) {
+  return Object.values(cost?.ledger || {}).reduce((total, usage) => {
+    return total + Object.values(usage || {}).reduce((sum, value) => {
+      return sum + (typeof value === 'number' ? value : 0);
+    }, 0);
+  }, 0);
+}
+
+async function waitForSessionCostAdvance(dbPath, sessionId, previousCost = null, timeoutMs = 30_000) {
+  const previousObservations = sessionCostObservationCount(previousCost);
+  const previousTokens = sessionCostTokenTotal(previousCost);
+  const startedAt = Date.now();
+  let lastCost = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    lastCost = await queryStoredSessionCost(dbPath, sessionId);
+    if (
+      sessionCostObservationCount(lastCost) > previousObservations &&
+      sessionCostTokenTotal(lastCost) > previousTokens
+    ) {
+      return lastCost;
+    }
+    await delay(250);
+  }
+  throw new Error(
+    `Timed out waiting for Codex cost to advance in ${dbPath}; previous=${JSON.stringify(previousCost)} last=${JSON.stringify(lastCost)}`
+  );
+}
+
 async function waitForStoredResumeId(dbPath, sessionId, timeoutMs = 30_000) {
   const startedAt = Date.now();
   let lastValue = '';
@@ -159,6 +218,21 @@ async function waitForStoredResumeIdChange(dbPath, sessionId, previousId, timeou
   }
   throw new Error(
     `Timed out waiting for Codex resume id to change in ${dbPath}; previous=${JSON.stringify(previousId)} last=${JSON.stringify(lastValue)}`
+  );
+}
+
+async function waitForStoredTranscriptPath(dbPath, sessionId, expectedPath, timeoutMs = 30_000) {
+  const startedAt = Date.now();
+  let lastValue = '';
+  while (Date.now() - startedAt < timeoutMs) {
+    lastValue = await queryStoredTranscriptPath(dbPath, sessionId);
+    if (lastValue && normalizeExistingPath(lastValue) === normalizeExistingPath(expectedPath)) {
+      return lastValue;
+    }
+    await delay(250);
+  }
+  throw new Error(
+    `Timed out waiting for stored Codex transcript path in ${dbPath}; expected=${JSON.stringify(expectedPath)} last=${JSON.stringify(lastValue)}`
   );
 }
 
@@ -347,6 +421,8 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const dbPath = dbPathForHarnessProfile();
+  const attnBin = path.join(options.appPath, 'Contents', 'MacOS', 'attn');
+  const daemonEnv = { ...process.env, ATTN_PROFILE: currentHarnessProfile() };
   let sessionId = null;
   let codexExecutable = null;
   let realCodexExecutable = null;
@@ -354,6 +430,8 @@ async function main() {
   let initialNativeSessionId = null;
   let nativeSessionId = null;
   let transcript = null;
+  let initialCost = null;
+  let successorCost = null;
   let initialPaneId = null;
 
   try {
@@ -417,7 +495,10 @@ async function main() {
         timeoutMs: 45_000,
       });
       await waitForCodexAssistantText(found.filePath, 'ATTN_FIRST_TURN_COMPLETE', 45_000);
+      await waitForStoredTranscriptPath(dbPath, sessionId, found.filePath, 30_000);
+      initialCost = await waitForSessionCostAdvance(dbPath, sessionId, null, 30_000);
       runner.writeJson('codex-transcript.json', found);
+      runner.writeJson('codex-cost-before-new.json', initialCost);
       const stoppedSession = await waitForSessionNotWorking(observer, sessionId, 20_000);
       runner.assert(stoppedSession.state !== 'working', 'real Codex session is not green after the turn stops', {
         state: stoppedSession.state,
@@ -481,12 +562,59 @@ async function main() {
       runner.assert(fs.existsSync(initialTranscript.filePath), 'the old rollout still exists during rebinding', {
         initial: initialTranscript.filePath,
       });
+      await waitForCodexAssistantText(successor.filePath, 'new-ok', 45_000);
+      await waitForStoredTranscriptPath(dbPath, sessionId, successor.filePath, 30_000);
+      successorCost = await waitForSessionCostAdvance(dbPath, sessionId, initialCost, 30_000);
+      for (const [observationId, observation] of Object.entries(initialCost?.observations || {})) {
+        runner.assert(
+          JSON.stringify(successorCost?.observations?.[observationId]) === JSON.stringify(observation),
+          'the successor cost ledger preserves each observation from before /new',
+          { observationId, before: observation, after: successorCost?.observations?.[observationId] }
+        );
+      }
+      runner.writeJson('codex-cost-after-new.json', successorCost);
       const stoppedSession = await waitForSessionNotWorking(observer, sessionId, 20_000);
       runner.assert(stoppedSession.state !== 'working', 'successor Codex turn settles normally', {
         state: stoppedSession.state,
       });
       await captureSessionArtifacts(client, runner.runDir, '02-after-new', sessionId);
       return successor;
+    });
+
+    await runner.step('assert_pathless_root_hook_cannot_replace_successor_binding', async () => {
+      const expectedResumeId = await queryStoredResumeId(dbPath, sessionId);
+      const expectedTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
+      const hookOutput = execFileSync(attnBin, ['_hook-session-start', sessionId], {
+        env: {
+          ...daemonEnv,
+          ATTN_WORKSPACE_CONTEXT_GUIDANCE: '',
+          ATTN_CHIEF_GUIDANCE: '',
+        },
+        input: JSON.stringify({
+          session_id: 'ephemeral-pathless-root',
+          transcript_path: null,
+          cwd: runner.sessionDir,
+        }),
+        encoding: 'utf8',
+      });
+      const hookContext = JSON.parse(hookOutput)?.hookSpecificOutput?.additionalContext || '';
+      runner.assert(
+        hookContext.includes("attn checked out this workspace's shared context") &&
+          hookContext.includes('ready now'),
+        'a pathless root hook still emits workspace and Garden guidance',
+        {
+          hasWorkspaceContext: hookContext.includes("attn checked out this workspace's shared context"),
+          hasGardenPrime: hookContext.includes('ready now'),
+        }
+      );
+      await delay(500);
+      const actualResumeId = await queryStoredResumeId(dbPath, sessionId);
+      const actualTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
+      runner.assert(
+        actualResumeId === expectedResumeId && actualTranscriptPath === expectedTranscriptPath,
+        'a pathless root hook cannot replace the path-bearing successor binding',
+        { expectedResumeId, actualResumeId, expectedTranscriptPath, actualTranscriptPath }
+      );
     });
 
     await runner.step('reload_session_from_ui_automation', async () => {
@@ -514,7 +642,30 @@ async function main() {
         before: transcript.filePath,
         after: transcriptAfterReload.filePath,
       });
+      await waitForStoredTranscriptPath(dbPath, sessionId, transcript.filePath, 30_000);
       await captureSessionArtifacts(client, runner.runDir, '03-after-reload', sessionId);
+    });
+
+    await runner.step('assert_daemon_restart_reuses_persisted_transcript_path', async () => {
+      await client.quitApp();
+      await observer.close().catch(() => {});
+      try {
+        execFileSync(attnBin, ['daemon', 'stop'], { env: daemonEnv, encoding: 'utf8' });
+      } catch {}
+      execFileSync(attnBin, ['daemon', 'ensure'], { env: daemonEnv, encoding: 'utf8' });
+      await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
+      await observer.waitForSession({ id: sessionId, timeoutMs: 30_000 });
+      await waitForStoredTranscriptPath(dbPath, sessionId, transcript.filePath, 30_000);
+
+      const { stdout } = await execFileAsync(attnBin, ['session', 'transcript', sessionId, '--json'], {
+        env: daemonEnv,
+        timeout: 20_000,
+      });
+      runner.assert(stdout.includes('new-ok'), 'the restarted daemon reads the successor transcript through its public CLI', {
+        transcriptPath: transcript.filePath,
+        output: stdout,
+      });
+      await captureSessionArtifacts(client, runner.runDir, '04-after-daemon-restart', sessionId);
     });
 
     const summary = await runner.finishSuccess({
@@ -525,6 +676,10 @@ async function main() {
       initialNativeSessionId,
       nativeSessionId,
       transcriptPath: transcript?.filePath || null,
+      costObservationsBeforeNew: sessionCostObservationCount(initialCost),
+      costObservationsAfterNew: sessionCostObservationCount(successorCost),
+      costTokensBeforeNew: sessionCostTokenTotal(initialCost),
+      costTokensAfterNew: sessionCostTokenTotal(successorCost),
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {

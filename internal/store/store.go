@@ -710,25 +710,26 @@ func (s *Store) SetResumeSessionID(id, resumeSessionID string) {
 		return
 	}
 
-	_, err := s.db.Exec("UPDATE sessions SET resume_session_id = ? WHERE id = ?", strings.TrimSpace(resumeSessionID), id)
+	resumeSessionID = strings.TrimSpace(resumeSessionID)
+	_, err := s.db.Exec(`
+		UPDATE sessions
+		SET resume_session_id = ?,
+			transcript_path = CASE
+				WHEN ? != '' AND resume_session_id = ? THEN transcript_path
+				ELSE ''
+			END
+		WHERE id = ?`, resumeSessionID, resumeSessionID, resumeSessionID, id)
 	if err != nil {
 		log.Printf("[store] SetResumeSessionID: failed for session %s: %v", id, err)
 	}
 }
 
 func (s *Store) GetResumeSessionID(id string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	return s.GetSessionConversation(id).NativeID
+}
 
-	if s.db == nil {
-		return ""
-	}
-
-	var resumeSessionID string
-	if err := s.db.QueryRow("SELECT resume_session_id FROM sessions WHERE id = ?", id).Scan(&resumeSessionID); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(resumeSessionID)
+func (s *Store) GetSessionTranscriptPath(id string) string {
+	return s.GetSessionConversation(id).TranscriptPath
 }
 
 func (s *Store) SetLaunchIntent(id string, intent LaunchIntent) {

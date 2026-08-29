@@ -935,6 +935,7 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 		{"sessions", "main_repo"},
 		{"sessions", "agent"},
 		{"sessions", "resume_session_id"},
+		{"sessions", "transcript_path"},
 		{"sessions", "endpoint_id"},
 		{"sessions", "agent_metadata"},
 		{"sessions", "agent_driver_plugin_name"},
@@ -1729,5 +1730,37 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	}
 	if requestAt != observed {
 		t.Fatalf("last_model_request_at = %q, want state observation %q", requestAt, observed)
+	}
+}
+
+func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	s.Add(&protocol.Session{ID: "legacy-session", Agent: protocol.SessionAgentCodex})
+	s.SetResumeSessionID("legacy-session", "native-legacy")
+	if _, err := s.db.Exec(`
+		ALTER TABLE sessions DROP COLUMN transcript_path;
+		DELETE FROM schema_migrations WHERE version = 123;
+	`); err != nil {
+		t.Fatalf("rewind migration 123: %v", err)
+	}
+
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("first migrateDB: %v", err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = 123`); err != nil {
+		t.Fatalf("unrecord migration 123: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("second migrateDB: %v", err)
+	}
+
+	if got := s.GetSessionConversation("legacy-session"); got != (SessionConversation{NativeID: "native-legacy"}) {
+		t.Fatalf("migrated binding = %+v, want native ID with an empty path", got)
 	}
 }

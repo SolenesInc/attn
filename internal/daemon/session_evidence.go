@@ -25,22 +25,32 @@ func newSessionEvidenceTable() *sessionEvidenceTable {
 
 // updateIf runs admit INSIDE the table's lock: checked outside, a writer could
 // pass liveness, lose to a removal, and recreate an orphan entry.
-func (t *sessionEvidenceTable) updateIf(sessionID string, at time.Time, admit func() bool, mutate func(*sessionstate.Evidence)) {
+func (t *sessionEvidenceTable) updateIf(
+	sessionID string,
+	at time.Time,
+	admit func() bool,
+	unchanged func(*sessionstate.Evidence) bool,
+	mutate func(*sessionstate.Evidence),
+) bool {
 	if t == nil || strings.TrimSpace(sessionID) == "" {
-		return
+		return false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if admit != nil && !admit() {
-		return
-	}
 	evidence := t.sessions[sessionID]
+	if evidence != nil && unchanged != nil && unchanged(evidence) {
+		return false
+	}
+	if admit != nil && !admit() {
+		return false
+	}
 	if evidence == nil {
 		evidence = &sessionstate.Evidence{}
 		t.sessions[sessionID] = evidence
 	}
 	mutate(evidence)
 	evidence.LastMovement = at
+	return true
 }
 
 func (t *sessionEvidenceTable) snapshot(sessionID string) (sessionstate.Evidence, bool) {
@@ -81,14 +91,23 @@ func (t *sessionEvidenceTable) forget(sessionID string) {
 // Tests only: runs inside the table's lock, between the live-row check and the write.
 var evidenceRecordGateHook func(sessionID string)
 
-func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) {
-	d.evidenceTable().updateIf(sessionID, at, func() bool {
+func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) bool {
+	return d.updateEvidence(sessionID, at, nil, mutate)
+}
+
+func (d *Daemon) updateEvidence(
+	sessionID string,
+	at time.Time,
+	unchanged func(*sessionstate.Evidence) bool,
+	mutate func(*sessionstate.Evidence),
+) bool {
+	return d.evidenceTable().updateIf(sessionID, at, func() bool {
 		live := d.store != nil && d.store.Get(sessionID) != nil
 		if hook := evidenceRecordGateHook; hook != nil {
 			hook(sessionID)
 		}
 		return live
-	}, mutate)
+	}, unchanged, mutate)
 }
 
 func (d *Daemon) evidenceTable() *sessionEvidenceTable {
@@ -105,7 +124,7 @@ func (d *Daemon) dwellGate() *dwellGate {
 	return d.sessionDwell
 }
 
-func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) {
+func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) bool {
 	at := obs.At
 	if at.IsZero() {
 		at = time.Now()
@@ -113,7 +132,7 @@ func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) {
 	switch obs.Source {
 	case pty.SourceHeartbeat:
 		if obs.Claim == "approval" {
-			d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
+			return d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 				e.LastHarnessEvent = &sessionstate.Observation{
 					Source:     sessionstate.SourceHarnessEvent,
 					Claim:      sessionstate.ClaimApprovalPending,
@@ -127,19 +146,25 @@ func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) {
 					ObservedAt: at,
 				}
 			})
-			return
 		}
 		// A title nobody can read is still someone painting: it stamps LastMovement
 		// and leaves the level alone. Filed as settled, it would retire an open turn.
 		if obs.Claim == "unclassified" {
-			d.recordEvidence(sessionID, at, func(*sessionstate.Evidence) {})
-			return
+			return d.recordEvidence(sessionID, at, func(*sessionstate.Evidence) {})
 		}
 		claim := sessionstate.ClaimSettled
 		if obs.Claim == "busy" {
 			claim = sessionstate.ClaimBusy
 		}
-		d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
+		var unchanged func(*sessionstate.Evidence) bool
+		if claim == sessionstate.ClaimSettled {
+			unchanged = func(e *sessionstate.Evidence) bool {
+				return e.Heartbeat != nil &&
+					e.Heartbeat.Claim == claim &&
+					e.Heartbeat.Detail == obs.Detail
+			}
+		}
+		return d.updateEvidence(sessionID, at, unchanged, func(e *sessionstate.Evidence) {
 			e.Heartbeat = &sessionstate.Observation{
 				Source:     sessionstate.SourceHeartbeat,
 				Claim:      claim,
@@ -151,6 +176,7 @@ func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) {
 			}
 		})
 	}
+	return false
 }
 
 func (d *Daemon) recordBracketEvidence(sessionID, state string) {
