@@ -324,9 +324,11 @@ type Daemon struct {
 	gardenMintNoteID          func() (string, error)
 	gardenNow                 func() time.Time
 	gardenDispatchBeforeWrite func(string)
+	gardenDispatchAfterWrite  func(string)
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
 	dispatchFromChief         map[string]bool
+	dispatchProjectionRevs    map[string]int64
 	dispatchSeedsLoaded       bool
 
 	gardenNotePageSize int

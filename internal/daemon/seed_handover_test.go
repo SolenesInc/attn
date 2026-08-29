@@ -186,6 +186,83 @@ func TestSeedHandoverCannotBeUndoneByAnInFlightMetadataRefresh(t *testing.T) {
 	}
 }
 
+func TestSeedHandoverBroadcastRejectsAnOlderCommittedMetadataRefresh(t *testing.T) {
+	tests := []struct {
+		name    string
+		refresh func(*Daemon, string) error
+	}{
+		{
+			name: "execution",
+			refresh: func(d *Daemon, sessionID string) error {
+				_, err := d.captureGardenSessionExecution(d.store.Get(sessionID))
+				return err
+			},
+		},
+		{
+			name: "resume identity",
+			refresh: func(d *Daemon, sessionID string) error {
+				return d.rememberDispatchResume(sessionID, "late-native-conversation")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+			consumeDelegatedPrompt(t, backend)
+			oldSessionID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+			seed, doc, err := d.readSeed(seedID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := protocol.Deref(d.sessionForBroadcast(d.store.Get(oldSessionID)).SeedID); got != seedID {
+				t.Fatalf("old session seed before Handover = %q, want %s", got, seedID)
+			}
+
+			refreshCommitted := make(chan struct{})
+			finishRefresh := make(chan struct{})
+			var pause, release sync.Once
+			d.gardenDispatchAfterWrite = func(sessionID string) {
+				if sessionID != oldSessionID {
+					return
+				}
+				pause.Do(func() {
+					close(refreshCommitted)
+					<-finishRefresh
+				})
+			}
+			releaseRefresh := func() { release.Do(func() { close(finishRefresh) }) }
+			defer releaseRefresh()
+
+			refreshDone := make(chan error, 1)
+			go func() { refreshDone <- test.refresh(d, oldSessionID) }()
+			<-refreshCommitted
+
+			op, err := d.startDelegation(handoverRequest(
+				seed, doc.Rev, "handover-after-commit-"+strings.ReplaceAll(test.name, " ", "-"), sourceSessionID, ""))
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := waitDelegationOperation(t, d, op.OperationID)
+			if done.State != protocol.DelegationOperationStateCompleted || done.Result == nil {
+				t.Fatalf("Handover operation = %+v", done)
+			}
+
+			releaseRefresh()
+			if err := <-refreshDone; err != nil {
+				t.Fatalf("committed metadata refresh after Handover: %v", err)
+			}
+			oldBroadcast := d.sessionForBroadcast(d.store.Get(oldSessionID))
+			if oldBroadcast.SeedID != nil {
+				t.Fatalf("superseded session regained seed_id %q", protocol.Deref(oldBroadcast.SeedID))
+			}
+			newBroadcast := d.sessionForBroadcast(d.store.Get(done.SessionID))
+			if got := protocol.Deref(newBroadcast.SeedID); got != seedID {
+				t.Fatalf("handed-over session seed_id = %q, want %s", got, seedID)
+			}
+		})
+	}
+}
+
 func TestSeedHandoverLaunchFailureLeavesTheOldBindingUntouched(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)

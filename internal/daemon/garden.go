@@ -34,7 +34,7 @@ func (d *Daemon) ensureGardenCollections() {
 		}
 	}
 	d.dispatchSeedsMu.Lock()
-	d.dispatchSeeds, d.dispatchFromChief, d.dispatchSeedsLoaded = nil, nil, false
+	d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, false
 	d.dispatchSeedsMu.Unlock()
 }
 
@@ -1140,12 +1140,14 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
 				d.logf("garden: reading dispatch records for broadcast: %v", err)
 				return nil
 			}
-			d.dispatchSeeds, d.dispatchFromChief, d.dispatchSeedsLoaded = nil, nil, true
+			d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, true
 			return nil
 		}
 		loaded := make(map[string]string, len(read.Documents))
 		fromChief := map[string]bool{}
+		revisions := make(map[string]int64, len(read.Documents))
 		for _, doc := range read.Documents {
+			revisions[doc.ID] = doc.Rev
 			dispatch, err := garden.DecodeDispatch(doc.Body)
 			if err != nil || activeDispatchCrown(dispatch) == "" {
 				continue
@@ -1155,46 +1157,45 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
 				fromChief[doc.ID] = true
 			}
 		}
-		d.dispatchSeeds, d.dispatchFromChief = loaded, fromChief
+		d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs = loaded, fromChief, revisions
 		d.dispatchSeedsLoaded = true
 	}
 	return d.dispatchSeeds
 }
 
-func (d *Daemon) rememberDispatchSeed(sessionID, crown string) {
+func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Dispatch, rev int64) {
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	if !d.dispatchSeedsLoaded {
 		return
 	}
-	if crown == "" {
-		delete(d.dispatchSeeds, sessionID)
+	if current, ok := d.dispatchProjectionRevs[sessionID]; ok && rev < current {
 		return
 	}
-	next := make(map[string]string, len(d.dispatchSeeds)+1)
+	nextSeeds := make(map[string]string, len(d.dispatchSeeds)+1)
 	for id, seed := range d.dispatchSeeds {
-		next[id] = seed
+		nextSeeds[id] = seed
 	}
-	next[sessionID] = crown
-	d.dispatchSeeds = next
-}
-
-func (d *Daemon) rememberDispatchFromChief(sessionID string, fromChief bool) {
-	d.dispatchSeedsMu.Lock()
-	defer d.dispatchSeedsMu.Unlock()
-	if !d.dispatchSeedsLoaded {
-		return
-	}
-	next := make(map[string]bool, len(d.dispatchFromChief)+1)
-	for id := range d.dispatchFromChief {
-		next[id] = true
-	}
-	if fromChief {
-		next[sessionID] = true
+	if crown := activeDispatchCrown(dispatch); crown != "" {
+		nextSeeds[sessionID] = crown
 	} else {
-		delete(next, sessionID)
+		delete(nextSeeds, sessionID)
 	}
-	d.dispatchFromChief = next
+	nextChief := make(map[string]bool, len(d.dispatchFromChief)+1)
+	for id := range d.dispatchFromChief {
+		nextChief[id] = true
+	}
+	if dispatch.FromChief {
+		nextChief[sessionID] = true
+	} else {
+		delete(nextChief, sessionID)
+	}
+	if d.dispatchProjectionRevs == nil {
+		d.dispatchProjectionRevs = map[string]int64{}
+	}
+	d.dispatchSeeds = nextSeeds
+	d.dispatchFromChief = nextChief
+	d.dispatchProjectionRevs[sessionID] = rev
 }
 
 func (d *Daemon) gardenDispatchesFromChief() map[string]bool {

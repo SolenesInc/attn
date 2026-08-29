@@ -205,8 +205,10 @@ func (d *Daemon) updateGardenDispatch(
 			return garden.Dispatch{}, writeErr
 		}
 		d.announceCommittedWrite(fact, written.Seq)
-		d.rememberDispatchSeed(sessionID, activeDispatchCrown(next))
-		d.rememberDispatchFromChief(sessionID, next.FromChief)
+		if d.gardenDispatchAfterWrite != nil {
+			d.gardenDispatchAfterWrite(sessionID)
+		}
+		d.rememberDispatchProjection(sessionID, next, written.Rev)
 		return next, nil
 	}
 	return garden.Dispatch{}, fmt.Errorf(

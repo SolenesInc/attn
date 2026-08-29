@@ -340,11 +340,9 @@ func (d *Daemon) bindSeedHandover(
 	if noteIndex >= 0 {
 		d.publishFact(FactGardenNoted, seed.ID, nil)
 	}
-	d.rememberDispatchSeed(sessionID, seed.ID)
-	d.rememberDispatchFromChief(sessionID, fromChief)
+	d.rememberDispatchProjection(sessionID, newDispatch, written[1].Rev)
 	if oldIndex >= 0 {
-		d.rememberDispatchSeed(oldExecutionID, "")
-		d.rememberDispatchFromChief(oldExecutionID, oldDispatch.FromChief)
+		d.rememberDispatchProjection(oldExecutionID, oldDispatch, written[oldIndex].Rev)
 	}
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, msg.SourceSessionID)
 
