@@ -72,6 +72,8 @@ func run(args []string, stdout io.Writer) error {
 		return runManifest(root, args[1:], stdout)
 	case "candidate":
 		return runCandidate(root, args[1:], stdout)
+	case "accepted-main":
+		return runAcceptedMain(root, args[1:], stdout)
 	case "sync":
 		return runSync(root, args[1:], stdout)
 	case "help", "--help", "-h":
@@ -91,6 +93,8 @@ commands:
   fragments render           render pending fragments for the release writer
   manifest write [flags]     write .github/release-candidate.yml
   candidate validate [flags] validate an accepted frozen candidate
+  accepted-main tag          print the manifest's release tag for main
+  accepted-main validate     validate and print the release tag for main
   sync apply [flags]         consume released fragments after main is merged
   sync check [flags]         verify main ancestry and fragment consumption
 `
@@ -583,6 +587,64 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 		return fmt.Errorf("candidate changes non-release file %s (%s)", path, status)
 	}
 	return nil
+}
+
+func runAcceptedMain(root string, args []string, stdout io.Writer) error {
+	if len(args) == 0 || (args[0] != "tag" && args[0] != "validate") {
+		return errors.New("usage: release-train accepted-main <tag|validate> --head <ref> [--manifest path]")
+	}
+	flags := flag.NewFlagSet("accepted-main "+args[0], flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	headRef := flags.String("head", "", "accepted main ref")
+	manifestPath := flags.String("manifest", defaultManifestPath, "candidate manifest")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *headRef == "" {
+		return errors.New("head ref is required")
+	}
+	manifest, err := readAcceptedMainManifest(root, *headRef, *manifestPath)
+	if args[0] == "validate" && err == nil {
+		manifest, err = validateAcceptedMain(root, *headRef, *manifestPath)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(stdout, "v"+manifest.Version)
+	return err
+}
+
+func readAcceptedMainManifest(root, headRef, manifestPath string) (candidateManifest, error) {
+	headSHA, err := resolveCommit(root, headRef)
+	if err != nil {
+		return candidateManifest{}, fmt.Errorf("head: %w", err)
+	}
+	manifest, err := readManifestAtRef(root, headSHA, manifestPath)
+	if err != nil {
+		return candidateManifest{}, fmt.Errorf("manifest: %w", err)
+	}
+	return manifest, nil
+}
+
+func validateAcceptedMain(root, headRef, manifestPath string) (candidateManifest, error) {
+	headSHA, err := resolveCommit(root, headRef)
+	if err != nil {
+		return candidateManifest{}, fmt.Errorf("head: %w", err)
+	}
+	manifest, err := readAcceptedMainManifest(root, headSHA, manifestPath)
+	if err != nil {
+		return candidateManifest{}, err
+	}
+	if err := requireAncestor(root, manifest.MainSHA, headSHA, "recorded main is not an ancestor of accepted main"); err != nil {
+		return candidateManifest{}, err
+	}
+	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
+		return candidateManifest{}, err
+	}
+	if err := requireNoFragments(root, headSHA); err != nil {
+		return candidateManifest{}, err
+	}
+	return manifest, nil
 }
 
 func runSync(root string, args []string, stdout io.Writer) error {

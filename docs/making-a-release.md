@@ -155,9 +155,36 @@ pass. CI reruns the same suite on the resulting `main` SHA. A release may start
 only after that exact SHA has green `Acceptance`; a red run leaves `main`
 untagged and opens the branch-health issue.
 
+```text
+main SHA ──CI──▶ Acceptance green ──validate manifest + versions──▶ vX.Y.Z
+   │                                                                    │
+   │ red or stale                                                       │ explicit dispatch
+   └────────────────────────────▶ no tag                                ▼
+                                                         draft release + all assets
+                                                                    │
+                                                        every build gate passes
+                                                                    ▼
+                                                              public release
+```
+
+`Release accepted main` is serialized across versions. It checks the triggering
+CI run's own `Acceptance` job, verifies that the SHA is still the current
+`main`, validates the candidate manifest and every committed version source,
+then creates the immutable tag and explicitly dispatches `release.yml` from
+that tag. A retry recognizes both an existing exact tag and an existing release
+run for the same commit, so it cannot start a second release.
+
+The manifest stays in Git history so `next` can reconcile the release. Once its
+tag points to an earlier `main` SHA, release automation treats that manifest as
+consumed and exits cleanly. It never reuses a published version for a later
+`main` change. A post-release hotfix therefore needs a fresh version and
+manifest; the hotfix preparation path is an activation prerequisite.
+
 If `main` Acceptance fails, make the smallest `hotfix/*` PR from `main`, merge
 it after its PR gate and manual verification pass, and wait for the repaired
-`main` SHA to earn Acceptance. Release that repaired SHA, not the failed one.
+`main` SHA to earn Acceptance. Update `CHANGELOG.md` directly for this
+pre-release repair; pending fragments make the accepted-main validator stop.
+Release that repaired SHA, not the failed one.
 
 ## Sync main back into next
 
@@ -189,10 +216,12 @@ back and prevents the two lines from silently diverging.
 The release workflow builds the app, stages the bundled plugins into it, checks
 they survived into the bundle, notarizes and staples, and builds the Linux
 daemons, all against a **draft** release. It is published only after every one
-of those has passed. A failed release run leaves a draft, not a half-built
-public release: fix the cause and rerun the workflow on the same tag
-(`gh workflow run release.yml -f tag=<tag>`), which replaces the assets and
-publishes when the whole set is right.
+of those has passed. A failed release run leaves any partial release as a
+private draft, not a half-built public release. `Release health` opens one issue
+for that tag with the exact run and draft receipt. Fix the cause and rerun the
+workflow on the same tag
+(`gh workflow run release.yml --ref <tag> -f tag=<tag>`); the rerun replaces
+the assets, publishes when the whole set is right, and closes the issue.
 
 ## What's New modal
 
