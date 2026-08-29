@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MarkdownReader } from './index';
 import { sanitizeLinkUrl } from './markdownLinks';
 import { fileMarkdownSource, seedMarkdownSource } from './documentSource';
+import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
+import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn(async () => {}),
@@ -34,6 +36,10 @@ function renderReader(content: string, allowLocalTargets = true) {
   return render(
     <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={allowLocalTargets} />,
   );
+}
+
+function seedReaderApi(resolveTarget: ReturnType<typeof vi.fn>): DaemonApi {
+  return { sendSeedArtifactTarget: resolveTarget } as unknown as DaemonApi;
 }
 
 describe('MarkdownReader source anchoring', () => {
@@ -120,6 +126,81 @@ describe('MarkdownReader link sanitization', () => {
 
     expect(screen.queryByRole('link', { name: 'local' })).toBeNull();
     expect(screen.getByRole('link', { name: 'site' })).toBeInTheDocument();
+  });
+
+  it('resolves direct seed links and images through the owning daemon', async () => {
+    const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (
+      purpose === 'image'
+        ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
+        : { relative_target: target, path: '/notebook/seeds/s-7k3f9m/report.pdf' }
+    ));
+    render(
+      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
+        <MarkdownReader
+          content={'[report](report.pdf)\n\n![cover](cover%20art.png)'}
+          source={seedMarkdownSource('s-7k3f9m')}
+          seedArtifacts={[{ filename: 'cover art.png', relative_target: 'cover%20art.png', size: 5, modified_at: '2026-08-29T20:00:00Z' }]}
+        />
+      </DaemonApiProvider>,
+    );
+
+    const image = await screen.findByRole('img', { name: 'cover' });
+    expect(image).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
+    fireEvent.click(screen.getByRole('link', { name: 'report' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
+      path: '/notebook/seeds/s-7k3f9m/report.pdf',
+    }));
+    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'cover%20art.png', 'image');
+    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
+  });
+
+  it('rejects nested, escaped, and active-content seed targets', () => {
+    const resolveTarget = vi.fn();
+    render(
+      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
+        <MarkdownReader
+          content={'[up](../secret.pdf) [nested](docs/report.pdf) [html](page.html) [encoded](%2e%2e%2fsecret.pdf) ![svg](art.svg)'}
+          source={seedMarkdownSource('s-7k3f9m')}
+        />
+      </DaemonApiProvider>,
+    );
+
+    expect(screen.queryByRole('link', { name: 'up' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'nested' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'html' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'encoded' })).toBeNull();
+    expect(screen.getByText(/blocked image: svg/)).toBeInTheDocument();
+    expect(resolveTarget).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a seed image without remounting the Markdown tree', async () => {
+    const resolveTarget = vi.fn(async () => ({
+      relative_target: 'cover.png', mime_type: 'image/png', data_base64: resolveTarget.mock.calls.length === 1 ? 'b25l' : 'dHdv',
+    }));
+    const api = seedReaderApi(resolveTarget);
+    const content = '<details><summary>Receipt</summary>\n\n![cover](cover.png)\n\n</details>';
+    const first = [{ filename: 'cover.png', relative_target: 'cover.png', size: 3, modified_at: '2026-08-29T20:00:00Z' }];
+    const { container, rerender } = render(
+      <DaemonApiProvider api={api}>
+        <MarkdownReader content={content} source={seedMarkdownSource('s-7k3f9m')} seedArtifacts={first} />
+      </DaemonApiProvider>,
+    );
+    const image = await screen.findByRole('img', { name: 'cover' });
+    expect(image).toHaveAttribute('src', 'data:image/png;base64,b25l');
+    const details = container.querySelector('details')!;
+    details.open = true;
+
+    rerender(
+      <DaemonApiProvider api={api}>
+        <MarkdownReader
+          content={content}
+          source={seedMarkdownSource('s-7k3f9m')}
+          seedArtifacts={[{ ...first[0], modified_at: '2026-08-29T20:01:00Z' }]}
+        />
+      </DaemonApiProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,dHdv'));
+    expect(details.open).toBe(true);
   });
 
   it('keeps heading ids GitHub-sluggy with dedup', () => {

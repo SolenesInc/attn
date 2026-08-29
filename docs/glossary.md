@@ -527,6 +527,17 @@ in a seed, including a bug found along the way, a deferred follow-up, or a piece
 split off for somebody else. `attn seed prime` gives every agent the working
 rules and current ready answer.
 
+A seed **artifact** is a direct visible regular file under
+`<Notebook>/seeds/<seed-id>/`. Filesystem membership is authoritative: adding,
+editing, renaming, or deleting a direct file changes the seed's artifacts, while
+hidden transfer receipts and log entries do not. An artifact belongs to the seed
+and survives sessions, workspaces, source worktrees, and seed lifecycle changes.
+Move or Copy explicitly brings a local file into that ownership; moving it back
+out requires an explicit destination and never overwrites. A **linked artifact**
+is the older attach-log association to a repository path, Notebook document, or
+URL. It stays visibly separate and becomes owned only through an explicit Bring
+into seed Move or Copy.
+
 A **plot** is a seed with children, addressed by that seed's id. Its body is the
 execution plan. Its children are parallel unless a `blocks` edge orders them.
 Any seed can become a plot when it gains a child. A **packet** is a plot flagged

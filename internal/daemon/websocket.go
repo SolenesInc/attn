@@ -1020,6 +1020,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
 	case protocol.CmdTicketAttach: // wire: ticket_attach
 		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		go d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage))
+	case protocol.CmdSeedArtifactTarget: // wire: seed_artifact_target
+		go d.handleSeedArtifactTarget(client, msg.(*protocol.SeedArtifactTargetMessage))
 	case protocol.CmdSeedResume: // wire: seed_resume
 		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake

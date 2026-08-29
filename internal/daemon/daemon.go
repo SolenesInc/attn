@@ -165,6 +165,7 @@ type Daemon struct {
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
 	sessionTitleAttempted             map[string]struct{}
 	ticketArtifactMu                  sync.Mutex
+	seedArtifactMu                    sync.Mutex
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationWorktreePrepareHook     func(path string)
@@ -2307,6 +2308,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedShow: // wire: seed_show
 		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit: // wire: seed_edit
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedSetResume: // wire: seed_set_resume

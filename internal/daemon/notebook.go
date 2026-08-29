@@ -63,13 +63,24 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 	w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
 		var mdPaths []string
+		artifactSeeds := map[string]struct{}{}
 		for _, p := range paths {
 			if _, err := notebook.CleanPath(p); err == nil {
 				mdPaths = append(mdPaths, p)
 			}
+			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
+				artifactSeeds[seedID] = struct{}{}
+			}
 		}
 		if len(mdPaths) > 0 {
 			d.broadcastNotebookChanged(originExternal, mdPaths...)
+		}
+		if len(artifactSeeds) > 0 {
+			d.coalesceSnapshots(func() {
+				for seedID := range artifactSeeds {
+					d.publishFact(FactGardenArtifactChanged, seedID, nil)
+				}
+			})
 		}
 	})
 	if err != nil {

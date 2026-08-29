@@ -130,6 +130,7 @@ const (
 	FactGardenWithered              = "garden.withered"
 	FactGardenReplanted             = "garden.replanted"
 	FactGardenNoted                 = "garden.noted"
+	FactGardenArtifactChanged       = "garden.artifact.changed"
 	FactGardenLinked                = "garden.linked"
 	FactGardenUnlinked              = "garden.unlinked"
 
