@@ -1,4 +1,4 @@
-import { createContext, isValidElement, memo, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Children, createContext, isValidElement, memo, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { HTMLAttributes, ReactNode, Ref, RefObject } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
@@ -137,18 +137,37 @@ function SeedArtifactLink({ target, children }: { target: string; children: Reac
   if (!artifactContext || !isSafeLocalMarkdownTarget(decodedSeedTargetName(target))) {
     return <span title={`Blocked seed artifact target: ${target}`}>{children}</span>;
   }
+  const targetName = decodedSeedTargetName(target);
+  const openArtifact = () => {
+    void artifactContext.resolveTarget(artifactContext.seedId, target, 'link')
+      .then((result) => result.path
+        ? invoke('open_safe_seed_artifact_target', { path: result.path })
+        : Promise.reject(new Error('The daemon returned no artifact path')))
+      .catch((error) => console.warn('[MarkdownReader] Failed to open seed artifact:', error));
+  };
+  const containsArtifactImage = Children.toArray(children)
+    .some((child) => isValidElement<{ node?: { tagName?: string } }>(child) && child.props.node?.tagName === 'img');
+  if (containsArtifactImage) {
+    return (
+      <span className="md-reader-linked-artifact-image">
+        {children}
+        <button
+          type="button"
+          className="md-reader-artifact-link"
+          title={targetName}
+          onClick={openArtifact}
+        >
+          Open {targetName}
+        </button>
+      </span>
+    );
+  }
   return (
     <button
       type="button"
       className="md-reader-artifact-link"
-      title={decodedSeedTargetName(target)}
-      onClick={() => {
-        void artifactContext.resolveTarget(artifactContext.seedId, target, 'link')
-          .then((result) => result.path
-            ? invoke('open_safe_seed_artifact_target', { path: result.path })
-            : Promise.reject(new Error('The daemon returned no artifact path')))
-          .catch((error) => console.warn('[MarkdownReader] Failed to open seed artifact:', error));
-      }}
+      title={targetName}
+      onClick={openArtifact}
     >
       {children}
     </button>

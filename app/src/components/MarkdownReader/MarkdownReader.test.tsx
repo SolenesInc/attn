@@ -161,6 +161,39 @@ describe('MarkdownReader link sanitization', () => {
     expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
   });
 
+  it('keeps a linked seed image and its target as sibling keyboard controls', async () => {
+    const user = userEvent.setup();
+    const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (
+      purpose === 'image'
+        ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
+        : { relative_target: target, path: '/notebook/seeds/s-7k3f9m/report.pdf' }
+    ));
+    const { container } = render(
+      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
+        <MarkdownReader
+          content="[![cover](cover.png)](report.pdf)"
+          source={seedMarkdownSource('s-7k3f9m')}
+          seedArtifacts={[{ filename: 'cover.png', relative_target: 'cover.png', size: 5, modified_at: '2026-08-29T20:00:00Z' }]}
+        />
+      </DaemonApiProvider>,
+    );
+
+    const imageButton = await screen.findByRole('button', { name: 'cover' });
+    const linkButton = screen.getByRole('button', { name: 'Open report.pdf' });
+    expect(container.querySelector('button button')).toBeNull();
+
+    imageButton.focus();
+    await user.keyboard('{Enter}');
+    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    linkButton.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
+      path: '/notebook/seeds/s-7k3f9m/report.pdf',
+    }));
+  });
+
   it('rejects nested, escaped, and active-content seed targets', () => {
     const resolveTarget = vi.fn();
     render(
