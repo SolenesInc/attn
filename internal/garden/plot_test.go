@@ -142,11 +142,11 @@ func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 		},
 		"two children deriving one slug": {
 			`{"title":"t","children":[{"title":"Do the thing"},{"title":"do the THING"}]}`,
-			[]string{"do-the-thing", "retitle"},
+			[]string{"do-thing", "retitle"},
 		},
 		"blocks naming no sibling": {
 			`{"title":"t","children":[{"title":"a","blocks":["nobody"]}]}`,
-			[]string{"nobody", "no sibling's step slug", "a"},
+			[]string{"nobody", "no sibling's title or step slug", "a"},
 		},
 		"blocks that cycle": {
 			`{"title":"t","children":[{"title":"a","blocks":["b"]},{"title":"b","blocks":["a"]}]}`,
@@ -165,6 +165,16 @@ func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParsePlotSpecAcceptsATitleAsABlocksTarget(t *testing.T) {
+	spec, err := ParsePlotSpec([]byte(`{"title":"t","children":[{"title":"Draw the grid"},{"title":"Scroll the grid","blocks":["Draw the grid"]}]}`))
+	if err != nil {
+		t.Fatalf("a sibling's title is refused as a blocks target: %v", err)
+	}
+	if len(spec.Children) != 2 {
+		t.Fatalf("children = %d", len(spec.Children))
 	}
 }
 

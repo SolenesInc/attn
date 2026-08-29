@@ -68,7 +68,9 @@ func runSeed() {
 func writeSeedHelp(w io.Writer) {
 	fmt.Fprintf(w, `usage: attn seed <command>
 
-A seed is the unit of work: one document, one short id, planted in the garden.
+A seed is the unit of work: one document, one short id, one slug made of the
+title's key words, planted in the garden. Commands take the id; the slug is
+how the seed is spoken of.
 Anything worth handing off, parking, or attributing is a seed.
 
 The garden lives at the home daemon. On an outpost every command here refuses,
@@ -76,7 +78,7 @@ naming the home to run it on.
 
 commands:
   plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [resume flags] [flags]
-        plant a seed and print its id. -m takes markdown, or - to read stdin —
+        plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
         if the seed gains children, that body is the plot's plan. --part-of
         plants it under a plot. --resume-session-id, --cwd and --agent
         together make a dead conversation resumable without a dispatch record.
@@ -237,7 +239,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 			ready.Crown.ID, ready.Crown.Title, ready.Crown.ID)
 		handoffs := freshestHandoffs(ready.Handoffs)
 		for _, seed := range ready.Seeds {
-			fmt.Fprintf(&tail, "\n- `%s` %s", seed.ID, seed.Title)
+			fmt.Fprintf(&tail, "\n- `%s` %s: %s", seed.ID, seed.StepSlug, seed.Title)
 			if handoff, ok := handoffs[seed.ID]; ok && strings.TrimSpace(handoff.Body) != "" {
 				author := crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)
 				if author == "" {
@@ -439,7 +441,20 @@ func runSeedPlant(args []string) {
 		writeJSON(result.Seed)
 		return
 	}
-	fmt.Println(result.Seed.ID)
+	fmt.Println(seedLine(result.Seed))
+}
+
+// The line an agent echoes: the id is what commands take, the slug is what the
+// user hears, the title is what both mean.
+func seedLine(seed protocol.Seed) string {
+	return fmt.Sprintf("%s  %s  %s", seed.ID, seed.StepSlug, seed.Title)
+}
+
+func seedHandle(seed protocol.Seed) string {
+	if seed.StepSlug == "" {
+		return seed.ID
+	}
+	return seed.ID + " (" + seed.StepSlug + ")"
 }
 
 func runSeedList(args []string) {
@@ -471,10 +486,10 @@ func runSeedList(args []string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tTENDER\tPLANTED\tTITLE")
+	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, *f.flat) {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n",
-			row.seed.ID, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
+			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed))
 	}
 	w.Flush()
@@ -528,7 +543,7 @@ func runSeedPlot(args []string) {
 		writeJSON(result)
 		return
 	}
-	fmt.Println(result.Crown.ID)
+	fmt.Println(seedLine(result.Crown))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, child := range result.Children {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
@@ -758,7 +773,7 @@ func runSeedReady(args []string) {
 
 func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Fprintf(out, "%s  %s%s\n\n", result.Crown.ID, result.Crown.Title, plotProgressSuffix(*result.Crown))
+		fmt.Fprintf(out, "%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown))
 	}
 	if len(result.Seeds) == 0 {
 		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
@@ -766,7 +781,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	}
 	handoffs := freshestHandoffs(result.Handoffs)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tSTATUS\tPLANTED\tTITLE")
+	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tPLANTED\tTITLE")
 	rows := make([]seedRow, 0, len(result.Plots)+len(result.Seeds))
 	if result.Scope == "garden" && len(result.Plots) > 0 {
 		rows = seedRows(append(slices.Clone(result.Plots), result.Seeds...), false)
@@ -784,10 +799,10 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 		if plotIDs[seed.ID] {
 			status = "plot"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s%s%s\n", seed.ID, status, shortStamp(seed.CreatedAt),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
 			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
-			fmt.Fprintf(w, "\t\t\t↳ %s: %s\n",
+			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
 		}
 	}
@@ -822,8 +837,8 @@ func readyScopeName(result *protocol.SeedReadyResult) string {
 func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
+	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "status\t%s\n", seed.Status)
-	fmt.Fprintf(w, "step\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(crew.HolderName(seed.PlanterMember, seed.PlanterSession)))
 	fmt.Fprintf(w, "tender\t%s\n", orDash(crew.HolderName(seed.TenderMember, seed.TenderSession)))
 	if p := seed.PlotProgress; p != nil {
@@ -907,7 +922,7 @@ func openPlotSeeds(seed protocol.Seed) int {
 }
 
 func transitionLine(seed protocol.Seed) string {
-	line := fmt.Sprintf("%s is %s", seed.ID, seed.Status)
+	line := fmt.Sprintf("%s is %s", seedHandle(seed), seed.Status)
 	if tender := crew.HolderName(seed.TenderMember, seed.TenderSession); tender != "" {
 		line += fmt.Sprintf(", tended by %s", tender)
 	}

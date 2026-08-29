@@ -29,10 +29,10 @@ func TestSeedPrimeFromReadyTails(t *testing.T) {
 			name: "plot",
 			ready: protocol.SeedReadyResult{
 				Crown:    &protocol.Seed{ID: "s-plot01", Title: "Example plot", PlotProgress: plotProgress},
-				Seeds:    []protocol.Seed{{ID: "s-child1", Title: "First child"}},
+				Seeds:    []protocol.Seed{{ID: "s-child1", StepSlug: "first-child", Title: "First child"}},
 				Handoffs: []protocol.SeedNote{{SeedID: "s-child1", Body: "left it half done", AuthorMember: "alder"}},
 			},
-			tail: "You were dispatched to work at plot `s-plot01`, \"Example plot\". Read the plan with `attn seed show s-plot01`. Tend or plant anything, here or elsewhere.\n\nReady in this plot now, oldest first:\n\n- `s-child1` First child\n  handoff from Alder: left it half done",
+			tail: "You were dispatched to work at plot `s-plot01`, \"Example plot\". Read the plan with `attn seed show s-plot01`. Tend or plant anything, here or elsewhere.\n\nReady in this plot now, oldest first:\n\n- `s-child1` first-child: First child\n  handoff from Alder: left it half done",
 		},
 		{
 			name:  "empty plot",
