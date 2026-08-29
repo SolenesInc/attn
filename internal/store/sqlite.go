@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -2756,8 +2757,11 @@ func applyMigration126(tx *sql.Tx) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	// A new body is a new revision: stale conditional writes and resuming
+	// subscriptions decide by rev, so a silent rewrite would leave them holding the old slug.
+	stamp := time.Now().UTC().Format(docstore.TimeFormat)
 	for _, u := range updates {
-		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET body = ? WHERE id = ?`, table), u.body, u.id); err != nil {
+		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET body = ?, rev = rev + 1, updated_at = ? WHERE id = ?`, table), u.body, stamp, u.id); err != nil {
 			return err
 		}
 	}

@@ -28,6 +28,10 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	if _, err := s.PutDocument(*schema, "s-e5zefj", body, time.Now(), nil); err != nil {
 		t.Fatalf("plant the old-slug seed: %v", err)
 	}
+	before, _, err := s.GetDocument(*schema, "s-e5zefj")
+	if err != nil {
+		t.Fatalf("read the seed before the migration: %v", err)
+	}
 	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 126`); err != nil {
 		t.Fatalf("unrecord migration 126: %v", err)
 	}
@@ -38,6 +42,12 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	doc, _, err := s.GetDocument(*schema, "s-e5zefj")
 	if err != nil {
 		t.Fatalf("read the seed back: %v", err)
+	}
+	if doc.Rev <= before.Rev {
+		t.Fatalf("rev stayed at %d although migration 126 changed the body; stale writes and resuming watchers decide by rev", doc.Rev)
+	}
+	if !doc.UpdatedAt.After(before.UpdatedAt) {
+		t.Fatalf("updated_at %s did not move past %s", doc.UpdatedAt, before.UpdatedAt)
 	}
 	var seed garden.Seed
 	if err := json.Unmarshal(doc.Body, &seed); err != nil {
