@@ -312,7 +312,7 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
-func TestMigration122FoldsTheLayerModelsIntoOneChain(t *testing.T) {
+func TestMigration124FoldsTheLayerModelsIntoOneChain(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -338,8 +338,8 @@ func TestMigration122FoldsTheLayerModelsIntoOneChain(t *testing.T) {
 	if _, err := s.GetAutoModeConfig(); err == nil {
 		t.Fatal("the planted schema already has the folded column; this test would pass without the migration")
 	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 122`); err != nil {
-		t.Fatalf("unrecord migration 122: %v", err)
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
+		t.Fatalf("unrecord migration 124: %v", err)
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB: %v", err)
@@ -365,7 +365,7 @@ func TestMigration122FoldsTheLayerModelsIntoOneChain(t *testing.T) {
 	}
 }
 
-func TestMigration123KeepsTheOldProseAsNotes(t *testing.T) {
+func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -378,8 +378,8 @@ func TestMigration123KeepsTheOldProseAsNotes(t *testing.T) {
 		VALUES (1, 1, '["this laptop is mine","nothing here serves traffic"]', '[]', '[]', '[]', '2026-08-23T09:00:00Z')`); err != nil {
 		t.Fatalf("plant the pre-123 row: %v", err)
 	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 123`); err != nil {
-		t.Fatalf("unrecord migration 123: %v", err)
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 125`); err != nil {
+		t.Fatalf("unrecord migration 125: %v", err)
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB: %v", err)
@@ -397,7 +397,7 @@ func TestMigration123KeepsTheOldProseAsNotes(t *testing.T) {
 	}
 }
 
-func TestMigration122DropsModelsNobodyPromoted(t *testing.T) {
+func TestMigration124DropsModelsNobodyPromoted(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
 	if err != nil {
@@ -418,8 +418,8 @@ func TestMigration122DropsModelsNobodyPromoted(t *testing.T) {
 			t.Fatalf("plant the pre-122 schema (%s): %v", stmt, err)
 		}
 	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 122`); err != nil {
-		t.Fatalf("unrecord migration 122: %v", err)
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
+		t.Fatalf("unrecord migration 124: %v", err)
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB: %v", err)

@@ -19,10 +19,10 @@ type Slot struct {
 	Kind    string   `json:"kind"`
 	Choices []string `json:"choices,omitempty"`
 	Detail  string   `json:"detail"`
-	Unset string `json:"unset"`
+	Unset   string   `json:"unset"`
 	// Detected slots are filled from the session at launch; a user value wins.
-	Detected bool `json:"detected,omitempty"`
-	ReadBy []string `json:"read_by"`
+	Detected bool     `json:"detected,omitempty"`
+	ReadBy   []string `json:"read_by"`
 }
 
 // Slots is the environment's whole schema, in render order. environment.ts
@@ -119,7 +119,7 @@ func SlotIDs() []string {
 
 type Environment struct {
 	Slots map[string][]string `json:"slots"`
-	Notes []string `json:"notes"`
+	Notes []string            `json:"notes"`
 }
 
 func NewEnvironment() Environment {

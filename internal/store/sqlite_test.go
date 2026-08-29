@@ -1745,7 +1745,7 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	s.SetResumeSessionID("legacy-session", "native-legacy")
 	if _, err := s.db.Exec(`
 		ALTER TABLE sessions DROP COLUMN transcript_path;
-		DELETE FROM schema_migrations WHERE version = 123;
+		DELETE FROM schema_migrations WHERE version >= 123;
 	`); err != nil {
 		t.Fatalf("rewind migration 123: %v", err)
 	}
@@ -1753,7 +1753,7 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("first migrateDB: %v", err)
 	}
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version = 123`); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 123`); err != nil {
 		t.Fatalf("unrecord migration 123: %v", err)
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {
