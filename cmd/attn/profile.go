@@ -292,7 +292,11 @@ func runProfileClean(args []string) {
 	fmt.Printf(">>> Cleaning profile %s\n", r.Label)
 
 	// The daemon outlives the app by design, so quit the app first.
-	fmt.Printf("  app      %s\n", stopProfileApp(r))
+	if msg, err := stopProfileApp(r); err != nil {
+		fmt.Printf("  app      %v\n", err)
+	} else {
+		fmt.Printf("  app      %s\n", msg)
+	}
 	if msg := stopProfileDaemon(r); msg != "" {
 		fmt.Printf("  daemon   %s\n", msg)
 	} else {
@@ -447,15 +451,19 @@ func runProfileStopApp(args []string) {
 			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
-	fmt.Printf("  app      %s\n", stopProfileApp(resolveProfile(profile)))
+	msg, err := stopProfileApp(resolveProfile(profile))
+	if err != nil {
+		profileFatal(err.Error())
+	}
+	fmt.Printf("  app      %s\n", msg)
 }
 
-// macOS asks the bundle to quit by id; elsewhere the app's own pid file is the
-// handle, and /proc proves the pid is still that app before any signal.
-func stopProfileApp(r profileResolved) string {
+// An error means the app may still be running: callers that replace the install
+// tree must stop rather than orphan a process on a deleted inode.
+func stopProfileApp(r profileResolved) (string, error) {
 	if runtime.GOOS == "darwin" {
 		_ = exec.Command("osascript", "-e", fmt.Sprintf("tell application id %q to quit", r.BundleID)).Run()
-		return "asked " + r.BundleID + " to quit"
+		return "asked " + r.BundleID + " to quit", nil
 	}
 	return stopProfileAppByPIDFile(r)
 }
@@ -467,48 +475,64 @@ const (
 	appStopSigkillWait = 2 * time.Second
 )
 
-func stopProfileAppByPIDFile(r profileResolved) string {
+func stopProfileAppByPIDFile(r profileResolved) (string, error) {
 	pidPath := appPIDFilePath(r.DataDir)
 	raw, err := os.ReadFile(pidPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "not running (no " + pidPath + ")"
+			return "not running (no " + pidPath + ")", nil
 		}
-		return fmt.Sprintf("could not read %s: %v", pidPath, err)
+		return "", fmt.Errorf("could not read %s: %w", pidPath, err)
 	}
 	text := strings.TrimSpace(string(raw))
 	pid, err := strconv.Atoi(text)
 	if err != nil || pid <= 0 {
-		return fmt.Sprintf("%s holds %q, not a pid; left alone", pidPath, text)
+		return "", fmt.Errorf("%s holds %q, not a pid; left alone", pidPath, text)
 	}
 	if pid == os.Getpid() || pid == os.Getppid() {
-		return fmt.Sprintf("refusing to signal pid %d: it is this command's own process tree", pid)
+		return "", fmt.Errorf("refusing to signal pid %d: it is this command's own process tree", pid)
 	}
 	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
 	if err != nil {
 		_ = os.Remove(pidPath)
-		return fmt.Sprintf("not running (pid %d is gone; removed stale %s)", pid, pidPath)
+		return fmt.Sprintf("not running (pid %d is gone; removed stale %s)", pid, pidPath), nil
 	}
-	if exe != r.AppExecutable {
-		return fmt.Sprintf("pid %d is %s, not %s; left running", pid, exe, r.AppExecutable)
+	// An app still running out of a replaced install tree is exactly what we
+	// must stop; Linux marks its unlinked image, the path is still ours.
+	exe = strings.TrimSuffix(exe, " (deleted)")
+	if !sameExecutable(exe, r.AppExecutable) {
+		return "", fmt.Errorf("pid %d is %s, not %s; left running", pid, exe, r.AppExecutable)
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 		if errors.Is(err, syscall.ESRCH) {
 			_ = os.Remove(pidPath)
-			return fmt.Sprintf("not running (stale %s)", pidPath)
+			return fmt.Sprintf("not running (stale %s)", pidPath), nil
 		}
-		return fmt.Sprintf("SIGTERM pid %d failed: %v", pid, err)
+		return "", fmt.Errorf("SIGTERM pid %d failed: %w", pid, err)
 	}
 	if appProcessGoneWithin(pid, appStopSigtermWait) {
 		_ = os.Remove(pidPath)
-		return fmt.Sprintf("stopped pid %d", pid)
+		return fmt.Sprintf("stopped pid %d", pid), nil
 	}
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 	if appProcessGoneWithin(pid, appStopSigkillWait) {
 		_ = os.Remove(pidPath)
-		return fmt.Sprintf("force-killed pid %d (did not exit on SIGTERM)", pid)
+		return fmt.Sprintf("force-killed pid %d (did not exit on SIGTERM)", pid), nil
 	}
-	return fmt.Sprintf("pid %d survived SIGKILL; check it with ps -p %d", pid, pid)
+	return "", fmt.Errorf("pid %d survived SIGKILL; check it with ps -p %d", pid, pid)
+}
+
+// /proc/<pid>/exe is already resolved, so an install root behind a symlink
+// (a symlinked XDG_DATA_HOME) only matches once both sides are.
+func sameExecutable(a, b string) bool {
+	return a == b || resolvedPath(a) == resolvedPath(b)
+}
+
+func resolvedPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 // Written by the Tauri shell at startup, removed on a clean exit.

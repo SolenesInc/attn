@@ -288,7 +288,7 @@ install: build-app
 	mkdir -p "$$(dirname "$$app_bundle")"; \
 	: "Quit a running instance first. macOS keeps the running image via mmap,"; \
 	: "so rm -rf + cp alone would leave an old process out of a deleted bundle."; \
-	"$$attn" profile stop-app --profile "$$profile" >/dev/null 2>&1 || true; \
+	"$$attn" profile stop-app --profile "$$profile" >/dev/null; \
 	rm -rf "$$app_bundle"; \
 	cp -r "$$staged" "$$app_bundle"; \
 	if [ -n "$$profile" ]; then \

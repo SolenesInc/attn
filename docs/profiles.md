@@ -142,7 +142,7 @@ the Go and (soon) e2e suites concurrently with no cross-talk.
 | Inspect | `attn profile` / `attn profile list` / `attn profile list --json` |
 | Build + install app | `make install PROFILE=<name>` (opens it: `make run PROFILE=<name>`) |
 | Sign | uniform stable identity via `scripts/macos-codesign-identity.sh`; macOS grants persist per bundle id |
-| Stop the app | `attn profile stop-app --profile <name>` — by bundle id on macOS, by the app's own `app.pid` (confirmed against `/proc`) elsewhere |
+| Stop the app | `attn profile stop-app --profile <name>` — by bundle id on macOS, by the app's own `app.pid` (confirmed against `/proc`) elsewhere. Nothing to stop is success; a refusal exits non-zero, and `make install` stops with it |
 | Clean | `attn profile clean <name>` — reap pty-workers, stop daemon, quit app, remove data dir + app, forget the bundle |
 
 ### Cleaning up after yourself

@@ -8,5 +8,6 @@ change: >
   binaries inside it, appExecutable and appDaemon, and the sidecar is staged
   under the rustc host triple instead of a hardcoded aarch64-apple-darwin.
   `attn profile stop-app` quits a profile's app — by bundle id on macOS, by the
-  app's own pid file (confirmed against /proc) elsewhere — and `attn profile
-  list` and `clean` see Linux installs. macOS behavior is unchanged.
+  app's own pid file (confirmed against /proc) elsewhere — and `make install`
+  refuses to replace an install tree it could not stop the app out of. `attn
+  profile list` and `clean` see Linux installs. macOS behavior is unchanged.
