@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus } from './generated';
 import {
   applyRatioOverrides,
+  collectPreferredSplitIds,
   collectSplitRatios,
   findLeafInDirection,
   findPaneInDirection,
@@ -11,6 +12,7 @@ import {
   hasLeaf,
   hasPane,
   localWorkspaceDirectory,
+  parseLayoutJSON,
   soleWorkspaceForId,
   parseNotebookTileParams,
   resolveEditorTileRoot,
@@ -169,6 +171,17 @@ describe('collectSplitRatios', () => {
   });
 });
 
+describe('collectPreferredSplitIds', () => {
+  it('keeps presentation intent separate from the stored ratio', () => {
+    const preferred: TerminalLayoutNode = {
+      ...verticalSplit,
+      ratioMode: 'preferred',
+    };
+    expect(collectPreferredSplitIds(preferred)).toEqual(new Set(['root']));
+    expect(collectPreferredSplitIds(verticalSplit)).toEqual(new Set());
+  });
+});
+
 const paneWithTile: TerminalLayoutNode = {
   type: 'split',
   splitId: 'root',
@@ -245,7 +258,24 @@ describe('docked tiles', () => {
       ],
     });
     expect(findTileByKind(snapshot.workspace.layoutTree, 'markdown')?.tileId).toBe('tile-md');
+    expect(snapshot.workspace.layoutTree).toMatchObject({ ratioMode: 'automatic' });
     expect(snapshot.workspace.agents.map((agent) => agent.id)).toEqual(['pane-a']);
+  });
+
+  it('parses a preferred split ratio from daemon layout_json', () => {
+    const layout = parseLayoutJSON(JSON.stringify({
+      type: 'split',
+      split_id: 'root',
+      direction: 'vertical',
+      ratio: 0.73,
+      ratio_mode: 'preferred',
+      children: [
+        { type: 'pane', pane_id: 'pane-a' },
+        { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown' },
+      ],
+    }));
+
+    expect(layout).toMatchObject({ ratio: 0.73, ratioMode: 'preferred' });
   });
 
   it('drops malformed tile leaves (missing kind)', () => {

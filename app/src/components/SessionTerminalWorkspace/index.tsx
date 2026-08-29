@@ -7,10 +7,8 @@ import { StateIndicator } from '../StateIndicator';
 import { useShortcut } from '../../shortcuts/useShortcut';
 import {
   getNormalizedPaneBounds,
-  getSplitDividers,
-  applyRatioOverrides,
+  collectPreferredSplitIds,
   collectSplitRatios,
-  hasLeaf,
   findLeafInDirection,
   leafSlotId,
   tileContentKey,
@@ -51,14 +49,11 @@ import type { AutomationProvenance as AutomationProvenanceValue } from '../../ty
 import { AutomationProvenance } from '../AutomationProvenance';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import {
-  projectAttentionLayout,
-  reconcileAttentionSuspension,
-  splitIdsBesideSuspendedSubtrees,
+  resolveWorkspaceLayout,
   swapSuspendedLeaf,
   type AttentionViewport,
 } from './attentionLayout';
 
-const ZOOM_PATH_RATIO = 0.76;
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 // Only swallows the trailing pointerup/synthetic click from the release itself,
 // so a deliberate click right after resizing is not dropped.
@@ -72,32 +67,6 @@ function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION
 
 // An effect dependency, so the no-op stand-in has to keep one identity.
 const noRequestContent = () => {};
-
-function zoomLayoutTowardLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode {
-  if (node.type !== 'split') {
-    return node;
-  }
-
-  const firstContainsPane = hasLeaf(node.children[0], leafId);
-  const secondContainsPane = hasLeaf(node.children[1], leafId);
-  const nextChildren: [TerminalLayoutNode, TerminalLayoutNode] = [
-    zoomLayoutTowardLeaf(node.children[0], leafId),
-    zoomLayoutTowardLeaf(node.children[1], leafId),
-  ];
-
-  if (!firstContainsPane && !secondContainsPane) {
-    return {
-      ...node,
-      children: nextChildren,
-    };
-  }
-
-  return {
-    ...node,
-    ratio: firstContainsPane ? ZOOM_PATH_RATIO : 1 - ZOOM_PATH_RATIO,
-    children: nextChildren,
-  };
-}
 
 export interface SessionTerminalWorkspaceHandle {
   fitPane: (paneId: string) => void;
@@ -258,7 +227,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       name: string;
       anchor: { top: number; left: number };
     } | null>(null);
-    const [ratioOverrides, setRatioOverrides] = useState<Map<string, number>>(() => new Map());
+    const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(() => new Map());
     const [resizingSplit, setResizingSplit] = useState<{ splitId: string; direction: TerminalSplitDirection } | null>(null);
     const [staleBuildDismissed, setStaleBuildDismissed] = useState<ReadonlySet<string>>(() => new Set());
     const [draggingLeafId, setDraggingLeafId] = useState<string | null>(null);
@@ -516,57 +485,41 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     }, [attentionFocusOrder]);
     const effectivePaneId = maximizedLeafId && leafIdSet.has(maximizedLeafId) ? maximizedLeafId : null;
     const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
-    const baseLayoutTree = useMemo(() => (
-      workspace.layoutTree ? applyRatioOverrides(workspace.layoutTree, ratioOverrides) : null
-    ), [workspace.layoutTree, ratioOverrides]);
-    const manuallySizedSplitIds = useMemo(
-      () => new Set(ratioOverrides.keys()),
-      [ratioOverrides],
-    );
-    const suspendedLeafIds = useMemo(() => {
+    const layoutPlan = useMemo(() => {
       const current = suspendedLeafIdsRef.current ?? new Set<string>();
-      if (!baseLayoutTree || effectivePaneId || effectiveZoomedPaneId) {
-        return current;
+      if (!workspace.layoutTree) {
+        return null;
       }
-      return reconcileAttentionSuspension(
-        baseLayoutTree,
-        current,
-        attentionViewport,
-        attentionActiveLeafId,
-        attentionFocusOrder.slice(1),
-        manuallySizedSplitIds,
-      );
+      return resolveWorkspaceLayout({
+        sourceTree: workspace.layoutTree,
+        viewport: attentionViewport,
+        activeLeafId: attentionActiveLeafId,
+        focusOrder: attentionFocusOrder.slice(1),
+        previousSuspendedLeafIds: current,
+        pendingRatioOverrides,
+        view: effectivePaneId
+          ? { mode: 'focused', leafId: effectivePaneId }
+          : effectiveZoomedPaneId
+            ? { mode: 'zoomed', leafId: effectiveZoomedPaneId }
+            : { mode: 'normal' },
+      });
     }, [
       attentionActiveLeafId,
       attentionFocusOrder,
       attentionViewport,
-      baseLayoutTree,
       effectivePaneId,
       effectiveZoomedPaneId,
-      manuallySizedSplitIds,
+      pendingRatioOverrides,
       attentionRevision,
+      workspace.layoutTree,
     ]);
+    const suspendedLeafIds = layoutPlan?.suspendedLeafIds
+      ?? suspendedLeafIdsRef.current
+      ?? new Set<string>();
     useLayoutEffect(() => {
       suspendedLeafIdsRef.current = suspendedLeafIds;
     }, [suspendedLeafIds]);
-    const attentionLayoutTree = useMemo(() => (
-      baseLayoutTree
-        ? projectAttentionLayout(baseLayoutTree, suspendedLeafIds, attentionViewport, manuallySizedSplitIds)
-        : null
-    ), [attentionViewport, baseLayoutTree, manuallySizedSplitIds, suspendedLeafIds]);
-    const renderedLayoutTree = useMemo(() => {
-      if (!attentionLayoutTree) {
-        return null;
-      }
-      if (effectivePaneId) {
-        return tileLeafById.get(effectivePaneId)
-          ?? ({ type: 'pane', paneId: effectivePaneId } satisfies TerminalLayoutNode);
-      }
-      if (!effectiveZoomedPaneId) {
-        return attentionLayoutTree;
-      }
-      return zoomLayoutTowardLeaf(baseLayoutTree ?? attentionLayoutTree, effectiveZoomedPaneId);
-    }, [effectivePaneId, effectiveZoomedPaneId, attentionLayoutTree, baseLayoutTree, tileLeafById]);
+    const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
 
     useLayoutEffect(() => {
       const container = panesContainerRef.current;
@@ -591,7 +544,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     }, [workspaceId, effectivePaneId]);
 
     const clearRatioOverride = useCallback((splitId: string, expectedRatio?: number) => {
-      setRatioOverrides((prev) => {
+      setPendingRatioOverrides((prev) => {
         const current = prev.get(splitId);
         if (current == null || (expectedRatio != null && Math.abs(current - expectedRatio) >= 0.005)) {
           return prev;
@@ -602,22 +555,24 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       });
     }, []);
 
-    // A matching daemon echo makes an optimistic ratio a durable manual
-    // presentation choice; a different authoritative ratio supersedes it.
+    // A matching preferred echo settles the optimistic value; different
+    // authority supersedes it.
     useEffect(() => {
-      setRatioOverrides((prev) => {
+      setPendingRatioOverrides((prev) => {
         if (prev.size === 0 || !workspace.layoutTree) {
           return prev;
         }
         let changed = false;
         const next = new Map(prev);
         const authoritative = collectSplitRatios(workspace.layoutTree);
+        const preferred = collectPreferredSplitIds(workspace.layoutTree);
         for (const splitId of prev.keys()) {
           if (splitId === draggingSplitRef.current) {
             continue;
           }
           const ratio = authoritative.get(splitId);
-          if (ratio == null || Math.abs(ratio - (prev.get(splitId) ?? ratio)) >= 0.005) {
+          const matches = ratio != null && Math.abs(ratio - (prev.get(splitId) ?? ratio)) < 0.005;
+          if (!matches || preferred.has(splitId)) {
             next.delete(splitId);
             changed = true;
           }
@@ -1358,13 +1313,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       return 'Pane';
     }, [effectiveDraggingLeafId, agentPaneById, sessionById, tileLeafById]);
 
-    const splitDividers = useMemo<SplitDivider[]>(() => {
-      if (!renderedLayoutTree || !baseLayoutTree || effectivePaneId || effectiveZoomedPaneId) {
-        return [];
-      }
-      const fixed = splitIdsBesideSuspendedSubtrees(baseLayoutTree, suspendedLeafIds);
-      return getSplitDividers(renderedLayoutTree).filter((divider) => !fixed.has(divider.splitId));
-    }, [baseLayoutTree, renderedLayoutTree, effectivePaneId, effectiveZoomedPaneId, suspendedLeafIds]);
+    const splitDividers = layoutPlan?.dividers ?? [];
 
     const ratioRafRef = useRef<number | null>(null);
     const pendingRatioRef = useRef<{ splitId: string; ratio: number } | null>(null);
@@ -1376,7 +1325,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       if (!pending) {
         return;
       }
-      setRatioOverrides((prev) => {
+      setPendingRatioOverrides((prev) => {
         if (prev.get(pending.splitId) === pending.ratio) {
           return prev;
         }

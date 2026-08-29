@@ -40,6 +40,9 @@ func TestMoveLeafLocksDroppedRatioSoSizeSticks(t *testing.T) {
 	if !moved.RatioLocked || math.Abs(moved.Ratio-0.4) > 1e-9 {
 		t.Fatalf("new split = {locked:%v ratio:%v}, want locked at 0.4 so the drop size survives", moved.RatioLocked, moved.Ratio)
 	}
+	if moved.RatioMode != RatioModeAutomatic {
+		t.Fatalf("new split ratio mode = %q, want automatic", moved.RatioMode)
+	}
 	normalized := NormalizeWorkspaceLayout(WorkspaceLayout{
 		WorkspaceID: "ws",
 		Layout:      moved,

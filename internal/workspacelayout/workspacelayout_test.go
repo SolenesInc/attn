@@ -187,7 +187,7 @@ func TestNormalizeWorkspaceLayoutRebalancesAfterRemovingPaneFromChain(t *testing
 	}
 }
 
-func TestSetSplitRatioLocksMatchingSplit(t *testing.T) {
+func TestSetSplitRatioRecordsPreferredRatio(t *testing.T) {
 	root := Node{
 		Type:      "split",
 		SplitID:   "root",
@@ -205,6 +205,9 @@ func TestSetSplitRatioLocksMatchingSplit(t *testing.T) {
 	}
 	if !updated.RatioLocked {
 		t.Fatalf("split should be locked after SetSplitRatio")
+	}
+	if updated.RatioMode != RatioModePreferred {
+		t.Fatalf("ratio mode = %q, want preferred", updated.RatioMode)
 	}
 	if math.Abs(updated.Ratio-0.7) > 1e-9 {
 		t.Fatalf("ratio = %v, want 0.7", updated.Ratio)
@@ -269,13 +272,14 @@ func TestNormalizeWorkspaceLayoutPreservesLockedRatio(t *testing.T) {
 	}
 }
 
-func TestLockedRatioSurvivesEncodeDecodeRoundTrip(t *testing.T) {
+func TestPreferredRatioSurvivesEncodeDecodeRoundTrip(t *testing.T) {
 	root := Node{
 		Type:        "split",
 		SplitID:     "root",
 		Direction:   DirectionVertical,
 		Ratio:       0.33,
 		RatioLocked: true,
+		RatioMode:   RatioModePreferred,
 		Children: []Node{
 			{Type: "pane", PaneID: "pane-a"},
 			{Type: "pane", PaneID: "pane-b"},
@@ -290,7 +294,28 @@ func TestLockedRatioSurvivesEncodeDecodeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeLayout: %v", err)
 	}
-	if !decoded.RatioLocked || math.Abs(decoded.Ratio-0.33) > 1e-9 {
-		t.Fatalf("round-tripped node = %+v, want locked ratio 0.33", decoded)
+	if !decoded.RatioLocked || decoded.RatioMode != RatioModePreferred || math.Abs(decoded.Ratio-0.33) > 1e-9 {
+		t.Fatalf("round-tripped node = %+v, want preferred locked ratio 0.33", decoded)
+	}
+}
+
+func TestNormalizeLayoutDefaultsMissingRatioModeToAutomatic(t *testing.T) {
+	root := Node{
+		Type:        "split",
+		SplitID:     "root",
+		Direction:   DirectionVertical,
+		Ratio:       0.68,
+		RatioLocked: true,
+		Children: []Node{
+			{Type: "tile", TileID: "doc", TileKind: "markdown"},
+			{Type: "pane", PaneID: "pane"},
+		},
+	}
+
+	normalized := NormalizeLayout(root, map[string]Pane{
+		"pane": {PaneID: "pane", RuntimeID: "runtime", SessionID: "session"},
+	})
+	if normalized.RatioMode != RatioModeAutomatic {
+		t.Fatalf("ratio mode = %q, want automatic", normalized.RatioMode)
 	}
 }

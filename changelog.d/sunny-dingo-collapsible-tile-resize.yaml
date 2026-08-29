@@ -1,0 +1,11 @@
+kind: fixed
+area: app
+change: >
+  Workspace layout is now resolved in one pass from the persisted split-ratio
+  preference, available space, and collapsed tiles. A divider resize remains a
+  preferred size across restarts, while minimum pane sizes and collapsed-tile
+  slivers can temporarily override it without losing the preference.
+symptom: >
+  After opening several tiles and dragging one divider, collapsing a tile could
+  leave it visibly expanded, suspend additional tiles, or produce large empty
+  bands that made the workspace look stuck between open and collapsed states.

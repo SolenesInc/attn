@@ -3,6 +3,7 @@ import type { WorkspaceLayout as DaemonWorkspaceSnapshot, PaneElement } from './
 export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
 export type TerminalDockEdge = 'left' | 'right' | 'top' | 'bottom';
+export type TerminalSplitRatioMode = 'automatic' | 'preferred';
 
 export type TileKind = 'markdown' | 'seed' | 'browser' | (string & {});
 
@@ -36,6 +37,7 @@ export interface TerminalSplitNode {
   splitId: string;
   direction: TerminalSplitDirection;
   ratio: number;
+  ratioMode?: TerminalSplitRatioMode;
   children: [TerminalLayoutNode, TerminalLayoutNode];
 }
 
@@ -226,7 +228,7 @@ export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {
   return dividers;
 }
 
-export function applyRatioOverrides(node: TerminalLayoutNode, overrides: Map<string, number>): TerminalLayoutNode {
+export function applyRatioOverrides(node: TerminalLayoutNode, overrides: ReadonlyMap<string, number>): TerminalLayoutNode {
   if (overrides.size === 0 || node.type !== 'split') {
     return node;
   }
@@ -253,6 +255,22 @@ export function collectSplitRatios(node: TerminalLayoutNode): Map<string, number
   };
   walk(node);
   return ratios;
+}
+
+export function collectPreferredSplitIds(node: TerminalLayoutNode): ReadonlySet<string> {
+  const splitIds = new Set<string>();
+  const walk = (current: TerminalLayoutNode): void => {
+    if (current.type !== 'split') {
+      return;
+    }
+    if (current.ratioMode === 'preferred') {
+      splitIds.add(current.splitId);
+    }
+    walk(current.children[0]);
+    walk(current.children[1]);
+  };
+  walk(node);
+  return splitIds;
 }
 
 function overlapSize(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
@@ -388,6 +406,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
       splitId: value.split_id,
       direction: value.direction,
       ratio,
+      ratioMode: value.ratio_mode === 'preferred' ? 'preferred' : 'automatic',
       children: [first, second],
     };
   }

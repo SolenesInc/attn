@@ -445,6 +445,7 @@ describe('sessions store', () => {
         splitId: 'root',
         direction: 'vertical',
         ratio: 0.5,
+        ratioMode: 'automatic',
         children: [
           { type: 'pane', paneId: 'pane-session' },
           { type: 'pane', paneId: 'pane-shell' },
