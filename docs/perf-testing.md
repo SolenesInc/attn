@@ -206,3 +206,29 @@ gates the scenario — the slope-vs-threshold check is. As with the other
 scenarios, a slope regression sets the verdict's `ok` to `false` but never
 sets a non-zero exit code — it's a trend signal for a human to look at, not a
 build break.
+
+## Daemon diagnostics endpoint (`ATTN_PPROF`)
+
+The daemon has an opt-in, loopback-only pprof and `/debug/vars` server. It is
+off by default and binds `127.0.0.1` only. Set `ATTN_PPROF` in the daemon's
+environment: `1`/`on`/`true` listens on `127.0.0.1:6060`; a port such as
+`6061` or `:6061` listens there instead. The daemon logs
+`diagnostics endpoint listening on http://127.0.0.1:<port>/` at startup. The
+perf harness scenarios above read these endpoints. For a controlled run use a
+throwaway profile: `env ATTN_PROFILE=perf ATTN_PPROF=6060 attn daemon`.
+
+- `GET /debug/vars`: JSON with Go `runtime.MemStats` heap fields, goroutine and
+  CPU counts, PTY session count, the active `pty_backend`, and `worker_pids`
+  (session id to worker PID).
+- `GET /debug/pprof/`: the standard Go pprof index.
+
+```bash
+curl -s http://127.0.0.1:6060/debug/vars | jq
+go tool pprof -top http://127.0.0.1:6060/debug/pprof/heap
+go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
+
+# Per-session memory lives in the worker subprocesses, not the daemon heap:
+curl -s http://127.0.0.1:6060/debug/vars \
+  | jq -r '.pid, (.worker_pids[]|tostring)' \
+  | xargs ps -o pid,rss,command -p
+```
