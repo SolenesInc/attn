@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Usage: ci-changed-areas.sh <base> [head], prints "<area>=true|false" per line.
-# A base git cannot diff against (empty, zeros, unfetched, orphan) is every area.
 set -euo pipefail
 
 base="${1:-}"
 head="${2:-HEAD}"
 
-# Globs use git's :(glob) pathspec: ** crosses directories, so 'cmd/**' is
-# everything under cmd/ and '**/*.go' is every Go file anywhere.
 areas=(daemon frontend generated tauri plugins)
 
 daemon=(
@@ -25,8 +21,6 @@ frontend=(
   'sdk/attn-app/**' 'internal/appbuild/sdkdist/**' 'internal/protocol/schema/**'
   'scripts/ci-changed-areas.sh' '.github/workflows/ci.yml'
 )
-# Every input to the type pipeline plus both outputs, so a hand-edit of an
-# output is gated even when no schema moved.
 generated=(
   'internal/protocol/schema/**' 'internal/protocol/generated.go' 'app/src/types/generated.ts'
   'Makefile' 'scripts/ci-changed-areas.sh' '.github/workflows/ci.yml'

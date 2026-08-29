@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Tests for ci-changed-areas.sh: the right areas for an ordinary diff, and every
-# area when the base is unusable. Run: bash scripts/ci-changed-areas_test.sh
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,7 +45,6 @@ check "go file under internal is daemon only" \
   $'daemon=true\nfrontend=false\ngenerated=false\ntauri=false\nplugins=false' \
   "$(run "$base" "$head")"
 
-# The base moved on after the branch forked; only the branch's own commits count.
 g checkout -q -b other "$base"
 commit_file app/src/main.tsx three
 g checkout -q main
