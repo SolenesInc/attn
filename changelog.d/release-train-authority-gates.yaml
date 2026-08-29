@@ -1,0 +1,8 @@
+kind: internal
+area: release
+change: >
+  Make accepted-main workflow dispatch the only release entrypoint and validate
+  every promotion candidate's source, baseline, version, and release-only diff
+  in CI before it can merge. Require the originating candidate's exact-head app
+  receipt before tagging or retrying a release, serialize each tag, and close
+  the one-time bootstrap route when next is created.

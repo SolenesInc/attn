@@ -76,5 +76,9 @@ Homebrew path with `brew upgrade --cask victorarias/attn/attn`.
 If a release workflow needs to be rerun for an existing tag, dispatch it with:
 
 ```bash
-gh workflow run release.yml -f tag=v0.12.0
+gh workflow run release.yml --ref v0.12.0 -f tag=v0.12.0
 ```
+
+The workflow rebuilds only after it proves the tag is on `main`, its exact SHA
+has green `Acceptance`, its originating candidate has green exact-head
+`App acceptance`, and its manifest and committed versions still agree.

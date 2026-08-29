@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+gate="$root/scripts/app-acceptance-gate.sh"
+work="$(mktemp -d "${TMPDIR:-/tmp}/attn-app-acceptance-gate-test.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+
+mkdir -p "$work/bin"
+cat >"$work/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == api ]] && [[ "$*" == *'/pulls'* ]]; then
+  printf '%s\n' "${FAKE_CANDIDATE_ROWS:-}"
+  exit 0
+fi
+if [[ "$1 $2" == "api --method" ]] && [[ "$*" == *'check_name=App%20acceptance'* ]]; then
+  if [[ "${FAKE_APP_MODE:-success}" != missing ]]; then
+    printf '%s\t%s\t%s\t%s\n' "$FAKE_APP_SHA" \
+      "${FAKE_APP_STATUS:-completed}" "${FAKE_APP_CONCLUSION:-success}" \
+      'https://github.com/example/attn/actions/runs/43/job/8'
+  fi
+  exit 0
+fi
+echo "unexpected gh command: $*" >&2
+exit 2
+EOF
+chmod +x "$work/bin/gh"
+
+export PATH="$work/bin:$PATH"
+export GITHUB_REPOSITORY=example/attn
+main_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+candidate_sha=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+export FAKE_APP_SHA="$candidate_sha"
+export FAKE_APP_STATUS=completed
+export FAKE_APP_CONCLUSION=success
+export FAKE_APP_MODE=success
+export FAKE_CANDIDATE_ROWS=$'42\t'$candidate_sha$'\trelease/v1.2.3\thttps://github.com/example/attn/pull/42'
+
+expect_failure() {
+  local expected="$1"
+  shift
+  if "$@" >"$work/failure.out" 2>&1; then
+    echo "expected app acceptance gate failure: $*" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected" "$work/failure.out"; then
+    echo "failure did not contain '$expected':" >&2
+    cat "$work/failure.out" >&2
+    exit 1
+  fi
+}
+
+"$gate" "$main_sha" >"$work/success.out"
+grep -Fq 'PR #42 release/v1.2.3 passed' "$work/success.out"
+
+export FAKE_APP_CONCLUSION=failure
+expect_failure 'App acceptance is completed/failure' "$gate" "$main_sha"
+export FAKE_APP_CONCLUSION=success
+
+export FAKE_APP_MODE=missing
+expect_failure 'has no App acceptance check' "$gate" "$main_sha"
+export FAKE_APP_MODE=success
+
+export FAKE_CANDIDATE_ROWS=''
+expect_failure 'has 0 associated release candidate PRs' "$gate" "$main_sha"
+
+echo "app acceptance gate: OK"

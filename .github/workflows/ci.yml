@@ -105,6 +105,10 @@ jobs:
     name: Changelog
     needs: changes
     if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +133,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check branch route
         run: >-

@@ -79,15 +79,16 @@ the app and its harness run reliably on Linux CI.
 The `Changelog` job in CI fails any PR that neither adds a
 `changelog.d/*.yaml` fragment nor modifies `CHANGELOG.md`. Touching
 `CHANGELOG.md` directly is the escape hatch for the compilation PR itself and
-for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates are exempt
-because an all-internal release deletes its fragments without adding user-facing
-copy. A `hotfix/*` candidate gets the same exemption only after the candidate
-validator proves its recorded source and main, versions, absent tag, consumed
-fragments, and release-only preparation diff. An unprepared hotfix still needs
-a fragment or direct changelog edit. Generated `sync/main-into-next-*` PRs are
-also exempt because they only reconcile fragments already represented in the
-released changelog. The candidate and sync validators enforce those narrower
-diffs. Run the gate locally with `./scripts/changelog-gate.sh next`.
+for hand-fixes to existing copy. Frozen `release/vX.Y.Z` candidates get an
+exemption only after CI proves the exact source Acceptance, recorded source and
+main, versions, absent tag, consumed fragments, and release-only preparation
+diff. A prepared `hotfix/*` candidate proves the same facts except source
+Acceptance, because its final `PR gate` and `App acceptance` are the source
+gate. A hotfix without a fresh manifest is accepted only as a repair of the
+still-unpublished candidate on `main`, and must update `CHANGELOG.md` directly.
+Generated `sync/main-into-next-*` PRs are exempt because they only reconcile
+fragments already represented in the released changelog. Run the gate locally
+with `./scripts/changelog-gate.sh next`.
 
 The `Main route` job rejects ordinary PRs aimed at `main`. These are the only
 allowed routes:
@@ -98,6 +99,9 @@ allowed routes:
 | `release/vX.Y.Z` | `main` | frozen promotion candidate |
 | `hotfix/*` | `main` | urgent repair |
 | `epic/release-train` | `main` | one-time workflow bootstrap |
+
+The bootstrap exception exists only while `origin/next` does not. Creating
+`next` during activation closes that route without a later cleanup change.
 
 ## Prepare a frozen candidate
 
@@ -198,10 +202,19 @@ main SHA ──CI──▶ Acceptance green ──validate manifest + versions�
 
 `Release accepted main` is serialized across versions. It checks the triggering
 CI run's own `Acceptance` job, verifies that the SHA is still the current
-`main`, validates the candidate manifest and every committed version source,
-then creates the immutable tag and explicitly dispatches `release.yml` from
-that tag. A retry recognizes both an existing exact tag and an existing release
-run for the same commit, so it cannot start a second release.
+`main`, resolves the promotion or hotfix PR that produced that SHA, and requires
+green `App acceptance` on the PR's exact head. It then validates the candidate
+manifest and every committed version source before inspecting or creating the
+immutable tag, and explicitly dispatches `release.yml` from that tag. A retry
+recognizes both an existing exact tag and an existing release run for the same
+commit, so it cannot start a second release.
+
+`release.yml` accepts workflow dispatch only. Pushing a `v*` tag by hand cannot
+start publication. Every dispatch independently proves that the tag is on
+`main`, its exact SHA has green `Acceptance`, its originating candidate has
+green exact-head `App acceptance`, and its manifest and committed versions
+agree. Runs for the same tag are serialized. The accepted-main gate is the sole
+authority that dispatches a release automatically.
 
 The manifest stays in Git history so `next` can reconcile the release. Once its
 tag points to an earlier `main` SHA, release automation treats that manifest as

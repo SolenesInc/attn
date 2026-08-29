@@ -17,6 +17,21 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/jobs?filter=latest'* ]]; t
     'https://github.com/example/attn/actions/runs/42/job/7'
   exit 0
 fi
+if [[ "$1" == api ]] && [[ "$*" == *'/pulls'* ]]; then
+  if [[ "${FAKE_CANDIDATE_MODE:-success}" != missing ]]; then
+    printf '42\t%s\trelease/v99.98.97\thttps://github.com/example/attn/pull/42\n' \
+      "$FAKE_CANDIDATE_SHA"
+  fi
+  exit 0
+fi
+if [[ "$1 $2" == "api --method" ]] && [[ "$*" == *'check_name=App%20acceptance'* ]]; then
+  if [[ "${FAKE_APP_MODE:-success}" != missing ]]; then
+    printf '%s\t%s\t%s\t%s\n' "$FAKE_CANDIDATE_SHA" completed \
+      "${FAKE_APP_CONCLUSION:-success}" \
+      'https://github.com/example/attn/actions/runs/43/job/8'
+  fi
+  exit 0
+fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/release.yml/runs?'* ]]; then
   if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
     printf '%s\n' 1
@@ -44,12 +59,20 @@ export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_TAG_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+export FAKE_CANDIDATE_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+export FAKE_CANDIDATE_MODE=success
+export FAKE_APP_MODE=success
+export FAKE_APP_CONCLUSION=success
 
 setup_fixture() {
   local name="$1"
   fixture_origin="$work/$name-origin.git"
   fixture_repo="$work/$name-repo"
   : >"$FAKE_GH_LOG"
+
+  export FAKE_CANDIDATE_MODE=success
+  export FAKE_APP_MODE=success
+  export FAKE_APP_CONCLUSION=success
 
 	  git init -q --bare "$fixture_origin"
 	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
@@ -84,6 +107,20 @@ run_release_after_acceptance() (
     'https://github.com/example/attn/actions/runs/42'
 )
 
+expect_failure() {
+  local expected="$1"
+  shift
+  if "$@" >"$work/failure.out" 2>&1; then
+    echo "expected release-after-acceptance failure: $*" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected" "$work/failure.out"; then
+    echo "failure did not contain '$expected':" >&2
+    cat "$work/failure.out" >&2
+    exit 1
+  fi
+}
+
 setup_fixture red
 export FAKE_ACCEPTANCE_CONCLUSION=failure
 run_release_after_acceptance >"$work/red.out"
@@ -106,6 +143,22 @@ run_release_after_acceptance >"$work/stale.out"
 grep -q 'ignoring stale result' "$work/stale.out"
 if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
   echo "stale Acceptance created a tag" >&2
+  exit 1
+fi
+
+setup_fixture missing-app
+export FAKE_APP_MODE=missing
+expect_failure 'has no App acceptance check' run_release_after_acceptance
+if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
+  echo "missing App acceptance created a tag" >&2
+  exit 1
+fi
+
+setup_fixture red-app
+export FAKE_APP_CONCLUSION=failure
+expect_failure 'App acceptance is completed/failure' run_release_after_acceptance
+if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
+  echo "red App acceptance created a tag" >&2
   exit 1
 fi
 
@@ -148,13 +201,46 @@ export FAKE_TAG_SHA="$repaired_sha"
 run_release_after_acceptance >"$work/repaired.out"
 [[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$repaired_sha" ]]
 
+setup_fixture forged-tag
+(cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
+git -C "$fixture_repo" add app
+git -C "$fixture_repo" commit -q -m 'forge accepted main versions'
+git -C "$fixture_repo" push -q origin main
+forged_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+git --git-dir="$fixture_origin" tag "$candidate_tag" "$forged_sha"
+export FAKE_TAG_SHA="$forged_sha"
+expect_failure 'expected 99.98.97' run_release_after_acceptance
+if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+  echo "pre-existing exact tag bypassed accepted-main validation" >&2
+  exit 1
+fi
+
 for value in \
   'workflows: [CI]' \
   'branches: [main]' \
+  'checks: read' \
+  'pull-requests: read' \
   'ref: ${{ github.event.workflow_run.head_sha }}' \
   './scripts/release-after-acceptance.sh'; do
   grep -Fq "$value" "$root/.github/workflows/release-after-acceptance.yml"
 done
-grep -Fq 'run-name: ${{ inputs.tag || github.ref_name }}' "$root/.github/workflows/release.yml"
+grep -Fq 'run-name: ${{ inputs.tag }}' "$root/.github/workflows/release.yml"
+trigger_block="$(sed -n '/^on:/,/^jobs:/p' "$root/.github/workflows/release.yml")"
+grep -Fq 'workflow_dispatch:' <<<"$trigger_block"
+if grep -Fq 'push:' <<<"$trigger_block"; then
+	echo "release workflow still accepts unvalidated tag pushes" >&2
+	exit 1
+fi
+for value in \
+  'validate-tag:' \
+  'checks: read' \
+  'pull-requests: read' \
+  'group: release-${{ inputs.tag }}' \
+  'cancel-in-progress: false' \
+  'fetch-depth: 0' \
+  'needs: validate-tag' \
+  './scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"'; do
+  grep -Fq "$value" "$root/.github/workflows/release.yml"
+done
 
 echo "release after acceptance: OK"

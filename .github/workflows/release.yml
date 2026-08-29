@@ -1,13 +1,10 @@
 name: Release
-run-name: ${{ inputs.tag || github.ref_name }}
+run-name: ${{ inputs.tag }}
 
 env:
   GH_TOKEN: ${{ github.token }}
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -15,21 +12,48 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
+  validate-tag:
+    name: Validate accepted tag
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate accepted release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+        run: ./scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"
+
   tauri:
     name: Tauri Release
+    needs: validate-tag
     permissions:
       contents: write
     runs-on: macos-14
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
@@ -262,12 +286,10 @@ jobs:
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
@@ -336,12 +358,10 @@ jobs:
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
@@ -414,12 +434,10 @@ jobs:
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"

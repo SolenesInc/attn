@@ -6,6 +6,21 @@ gate="$root/scripts/changelog-gate.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-changelog-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
+mkdir -p "$work/bin"
+cat >"$work/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1 $2" == "pr list" ]]; then
+  printf '%s\n' '[]'
+  exit 0
+fi
+echo "unexpected gh command: $*" >&2
+exit 2
+EOF
+chmod +x "$work/bin/gh"
+export PATH="$work/bin:$PATH"
+export GOCACHE="$work/go-cache"
+
 git init -q -b main "$work/repo"
 git -C "$work/repo" config user.name 'Changelog Gate Test'
 git -C "$work/repo" config user.email 'changelog-gate@example.com'
@@ -28,9 +43,9 @@ expect_failure() {
   fi
 }
 
-expect_success main release/v1.2.3
 expect_success next sync/main-into-next-0123456789ab
 
+expect_failure main release/v1.2.3
 expect_failure main hotfix/unprepared
 expect_failure main release/1.2.3
 expect_failure main release/v1.2
@@ -45,7 +60,7 @@ git -C "$hotfix_repo" switch -q -C main
 git -C "$hotfix_repo" rm -q -- 'changelog.d/*.yaml'
 previous_source="$(git -C "$hotfix_repo" rev-parse HEAD)"
 cat >"$hotfix_repo/.github/release-candidate.yml" <<EOF
-version: 0.11.1
+version: 99.98.96
 kind: promotion
 source_sha: ${previous_source}
 main_sha: ${previous_source}
@@ -63,6 +78,28 @@ git -C "$hotfix_repo" add .github/release-candidate.yml
 git -C "$hotfix_repo" commit -q -m 'forge hotfix manifest'
 if (cd "$hotfix_repo" && "$gate" main hotfix/forged) >/dev/null 2>&1; then
   echo "forged hotfix manifest bypassed the changelog gate" >&2
+  exit 1
+fi
+
+git -C "$hotfix_repo" switch -q main
+git -C "$hotfix_repo" switch -q -c hotfix/pre-release-repair
+printf '%s\n' 'repair the unpublished candidate' >>"$hotfix_repo/CHANGELOG.md"
+git -C "$hotfix_repo" add CHANGELOG.md
+git -C "$hotfix_repo" commit -q -m 'fix(app): repair unpublished candidate'
+if ! (cd "$hotfix_repo" && "$gate" main hotfix/pre-release-repair) >/dev/null; then
+  echo "pre-release repair did not pass the changelog gate" >&2
+  exit 1
+fi
+
+git -C "$hotfix_repo" switch -q main
+git -C "$hotfix_repo" tag v99.98.96
+git -C "$hotfix_repo" switch -q -c hotfix/unprepared-after-release
+printf '%s\n' 'kind: fixed' 'area: app' 'change: unprepared released hotfix' \
+  >"$hotfix_repo/changelog.d/unprepared.yaml"
+git -C "$hotfix_repo" add changelog.d/unprepared.yaml
+git -C "$hotfix_repo" commit -q -m 'fix(app): add unprepared released hotfix'
+if (cd "$hotfix_repo" && "$gate" main hotfix/unprepared-after-release) >/dev/null 2>&1; then
+  echo "post-release hotfix without a fresh manifest bypassed the gate" >&2
   exit 1
 fi
 

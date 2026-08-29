@@ -300,7 +300,8 @@ doubt, ask the maintainer.
   `epic/release-train` PR is the one bootstrap exception.
 - **Prepare candidates from accepted `next`.** Run `make release
   VERSION_TAG=vX.Y.Z` from a clean, current `next`. It opens a draft candidate;
-  it never merges, tags, or starts the release.
+  it never merges, tags, or starts the release. CI revalidates the exact source
+  Acceptance, baseline, versions, and release-only diff before merge.
 - **Prepare post-release hotfixes from `main`.** Commit the fix and changelog
   fragment on a clean `hotfix/*` branch, then run `make release-hotfix
   VERSION_TAG=vX.Y.Z`. It adds fresh release metadata and opens the draft PR.

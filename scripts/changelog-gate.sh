@@ -15,13 +15,9 @@ set -euo pipefail
 
 BASE_REF="${1:?usage: changelog-gate.sh <base-ref> [head-branch]}"
 HEAD_BRANCH="${2:-$(git branch --show-current)}"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$(git rev-parse --show-toplevel)"
-
-if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "changelog gate: frozen candidate ${HEAD_BRANCH}, skipping"
-  exit 0
-fi
 
 if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
   echo "changelog gate: release sync branch ${HEAD_BRANCH}, skipping"
@@ -35,17 +31,35 @@ if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
   RANGE="origin/${BASE_REF}...HEAD"
 fi
 
-if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]] &&
-  ! git diff --quiet "$RANGE" -- .github/release-candidate.yml; then
-  main_ref="$BASE_REF"
-  if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
-    main_ref="origin/${BASE_REF}"
-  fi
-  if go run ./cmd/release-train candidate validate \
-    --current-main "$main_ref" --head HEAD --other-open-candidates 0; then
-    echo "changelog gate: prepared hotfix candidate ${HEAD_BRANCH}, skipping"
+main_ref="$BASE_REF"
+if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
+  main_ref="origin/${BASE_REF}"
+fi
+
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  "$script_root/candidate-gate.sh" promotion "$main_ref" HEAD "$HEAD_BRANCH"
+  echo "changelog gate: validated promotion candidate ${HEAD_BRANCH}, skipping"
+  exit 0
+fi
+
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]]; then
+  if ! git diff --quiet "$RANGE" -- .github/release-candidate.yml; then
+    "$script_root/candidate-gate.sh" hotfix "$main_ref" HEAD "$HEAD_BRANCH"
+    echo "changelog gate: validated hotfix candidate ${HEAD_BRANCH}, skipping"
     exit 0
   fi
+
+  if ! base_tag="$(go run ./cmd/release-train accepted-main tag --head "$main_ref")"; then
+    echo "changelog gate: ${HEAD_BRANCH} must carry a fresh hotfix candidate manifest" >&2
+    echo "run make release-hotfix VERSION_TAG=vX.Y.Z before opening the PR" >&2
+    exit 1
+  fi
+  if git show-ref --verify --quiet "refs/tags/${base_tag}"; then
+    echo "changelog gate: ${base_tag} is already published; ${HEAD_BRANCH} must carry a fresh hotfix candidate manifest" >&2
+    echo "run make release-hotfix VERSION_TAG=vX.Y.Z before opening the PR" >&2
+    exit 1
+  fi
+  echo "changelog gate: ${HEAD_BRANCH} repairs the still-unpublished ${base_tag} candidate"
 fi
 
 # Committed additions, plus staged/untracked ones so the gate is honest when

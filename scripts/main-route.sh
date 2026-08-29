@@ -11,8 +11,16 @@ if [[ "$event_name" != "pull_request" || "$base_branch" != "main" ]]; then
 fi
 
 case "$head_branch" in
-  hotfix/*|epic/release-train)
+  hotfix/*)
     echo "main route: ${head_branch} may target main"
+    exit 0
+    ;;
+  epic/release-train)
+    if git show-ref --verify --quiet refs/remotes/origin/next; then
+      echo "main route: epic/release-train was only allowed before next existed" >&2
+      exit 1
+    fi
+    echo "main route: epic/release-train may bootstrap main before next exists"
     exit 0
     ;;
 esac
