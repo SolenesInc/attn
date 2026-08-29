@@ -117,20 +117,13 @@ func inventoryLegacyTicketTranscripts() ([]store.LegacyTicketRecoverySource, err
 	}
 	out := make([]store.LegacyTicketRecoverySource, 0, len(sources))
 	for _, source := range sources {
-		info, err := os.Lstat(source.Path)
+		identity, err := readLegacySnapshotIdentity(source.Path)
 		if err != nil {
 			return nil, fmt.Errorf("inventory %s transcript %s: %w", source.Provider, source.Path, err)
 		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		out = append(out, store.LegacyTicketRecoverySource{
-			RunVersion: store.LegacyTicketRecoveryVersion,
-			Path:       filepath.Clean(source.Path),
-			Family:     "transcript:" + source.Provider,
-			Size:       info.Size(),
-			ModTimeNS:  info.ModTime().UnixNano(),
-		})
+		identity.RunVersion = store.LegacyTicketRecoveryVersion
+		identity.Family = "transcript:" + source.Provider
+		out = append(out, identity)
 	}
 	return out, nil
 }
@@ -555,7 +548,7 @@ func (d *Daemon) recoverLegacyTicketsFromTranscripts(ctx context.Context, job *j
 			sourceWarnings[source.Path] = append(sourceWarnings[source.Path], err.Error())
 			continue
 		}
-		if source.Path != before.Path || source.Size != before.Size || source.ModTimeNS != before.ModTimeNS {
+		if !legacySnapshotIdentityMatches(source, before) {
 			sourceWarnings[source.Path] = append(sourceWarnings[source.Path], "source identity changed before inspection")
 			continue
 		}

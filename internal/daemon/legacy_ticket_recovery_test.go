@@ -324,6 +324,77 @@ func TestLegacyTicketRecoveryRestoresTranscriptOnlyArchiveAndConversation(t *tes
 	}
 }
 
+func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *testing.T) {
+	t.Setenv("ATTN_PROFILE", "")
+	dataRoot := t.TempDir()
+	target, err := store.NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	makeRecoveryHome(t, dataRoot)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	path := createCodexLegacyTranscript(t, codexHome, dataRoot, "native-one", "original-ticket", "completed", "done")
+
+	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
+	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	if wait, prepareErr := d.prepareLegacyTicketRecovery(); prepareErr != nil || !wait {
+		t.Fatalf("prepare wait=%v err=%v", wait, prepareErr)
+	}
+	sources, err := target.ListLegacyTicketRecoverySources(store.LegacyTicketRecoveryVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 || sources[0].SHA256 == "" {
+		t.Fatalf("frozen sources = %#v", sources)
+	}
+	frozenInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := createCodexLegacyTranscript(t, t.TempDir(), dataRoot, "native-one", "replaced-ticket", "completed", "done")
+	replacementBody, err := os.ReadFile(replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int64(len(replacementBody)) != frozenInfo.Size() {
+		t.Fatalf("replacement size = %d, want %d", len(replacementBody), frozenInfo.Size())
+	}
+	swap := path + ".replacement"
+	if err := os.WriteFile(swap, replacementBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(swap, path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, frozenInfo.ModTime(), frozenInfo.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	replacedInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacedInfo.Size() != frozenInfo.Size() || replacedInfo.ModTime().UnixNano() != frozenInfo.ModTime().UnixNano() {
+		t.Fatalf("replacement metadata = size %d mtime %d, want size %d mtime %d",
+			replacedInfo.Size(), replacedInfo.ModTime().UnixNano(), frozenInfo.Size(), frozenInfo.ModTime().UnixNano())
+	}
+
+	resultAny, err := d.legacyTicketRecoveryHandler(context.Background(), &jobs.Job{Attempts: 1, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := resultAny.(legacyTicketRecoveryResult)
+	if result.Counts.Recovered != 0 || len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "source identity changed before inspection") {
+		t.Fatalf("result = %#v", result)
+	}
+	for _, ticketID := range []string{"original-ticket", "replaced-ticket"} {
+		if ticket, getErr := target.GetTicket(ticketID); getErr != nil || ticket != nil {
+			t.Fatalf("ticket %s = %#v, err=%v", ticketID, ticket, getErr)
+		}
+	}
+}
+
 func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t *testing.T) {
 	t.Setenv("ATTN_PROFILE", "")
 	dataRoot := t.TempDir()
