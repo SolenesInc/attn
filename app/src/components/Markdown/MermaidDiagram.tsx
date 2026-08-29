@@ -11,8 +11,7 @@ import {
 import { DiagramFocusView } from './DiagramFocusView';
 import './Markdown.css';
 
-// Preserve at least 80% of Mermaid's generated label size; the measured rationale
-// lives in docs/plans/2026-08-10-mermaid-large-diagram-legibility.md.
+// Preserve at least 80% of Mermaid's generated label size.
 const OVERSIZED_FIT_RATIO = 0.8;
 
 // Loaded lazily so mermaid (large) is code-split out of the main bundle and

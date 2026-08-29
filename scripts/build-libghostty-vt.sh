@@ -13,8 +13,6 @@
 #
 # The target platform defaults to the effective Go target; the Makefile passes
 # GHOSTTY_VT_GOOS/GOARCH when cross-building a Linux daemon from a Mac.
-#
-# See the pin/lock files and docs/plans/2026-07-22-server-authoritative-terminal.md.
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/libghostty-vt.sh"

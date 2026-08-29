@@ -16,7 +16,7 @@ import (
 
 const kittyCorpusFileName = "kitty_rewrite_corpus.json"
 
-const kittyCorpusDescription = "Cross-runtime parity corpus for the kitty wire rewrite (docs/plans/2026-08-02-terminal-kitty-images.md). " +
+const kittyCorpusDescription = "Cross-runtime parity corpus for the kitty wire rewrite. " +
 	"GENERATED — do not hand-edit. Inputs come from kittyCorpusInputs in internal/pty/kittycorpus_test.go; " +
 	"regenerate with `go test ./internal/pty -run TestKittyWireRewriteCorpus -update`. " +
 	"Each entry feeds `chunks` (base64, in order) through one real wireFeeder into a kitty-LIVE ghostty terminal. " +

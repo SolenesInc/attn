@@ -1,5 +1,3 @@
-// See docs/decisions/2026-08-02-terminal-annotations-anchor-to-the-transcript.md.
-
 import React, { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {

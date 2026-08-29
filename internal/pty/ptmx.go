@@ -9,7 +9,7 @@ import (
 )
 
 // A session's PTY master is held as a POLLABLE file: creackpty hands back a blocking
-// master, on which SetReadDeadline fails outright. Receipts: docs/plans/2026-08-22-worker-inplace-upgrade.md.
+// master, on which SetReadDeadline fails outright.
 
 func pollablePTMX(f *os.File) (*os.File, error) {
 	fd, err := syscall.Dup(int(f.Fd()))

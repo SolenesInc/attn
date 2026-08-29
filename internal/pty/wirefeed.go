@@ -1,7 +1,5 @@
 package pty
 
-// Design: docs/plans/2026-08-02-terminal-kitty-images.md.
-
 import (
 	"bytes"
 	"strconv"

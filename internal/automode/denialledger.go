@@ -13,7 +13,7 @@ import (
 )
 
 // The writer is plugins/attn-pi/automode/ledger.ts, which owns the file names and record
-// shape. Design: docs/plans/2026-08-18-automode-denial-ledger.md
+// shape.
 
 const DenialLedgerFileName = "attn-automode-denials.jsonl"
 

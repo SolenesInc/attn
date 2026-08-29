@@ -8,7 +8,7 @@ import (
 )
 
 // Scopes every test in this package to a temp data dir so none can resolve
-// config.DataDir() to the real ~/.attn. See docs/plans/2026-07-18-db-loss-mitigation.md.
+// config.DataDir() to the real ~/.attn.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-test-data-*")
 	if err != nil {

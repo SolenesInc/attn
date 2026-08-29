@@ -19,8 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// Design: docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
-
 const (
 	appInvocationStatusOK           = "ok"
 	appInvocationStatusError        = "error"

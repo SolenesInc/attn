@@ -196,7 +196,7 @@ func requireExplicitDataDirUnderTest() {
 	if testing.Testing() && strings.TrimSpace(os.Getenv("ATTN_DATA_DIR")) == "" {
 		panic("config: ATTN_DATA_DIR is not set under go test — tests must never resolve the real data dir. " +
 			"Set ATTN_DATA_DIR to a temp dir (os.Setenv in a package TestMain, or t.Setenv per-test). " +
-			"Never redirect HOME to work around this: see docs/plans/2026-07-18-db-loss-mitigation.md")
+			"Never redirect HOME to work around this.")
 	}
 }
 

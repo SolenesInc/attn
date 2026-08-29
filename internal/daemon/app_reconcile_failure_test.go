@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// See docs/plans/2026-08-14-ext-app-reconcile-handler.md, gates 4 and 7.
-
 func reconcilingApp(t *testing.T, d *Daemon, name string) store.AppVersion {
 	t.Helper()
 	installApp(t, d, name, subscribing("ticket.*"))

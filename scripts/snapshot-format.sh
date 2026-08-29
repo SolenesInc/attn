@@ -5,7 +5,7 @@
 # A pty-worker outlives an install, so a session opened after an upgrade can be
 # served a snapshot the running app cannot read. The tag is what lets the app
 # recognize that and fall back to a snapshot-less attach instead of decoding
-# garbage. See docs/plans/2026-08-16-snapshot-format-skew.md.
+# garbage.
 #
 # Derived, never typed: the inputs are the two artifacts that decide the format
 # — the native encoder's archive and the browser decoder's module — so

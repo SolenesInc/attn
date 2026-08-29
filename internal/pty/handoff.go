@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// Design: docs/plans/2026-08-22-worker-inplace-upgrade.md
-
 // quiesceTimeout is a tripwire, not a budget: quiescing measured at 38µs under a
 // 15MB/s stream, so anything near a second means the read loop is wedged.
 const quiesceTimeout = 2 * time.Second

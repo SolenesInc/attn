@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
 package apps
 
 import (

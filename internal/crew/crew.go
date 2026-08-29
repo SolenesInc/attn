@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-11-the-crew-primitive.md.
 package crew
 
 import (
