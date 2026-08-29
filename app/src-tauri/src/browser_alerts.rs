@@ -2,8 +2,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
-// Only the macOS WKUIDelegate below constructs a PendingAlert outside tests,
-// so these are unread elsewhere.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub enum AlertType {

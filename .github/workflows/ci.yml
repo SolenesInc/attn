@@ -362,7 +362,6 @@ jobs:
           echo "shards result: $result"
           [ "$result" = "success" ] || [ "$result" = "skipped" ]
 
-  # Both legs: the non-mac arms ship to nobody yet, but they must compile so Linux support can land on a green base.
   rust:
     name: Tauri (${{ matrix.os }})
     needs: changes

@@ -172,7 +172,6 @@ fn single_tab_script() -> &'static str {
 })()"#
 }
 
-// Only the macOS webview registration below calls this outside tests.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn isolated_initialization_script() -> String {
     format!(
@@ -212,7 +211,6 @@ fn report_location(app: &AppHandle, label: &str, url: &tauri::Url) {
     ));
 }
 
-// Only the macOS webview layout code below calls this outside tests.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn content_layout_inset(
     window_height: f64,
@@ -789,8 +787,6 @@ async fn evaluate_script(webview: tauri::Webview, script: String) -> Result<Stri
     .map_err(|error| format!("join browser script result: {error}"))?
 }
 
-// Deserialized cross-platform from the screenshot command's params, but
-// only the macOS screenshot() below reads the fields.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 struct SnapshotRect {
@@ -971,7 +967,6 @@ async fn print_page(
     result.map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
-// Only the macOS print_page() above calls this outside tests.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn page_size(width: f64, height: f64, params: &Map<String, Value>) -> (f64, f64) {
     if params.get("orientation").and_then(Value::as_str) == Some("landscape") {
