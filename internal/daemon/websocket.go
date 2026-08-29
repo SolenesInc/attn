@@ -1231,10 +1231,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModePromote(client, msg.(*protocol.AutoModePromoteMessage))
 	case protocol.CmdAutoModeDiscard: // wire: automode_discard
 		d.handleAutoModeDiscard(client, msg.(*protocol.AutoModeDiscardMessage))
+	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+		d.handleAutoModeEnvSlotWS(client, msg.(*protocol.AutoModeEnvSlotMessage))
+	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+		d.handleAutoModeEnvNotesWS(client, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePatternAdd: // wire: automode_pattern_add
 		d.handleAutoModePatternAdd(client, msg.(*protocol.AutoModePatternAddMessage))
 	case protocol.CmdAutoModePatternRemove: // wire: automode_pattern_remove
 		d.handleAutoModePatternRemove(client, msg.(*protocol.AutoModePatternRemoveMessage))
+	case protocol.CmdAutoModeModelSet: // wire: automode_model_set
+		d.handleAutoModeModelSet(client, msg.(*protocol.AutoModeModelSetMessage))
+	case protocol.CmdAutoModeModels: // wire: automode_models
+		d.handleAutoModeModels(client, msg.(*protocol.AutoModeModelsMessage))
 	case protocol.CmdPtyResize: // wire: pty_resize
 		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
 	case protocol.CmdKillSession: // wire: kill_session

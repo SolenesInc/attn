@@ -22,16 +22,13 @@ func TestAutoModeConfigDefaultsOnAFreshDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(cfg.ClassifierModels) != 1 || cfg.ClassifierModels[0] != automode.DefaultClassifierModel {
-		t.Errorf("classifier models = %v, want the shipped default", cfg.ClassifierModels)
-	}
-	if len(cfg.EscalationModels) != 1 || cfg.EscalationModels[0] != automode.DefaultEscalationModel {
-		t.Errorf("escalation models = %v, want the shipped default", cfg.EscalationModels)
+	if len(cfg.Models) != 0 {
+		t.Errorf("models = %v on a fresh database, want none until the user names one", cfg.Models)
 	}
 	if !cfg.EnabledDefault {
 		t.Error("enabled_default = false on a fresh database, want true")
 	}
-	if len(cfg.Allow) != 0 || len(cfg.Environment) != 0 {
+	if filled, _ := cfg.Environment.Filled(); len(cfg.Allow) != 0 || filled != 0 {
 		t.Errorf("fresh config is not empty: %+v", cfg)
 	}
 	if diff := len(cfg.HardDeny) - len(automode.ShippedHardDeny(config.WSPort())); diff != 0 {
@@ -42,22 +39,53 @@ func TestAutoModeConfigDefaultsOnAFreshDatabase(t *testing.T) {
 func TestAutoModeEnvironmentRoundTrips(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
-	cfg, err := s.SetAutoModeEnvironment([]string{"pushing to origin is fine", "never touch prod"}, now)
+	cfg, err := s.SetAutoModeEnvironmentSlot("domains", []string{"grafana.acme.corp", "  ", "grafana.acme.corp"}, now)
 	if err != nil {
-		t.Fatalf("set environment: %v", err)
+		t.Fatalf("set slot: %v", err)
 	}
-	if len(cfg.Environment) != 2 {
-		t.Fatalf("environment = %v, want two entries", cfg.Environment)
+	if got := cfg.Environment.Slots["domains"]; len(got) != 1 || got[0] != "grafana.acme.corp" {
+		t.Fatalf("domains = %v, want the one entry, trimmed and de-duplicated", got)
+	}
+	if _, err := s.SetAutoModeEnvironmentNotes([]string{"the CI box shares this checkout"}, now); err != nil {
+		t.Fatalf("set notes: %v", err)
 	}
 	read, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if read.Environment[1] != "never touch prod" {
-		t.Errorf("environment[1] = %q", read.Environment[1])
+	if got := read.Environment.Slots["domains"]; len(got) != 1 {
+		t.Errorf("domains did not survive the round trip: %v", got)
 	}
-	if len(read.ClassifierModels) != 1 || read.ClassifierModels[0] != automode.DefaultClassifierModel {
-		t.Errorf("classifier models drifted to %v", read.ClassifierModels)
+	if len(read.Environment.Notes) != 1 {
+		t.Errorf("notes = %v, want the line that was written", read.Environment.Notes)
+	}
+	if len(read.Models) != 0 {
+		t.Errorf("models drifted to %v", read.Models)
+	}
+}
+
+func TestAutoModeEnvironmentSlotRefusesWhatTheSchemaDoesNotHave(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	if _, err := s.SetAutoModeEnvironmentSlot("intranet", []string{"acme.corp"}, now); err == nil {
+		t.Fatal("a slot the rules never read was accepted; nothing would ever look it up")
+	}
+	if _, err := s.SetAutoModeEnvironmentSlot("repo_visibility", []string{"secret"}, now); err == nil {
+		t.Fatal("repo_visibility took a value outside its choices")
+	}
+	cfg, err := s.SetAutoModeEnvironmentSlot("repo_visibility", []string{"private"}, now)
+	if err != nil {
+		t.Fatalf("set visibility: %v", err)
+	}
+	if got := cfg.Environment.Slots["repo_visibility"]; len(got) != 1 || got[0] != "private" {
+		t.Errorf("repo_visibility = %v", got)
+	}
+	cleared, err := s.SetAutoModeEnvironmentSlot("repo_visibility", nil, now)
+	if err != nil {
+		t.Fatalf("clear visibility: %v", err)
+	}
+	if _, ok := cleared.Environment.Slots["repo_visibility"]; ok {
+		t.Error("clearing left the slot behind; an unset slot has to read as unset")
 	}
 }
 
@@ -71,7 +99,7 @@ func TestAutoModeProposalDoesNotChangeTheConfig(t *testing.T) {
 	if _, err := s.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "session-1", now); err != nil {
 		t.Fatalf("create proposal: %v", err)
 	}
-	if _, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetClassifier, "opencode-go/other-model", "", now); err != nil {
+	if _, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetModels, "opencode-go/other-model", "", now); err != nil {
 		t.Fatalf("create model proposal: %v", err)
 	}
 	after, err := s.GetAutoModeConfig()
@@ -81,8 +109,8 @@ func TestAutoModeProposalDoesNotChangeTheConfig(t *testing.T) {
 	if len(after.Allow) != 0 {
 		t.Errorf("allow list changed to %v", after.Allow)
 	}
-	if strings.Join(after.ClassifierModels, ",") != strings.Join(before.ClassifierModels, ",") {
-		t.Errorf("classifier models changed to %v", after.ClassifierModels)
+	if strings.Join(after.Models, ",") != strings.Join(before.Models, ",") {
+		t.Errorf("models changed to %v", after.Models)
 	}
 	pending, err := s.ListAutoModeProposals(automode.StatePending)
 	if err != nil {
@@ -117,7 +145,7 @@ func TestAutoModePromoteAppliesAndClosesTheProposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create allow: %v", err)
 	}
-	model, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetEscalation, "opencode-go/kimi-k3", "", now)
+	model, err := s.CreateAutoModeProposal(automode.KindModel, automode.TargetModels, "opencode-go/kimi-k3", "", now)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
@@ -135,18 +163,15 @@ func TestAutoModePromoteAppliesAndClosesTheProposal(t *testing.T) {
 	if _, cfg, err = s.PromoteAutoModeProposal(model.ID, now); err != nil {
 		t.Fatalf("promote model: %v", err)
 	}
-	if len(cfg.EscalationModels) != 1 || cfg.EscalationModels[0] != "opencode-go/kimi-k3" {
-		t.Errorf("escalation models = %v", cfg.EscalationModels)
-	}
-	if len(cfg.ClassifierModels) != 1 || cfg.ClassifierModels[0] != automode.DefaultClassifierModel {
-		t.Errorf("classifier models = %v, want it untouched", cfg.ClassifierModels)
+	if len(cfg.Models) != 1 || cfg.Models[0] != "opencode-go/kimi-k3" {
+		t.Errorf("models = %v", cfg.Models)
 	}
 
 	read, err := s.GetAutoModeConfig()
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
-	if len(read.Allow) != 1 || len(read.EscalationModels) != 1 || read.EscalationModels[0] != "opencode-go/kimi-k3" {
+	if len(read.Allow) != 1 || len(read.Models) != 1 || read.Models[0] != "opencode-go/kimi-k3" {
 		t.Fatalf("promoted config did not survive the read: %+v", read)
 	}
 	pending, err := s.ListAutoModeProposals(automode.StatePending)
@@ -287,6 +312,131 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
+func TestMigration124FoldsTheLayerModelsIntoOneChain(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	for _, stmt := range []string{
+		`ALTER TABLE automode_config DROP COLUMN models`,
+		`ALTER TABLE automode_config ADD COLUMN classifier_models TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE automode_config ADD COLUMN escalation_models TEXT NOT NULL DEFAULT '[]'`,
+		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
+		    classifier_models, escalation_models, updated_at)
+		 VALUES (1, 1, '[]', '[]', '[]', '["vendor/small","vendor/shared"]',
+		         '["vendor/shared","vendor/big"]', '2026-08-22T09:00:00Z')`,
+		`INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
+		 VALUES ('model', 'models', 'vendor/small', 'test', 'promoted', '2026-08-22T08:00:00Z')`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("plant the pre-122 schema (%s): %v", stmt, err)
+		}
+	}
+	if _, err := s.GetAutoModeConfig(); err == nil {
+		t.Fatal("the planted schema already has the folded column; this test would pass without the migration")
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
+		t.Fatalf("unrecord migration 124: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config after the migration: %v", err)
+	}
+	want := "vendor/small,vendor/shared,vendor/big"
+	if strings.Join(cfg.Models, ",") != want {
+		t.Errorf("models = %v, want %s", cfg.Models, want)
+	}
+	for _, column := range []string{"classifier_models", "escalation_models"} {
+		var rows int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('automode_config') WHERE name = ?`, column).Scan(&rows); err != nil {
+			t.Fatalf("read table info: %v", err)
+		}
+		if rows != 0 {
+			t.Errorf("column %s survived the migration; two spellings of one setting is how one goes stale", column)
+		}
+	}
+}
+
+func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	if _, err := s.db.Exec(`INSERT INTO automode_config
+		(id, enabled_default, environment, allow_patterns, hard_deny, models, updated_at)
+		VALUES (1, 1, '["this laptop is mine","nothing here serves traffic"]', '[]', '[]', '[]', '2026-08-23T09:00:00Z')`); err != nil {
+		t.Fatalf("plant the pre-123 row: %v", err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 125`); err != nil {
+		t.Fatalf("unrecord migration 125: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config after the migration: %v", err)
+	}
+	if len(cfg.Environment.Notes) != 2 || cfg.Environment.Notes[0] != "this laptop is mine" {
+		t.Errorf("notes = %v, want the prose that was there", cfg.Environment.Notes)
+	}
+	if filled, _ := cfg.Environment.Filled(); filled != 0 {
+		t.Errorf("%d slots came up filled; prose cannot be read as a trust list", filled)
+	}
+}
+
+func TestMigration124DropsModelsNobodyPromoted(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	for _, stmt := range []string{
+		`ALTER TABLE automode_config DROP COLUMN models`,
+		`ALTER TABLE automode_config ADD COLUMN classifier_models TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE automode_config ADD COLUMN escalation_models TEXT NOT NULL DEFAULT '[]'`,
+		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
+		    classifier_models, escalation_models, updated_at)
+		 VALUES (1, 1, '[]', '["Bash(ls:*)"]', '[]', '["opencode-go/glm-5.3"]',
+		         '["opencode-go/qwen3.8-max"]', '2026-08-22T09:00:00Z')`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("plant the pre-122 schema (%s): %v", stmt, err)
+		}
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 124`); err != nil {
+		t.Fatalf("unrecord migration 124: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+
+	cfg, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config after the migration: %v", err)
+	}
+	if len(cfg.Models) != 0 {
+		t.Errorf("models = %v, want none: nobody promoted those", cfg.Models)
+	}
+	if len(cfg.Allow) != 1 || cfg.Allow[0] != "Bash(ls:*)" {
+		t.Errorf("allow = %v, want the pattern the machine actually saved", cfg.Allow)
+	}
+}
+
 func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewWithDB(dbPath)
@@ -296,13 +446,14 @@ func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	defer s.Close()
 
 	for _, stmt := range []string{
-		`ALTER TABLE automode_config DROP COLUMN classifier_models`,
-		`ALTER TABLE automode_config DROP COLUMN escalation_models`,
+		`ALTER TABLE automode_config DROP COLUMN models`,
 		`ALTER TABLE automode_config ADD COLUMN classifier_model TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE automode_config ADD COLUMN escalation_model TEXT NOT NULL DEFAULT ''`,
 		`INSERT INTO automode_config (id, enabled_default, environment, allow_patterns, hard_deny,
 		    classifier_model, escalation_model, updated_at)
 		 VALUES (1, 1, '[]', '[]', '[]', 'vendor/picked', '', '2026-08-17T09:00:00Z')`,
+		`INSERT INTO automode_proposals (kind, target, value, proposed_by, state, created_at)
+		 VALUES ('model', 'models', 'vendor/picked', 'test', 'promoted', '2026-08-17T08:00:00Z')`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil {
 			t.Fatalf("plant the pre-114 schema (%s): %v", stmt, err)
@@ -324,11 +475,8 @@ func TestMigration114CarriesAPromotedModelIntoItsLayersList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get config after the migration: %v", err)
 	}
-	if len(cfg.ClassifierModels) != 1 || cfg.ClassifierModels[0] != "vendor/picked" {
-		t.Errorf("classifier models = %v, want the promoted model carried over", cfg.ClassifierModels)
-	}
-	if len(cfg.EscalationModels) != 1 || cfg.EscalationModels[0] != automode.DefaultEscalationModel {
-		t.Errorf("escalation models = %v, want the shipped default", cfg.EscalationModels)
+	if len(cfg.Models) != 1 || cfg.Models[0] != "vendor/picked" {
+		t.Errorf("models = %v, want the promoted model carried over", cfg.Models)
 	}
 	for _, column := range []string{"classifier_model", "escalation_model"} {
 		var rows int
@@ -661,5 +809,56 @@ func TestAutoModeDirectEditAndPromotionShareTheList(t *testing.T) {
 	}
 	if len(cfg.Allow) != 1 || cfg.Allow[0] != "git push origin*" {
 		t.Fatalf("allow after removal = %v", cfg.Allow)
+	}
+}
+
+func TestSetAutoModeModelsReplacesTheWholeListAndKeepsTheOrder(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+
+	cfg, err := s.SetAutoModeModels([]string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"}, now)
+	if err != nil {
+		t.Fatalf("set models: %v", err)
+	}
+	if len(cfg.Models) != 2 || cfg.Models[0] != "opencode/claude-opus-4-6" {
+		t.Fatalf("models = %v", cfg.Models)
+	}
+
+	if cfg, err = s.SetAutoModeModels([]string{"openai-codex/gpt-5.6-luna"}, now); err != nil {
+		t.Fatalf("replace models: %v", err)
+	}
+	if len(cfg.Models) != 1 || cfg.Models[0] != "openai-codex/gpt-5.6-luna" {
+		t.Errorf("replacement did not drop the old list: %v", cfg.Models)
+	}
+
+	read, err := s.GetAutoModeConfig()
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if len(read.Models) != 1 || read.Models[0] != "openai-codex/gpt-5.6-luna" {
+		t.Errorf("stored models = %v", read.Models)
+	}
+}
+
+func TestSetAutoModeModelsTakesNoneAndRefusesWhatCannotBeReached(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	if _, err := s.SetAutoModeModels([]string{"opencode-go/glm-5.3"}, now); err != nil {
+		t.Fatalf("seed models: %v", err)
+	}
+
+	cfg, err := s.SetAutoModeModels(nil, now)
+	if err != nil {
+		t.Fatalf("clearing the list is how auto mode is turned off: %v", err)
+	}
+	if len(cfg.Models) != 0 {
+		t.Errorf("models = %v, want none", cfg.Models)
+	}
+
+	if _, err := s.SetAutoModeModels([]string{"noprovider"}, now); err == nil {
+		t.Error("a model with no provider was accepted")
+	}
+	if _, err := s.SetAutoModeModels([]string{"a/one", "a/one"}, now); err == nil {
+		t.Error("the same model twice was accepted; a pass walks each model once")
 	}
 }

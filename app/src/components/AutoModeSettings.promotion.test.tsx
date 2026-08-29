@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AutoModeSettings } from './AutoModeSettings';
 import type {
@@ -12,12 +12,11 @@ import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 
 const config = (over: Partial<AutoModeConfigInfo> = {}): AutoModeConfigInfo => ({
   enabled_default: true,
-  environment: [],
+  environment: { slots: [], notes: [] },
   allow: [],
   hard_deny: ['*attn automode env*'],
   shipped_hard_deny: ['*attn automode env*'],
-  classifier_models: ['opencode-go/glm-5.3'],
-  escalation_models: ['opencode-go/qwen3.8-max'],
+  models: ['opencode-go/glm-5.3', 'opencode-go/qwen3.8-max'],
   ...over,
 });
 
@@ -37,6 +36,18 @@ const state = (over: Partial<AutoModeState> = {}): AutoModeState => ({
   config: config(),
   proposals: [],
   denials: [],
+  environmentSlots: [
+    {
+      id: 'domains',
+      label: 'Trusted internal domains',
+      kind: 'list',
+      choices: [],
+      detail: 'Hosts the agent may send data to.',
+      unset: 'None configured',
+      detected: false,
+      read_by: ['Data Exfiltration'],
+    },
+  ],
   ...over,
 });
 
@@ -46,11 +57,15 @@ function Harness(props: {
   discardProposal: (id: number) => Promise<AutoModePromotion>;
   addPattern?: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
   removePattern?: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot?: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
 }) {
   const policy = useAutoModePolicy({
     enabled: true,
     addPattern: vi.fn().mockResolvedValue(edited()),
     removePattern: vi.fn().mockResolvedValue(edited()),
+    setEnvironmentSlot: vi.fn().mockResolvedValue(edited()),
+    setModels: vi.fn(async () => ({ config: config() })),
+    loadModels: vi.fn(async () => ({ providers: [], problem: null })),
     ...props,
   });
   return <AutoModeSettings policy={policy} />;
@@ -65,12 +80,14 @@ function renderPane(value: AutoModeState, over: Partial<{
   discardProposal: (id: number) => Promise<AutoModePromotion>;
   addPattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
   removePattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
 }> = {}) {
   const getState = vi.fn().mockResolvedValue(value);
   const promoteProposal = over.promoteProposal ?? vi.fn().mockResolvedValue(resolved());
   const discardProposal = over.discardProposal ?? vi.fn().mockResolvedValue(resolved());
   const addPattern = over.addPattern ?? vi.fn().mockResolvedValue(edited());
   const removePattern = over.removePattern ?? vi.fn().mockResolvedValue(edited());
+  const setEnvironmentSlot = over.setEnvironmentSlot ?? vi.fn().mockResolvedValue(edited());
   render(
     <Harness
       getState={getState}
@@ -78,9 +95,10 @@ function renderPane(value: AutoModeState, over: Partial<{
       discardProposal={discardProposal}
       addPattern={addPattern}
       removePattern={removePattern}
+      setEnvironmentSlot={setEnvironmentSlot}
     />,
   );
-  return { getState, promoteProposal, discardProposal, addPattern, removePattern };
+  return { getState, promoteProposal, discardProposal, addPattern, removePattern, setEnvironmentSlot };
 }
 
 describe('AutoModeSettings', () => {
@@ -104,7 +122,7 @@ describe('AutoModeSettings', () => {
     renderPane(state({
       proposals: [
         proposal(),
-        proposal({ id: 8, kind: 'model', target: 'classifier', value: 'opencode-go/other', proposed_by: '' }),
+        proposal({ id: 8, kind: 'model', target: 'models', value: 'opencode-go/other', proposed_by: '' }),
       ],
     }));
     await screen.findByTestId('automode-proposals');
@@ -115,21 +133,27 @@ describe('AutoModeSettings', () => {
     expect(allow).toHaveTextContent('session-a');
 
     const model = screen.getByTestId('automode-proposal-8');
-    expect(model).toHaveTextContent('classifier model');
+    expect(model).toHaveTextContent('models');
     expect(model).toHaveTextContent('unattributed');
   });
 
-  it('shows each layer\'s models in order, marking the one that judges', async () => {
+  it('shows the models in order, marking the one that judges', async () => {
     renderPane(state({
-      config: config({ classifier_models: ['opencode-go/glm-5.3', 'vendor/backup'] }),
+      config: config({ models: ['opencode-go/glm-5.3', 'vendor/backup'] }),
     }));
-    const classifier = await screen.findByTestId('automode-classifier-models');
-    expect(classifier).toHaveTextContent('opencode-go/glm-5.3 judges');
-    expect(classifier).toHaveTextContent('vendor/backup fallback');
+    const models = await screen.findByTestId('automode-models');
+    const rows = within(models).getAllByTestId('automode-models-entry');
+    expect(rows[0]).toHaveTextContent('opencode-go/glm-5.3');
+    expect(rows[0]).toHaveTextContent('judges');
+    expect(rows[1]).toHaveTextContent('vendor/backup');
+    expect(rows[1]).toHaveTextContent('fallback');
+    expect(within(rows[0]).queryByTestId('automode-models-primary')).toBeNull();
+  });
 
-    const escalation = screen.getByTestId('automode-escalation-models');
-    expect(escalation).toHaveTextContent('opencode-go/qwen3.8-max judges');
-    expect(escalation).not.toHaveTextContent('fallback');
+  it('says auto mode stays off while no model can judge a call', async () => {
+    renderPane(state({ config: config({ models: [], enabled_default: true }) }));
+    expect(await screen.findByTestId('automode-new-sessions')).toHaveTextContent('Auto mode off');
+    expect(screen.getByTestId('automode-models')).toHaveTextContent('No model, so auto mode stays off');
   });
 
   it('promotes a proposal and re-reads the result', async () => {
@@ -168,18 +192,36 @@ describe('AutoModeSettings', () => {
         enabled_default: false,
         allow: ['git push origin*'],
         hard_deny: ['*attn automode env*', 'rm -rf /*'],
-        environment: ['never touch prod'],
+        environment: { slots: [{ id: 'domains', values: ['grafana.acme.corp'] }], notes: [] },
       }),
     }));
     const shown = await screen.findByTestId('automode-config');
 
     expect(shown).toHaveTextContent('Auto mode off');
-    expect(shown).toHaveTextContent('opencode-go/glm-5.3');
-    expect(shown).toHaveTextContent('opencode-go/qwen3.8-max');
+    const models = screen.getByTestId('automode-models');
+    expect(models).toHaveTextContent('opencode-go/glm-5.3');
+    expect(models).toHaveTextContent('opencode-go/qwen3.8-max');
     // The shipped denies are resolved in daemon-side, so they show up without anyone promoting them.
     expect(screen.getByTestId('automode-hard-deny')).toHaveTextContent('*attn automode env*');
     expect(screen.getByTestId('automode-allow')).toHaveTextContent('git push origin*');
-    expect(screen.getByTestId('automode-environment')).toHaveTextContent('never touch prod');
+    expect(screen.getByTestId('automode-slot-domains')).toHaveTextContent('grafana.acme.corp');
+  });
+
+  it('writes the slot the entry was typed into', async () => {
+    const setEnvironmentSlot = vi.fn().mockResolvedValue(edited());
+    renderPane(state(), { setEnvironmentSlot });
+    fireEvent.click(await screen.findByTestId('automode-slot-edit-domains'));
+    const input = screen.getByTestId('automode-slot-input-domains');
+
+    fireEvent.change(input, { target: { value: 'grafana.acme.corp' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(setEnvironmentSlot).toHaveBeenCalledWith('domains', ['grafana.acme.corp']));
+  });
+
+  it('shows an unfilled slot as what the rules assume', async () => {
+    renderPane(state());
+    expect(await screen.findByTestId('automode-slot-domains')).toHaveTextContent('None configured');
   });
 
   it('says so when a list is empty rather than leaving a blank row', async () => {

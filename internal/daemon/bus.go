@@ -99,6 +99,8 @@ const (
 
 	FactAutoModeDenied = "automode.denied"
 
+	FactAutoModeConfigChanged = "automode.config.changed"
+
 	FactAutomationChanged  = "automation.changed"
 	FactWorkflowRunUpdated = "workflow.run.updated"
 	FactTaskChanged        = "task.changed"
@@ -368,6 +370,10 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
 		},
 		{
+			filter: bus.Filter{FactAutoModeConfigChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectAutoModeStateChanged() },
+		},
+		{
 			filter: bus.Filter{FactAutomationChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectAutomationsChanged(ev.Subject) },
 		},
@@ -528,8 +534,12 @@ const (
 	snapshotAutomations = "automations_changed"
 	snapshotTasks       = "tasks_changed"
 	snapshotApps        = "apps_updated"
+	snapshotAutoMode    = "automode_state_changed"
 )
 
+const AutoModeConfigSubject = "config"
+
+// wireEqual reports whether two values reach clients as the same JSON —
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)
 	rawB, errB := json.Marshal(b)

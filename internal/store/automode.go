@@ -56,15 +56,14 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 		return cfg, nil
 	}
 	var (
-		enabled                            int
-		environment, allow, hardDeny       string
-		classifierModels, escalationModels string
+		enabled                      int
+		environment, allow, hardDeny string
+		models                       string
 	)
 	err := q.QueryRow(`
-		SELECT enabled_default, environment, allow_patterns, hard_deny,
-		       classifier_models, escalation_models
+		SELECT enabled_default, environment, allow_patterns, hard_deny, models
 		FROM automode_config WHERE id = 1
-	`).Scan(&enabled, &environment, &allow, &hardDeny, &classifierModels, &escalationModels)
+	`).Scan(&enabled, &environment, &allow, &hardDeny, &models)
 	if err == sql.ErrNoRows {
 		return cfg, nil
 	}
@@ -72,7 +71,7 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 		return cfg, err
 	}
 	cfg.EnabledDefault = enabled != 0
-	if cfg.Environment, err = decodeStringList(environment, "environment"); err != nil {
+	if cfg.Environment, err = decodeEnvironment(environment); err != nil {
 		return defaults(), err
 	}
 	if cfg.Allow, err = decodeStringList(allow, "allow"); err != nil {
@@ -83,29 +82,67 @@ func (s *Store) readAutoModeConfig(q rowQuerier) (automode.Config, error) {
 		return defaults(), err
 	}
 	cfg.HardDeny = automode.ResolveHardDeny(wsPort, stored)
-	if models, err := decodeStringList(classifierModels, "classifier_models"); err != nil {
+	if list, err := decodeStringList(models, "models"); err != nil {
 		return defaults(), err
-	} else if len(models) > 0 {
-		cfg.ClassifierModels = models
-	}
-	if models, err := decodeStringList(escalationModels, "escalation_models"); err != nil {
-		return defaults(), err
-	} else if len(models) > 0 {
-		cfg.EscalationModels = models
+	} else if len(list) > 0 {
+		cfg.Models = list
 	}
 	return cfg, nil
 }
 
-func (s *Store) SetAutoModeEnvironment(entries []string, now time.Time) (automode.Config, error) {
+func (s *Store) SetAutoModeEnvironmentSlot(id string, values []string, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
-		cfg.Environment = append([]string{}, entries...)
+		return cfg.Environment.SetSlot(id, values)
+	})
+}
+
+func (s *Store) SetAutoModeEnvironmentNotes(notes []string, now time.Time) (automode.Config, error) {
+	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		cfg.Environment.Notes = append([]string{}, notes...)
 		return nil
 	})
+}
+
+func encodeEnvironment(env automode.Environment) (string, error) {
+	encoded, err := json.Marshal(env.Normalize())
+	if err != nil {
+		return "", fmt.Errorf("encode environment: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func decodeEnvironment(raw string) (automode.Environment, error) {
+	env := automode.NewEnvironment()
+	if strings.TrimSpace(raw) == "" {
+		return env, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+		return automode.NewEnvironment(), fmt.Errorf("decode environment %q: %w", raw, err)
+	}
+	if env.Slots == nil {
+		env.Slots = map[string][]string{}
+	}
+	if env.Notes == nil {
+		env.Notes = []string{}
+	}
+	return env, nil
 }
 
 func (s *Store) SetAutoModeEnabledDefault(enabled bool, now time.Time) (automode.Config, error) {
 	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
 		cfg.EnabledDefault = enabled
+		return nil
+	})
+}
+
+// An empty list is auto mode off, which a caller may mean; it is not an error.
+func (s *Store) SetAutoModeModels(models []string, now time.Time) (automode.Config, error) {
+	parsed, err := automode.ParseModelList(automode.FormatModelList(models))
+	if err != nil {
+		return automode.Config{}, err
+	}
+	return s.mutateAutoModeConfig(now, func(cfg *automode.Config) error {
+		cfg.Models = parsed
 		return nil
 	})
 }
@@ -211,8 +248,7 @@ func (s *Store) CreateAutoModeProposal(kind, target, value, proposedBy string, n
 		VALUES (?, ?, ?, ?, ?, ?)
 	`, kind, target, value, proposedBy, automode.StatePending, stamp)
 	if err != nil {
-		// The index caught an asker this process did not see; that ask is the
-		// row already there, not a failure to report.
+
 		if existing, findErr := findPending(); findErr == nil {
 			return existing, nil
 		}
@@ -300,11 +336,7 @@ func (s *Store) PromoteAutoModeProposal(id int64, now time.Time) (AutoModePropos
 		if err != nil {
 			return AutoModeProposal{}, automode.Config{}, err
 		}
-		if proposal.Target == automode.TargetClassifier {
-			cfg.ClassifierModels = models
-		} else {
-			cfg.EscalationModels = models
-		}
+		cfg.Models = models
 	}
 	if err := writeAutoModeConfig(tx, cfg, now); err != nil {
 		return AutoModeProposal{}, automode.Config{}, err
@@ -446,7 +478,7 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 	// Every config here came out of a read, which resolved the shipped denies in;
 	// persisting them would freeze today's list into the row.
 	cfg.HardDeny = automode.StripShippedHardDeny(config.WSPort(), cfg.HardDeny)
-	environment, err := encodeStringList(cfg.Environment)
+	environment, err := encodeEnvironment(cfg.Environment)
 	if err != nil {
 		return err
 	}
@@ -458,11 +490,7 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	classifierModels, err := encodeStringList(cfg.ClassifierModels)
-	if err != nil {
-		return err
-	}
-	escalationModels, err := encodeStringList(cfg.EscalationModels)
+	models, err := encodeStringList(cfg.Models)
 	if err != nil {
 		return err
 	}
@@ -473,17 +501,16 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 	_, err = e.Exec(`
 		INSERT INTO automode_config
 			(id, enabled_default, environment, allow_patterns, hard_deny,
-			 classifier_models, escalation_models, updated_at)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+			 models, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			enabled_default   = excluded.enabled_default,
-			environment       = excluded.environment,
-			allow_patterns    = excluded.allow_patterns,
-			hard_deny         = excluded.hard_deny,
-			classifier_models = excluded.classifier_models,
-			escalation_models = excluded.escalation_models,
-			updated_at        = excluded.updated_at
-	`, enabled, environment, allow, hardDeny, classifierModels, escalationModels,
+			enabled_default = excluded.enabled_default,
+			environment     = excluded.environment,
+			allow_patterns  = excluded.allow_patterns,
+			hard_deny       = excluded.hard_deny,
+			models          = excluded.models,
+			updated_at      = excluded.updated_at
+	`, enabled, environment, allow, hardDeny, models,
 		now.UTC().Format(sortableTimeFormat))
 	return err
 }
@@ -508,6 +535,9 @@ func describeProposer(proposedBy string) string {
 
 func describeProposedChange(kind, target, value string) string {
 	if kind == automode.KindModel {
+		if value == "" {
+			return fmt.Sprintf("%s %s (none, which leaves auto mode off)", kind, target)
+		}
 		return fmt.Sprintf("%s %s %s", kind, target, value)
 	}
 	return fmt.Sprintf("%s %s", kind, value)

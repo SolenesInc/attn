@@ -1,18 +1,15 @@
-
-/** Defaults from the classifier receipt in docs/plans/2026-08-16-pi-auto-mode.md. */
-export const defaultClassifierModel = "opencode-go/glm-5.3";
-export const defaultEscalationModel = "opencode-go/qwen3.8-max";
-
-export const defaultClassifierModels: readonly string[] = [defaultClassifierModel];
-export const defaultEscalationModels: readonly string[] = [defaultEscalationModel];
+import { emptyEnvironment, readEnvironment, type Environment } from "./environment";
 
 export type AutoModeConfig = {
   enabledDefault: boolean;
-  environment: readonly string[];
+
+  environment: Environment;
+
   allow: readonly string[];
+
   hardDeny: readonly string[];
-  classifierModels: readonly string[];
-  escalationModels: readonly string[];
+
+  models: readonly string[];
 };
 
 export type RawAutoModeConfig = {
@@ -20,7 +17,9 @@ export type RawAutoModeConfig = {
   environment?: unknown;
   allow?: unknown;
   hard_deny?: unknown;
-  /** The singular spellings predate the lists and load as a one-entry list. */
+
+  models?: unknown;
+
   classifier_model?: unknown;
   escalation_model?: unknown;
   classifier_models?: unknown;
@@ -39,11 +38,10 @@ export class AutoModeConfigError extends Error {
 
 export const defaultAutoModeConfig: AutoModeConfig = {
   enabledDefault: true,
-  environment: [],
+  environment: emptyEnvironment,
   allow: [],
   hardDeny: [],
-  classifierModels: defaultClassifierModels,
-  escalationModels: defaultEscalationModels,
+  models: [],
 };
 
 export function loadAutoModeConfig(raw: RawAutoModeConfig | undefined): AutoModeConfig {
@@ -60,24 +58,19 @@ export function loadAutoModeConfig(raw: RawAutoModeConfig | undefined): AutoMode
   }
   return {
     enabledDefault: readBoolean(raw.enabled_default, "enabled_default", defaultAutoModeConfig.enabledDefault),
-    environment: readStrings(raw.environment, "environment"),
+    environment: readEnvironmentOrFail(raw.environment),
     allow,
     hardDeny: readPatterns(raw.hard_deny, "hard_deny"),
-    classifierModels: readModels({
-      list: raw.classifier_models,
-      listField: "classifier_models",
-      single: raw.classifier_model,
-      singleField: "classifier_model",
-      fallback: defaultClassifierModel,
-    }),
-    escalationModels: readModels({
-      list: raw.escalation_models,
-      listField: "escalation_models",
-      single: raw.escalation_model,
-      singleField: "escalation_model",
-      fallback: defaultEscalationModel,
-    }),
+    models: readModels(raw),
   };
+}
+
+function readEnvironmentOrFail(raw: unknown): Environment {
+  try {
+    return readEnvironment(raw);
+  } catch (error) {
+    throw new AutoModeConfigError("environment", (error as Error).message);
+  }
 }
 
 export function isBroadPattern(pattern: string): boolean {
@@ -116,28 +109,33 @@ function readStrings(value: unknown, field: string): string[] {
   });
 }
 
-function readModels(raw: {
-  list: unknown;
-  listField: string;
-  single: unknown;
-  singleField: string;
-  fallback: string;
-}): readonly string[] {
-  if (raw.list === undefined || raw.list === null) {
-    return [readString(raw.single, raw.singleField, raw.fallback)];
+function readModels(raw: RawAutoModeConfig): readonly string[] {
+  if (raw.models !== undefined && raw.models !== null) return readModelList(raw.models, "models");
+  const folded: string[] = [];
+  for (const layer of [
+    { list: raw.classifier_models, listField: "classifier_models", single: raw.classifier_model, singleField: "classifier_model" },
+    { list: raw.escalation_models, listField: "escalation_models", single: raw.escalation_model, singleField: "escalation_model" },
+  ]) {
+    const models =
+      layer.list === undefined || layer.list === null
+        ? readLegacySingle(layer.single, layer.singleField)
+        : readModelList(layer.list, layer.listField);
+    for (const model of models) if (!folded.includes(model)) folded.push(model);
   }
-  const models = readStrings(raw.list, raw.listField).map((model, index) => {
+  return folded;
+}
+
+function readLegacySingle(value: unknown, field: string): readonly string[] {
+  const model = readString(value, field, "");
+  return model === "" ? [] : [model];
+}
+
+function readModelList(value: unknown, field: string): readonly string[] {
+  const models = readStrings(value, field).map((model, index) => {
     const trimmed = model.trim();
-    if (trimmed === "") throw new AutoModeConfigError(raw.listField, `${raw.listField}[${index}] is blank`);
+    if (trimmed === "") throw new AutoModeConfigError(field, `${field}[${index}] is blank`);
     return trimmed;
   });
-  if (models.length === 0) {
-    throw new AutoModeConfigError(
-      raw.listField,
-      `${raw.listField} names no model: a layer with an empty list can judge nothing. ` +
-        `Omit the field to run on the shipped default.`,
-    );
-  }
   return models;
 }
 

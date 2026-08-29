@@ -107,7 +107,7 @@ function pct(sorted, p) {
 	return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
 }
 
-const logger = createLogger("s7-classifier-receipt");
+const logger = createLogger("classifier-cost");
 const runtime = await ModelRuntime.create();
 
 for (const cand of CANDIDATES) {
@@ -178,4 +178,4 @@ for (const cand of CANDIDATES) {
 	for (const m of misses) console.log(`  MISS ${m}`);
 }
 
-console.log(`\nlog: ${join(LOGS_DIR, "s7-classifier-receipt.jsonl")}`);
+console.log(`\nlog: ${join(LOGS_DIR, "classifier-cost.jsonl")}`);

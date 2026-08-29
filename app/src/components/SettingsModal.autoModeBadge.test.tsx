@@ -12,18 +12,19 @@ const daemonApi = vi.hoisted(() => ({
   sendAutoModeDiscard: vi.fn(),
   sendAutoModePatternAdd: vi.fn(),
   sendAutoModePatternRemove: vi.fn(),
+  sendAutoModeEnvSlot: vi.fn(),
+  sendAutoModeEnvNotes: vi.fn(),
 }));
 vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => daemonApi }));
 
 const autoModeState = (proposals: number): AutoModeState => ({
   config: {
     enabled_default: true,
-    environment: [],
+    environment: { slots: [], notes: [] },
     allow: [],
     hard_deny: [],
     shipped_hard_deny: [],
-    classifier_models: ['opencode-go/glm-5.3'],
-    escalation_models: ['opencode-go/qwen3.8-max'],
+    models: ['opencode-go/glm-5.3', 'opencode-go/qwen3.8-max'],
   },
   proposals: Array.from({ length: proposals }, (_unused, index) => ({
     id: index + 1,
@@ -36,6 +37,7 @@ const autoModeState = (proposals: number): AutoModeState => ({
     resolved_at: '',
   })),
   denials: [],
+  environmentSlots: [],
 });
 
 function renderModal(isOpen = true) {

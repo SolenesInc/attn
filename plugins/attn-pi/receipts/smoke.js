@@ -1,9 +1,9 @@
 // S1 smoke: createAgentSession + bindExtensions, prompt "ok", check session file
 // location/timing and sdk/ext event ordering around agent_end/agent_settled.
 import { existsSync } from "node:fs";
-import { SPIKE_DIR, buildSession, createLogger } from "./common.js";
+import { RECEIPTS_DIR, buildSession, createLogger } from "./common.js";
 
-const SCENARIO = "s1-smoke";
+const SCENARIO = "smoke";
 const logger = createLogger(SCENARIO);
 
 function extensionFactory(pi) {
@@ -17,8 +17,8 @@ function extensionFactory(pi) {
 async function main() {
 	const { session, sessionDir } = await buildSession(SCENARIO, { extensionFactory });
 
-	if (!sessionDir.startsWith(SPIKE_DIR)) {
-		throw new Error(`REFUSING: sessionDir ${sessionDir} is not under spike dir ${SPIKE_DIR}`);
+	if (!sessionDir.startsWith(RECEIPTS_DIR)) {
+		throw new Error(`REFUSING: sessionDir ${sessionDir} is not under the receipts dir ${RECEIPTS_DIR}`);
 	}
 	logger.log("harness", "session_dir_verified", { note: sessionDir });
 

@@ -1,7 +1,7 @@
 // S3 steer: mid-run steer() while two sequential bash tool calls are running.
 import { buildSession, createLogger } from "./common.js";
 
-const SCENARIO = "s3-steer";
+const SCENARIO = "steer";
 const logger = createLogger(SCENARIO);
 const STEER_TEXT = "Also include the word BANANA in your final answer.";
 

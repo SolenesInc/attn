@@ -93,39 +93,44 @@ const (
 )
 
 type Daemon struct {
-	socketPath                        string
-	pidPath                           string
-	pidFile                           *os.File
-	dataRoot                          string
-	daemonInstanceID                  string
-	clientToken                       string
-	store                             *store.Store
-	automationMu                      sync.Mutex
-	wsAutomationMutationTimeout       time.Duration
-	automationObservationMu           sync.Mutex
-	automationObservationLocks        map[string]*sync.Mutex
-	automationRepoMu                  sync.Mutex
-	automationRepos                   map[string]*sync.Mutex
-	automationDeliveryHook            func(*store.AutomationRun) error
-	wsWriteTimeout                    time.Duration
-	wsPingInterval                    time.Duration
-	wsPingTimeout                     time.Duration
-	listener                          net.Listener
-	httpServer                        *http.Server
-	httpListener                      net.Listener
-	httpHandler                       http.Handler
-	diagServer                        *diag.Server
-	wsHub                             *wsHub
-	presentSince                      time.Time
-	presenceMu                        sync.RWMutex
-	crewLifecycleState                *crewLifecycleMemo
-	crewMemoOnce                      sync.Once
-	done                              chan struct{}
-	logger                            *logging.Logger
-	debugLogging                      bool
-	ghRegistry                        *github.ClientRegistry
-	hubManager                        *hub.Manager
-	classifier                        Classifier
+	socketPath                  string
+	pidPath                     string
+	pidFile                     *os.File
+	dataRoot                    string
+	daemonInstanceID            string
+	clientToken                 string
+	store                       *store.Store
+	automationMu                sync.Mutex
+	wsAutomationMutationTimeout time.Duration
+	automationObservationMu     sync.Mutex
+	automationObservationLocks  map[string]*sync.Mutex
+	automationRepoMu            sync.Mutex
+	automationRepos             map[string]*sync.Mutex
+	automationDeliveryHook      func(*store.AutomationRun) error
+	wsWriteTimeout              time.Duration
+	wsPingInterval              time.Duration
+	wsPingTimeout               time.Duration
+	listener                    net.Listener
+	httpServer                  *http.Server
+	httpListener                net.Listener
+	httpHandler                 http.Handler
+	diagServer                  *diag.Server
+	wsHub                       *wsHub
+	presentSince                time.Time
+	presenceMu                  sync.RWMutex
+	crewLifecycleState          *crewLifecycleMemo
+	crewMemoOnce                sync.Once
+	done                        chan struct{}
+	logger                      *logging.Logger
+	debugLogging                bool
+	ghRegistry                  *github.ClientRegistry
+	hubManager                  *hub.Manager
+	classifier                  Classifier
+	// What auto mode's repo_visibility slot knows, keyed "host/owner/name".
+	// A launch reads it and never waits on it; see automode_detect.go.
+	repoVisibilityKnown               map[string]string
+	repoVisibilityPending             map[string]bool
+	repoVisibilityMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
@@ -2237,10 +2242,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAppWatch(conn, msg.(*protocol.AppWatchMessage))
 	case protocol.CmdAutoModeShow: // wire: automode_show
 		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
-	case protocol.CmdAutoModeEnvAdd: // wire: automode_env_add
-		d.handleAutoModeEnvAdd(conn, msg.(*protocol.AutoModeEnvAddMessage))
-	case protocol.CmdAutoModeEnvRemove: // wire: automode_env_remove
-		d.handleAutoModeEnvRemove(conn, msg.(*protocol.AutoModeEnvRemoveMessage))
+	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+		d.handleAutoModeEnvSlot(conn, msg.(*protocol.AutoModeEnvSlotMessage))
+	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePropose: // wire: automode_propose
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials: // wire: automode_denials

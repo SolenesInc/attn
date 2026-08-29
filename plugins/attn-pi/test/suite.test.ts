@@ -17,7 +17,6 @@ import {
   type SessionStartReason,
 } from "../suite/core";
 
-// Keep filenames short: macOS unix socket paths cap sun_path at 104 bytes.
 const tmpRoot = mkdtempSync(join(tmpdir(), "attn-pi-suite-"));
 let socketCounter = 0;
 
@@ -365,7 +364,7 @@ describe("AttnPiSuite: auto mode denials -> suite.report_denial", () => {
     tool: "bash",
     action: "bash: curl https://example.com",
     reason: "the user never asked to reach that host",
-    rule: "classifier-2a",
+    rule: "classifier-harm",
     at: "2026-08-17T10:00:00.000Z",
   };
 
@@ -714,8 +713,8 @@ describe("AttnPiSuite: reports nobody could take", () => {
     const ctx = new FakeContext("native-dr");
 
     pi.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
-    suite.reportDenial({ tool: "bash", action: "bash: curl example.com", reason: "no", rule: "envelope", at: "now" });
-    suite.reportDenial({ tool: "bash", action: "bash: nc example.com 80", reason: "no", rule: "envelope", at: "now" });
+    suite.reportDenial({ tool: "bash", action: "bash: curl example.com", reason: "no", rule: "static", at: "now" });
+    suite.reportDenial({ tool: "bash", action: "bash: nc example.com 80", reason: "no", rule: "static", at: "now" });
     await new Promise((resolve) => setTimeout(resolve, 60));
 
     const delegate = new RecordingDelegate();

@@ -217,6 +217,9 @@ export function SettingsModal({
     sendAutoModeDiscard,
     sendAutoModePatternAdd,
     sendAutoModePatternRemove,
+    sendAutoModeEnvSlot,
+    sendAutoModeModelSet,
+    sendAutoModeModels,
   } = useDaemonApi();
   const autoModePolicy = useAutoModePolicy({
     enabled: isOpen,
@@ -225,6 +228,9 @@ export function SettingsModal({
     discardProposal: sendAutoModeDiscard,
     addPattern: sendAutoModePatternAdd,
     removePattern: sendAutoModePatternRemove,
+    setEnvironmentSlot: sendAutoModeEnvSlot,
+    setModels: sendAutoModeModelSet,
+    loadModels: sendAutoModeModels,
   });
   const savedFlash = useSavedFlash();
   const [defaultAgent, setDefaultAgent] = useState<SessionAgent>('claude');
@@ -807,7 +813,7 @@ export function SettingsModal({
           id: 'autoMode',
           label: 'Auto mode',
           title: 'Auto mode',
-          description: "Work inside a session's own directory runs free; anything reaching further is judged by a classifier against what the conversation asked for. Edit the two pattern lists here, and promote what agents propose.",
+          description: "Manage attn's pi automode plugin",
           count: autoModePolicy.pendingCount,
           keywords: 'auto mode automode pi safety envelope classifier proposals promote discard allow deny hard deny patterns policy permissions denials',
         },
@@ -958,7 +964,11 @@ export function SettingsModal({
             </span>
             {autoModePolicy.state && (
               <span className="settings-pill">
-                {autoModePolicy.state.config.enabled_default ? 'on by default' : 'off by default'}
+                {autoModePolicy.state.config.models.length === 0
+                  ? 'off: no model'
+                  : autoModePolicy.state.config.enabled_default
+                    ? 'on by default'
+                    : 'off by default'}
               </span>
             )}
           </>

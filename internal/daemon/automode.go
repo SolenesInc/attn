@@ -54,58 +54,78 @@ func (d *Daemon) handleAutoModeShow(conn net.Conn, _ *protocol.AutoModeShowMessa
 	})
 }
 
-func (d *Daemon) handleAutoModeEnvAdd(conn net.Conn, msg *protocol.AutoModeEnvAddMessage) {
+func (d *Daemon) handleAutoModeEnvSlot(conn net.Conn, msg *protocol.AutoModeEnvSlotMessage) {
 	if !d.requireAutoModeStore(conn) {
 		return
 	}
-	text := strings.TrimSpace(msg.Text)
-	if text == "" {
-		d.sendError(conn, "automode_env_add: text is required")
-		return
-	}
-	cfg, err := d.store.GetAutoModeConfig()
+	updated, err := d.store.SetAutoModeEnvironmentSlot(msg.Slot, msg.Values, time.Now())
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	updated, err := d.store.SetAutoModeEnvironment(append(cfg.Environment, text), time.Now())
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
+	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
 	d.sendAutoModeResponse(conn, protocol.Response{
 		Ok:                true,
-		AutomodeEnvResult: &protocol.AutoModeEnvResult{Environment: updated.Environment},
+		AutomodeEnvResult: &protocol.AutoModeEnvResult{Environment: autoModeEnvironmentInfo(updated.Environment)},
 	})
 }
 
-func (d *Daemon) handleAutoModeEnvRemove(conn net.Conn, msg *protocol.AutoModeEnvRemoveMessage) {
+func (d *Daemon) handleAutoModeEnvNotes(conn net.Conn, msg *protocol.AutoModeEnvNotesMessage) {
 	if !d.requireAutoModeStore(conn) {
 		return
 	}
-	cfg, err := d.store.GetAutoModeConfig()
+	updated, err := d.store.SetAutoModeEnvironmentNotes(cleanEnvironmentLines(msg.Notes), time.Now())
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	index := msg.Index
-	if index < 0 || index >= len(cfg.Environment) {
-		d.sendError(conn, fmt.Sprintf(
-			"automode_env_remove: index %d is out of range; there are %d environment entries",
-			index, len(cfg.Environment)))
-		return
-	}
-	entries := append([]string{}, cfg.Environment[:index]...)
-	entries = append(entries, cfg.Environment[index+1:]...)
-	updated, err := d.store.SetAutoModeEnvironment(entries, time.Now())
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
+	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
 	d.sendAutoModeResponse(conn, protocol.Response{
 		Ok:                true,
-		AutomodeEnvResult: &protocol.AutoModeEnvResult{Environment: updated.Environment},
+		AutomodeEnvResult: &protocol.AutoModeEnvResult{Environment: autoModeEnvironmentInfo(updated.Environment)},
 	})
+}
+
+func cleanEnvironmentLines(lines []string) []string {
+	cleaned := []string{}
+	for _, line := range lines {
+		cleaned = append(cleaned, strings.TrimRight(line, " \t"))
+	}
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+	return cleaned
+}
+
+// autoModeEnvironmentInfo puts the slots on the wire in the schema's order, so
+func autoModeEnvironmentInfo(env automode.Environment) protocol.AutoModeEnvironmentInfo {
+	values := []protocol.AutoModeEnvironmentSlotValue{}
+	for _, id := range automode.SlotIDs() {
+		if entries := env.Slots[id]; len(entries) > 0 {
+			values = append(values, protocol.AutoModeEnvironmentSlotValue{
+				ID: id, Values: nonNilStrings(entries),
+			})
+		}
+	}
+	return protocol.AutoModeEnvironmentInfo{Slots: values, Notes: nonNilStrings(env.Notes)}
+}
+
+func autoModeEnvironmentSlots() []protocol.AutoModeEnvironmentSlot {
+	slots := automode.Slots()
+	infos := make([]protocol.AutoModeEnvironmentSlot, 0, len(slots))
+	for _, slot := range slots {
+		infos = append(infos, protocol.AutoModeEnvironmentSlot{
+			ID:       slot.ID,
+			Label:    slot.Label,
+			Kind:     slot.Kind,
+			Choices:  nonNilStrings(slot.Choices),
+			Detail:   slot.Detail,
+			Unset:    slot.Unset,
+			Detected: slot.Detected,
+			ReadBy:   nonNilStrings(slot.ReadBy),
+		})
+	}
+	return infos
 }
 
 func (d *Daemon) handleAutoModePropose(conn net.Conn, msg *protocol.AutoModeProposeMessage) {
@@ -123,6 +143,7 @@ func (d *Daemon) handleAutoModePropose(conn net.Conn, msg *protocol.AutoModeProp
 		d.sendError(conn, err.Error())
 		return
 	}
+	d.publishFact(FactAutoModeConfigChanged, AutoModeConfigSubject, nil)
 	d.sendAutoModeResponse(conn, protocol.Response{
 		Ok: true,
 		AutomodeProposeResult: &protocol.AutoModeProposeResult{
@@ -215,13 +236,12 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 
 func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 	return protocol.AutoModeConfigInfo{
-		EnabledDefault:   cfg.EnabledDefault,
-		Environment:      nonNilStrings(cfg.Environment),
-		Allow:            nonNilStrings(cfg.Allow),
-		HardDeny:         nonNilStrings(cfg.HardDeny),
-		ShippedHardDeny:  nonNilStrings(automode.ShippedHardDeny(config.WSPort())),
-		ClassifierModels: nonNilStrings(cfg.ClassifierModels),
-		EscalationModels: nonNilStrings(cfg.EscalationModels),
+		EnabledDefault:  cfg.EnabledDefault,
+		Environment:     autoModeEnvironmentInfo(cfg.Environment),
+		Allow:           nonNilStrings(cfg.Allow),
+		HardDeny:        nonNilStrings(cfg.HardDeny),
+		ShippedHardDeny: nonNilStrings(automode.ShippedHardDeny(config.WSPort())),
+		Models:          nonNilStrings(cfg.Models),
 	}
 }
 

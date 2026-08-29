@@ -11,11 +11,11 @@ import {
 // /compat subpath (deprecated there but functional).
 import { getModel } from "@earendil-works/pi-ai/compat";
 
-export const SPIKE_DIR = resolve(import.meta.dirname);
-export const LOGS_DIR = join(SPIKE_DIR, "logs");
-export const SESSIONS_DIR = join(SPIKE_DIR, "sessions");
-// The real ~/.pi/agent, for auth/resource resolution only. Never written to;
-// session storage is redirected separately in buildSession.
+export const RECEIPTS_DIR = resolve(import.meta.dirname);
+export const LOGS_DIR = join(RECEIPTS_DIR, "logs");
+export const SESSIONS_DIR = join(RECEIPTS_DIR, "sessions");
+// Real ~/.pi/agent, used ONLY for auth/resource resolution the same way plain `pi` does.
+// Never written to, never redirected: session storage is redirected separately (see buildSession).
 export const REAL_AGENT_DIR = join(homedir(), ".pi", "agent");
 export const REAL_SESSIONS_DIR = join(REAL_AGENT_DIR, "sessions");
 
@@ -42,7 +42,7 @@ export function createLogger(scenario) {
 }
 
 export async function buildSession(scenario, { extensionFactory } = {}) {
-	const cwd = SPIKE_DIR;
+	const cwd = RECEIPTS_DIR;
 	const sessionDir = join(SESSIONS_DIR, scenario);
 	if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
 
@@ -69,7 +69,7 @@ export async function buildSession(scenario, { extensionFactory } = {}) {
 }
 
 export async function openSession(sessionFilePath) {
-	const cwd = SPIKE_DIR;
+	const cwd = RECEIPTS_DIR;
 	const sessionManager = SessionManager.open(sessionFilePath);
 	const settingsManager = SettingsManager.create(cwd);
 

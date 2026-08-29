@@ -446,6 +446,7 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 		if intent, ok := d.store.LaunchIntent(session.ID); ok && intent.AutoMode != nil {
 			cfg.EnabledDefault = *intent.AutoMode
 		}
+		cfg = d.autoModeConfigForSession(cfg, params.CWD)
 		params.AutoMode = &cfg
 	}
 	if metadata := strings.TrimSpace(d.store.GetAgentMetadata(session.ID)); metadata != "" && json.Valid([]byte(metadata)) {

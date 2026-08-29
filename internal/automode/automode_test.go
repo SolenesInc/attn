@@ -38,18 +38,20 @@ func TestValidateProposalAcceptsABroadDeny(t *testing.T) {
 }
 
 func TestValidateProposalChecksModelShape(t *testing.T) {
-	if err := ValidateProposal(KindModel, TargetClassifier, "opencode-go/glm-5.3"); err != nil {
+	if err := ValidateProposal(KindModel, TargetModels, "opencode-go/glm-5.3"); err != nil {
 		t.Fatalf("valid model refused: %v", err)
 	}
 	for _, tc := range []struct{ target, value string }{
 		{"", "opencode-go/glm-5.3"},
 		{"main", "opencode-go/glm-5.3"},
-		{TargetClassifier, "glm-5.3"},
-		{TargetEscalation, ""},
+		{TargetModels, "glm-5.3"},
 	} {
 		if err := ValidateProposal(KindModel, tc.target, tc.value); err == nil {
 			t.Errorf("ValidateProposal(model, %q, %q) was accepted", tc.target, tc.value)
 		}
+	}
+	if err := ValidateProposal(KindModel, TargetModels, ""); err != nil {
+		t.Errorf("an empty model list was refused: %v", err)
 	}
 }
 
@@ -68,8 +70,6 @@ func TestParseModelListReadsAnOrderedLayer(t *testing.T) {
 
 func TestParseModelListRefusesWhatNoLayerCouldRunOn(t *testing.T) {
 	for name, value := range map[string]string{
-		"nothing named":        "  ",
-		"only separators":      ",,",
 		"not a pair":           "glm-5.3",
 		"one entry not a pair": "vendor/ok,glm-5.3",
 		"the same model twice": "vendor/ok,vendor/ok",
@@ -78,16 +78,22 @@ func TestParseModelListRefusesWhatNoLayerCouldRunOn(t *testing.T) {
 			t.Errorf("%s (%q) was accepted", name, value)
 		}
 	}
+	for name, value := range map[string]string{"nothing named": "  ", "only separators": ",,"} {
+		models, err := ParseModelList(value)
+		if err != nil || len(models) != 0 {
+			t.Errorf("%s (%q) = %v, %v; want no models and no error", name, value, models, err)
+		}
+	}
 }
 
 func TestValidateProposalTakesAModelListAndNamesTheLayer(t *testing.T) {
-	if err := ValidateProposal(KindModel, TargetClassifier, "vendor/a,vendor/b"); err != nil {
+	if err := ValidateProposal(KindModel, TargetModels, "vendor/a,vendor/b"); err != nil {
 		t.Fatalf("a two-model list was refused: %v", err)
 	}
 	if err := ValidateProposal(KindModel, "", "vendor/a"); err == nil {
 		t.Fatal("a model proposal with no target was accepted")
 	}
-	if err := ValidateProposal(KindModel, TargetEscalation, "vendor/a,oops"); err == nil {
+	if err := ValidateProposal(KindModel, TargetModels, "vendor/a,oops"); err == nil {
 		t.Fatal("a list with an entry that is not a provider/id pair was accepted")
 	}
 }
@@ -111,7 +117,7 @@ func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 	}
 	want := []string{
 		"enabled_default", "environment", "allow", "hard_deny",
-		"classifier_models", "escalation_models",
+		"models",
 	}
 	if len(fields) != len(want) {
 		t.Fatalf("config has %d fields, want exactly %d: %s", len(fields), len(want), raw)
@@ -126,14 +132,12 @@ func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 func TestShippedHardDenyCoversAutoModesOwnSurfaces(t *testing.T) {
 	patterns := ShippedHardDeny("29849")
 	joined := strings.Join(patterns, "\n")
-	for _, verb := range []string{"env", "allow", "deny", "model"} {
-		if !strings.Contains(joined, "attn automode "+verb) {
-			t.Errorf("shipped hard deny does not cover `attn automode %s`: %v", verb, patterns)
-		}
+	if !strings.Contains(joined, "attn automode env") {
+		t.Errorf("shipped hard deny does not cover `attn automode env`: %v", patterns)
 	}
-	for _, verb := range []string{"show", "denials"} {
+	for _, verb := range []string{"allow", "deny", "model", "show", "denials"} {
 		if strings.Contains(joined, "attn automode "+verb) {
-			t.Errorf("shipped hard deny covers the read-only verb %q: %v", verb, patterns)
+			t.Errorf("shipped hard deny covers %q, which does not write the config: %v", verb, patterns)
 		}
 	}
 	if !strings.Contains(joined, "localhost:29849") {

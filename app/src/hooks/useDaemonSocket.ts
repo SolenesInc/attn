@@ -76,6 +76,7 @@ import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
   type AutoModePatternEdit,
+  type AutoModeModelCatalog,
   type AutoModePromotion,
   type AutoModeState,
 } from './daemonAutoModeEvents';
@@ -109,6 +110,7 @@ import { BUILD_PROFILE, daemonProfileMatches, fetchDaemonHealthProfile, profileM
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
 import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useConversationsStore, type AgentPromptMode } from '../store/conversations';
+import { useAutoModePushStore } from '../store/autoMode';
 import { conversationAgents } from '../utils/agentAvailability';
 import { useAutomationsStore } from '../store/automations';
 
@@ -252,7 +254,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '272';
+export const PROTOCOL_VERSION = '273';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2782,6 +2784,7 @@ export function useDaemonSocket({
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
+      useAutoModePushStore.getState().clear();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
@@ -3097,6 +3100,50 @@ export function useDaemonSocket({
         'automode_pattern_add',
         { list, pattern },
         'Adding the pattern timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeModelSet = useCallback(
+    (models: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_model_set',
+        { models },
+        'Saving the models timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  // pi is asked per provider and each ask spawns a process, so this waits far
+  // longer than a command the daemon answers on its own.
+  const sendAutoModeModels = useCallback((): Promise<AutoModeModelCatalog> => {
+    return sendRequest<AutoModeModelCatalog>(
+      'automode_models',
+      {},
+      'Asking pi which models it can reach timed out',
+      30000,
+    );
+  }, [sendRequest]);
+
+  const sendAutoModeEnvSlot = useCallback(
+    (slot: string, values: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_env_slot',
+        { slot, values },
+        'Saving what the classifier knows about this machine timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeEnvNotes = useCallback(
+    (notes: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_env_notes',
+        { notes },
+        'Saving your notes about this machine timed out',
       );
     },
     [sendRequest],
@@ -5125,6 +5172,10 @@ export function useDaemonSocket({
     sendAutoModePromote,
     sendAutoModeDiscard,
     sendAutoModePatternAdd,
+    sendAutoModeModelSet,
+    sendAutoModeModels,
+    sendAutoModeEnvSlot,
+    sendAutoModeEnvNotes,
     sendAutoModePatternRemove,
     sendBusSetConsumerEnabled,
     sendTriggerNudge,

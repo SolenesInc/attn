@@ -1,25 +1,37 @@
-// Only what the user and the agent SAID: a classifier that reads tool output can be
-// talked into a verdict. Tripwires from 6,357 messages (2026-08-17): p90 2,523 chars.
-
-export const transcriptEntryLimit = 12;
-export const transcriptEntryCharLimit = 4_000;
-export const transcriptCharLimit = 8_000;
-
-export type TranscriptRole = "user" | "assistant";
+export type TranscriptRole = "user" | "assistant" | "tool";
 
 export type TranscriptEntry = {
   role: TranscriptRole;
   text: string;
+
+  tool?: string;
 };
 
 export class TranscriptWindow {
-  private readonly entries: TranscriptEntry[] = [];
+  private entries: TranscriptEntry[] = [];
 
-  record(role: TranscriptRole, text: string): void {
+  private opening: string | undefined;
+
+  record(role: TranscriptRole, text: string, tool?: string): void {
     const trimmed = text.trim();
     if (trimmed === "") return;
-    this.entries.push({ role, text: clampEntry(trimmed) });
-    while (this.entries.length > transcriptEntryLimit) this.entries.shift();
+    if (role === "user") {
+      if (this.opening === undefined && this.entries.length === 0) {
+        this.opening = trimmed;
+        return;
+      }
+      if (trimmed === this.opening) return;
+      if (this.latest("user") === trimmed) return;
+    }
+    this.entries.push({ role, text: trimmed, ...(tool === undefined ? {} : { tool }) });
+  }
+
+  recordToolCall(tool: string, action: string): void {
+    this.record("tool", action, tool);
+  }
+
+  compacted(): void {
+    this.entries = [];
   }
 
   // A caller deduplicating two seams compares against this, never the raw text:
@@ -29,33 +41,23 @@ export class TranscriptWindow {
       const entry = this.entries[i];
       if (entry?.role === role) return entry.text;
     }
-    return undefined;
+    return role === "user" ? this.opening : undefined;
+  }
+
+  grant(): string | undefined {
+    return this.opening;
   }
 
   snapshot(): TranscriptEntry[] {
-    const kept: TranscriptEntry[] = [];
-    let budget = transcriptCharLimit;
-    for (let i = this.entries.length - 1; i >= 0; i--) {
-      const entry = this.entries[i];
-      if (!entry) continue;
-      if (entry.text.length > budget) break;
-      budget -= entry.text.length;
-      kept.unshift(entry);
-    }
-    return kept;
+    return [...this.entries];
   }
 }
 
-export function transcriptEntryText(text: string): string {
-  return clampEntry(text.trim());
-}
-
 export function renderTranscript(entries: readonly TranscriptEntry[]): string {
-  return entries.map((entry) => `[${entry.role}] ${entry.text}`).join("\n");
+  return entries.map(projectEntry).join("\n");
 }
 
-function clampEntry(text: string): string {
-  if (text.length <= transcriptEntryCharLimit) return text;
-  const half = Math.floor((transcriptEntryCharLimit - 1) / 2);
-  return `${text.slice(0, half)}…${text.slice(text.length - half)}`;
+function projectEntry(entry: TranscriptEntry): string {
+  const key = entry.role === "tool" ? (entry.tool ?? "tool") : entry.role;
+  return JSON.stringify({ [key]: entry.text });
 }
