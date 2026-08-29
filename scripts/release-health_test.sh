@@ -67,7 +67,8 @@ export FAKE_ISSUE_STATE=
 "$script" failure "$tag" "$run_url" >"$work/create.out"
 grep -q '^issue create ' "$FAKE_GH_LOG"
 for value in "$FAKE_REMOTE_TAG_SHA" "$run_url" 'private draft' \
-  "gh workflow run release.yml --ref main -f tag=$tag"; do
+  'gh api --method POST repos/example/attn/dispatches' \
+  "client_payload[tag]=$tag"; do
   grep -Fq "$value" "$FAKE_ISSUE_BODY"
 done
 
@@ -87,9 +88,15 @@ grep -q 'closed #17 after recovery' "$work/recovery.out"
 
 for value in \
   'workflows: [Release]' \
-  '${{ github.event.workflow_run.display_title }}' \
+  'RELEASE_TITLE: ${{ github.event.workflow_run.display_title }}' \
+  '"$RELEASE_TITLE"' \
   './scripts/release-health.sh'; do
   grep -Fq "$value" "$root/.github/workflows/release-health.yml"
 done
+run_line="$(grep 'run: ./scripts/release-health.sh' "$root/.github/workflows/release-health.yml")"
+if grep -Fq '${{ github.event.workflow_run.display_title }}' <<<"$run_line"; then
+  echo "release title is still interpolated into shell code" >&2
+  exit 1
+fi
 
 echo "release health: OK"

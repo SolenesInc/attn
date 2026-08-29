@@ -1,19 +1,15 @@
 name: Release
-run-name: ${{ inputs.tag }}
+run-name: ${{ github.event.client_payload.tag }}
 
 env:
   GH_TOKEN: ${{ github.token }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing current-main tag to release or retry, e.g. v0.2.0"
-        required: true
-        type: string
+  repository_dispatch:
+    types: [release]
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.event.client_payload.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -42,7 +38,7 @@ jobs:
       - name: Validate accepted release tag
         id: validate
         env:
-          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
         run: ./scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"
 
   tauri:
@@ -55,7 +51,7 @@ jobs:
     steps:
       - name: Resolve release tag
         env:
-          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
           RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
           RELEASE_TAG="$RELEASE_TAG_INPUT"
@@ -298,7 +294,7 @@ jobs:
     steps:
       - name: Resolve release tag
         env:
-          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
           RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
           RELEASE_TAG="$RELEASE_TAG_INPUT"
@@ -377,7 +373,7 @@ jobs:
     steps:
       - name: Resolve release tag
         env:
-          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
           RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
           RELEASE_TAG="$RELEASE_TAG_INPUT"
@@ -460,7 +456,7 @@ jobs:
     steps:
       - name: Resolve release tag
         env:
-          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
           RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
           RELEASE_TAG="$RELEASE_TAG_INPUT"

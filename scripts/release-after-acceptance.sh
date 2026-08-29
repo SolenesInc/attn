@@ -70,7 +70,6 @@ if [ "$validated_tag" != "$tag" ]; then
   exit 1
 fi
 
-tag_created=0
 remote_tag_status=0
 remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || remote_tag_status=$?
 case "$remote_tag_status" in
@@ -113,7 +112,6 @@ case "$remote_tag_status" in
         -F tagRef="refs/tags/$tag" \
         --silent
     } 2>&1)"; then
-      tag_created=1
       echo "release after acceptance: atomically created $tag at current main $sha"
     else
       latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
@@ -144,22 +142,21 @@ case "$remote_tag_status" in
     ;;
 esac
 
-if [ "$tag_created" -eq 0 ]; then
-  release_runs="$(
-    gh api --paginate \
-      "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=100" \
-      --jq ".workflow_runs[] | select(.event == \"workflow_dispatch\" and .display_title == \"$tag\") | select(.status != \"completed\" or .conclusion == \"success\") | [.id, .status, (.conclusion // \"\")] | @tsv" |
-      awk 'NF { count++ } END { print count + 0 }'
-  )"
-  if ! [[ "$release_runs" =~ ^[0-9]+$ ]]; then
-    echo "release after acceptance: invalid authoritative release run count '$release_runs'" >&2
-    exit 1
-  fi
-  if [ "$release_runs" -gt 0 ]; then
-    echo "release after acceptance: release.yml already has $release_runs active or successful run(s) for $sha; not dispatching again"
-    exit 0
-  fi
+release_runs="$(
+  gh api --paginate \
+    "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=repository_dispatch&per_page=100" \
+    --jq ".workflow_runs[] | select(.event == \"repository_dispatch\" and .display_title == \"$tag\") | select(.status != \"completed\" or .conclusion == \"success\") | [.id, .status, (.conclusion // \"\")] | @tsv" |
+    awk 'NF { count++ } END { print count + 0 }'
+)"
+if ! [[ "$release_runs" =~ ^[0-9]+$ ]]; then
+  echo "release after acceptance: invalid authoritative release run count '$release_runs'" >&2
+  exit 1
+fi
+if [ "$release_runs" -gt 0 ]; then
+  echo "release after acceptance: release.yml already has $release_runs active or successful run(s) for $sha; not dispatching again"
+  exit 0
 fi
 
-gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=$tag"
+gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" \
+  -f event_type=release -F "client_payload[tag]=$tag"
 echo "release after acceptance: dispatched release.yml for $tag after $acceptance_url"

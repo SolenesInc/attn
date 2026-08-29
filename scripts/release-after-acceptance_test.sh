@@ -51,7 +51,7 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls/42/commits?'* ]]; th
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/release.yml/runs?'* ]]; then
-  if [[ "${FAKE_RELEASE_RUN_PAGE_2:-0}" == 1 ]] || grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+  if [[ "${FAKE_RELEASE_RUN_PAGE_2:-0}" == 1 ]] || grep -q '^api --method POST repos/.*/dispatches ' "$FAKE_GH_LOG"; then
     release_status="${FAKE_RELEASE_RUN_STATUS:-completed}"
     release_conclusion="${FAKE_RELEASE_RUN_CONCLUSION:-success}"
     if [[ "$release_status" != completed || "$release_conclusion" == success ]]; then
@@ -90,9 +90,9 @@ if [[ "$1" == api ]] && [[ "$*" == *'/commits/v'* ]]; then
   printf '%s\n' "$FAKE_TAG_SHA"
   exit 0
 fi
-if [[ "$1 $2 $3" == "workflow run release.yml" ]]; then
-  if [[ "$*" != *'--ref main -f tag='* ]]; then
-    echo "release workflow must be loaded from protected main: $*" >&2
+if [[ "$1 $2 $3" == "api --method POST" ]] && [[ "$*" == *'/dispatches '* ]]; then
+  if ! grep -Fq -- "-f event_type=release -F client_payload[tag]=$FAKE_EXPECTED_TAG" <<<"$*"; then
+    echo "release repository dispatch has invalid payload: $*" >&2
     exit 1
   fi
   exit 0
@@ -267,7 +267,7 @@ export FAKE_TAG_SHA="$candidate_sha"
 run_release_after_acceptance >"$work/concurrent-tag.out"
 grep -q 'concurrently created at accepted main' "$work/concurrent-tag.out"
 [[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
-grep -q "workflow run release.yml --repo example/attn --ref main -f tag=$candidate_tag" "$FAKE_GH_LOG"
+grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
 setup_fixture red-app
 export FAKE_APP_CONCLUSION=failure
@@ -285,16 +285,28 @@ if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candida
   exit 1
 fi
 
+setup_fixture created-tag-active-run
+export FAKE_RELEASE_RUN_PAGE_2=1
+export FAKE_RELEASE_RUN_STATUS=in_progress
+export FAKE_RELEASE_RUN_CONCLUSION=
+run_release_after_acceptance >"$work/created-tag-active-run.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
+grep -q 'not dispatching again' "$work/created-tag-active-run.out"
+if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
+  echo "newly created tag duplicated an active release run" >&2
+  exit 1
+fi
+
 setup_fixture success
 export FAKE_ACCEPTANCE_CONCLUSION=success
 run_release_after_acceptance >"$work/success.out"
 tag_sha="$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")"
 [[ "$tag_sha" == "$candidate_sha" ]]
-grep -q "workflow run release.yml --repo example/attn --ref main -f tag=$candidate_tag" "$FAKE_GH_LOG"
+grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
 export FAKE_TAG_SHA="$candidate_sha"
 run_release_after_acceptance >"$work/duplicate.out"
-[[ "$(grep -c '^workflow run release.yml ' "$FAKE_GH_LOG")" -eq 1 ]]
+[[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
 grep -q 'not dispatching again' "$work/duplicate.out"
 
 printf '%s\n' 'urgent fix after the release' >"$fixture_repo/post-release-hotfix.txt"
@@ -305,7 +317,7 @@ hotfix_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 run_release_after_acceptance >"$work/post-release-hotfix.out"
 grep -q "manifest $candidate_tag was consumed at $candidate_sha" "$work/post-release-hotfix.out"
 [[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
-[[ "$(grep -c '^workflow run release.yml ' "$FAKE_GH_LOG")" -eq 1 ]]
+[[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
 if grep -Fq "$hotfix_sha" <(git --git-dir="$fixture_origin" show-ref --tags); then
 	echo "post-release hotfix moved or created the consumed tag" >&2
 	exit 1
@@ -317,11 +329,11 @@ export FAKE_TAG_SHA="$candidate_sha"
 export FAKE_RELEASE_RUN_PAGE_2=1
 run_release_after_acceptance >"$work/paginated-release-run.out"
 grep -q 'not dispatching again' "$work/paginated-release-run.out"
-if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
   echo "page-two release run was dispatched again" >&2
   exit 1
 fi
-grep -Fq 'api --paginate repos/example/attn/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=100' "$FAKE_GH_LOG"
+grep -Fq 'api --paginate repos/example/attn/actions/workflows/release.yml/runs?event=repository_dispatch&per_page=100' "$FAKE_GH_LOG"
 export FAKE_RELEASE_RUN_PAGE_2=0
 
 setup_fixture failed-release-run
@@ -330,7 +342,7 @@ export FAKE_TAG_SHA="$candidate_sha"
 export FAKE_RELEASE_RUN_PAGE_2=1
 export FAKE_RELEASE_RUN_CONCLUSION=failure
 run_release_after_acceptance >"$work/failed-release-run.out"
-grep -q "workflow run release.yml --repo example/attn --ref main -f tag=$candidate_tag" "$FAKE_GH_LOG"
+grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
 setup_fixture active-release-run
 git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
@@ -340,7 +352,7 @@ export FAKE_RELEASE_RUN_STATUS=in_progress
 export FAKE_RELEASE_RUN_CONCLUSION=
 run_release_after_acceptance >"$work/active-release-run.out"
 grep -q 'not dispatching again' "$work/active-release-run.out"
-if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
   echo "active release run was dispatched again" >&2
   exit 1
 fi
@@ -367,7 +379,7 @@ forged_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 git --git-dir="$fixture_origin" tag "$candidate_tag" "$forged_sha"
 export FAKE_TAG_SHA="$forged_sha"
 expect_failure 'expected 99.98.97' run_release_after_acceptance
-if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
   echo "pre-existing exact tag bypassed accepted-main validation" >&2
   exit 1
 fi
@@ -381,12 +393,13 @@ for value in \
   './scripts/release-after-acceptance.sh'; do
   grep -Fq "$value" "$root/.github/workflows/release-after-acceptance.yml"
 done
-grep -Fq 'run-name: ${{ inputs.tag }}' "$root/.github/workflows/release.yml"
+grep -Fq 'run-name: ${{ github.event.client_payload.tag }}' "$root/.github/workflows/release.yml"
 grep -Fq 'updateRefs(input:' "$root/scripts/release-after-acceptance.sh"
 grep -Fq 'beforeOid: $mainSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
 grep -Fq 'beforeOid: $zeroSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
 trigger_block="$(sed -n '/^on:/,/^jobs:/p' "$root/.github/workflows/release.yml")"
-grep -Fq 'workflow_dispatch:' <<<"$trigger_block"
+grep -Fq 'repository_dispatch:' <<<"$trigger_block"
+grep -Fq 'types: [release]' <<<"$trigger_block"
 if grep -Fq 'push:' <<<"$trigger_block"; then
 	echo "release workflow still accepts unvalidated tag pushes" >&2
 	exit 1
@@ -395,7 +408,7 @@ for value in \
   'validate-tag:' \
   'checks: read' \
   'pull-requests: read' \
-  'group: release-${{ inputs.tag }}' \
+  'group: release-${{ github.event.client_payload.tag }}' \
   'cancel-in-progress: false' \
   'fetch-depth: 0' \
   'ref: ${{ github.sha }}' \

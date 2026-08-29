@@ -70,10 +70,11 @@ The release workflow did not complete for \`$tag\`.
 
 $release_state
 
-Fix the failing release step, then rerun the same immutable tag:
+Fix the failing release step, then rerun the same immutable current-main tag:
 
 \`\`\`bash
-gh workflow run release.yml --ref main -f tag=$tag
+gh api --method POST repos/$GITHUB_REPOSITORY/dispatches \\
+  -f event_type=release -F 'client_payload[tag]=$tag'
 \`\`\`
 
 This issue stays open until a release run for the tag succeeds. Consecutive

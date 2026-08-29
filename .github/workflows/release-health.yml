@@ -27,8 +27,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_HEALTH_ASSIGNEE: victorarias
-        run: >-
-          ./scripts/release-health.sh
-          "${{ github.event.workflow_run.conclusion }}"
-          "${{ github.event.workflow_run.display_title }}"
-          "${{ github.event.workflow_run.html_url }}"
+          RELEASE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RELEASE_TITLE: ${{ github.event.workflow_run.display_title }}
+          RELEASE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: ./scripts/release-health.sh "$RELEASE_CONCLUSION" "$RELEASE_TITLE" "$RELEASE_RUN_URL"
