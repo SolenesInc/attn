@@ -47,7 +47,6 @@ else
   bundle_args="--no-bundle"
 fi
 
-# Stage the Go daemon as the Tauri sidecar. Tauri finds it by the rustc host triple.
 host_triple="$(rustc -vV | awk '/host:/ {print $2}')"
 if [ -z "$host_triple" ]; then
   echo "could not read the rustc host triple (rustc -vV)" >&2
@@ -119,7 +118,6 @@ write_build_identity() {
     "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" > "$1"
 }
 
-# Cargo honours CARGO_TARGET_DIR; the tree stays where the Makefile looks for it.
 if [ "$(uname -s)" != "Darwin" ]; then
   release_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}/release"
   tree_dir="app/src-tauri/target/release/linux-tree/${app_name}"

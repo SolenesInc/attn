@@ -42,8 +42,6 @@ function xdgDataHome() {
   return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
 }
 
-// Mirrors config.AppPathForProfile, AppExecutableInTree and
-// AppDaemonBinaryInTree on the Go side.
 function installedApp(appName) {
   if (process.platform === 'darwin') {
     const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);

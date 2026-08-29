@@ -155,7 +155,6 @@ func AppPathForProfile(profile string) string {
 	return filepath.Join(home, ".local", "share", name)
 }
 
-// Cargo names the Tauri shell after its crate, hence "app".
 func AppExecutableForProfile(profile string) string {
 	return AppExecutableInTree(AppPathForProfile(profile))
 }

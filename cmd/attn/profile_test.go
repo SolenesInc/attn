@@ -73,8 +73,6 @@ func TestStopProfileDaemonStalePidNotSignaled(t *testing.T) {
 	}
 }
 
-// XDG_DATA_HOME is often a symlink (a home moved onto another volume), and
-// /proc/<pid>/exe reports the resolved path: the app must still be recognized.
 func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
 	realRoot := t.TempDir()
 	linkRoot := filepath.Join(t.TempDir(), "share")
@@ -100,8 +98,6 @@ func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
 	}
 }
 
-// `make install` replaces the install tree only when stop-app succeeded, so a
-// profile with no app running must not report failure.
 func TestStopProfileAppByPIDFileExitStatus(t *testing.T) {
 	if msg, err := stopProfileAppByPIDFile(profileResolved{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("stopProfileAppByPIDFile (no pid file) = %v, want a 'not running' success: %q", err, msg)

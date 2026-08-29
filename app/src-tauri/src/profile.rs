@@ -118,7 +118,6 @@ pub(crate) fn data_dir() -> Result<PathBuf, String> {
     Ok(home.join(name))
 }
 
-/// The handle `attn profile stop-app` signals off darwin.
 pub fn write_app_pid_file() {
     let Ok(dir) = data_dir() else { return };
     if fs::create_dir_all(&dir).is_err() {

@@ -458,8 +458,6 @@ func runProfileStopApp(args []string) {
 	fmt.Printf("  app      %s\n", msg)
 }
 
-// An error means the app may still be running: callers that replace the install
-// tree must stop rather than orphan a process on a deleted inode.
 func stopProfileApp(r profileResolved) (string, error) {
 	if runtime.GOOS == "darwin" {
 		_ = exec.Command("osascript", "-e", fmt.Sprintf("tell application id %q to quit", r.BundleID)).Run()
@@ -535,7 +533,6 @@ func resolvedPath(path string) string {
 	return path
 }
 
-// Written by the Tauri shell at startup, removed on a clean exit.
 func appPIDFilePath(dataDir string) string {
 	return filepath.Join(dataDir, "app.pid")
 }
