@@ -17,6 +17,7 @@ import {
   deepLinkSchemeForProfile,
   hasRunAgainstProdFlag,
   isProductionHarnessTarget,
+  manifestPathForProfile,
   profileCliEnv,
   profileForAppPath,
   resolveHarnessResources,
@@ -140,6 +141,14 @@ describe('real-app harness production safety', () => {
     expect(profileForAppPath(namedAppPath, '')).toBe('agent7');
   });
 
+  it('derives the profile from a Linux install tree, which has no .app suffix', () => {
+    const treeRoot = path.join(os.homedir(), '.local', 'share');
+    expect(profileForAppPath(path.join(treeRoot, 'attn'), 'dev')).toBe('');
+    expect(profileForAppPath(path.join(treeRoot, 'attn-lx'), '')).toBe('lx');
+    expect(profileForAppPath(path.join(treeRoot, 'attn-agent7'), '')).toBe('agent7');
+    expect(profileForAppPath(path.join(treeRoot, 'something-else'), 'dev')).toBe('dev');
+  });
+
   it('requires the explicit production acknowledgement flag', () => {
     expect(() => assertProductionRunAllowed({ profile: '' }, [])).toThrow(
       'Refusing to run the real-app harness against production',
@@ -172,6 +181,15 @@ describe('real-app harness production safety', () => {
     await expect(getFrontWindowBounds('com.attn.manager')).rejects.toThrow(
       'Refusing to run the real-app harness against production',
     );
+  });
+});
+
+describe('ui automation manifest', () => {
+  it('follows the platform app_local_data_dir', () => {
+    const expected = process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager.dev', 'debug', 'ui-automation.json')
+      : path.join(os.homedir(), '.local', 'share', 'com.attn.manager.dev', 'debug', 'ui-automation.json');
+    expect(manifestPathForProfile('dev')).toBe(expected);
   });
 });
 

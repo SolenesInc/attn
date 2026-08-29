@@ -13,6 +13,7 @@ const BUILD_BUNDLE_ID: Option<&str> = option_env!("ATTN_BUILD_BUNDLE_ID");
 const BUILD_DEFAULT_PROFILE_HARNESS: bool =
     option_env!("ATTN_BUILD_DEFAULT_PROFILE_HARNESS").is_some();
 const HARNESS_DATA_DIR_ENV: &str = "ATTN_HARNESS_DATA_DIR";
+const APP_PID_FILE: &str = "app.pid";
 const ROUTING_PATH_OVERRIDES: [&str; 7] = [
     "ATTN_SOCKET_PATH",
     "ATTN_DB_PATH",
@@ -115,6 +116,27 @@ pub(crate) fn data_dir() -> Result<PathBuf, String> {
         profile => format!(".attn-{profile}"),
     };
     Ok(home.join(name))
+}
+
+/// The handle `attn profile stop-app` signals off darwin: it confirms
+/// /proc/<pid>/exe is this executable before touching the pid.
+pub fn write_app_pid_file() {
+    let Ok(dir) = data_dir() else { return };
+    if fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let _ = fs::write(dir.join(APP_PID_FILE), std::process::id().to_string());
+}
+
+pub fn remove_app_pid_file() {
+    let Ok(dir) = data_dir() else { return };
+    let path = dir.join(APP_PID_FILE);
+    match fs::read_to_string(&path) {
+        Ok(raw) if raw.trim() == std::process::id().to_string() => {
+            let _ = fs::remove_file(&path);
+        }
+        _ => {}
+    }
 }
 
 pub fn read_client_token() -> Result<String, String> {

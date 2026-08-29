@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -139,12 +140,62 @@ func AppNameForProfile(profile string) string {
 	return "attn-" + p
 }
 
+// macOS installs a bundle; every other OS gets a plain directory tree
+// (bin/, resources/) under XDG_DATA_HOME.
 func AppPathForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	return filepath.Join(home, "Applications", AppNameForProfile(profile)+".app")
+	name := AppNameForProfile(profile)
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Applications", name+".app")
+	}
+	if dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); dataHome != "" {
+		return filepath.Join(dataHome, name)
+	}
+	return filepath.Join(home, ".local", "share", name)
+}
+
+// The Tauri shell. Cargo names it after the crate ("app") on every platform.
+func AppExecutableForProfile(profile string) string {
+	return AppExecutableInTree(AppPathForProfile(profile))
+}
+
+func AppExecutableInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "app")
+	}
+	return filepath.Join(appPath, "bin", "attn-app")
+}
+
+// The Go daemon staged beside the shell as its sidecar.
+func AppDaemonBinaryForProfile(profile string) string {
+	return AppDaemonBinaryInTree(AppPathForProfile(profile))
+}
+
+func AppDaemonBinaryInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "attn")
+	}
+	return filepath.Join(appPath, "bin", "attn")
+}
+
+// Where the install tree holding this executable stages plugins and the app
+// runtime, "" when it is in none. ~/.local/bin/attn has a bin/ and no tree.
+func InstallResourcesDir(executable string) string {
+	binDir := filepath.Dir(executable)
+	parent := filepath.Dir(binDir)
+	if filepath.Base(binDir) == "MacOS" && filepath.Base(parent) == "Contents" {
+		return filepath.Join(parent, "Resources")
+	}
+	if filepath.Base(binDir) == "bin" {
+		resources := filepath.Join(parent, "resources")
+		if info, err := os.Stat(resources); err == nil && info.IsDir() {
+			return resources
+		}
+	}
+	return ""
 }
 
 // A distinct scheme per bundle, so macOS never cross-routes a spawn deep link

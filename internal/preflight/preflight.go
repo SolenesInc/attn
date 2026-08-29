@@ -155,7 +155,7 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	paths := []struct{ name, path, action string }{
 		{"path.working_directory", workingDir, "Choose a writable checkout or fix its permissions."},
 		{"path.profile_data", routing.DataDir, "Install or initialize the selected non-production profile, then fix the data directory permissions."},
-		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable Applications directory for the selected profile."},
+		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable app install directory for the selected profile."},
 	}
 	for _, item := range paths {
 		if err := p.writable(item.path); err != nil {
@@ -347,7 +347,7 @@ func resolveGoCachePaths(ctx context.Context) ([]string, error) {
 }
 
 func readAppProtocol(ctx context.Context, appPath string) (string, error) {
-	binary := filepath.Join(appPath, "Contents", "MacOS", "attn")
+	binary := config.AppDaemonBinaryInTree(appPath)
 	if _, err := os.Stat(binary); err != nil {
 		return "", fmt.Errorf("%s: %w", binary, err)
 	}

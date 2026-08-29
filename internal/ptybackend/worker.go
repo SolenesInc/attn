@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -263,9 +264,7 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	if home != "" {
 		candidates = append(candidates, filepath.Join(home, ".local", "bin", "attn"))
 	}
-	if runtime.GOOS == "darwin" {
-		candidates = append(candidates, darwinBundledAttnCandidates(home)...)
-	}
+	candidates = append(candidates, bundledAttnCandidates(home)...)
 	if path, err := exec.LookPath("attn"); err == nil && path != "" {
 		candidates = append(candidates, path)
 	}
@@ -283,13 +282,26 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	return binaryPath
 }
 
-func darwinBundledAttnCandidates(home string) []string {
-	candidates := make([]string, 0, 2)
-	if strings.TrimSpace(home) != "" {
-		candidates = append(candidates, filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", "attn"))
+// The running profile's own install first, then the prod bundle macOS also
+// allows in ~/Applications and /Applications.
+func bundledAttnCandidates(home string) []string {
+	candidates := []string{config.AppDaemonBinaryForProfile(config.Profile())}
+	if runtime.GOOS == "darwin" {
+		if strings.TrimSpace(home) != "" {
+			candidates = append(candidates, filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", "attn"))
+		}
+		candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", "attn"))
 	}
-	candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", "attn"))
-	return candidates
+	unique := make([]string, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate == "" || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		unique = append(unique, candidate)
+	}
+	return unique
 }
 
 func isExecutableFile(path string) bool {

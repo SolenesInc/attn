@@ -14,7 +14,8 @@ const PROD_DAEMON_PORT = '9849';
 // Profile name grammar — mirrors config.profileNamePattern on the Go side.
 const PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
 
-// Fast-path resources for prod ('') and dev. The drift guard in
+// Fast-path resources for prod ('') and dev, macOS-shaped: off darwin these
+// profiles go to the authority like any other. The drift guard in
 // harnessProfile.test.mjs pins them to `attn profile resolve`.
 const BUILTIN_RESOURCES = {
   '': {
@@ -22,6 +23,7 @@ const BUILTIN_RESOURCES = {
     bundleId: PROD_BUNDLE_ID,
     appName: 'attn',
     appPath: path.join(os.homedir(), 'Applications', PROD_APP_NAME),
+    appExecutable: path.join(os.homedir(), 'Applications', PROD_APP_NAME, 'Contents', 'MacOS', 'app'),
     wsPort: 9849,
     socket: path.join(os.homedir(), '.attn', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn'),
@@ -32,6 +34,7 @@ const BUILTIN_RESOURCES = {
     bundleId: 'com.attn.manager.dev',
     appName: 'attn-dev',
     appPath: path.join(os.homedir(), 'Applications', 'attn-dev.app'),
+    appExecutable: path.join(os.homedir(), 'Applications', 'attn-dev.app', 'Contents', 'MacOS', 'app'),
     wsPort: 29849,
     socket: path.join(os.homedir(), '.attn-dev', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn-dev'),
@@ -86,6 +89,7 @@ function resolveViaAuthority(profile) {
     bundleId: resolved.bundleId,
     appName: resolved.appName,
     appPath: resolved.appPath,
+    appExecutable: resolved.appExecutable,
     wsPort: Number(resolved.wsPort),
     socket: resolved.socket,
     dataDir: resolved.dataDir,
@@ -95,10 +99,10 @@ function resolveViaAuthority(profile) {
 
 export function resolveHarnessResources(profile = currentHarnessProfile()) {
   const key = normalizeProfile(profile);
-  if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
+  if (process.platform === 'darwin' && Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
     return BUILTIN_RESOURCES[key];
   }
-  if (!PROFILE_NAME.test(key)) {
+  if (key !== '' && !PROFILE_NAME.test(key)) {
     throw new Error(`Invalid attn profile name '${profile}' (expected ${PROFILE_NAME}).`);
   }
   if (!resourceCache.has(key)) {
@@ -111,10 +115,11 @@ export function bundleIdentifierForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).bundleId;
 }
 
-// macOS filesystems are case-insensitive: `Attn.app` is the prod bundle.
+// macOS filesystems are case-insensitive: `Attn.app` is the prod bundle. Off
+// darwin the install is a directory tree named `attn` / `attn-<profile>`.
 export function profileForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
   const appName = path.basename(appPath || '').toLowerCase();
-  const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?\.app$/.exec(appName);
+  const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?(?:\.app)?$/.exec(appName);
   if (match) return match[1] ?? '';
   return fallbackProfile;
 }
@@ -168,15 +173,14 @@ export function defaultWSURLForProfile(profile = currentHarnessProfile()) {
   return `ws://127.0.0.1:${resolveHarnessResources(profile).wsPort}/ws`;
 }
 
+// Tauri's app_local_data_dir, where the bridge writes its manifest.
 export function manifestPathForProfile(profile = currentHarnessProfile()) {
-  return path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    resolveHarnessResources(profile).bundleId,
-    'debug',
-    'ui-automation.json',
-  );
+  const bundleId = resolveHarnessResources(profile).bundleId;
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', bundleId, 'debug', 'ui-automation.json');
+  }
+  const dataHome = (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+  return path.join(dataHome, bundleId, 'debug', 'ui-automation.json');
 }
 
 export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
