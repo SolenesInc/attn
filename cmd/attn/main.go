@@ -2592,12 +2592,7 @@ func runHookSessionStart() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
-	if strings.TrimSpace(input.TranscriptPath) == "" {
-		return
-	}
-
-	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, 40, 25*time.Millisecond)
+	output, contextErr, primeErr := sessionStartHookOutput(c, sessionID, input, 40, 25*time.Millisecond)
 	if contextErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", contextErr)
 	}
@@ -2605,9 +2600,26 @@ func runHookSessionStart() {
 		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
 	}
 
-	if output := hooks.SessionStartOutput(contexts...); output != "" {
+	if output != "" {
 		fmt.Fprintln(os.Stdout, output)
 	}
+}
+
+type sessionStartHookClient interface {
+	agentConversationObserver
+	sessionStartClient
+}
+
+func sessionStartHookOutput(
+	c sessionStartHookClient,
+	sessionID string,
+	input hookInput,
+	attempts int,
+	retryDelay time.Duration,
+) (output string, contextErr, primeErr error) {
+	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
+	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, attempts, retryDelay)
+	return hooks.SessionStartOutput(contexts...), contextErr, primeErr
 }
 
 type sessionStartClient interface {
