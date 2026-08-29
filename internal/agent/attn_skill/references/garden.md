@@ -16,13 +16,6 @@ exchange. Do not correct them or switch the other concepts unless they do.
 
 Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone.
 
-## Closing work
-
-Harvest a seed when the outcome and required verification written in its body
-are complete. Review, acceptance, or merge keeps it open only when the body
-requires that result. Put independent remaining work in a child seed. A child
-finishing never settles its plot or siblings.
-
 ## Planting a plot
 
 `attn seed plot -f <payload.json>` plants a plot and its children in one move.

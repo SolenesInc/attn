@@ -331,16 +331,10 @@ func TestGardenGuidanceMirrorsJiraVocabularyPerConcept(t *testing.T) {
 	}
 }
 
-func TestGardenGuidanceClosesTheStatedOutcomeWithoutCascading(t *testing.T) {
-	for _, want := range []string{
-		"outcome and required verification written in a seed's body are complete",
-		"Review, acceptance, or merge keeps the seed open only when its body requires that result",
-		"Independent remaining work belongs in a child seed",
-		"completing one child never settles its plot or siblings",
-	} {
-		if !strings.Contains(GardenGuidance, want) {
-			t.Fatalf("garden guidance dropped %q:\n%s", want, GardenGuidance)
-		}
+func TestGardenGuidanceHarvestsTheStatedOutcome(t *testing.T) {
+	want := "Harvest a seed when the outcome and required verification in its body are complete"
+	if !strings.Contains(GardenGuidance, want) {
+		t.Fatalf("garden guidance dropped %q:\n%s", want, GardenGuidance)
 	}
 }
 

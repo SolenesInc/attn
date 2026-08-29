@@ -15,10 +15,8 @@ Report progress, what you learned, and decisions needed on the log:
 
     attn seed note s-abc123 -m "<what happened and what you learned>"
 
-Harvest as soon as the outcome and required verification in the seed body are
-complete. Review, acceptance, or merge keeps the seed open only when the body
-requires it. Put independent remaining work in a child seed; closing that child
-never closes its plot or siblings:
+Harvest the seed when the outcome and required verification in its body are
+complete:
 
     attn seed harvest s-abc123 -m "<what got done>"`
 

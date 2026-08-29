@@ -1,8 +1,8 @@
 kind: fixed
 area: garden
 change: >
-  Agent guidance now harvests a seed when the outcome and verification written
-  in that seed are complete, while preserving explicit review or merge gates.
+  Agent guidance now treats the outcome and verification written in each seed
+  as its finish line.
 symptom: >
   Completed agent work could remain growing because guidance treated user
   acceptance or a merged pull request as a universal completion requirement.
