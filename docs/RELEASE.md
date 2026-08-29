@@ -1,45 +1,66 @@
-# Release Guide
+# Release guide
 
-This guide is for maintainers publishing `attn` releases.
+This is the short maintainer runbook. [Making a release](making-a-release.md)
+explains the branch model, changelog fragments, hotfixes, and main-to-next sync
+in detail.
 
-## One-Command Release
+## Prepare the candidate
 
-From a clean `main` branch:
-
-```bash
-./scripts/release.sh v0.1.1
-```
-
-or:
+Start from a clean, current `next` branch:
 
 ```bash
-make release VERSION_TAG=v0.1.1
+git switch next
+git pull --ff-only origin next
+make release VERSION_TAG=v0.12.0
 ```
 
-`main` is protected — direct pushes are rejected — so the release lands through a
-pull request rather than a push to `main`.
+The command requires green exact-SHA `Acceptance` on `next`. It refuses an
+existing tag, an open candidate, stale local state, or a `main` commit that has
+not been synced into `next`.
 
-What it automates:
+It then:
 
-1. Bumps app version in:
-   - `app/package.json`
-   - `app/src-tauri/tauri.conf.json`
-   - `app/src-tauri/Cargo.toml`
-2. Refreshes lockfiles.
-3. Runs validation (unless `--skip-tests`).
-4. Creates a `release/<tag>` branch with the release commit and pushes it.
-5. Opens a PR to `main` and waits for the required CI checks (`Frontend`,
-   `Tauri`, `Daemon`) to pass.
-6. Merges the PR, then tags the merge commit and pushes the tag.
+1. Creates `release/v0.12.0` at the accepted `next` SHA.
+2. Compiles and consumes the frozen changelog fragments.
+3. Updates the app version and lockfiles.
+4. Writes `.github/release-candidate.yml` with the source and `main` baseline.
+5. Validates that the candidate contains release-only changes.
+6. Pushes the branch and opens a draft PR to `main`.
 
-The merge is automatic once CI is green (the repo requires zero approvals). If a
-check fails, the script aborts and leaves the PR open for inspection without
-creating or pushing the tag. Override the 30-minute check-wait with
-`RELEASE_CHECK_TIMEOUT=<seconds>`.
+It does not merge the PR, create a tag, or start the release workflow.
 
-The GitHub release workflow (`.github/workflows/release.yml`) builds and publishes the macOS app artifacts, uploads `attn_aarch64.dmg` for the Homebrew cask, and attaches standalone Linux daemon binaries for `amd64` and `arm64`.
-The cask itself stays `version :latest` and does not need per-release edits.
-The macOS release job now requires these GitHub Actions secrets for Developer ID signing and notarization:
+## Accept the candidate
+
+Review the generated changelog, then install and exercise the packaged app from
+the exact candidate head. The draft PR contains a ready-to-fill command for the
+manual receipt:
+
+```bash
+gh workflow run app-acceptance.yml \
+  --ref release/v0.12.0 \
+  -f candidate_sha=<full candidate SHA> \
+  -f profile=<profile> \
+  -f scenarios='<scenarios run>' \
+  -f evidence='<recording URL or concise receipt>' \
+  -f outcome=passed
+```
+
+`App acceptance` fails if the workflow ref resolves to a different SHA. Any
+candidate edit needs a new receipt. Make the PR ready only when `PR gate` and
+`App acceptance` are green on the same head.
+
+## Release preflight
+
+The `Release Preflight` workflow runs in branch and PR context with no release
+side effects. It builds and validates the Linux daemon and app runtime host on
+`ubuntu-24.04` (`amd64`) and `ubuntu-24.04-arm` (`arm64`), then uploads the
+artifacts for inspection.
+
+## Release artifacts
+
+The release workflow builds and publishes the signed and notarized macOS app,
+the Homebrew DMG, and standalone Linux daemon binaries for `amd64` and `arm64`.
+The macOS job requires these GitHub Actions secrets:
 
 - `APPLE_CERTIFICATE`
 - `APPLE_CERTIFICATE_PASSWORD`
@@ -48,59 +69,12 @@ The macOS release job now requires these GitHub Actions secrets for Developer ID
 - `APPLE_API_KEY`
 - `APPLE_API_KEY_P8`
 
-## Optional Fast Path
+After publication, confirm the release contains the versioned DMG,
+`attn_aarch64.dmg`, `attn-linux-amd64`, and `attn-linux-arm64`. Then verify the
+Homebrew path with `brew upgrade --cask victorarias/attn/attn`.
+
+If a release workflow needs to be rerun for an existing tag, dispatch it with:
 
 ```bash
-./scripts/release.sh v0.1.1 --skip-tests
+gh workflow run release.yml -f tag=v0.12.0
 ```
-
-Use only if CI or prior local verification already covered tests.
-
-## Branch Preflight
-
-To verify the Linux release builds on GitHub-hosted runners without publishing a release, use the `Release Preflight` workflow.
-
-It runs in branch/PR context and has no release side effects:
-
-1. Builds the Linux daemon on:
-   - `ubuntu-24.04` (`amd64`)
-   - `ubuntu-24.04-arm` (`arm64`)
-2. Verifies the compiled-in version via `attn --version`
-3. Uploads the binaries as workflow artifacts instead of GitHub release assets
-
-Suggested use:
-
-1. Push your branch.
-2. Open a PR against `main` to trigger `Release Preflight` against the branch with no release side effects.
-3. Confirm both artifacts are produced:
-   - `attn-linux-amd64`
-   - `attn-linux-arm64`
-4. Only then merge changes to `.github/workflows/release.yml`.
-
-## Preconditions
-
-- `gh` (GitHub CLI) installed and authenticated (`gh auth login`).
-- Working tree must be clean.
-- Current branch must be `main`.
-- Tag must not already exist locally or on `origin`.
-- `release/<tag>` branch must not already exist locally or on `origin`.
-- `origin` must be writable (push access).
-
-## After Release
-
-1. Confirm GitHub Actions release job succeeded.
-2. Confirm release assets include:
-   - versioned DMG
-   - `attn_aarch64.dmg`
-   - `attn-linux-amd64`
-   - `attn-linux-arm64`
-3. Verify install/upgrade:
-   - `brew upgrade --cask victorarias/attn/attn`
-
-## Re-run an Existing Tag
-
-If the workflow changes after a tag already exists, rerun the release workflow manually:
-
-1. Merge the workflow change to `main`.
-2. Open the `Release` workflow in GitHub Actions.
-3. Run `workflow_dispatch` with the existing tag, for example `v0.4.0`.

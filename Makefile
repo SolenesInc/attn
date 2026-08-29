@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -172,8 +172,10 @@ test-hooks:
 test-scripts:
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
+	@bash ./scripts/app-acceptance_test.sh
 	@bash ./scripts/changelog-gate_test.sh
 	@bash ./scripts/main-route_test.sh
+	@bash ./scripts/release_test.sh
 	@bash ./scripts/sync-main-to-next_test.sh
 
 # Verbose test output (shows all test names as they run)
@@ -477,6 +479,3 @@ dist: build-app
 
 release:
 	./scripts/release.sh $(VERSION_TAG)
-
-release-skip-tests:
-	./scripts/release.sh $(VERSION_TAG) --skip-tests

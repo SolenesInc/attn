@@ -298,6 +298,9 @@ doubt, ask the maintainer.
 - **`main` is the accepted release line.** Only frozen `release/vX.Y.Z`
   candidates and urgent `hotfix/*` branches target `main`. The
   `epic/release-train` PR is the one bootstrap exception.
+- **Prepare candidates from accepted `next`.** Run `make release
+  VERSION_TAG=vX.Y.Z` from a clean, current `next`. It opens a draft candidate;
+  it never merges, tags, or starts the release.
 - **Sync after every main change.** Run `./scripts/sync-main-to-next.sh`, then
   merge its PR with a merge commit. Never squash or rebase a sync PR: `main`
   must remain an ancestor of `next`. Routine cherry-pick sync is forbidden.

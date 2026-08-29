@@ -40,11 +40,8 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
-              - 'scripts/source-fingerprint.sh'
-              - 'scripts/claude/**'
-              - 'scripts/ci-*.sh'
-              - 'scripts/main-route*.sh'
-              - 'scripts/pr-evidence*.sh'
+              - 'scripts/**'
+              - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
             frontend:
               - 'app/src/**'
