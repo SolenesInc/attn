@@ -680,7 +680,7 @@ func TestScheduledSingletonFreshRunAfterTicketSweepGetsItsOwnTicket(t *testing.T
 	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
-	if removed, err := s.SweepExpiredTickets(now.Add(2*time.Hour), time.Hour); err != nil || removed != 1 {
+	if removed, err := s.SweepExpiredAutomationTickets(now.Add(2*time.Hour), time.Hour); err != nil || removed != 1 {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
 

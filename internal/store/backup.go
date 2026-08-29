@@ -26,7 +26,7 @@ const premigrationTimestampLen = len(backupNameLayout)
 
 // BackupNow is safe while the daemon serves traffic: VACUUM INTO reads a
 // consistent snapshot without blocking writers.
-func (s *Store) BackupNow(dir string, keep int) (string, error) {
+func (s *Store) BackupNow(dir string) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("backup: store has no open database")
 	}
@@ -50,15 +50,11 @@ func (s *Store) BackupNow(dir string, keep int) (string, error) {
 		return "", fmt.Errorf("backup: vacuum into %s: %w", target, err)
 	}
 
-	if err := pruneBackups(dir, keep); err != nil {
-		return target, fmt.Errorf("backup: wrote %s but prune failed: %w", target, err)
-	}
-
 	return target, nil
 }
 
 // Lexical sort on the fixed-width timestamp is chronological.
-func pruneBackups(dir string, keep int) error {
+func PruneBackups(dir string, keep int, protected map[string]struct{}) error {
 	if keep < 0 {
 		keep = 0
 	}
@@ -86,7 +82,11 @@ func pruneBackups(dir string, keep int) error {
 	toRemove := names[:len(names)-keep]
 	var firstErr error
 	for _, name := range toRemove {
-		if err := os.Remove(filepath.Join(dir, name)); err != nil && firstErr == nil {
+		path := filepath.Clean(filepath.Join(dir, name))
+		if _, ok := protected[path]; ok {
+			continue
+		}
+		if err := os.Remove(path); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("remove %s: %w", name, err)
 		}
 	}
@@ -112,16 +112,12 @@ func backupPreMigration(db *sql.DB, dbPath string, version int) (string, error) 
 		return "", fmt.Errorf("vacuum into %s: %w", target, err)
 	}
 
-	if err := pruneBackupPremigration(dir, backupPremigrationKeep); err != nil {
-		return target, fmt.Errorf("wrote %s but premigration prune failed: %w", target, err)
-	}
-
 	return target, nil
 }
 
 // Ordered by the trailing timestamp: the embedded schema version varies in digit
 // count, so a whole-filename sort is not chronological.
-func pruneBackupPremigration(dir string, keep int) error {
+func PrunePremigrationBackups(dir string, keep int, protected map[string]struct{}) error {
 	if keep < 0 {
 		keep = 0
 	}
@@ -166,7 +162,11 @@ func pruneBackupPremigration(dir string, keep int) error {
 	toRemove := snapshots[:len(snapshots)-keep]
 	var firstErr error
 	for _, s := range toRemove {
-		if err := os.Remove(filepath.Join(dir, s.name)); err != nil && firstErr == nil {
+		path := filepath.Clean(filepath.Join(dir, s.name))
+		if _, ok := protected[path]; ok {
+			continue
+		}
+		if err := os.Remove(path); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("remove %s: %w", s.name, err)
 		}
 	}
@@ -182,4 +182,22 @@ func IsRotatingBackupName(name string) bool {
 		return false
 	}
 	return true
+}
+
+func IsPremigrationBackupName(name string) bool {
+	if !strings.HasPrefix(name, premigrationNamePrefix) || !strings.HasSuffix(name, backupNameSuffix) {
+		return false
+	}
+	stem := strings.TrimSuffix(name, backupNameSuffix)
+	if len(stem) < premigrationTimestampLen {
+		return false
+	}
+	_, err := time.Parse(backupNameLayout, stem[len(stem)-premigrationTimestampLen:])
+	return err == nil
+}
+
+func PremigrationBackupKeep() int { return backupPremigrationKeep }
+
+func BackupDirForDatabase(dbPath string) string {
+	return filepath.Join(filepath.Dir(dbPath), "backups")
 }

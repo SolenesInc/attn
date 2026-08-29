@@ -124,6 +124,7 @@ func TestMain(m *testing.M) {
 		panic("daemon: TestMain: MkdirTemp: " + err.Error())
 	}
 	_ = os.Setenv(toolhome.EnvVar, toolHomeDir)
+	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHomeDir, ".codex"))
 
 	// Daemons here use a per-test socket dir, so a minted token would land
 	// where config.ClientToken() never looks.

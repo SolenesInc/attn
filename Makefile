@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -440,6 +440,11 @@ build-app: ensure-codesign-identity build
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
 		bash ./scripts/build-app-profile.sh
+
+# A uniquely identified packaged app whose logical runtime profile is still the
+# empty/default profile. Its runtime refuses any non-owner-only or production root.
+build-default-profile-harness:
+	@env -u ATTN_PROFILE ATTN_BUILD_DEFAULT_PROFILE_HARNESS=1 $(MAKE) build-app PROFILE=legacy-recovery
 
 ensure-codesign-identity:
 	@identity="$$(bash ./scripts/macos-codesign-identity.sh ensure)"; \

@@ -40,7 +40,7 @@ func (d *Daemon) performDatabaseBackup() {
 		return
 	}
 
-	path, err := d.store.BackupNow(d.backupDir(), backupKeep)
+	path, err := d.store.BackupNow(d.backupDir())
 	if err != nil {
 		d.logf("database backup failed: %v", err)
 		return
@@ -52,4 +52,5 @@ func (d *Daemon) performDatabaseBackup() {
 	d.lastBackupMu.Unlock()
 
 	d.publishSettingsFact(FactBackupWritten, path)
+	d.pruneLegacyTicketRecoveryBackups()
 }

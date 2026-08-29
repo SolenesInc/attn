@@ -130,6 +130,11 @@ type Daemon struct {
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
+	legacyTicketRecoveryNeeded        bool
+	legacyTicketRecoveryPostOnce      sync.Once
+	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
+	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
+	legacyRecoveryArtifactWrite       func(string, []byte) error
 	ptyBackend                        ptybackend.Backend
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[string]bool
@@ -747,6 +752,33 @@ func (d *Daemon) Start() error {
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
 	}
+	startSucceeded := false
+	if err := d.acquirePIDLock(); err != nil {
+		return fmt.Errorf("acquire PID lock: %w", err)
+	}
+	defer func() {
+		if startSucceeded {
+			return
+		}
+		d.stopInstalledPlugins()
+		if d.httpServer != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			_ = d.httpServer.Shutdown(ctx)
+			cancel()
+		}
+		// Shutdown closes only listeners the server is already serving, so a
+		// failure between bind and Serve() would leak the port.
+		if d.httpListener != nil {
+			_ = d.httpListener.Close()
+			d.httpListener = nil
+		}
+		if d.listener != nil {
+			_ = d.listener.Close()
+			d.listener = nil
+			os.Remove(d.socketPath)
+		}
+		d.releasePIDLock()
+	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
 	if err := d.startEventBus(); err != nil {
@@ -772,8 +804,10 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.ensureGardenCollections()
-	d.convertBacklogTicketsToSeeds()
-	d.replantStrandedTickets()
+	waitForLegacyTicketRecovery, err := d.prepareLegacyTicketRecovery()
+	if err != nil {
+		return fmt.Errorf("prepare legacy ticket recovery: %w", err)
+	}
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
@@ -844,38 +878,10 @@ func (d *Daemon) Start() error {
 	go d.warmLoginShellEnvCache()
 
 	d.setRecovering(true)
-	startSucceeded := false
 	defer func() {
 		if !startSucceeded {
 			d.setRecovering(false)
 		}
-	}()
-
-	if err := d.acquirePIDLock(); err != nil {
-		return fmt.Errorf("acquire PID lock: %w", err)
-	}
-	defer func() {
-		if startSucceeded {
-			return
-		}
-		d.stopInstalledPlugins()
-		if d.httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = d.httpServer.Shutdown(ctx)
-			cancel()
-		}
-		// Shutdown closes only listeners the server is already serving, so a
-		// failure between bind and Serve() would leak the port.
-		if d.httpListener != nil {
-			_ = d.httpListener.Close()
-			d.httpListener = nil
-		}
-		if d.listener != nil {
-			_ = d.listener.Close()
-			d.listener = nil
-			os.Remove(d.socketPath)
-		}
-		d.releasePIDLock()
 	}()
 
 	listener, err := listenUnixAtomically(d.socketPath)
@@ -937,17 +943,19 @@ func (d *Daemon) Start() error {
 
 	go d.monitorBranches()
 
-	go d.runDatabaseBackupLoop()
-
 	go d.runTicketReconcileSweep()
 
-	go d.runAutomationRetentionSweep()
 	go d.runEvidenceResolveLoop()
 	go d.runModelCaptureLoop()
 
-	go d.runTicketRetentionSweep()
-
 	d.startJobQueue()
+	if waitForLegacyTicketRecovery {
+		if err := d.enqueueLegacyTicketRecovery(); err != nil {
+			return fmt.Errorf("enqueue legacy ticket recovery: %w", err)
+		}
+	} else {
+		d.startPostLegacyTicketRecovery()
+	}
 
 	for _, wsID := range reapedWorkspaceIDs {
 		d.enqueueFinalNarrateWorkspace(wsID)

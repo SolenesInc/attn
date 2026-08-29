@@ -9,6 +9,8 @@ import (
 
 var routingOverrideEnv = []string{
 	"ATTN_DATA_DIR",
+	"ATTN_HARNESS_DATA_DIR",
+	"ATTN_HARNESS_NOTEBOOK_ROOT",
 	"ATTN_SOCKET_PATH",
 	"ATTN_DB_PATH",
 	"ATTN_CONFIG_PATH",
@@ -23,6 +25,9 @@ func RoutingOverrideEnv() []string {
 // Receipt: on 2026-08-17 an inherited path override let `make install PROFILE=<name>` take
 // the production PID lock and migrate the production database. Call this before any of that.
 func ValidateProfileRouting() error {
+	if err := validateHarnessRouting(); err != nil {
+		return err
+	}
 	profile := Profile()
 	if profile == "" {
 		return nil
@@ -79,6 +84,75 @@ func ValidateProfileRouting() error {
 		return nil
 	}
 	return formatRoutingConflict(profile, profileDir, profilePort, conflicts)
+}
+
+func validateHarnessRouting() error {
+	rawRoot := strings.TrimSpace(os.Getenv("ATTN_HARNESS_DATA_DIR"))
+	if rawRoot == "" {
+		return nil
+	}
+	if Profile() != "" {
+		return fmt.Errorf("refusing ATTN_HARNESS_DATA_DIR with named profile %s", Profile())
+	}
+	if !filepath.IsAbs(rawRoot) {
+		return fmt.Errorf("ATTN_HARNESS_DATA_DIR must be absolute")
+	}
+	info, err := os.Lstat(rawRoot)
+	if err != nil {
+		return fmt.Errorf("inspect ATTN_HARNESS_DATA_DIR: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("ATTN_HARNESS_DATA_DIR must be a direct owner-only directory")
+	}
+
+	root, err := CanonicalRuntimePath(rawRoot)
+	if err != nil {
+		return fmt.Errorf("resolve ATTN_HARNESS_DATA_DIR: %w", err)
+	}
+	production, err := CanonicalRuntimePath(DataDirForProfile(""))
+	if err != nil {
+		return fmt.Errorf("resolve production data directory: %w", err)
+	}
+	if runtimePathWithin(root, production) || runtimePathWithin(production, root) {
+		return fmt.Errorf("refusing harness root %q because it overlaps production %q", root, production)
+	}
+
+	checks := []struct {
+		label string
+		path  string
+	}{
+		{"ATTN_DATA_DIR", DataDir()},
+		{"ATTN_SOCKET_PATH", SocketPath()},
+		{"ATTN_DB_PATH", DBPath()},
+		{"ATTN_CONFIG_PATH", ConfigPath()},
+		{"ATTN_PLUGIN_DIR", PluginDir()},
+		{"ATTN_HARNESS_NOTEBOOK_ROOT", HarnessNotebookRoot()},
+	}
+	for _, check := range checks {
+		resolved, resolveErr := CanonicalRuntimePath(check.path)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve %s for default-profile harness: %w", check.label, resolveErr)
+		}
+		if !runtimePathWithin(resolved, root) {
+			return fmt.Errorf("refusing %s=%q outside default-profile harness root %q", check.label, resolved, root)
+		}
+	}
+	if port := strings.TrimSpace(WSPort()); port == "9849" || port == "29849" {
+		return fmt.Errorf("refusing default-profile harness websocket port %s", port)
+	}
+	return nil
+}
+
+func HarnessNotebookRoot() string {
+	if strings.TrimSpace(os.Getenv("ATTN_HARNESS_DATA_DIR")) == "" {
+		return ""
+	}
+	return filepath.Clean(strings.TrimSpace(os.Getenv("ATTN_HARNESS_NOTEBOOK_ROOT")))
+}
+
+func runtimePathWithin(candidate, root string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) && !filepath.IsAbs(relative)
 }
 
 type routingConflict struct {

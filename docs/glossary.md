@@ -268,25 +268,39 @@ replaced it and exits nonzero. Three things survive, on purpose:
 
 - `attn ticket show` and `attn ticket list` keep reading the archived board
   forever. `attn ticket inbox` consumes unread activity for participants in
-  tickets that predate the garden.
+  tickets that predate the garden. User-created tickets and tickets whose origin
+  is unknown are permanent records, including their activity and attachments.
 - Work that was already ticket-bound at the cutover keeps moving on its ticket:
   the daemon mirrors its tender's garden moves and notes onto it, so an
   in-flight delegation still closes where it started.
 - An automation run still mints its own daemon-internal ticket, because
   continuation, retention, and crash classification are keyed on it. It is not
   an agent-facing card: no CLI verb creates or moves one, and the seed moves
-  mirror onto it like any other.
+  mirror onto it like any other. Only tickets with relational proof that the
+  Automation feature created them, such as a scheduled run or a pull-request
+  update, may age out. A ticket created or updated by an agent is not an
+  automation ticket.
 
 Unbound backlog todos were converted to seeds at the cutover, each carrying its
 description as the seed's body and a log note naming the ticket it came from.
 
-A ticket whose session **died** converts the same way, and for the same reason:
-nobody is left to move it, so it is as inert as an unbound todo was. The daemon
-replants it at every boot and again as soon as a death is reconciled — a crashed
-ticket becomes a growing seed still tended by the session that died (dead, so the
-seed is ready for anyone; alive again, and the hold comes back with it), a failed
-one becomes a withered seed carrying the reason. Both carry the reconciler's
-verdict on the seed's log, and the ticket is closed and archived behind them.
+The main profile runs one create-only recovery pass for terminal tickets that
+predate permanent retention. It reads only attn-owned local backups and eligible
+native transcripts, restores missing ticket archives without replacing a live
+row, and represents every user ticket once in the Garden: `done` becomes
+`harvested`; `failed` and `crashed` become `withered`. Existing machine-proven
+ticket-to-seed lineage is adopted without changing the seed. The legacy ticket
+keeps its original state, timestamps, activity, and attachments. Codex and
+Claude carry profile-specific launch proof. Historical Copilot transcripts use
+their native session envelope and an exact implicit ticket-status receipt; the
+one-time pass treats them as main-profile history because Copilot was not used
+under named profiles before permanent retention.
+
+Evidence that cannot prove a terminal ticket creates no work. When present, its
+metadata is preserved create-only in `legacy-ticket-recovery/fragments.json` or
+`legacy-ticket-delegations.json` under the profile data directory, and one
+warning points to those local files. Recovery never scans other profiles or
+arbitrary home directories.
 
 ## The raw tier
 
