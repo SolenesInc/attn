@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// See docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "Protocol envelopes".
-
 // clientDocSubscriptions has its own lock: a subscription ends from three directions
 // (client asking, client disconnecting, daemon giving up) and none holds the other's.
 type clientDocSubscriptions struct {

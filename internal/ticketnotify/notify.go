@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-06-26-work-tracker.md.
 package ticketnotify
 
 import (

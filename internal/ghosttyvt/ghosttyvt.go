@@ -1,6 +1,5 @@
 //go:build (darwin && arm64) || (linux && amd64) || (linux && arm64)
 
-// Design: docs/plans/2026-07-22-server-authoritative-terminal.md
 package ghosttyvt
 
 /*

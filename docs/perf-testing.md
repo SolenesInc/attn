@@ -1,10 +1,7 @@
 # Performance testing
 
 This is the practical runbook for attn's performance-test suite. It covers how
-to run each layer and how to read the result. For the *why* behind this shape
-(trend-only, no hard gates, per-machine registry instead of a single "Victor's
-number"), see the strategy doc:
-[`docs/plans/2026-07-05-performance-test-strategy.md`](plans/2026-07-05-performance-test-strategy.md).
+to run each layer and how to read the result.
 
 ## Philosophy: trend-only, no hard gates (for now)
 

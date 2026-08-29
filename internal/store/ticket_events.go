@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// Design: docs/plans/2026-06-26-work-tracker.md (slice 2).
-
 type TicketEventKind string
 
 const (

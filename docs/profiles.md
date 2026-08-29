@@ -33,8 +33,7 @@ port=…]` banner so you can never lose track of which world you are touching.
 `ATTN_DATA_DIR`, when set, overrides every profile-derived data dir outright
 (highest precedence, above `ATTN_PROFILE`) — the knob test suites and
 harnesses use to scope themselves to an explicit temp dir instead of ever
-touching a real profile's data. See
-[docs/plans/2026-07-18-db-loss-mitigation.md](plans/2026-07-18-db-loss-mitigation.md).
+touching a real profile's data.
 It is a per-process scoping override, not a profile. `attn profile resolve`
 and `attn profile clean` deliberately keep reporting and operating on the
 profile's canonical directories and do not honor it, so under `ATTN_DATA_DIR`
@@ -206,5 +205,4 @@ stays off unless an operator opts in with `ATTN_AUTOMATION=1` (see
 **per-profile app build** (`make install PROFILE=<name>` — bundle metadata
 generated from `attn profile tauri-config`, the authority's port and bundle id
 baked into the binary so a profiled app can never reach another profile's
-daemon); and **`attn profile clean`** for teardown. See
-`docs/plans/2026-06-13-parallel-profiles.md` for the design history.
+daemon); and **`attn profile clean`** for teardown.

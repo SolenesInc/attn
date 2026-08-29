@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md, "SDK packaging".
-
 //go:embed sdkdist
 var sdkDeclarations embed.FS
 

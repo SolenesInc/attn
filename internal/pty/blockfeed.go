@@ -1,7 +1,5 @@
 package pty
 
-// Design: docs/plans/2026-07-23-terminal-restore-fidelity.md.
-
 import "github.com/victorarias/attn/internal/ghosttyvt"
 
 type osc133MarkerKind byte
