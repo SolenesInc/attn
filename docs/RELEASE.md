@@ -80,16 +80,20 @@ Homebrew path with `brew upgrade --cask victorarias/attn/attn`.
 If a release workflow needs to be rerun for an existing tag, dispatch it with:
 
 ```bash
-gh workflow run release.yml --ref main -f tag=v0.12.0
+gh api --method POST repos/victorarias/attn/dispatches \
+  -f event_type=release -F 'client_payload[tag]=v0.12.0'
 ```
 
-Loading the workflow from protected `main` prevents an older tag from selecting
-an older release workflow. The validation job uses the exact protected `main`
-SHA that supplied the workflow; it never executes gate code from the tag under
-inspection. The workflow rebuilds only after it proves the tag is on `main`,
+The repository event loads the workflow from protected `main`, so an older tag
+cannot select an older release workflow. The validation job never executes
+gate code from the tag under inspection. The workflow rebuilds only after it
+proves the tag is the exact current `main`,
 its exact SHA has green `Acceptance` from
 `ci.yml`, its originating candidate has green exact-head `App acceptance` from
 the protected `main` copy of `app-acceptance.yml`, and its manifest
 and committed versions still agree.
 Every build checks out the validated commit SHA. Publication stops if the
-remote tag no longer resolves to that SHA.
+remote tag no longer resolves to that SHA. Publishing an older build after a
+newer version has completed does not move GitHub's latest release or the
+Homebrew stable-download path backward; the highest published stable semantic
+version remains latest.

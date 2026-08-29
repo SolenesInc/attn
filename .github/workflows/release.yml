@@ -454,6 +454,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
       - name: Resolve release tag
         env:
           RELEASE_TAG_INPUT: ${{ github.event.client_payload.tag }}
@@ -488,8 +492,5 @@ jobs:
       - name: Publish the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh release edit "${RELEASE_TAG}" --draft=false --latest
-          gh release view "${RELEASE_TAG}" --json isDraft,assets \
-            --jq '"published draft=\(.isDraft) assets:\n" + (.assets | map("  " + .name) | join("\n"))'
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/publish-release.sh "$RELEASE_TAG"
