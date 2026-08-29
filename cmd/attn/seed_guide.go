@@ -127,10 +127,10 @@ WHAT DONE IS, BY DELIVERABLE
 
 A few examples; the shape carries to any deliverable.
 
-    code       behavior exists, tests green, PR up. Prescribe the outcome and
-               the constraints, not the implementation, unless the user hands
-               you the design too (an API contract, a call stack) so the tender
-               does not have to invent one.
+    code       behavior exists and its required verification is green. Prescribe
+               the outcome and the constraints, not the implementation, unless
+               the user hands you the design too (an API contract, a call stack)
+               so the tender does not have to invent one.
     bug fix    root cause found, then fixed, with a regression test. Give the
                symptom and a repro only; prescribing the fix invites
                symptom-patching.
@@ -144,9 +144,18 @@ A few examples; the shape carries to any deliverable.
     prototype  a decision or a feel, then thrown away. Name the question it
                answers; tests optional.
 
-Harvest on evidence, the user accepted it or the PR merged, not on the type.
-Implementation finished but acceptance pending is a note, and the seed stays
-open.
+Harvest when the outcome and required verification written in the seed body are
+complete. Review, acceptance, or merge keeps a seed open only when the body
+requires it. Otherwise record the evidence and harvest.
+
+Examples:
+
+- An investigation that asks for a sourced answer is done when that answer and
+  its evidence are recorded.
+- An implementation that explicitly asks for review stays open after the code
+  is finished. An implementation that asks only for code and tests does not.
+- A completed child is harvested by itself. Its plot and siblings keep their
+  own states.
 
 ARTIFACTS
 

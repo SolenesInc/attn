@@ -854,9 +854,10 @@ Report progress, what you learned, and decisions needed on the log:
 
     attn seed note ` + seedID + ` -m "<what happened and what you learned>"
 
-Harvest only when the requested outcome is settled — the user accepted the work
-or the requested PR merged. If implementation is finished but acceptance or
-review is pending, note that and leave the seed open:
+Harvest as soon as the outcome and required verification in the seed body are
+complete. Review, acceptance, or merge keeps the seed open only when the body
+requires it. Put independent remaining work in a child seed; closing that child
+never closes its plot or siblings:
 
     attn seed harvest ` + seedID + ` -m "<what got done>"`
 }

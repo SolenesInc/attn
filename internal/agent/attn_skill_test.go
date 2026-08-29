@@ -5,10 +5,34 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/toolhome"
 )
+
+func TestAttnSkillDefinesSeedCompletionFromTheBody(t *testing.T) {
+	for path, wants := range map[string][]string{
+		"attn_skill/references/garden.md": {
+			"outcome and required verification written in its body",
+			"finishing never settles its plot or siblings",
+		},
+		"attn_skill/references/delegated-agent.md": {
+			"outcome and required verification in its body",
+			"Recorded the sourced answer and recommendation",
+		},
+	} {
+		contents, err := attnSkillFiles.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(string(contents), want) {
+				t.Fatalf("%s dropped %q:\n%s", path, want, contents)
+			}
+		}
+	}
+}
 
 func assertAttnSkillTree(t *testing.T, skillDir string) {
 	t.Helper()
