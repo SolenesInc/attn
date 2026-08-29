@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md
-
 const appViewCrashEvent = "app.view.crashed"
 
 // appViewCrashErrorLimit sits ~8x past the largest component stack React has

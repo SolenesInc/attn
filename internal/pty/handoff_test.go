@@ -9,7 +9,6 @@ import (
 )
 
 // These run both halves in one process; the exec itself is measured in
-// docs/plans/2026-08-22-worker-inplace-upgrade.md.
 const echoChild = `printf 'banner one\r\n'; while read line; do printf 'got %s\r\n' "$line"; done`
 
 type collector struct {

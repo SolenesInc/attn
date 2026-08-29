@@ -18,8 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Design: docs/plans/2026-07-01-orphaned-ticket-reconciliation.md.
-
 const (
 	// The sweep's claim-crash repair keys on this prefix.
 	ticketReconcileCommentPrefix = "🩺 Reconciliation"

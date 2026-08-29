@@ -3,10 +3,8 @@
 Scripts that measure pi and attn's auto mode against real models. Most drive
 pi's SDK directly, without attn. They are the evidence behind the headless
 host's design, and they are the gate a pi version bump has
-to pass: run them against the new pin, diff the receipts against the ones
-recorded in `docs/grounding/pi-plugins.md` and
-`docs/plans/2026-08-05-pi-headless-host.md`, and treat any change as a breaking
-change until proven otherwise. pi ships breaking changes every few releases and
+to pass: run them against the current pin first, then against the new one,
+and treat any difference as a breaking change until proven otherwise. pi ships breaking changes every few releases and
 has no compat gate — an extension built against old types loads silently and
 fails at the first missing call site — so nothing else tells you what moved.
 

@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-07-session-activity.md
 package main
 
 import (

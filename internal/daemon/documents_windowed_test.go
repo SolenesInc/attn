@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// See docs/plans/2026-08-05-ext-a3.4-doc-store-positions-and-windows.md.
-
 func putDocSeq(t *testing.T, d *Daemon, id, body string) int64 {
 	t.Helper()
 	resp := docCall(t, func(c net.Conn) {

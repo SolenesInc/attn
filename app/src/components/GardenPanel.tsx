@@ -1,4 +1,3 @@
-// See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';

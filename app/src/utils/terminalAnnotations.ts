@@ -1,5 +1,3 @@
-// See docs/decisions/2026-08-02-terminal-annotations-anchor-to-the-transcript.md.
-
 import {
   alignMessage,
   offsetsForSelection,

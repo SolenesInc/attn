@@ -33,8 +33,16 @@ The payload names sibling blockers by slug:
 }
 ```
 
-The slug is the sibling title lowercased. Each run of characters that are not
-ASCII letters or digits becomes one dash. Pass `-` to read the payload from stdin.
+The slug is the sibling title without its stop words (a, the, of, in, on...),
+lowercased and dash-joined; writing the sibling's title works too. Two siblings
+that derive the same slug are refused. Pass `-` to read the payload from stdin.
+
+## Speaking of seeds
+
+Every verb prints a seed as `id  slug  title`. The id is for commands and for
+messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
+(`s-7k3f9m`) on first mention, then the slug alone. A person should never have
+to decode an id.
 
 ## Rings and watches
 

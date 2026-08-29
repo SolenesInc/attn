@@ -1,4 +1,3 @@
-// See docs/plans/2026-08-01-ext-a1-event-bus.md.
 package bus
 
 import (

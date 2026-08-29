@@ -32,7 +32,7 @@ func TestSeedRowsNestByDefaultAndFlattenOnRequest(t *testing.T) {
 
 func TestReadyPrintsPlotHierarchyBeforeLooseSeeds(t *testing.T) {
 	stamp := "2026-08-22T12:00:00Z"
-	firstPlot := protocol.Seed{ID: "s-plot11", Title: "first plot", CreatedAt: stamp}
+	firstPlot := protocol.Seed{ID: "s-plot11", StepSlug: "first-plot", Title: "first plot", CreatedAt: stamp}
 	secondPlot := protocol.Seed{ID: "s-plot22", Title: "second plot", CreatedAt: stamp}
 	firstChild := protocol.Seed{
 		ID: "s-child1", Title: "first child", Status: "planted", CreatedAt: stamp,
@@ -59,7 +59,7 @@ func TestReadyPrintsPlotHierarchyBeforeLooseSeeds(t *testing.T) {
 		}
 		last = at
 	}
-	if !strings.Contains(text, "s-plot11  plot") || !strings.Contains(text, "3 ready") {
+	if !strings.Contains(text, "s-plot11  first-plot  plot") || !strings.Contains(text, "3 ready") {
 		t.Fatalf("ready output does not distinguish headers from the three pickups:\n%s", text)
 	}
 }

@@ -476,8 +476,8 @@ func TestGarden_PlantListShowRoundTrip(t *testing.T) {
 	if planted.Status != garden.StatusPlanted {
 		t.Fatalf("a fresh seed is %q, want %q", planted.Status, garden.StatusPlanted)
 	}
-	if planted.StepSlug != "plant-and-see" {
-		t.Fatalf("step slug = %q, want plant-and-see", planted.StepSlug)
+	if planted.StepSlug != "plant-see" {
+		t.Fatalf("step slug = %q, want plant-see", planted.StepSlug)
 	}
 	if planted.PlanterSession != "sess-a" || planted.PlanterMember != "trellis" {
 		t.Fatalf("planter not recorded: %+v", planted)

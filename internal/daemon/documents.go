@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// See docs/plans/2026-08-03-ext-a3-doc-store.md.
-
 type docSubscription struct {
 	id       string
 	query    docstore.Query

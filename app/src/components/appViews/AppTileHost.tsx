@@ -10,8 +10,6 @@ import './AppTileHost.css';
 // SDK components are styled from attn's build, not the SDK's own chunk.
 import './appSdkComponents.css';
 
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
-
 interface AppTileHostProps {
   app: string;
   view: string;

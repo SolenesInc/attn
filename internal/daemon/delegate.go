@@ -863,7 +863,6 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, placement 
 	return result
 }
 
-// See docs/plans/2026-06-30-delegated-leaf-not-chief.md.
 const leafIdentityPreamble = "You are a delegated attn session — a leaf, not a " +
 	"coordinator. Do the work below in this session. For your own subtasks, use " +
 	"native subagents (your Task/Agent tools), not `attn delegate` — delegating " +

@@ -1226,8 +1226,8 @@ model TaskRetryMessage {
   task_id: string;
 }
 
-// Notifications surface: a global, daemon-level feed of durable notifications
-// (see docs/plans/2026-07-02-bg-task-notifications.md). The producer is the task
+// Notifications surface: a global, daemon-level feed of durable notifications.
+// The producer is the task
 // runner, which adds one when a background task reaches terminal `dead`. The
 // frontend lists them, marks them read, and re-lists on the notifications_updated
 // broadcast; the unread count drives a sidebar badge.
@@ -3685,8 +3685,7 @@ model ReloadSessionResultMessage {
 // beside the snapshot so restore reconstructs clickable prompt/command/output
 // regions (the snapshot has rendered cells, not the marks). Rows are
 // SCREEN-space rows of the snapshot, which equal client buffer rows once it is
-// decoded. See Phase 3a in
-// docs/plans/2026-07-22-server-authoritative-terminal.md.
+// decoded.
 model AttachBlock {
   id: safeint;                   // server-assigned, monotonic per session
   pending: boolean;              // the single open block (no command-end yet)
@@ -3746,7 +3745,7 @@ model AttachSnapshot {
   // not match; the client compares this against its own and falls back to a
   // snapshot-less attach rather than decoding a format it cannot read. Absent
   // from a worker that predates the field, which is also a format nobody
-  // speaks. See docs/plans/2026-08-16-snapshot-format-skew.md.
+  // speaks.
   format?: string;
   blocks?: AttachBlock[];        // OSC 133 command blocks, empty/absent if none
   // Kitty placements on the screen the snapshot carries, captured in the same
@@ -4304,8 +4303,6 @@ model DocSubscriptionEndedMessage {
 // crown, a packet is a plot flagged as template. Seeds live in the home
 // daemon's document store under `core/garden`; an outpost refuses every command
 // here, naming its home, until the uplink carries the ask there.
-//
-// Design: docs/plans/2026-08-06-the-garden-vertical-slices.md.
 
 // One seed as every read and every push carries it. The id is short, stable and
 // sayable, and unique within its hub; the fully qualified `<daemon-id>/<id>`
