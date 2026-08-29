@@ -519,7 +519,7 @@ point — an outpost has none and passes its asks home.
 A **seed** is the unit of work: one document with one short id, a **slug**, a
 title, a markdown body, and a state. The id (`s-7k3f9m`) is what commands and
 agent-to-agent messages use; it is stable and safe across hosts. The slug
-(`mermaid-rendered-grid`) is the title's key words, stop words dropped, and is
+(`mermaid-rendered-grid`) is the title's first six key words, stop words dropped, and is
 how a seed is spoken of to a person: it is a name, not a key, so two seeds may
 share one. **Planting** creates a seed and prints its id, slug and title
 (`attn seed plant "what this is"`). Work that outlives the current turn belongs

@@ -171,6 +171,8 @@ const (
 	MaxBodyBytes  = 1 << 20
 	// Past the longest real title measured above, so it never truncates one.
 	MaxSlugChars = 100
+	// Enough to tell seeds apart, few enough to say out loud.
+	MaxSlugWords = 6
 )
 
 func ValidatePlant(title, body string) error {
@@ -204,6 +206,9 @@ func StepSlug(title string) string {
 	// A title made only of stop words ("The One") still needs a name.
 	if len(kept) == 0 {
 		kept = words
+	}
+	if len(kept) > MaxSlugWords {
+		kept = kept[:MaxSlugWords]
 	}
 	slug := strings.Join(kept, "-")
 	if runes := []rune(slug); len(runes) > MaxSlugChars {
