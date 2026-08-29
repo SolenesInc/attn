@@ -1,0 +1,4 @@
+# libghostty-vt links the archive the daemon links: third_party/ghostty-vt,
+# fetched by `make build` and sha-verified against ghostty-vt-native.lock.
+[env]
+LIBGHOSTTY_VT_PREBUILT_ROOT = { value = "../third_party/ghostty-vt", relative = true }
