@@ -1,13 +1,10 @@
 name: Release
-run-name: ${{ inputs.tag || github.ref_name }}
+run-name: ${{ inputs.tag }}
 
 env:
   GH_TOKEN: ${{ github.token }}
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -15,33 +12,70 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
+  validate-tag:
+    name: Validate accepted tag
+    outputs:
+      release_sha: ${{ steps.validate.outputs.release_sha }}
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate accepted release tag
+        id: validate
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+        run: ./scripts/release-tag-gate.sh "$RELEASE_TAG_INPUT"
+
   tauri:
     name: Tauri Release
+    needs: validate-tag
     permissions:
       contents: write
     runs-on: macos-14
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
+          RELEASE_SHA="$RELEASE_SHA_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
             exit 1
           fi
+          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $RELEASE_SHA"
+            exit 1
+          fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
           echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -255,31 +289,36 @@ jobs:
 
   linux-amd64:
     name: Linux amd64 daemon
-    needs: tauri
+    needs: [validate-tag, tauri]
     permissions:
       contents: write
     runs-on: ubuntu-24.04
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
+          RELEASE_SHA="$RELEASE_SHA_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
             exit 1
           fi
+          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $RELEASE_SHA"
+            exit 1
+          fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
           echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -329,31 +368,36 @@ jobs:
 
   linux-arm64:
     name: Linux arm64 daemon
-    needs: tauri
+    needs: [validate-tag, tauri]
     permissions:
       contents: write
     runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
+          RELEASE_SHA="$RELEASE_SHA_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
             exit 1
           fi
+          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $RELEASE_SHA"
+            exit 1
+          fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
           echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -407,26 +451,42 @@ jobs:
   # set is right.
   publish:
     name: Publish release
-    needs: [tauri, linux-amd64, linux-arm64]
+    needs: [validate-tag, tauri, linux-amd64, linux-arm64]
     permissions:
       contents: write
     runs-on: ubuntu-latest
 
     steps:
       - name: Resolve release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          RELEASE_SHA_INPUT: ${{ needs.validate-tag.outputs.release_sha }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="${{ inputs.tag }}"
-          else
-            RELEASE_TAG="${{ github.ref_name }}"
-          fi
+          RELEASE_TAG="$RELEASE_TAG_INPUT"
+          RELEASE_SHA="$RELEASE_SHA_INPUT"
 
           if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release tag: $RELEASE_TAG"
             exit 1
           fi
+          if ! [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid release SHA: $RELEASE_SHA"
+            exit 1
+          fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$RELEASE_SHA" >> "$GITHUB_ENV"
+
+      - name: Recheck immutable release tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ACTUAL_SHA="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)"
+          if [ "$ACTUAL_SHA" != "$RELEASE_SHA" ]; then
+            echo "$RELEASE_TAG moved to $ACTUAL_SHA, expected $RELEASE_SHA"
+            exit 1
+          fi
 
       - name: Publish the release
         env:

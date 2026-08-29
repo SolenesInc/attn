@@ -4,6 +4,7 @@ set -euo pipefail
 sha="${1:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
 ci_run_id="${2:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
 ci_run_url="${3:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
+script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "release after acceptance: invalid commit SHA '$sha'" >&2
@@ -56,30 +57,38 @@ if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
   exit 0
 fi
 
+"$script_root/app-acceptance-gate.sh" "$sha"
+
 tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"
 if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-	  echo "release after acceptance: manifest returned invalid tag '$tag'" >&2
+  echo "release after acceptance: manifest returned invalid tag '$tag'" >&2
+  exit 1
+fi
+validated_tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
+if [ "$validated_tag" != "$tag" ]; then
+  echo "release after acceptance: manifest tag changed from $tag to $validated_tag during validation" >&2
   exit 1
 fi
 
 remote_tag_status=0
 remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || remote_tag_status=$?
 case "$remote_tag_status" in
-	  0)
-	    remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
-	    if [ "$remote_tag_sha" != "$sha" ]; then
-	      echo "release after acceptance: manifest $tag was consumed at $remote_tag_sha; nothing to release from $sha"
-	      exit 0
-	    fi
-	    echo "release after acceptance: $tag already points to accepted main $sha"
-	    ;;
-	  2)
-	    validated_tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
-	    if [ "$validated_tag" != "$tag" ]; then
-	      echo "release after acceptance: manifest tag changed from $tag to $validated_tag during validation" >&2
-	      exit 1
-	    fi
-	    git tag "$tag" "$sha"
+  0)
+    remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+    if [ "$remote_tag_sha" != "$sha" ]; then
+      echo "release after acceptance: manifest $tag was consumed at $remote_tag_sha; nothing to release from $sha"
+      exit 0
+    fi
+    echo "release after acceptance: $tag already points to accepted main $sha"
+    ;;
+  2)
+    latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
+    latest_main_sha="${latest_main_line%%[[:space:]]*}"
+    if [ "$latest_main_sha" != "$sha" ]; then
+      echo "release after acceptance: main moved to $latest_main_sha before tagging; leaving $sha untagged"
+      exit 0
+    fi
+    git tag "$tag" "$sha"
     git push origin "refs/tags/$tag"
     echo "release after acceptance: created $tag at $sha"
     ;;
@@ -90,8 +99,10 @@ case "$remote_tag_status" in
 esac
 
 release_runs="$(
-  gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?head_sha=$sha&per_page=100" \
-    --jq '[.workflow_runs[] | select(.event == "workflow_dispatch" or .event == "push")] | length'
+  gh api --paginate \
+    "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=100" \
+    --jq ".workflow_runs[] | select(.event == \"workflow_dispatch\" and .display_title == \"$tag\") | .id" |
+    awk 'NF { count++ } END { print count + 0 }'
 )"
 if ! [[ "$release_runs" =~ ^[0-9]+$ ]]; then
   echo "release after acceptance: invalid release run count '$release_runs'" >&2
@@ -102,5 +113,5 @@ if [ "$release_runs" -gt 0 ]; then
   exit 0
 fi
 
-gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag" -f "tag=$tag"
+gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=$tag"
 echo "release after acceptance: dispatched release.yml for $tag after $acceptance_url"

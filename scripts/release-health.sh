@@ -1,29 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-conclusion="${1:?usage: release-health.sh <conclusion> <tag> <sha> <run-url>}"
-tag="${2:?usage: release-health.sh <conclusion> <tag> <sha> <run-url>}"
-sha="${3:?usage: release-health.sh <conclusion> <tag> <sha> <run-url>}"
-run_url="${4:?usage: release-health.sh <conclusion> <tag> <sha> <run-url>}"
+conclusion="${1:?usage: release-health.sh <conclusion> <tag> <run-url>}"
+tag="${2:?usage: release-health.sh <conclusion> <tag> <run-url>}"
+run_url="${3:?usage: release-health.sh <conclusion> <tag> <run-url>}"
 
 if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "release health: invalid release tag '$tag'" >&2
   exit 2
 fi
-if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "release health: invalid commit SHA '$sha'" >&2
-  exit 2
-fi
-
 : "${GITHUB_REPOSITORY:?release health: GITHUB_REPOSITORY is required}"
 for tool in gh jq; do
   command -v "$tool" >/dev/null || { echo "release health: missing $tool" >&2; exit 2; }
 done
 
-remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
-if [ "$remote_tag_sha" != "$sha" ]; then
-  echo "release health: $tag moved to $remote_tag_sha; ignoring stale result for $sha"
-  exit 0
+sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "release health: $tag returned invalid commit SHA '$sha'" >&2
+  exit 1
 fi
 
 title="Release health: $tag"
@@ -79,7 +73,7 @@ $release_state
 Fix the failing release step, then rerun the same immutable tag:
 
 \`\`\`bash
-gh workflow run release.yml --ref $tag -f tag=$tag
+gh workflow run release.yml --ref main -f tag=$tag
 \`\`\`
 
 This issue stays open until a release run for the tag succeeds. Consecutive

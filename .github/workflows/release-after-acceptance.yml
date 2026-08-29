@@ -15,7 +15,9 @@ jobs:
     name: Release accepted main
     permissions:
       actions: write
+      checks: read
       contents: write
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

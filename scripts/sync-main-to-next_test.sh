@@ -16,7 +16,11 @@ case "$1 $2" in
   "auth status")
     exit 0
     ;;
-  "pr list")
+  "api --paginate")
+    if [[ "$*" != *'/pulls?state=open&base=main&per_page=100'* ]]; then
+      echo "unexpected paginated API command: $*" >&2
+      exit 2
+    fi
     printf '%s' "${FAKE_ACTIVE_CANDIDATE:-}"
     ;;
   "pr create")

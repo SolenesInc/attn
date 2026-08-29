@@ -19,7 +19,11 @@ case "$1 $2" in
   "repo view")
     printf '%s\n' $'example/attn\thttps://github.com/example/attn'
     ;;
-  "pr list")
+  "api --paginate")
+    if [[ "$*" != *'/pulls?state=open&base=main&per_page=100'* ]]; then
+      echo "unexpected paginated API command: $*" >&2
+      exit 2
+    fi
     printf '%s' "${FAKE_ACTIVE_CANDIDATE:-}"
     ;;
   "api --method")
@@ -210,8 +214,9 @@ export FAKE_ACCEPTANCE_CONCLUSION=failure
 expect_failure 'Acceptance is completed/failure' run_release v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
-export FAKE_ACTIVE_CANDIDATE=$'release/v99.0.0\thttps://github.com/example/attn/pull/9'
+export FAKE_ACTIVE_CANDIDATE=$'release/v99.0.0\thttps://github.com/example/attn/pull/109'
 expect_failure 'another release candidate is open' run_release v99.98.97
+grep -Fq 'api --paginate --method GET repos/{owner}/{repo}/pulls?state=open&base=main&per_page=100' "$FAKE_GH_LOG"
 export FAKE_ACTIVE_CANDIDATE=
 
 git -C "$fixture_repo" tag v99.98.96
