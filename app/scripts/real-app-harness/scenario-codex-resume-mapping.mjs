@@ -584,8 +584,12 @@ async function main() {
     await runner.step('assert_pathless_root_hook_cannot_replace_successor_binding', async () => {
       const expectedResumeId = await queryStoredResumeId(dbPath, sessionId);
       const expectedTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
-      execFileSync(attnBin, ['_hook-session-start', sessionId], {
-        env: daemonEnv,
+      const hookOutput = execFileSync(attnBin, ['_hook-session-start', sessionId], {
+        env: {
+          ...daemonEnv,
+          ATTN_WORKSPACE_CONTEXT_GUIDANCE: '',
+          ATTN_CHIEF_GUIDANCE: '',
+        },
         input: JSON.stringify({
           session_id: 'ephemeral-pathless-root',
           transcript_path: null,
@@ -593,6 +597,16 @@ async function main() {
         }),
         encoding: 'utf8',
       });
+      const hookContext = JSON.parse(hookOutput)?.hookSpecificOutput?.additionalContext || '';
+      runner.assert(
+        hookContext.includes("attn checked out this workspace's shared context") &&
+          hookContext.includes('ready now'),
+        'a pathless root hook still emits workspace and Garden guidance',
+        {
+          hasWorkspaceContext: hookContext.includes("attn checked out this workspace's shared context"),
+          hasGardenPrime: hookContext.includes('ready now'),
+        }
+      );
       await delay(500);
       const actualResumeId = await queryStoredResumeId(dbPath, sessionId);
       const actualTranscriptPath = await queryStoredTranscriptPath(dbPath, sessionId);
