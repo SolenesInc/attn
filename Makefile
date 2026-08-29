@@ -316,7 +316,10 @@ install-daemon: ensure-codesign-identity build
 		exit 1; \
 	fi; \
 	echo ">>> Updating $$label daemon at $$app_binary"; \
-	cp $(OUTPUT) "$$app_binary"; \
+	: "Rename, not overwrite: Linux refuses to write a running executable"; \
+	: "(ETXTBSY), while a rename leaves the running inode alone."; \
+	cp $(OUTPUT) "$$app_binary.new"; \
+	mv -f "$$app_binary.new" "$$app_binary"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
 		identity="$(MACOS_CODESIGN_IDENTITY)"; \
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \

@@ -1,0 +1,12 @@
+kind: internal
+area: linux
+change: >
+  `make install PROFILE=<name>` works on Linux: Tauri builds with --no-bundle and
+  the app is staged as a plain directory tree under XDG_DATA_HOME
+  (bin/attn-app, bin/attn, resources/), which is what `attn profile resolve
+  --field appPath` now reports off macOS. Two new resolved fields name the
+  binaries inside it, appExecutable and appDaemon, and the sidecar is staged
+  under the rustc host triple instead of a hardcoded aarch64-apple-darwin.
+  `attn profile stop-app` quits a profile's app — by bundle id on macOS, by the
+  app's own pid file (confirmed against /proc) elsewhere — and `attn profile
+  list` and `clean` see Linux installs. macOS behavior is unchanged.

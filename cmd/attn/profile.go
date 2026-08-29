@@ -460,8 +460,8 @@ func stopProfileApp(r profileResolved) string {
 	return stopProfileAppByPIDFile(r)
 }
 
-// The daemon's own stop waits, for a process that tears down less: the app under
-// Xvfb exits on SIGTERM in 0.09s (2026-08-30, attn-linux VM).
+// The daemon's own stop waits, for a process that tears down less: measured at
+// 72ms from SIGTERM to gone (2026-08-30, attn-linux VM under Xvfb).
 const (
 	appStopSigtermWait = 5 * time.Second
 	appStopSigkillWait = 2 * time.Second
