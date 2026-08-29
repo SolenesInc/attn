@@ -19,6 +19,31 @@ describe("the models pi can reach", () => {
     expect(piAgentDir({})).toEndWith("/.pi/agent");
   });
 
+  test("a catalog bigger than the cap never runs more checks at once than the cap", async () => {
+    const store: Record<string, unknown> = {};
+    for (let i = 0; i < 60; i++) store[`p${String(i).padStart(2, "0")}`] = { models: [{ id: "m" }] };
+
+    let live = 0;
+    let peak = 0;
+    const asked: string[] = [];
+    const slowCheck = async (provider: string) => {
+      asked.push(provider);
+      live++;
+      peak = Math.max(peak, live);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      live--;
+      return { ready: true };
+    };
+
+    const answer = await availableModels({}, files({ "models-store.json": store }), slowCheck);
+
+    expect(peak).toBeLessThanOrEqual(12);
+    expect(peak).toBeGreaterThan(1);
+    expect(asked).toHaveLength(60);
+    expect(answer.providers).toHaveLength(60);
+    expect(answer.providers.every((provider) => provider.ready)).toBe(true);
+  });
+
   test("answers each provider's models, sorted, with when the catalog was read", async () => {
     const answer = await availableModels(
       {},

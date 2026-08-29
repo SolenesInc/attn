@@ -27,6 +27,10 @@ export type AvailableModels = {
 
 export type AuthCheck = (provider: string) => Promise<{ ready: boolean; detail?: string }>;
 
+// Each check spawns a pi auth check process, and the catalog files are
+// hand-editable: five providers here, so this bounds a damaged one's burst.
+const maxParallelAuthChecks = 12;
+
 export function piAgentDir(env: EnvironmentLike): string {
   const configured = env.PI_CODING_AGENT_DIR?.trim();
   return configured && configured !== "" ? configured : join(homedir(), ".pi", "agent");
@@ -63,7 +67,7 @@ export async function availableModels(
   }
 
   const entries = [...catalog];
-  const auth = await Promise.all(entries.map(([provider]) => checkAuth(provider)));
+  const auth = await mapWithLimit(entries, maxParallelAuthChecks, ([provider]) => checkAuth(provider));
   const providers: ProviderModels[] = entries.map(([provider, entry], index) => ({
     provider,
     ready: auth[index].ready,
@@ -74,6 +78,22 @@ export async function availableModels(
   providers.sort((left, right) => left.provider.localeCompare(right.provider));
 
   return { providers, problem: problems.length > 0 ? problems.join("; ") : undefined };
+}
+
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = Array.from({ length: items.length }) as R[];
+  let next = 0;
+  const worker = async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      out[index] = await run(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 function readModels(value: unknown): CatalogModel[] {
