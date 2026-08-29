@@ -78,7 +78,6 @@ func (d *Daemon) prepareLegacyTicketRecovery() (bool, error) {
 	if !d.legacyTicketRecoveryEligible() {
 		return false, nil
 	}
-	d.legacyTicketRecoveryNeeded = true
 	if run, err := d.store.GetLegacyTicketRecoveryRun(store.LegacyTicketRecoveryVersion); err != nil {
 		return false, err
 	} else if run != nil {
@@ -278,7 +277,7 @@ func (d *Daemon) legacyTicketRecoveryHandler(ctx context.Context, job *jobs.Job)
 		return nil, errors.New("legacy ticket recovery run is missing")
 	}
 	if run.State.Terminal() {
-		d.startPostLegacyTicketRecovery()
+		d.finishLegacyTicketRecoveryUpgrade()
 		return legacyTicketRecoveryResult{}, nil
 	}
 
@@ -333,7 +332,7 @@ func (d *Daemon) legacyTicketRecoveryHandler(ctx context.Context, job *jobs.Job)
 	}); err != nil {
 		return nil, err
 	}
-	d.startPostLegacyTicketRecovery()
+	d.finishLegacyTicketRecoveryUpgrade()
 	return result, nil
 }
 
@@ -1028,7 +1027,7 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 			return err
 		}
 		fingerprint := legacyTicketSeedFingerprint(ticket, sourceKind)
-		var linked store.LegacyTicketSeedResult
+		var linked store.TicketSeedHandoverResult
 		for attempt := 0; attempt < 3; attempt++ {
 			seedID, err := d.mintSeedID()
 			if err != nil {
@@ -1053,18 +1052,18 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 			if err != nil {
 				return err
 			}
-			spec := store.LegacyTicketSeedSpec{
+			handover := store.TicketSeedHandover{
 				TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody,
 				SeedFact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
 				SeedTitle: title, SeedDescription: body,
 				SeedSchema: *seedSchema, NoteSchema: *noteSchema, DispatchSchema: *dispatchSchema,
 				Notes: notes, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
-				SourceKind: sourceKind, EvidenceFingerprint: fingerprint,
-				OriginalTerminalState: ticket.Status, CreatedAt: run.RecoveryAt,
+				HandoverKind: sourceKind, EvidenceFingerprint: fingerprint,
+				OriginalTicketStatus: ticket.Status, CreatedAt: run.RecoveryAt,
 			}
 			if err := withLegacyRecoveryCommit(job, func() error {
 				var linkErr error
-				linked, linkErr = d.store.EnsureLegacyTicketSeed(spec)
+				linked, linkErr = d.store.EnsureTicketSeedHandover(handover)
 				return linkErr
 			}); err != nil {
 				if docstore.IsConflict(err) {
@@ -1073,7 +1072,7 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 				return err
 			}
 			if linked.Result == "created" {
-				d.announceLegacyTicketSeedWrites(spec, linked)
+				d.announceTicketSeedHandoverWrites(handover, linked)
 			}
 			break
 		}
@@ -1094,7 +1093,7 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 	return nil
 }
 
-func (d *Daemon) legacyTicketSeedNotes(ticket *store.Ticket, seedID string) ([]store.LegacyTicketSeedNote, error) {
+func (d *Daemon) legacyTicketSeedNotes(ticket *store.Ticket, seedID string) ([]store.TicketSeedNote, error) {
 	noteID, err := d.mintNoteID()
 	if err != nil {
 		return nil, err
@@ -1107,7 +1106,7 @@ func (d *Daemon) legacyTicketSeedNotes(ticket *store.Ticket, seedID string) ([]s
 	if err != nil {
 		return nil, err
 	}
-	notes := []store.LegacyTicketSeedNote{{
+	notes := []store.TicketSeedNote{{
 		ID: noteID, Body: body,
 		Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
 	}}
@@ -1133,7 +1132,7 @@ func (d *Daemon) legacyTicketSeedNotes(ticket *store.Ticket, seedID string) ([]s
 		if err != nil {
 			return nil, err
 		}
-		notes = append(notes, store.LegacyTicketSeedNote{
+		notes = append(notes, store.TicketSeedNote{
 			ID: id, Body: encoded,
 			Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, id, false),
 		})
@@ -1270,44 +1269,29 @@ func (d *Daemon) finalizeExhaustedLegacyTicketRecovery(job *jobs.Job) {
 	if id != "" {
 		d.publishFact(FactNotificationCreated, id, nil)
 	}
-	d.startPostLegacyTicketRecovery()
+	d.finishLegacyTicketRecoveryUpgrade()
 }
 
-func (d *Daemon) startPostLegacyTicketRecovery() {
-	d.legacyTicketRecoveryPostOnce.Do(func() {
+func (d *Daemon) finishLegacyTicketRecoveryUpgrade() {
+	d.legacyTicketRecoveryFinishOnce.Do(func() {
 		d.convertBacklogTicketsToSeeds()
 		d.replantStrandedTickets()
-		d.pruneLegacyTicketRecoveryBackups()
-		go d.runDatabaseBackupLoop()
-		go d.runAutomationRetentionSweep()
-		go d.runAutomationTicketRetentionSweep()
+		d.pruneEligibleDatabaseBackups()
 	})
 }
 
-func (d *Daemon) pruneLegacyTicketRecoveryBackups() {
-	protected := map[string]struct{}{}
+func (d *Daemon) legacyTicketRecoveryBackupProtection() (map[string]struct{}, bool) {
 	if d.legacyTicketRecoveryEligible() {
 		run, err := d.store.GetLegacyTicketRecoveryRun(store.LegacyTicketRecoveryVersion)
 		if err != nil || run == nil || !run.State.Terminal() {
-			d.logf("legacy ticket recovery: backup pruning remains fenced")
-			return
+			return nil, false
 		}
-		protected, err = d.store.ProtectedLegacyTicketRecoveryPaths(run.Version)
+		protected, err := d.store.ProtectedLegacyTicketRecoveryPaths(run.Version)
 		if err != nil {
 			d.logf("legacy ticket recovery: read protected backups: %v", err)
-			return
+			return nil, false
 		}
+		return protected, true
 	}
-	if err := store.PruneBackups(d.backupDir(), backupKeep, protected); err != nil && !os.IsNotExist(err) {
-		d.logf("database backup prune: %v", err)
-	}
-	premigrationDir := ""
-	if d.store != nil {
-		premigrationDir = store.BackupDirForDatabase(d.store.DatabasePath())
-	}
-	if premigrationDir != "" {
-		if err := store.PrunePremigrationBackups(premigrationDir, store.PremigrationBackupKeep(), protected); err != nil && !os.IsNotExist(err) {
-			d.logf("pre-migration backup prune: %v", err)
-		}
-	}
+	return map[string]struct{}{}, true
 }

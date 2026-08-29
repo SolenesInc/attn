@@ -325,36 +325,9 @@ func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, si
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	results := make([]DocumentWriteResult, len(commits))
-	changed := false
-	for i, commit := range commits {
-		w := commit.Write
-		out := &results[i]
-		if w.Delete {
-			existed, err := deleteDocumentWith(tx, w.Schema, tables[i], w.ID, w.Expected)
-			if err != nil {
-				return nil, err
-			}
-			out.Changed = existed
-		} else {
-			rev, err := putDocumentWith(tx, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
-			if err != nil {
-				return nil, err
-			}
-			out.Rev = rev
-			out.Changed = true
-		}
-
-		if !out.Changed {
-			continue
-		}
-		changed = true
-		seq, err := appendBusEventWith(tx, commit.Fact, now)
-		if err != nil {
-			return nil, fmt.Errorf("store: announcing the write to %s/%s/%s: %w",
-				w.Schema.Namespace, w.Schema.Collection, w.ID, err)
-		}
-		out.Seq = seq
+	results, changed, err := commitDocumentWritesWith(tx, commits, tables, now)
+	if err != nil {
+		return nil, err
 	}
 	if !changed {
 		return results, nil
@@ -369,6 +342,41 @@ func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, si
 		return nil, fmt.Errorf("store: committing %d document writes: %w", len(commits), err)
 	}
 	return results, nil
+}
+
+func commitDocumentWritesWith(tx *sql.Tx, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {
+	results := make([]DocumentWriteResult, len(commits))
+	changed := false
+	for i, commit := range commits {
+		w := commit.Write
+		out := &results[i]
+		if w.Delete {
+			existed, err := deleteDocumentWith(tx, w.Schema, tables[i], w.ID, w.Expected)
+			if err != nil {
+				return nil, false, err
+			}
+			out.Changed = existed
+		} else {
+			rev, err := putDocumentWith(tx, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
+			if err != nil {
+				return nil, false, err
+			}
+			out.Rev = rev
+			out.Changed = true
+		}
+
+		if !out.Changed {
+			continue
+		}
+		changed = true
+		seq, err := appendBusEventWith(tx, commit.Fact, now)
+		if err != nil {
+			return nil, false, fmt.Errorf("store: announcing the write to %s/%s/%s: %w",
+				w.Schema.Namespace, w.Schema.Collection, w.ID, err)
+		}
+		out.Seq = seq
+	}
+	return results, changed, nil
 }
 
 func (s *Store) queryDocuments(c docstore.Compiled) ([]docstore.Document, error) {

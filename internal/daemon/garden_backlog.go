@@ -84,7 +84,7 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 		return "", err
 	}
 	now := time.Now()
-	var linked store.LegacyTicketSeedResult
+	var linked store.TicketSeedHandoverResult
 	for attempt := 0; attempt < 3; attempt++ {
 		seedID, err := d.mintSeedID()
 		if err != nil {
@@ -106,18 +106,18 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		spec := store.LegacyTicketSeedSpec{
+		handover := store.TicketSeedHandover{
 			TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody, SeedTitle: title, SeedDescription: body,
 			SeedFact:   documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
 			SeedSchema: *seedSchema, NoteSchema: *noteSchema, DispatchSchema: *dispatchSchema,
-			Notes: []store.LegacyTicketSeedNote{{
+			Notes: []store.TicketSeedNote{{
 				ID: noteID, Body: noteBody,
 				Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
 			}}, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
-			SourceKind: "backlog", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "backlog"),
-			OriginalTerminalState: ticket.Status, CreatedAt: now,
+			HandoverKind: "backlog", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "backlog"),
+			OriginalTicketStatus: ticket.Status, CreatedAt: now,
 		}
-		linked, err = d.store.EnsureLegacyTicketSeed(spec)
+		linked, err = d.store.EnsureTicketSeedHandover(handover)
 		if err != nil && docstore.IsConflict(err) {
 			continue
 		}
@@ -125,7 +125,7 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 			return "", err
 		}
 		if linked.Result == "created" {
-			d.announceLegacyTicketSeedWrites(spec, linked)
+			d.announceTicketSeedHandoverWrites(handover, linked)
 		}
 		break
 	}
@@ -151,10 +151,10 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 	return linked.SeedID, nil
 }
 
-func (d *Daemon) announceLegacyTicketSeedWrites(spec store.LegacyTicketSeedSpec, result store.LegacyTicketSeedResult) {
-	facts := make([]store.BusEvent, 0, len(spec.Notes)+1)
-	facts = append(facts, spec.SeedFact)
-	for _, note := range spec.Notes {
+func (d *Daemon) announceTicketSeedHandoverWrites(handover store.TicketSeedHandover, result store.TicketSeedHandoverResult) {
+	facts := make([]store.BusEvent, 0, len(handover.Notes)+1)
+	facts = append(facts, handover.SeedFact)
+	for _, note := range handover.Notes {
 		facts = append(facts, note.Fact)
 	}
 	if len(result.Seqs) != len(facts) {

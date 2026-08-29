@@ -130,8 +130,7 @@ type Daemon struct {
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
-	legacyTicketRecoveryNeeded        bool
-	legacyTicketRecoveryPostOnce      sync.Once
+	legacyTicketRecoveryFinishOnce    sync.Once
 	legacyTicketSnapshotIdentity      func(string) (store.LegacyTicketRecoverySource, error)
 	legacyTicketSnapshotRead          func(string) (store.LegacyTicketSnapshotRead, error)
 	legacyRecoveryArtifactWrite       func(string, []byte) error
@@ -954,8 +953,9 @@ func (d *Daemon) Start() error {
 			return fmt.Errorf("enqueue legacy ticket recovery: %w", err)
 		}
 	} else {
-		d.startPostLegacyTicketRecovery()
+		d.finishLegacyTicketRecoveryUpgrade()
 	}
+	d.startPermanentMaintenance()
 
 	for _, wsID := range reapedWorkspaceIDs {
 		d.enqueueFinalNarrateWorkspace(wsID)
