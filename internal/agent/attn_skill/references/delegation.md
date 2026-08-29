@@ -89,59 +89,62 @@ default is not applied to them.
 
 ## Placement
 
-For work involving a Git repository, `attn delegate` creates a new worktree by
-default—even for read-only investigation or discussion. Use `--from` when the
-task needs a particular starting branch; otherwise attn uses the repository's
-default branch. Pass `--no-worktree` when the user asks to reuse the current
-checkout, the delegation clearly continues work already happening there, or more
-specific repository or agent guidance requires it.
+Placement answers two independent questions. Each flag answers one of them.
 
-When the source directory is not a Git repository (a crew home, for instance),
-the flag-free default is refused rather than launching the delegate with no
-checkout. Place it with `--cwd <repo>` or `--workspace <id>`, or pass
-`--no-worktree` to delegate without one. Any explicit placement flag is taken as
-consent, so none of them is refused.
+### Where the pane appears
 
-Before creating a new workspace, check whether an existing one already fits the
-work. `attn list` returns sessions grouped by `workspace_id`; use the session
-labels, directories, and workspace IDs to identify domain workspaces the user
-already has (e.g. code reviews, goalie rotation, triage). When the delegated
-task matches an existing workspace's domain, place it there with `--workspace`:
+- no flag: the source session's workspace
+- `--workspace <id>`: an existing workspace
+- `--new-workspace`: a new workspace
+- `--cwd <path>`: a new workspace at that directory (this flag also moves the
+  checkout, see below)
+
+Before creating a workspace, check whether one already fits. `attn list`
+groups sessions by `workspace_id`; the labels and directories show the domain
+workspaces the user keeps (code reviews, goalie rotation, triage). When the
+task matches one, place it there:
 
     attn delegate --brief-file "$brief_file" --workspace <workspace-id> --model <model>
 
-When delegating multiple independent items in parallel, route each agent to the
-workspace that fits its domain rather than creating a new workspace per item.
-
-If no existing workspace fits: no placement flag adds the session to the
-current workspace, `--new-workspace` creates a separate workspace from the
-source directory, and `--cwd` creates one at an existing directory.
-
-A workspace decides where the pane appears. It never decides which checkout the
-agent edits. `--workspace` with `--no-worktree` reuses the source session's
-current checkout, even when that workspace holds sessions from another
-repository. `--cwd` is the one flag that moves the checkout, and it creates a
-new workspace there. `attn delegate` refuses conflicting repository flags
-before an agent starts, and the error names both repositories it resolved.
+When delegating several independent items, route each to the workspace that
+fits its domain instead of creating one per item.
 
 `attn list` marks sessions in hidden workspaces with `workspace_muted: true`.
-When the source session is the chief of staff, delegating into a muted existing
-workspace automatically unmutes it so the new agent is visible in the sidebar.
-Ordinary delegation preserves the workspace's current mute state.
+When the source session is the chief of staff, delegating into a muted
+workspace unmutes it so the new agent shows in the sidebar. Ordinary
+delegation leaves the mute state alone.
 
-Git repositories get an isolated worktree with an automatically generated
-branch; `--worktree` chooses the branch name explicitly and combines with any
-placement. Two worktree defaults matter beyond what `attn delegate --help`
-states:
+### Which checkout the agent edits
 
-- `--repo` defaults to the repository the target's *existing sessions* are in —
-  the session you delegate alongside, not the workspace's recorded directory.
-  Delegation fails and asks for `--repo` when those sessions span more than one
-  repository.
-- Without `--from`, every placement starts from the repository's default branch
-  — `origin/<default>` when that exists, otherwise the local one. It never
-  depends on what the source or main checkout currently has checked out. Pass
-  `--from` to deliberately continue or stack on another branch.
+- no flag: a new worktree. Its repository is the source checkout's; with
+  `--workspace`, it is the one that workspace's existing sessions are in, and
+  delegation fails and asks for `--repo` when they span more than one.
+- `--no-worktree`: the source session's checkout, whatever workspace the pane
+  lands in.
+- `--cwd <path>`: that directory; combined with the default worktree, a
+  worktree of the repository at that path.
+
+A workspace never chooses the checkout. `--workspace` with `--no-worktree`
+moves only the pane, even when that workspace holds sessions from another
+repository.
+
+The worktree default applies even to read-only investigation or discussion.
+Pass `--no-worktree` when the user asks to reuse the current checkout, the
+delegation continues work already happening there, or repository or agent
+guidance requires it.
+
+A new worktree gets a generated branch; `--worktree <branch>` names it. It
+starts from the repository's default branch (`origin/<default>` when that
+exists, otherwise the local one), never from what the source or main checkout
+has checked out. Pass `--from <ref>` to continue or stack on another branch.
+
+When the source directory is not a Git repository (a crew home, for instance),
+the flag-free default is refused rather than launching with no checkout. Any
+placement flag or `--no-worktree` is taken as consent.
+
+`attn delegate` refuses conflicting repository inputs before an agent starts
+(`--cwd` and `--repo` in different repositories, or a `--worktree-path` that
+already exists inside another one), and the error names both repositories.
 
 When running outside the source session, add `--source-session <session-id>`.
 Run `attn delegate --help` for the full flag list and the exact option
