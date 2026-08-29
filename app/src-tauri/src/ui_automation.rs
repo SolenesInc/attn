@@ -6,7 +6,6 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -539,6 +538,8 @@ fn capture_native_window_screenshot<R: Runtime>(
     app: &AppHandle<R>,
     payload: Value,
 ) -> Result<Value, String> {
+    use std::process::Command;
+
     let bounds = window_bounds(app)?;
     let (window_id_sender, window_id_receiver) = mpsc::channel();
     let app_for_window_id = app.clone();
