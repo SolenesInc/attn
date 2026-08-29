@@ -28,6 +28,9 @@ func TestDockTileAfterPaneCreatesLockedSplit(t *testing.T) {
 	if !root.RatioLocked {
 		t.Fatal("tile split must be ratio-locked so the tile keeps its size")
 	}
+	if root.RatioMode != RatioModeAutomatic {
+		t.Fatalf("tile split ratio mode = %q, want automatic", root.RatioMode)
+	}
 	if root.Children[0].Type != "pane" || root.Children[0].PaneID != "pane-root" {
 		t.Fatalf("children[0] = %+v, want pane-root", root.Children[0])
 	}
@@ -373,8 +376,8 @@ func TestDockedTileRatioSurvivesEncodeDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeLayout: %v", err)
 	}
-	if !decoded.RatioLocked || math.Abs(decoded.Ratio-0.71) > 1e-9 {
-		t.Fatalf("decoded split = %+v, want locked ratio 0.71", decoded)
+	if !decoded.RatioLocked || decoded.RatioMode != RatioModeAutomatic || math.Abs(decoded.Ratio-0.71) > 1e-9 {
+		t.Fatalf("decoded split = %+v, want automatic locked ratio 0.71", decoded)
 	}
 	tile := decoded.Children[1]
 	if tile.Type != "tile" || tile.TileID != "tile-md" || tile.TileKind != "markdown" {
@@ -400,6 +403,9 @@ func TestDockedTileIsOpaqueToTerminalRebalance(t *testing.T) {
 	normalized := NormalizeWorkspaceLayout(snapshot)
 	if !normalized.Layout.RatioLocked || math.Abs(normalized.Layout.Ratio-0.7) > 1e-9 {
 		t.Fatalf("tile split ratio = %v (locked=%v), want preserved 0.7", normalized.Layout.Ratio, normalized.Layout.RatioLocked)
+	}
+	if normalized.Layout.RatioMode != RatioModeAutomatic {
+		t.Fatalf("tile split ratio mode = %q, want automatic", normalized.Layout.RatioMode)
 	}
 }
 

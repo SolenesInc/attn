@@ -1016,6 +1016,53 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		UPDATE sessions SET last_model_request_at = state_updated_at
 			WHERE last_model_request_at IS NULL OR last_model_request_at = '';
 	`},
+	{122, "journal the one-time legacy ticket recovery", `
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_runs (
+			version                 INTEGER PRIMARY KEY,
+			state                   TEXT NOT NULL,
+			inventory_json          TEXT NOT NULL,
+			counts_json             TEXT NOT NULL DEFAULT '{}',
+			warning_notification_id TEXT NOT NULL DEFAULT '',
+			started_at              TEXT NOT NULL,
+			recovery_at             TEXT NOT NULL,
+			finished_at             TEXT NOT NULL DEFAULT '',
+			terminal_error          TEXT NOT NULL DEFAULT ''
+		);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_sources (
+			run_version INTEGER NOT NULL,
+			path        TEXT NOT NULL,
+			family      TEXT NOT NULL,
+			size        INTEGER NOT NULL,
+			mod_time_ns INTEGER NOT NULL,
+			sha256      TEXT NOT NULL,
+			state       TEXT NOT NULL DEFAULT 'pending',
+			detail      TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (run_version, path)
+		);
+		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_sources_state
+			ON legacy_ticket_recovery_sources(run_version, state);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_recovery_items (
+			fingerprint              TEXT PRIMARY KEY,
+			run_version              INTEGER NOT NULL,
+			source_kind              TEXT NOT NULL,
+			source_key               TEXT NOT NULL,
+			ticket_id                TEXT NOT NULL DEFAULT '',
+			recovered_local_identity TEXT NOT NULL DEFAULT '',
+			result                   TEXT NOT NULL,
+			detail                   TEXT NOT NULL DEFAULT '',
+			created_at               TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_legacy_ticket_recovery_items_ticket
+			ON legacy_ticket_recovery_items(ticket_id, fingerprint);
+		CREATE TABLE IF NOT EXISTS legacy_ticket_seed_links (
+			ticket_id               TEXT PRIMARY KEY,
+			seed_id                 TEXT NOT NULL UNIQUE,
+			source_kind             TEXT NOT NULL,
+			evidence_fingerprint    TEXT NOT NULL,
+			original_terminal_state TEXT NOT NULL,
+			created_at              TEXT NOT NULL
+		);
+	`},
 }
 
 const migration99SQL = `

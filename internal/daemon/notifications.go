@@ -134,6 +134,10 @@ func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	if t == nil || d.store == nil {
 		return
 	}
+	if t.Kind == legacyTicketRecoveryKind {
+		d.finalizeExhaustedLegacyTicketRecovery(t)
+		return
+	}
 	record, err := d.store.AddNotification(renderTaskFailureNotification(t), time.Now())
 	if err != nil {
 		d.logf("notifications: add task-failure notification for %s: %v", t.ID, err)

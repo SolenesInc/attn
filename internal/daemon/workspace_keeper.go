@@ -231,6 +231,13 @@ func (d *Daemon) startJobQueue() {
 		); err != nil {
 			d.logf("ticket reconcile: register reconcile: %v", err)
 		}
+		if err := runner.RegisterWith(
+			legacyTicketRecoveryKind,
+			d.legacyTicketRecoveryHandler,
+			jobs.HandlerConfig{Timeout: legacyTicketRecoveryTimeout},
+		); err != nil {
+			d.logf("legacy ticket recovery: register: %v", err)
+		}
 		if err := runner.RegisterCron(
 			notebookCronKind,
 			defaultNotebookCronInterval,

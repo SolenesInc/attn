@@ -31,6 +31,51 @@ func TestValidateProfileRouting_NoProfileIsAlwaysLegal(t *testing.T) {
 	}
 }
 
+func TestValidateProfileRouting_DefaultProfileHarnessKeepsEveryRouteInsideItsRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	scopeRouting(t, "", map[string]string{
+		"ATTN_DATA_DIR":              root,
+		"ATTN_HARNESS_DATA_DIR":      root,
+		"ATTN_HARNESS_NOTEBOOK_ROOT": filepath.Join(root, "notebook"),
+		"ATTN_SOCKET_PATH":           filepath.Join(root, "attn.sock"),
+		"ATTN_DB_PATH":               filepath.Join(root, "attn.db"),
+		"ATTN_CONFIG_PATH":           filepath.Join(root, "config.json"),
+		"ATTN_PLUGIN_DIR":            filepath.Join(root, "plugins"),
+		"ATTN_WS_PORT":               "29150",
+	})
+	if err := ValidateProfileRouting(); err != nil {
+		t.Fatalf("isolated default-profile harness routing was refused: %v", err)
+	}
+}
+
+func TestValidateProfileRouting_DefaultProfileHarnessRefusesAnInheritedProductionPath(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	productionDB := filepath.Join(DataDirForProfile(""), "attn.db")
+	scopeRouting(t, "", map[string]string{
+		"ATTN_DATA_DIR":              root,
+		"ATTN_HARNESS_DATA_DIR":      root,
+		"ATTN_HARNESS_NOTEBOOK_ROOT": filepath.Join(root, "notebook"),
+		"ATTN_DB_PATH":               productionDB,
+		"ATTN_WS_PORT":               "29150",
+	})
+
+	err := ValidateProfileRouting()
+	if err == nil {
+		t.Fatal("default-profile harness accepted a production database override")
+	}
+	for _, want := range []string{"ATTN_DB_PATH", productionDB, root} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error must name %q; got:\n%s", want, err)
+		}
+	}
+}
+
 func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 	// The 2026-08-17 incident: an attn agent session's production routing env inherited
 	// into `make install PROFILE=fb2lists`.
@@ -61,6 +106,9 @@ func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 		}
 	}
 	for _, name := range routingOverrideEnv {
+		if strings.HasPrefix(name, "ATTN_HARNESS_") {
+			continue
+		}
 		if !strings.Contains(message, name) {
 			t.Errorf("error must name the disagreeing variable %s; got:\n%s", name, message)
 		}

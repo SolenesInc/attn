@@ -6,9 +6,10 @@ Date: 2026-05-31
 
 A "docked tile" (markdown today, more later) is a first-class leaf in the
 daemon's workspace layout tree, next to terminal-pane leaves. The daemon owns
-and persists its position and size; the frontend renders it. This is distinct
-from the slide-in overlay panels (diff, review loop, git status, PR), which stay
-frontend-only and are **not** changed by this work.
+and persists its position and split-ratio intent; the frontend resolves that
+intent against its viewport and renders it. This is distinct from the slide-in
+overlay panels (diff, review loop, git status, PR), which stay frontend-only and
+are **not** changed by this work.
 
 ## Why
 
@@ -41,9 +42,16 @@ intentionally transient UX.
   the app or another client reproduces the same document, not just an empty
   tile. New kinds are a frontend-only change; the layout stores another opaque
   leaf.
-- A docked tile sits behind a normal split, created `ratio_locked` so the tile
-  keeps its size and is never auto-equalized with terminals during
-  normalization. `splitChainSpanCount` treats a locked split as one opaque unit.
+- A docked tile sits behind a normal split, created `ratio_locked` so daemon
+  normalization preserves its ratio. `splitChainSpanCount` treats a locked split
+  as one opaque unit. This flag is only about tree normalization; it does not
+  freeze the rendered geometry.
+- Every split also carries a ratio mode. Docking and moving create an
+  `automatic` ratio, which the frontend may rebalance for the current viewport.
+  Dragging a divider records a `preferred` ratio. Preferred ratios survive app
+  and daemon restarts, but remain soft targets: minimum visible sizes and the
+  exact collapsed-tile sliver take priority. When space returns, the preferred
+  ratio resumes without another drag.
 - Tiles are excluded from pane bookkeeping (`PaneIDs`, the `panes` array,
   session reconcile).
 - **A workspace lives while its layout holds any leaf, not just a terminal.**
@@ -68,7 +76,9 @@ intentionally transient UX.
   {left,right,top,bottom} → (direction, side). `ratio` is the tile's fraction
   (defaults to ~1/3).
 - `workspace_layout_undock_tile { workspace_id, tile_id }`.
-- Resize reuses `workspace_layout_set_split_ratio`. Protocol bumped to 76.
+- Resize reuses `workspace_layout_set_split_ratio`, which promotes that split's
+  ratio mode to `preferred`. Protocol bumped to 76 when docked tiles were added;
+  the ratio-mode contract was added in protocol 272.
 
 ## Content is daemon-served, not frontend-read
 

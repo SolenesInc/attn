@@ -1216,7 +1216,7 @@ func TestContinuationOccurrenceRecordsOnTerminalTicketExactlyOnce(t *testing.T) 
 	if !strings.Contains(ticket.Activity[0].Comment, "/tmp/occ-2.json") {
 		t.Fatalf("occurrence activity does not expose structured input path: %#v", ticket.Activity[0])
 	}
-	if removed, err := s.SweepExpiredTickets(now.Add(2*time.Hour), time.Hour); err != nil || removed != 1 {
+	if removed, err := s.SweepExpiredAutomationTickets(now.Add(2*time.Hour), time.Hour); err != nil || removed != 1 {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
 	var orphanEvents int
@@ -1442,7 +1442,7 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	}
 }
 
-func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
+func TestSweepExpiredAutomationTicketsReleasesActiveContinuityBindings(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 	const ttl = 30 * 24 * time.Hour
@@ -1475,9 +1475,9 @@ func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 	bind("recent", base.Add(-5*24*time.Hour), true) // terminal, 5d old: within the TTL.
 	bind("open", base.Add(-90*24*time.Hour), false) // never closed: not a sweep candidate regardless of age.
 
-	removed, err := s.SweepExpiredTickets(base, ttl)
+	removed, err := s.SweepExpiredAutomationTickets(base, ttl)
 	if err != nil {
-		t.Fatalf("SweepExpiredTickets: %v", err)
+		t.Fatalf("SweepExpiredAutomationTickets: %v", err)
 	}
 	if removed != 1 {
 		t.Fatalf("removed = %d, want 1 (only swept)", removed)
@@ -1509,7 +1509,7 @@ func TestSweepExpiredTicketsReleasesActiveContinuityBindings(t *testing.T) {
 	}
 }
 
-func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
+func TestSweepExpiredAutomationTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
@@ -1543,7 +1543,7 @@ func TestSweepExpiredTicketsUnblocksPruningOfBoundThreadOrigin(t *testing.T) {
 		}
 	}
 
-	if removed, err := s.SweepExpiredTickets(now.Add(31*24*time.Hour), 30*24*time.Hour); err != nil || removed != 1 {
+	if removed, err := s.SweepExpiredAutomationTickets(now.Add(31*24*time.Hour), 30*24*time.Hour); err != nil || removed != 1 {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
 

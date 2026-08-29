@@ -78,6 +78,31 @@ function createWorkspaceWithDocuments(documentIds: readonly string[]): TerminalW
   };
 }
 
+function createDocumentSplitWorkspace(
+  ratio: number,
+  ratioMode: 'automatic' | 'preferred',
+): TerminalWorkspaceState {
+  return {
+    agents: [{ id: SESSION_PANE_ID, runtimeId: 'session-1', sessionId: 'session-1', title: 'Session 1' }],
+    layoutTree: {
+      type: 'split',
+      splitId: 'root',
+      direction: 'vertical',
+      ratio,
+      ratioMode,
+      children: [
+        { type: 'pane', paneId: SESSION_PANE_ID },
+        {
+          type: 'tile',
+          tileId: 'doc',
+          tileKind: 'markdown',
+          tileParams: '/tmp/doc.md',
+        },
+      ],
+    },
+  };
+}
+
 const { registeredShortcuts } = vi.hoisted(() => ({
   registeredShortcuts: new Map<string, () => void>(),
 }));
@@ -810,6 +835,59 @@ describe('SessionTerminalWorkspace', () => {
     );
 
     expect(container.querySelector('.workspace-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.600');
+  });
+
+  it('settles an optimistic resize when the daemon echoes it as preferred', () => {
+    const onResizeSplit = vi.fn(() => new Promise<void>(() => {}));
+    const commonProps = {
+      workspaceId: 'workspace-session-1',
+      workspaceSessions: [{ id: 'session-1', label: 'Session 1', agent: 'claude' as const, cwd: '/tmp/repo' }],
+      activePaneId: SESSION_PANE_ID,
+      fontSize: 14,
+      enabled: true,
+      isActiveSession: true,
+      eventRouter: mockEventRouter,
+      onSplitPane: vi.fn(),
+      onClosePane: vi.fn(),
+      onFocusPane: vi.fn(),
+      onNavigateOutOfSession: vi.fn(),
+      onResizeSplit,
+      onUndockTile: vi.fn(),
+      tileContents: {
+        [tileContentKey('workspace-session-1', 'doc')]: { path: '/tmp/doc.md', content: '# Document' },
+      },
+      onRequestTileContent: vi.fn(),
+    };
+    const { container, rerender } = render(
+      <SessionTerminalWorkspace
+        {...commonProps}
+        workspace={createDocumentSplitWorkspace(0.5, 'automatic')}
+      />,
+      { wrapper: NotebookSurfaceTestWrapper },
+    );
+    const panes = container.querySelector('.session-terminal-panes') as HTMLElement;
+    vi.spyOn(panes, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
+    });
+
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
+    fireEvent.pointerUp(window, { clientX: 800, clientY: 250 });
+    expect(container.querySelector('.workspace-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.800');
+
+    rerender(
+      <SessionTerminalWorkspace
+        {...commonProps}
+        workspace={createDocumentSplitWorkspace(0.8, 'preferred')}
+      />,
+    );
+    rerender(
+      <SessionTerminalWorkspace
+        {...commonProps}
+        workspace={createDocumentSplitWorkspace(0.8, 'automatic')}
+      />,
+    );
+
+    expect(container.querySelector('.workspace-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.400');
   });
 
   it('releases selection locks when divider and tile drags are cancelled', () => {

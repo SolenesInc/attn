@@ -74,6 +74,7 @@
     "real-app:scenario-garden-seed-nudges": "node scripts/real-app-harness/scenario-garden-seed-nudges.mjs",
     "real-app:scenario-ordinary-delegation-ticket": "node scripts/real-app-harness/scenario-ordinary-delegation-ticket.mjs",
     "real-app:scenario-garden-seed-reopen": "node scripts/real-app-harness/scenario-garden-seed-reopen.mjs",
+    "real-app:scenario-legacy-ticket-recovery": "node scripts/real-app-harness/scenario-legacy-ticket-recovery.mjs",
     "real-app:scenario-agent-queue": "node scripts/real-app-harness/scenario-agent-queue.mjs",
     "real-app:scenario-agent-queue-snooze": "node scripts/real-app-harness/scenario-agent-queue-snooze.mjs",
     "real-app:scenario-nudge-trigger": "node scripts/real-app-harness/scenario-nudge-trigger.mjs",

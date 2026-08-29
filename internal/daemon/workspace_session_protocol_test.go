@@ -573,6 +573,9 @@ func TestWorkspaceLayoutSetSplitRatioPersistsLockedRatio(t *testing.T) {
 	if !split.RatioLocked {
 		t.Fatalf("split should be locked after set ratio")
 	}
+	if split.RatioMode != workspacelayout.RatioModePreferred {
+		t.Fatalf("split ratio mode = %q, want preferred", split.RatioMode)
+	}
 	if split.Ratio < 0.29 || split.Ratio > 0.31 {
 		t.Fatalf("split ratio = %v, want ~0.3 (locked ratio must not be rebalanced)", split.Ratio)
 	}

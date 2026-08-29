@@ -18,6 +18,7 @@
 set -eo pipefail
 
 profile="${PROFILE:-}"
+harness_default="${ATTN_BUILD_DEFAULT_PROFILE_HARNESS:-}"
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
 : "${VERSION:?VERSION is required}"
 : "${SOURCE_FINGERPRINT:?SOURCE_FINGERPRINT is required}"
@@ -32,6 +33,11 @@ app_name="$("$attn" profile resolve --profile "$profile" --field appName)"
 bundle_id="$("$attn" profile resolve --profile "$profile" --field bundleId)"
 ws_port="$("$attn" profile resolve --profile "$profile" --field wsPort)"
 label="$("$attn" profile resolve --profile "$profile" --field label)"
+
+if [ -n "$harness_default" ] && [ -z "$profile" ]; then
+  echo "ATTN_BUILD_DEFAULT_PROFILE_HARNESS requires a named packaging profile" >&2
+  exit 1
+fi
 
 echo ">>> Building $label app: $app_name.app (id=$bundle_id, port=$ws_port)"
 
@@ -56,17 +62,33 @@ if [ -n "$profile" ]; then
   gen_rel="src-tauri/${app_name}.gen.conf.json"
   "$attn" profile tauri-config --profile "$profile" > "$gen_rel"
   echo ">>> Generated Tauri overlay $gen_rel"
-  ATTN_BUILD_PROFILE="$profile" \
-  VITE_ATTN_BUILD_PROFILE="$profile" \
-  ATTN_BUILD_WS_PORT="$ws_port" \
-  ATTN_BUILD_BUNDLE_ID="$bundle_id" \
-  VITE_DAEMON_PORT="$ws_port" \
-  VITE_INSTALL_CHANNEL=source \
-  VITE_ATTN_BUILD_VERSION="$VERSION" \
-  VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
-  VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
-  VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-  pnpm tauri build --bundles app --config "$gen_rel"
+  if [ -n "$harness_default" ]; then
+    echo ">>> Logical runtime profile: default, isolated by ATTN_HARNESS_DATA_DIR"
+    ATTN_BUILD_PROFILE="" \
+    VITE_ATTN_BUILD_PROFILE="" \
+    ATTN_BUILD_WS_PORT="$ws_port" \
+    ATTN_BUILD_BUNDLE_ID="$bundle_id" \
+    ATTN_BUILD_DEFAULT_PROFILE_HARNESS=1 \
+    VITE_DAEMON_PORT="$ws_port" \
+    VITE_INSTALL_CHANNEL=source \
+    VITE_ATTN_BUILD_VERSION="$VERSION" \
+    VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+    VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
+    VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
+    pnpm tauri build --bundles app --config "$gen_rel"
+  else
+    ATTN_BUILD_PROFILE="$profile" \
+    VITE_ATTN_BUILD_PROFILE="$profile" \
+    ATTN_BUILD_WS_PORT="$ws_port" \
+    ATTN_BUILD_BUNDLE_ID="$bundle_id" \
+    VITE_DAEMON_PORT="$ws_port" \
+    VITE_INSTALL_CHANNEL=source \
+    VITE_ATTN_BUILD_VERSION="$VERSION" \
+    VITE_ATTN_SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" \
+    VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
+    VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
+    pnpm tauri build --bundles app --config "$gen_rel"
+  fi
 else
   # Default/prod build: committed tauri.conf.json, no baked profile env. This is
   # byte-for-byte the historical `make build-app` command.

@@ -62,6 +62,7 @@ type Ticket struct {
 	LastAgentID     string
 	ProjectID       string
 	AutomationRunID string
+	ResumeSessionID string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	ClosedAt        *time.Time
@@ -964,7 +965,7 @@ func (s *Store) ArchiveTicket(id string, now time.Time) error {
 	return tx.Commit()
 }
 
-func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, error) {
+func (s *Store) SweepExpiredAutomationTickets(now time.Time, ttl time.Duration) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -975,46 +976,79 @@ func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, erro
 	cutoff := formatTicketTime(now.Add(-ttl))
 	// closed_at is a fixed-width RFC3339 UTC string, so a lexical compare is a
 	// chronological compare.
-	const expired = `status IN ('done','failed','crashed') AND closed_at != '' AND closed_at < ?`
+	const expired = `status IN ('done','failed','crashed') AND closed_at != '' AND closed_at < ? AND (
+		(automation_run_id IS NOT NULL AND automation_run_id != '') OR
+		EXISTS (SELECT 1 FROM automation_runs WHERE automation_runs.ticket_id = tickets.id) OR
+		EXISTS (SELECT 1 FROM automation_ticket_occurrence_events WHERE automation_ticket_occurrence_events.ticket_id = tickets.id) OR
+		EXISTS (SELECT 1 FROM automation_continuity_bindings WHERE automation_continuity_bindings.ticket_id = tickets.id)
+	)`
 
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS temp.expired_automation_tickets`); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`CREATE TEMP TABLE expired_automation_tickets(id TEXT PRIMARY KEY) WITHOUT ROWID`); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`INSERT INTO expired_automation_tickets(id) SELECT id FROM tickets WHERE `+expired, cutoff); err != nil {
+		return 0, err
+	}
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM expired_automation_tickets`).Scan(&count); err != nil {
+		return 0, err
+	}
+	if count == 0 {
+		if _, err := tx.Exec(`DROP TABLE expired_automation_tickets`); err != nil {
+			return 0, err
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
 
-	if _, err := tx.Exec(`DELETE FROM ticket_activity WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_activity WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_attachments WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_attachments WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_events WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_events WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_event_cursors WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_event_cursors WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM ticket_subscriptions WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM ticket_subscriptions WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM automation_ticket_occurrence_events WHERE ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`, cutoff); err != nil {
+	if _, err := tx.Exec(`DELETE FROM automation_ticket_occurrence_events WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
 	// Bindings are append-only, so this releases and never deletes;
 	// already-released rows keep their own reason.
 	if _, err := tx.Exec(
-		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE status=? AND ticket_id IN (SELECT id FROM tickets WHERE `+expired+`)`,
-		AutomationBindingStatusReleased, AutomationBindingReleasedTicketSwept, formatTicketTime(now), formatTicketTime(now), AutomationBindingStatusActive, cutoff,
+		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE status=? AND ticket_id IN (SELECT id FROM expired_automation_tickets)`,
+		AutomationBindingStatusReleased, AutomationBindingReleasedTicketSwept, formatTicketTime(now), formatTicketTime(now), AutomationBindingStatusActive,
 	); err != nil {
 		return 0, err
 	}
-	res, err := tx.Exec(`DELETE FROM tickets WHERE `+expired, cutoff)
+	res, err := tx.Exec(`DELETE FROM tickets WHERE id IN (SELECT id FROM expired_automation_tickets)`)
 	if err != nil {
 		return 0, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
+		return 0, err
+	}
+	if int(n) != count {
+		return 0, fmt.Errorf("expired automation ticket count changed: selected %d, deleted %d", count, n)
+	}
+	if _, err := tx.Exec(`DROP TABLE expired_automation_tickets`); err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1025,7 +1059,7 @@ func (s *Store) SweepExpiredTickets(now time.Time, ttl time.Duration) (int, erro
 
 const ticketSelect = `
 	SELECT id, title, description, status, assignee, cwd, last_agent_id,
-		project_id, automation_run_id, created_at, updated_at, closed_at, archived_at, reconciled_at
+		project_id, automation_run_id, resume_session_id, created_at, updated_at, closed_at, archived_at, reconciled_at
 	FROM tickets`
 
 func nullIfEmpty(value string) any {
@@ -1140,7 +1174,7 @@ func scanTicket(scanner ticketScanner) (*Ticket, error) {
 	)
 	if err := scanner.Scan(
 		&t.ID, &t.Title, &t.Description, &status, &t.Assignee, &t.Cwd, &t.LastAgentID,
-		&t.ProjectID, &automationRunID, &createdAt, &updatedAt, &closedAt, &archivedAt, &reconciledAt,
+		&t.ProjectID, &automationRunID, &t.ResumeSessionID, &createdAt, &updatedAt, &closedAt, &archivedAt, &reconciledAt,
 	); err != nil {
 		return nil, err
 	}

@@ -1429,6 +1429,21 @@ function collectGardenSeedPage() {
   };
 }
 
+function collectNotificationsUiState() {
+  const panel = document.querySelector('.notifications-panel');
+  if (!(panel instanceof HTMLElement)) return { present: false, rows: [] };
+  return {
+    present: true,
+    empty: panel.querySelector('.notifications-panel-empty')?.textContent?.trim() ?? '',
+    rows: Array.from(panel.querySelectorAll('.notification-row')).map((row) => ({
+      title: row.querySelector('.notification-row-title')?.textContent?.trim() ?? '',
+      severity: row.querySelector('.notification-sev-tag')?.textContent?.trim() ?? '',
+      preview: row.querySelector('.notification-row-preview')?.textContent?.trim() ?? '',
+      unread: row.classList.contains('is-unread'),
+    })),
+  };
+}
+
 function collectSeedDocumentState(scope: string, seedId: string) {
   const named = seedId ? `[data-seed-id="${seedId}"]` : '';
   const root = document.querySelector(`${scope} .seed-document${named}`);
@@ -3269,6 +3284,8 @@ export function useUiAutomationBridge({
       }
       case 'garden_get_state':
         return collectGardenUiState();
+      case 'notifications_get_state':
+        return collectNotificationsUiState();
       case 'garden_board_get_state':
         return collectGardenBoardUiState();
       case 'garden_toggle_frame': {

@@ -19,6 +19,13 @@ const (
 	DirectionHorizontal Direction = "horizontal"
 )
 
+type RatioMode string
+
+const (
+	RatioModeAutomatic RatioMode = "automatic"
+	RatioModePreferred RatioMode = "preferred"
+)
+
 type PaneKind string
 
 const (
@@ -63,8 +70,9 @@ type Node struct {
 	Direction     Direction `json:"direction,omitempty"`
 	Ratio         float64   `json:"ratio,omitempty"`
 	// RatioLocked survives normalization instead of being rebalanced to an equal split.
-	RatioLocked bool   `json:"ratio_locked,omitempty"`
-	Children    []Node `json:"children,omitempty"`
+	RatioLocked bool      `json:"ratio_locked,omitempty"`
+	RatioMode   RatioMode `json:"ratio_mode,omitempty"`
+	Children    []Node    `json:"children,omitempty"`
 }
 
 type WorkspaceLayout struct {
@@ -272,6 +280,10 @@ func normalizeNode(node Node, panesByID map[string]Pane) (Node, bool) {
 			if ratio <= 0 || ratio >= 1 {
 				ratio = DefaultSplitRatio
 			}
+			ratioMode := RatioModeAutomatic
+			if node.RatioMode == RatioModePreferred {
+				ratioMode = RatioModePreferred
+			}
 			splitID := strings.TrimSpace(node.SplitID)
 			if splitID == "" {
 				splitID = "split"
@@ -282,6 +294,7 @@ func normalizeNode(node Node, panesByID map[string]Pane) (Node, bool) {
 				Direction:   direction,
 				Ratio:       ratio,
 				RatioLocked: node.RatioLocked,
+				RatioMode:   ratioMode,
 				Children:    children[:2],
 			}, false
 		}
@@ -308,6 +321,7 @@ func Split(node Node, targetPaneID, newPaneID, splitID string, direction Directi
 			SplitID:   splitID,
 			Direction: direction,
 			Ratio:     ratio,
+			RatioMode: RatioModeAutomatic,
 			Children: []Node{
 				{Type: "pane", PaneID: targetPaneID},
 				{Type: "pane", PaneID: newPaneID},
@@ -341,6 +355,7 @@ func SetSplitRatio(node Node, splitID string, ratio float64) (Node, bool) {
 	if node.SplitID == splitID {
 		node.Ratio = ratio
 		node.RatioLocked = true
+		node.RatioMode = RatioModePreferred
 		return node, true
 	}
 	children := make([]Node, len(node.Children))
@@ -706,6 +721,7 @@ func lockedSplit(existing, incoming Node, direction Direction, before bool, spli
 		Direction:   direction,
 		Ratio:       ratio,
 		RatioLocked: true,
+		RatioMode:   RatioModeAutomatic,
 		Children:    children,
 	}
 }

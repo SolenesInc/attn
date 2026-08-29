@@ -21,8 +21,9 @@ import (
 )
 
 type Store struct {
-	mu sync.RWMutex
-	db *sql.DB
+	mu     sync.RWMutex
+	db     *sql.DB
+	dbPath string
 
 	// BackupNow refuses when false: VACUUM INTO an in-memory fallback writes empty snapshots and rotation prunes the real ones.
 	durable bool
@@ -129,7 +130,14 @@ func NewWithDB(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{db: db, durable: true}, nil
+	return &Store{db: db, dbPath: dbPath, durable: true}, nil
+}
+
+func (s *Store) DatabasePath() string {
+	if s == nil {
+		return ""
+	}
+	return s.dbPath
 }
 
 func NewWithPersistence(path string) *Store {

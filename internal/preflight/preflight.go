@@ -32,6 +32,7 @@ type Options struct {
 	Effort       string
 	EffortSource string
 	WorkingDir   string
+	AppPath      string
 }
 
 type ResolvedValue struct {
@@ -108,6 +109,9 @@ func Run(ctx context.Context, opts Options) Report {
 
 func run(ctx context.Context, opts Options, p prober) Report {
 	routing, routingErr := resolveRouting()
+	if appPath := strings.TrimSpace(opts.AppPath); appPath != "" {
+		routing.AppPath = filepath.Clean(appPath)
+	}
 	launch := resolveLaunch(opts)
 	report := Report{Status: StatusPass, Routing: routing, Launch: launch}
 	add := func(check Check) { report.Checks = append(report.Checks, check) }
