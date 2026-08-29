@@ -7,3 +7,5 @@ change: >
   non-persistent Codex roots cannot replace the interactive conversation. A
   legacy session gets one exact-ID compatibility lookup; if it has no
   transcript, its watcher stops instead of searching again in the background.
+  Idle sessions also stop rereading their database row for an unchanged prompt
+  heartbeat.

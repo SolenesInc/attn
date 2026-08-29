@@ -1760,9 +1760,11 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
 	state := obs.Claim
 	origin := stateOrigin{source: string(obs.Source), detail: obs.Detail, observedAt: obs.At}
-	d.recordPTYEvidence(sessionID, obs)
+	evidenceChanged := d.recordPTYEvidence(sessionID, obs)
 	if !obs.Source.ClaimsProtocolState() {
-		d.traceStateEvidence(sessionID, origin, state)
+		if evidenceChanged {
+			d.traceStateEvidence(sessionID, origin, state)
+		}
 		return
 	}
 	session := d.store.Get(sessionID)
