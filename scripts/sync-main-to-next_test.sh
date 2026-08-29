@@ -40,6 +40,7 @@ setup_fixture() {
   fixture_log="$work/${name}-gh.log"
 
   git init -q --bare "$fixture_origin"
+  git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Train Test'
   git -C "$fixture_repo" config user.email 'release-train@example.com'
