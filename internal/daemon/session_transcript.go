@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"os"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -86,19 +86,28 @@ func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 	if session == nil {
 		return ""
 	}
-	driver := agentdriver.Get(string(session.Agent))
-	finder, ok := agentdriver.GetTranscriptFinder(driver)
-	if !ok {
-		return ""
-	}
-
-	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(session.ID)); resumeID != "" {
-		if path := strings.TrimSpace(finder.FindTranscriptForResume(resumeID)); path != "" {
-			return path
+	binding := d.store.GetSessionConversation(session.ID)
+	if binding.TranscriptPath != "" {
+		if _, err := os.Stat(binding.TranscriptPath); err == nil {
+			return binding.TranscriptPath
 		}
 	}
-
-	return d.liveTranscriptPath(session.ID, session.Agent)
+	if path := d.liveTranscriptPath(session.ID, session.Agent); path != "" {
+		return path
+	}
+	path := d.findTranscriptForResume(session.Agent, binding.NativeID)
+	if path == "" {
+		return ""
+	}
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	d.observeAgentConversation(agentConversationObservation{
+		SessionID:      session.ID,
+		NativeID:       binding.NativeID,
+		TranscriptPath: path,
+	})
+	return path
 }
 
 func SessionTranscriptErrorMessage(code string) string {

@@ -55,7 +55,7 @@ func TestCodexResumeAvailable(t *testing.T) {
 		t.Fatalf("mkdir Codex sessions dir: %v", err)
 	}
 	rollout := []byte(`{"type":"session_meta","payload":{"id":"has-rollout-id","cwd":"/tmp"}}` + "\n")
-	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-fixture.jsonl"), rollout, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-2026-07-20T12-00-00-has-rollout-id.jsonl"), rollout, 0o644); err != nil {
 		t.Fatalf("write Codex rollout fixture: %v", err)
 	}
 	if !ResumeAvailable(&Codex{}, "has-rollout-id") {

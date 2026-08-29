@@ -161,14 +161,22 @@ func TestSpawnCharacterizationConsumesQueuedConversationObservation(t *testing.T
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
 	addTestWorkspace(d, "workspace", cwd)
 	const sessionID = "queued-resume"
+	transcriptPath := filepath.Join(t.TempDir(), "rollout-queued-native-id.jsonl")
+	if err := os.WriteFile(transcriptPath, []byte(`{"type":"session_meta","payload":{"id":"queued-native-id"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	d.observeOrQueueAgentConversation(agentConversationObservation{
-		SessionID: sessionID,
-		NativeID:  "queued-native-id",
+		SessionID:      sessionID,
+		NativeID:       "queued-native-id",
+		TranscriptPath: transcriptPath,
 	})
 	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, "workspace", cwd))
 	expectSpawnResult(t, client, sessionID, true)
 	if got := d.store.GetResumeSessionID(sessionID); got != "queued-native-id" {
 		t.Fatalf("persisted queued resume id = %q, want queued-native-id", got)
+	}
+	if got := d.store.GetSessionTranscriptPath(sessionID); got != transcriptPath {
+		t.Fatalf("persisted queued transcript = %q, want %q", got, transcriptPath)
 	}
 	if got, ok := d.consumePendingAgentConversation(sessionID); ok {
 		t.Fatalf("pending conversation = %+v, want consumed", got)

@@ -20,25 +20,7 @@ const (
 	transcriptQuietWindow    = 1500 * time.Millisecond
 	assistantDedupWindow     = 2 * time.Second
 	transcriptDiscoveryGrace = 2 * time.Second
-
-	// Discovery walks codex's and copilot's whole session tree — thousands of files —
-	// every poll, so back off once a transcript is no longer plausibly being created.
-	transcriptDiscoveryFastAttempts = 20
-	transcriptDiscoverySlowAttempts = 40
-	transcriptDiscoverySlowInterval = 2 * time.Second
-	transcriptDiscoveryIdleInterval = 5 * time.Second
 )
-
-func transcriptDiscoveryDelay(attempts int) time.Duration {
-	switch {
-	case attempts < transcriptDiscoveryFastAttempts:
-		return 0
-	case attempts < transcriptDiscoverySlowAttempts:
-		return transcriptDiscoverySlowInterval
-	default:
-		return transcriptDiscoveryIdleInterval
-	}
-}
 
 type transcriptWatcher struct {
 	sessionID     string
@@ -181,22 +163,84 @@ func isTranscriptWatchedAgent(agent protocol.SessionAgent) bool {
 }
 
 func (d *Daemon) resolveExactTranscriptPathForWatcher(w *transcriptWatcher) string {
-	if path := strings.TrimSpace(w.preferredPath); path != "" {
+	binding := d.store.GetSessionConversation(w.sessionID)
+	for _, path := range []string{strings.TrimSpace(w.preferredPath), binding.TranscriptPath} {
+		if path == "" {
+			continue
+		}
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
 	}
-	driver := agentdriver.Get(string(w.agent))
+	return ""
+}
+
+func (d *Daemon) findTranscriptForResume(agent protocol.SessionAgent, resumeID string) string {
+	resumeID = strings.TrimSpace(resumeID)
+	if resumeID == "" {
+		return ""
+	}
+	if d.transcriptResumeLookup != nil {
+		return strings.TrimSpace(d.transcriptResumeLookup(agent, resumeID))
+	}
+	driver := agentdriver.Get(string(agent))
 	tf, ok := agentdriver.GetTranscriptFinder(driver)
 	if !ok {
 		return ""
 	}
-	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(w.sessionID)); resumeID != "" {
-		if path := strings.TrimSpace(tf.FindTranscriptForResume(resumeID)); path != "" {
-			return path
-		}
+	return strings.TrimSpace(tf.FindTranscriptForResume(resumeID))
+}
+
+func (d *Daemon) discoverTranscriptForWatcher(w *transcriptWatcher) string {
+	binding := d.store.GetSessionConversation(w.sessionID)
+	path := d.findTranscriptForResume(w.agent, binding.NativeID)
+	if path == "" {
+		return ""
 	}
-	return ""
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	if _, err := d.store.TransitionSessionConversation(w.sessionID, binding.NativeID, path); err != nil {
+		d.logf("transcript watcher: persist discovered path failed session=%s path=%s err=%v", w.sessionID, path, err)
+	}
+	return path
+}
+
+func (d *Daemon) sessionHasBoundTranscriptPath(sessionID string) bool {
+	return strings.TrimSpace(d.store.GetSessionTranscriptPath(sessionID)) != ""
+}
+
+func (d *Daemon) transcriptDiscoveryDeadline(w *transcriptWatcher, now time.Time) time.Time {
+	if strings.TrimSpace(w.preferredPath) != "" || d.sessionHasBoundTranscriptPath(w.sessionID) {
+		return now.Add(transcriptDiscoveryGrace)
+	}
+	return now
+}
+
+func watcherStopped(w *transcriptWatcher) bool {
+	select {
+	case <-w.doneCh:
+		return true
+	default:
+		return false
+	}
+}
+
+func (d *Daemon) ensureTranscriptWatcherAtPath(sessionID string, transcriptPath string) {
+	session := d.store.Get(sessionID)
+	if session == nil || !isTranscriptWatchedAgent(session.Agent) {
+		return
+	}
+	transcriptPath = strings.TrimSpace(transcriptPath)
+	d.watchersMu.Lock()
+	watcher := d.transcriptWatch[sessionID]
+	current := watcher != nil && watcher.agent == session.Agent &&
+		strings.TrimSpace(watcher.preferredPath) == transcriptPath && !watcherStopped(watcher)
+	d.watchersMu.Unlock()
+	if current {
+		return
+	}
+	d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, time.Now(), transcriptPath)
 }
 
 func (d *Daemon) transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
@@ -279,10 +323,11 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		if _, ok := live[session.ID]; !ok {
 			continue
 		}
-		if strings.TrimSpace(d.store.GetResumeSessionID(session.ID)) == "" {
+		binding := d.store.GetSessionConversation(session.ID)
+		if binding.NativeID == "" {
 			continue
 		}
-		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, time.Now())
+		d.startTranscriptWatcherAtPath(session.ID, session.Agent, session.Directory, time.Now(), binding.TranscriptPath)
 	}
 }
 
@@ -457,6 +502,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		transcriptPath string
 		follower       *transcript.Follower
 		costFollower   *transcript.Follower
+		costAttempted  bool
 		costFileSize   int64 = -1
 		readFileInfo   os.FileInfo
 
@@ -465,10 +511,8 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		assistantSeq    int64
 		classifiedSeq   int64
 
-		lastDiscoveryLog  time.Time
-		discoveryAttempts int
-		nextDiscoveryAt   time.Time
-		discoverySince    = time.Now()
+		discoveryDeadline = d.transcriptDiscoveryDeadline(w, time.Now())
+		fallbackAttempted bool
 	)
 
 	for {
@@ -483,39 +527,27 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		windowChanged := false
 
 		if transcriptPath == "" {
-			if !nextDiscoveryAt.IsZero() && time.Now().Before(nextDiscoveryAt) {
-				continue
-			}
 			transcriptPath = d.resolveExactTranscriptPathForWatcher(w)
-			if transcriptPath == "" {
-				discoveryAttempts++
-				nextDiscoveryAt = time.Now().Add(transcriptDiscoveryDelay(discoveryAttempts))
-				if time.Since(discoverySince) >= transcriptDiscoveryGrace {
-					if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript has been discovered for this live session") {
-						d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
-					}
-				}
-				if time.Since(lastDiscoveryLog) >= 5*time.Second {
-					d.logf("transcript watcher: waiting for transcript session=%s agent=%s cwd=%s attempts=%d", w.sessionID, w.agent, w.cwd, discoveryAttempts)
-					lastDiscoveryLog = time.Now()
-				}
+			if transcriptPath == "" && time.Now().Before(discoveryDeadline) {
 				continue
 			}
-			discoveryAttempts = 0
-			nextDiscoveryAt = time.Time{}
+			if transcriptPath == "" && !fallbackAttempted {
+				fallbackAttempted = true
+				transcriptPath = d.discoverTranscriptForWatcher(w)
+			}
+			if transcriptPath == "" {
+				if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript is bound to this live session") {
+					d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				}
+				d.logf("transcript watcher: exact transcript unavailable session=%s agent=%s cwd=%s", w.sessionID, w.agent, w.cwd)
+				return
+			}
 			info, err := os.Stat(transcriptPath)
 			if err != nil {
 				d.logf("transcript watcher: transcript stat failed session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be opened", false)
 				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
-				transcriptPath = ""
-				follower = nil
-				costFollower = nil
-				costFileSize = -1
-				readFileInfo = nil
-				discoverySince = time.Now()
-				w.behavior.Reset()
-				continue
+				return
 			}
 			startOffset := info.Size()
 			bootstrapBytes := d.transcriptBootstrapBytesForAgent(w.agent)
@@ -527,15 +559,19 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			follower, err = transcript.NewFollower(transcriptPath, string(w.agent), startOffset)
 			if err != nil {
 				d.logf("transcript watcher: follower init failed session=%s path=%s err=%v", w.sessionID, transcriptPath, err)
-				transcriptPath = ""
-				continue
+				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
+				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
+				return
 			}
 			w.behavior.Reset()
 			w.resetSource(protocol.SessionMessageWindowStatusReady, transcriptPath, "", startOffset > 0)
 			windowChanged = true
+			fallbackAttempted = false
+			costAttempted = false
 			d.logf("transcript watcher: transcript discovered session=%s path=%s offset=%d", w.sessionID, transcriptPath, startOffset)
 		}
-		if costFollower == nil {
+		if !costAttempted {
+			costAttempted = true
 			var costErr error
 			costFollower, costErr = d.newSessionCostFollower(w, transcriptPath)
 			if costErr != nil {
@@ -553,9 +589,11 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			transcriptPath = ""
 			follower = nil
 			costFollower = nil
+			costAttempted = false
 			costFileSize = -1
 			readFileInfo = nil
-			discoverySince = time.Now()
+			discoveryDeadline = d.transcriptDiscoveryDeadline(w, time.Now())
+			fallbackAttempted = false
 			w.behavior.Reset()
 			continue
 		}
@@ -567,30 +605,16 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		if follower != nil && transcriptMoved {
 			batch, readErr := follower.Read()
 			if errors.Is(readErr, transcript.ErrCursorMismatch) || errors.Is(readErr, transcript.ErrCursorPastEnd) {
-				d.logf("transcript watcher: transcript replaced, rediscovering session=%s path=%s", w.sessionID, transcriptPath)
-				w.resetSource(protocol.SessionMessageWindowStatusDiscovering, "", "", false)
+				d.logf("transcript watcher: transcript replaced session=%s path=%s", w.sessionID, transcriptPath)
+				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript was replaced", false)
 				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
-				transcriptPath = ""
-				follower = nil
-				costFollower = nil
-				costFileSize = -1
-				readFileInfo = nil
-				discoverySince = time.Now()
-				w.behavior.Reset()
-				continue
+				return
 			}
 			if readErr != nil {
 				d.logf("transcript watcher: read delta error session=%s path=%s err=%v", w.sessionID, transcriptPath, readErr)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
 				d.publishFact(FactSessionAssistantWindowChanged, w.sessionID, nil)
-				transcriptPath = ""
-				follower = nil
-				costFollower = nil
-				costFileSize = -1
-				readFileInfo = nil
-				discoverySince = time.Now()
-				w.behavior.Reset()
-				continue
+				return
 			}
 
 			if batch.Context != nil {

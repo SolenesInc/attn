@@ -270,3 +270,93 @@ func TestSessionCostSeedsRewrittenCodexTranscriptAtHead(t *testing.T) {
 		t.Fatalf("usage after rewritten transcript future record = %+v, before %+v", got, beforeUsage)
 	}
 }
+
+func TestSessionCostRebindsToNewCodexTranscriptWithoutReplay(t *testing.T) {
+	d := newTurnDaemon(t)
+	addCostSession(t, d, "codex-new", protocol.SessionAgentCodex)
+	if err := d.store.InitializeSessionCostTracking("codex-new"); err != nil {
+		t.Fatal(err)
+	}
+	w := &transcriptWatcher{sessionID: "codex-new", agent: protocol.SessionAgentCodex}
+	firstPath := filepath.Join(t.TempDir(), "first.jsonl")
+	first := []byte(
+		`{"type":"session_meta","payload":{"id":"first"}}` + "\n" +
+			`{"type":"turn_context","payload":{"model":"gpt-5.5"}}` + "\n" +
+			`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":2}}}}` + "\n",
+	)
+	if err := os.WriteFile(firstPath, first, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	firstFollower, err := d.newSessionCostFollower(w, firstPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstBatch, err := firstFollower.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.applySessionCostBatch(w, firstFollower, firstBatch); err != nil {
+		t.Fatal(err)
+	}
+	beforeNew, err := d.store.SessionCost("codex-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := beforeNew.Ledger["gpt-5.5"]; got.InputTokens != 6 || got.CacheReadInputTokens != 4 || got.OutputTokens != 2 {
+		t.Fatalf("first transcript usage = %+v", got)
+	}
+
+	secondPath := filepath.Join(t.TempDir(), "second.jsonl")
+	second := []byte(
+		`{"type":"session_meta","payload":{"id":"second"}}` + "\n" +
+			`{"type":"turn_context","payload":{"model":"gpt-5.5"}}` + "\n",
+	)
+	if err := os.WriteFile(secondPath, second, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secondFollower, err := d.newSessionCostFollower(w, secondPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seededBatch, err := secondFollower.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seededBatch.Records) != 0 {
+		t.Fatalf("new transcript replayed %d records", len(seededBatch.Records))
+	}
+	afterSeed, err := d.store.SessionCost("codex-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := afterSeed.Ledger["gpt-5.5"]; got != beforeNew.Ledger["gpt-5.5"] {
+		t.Fatalf("binding new transcript changed usage from %+v to %+v", beforeNew.Ledger["gpt-5.5"], got)
+	}
+
+	f, err := os.OpenFile(secondPath, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeErr := f.WriteString(
+		`{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"cached_input_tokens":5,"output_tokens":3}}}}` + "\n",
+	)
+	closeErr := f.Close()
+	if writeErr != nil || closeErr != nil {
+		t.Fatalf("append successor usage: write=%v close=%v", writeErr, closeErr)
+	}
+	secondBatch, err := secondFollower.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.applySessionCostBatch(w, secondFollower, secondBatch); err != nil {
+		t.Fatal(err)
+	}
+	afterNew, err := d.store.SessionCost("codex-new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := afterNew.Ledger["gpt-5.5"]
+	if got.InputTokens != 21 || got.CacheReadInputTokens != 9 || got.OutputTokens != 5 {
+		t.Fatalf("usage after /new = %+v", got)
+	}
+}
