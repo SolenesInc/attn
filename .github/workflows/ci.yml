@@ -362,19 +362,29 @@ jobs:
           echo "shards result: $result"
           [ "$result" = "success" ] || [ "$result" = "skipped" ]
 
-  # macOS, because the app is macOS-only: on Linux the platform half of it is
-  # cfg'd out, so `cargo test` checked a build nobody ships and clippy read the
-  # macOS-only code as dead. The runner is free on a public repo.
+  # Both legs, because Linux support is landing: the non-mac arms ship to
+  # nobody yet but must compile so that work can build on this branch.
   rust:
-    name: Tauri
+    name: Tauri (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04]
     defaults:
       run:
         working-directory: app/src-tauri
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Linux webview deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -408,6 +418,20 @@ jobs:
 
       - name: Cargo test
         run: cargo test
+
+  # Single stable check name over the os matrix, for branch-protection
+  # rulesets. Green when both legs pass or the tauri filter skipped them.
+  rust-gate:
+    name: Tauri
+    needs: rust
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check matrix results
+        run: |
+          result="${{ needs.rust.result }}"
+          echo "matrix result: $result"
+          [ "$result" = "success" ] || [ "$result" = "skipped" ]
 
   # The bundled plugins are compiled by the packaged-app build, which no CI job
   # runs — so a plugin that only builds on a machine with warm node_modules got
@@ -462,6 +486,7 @@ jobs:
       - frontend-e2e
       - frontend-e2e-gate
       - rust
+      - rust-gate
       - plugins
       - release-preflight
     permissions:
@@ -476,7 +501,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh pr
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins release-preflight
 
   acceptance:
     name: Acceptance
@@ -491,6 +516,7 @@ jobs:
       - frontend-e2e
       - frontend-e2e-gate
       - rust
+      - rust-gate
       - plugins
       - release-preflight
     permissions:
@@ -505,7 +531,7 @@ jobs:
         run: >-
           ./scripts/ci-gate.sh acceptance
           changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust plugins release-preflight
+          frontend-e2e-gate rust rust-gate plugins release-preflight
 
   branch-health:
     name: Report branch health

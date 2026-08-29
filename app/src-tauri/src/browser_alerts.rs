@@ -2,13 +2,17 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
+// Only the macOS WKUIDelegate below constructs a PendingAlert outside tests,
+// so these are unread elsewhere.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub enum AlertType {
     Alert,
     Confirm,
     Prompt,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub struct AlertResponse {
     pub accepted: bool,
     pub prompt_text: Option<String>,
@@ -35,6 +39,7 @@ impl AlertState {
         }
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn should_capture(&self) -> bool {
         self.capture_requested
             .lock()
@@ -54,6 +59,7 @@ impl AlertState {
         }
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn set_pending(&self, alert: PendingAlert) {
         if let Ok(mut prompt) = self.prompt_input.lock() {
             *prompt = None;
