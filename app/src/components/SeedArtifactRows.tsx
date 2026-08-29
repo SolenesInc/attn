@@ -75,9 +75,12 @@ function useMissingPaths(
   check?: (path: string) => Promise<boolean>,
 ): Set<string> {
   const [missing, setMissing] = useState<Set<string>>(new Set());
-  const pathsKey = JSON.stringify(
-    references.map((reference) => reference.path ?? '').filter((path) => path.startsWith('/')),
-  );
+  const absolutePaths: string[] = [];
+  for (const reference of references) {
+    const path = reference.path ?? '';
+    if (path.startsWith('/')) absolutePaths.push(path);
+  }
+  const pathsKey = JSON.stringify(absolutePaths);
 
   useEffect(() => {
     const absolute = JSON.parse(pathsKey) as string[];

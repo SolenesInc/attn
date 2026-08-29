@@ -316,6 +316,21 @@
   text-underline-offset: 2px;
 }
 
+.md-reader-artifact-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent, #5b8cff);
+  font: inherit;
+  cursor: pointer;
+}
+
+.md-reader-artifact-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .md-reader ::selection {
   background: color-mix(in srgb, var(--color-accent, #5b8cff) 30%, transparent);
 }
@@ -510,6 +525,15 @@
   max-width: 100%;
   border-radius: 0.25rem;
   margin: 0.5rem 0;
+  cursor: zoom-in;
+}
+
+.md-reader-image-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   cursor: zoom-in;
 }
 

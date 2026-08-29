@@ -146,7 +146,7 @@ describe('MarkdownReader link sanitization', () => {
 
     const image = await screen.findByRole('img', { name: 'cover' });
     expect(image).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
-    fireEvent.click(screen.getByRole('link', { name: 'report' }));
+    fireEvent.click(screen.getByRole('button', { name: 'report' }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
       path: '/notebook/seeds/s-7k3f9m/report.pdf',
     }));

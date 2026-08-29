@@ -47,6 +47,7 @@ const rehypePlugins: PluggableList = [
   rehypeHeadingSlugs,
   rehypeProseTransforms,
 ];
+const EMPTY_SEED_ARTIFACTS: readonly SeedArtifact[] = [];
 
 const ALERT_TITLES: Record<AlertKind, string> = {
   note: 'Note',
@@ -137,11 +138,11 @@ function SeedArtifactLink({ target, children }: { target: string; children: Reac
     return <span title={`Blocked seed artifact target: ${target}`}>{children}</span>;
   }
   return (
-    <a
-      href={target}
+    <button
+      type="button"
+      className="md-reader-artifact-link"
       title={decodedSeedTargetName(target)}
-      onClick={(event) => {
-        event.preventDefault();
+      onClick={() => {
         void artifactContext.resolveTarget(artifactContext.seedId, target, 'link')
           .then((result) => result.path
             ? invoke('open_safe_seed_artifact_target', { path: result.path })
@@ -150,7 +151,7 @@ function SeedArtifactLink({ target, children }: { target: string; children: Reac
       }}
     >
       {children}
-    </a>
+    </button>
   );
 }
 
@@ -191,18 +192,23 @@ function SeedArtifactImage({
     return <span className="md-reader-image-loading" data-md-chrome="1">[loading image: {alt || target}]</span>;
   }
   return (
-    <img
-      {...imageProps}
-      className="md-reader-image"
-      src={src}
-      alt={alt || decodedSeedTargetName(target)}
-      title={decodedSeedTargetName(target)}
-      loading="lazy"
+    <button
+      type="button"
+      className="md-reader-image-button"
       onClick={(event) => {
         event.stopPropagation();
         onImageClick(src, alt);
       }}
-    />
+    >
+      <img
+        {...imageProps}
+        className="md-reader-image"
+        src={src}
+        alt={alt || decodedSeedTargetName(target)}
+        title={decodedSeedTargetName(target)}
+        loading="lazy"
+      />
+    </button>
   );
 }
 
@@ -435,7 +441,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   annotationsEnabled = false,
   onAnnotationsCountChange,
   annotationsSendRef,
-  seedArtifacts = [],
+  seedArtifacts = EMPTY_SEED_ARTIFACTS,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
@@ -443,7 +449,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   const localTargetsEnabled = allowLocalTargets && source.kind === 'file';
   const rootRef = useRef<HTMLDivElement | null>(null);
   const annotationLayerRef = useRef<AnnotationLayerHandle | null>(null);
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string; artifactVersion: string } | null>(null);
   const seedArtifactVersion = useMemo(() => seedArtifacts
     .map((artifact) => `${artifact.filename}\0${artifact.size}\0${artifact.modified_at}`)
     .join('\0'), [seedArtifacts]);
@@ -458,8 +464,8 @@ export const MarkdownReader = memo(function MarkdownReader({
   ), [daemon?.sendSeedArtifactTarget, seedArtifactVersion, sourceSeedId]);
   // Props of the memoized body: identities must never change (gate contract).
   const handleImageClick = useCallback((src: string, alt: string) => {
-    setLightbox({ src, alt });
-  }, []);
+    setLightbox({ src, alt, artifactVersion: seedArtifactVersion });
+  }, [seedArtifactVersion]);
   const handleLightboxClose = useCallback(() => {
     setLightbox(null);
   }, []);
@@ -482,9 +488,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       onAnnotationsCountChange?.(0);
     };
   }, [onAnnotationsCountChange]);
-  useEffect(() => {
-    setLightbox(null);
-  }, [seedArtifactVersion]);
+  const visibleLightbox = lightbox?.artifactVersion === seedArtifactVersion ? lightbox : null;
 
   useImperativeHandle(annotationsSendRef, () => ({
     flushPendingSave: () => annotationsApiRef.current.flushPendingSave(),
@@ -521,8 +525,8 @@ export const MarkdownReader = memo(function MarkdownReader({
       {annotationsEnabled && (
         <AnnotationLayer ref={annotationLayerRef} api={annotationsApi} rootRef={rootRef} source={source} />
       )}
-      {lightbox && (
-        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={handleLightboxClose} />
+      {visibleLightbox && (
+        <ImageLightbox src={visibleLightbox.src} alt={visibleLightbox.alt} onClose={handleLightboxClose} />
       )}
     </div>
   );
