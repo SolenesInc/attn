@@ -114,8 +114,8 @@ func ValidatePlotSpec(spec PlotSpec) error {
 	}
 	for i, child := range spec.Children {
 		for _, target := range child.Blocks {
-			if _, known := slugs[strings.TrimSpace(target)]; !known {
-				return fmt.Errorf("child %d blocks %q, which is no sibling's step slug; the slugs here are %s", i+1, target, strings.Join(slugList(spec.Children), ", "))
+			if _, known := slugs[StepSlug(target)]; !known {
+				return fmt.Errorf("child %d blocks %q, which is no sibling's title or step slug; the slugs here are %s", i+1, target, strings.Join(slugList(spec.Children), ", "))
 			}
 		}
 	}
@@ -140,7 +140,7 @@ func blocksCycle(children []PlotChildSpec, slugs map[string]int) (string, string
 	walk = func(i int) (string, string, bool) {
 		state[i] = visiting
 		for _, target := range children[i].Blocks {
-			j := slugs[strings.TrimSpace(target)]
+			j := slugs[StepSlug(target)]
 			if state[j] == visiting {
 				return StepSlug(children[i].Title), StepSlug(children[j].Title), true
 			}

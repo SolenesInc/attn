@@ -13,6 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
@@ -1067,6 +1068,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{123, "persist session transcript bindings", ``},
 	{124, "one model list for both classifier passes", ``},
 	{125, "the environment becomes slots the rules can look up", ``},
+	{126, "seed slugs drop their stop words", ``},
 }
 
 const migration99SQL = `
@@ -1478,6 +1480,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 125 {
 			if err := applyMigration125(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 126 {
+			if err := applyMigration126(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2700,6 +2707,61 @@ func applyMigration125(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
 	return err
+}
+
+// Slugs are stored at planting, so every seed planted under the old rule keeps a
+// title-length slug until it is recomputed here. Nothing references a slug as a key.
+func applyMigration126(tx *sql.Tx) error {
+	var collection int64
+	err := tx.QueryRow(
+		`SELECT id FROM document_collections WHERE namespace = ? AND collection = ?`,
+		garden.Namespace, garden.CollectionSeeds).Scan(&collection)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	table := docstore.TableName(collection)
+	rows, err := tx.Query(fmt.Sprintf(`SELECT id, body FROM %s`, table))
+	if err != nil {
+		return err
+	}
+	type reslug struct{ id, body string }
+	var updates []reslug
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &body); err != nil {
+			continue
+		}
+		var title, slug string
+		json.Unmarshal(body["title"], &title)
+		json.Unmarshal(body["step_slug"], &slug)
+		if want := garden.StepSlug(title); want != slug {
+			encoded, _ := json.Marshal(want)
+			body["step_slug"] = encoded
+			next, err := json.Marshal(body)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			updates = append(updates, reslug{id, string(next)})
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, u := range updates {
+		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET body = ? WHERE id = ?`, table), u.body, u.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func foldModelLists(lists ...string) ([]string, error) {
