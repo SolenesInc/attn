@@ -14,9 +14,8 @@ const PROD_DAEMON_PORT = '9849';
 // Profile name grammar — mirrors config.profileNamePattern on the Go side.
 const PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
 
-// Fast-path resources for prod ('') and dev, macOS-shaped: off darwin these
-// profiles go to the authority like any other. The drift guard in
-// harnessProfile.test.mjs pins them to `attn profile resolve`.
+// Fast-path resources for prod ('') and dev, macOS-shaped: off darwin these go
+// to the authority. harnessProfile.test.mjs pins them to `attn profile resolve`.
 const BUILTIN_RESOURCES = {
   '': {
     profile: '',
