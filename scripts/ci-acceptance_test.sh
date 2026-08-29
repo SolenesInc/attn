@@ -13,6 +13,11 @@ expect_failure() {
 }
 
 workflow="$root/.github/workflows/ci.yml"
+if ! grep -Fq "              - 'scripts/**'" "$workflow"; then
+  echo "Daemon path filter must cover every repository script" >&2
+  exit 1
+fi
+
 sed -n '/^jobs:/,$p' "$workflow" \
   | sed -nE 's/^  ([a-z0-9-]+):$/\1/p' \
   | grep -Ev '^(pr-gate|acceptance|branch-health)$' \
