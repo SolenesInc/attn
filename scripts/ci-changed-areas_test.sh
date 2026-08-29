@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Tests for ci-changed-areas.sh, the CI "Changes" job's classifier.
-#
-# Every gated job keys off its output, so the contract is: the right areas for
-# an ordinary diff, and every area when the base is unusable. The second half
-# is the one that strands the suite when it breaks. Run: bash scripts/ci-changed-areas_test.sh
+# Tests for ci-changed-areas.sh: the right areas for an ordinary diff, and every
+# area when the base is unusable. Run: bash scripts/ci-changed-areas_test.sh
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

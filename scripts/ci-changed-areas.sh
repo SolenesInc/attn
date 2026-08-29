@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Classify what a change touches for CI job gating, using git only.
-# Usage: ci-changed-areas.sh <base> [head]   prints "<area>=true|false" per line.
-# A base git cannot diff against (empty, all zeros, unfetched, or an unrelated
-# history after a force push) marks every area changed, never none.
+# Usage: ci-changed-areas.sh <base> [head], prints "<area>=true|false" per line.
+# A base git cannot diff against (empty, zeros, unfetched, orphan) is every area.
 set -euo pipefail
 
 base="${1:-}"
