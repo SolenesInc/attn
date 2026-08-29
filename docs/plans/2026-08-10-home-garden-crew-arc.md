@@ -3,9 +3,8 @@
 Spine plan for the arc that takes attn from single-daemon sessions to a
 crewed, multi-machine home: agent messaging, home daemons and outposts, the
 garden, the crew primitive, the uplink, the central server. Stage detail
-lives in the stage plans — [messaging](2026-08-08-converse-and-observe.md),
-[the garden](2026-08-06-the-garden-vertical-slices.md), the crew plan when
-it is written. This doc owns what none of them can: the vocabulary, the
+lived in the stage plans (messaging, the garden, the crew), now shipped and
+retired. This doc owns what none of them can: the vocabulary, the
 sequencing, the fence, and the server.
 
 `docs/glossary.md` owns the terms (home daemon, outpost, enrollment). The
@@ -67,8 +66,7 @@ flowchart LR
 
 ### Stage 1 — messaging v1 (per-daemon)
 
-[2026-08-08-converse-and-observe.md](2026-08-08-converse-and-observe.md),
-build-ready: peek then msg, both sessions on one daemon. Message state is
+Peek then msg, both sessions on one daemon. Message state is
 daemon-local by design — no split-brain risk, no fence needed. Cross-daemon
 addressing errors as an unknown session until it rides the uplink.
 
@@ -119,8 +117,7 @@ sequenceDiagram
 
 ### Stage 3 — the garden (home-only, fenced)
 
-[2026-08-06-the-garden-vertical-slices.md](2026-08-06-the-garden-vertical-slices.md)
-as planned, entirely at the home daemon. Seed ids stay
+The garden as planned, entirely at the home daemon. Seed ids stay
 fully-qualified-ready: `<daemon-id>/<local-id>` minted only at the
 boundary; the docstore id charset forbids `/`
 (`internal/docstore/docstore.go:307`), so qualified forms cannot leak into

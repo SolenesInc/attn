@@ -2,5 +2,5 @@ kind: changed
 area: docs
 change: >
   Removed 113 plan docs under docs/plans that had shipped or been abandoned,
-  along with the prototypes, decisions, and source comments that pointed at
-  them. Three active plans remain.
+  along with the prototypes, decisions, grounding notes, and source comments
+  that pointed at them. Four active plans remain.
