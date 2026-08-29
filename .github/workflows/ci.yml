@@ -522,6 +522,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Update branch-health issue
+        id: branch-health-issue
+        continue-on-error: true
         env:
           ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
           BRANCH_HEALTH_ASSIGNEE: victorarias
@@ -529,3 +531,9 @@ jobs:
         run: >-
           ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
           "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL"
+
+      - name: Report issue-update failure
+        if: steps.branch-health-issue.outcome == 'failure'
+        run: >-
+          echo "::warning title=Branch health reporting failed::Acceptance is
+          authoritative; the branch-health issue could not be updated."
