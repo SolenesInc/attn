@@ -52,6 +52,8 @@ EOF
 cat >"$work/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$#" >"$FAKE_CLAUDE_ARGC"
+cat >"$FAKE_CLAUDE_INPUT"
 printf '## [%s]\n\n### Added\n- **Fixture release.** Candidate facts compiled.\n' \
   "$(date +%Y-%m-%d)"
 EOF
@@ -76,6 +78,11 @@ setup_fixture() {
   git clone -q "$root" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
+  cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
+  if ! git -C "$fixture_repo" diff --quiet -- scripts/compile-changelog.sh; then
+    git -C "$fixture_repo" add scripts/compile-changelog.sh
+    git -C "$fixture_repo" commit -q -m 'test(release): use current changelog compiler'
+  fi
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" switch -q -C main
   git -C "$fixture_repo" push -q -u origin main
@@ -101,6 +108,8 @@ export PATH="$work/bin:$PATH"
 export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_PR_BODY="$work/pr-body.md"
+export FAKE_CLAUDE_ARGC="$work/claude-argc.txt"
+export FAKE_CLAUDE_INPUT="$work/claude-input.txt"
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
@@ -198,6 +207,8 @@ for value in "$source_sha" "$main_sha" "$candidate_sha" \
   'candidate-fixture.yaml' 'candidate_sha='; do
   grep -Fq "$value" "$FAKE_PR_BODY"
 done
+grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
+[[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
 if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   echo "candidate preparation crossed a merge or release boundary" >&2
   exit 1

@@ -99,7 +99,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "writing section with claude..."
-SECTION="$(claude --strict-mcp-config -p "$PROMPT" < /dev/null)"
+SECTION="$(printf '%s' "$PROMPT" | claude --strict-mcp-config -p)"
 
 if [[ "$SECTION" == "EMPTY" ]]; then
   echo "no user-facing changes in pending fragments; removing them without a new section"
