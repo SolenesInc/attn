@@ -3,6 +3,7 @@ package daemon
 import (
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -58,6 +59,9 @@ func TestObserveAgentConversationTransitionsOnceAndRebindsRuntime(t *testing.T) 
 
 	if got := d.store.GetResumeSessionID("session-1"); got != "codex-new" {
 		t.Fatalf("conversation binding = %q, want codex-new", got)
+	}
+	if got := d.store.GetSessionTranscriptPath("session-1"); got != newTranscript {
+		t.Fatalf("transcript binding = %q, want %q", got, newTranscript)
 	}
 	if got := d.store.GetSessionActivity("session-1"); got.Line != "" || got.Cursor != "" {
 		t.Fatalf("old activity survived transition: %+v", got)
@@ -127,7 +131,14 @@ func TestTranscriptWatcherPrefersPersistedNativeConversationAfterRestart(t *test
 	_ = writeCodexInteractiveRollout(t, codexHome, "codex-neighbor", cwd, now)
 
 	d.store.Add(&protocol.Session{ID: "session-1", Agent: protocol.SessionAgentCodex, Directory: cwd})
-	d.store.SetResumeSessionID("session-1", "codex-current")
+	if changed, err := d.store.TransitionSessionConversation("session-1", "codex-current", want); err != nil || !changed {
+		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+	}
+	lookups := 0
+	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
+		lookups++
+		return ""
+	}
 	watcher := &transcriptWatcher{
 		sessionID: "session-1",
 		agent:     protocol.SessionAgentCodex,
@@ -137,4 +148,52 @@ func TestTranscriptWatcherPrefersPersistedNativeConversationAfterRestart(t *test
 	if got := d.resolveExactTranscriptPathForWatcher(watcher); got != want {
 		t.Fatalf("restart transcript = %q, want persisted conversation %q", got, want)
 	}
+	if lookups != 0 {
+		t.Fatalf("restart performed %d fallback lookups despite its persisted exact path", lookups)
+	}
+}
+
+func TestRepeatedPathBearingObservationRestartsAnEndedWatcher(t *testing.T) {
+	d := newTraceDaemon(t)
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		id := "session-restart-ended-watcher"
+		path := filepath.Join(t.TempDir(), "rollout-native-current.jsonl")
+		addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
+		if changed, err := d.store.TransitionSessionConversation(id, "native-current", path); err != nil || !changed {
+			t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+		}
+		d.transcriptResumeLookup = func(protocol.SessionAgent, string) string { return "" }
+		d.startTranscriptWatcherAtPath(id, protocol.SessionAgentCodex, t.TempDir(), time.Now(), path)
+
+		d.watchersMu.Lock()
+		ended := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+		advancePolls(5)
+		synctest.Wait()
+		select {
+		case <-ended.doneCh:
+		default:
+			t.Fatal("watcher did not stop after its bounded miss")
+		}
+
+		writeLine(t, path, `{"type":"session_meta","payload":{"id":"native-current"}}`)
+		d.observeAgentConversation(agentConversationObservation{
+			SessionID:      id,
+			NativeID:       "native-current",
+			TranscriptPath: path,
+		})
+		d.watchersMu.Lock()
+		restarted := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+		if restarted == nil || restarted == ended {
+			t.Fatalf("ended watcher was not restarted: ended=%p restarted=%p", ended, restarted)
+		}
+		advancePolls(1)
+		if got := restarted.snapshot().Status; got != protocol.SessionMessageWindowStatusReady {
+			t.Fatalf("restarted watcher status = %q, want ready", got)
+		}
+		d.stopTranscriptWatcher(id)
+		synctest.Wait()
+	})
 }

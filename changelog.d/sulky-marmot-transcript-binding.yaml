@@ -1,0 +1,9 @@
+kind: fixed
+area: daemon
+change: >
+  Codex sessions now remember the exact transcript path with the native
+  conversation ID. A daemon restart reopens that file directly, the first
+  prompt after `/new` replaces both together, and pathless hooks from
+  non-persistent Codex roots cannot replace the interactive conversation. A
+  legacy session gets one exact-ID compatibility lookup; if it has no
+  transcript, its watcher stops instead of searching again in the background.

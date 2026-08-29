@@ -1863,6 +1863,12 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForCodexSession(t *t
 
 func TestDaemon_HandleObserveAgentConversation_QueuesUntilSessionExists(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	t.Cleanup(d.stopEventBus)
+	t.Cleanup(d.stopAllTranscriptWatchers)
+	transcriptPath := filepath.Join(t.TempDir(), "rollout-codex-session.jsonl")
+	if err := os.WriteFile(transcriptPath, []byte(`{"type":"session_meta","payload":{"id":"codex-session"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	serverConn, clientConn := net.Pipe()
 	done := make(chan struct{})
@@ -1871,6 +1877,7 @@ func TestDaemon_HandleObserveAgentConversation_QueuesUntilSessionExists(t *testi
 		d.handleObserveAgentConversation(serverConn, &protocol.SetSessionResumeIDMessage{
 			ID:              "attn-session",
 			ResumeSessionID: "codex-session",
+			TranscriptPath:  protocol.Ptr(transcriptPath),
 		})
 		_ = serverConn.Close()
 	}()
@@ -1910,8 +1917,41 @@ func TestDaemon_HandleObserveAgentConversation_QueuesUntilSessionExists(t *testi
 	if !resp.Ok {
 		t.Fatalf("register response ok=%v, want true", resp.Ok)
 	}
-	if got := d.store.GetResumeSessionID("attn-session"); got != "codex-session" {
-		t.Fatalf("resume id after registration = %q, want codex-session", got)
+	if got := d.store.GetSessionConversation("attn-session"); got != (store.SessionConversation{NativeID: "codex-session", TranscriptPath: transcriptPath}) {
+		t.Fatalf("binding after registration = %+v, want exact Codex binding", got)
+	}
+}
+
+func TestDaemon_HandleObserveAgentConversation_IgnoresPathlessIdentity(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	t.Cleanup(d.stopEventBus)
+	d.store.Add(&protocol.Session{ID: "attn-session", Agent: protocol.SessionAgentCodex})
+	want := store.SessionConversation{NativeID: "codex-root", TranscriptPath: "/transcripts/codex-root.jsonl"}
+	if changed, err := d.store.TransitionSessionConversation("attn-session", want.NativeID, want.TranscriptPath); err != nil || !changed {
+		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.handleObserveAgentConversation(serverConn, &protocol.SetSessionResumeIDMessage{
+			ID:              "attn-session",
+			ResumeSessionID: "ephemeral-root",
+		})
+		_ = serverConn.Close()
+	}()
+	var resp protocol.Response
+	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	_ = clientConn.Close()
+	<-done
+	if !resp.Ok {
+		t.Fatalf("pathless response ok=%v, want true", resp.Ok)
+	}
+	if got := d.store.GetSessionConversation("attn-session"); got != want {
+		t.Fatalf("pathless identity replaced binding: got %+v want %+v", got, want)
 	}
 }
 

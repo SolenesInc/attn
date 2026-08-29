@@ -2593,6 +2593,9 @@ func runHookSessionStart() {
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
+	if strings.TrimSpace(input.TranscriptPath) == "" {
+		return
+	}
 
 	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, 40, 25*time.Millisecond)
 	if contextErr != nil {
@@ -2688,6 +2691,7 @@ func runHookState() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	observePromptConversation(c, sessionID, hookEvent, input)
 	if err := c.UpdateStateFromHookEvidence(sessionID, state, input.PermissionMode, hookEvent, input.Prompt); err != nil {
 		fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
 		os.Exit(1)
@@ -2905,9 +2909,21 @@ func hookStateValue(value string) bool {
 	}
 }
 
-func observeAgentConversation(c *client.Client, attnSessionID, agentSessionID, transcriptPath string) {
+type agentConversationObserver interface {
+	ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath string) error
+}
+
+func observePromptConversation(c agentConversationObserver, attnSessionID, hookEvent string, input hookInput) {
+	if !strings.EqualFold(strings.TrimSpace(hookEvent), "user_prompt_submit") {
+		return
+	}
+	observeAgentConversation(c, attnSessionID, input.SessionID, input.TranscriptPath)
+}
+
+func observeAgentConversation(c agentConversationObserver, attnSessionID, agentSessionID, transcriptPath string) {
 	agentSessionID = strings.TrimSpace(agentSessionID)
-	if agentSessionID == "" {
+	transcriptPath = strings.TrimSpace(transcriptPath)
+	if agentSessionID == "" || transcriptPath == "" {
 		return
 	}
 	if err := c.ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath); err != nil {

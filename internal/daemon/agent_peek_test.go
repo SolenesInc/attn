@@ -31,14 +31,17 @@ func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
 		`{"timestamp":"2026-08-10T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"first answer"}}`,
 		`{"timestamp":"2026-08-10T10:00:02Z","type":"event_msg","payload":{"type":"agent_message","message":"latest answer"}}`,
 	}, "\n") + "\n"
-	if err := os.WriteFile(filepath.Join(transcriptDir, "rollout.jsonl"), []byte(content), 0o600); err != nil {
+	path := filepath.Join(transcriptDir, "rollout-native-peek.jsonl")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	workspaceID := addCharacterizationSession(t, d, "peek-target", protocol.SessionAgentCodex, protocol.SessionStateWorking)
 	d.store.UpdateTodos("peek-target", []string{"[✓] read the plan", "[→] build peek"})
-	d.store.SetResumeSessionID("peek-target", "native-peek")
+	if changed, err := d.store.TransitionSessionConversation("peek-target", "native-peek", path); err != nil || !changed {
+		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+	}
 
 	resp := callAgentPeek(t, d, "peek-target")
 	if !resp.Ok || resp.AgentPeekResult == nil {

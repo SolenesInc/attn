@@ -165,7 +165,7 @@ func TestConversationGuardedActivityWritesRejectAStaleBinding(t *testing.T) {
 	s.SetResumeSessionID("s1", "conversation-old")
 	s.UpdateSessionActivity("s1", "old work", time.Now(), "old-cursor")
 
-	changed, err := s.TransitionSessionConversation("s1", "conversation-new")
+	changed, err := s.TransitionSessionConversation("s1", "conversation-new", "/transcripts/conversation-new.jsonl")
 	if err != nil || !changed {
 		t.Fatalf("transition: changed=%v err=%v", changed, err)
 	}

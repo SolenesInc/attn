@@ -1063,6 +1063,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			created_at              TEXT NOT NULL
 		);
 	`},
+	{123, "persist session transcript bindings", ``},
 }
 
 const migration99SQL = `
@@ -1457,6 +1458,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 123 {
+			if err := applyMigration123(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 114 {
 			if err := applyMigration114(tx); err != nil {
 				tx.Rollback()
@@ -1497,6 +1503,18 @@ func applyMigration121(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec(`UPDATE sessions SET last_model_request_at = state_updated_at
 		WHERE last_model_request_at IS NULL OR last_model_request_at = ''`)
+	return err
+}
+
+func applyMigration123(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "transcript_path")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN transcript_path TEXT NOT NULL DEFAULT ''")
 	return err
 }
 

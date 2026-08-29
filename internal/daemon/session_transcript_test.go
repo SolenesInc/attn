@@ -35,7 +35,7 @@ func TestHandleSessionTranscriptResolvesNativeIDAndReturnsRedactedEvents(t *test
 	if err := os.MkdirAll(transcriptDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(transcriptDir, "rollout.jsonl")
+	path := filepath.Join(transcriptDir, "rollout-native-session.jsonl")
 	content := strings.Join([]string{
 		`{"timestamp":"2026-07-19T10:00:00Z","type":"session_meta","payload":{"id":"native-session"}}`,
 		`{"timestamp":"2026-07-19T10:00:01Z","type":"event_msg","payload":{"type":"user_message","message":"token=do-not-leak"}}`,
@@ -63,6 +63,9 @@ func TestHandleSessionTranscriptResolvesNativeIDAndReturnsRedactedEvents(t *test
 	}
 	if text := protocol.Deref(result.Events[0].Text); strings.Contains(text, "do-not-leak") || !strings.Contains(text, "[REDACTED]") {
 		t.Fatalf("redacted event text = %q", text)
+	}
+	if got := d.store.GetSessionTranscriptPath("attn-session"); got != path {
+		t.Fatalf("compatibility lookup did not persist exact path: got %q want %q", got, path)
 	}
 
 	resumed := callSessionTranscript(t, d, &protocol.SessionTranscriptMessage{

@@ -68,6 +68,7 @@ type ModelRunner interface {
 type SessionLookup interface {
 	Get(string) *protocol.Session
 	GetResumeSessionID(string) string
+	GetSessionTranscriptPath(string) string
 }
 
 type TranscriptFinder interface {
@@ -108,7 +109,10 @@ func (s Service) Ask(ctx context.Context, req Request) (*protocol.SessionInstruc
 	if resumeID == "" {
 		return nil, &Error{Code: "transcript_unavailable", Message: "The target transcript is unavailable"}
 	}
-	path := strings.TrimSpace(s.Finder.FindTranscriptForResume(resumeID))
+	path := strings.TrimSpace(s.Store.GetSessionTranscriptPath(req.TargetSessionID))
+	if _, err := os.Stat(path); path == "" || err != nil {
+		path = strings.TrimSpace(s.Finder.FindTranscriptForResume(resumeID))
+	}
 	if path == "" {
 		return nil, &Error{Code: "transcript_unavailable", Message: "The target transcript is unavailable"}
 	}

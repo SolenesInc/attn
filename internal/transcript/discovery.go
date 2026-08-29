@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,17 +124,16 @@ func FindCodexTranscriptForResume(resumeID string) string {
 	if sessionsDir == "" {
 		return ""
 	}
+	return findCodexTranscriptForResumeIn(sessionsDir, resumeID, readFirstJSONLLine)
+}
+
+func findCodexTranscriptForResumeIn(sessionsDir, resumeID string, readLine func(string) ([]byte, error)) string {
 	var found string
 	_ = filepath.WalkDir(sessionsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") || found != "" {
+		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), resumeID+".jsonl") {
 			return nil
 		}
-		f, openErr := os.Open(path)
-		if openErr != nil {
-			return nil
-		}
-		defer f.Close()
-		line, readErr := bufio.NewReader(f).ReadBytes('\n')
+		line, readErr := readLine(path)
 		if readErr != nil && len(line) == 0 {
 			return nil
 		}
@@ -145,10 +145,20 @@ func FindCodexTranscriptForResume(resumeID string) string {
 		}
 		if json.Unmarshal(bytes.TrimSpace(line), &entry) == nil && entry.Type == "session_meta" && strings.TrimSpace(entry.Payload.ID) == resumeID {
 			found = path
+			return fs.SkipAll
 		}
 		return nil
 	})
 	return found
+}
+
+func readFirstJSONLLine(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return bufio.NewReader(f).ReadBytes('\n')
 }
 
 func codexSessionsDir() string {

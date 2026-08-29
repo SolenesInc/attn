@@ -29,6 +29,11 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.sendError(conn, "missing resume_session_id")
 		return
 	}
+	if observation.TranscriptPath == "" {
+		d.logf("agent conversation: ignored pathless observation session=%s native=%s", observation.SessionID, observation.NativeID)
+		d.sendOK(conn)
+		return
+	}
 	d.observeOrQueueAgentConversation(observation)
 	d.sendOK(conn)
 }
@@ -62,12 +67,17 @@ func (d *Daemon) consumePendingAgentConversation(sessionID string) (agentConvers
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
-	changed, err := d.store.TransitionSessionConversation(observation.SessionID, observation.NativeID)
+	changed, err := d.store.TransitionSessionConversation(
+		observation.SessionID,
+		observation.NativeID,
+		observation.TranscriptPath,
+	)
 	if err != nil {
 		d.logf("agent conversation: transition failed session=%s native=%s: %v", observation.SessionID, observation.NativeID, err)
 		return
 	}
 	if !changed {
+		d.ensureTranscriptWatcherAtPath(observation.SessionID, observation.TranscriptPath)
 		return
 	}
 

@@ -142,6 +142,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
+	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
 	classifiedTurn                    map[string]string
 	classifyingTurn                   map[string]string
@@ -2553,7 +2554,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 }
 
 func (d *Daemon) persistResumeSessionID(sessionID, resumeSessionID string) {
-	if _, err := d.store.TransitionSessionConversation(sessionID, resumeSessionID); err != nil {
+	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
 		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
 	}
 	d.rememberDispatchResume(sessionID, resumeSessionID)
@@ -2597,7 +2598,12 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			agentdriver.Get(string(session.Agent)),
 			msg.TranscriptPath,
 		); resumeSessionID != "" {
-			d.persistResumeSessionID(msg.ID, resumeSessionID)
+			d.observeAgentConversation(agentConversationObservation{
+				SessionID:      msg.ID,
+				NativeID:       resumeSessionID,
+				TranscriptPath: msg.TranscriptPath,
+			})
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}
 	d.store.Touch(msg.ID)
@@ -2633,15 +2639,9 @@ func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, tran
 		}
 	}
 
-	driver := agentdriver.Get(string(session.Agent))
-	tf, ok := agentdriver.GetTranscriptFinder(driver)
-	if !ok {
-		return path
-	}
-
-	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(session.ID)); resumeID != "" {
-		if resolved := strings.TrimSpace(tf.FindTranscriptForResume(resumeID)); resolved != "" {
-			return resolved
+	if bound := strings.TrimSpace(d.store.GetSessionTranscriptPath(session.ID)); bound != "" {
+		if _, err := os.Stat(bound); err == nil {
+			return bound
 		}
 	}
 
