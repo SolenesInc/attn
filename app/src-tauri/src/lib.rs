@@ -1102,6 +1102,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_focus_state,
         ])
         .setup(|app| {
+            #[cfg(target_os = "macos")]
             use tauri::Manager;
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
