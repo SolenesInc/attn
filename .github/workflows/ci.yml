@@ -43,6 +43,7 @@ jobs:
               - 'scripts/source-fingerprint.sh'
               - 'scripts/claude/**'
               - 'scripts/ci-*.sh'
+              - 'scripts/main-route*.sh'
               - 'scripts/pr-evidence*.sh'
               - '.github/workflows/ci.yml'
             frontend:
@@ -118,6 +119,17 @@ jobs:
       - name: Validate pending fragments
         if: github.event_name == 'push'
         run: go run ./cmd/changelog-check
+
+  main-route:
+    name: Main route
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check branch route
+        run: >-
+          ./scripts/main-route.sh "${{ github.event_name }}"
+          "${{ github.base_ref }}" "${{ github.head_ref }}"
 
   # generated.go and generated.ts are compiled from internal/protocol/schema, and
   # nothing was checking that the committed copies match. The other jobs cannot:
@@ -427,6 +439,7 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     needs:
       - changes
+      - main-route
       - changelog
       - generated-types
       - backend
@@ -447,7 +460,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: >-
           ./scripts/ci-gate.sh pr
-          changes changelog generated-types backend frontend frontend-e2e
+          changes main-route changelog generated-types backend frontend frontend-e2e
           frontend-e2e-gate rust plugins release-preflight
 
   acceptance:
@@ -455,6 +468,7 @@ jobs:
     if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
     needs:
       - changes
+      - main-route
       - changelog
       - generated-types
       - backend
@@ -475,7 +489,7 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: >-
           ./scripts/ci-gate.sh acceptance
-          changes changelog generated-types backend frontend frontend-e2e
+          changes main-route changelog generated-types backend frontend frontend-e2e
           frontend-e2e-gate rust plugins release-preflight
 
   branch-health:

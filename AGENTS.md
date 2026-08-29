@@ -292,11 +292,15 @@ doubt, ask the maintainer.
 - **Plan docs are the norm.** Non-trivial work gets a plan doc first, often
   written by the same agent that then implements it in the same session, but not
   necessarily. Only a genuinely small change goes straight to a PR with no plan.
-- **A plan becomes one or several PRs.** When the work changes existing behavior
-  visibly but lands on main on a multi-PR arc, make the PRs target an `epic/*`
-  branch and the epic branch gets a full review when it merges to main. When the
-  work builds something new that cannot break what already exists, PRs may merge
-  directly to main as they land.
+- **Normal work targets `next`.** Feature and fix PRs merge into `next`, and a
+  completed `epic/*` branch also targets `next`. PRs within a multi-PR arc target
+  its `epic/*` branch. Squash these ordinary PRs.
+- **`main` is the accepted release line.** Only frozen `release/vX.Y.Z`
+  candidates and urgent `hotfix/*` branches target `main`. The
+  `epic/release-train` PR is the one bootstrap exception.
+- **Sync after every main change.** Run `./scripts/sync-main-to-next.sh`, then
+  merge its PR with a merge commit. Never squash or rebase a sync PR: `main`
+  must remain an ancestor of `next`. Routine cherry-pick sync is forbidden.
 - **A spike answers a question.** The maintainer decides what happens after
   a spike: merge it, discard it, or build on what it showed. Do not commit
   spikes.
@@ -320,7 +324,7 @@ them, and do not present them as risks, blockers, or reasons to pause.
 
 ## Pull requests
 
-Ready-for-review (not draft) and rebase onto main first.
+Ready-for-review (not draft) and rebase onto the PR's target branch first.
 
 To wait on a GitHub PR, run `attn pr wait-ready <pr> --repo <owner/repo>
 --reviewer <login>` once; do not poll checks, reviews, and comments separately.
