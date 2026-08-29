@@ -62,17 +62,15 @@ export async function availableModels(
     }
   }
 
-  const providers: ProviderModels[] = [];
-  for (const [provider, entry] of catalog) {
-    const auth = await checkAuth(provider);
-    providers.push({
-      provider,
-      ready: auth.ready,
-      detail: auth.detail,
-      checkedAt: entry.checkedAt,
-      models: entry.models,
-    });
-  }
+  const entries = [...catalog];
+  const auth = await Promise.all(entries.map(([provider]) => checkAuth(provider)));
+  const providers: ProviderModels[] = entries.map(([provider, entry], index) => ({
+    provider,
+    ready: auth[index].ready,
+    detail: auth[index].detail,
+    checkedAt: entry.checkedAt,
+    models: entry.models,
+  }));
   providers.sort((left, right) => left.provider.localeCompare(right.provider));
 
   return { providers, problem: problems.length > 0 ? problems.join("; ") : undefined };

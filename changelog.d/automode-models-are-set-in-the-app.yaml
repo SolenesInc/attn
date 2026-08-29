@@ -7,4 +7,5 @@ change: >
   grouped by provider, with the ones pi cannot use closed off and its reason
   shown; the field still takes any provider/id, so the pane is no stricter
   than `attn automode model`. That command still records a proposal, and an
-  agent still cannot write the list.
+  agent still cannot write the list. The picker asks pi about every provider
+  at once, so it fills in about the time one answer takes.

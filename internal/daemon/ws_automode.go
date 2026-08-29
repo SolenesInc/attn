@@ -235,8 +235,8 @@ func (d *Daemon) handleAutoModeModelSet(client *wsClient, msg *protocol.AutoMode
 
 const autoModeModelsPlugin = "attn-pi"
 
-// pi is asked about each provider in turn and each ask spawns a process: five
-// providers measured at 0.7s worst, so this is a tripwire, not a deadline.
+// pi is asked about every provider at once, each ask a process: five providers
+// measured at 0.53s together, so this is a tripwire, not a deadline.
 const autoModeModelsTimeout = 20 * time.Second
 
 type pluginCatalogModel struct {
