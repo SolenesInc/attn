@@ -1,0 +1,7 @@
+kind: internal
+area: ci
+change: >
+  The CI "Changes" job classifies touched paths with git instead of the
+  GitHub API. paths-filter drew on the Actions token's 1,000 requests/hour
+  per repository, and a busy hour of pushes exhausted it, failing every
+  gated job on three PRs at once.

@@ -14,7 +14,6 @@ jobs:
     name: Changes
     permissions:
       contents: read
-      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       daemon: ${{ steps.filter.outputs.daemon }}
@@ -24,64 +23,17 @@ jobs:
       plugins: ${{ steps.filter.outputs.plugins }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # git only: the Actions token's 1,000 requests/hour per repository ran
+      # out under a busy hour of pushes and took every gated job with it.
       - name: Classify changed paths
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            daemon:
-              - '**/*.go'
-              - 'cmd/**'
-              - 'internal/**'
-              - 'test/**'
-              - 'go.mod'
-              - 'go.sum'
-              - 'Makefile'
-              - 'scripts/source-fingerprint.sh'
-              - 'scripts/claude/**'
-              - 'scripts/pr-evidence*.sh'
-              - '.github/workflows/ci.yml'
-            frontend:
-              - 'app/src/**'
-              - 'app/e2e/**'
-              - 'app/scripts/**'
-              - 'app/test-harness/**'
-              - 'app/public/**'
-              - 'app/index.html'
-              - 'app/package.json'
-              - 'app/pnpm-lock.yaml'
-              - 'app/playwright.config.ts'
-              - 'app/tsconfig*.json'
-              - 'app/vite.config.ts'
-              - 'app/lint/**'
-              - '.oxlintrc.json'
-              - 'plugins/**'
-              - 'app/pnpm-workspace.yaml'
-              # The app SDK is a workspace package of the frontend and the source
-              # its committed declarations are emitted from, so an edit to either
-              # has to reach the typecheck and the drift check.
-              - 'sdk/attn-app/**'
-              - 'internal/appbuild/sdkdist/**'
-              - 'internal/protocol/schema/**'
-              - '.github/workflows/ci.yml'
-            # Every input to the type pipeline plus both of its outputs. The
-            # outputs are listed so a hand-edit is gated even when no schema
-            # moved — that edit is exactly what this catches.
-            generated:
-              - 'internal/protocol/schema/**'
-              - 'internal/protocol/generated.go'
-              - 'app/src/types/generated.ts'
-              - 'Makefile'
-              - '.github/workflows/ci.yml'
-            tauri:
-              - 'app/src-tauri/**'
-              - '.github/workflows/ci.yml'
-            plugins:
-              - 'plugins/**'
-              - 'scripts/build-bundled-plugins.sh'
-              - '.tool-versions'
-              - '.github/workflows/ci.yml'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: scripts/ci-changed-areas.sh "$BASE" >> "$GITHUB_OUTPUT"
+
   changelog:
     name: Changelog
     if: github.event_name == 'pull_request'
