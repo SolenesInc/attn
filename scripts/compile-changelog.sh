@@ -36,18 +36,9 @@ go run ./cmd/changelog-check
 
 TODAY="$(date +%Y-%m-%d)"
 
-# Each fragment plus the subject of the commit that added it — after a squash
-# merge the subject carries the PR number, which the writer can use for context.
-FACTS=""
-for f in "${fragments[@]}"; do
-  subject="$(git log --diff-filter=A --format=%s -1 -- "$f" 2>/dev/null || true)"
-  [[ -z "$subject" ]] && subject="(uncommitted)"
-  FACTS+="--- fragment: ${f}
---- introduced by: ${subject}
-$(cat "$f")
-
-"
-done
+# Include each fragment's introducing commit subject. A squash merge puts the PR
+# number there, which gives the release writer useful context.
+FACTS="$(go run ./cmd/release-train fragments render)"
 
 # If the top section already carries today's date (a second compile in one
 # day), hand it to the writer to fold the new facts into.
