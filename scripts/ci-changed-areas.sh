@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Classify what a change touches for CI job gating, using git only.
 # Usage: ci-changed-areas.sh <base> [head]   prints "<area>=true|false" per line.
-# An empty or all-zero base (first push of a branch) marks every area changed.
+# A base git cannot diff against (empty, all zeros, unfetched, or an unrelated
+# history after a force push) marks every area changed, never none.
 set -euo pipefail
 
 base="${1:-}"
@@ -38,12 +39,15 @@ plugins=(
   'scripts/ci-changed-areas.sh' '.github/workflows/ci.yml'
 )
 
-if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+everything_changed() {
   for area in "${areas[@]}"; do echo "$area=true"; done
   exit 0
-fi
+}
 
-merge_base="$(git merge-base "$base" "$head")"
+if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+  everything_changed
+fi
+merge_base="$(git merge-base "$base" "$head" 2>/dev/null)" || everything_changed
 for area in "${areas[@]}"; do
   declare -n globs="$area"
   pathspecs=()

@@ -142,7 +142,9 @@ jobs:
         run: bash ./scripts/claude/attn-profile-nudge_test.sh
 
       - name: Test repository scripts
-        run: bash ./scripts/pr-evidence_test.sh
+        run: |
+          bash ./scripts/pr-evidence_test.sh
+          bash ./scripts/ci-changed-areas_test.sh
 
   frontend:
     name: Frontend
