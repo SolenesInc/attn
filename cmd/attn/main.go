@@ -742,14 +742,15 @@ workspace placement (where the pane appears):
   --cwd <path>               create a workspace and use this checkout/repository
 
 repository placement (where the agent runs):
-  (no flags)                 create a worktree from the source checkout; a
-                             non-repository source is refused — pass --cwd or
-                             --no-worktree
+  (no flags)                 create a worktree of the source checkout's
+                             repository (with --workspace: the repository that
+                             workspace's sessions are in); a non-repository
+                             source is refused, pass --cwd or --no-worktree
   --no-worktree              reuse the source checkout; with --workspace, only
                              the pane moves to the target workspace
   --worktree <branch>        choose the new worktree's branch
-  --repo <path>              main repository (defaults to the repository the
-                             target workspace's sessions are in)
+  --repo <path>              main repository; required when the target
+                             workspace's sessions span several
   --from <ref>               branch or ref to start from
   --worktree-path <path>     override the generated sibling path
 
