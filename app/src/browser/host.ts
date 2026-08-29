@@ -98,6 +98,13 @@ export async function unmountBrowserHost(label: string): Promise<void> {
   }
 }
 
+// screenshot/print_page error out on non-mac (see browser_host.rs); a
+// toolbar checks this before offering either action.
+export async function browserCaptureSupported(): Promise<boolean> {
+  if (!isTauri()) return false;
+  return await invoke<boolean>('browser_host_capture_supported');
+}
+
 export function clearBrowserHostFocus(): void {
   if (!isTauri()) return;
   void invoke('browser_host_clear_focus').catch((error) => {
