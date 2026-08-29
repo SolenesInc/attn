@@ -12,6 +12,35 @@ cat >"$work/bin/gh" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"$FAKE_GH_LOG"
 
+if [[ "$1 $2" == "api graphql" ]] && [[ "$*" == *'updateRefs'* ]]; then
+  if [[ "${FAKE_ATOMIC_REJECT:-0}" == 1 ]]; then
+    if [[ "${FAKE_ATOMIC_RACE_TAG:-0}" == 1 ]]; then
+      $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "refs/tags/$FAKE_EXPECTED_TAG" "$FAKE_EXPECTED_SHA"
+    fi
+    echo 'atomic ref precondition failed' >&2
+    exit 1
+  fi
+  expected_sha=''
+  tag_ref=''
+  for arg in "$@"; do
+    case "$arg" in
+      mainSha=*) expected_sha="${arg#mainSha=}" ;;
+      tagRef=*) tag_ref="${arg#tagRef=}" ;;
+    esac
+  done
+  actual_main="$($REAL_GIT --git-dir="$FAKE_ORIGIN" rev-parse refs/heads/main)"
+  if [[ "$actual_main" != "$expected_sha" ]] || \
+    $REAL_GIT --git-dir="$FAKE_ORIGIN" show-ref --verify --quiet "$tag_ref"; then
+    echo 'atomic ref precondition failed' >&2
+    exit 1
+  fi
+  $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "$tag_ref" "$expected_sha"
+  exit 0
+fi
+if [[ "$1 $2" == "api graphql" ]] && [[ "$*" == *'repository(owner:'* ]]; then
+  printf '%s\n' 'R_fake_repository'
+  exit 0
+fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
   printf '%s\t%s\t%s\n' completed "$FAKE_ACCEPTANCE_CONCLUSION" \
     'https://github.com/example/attn/actions/runs/42/job/7'
@@ -108,6 +137,8 @@ export FAKE_MAIN_CHECK_COUNT="$work/main-check-count"
 export FAKE_MOVED_MAIN_SHA=cccccccccccccccccccccccccccccccccccccccc
 export FAKE_MOVE_MAIN_AT_CHECK=
 export FAKE_RELEASE_RUN_PAGE_2=0
+export FAKE_ATOMIC_REJECT=0
+export FAKE_ATOMIC_RACE_TAG=0
 
 setup_fixture() {
   local name="$1"
@@ -121,6 +152,8 @@ setup_fixture() {
   export FAKE_APP_CONCLUSION=success
   export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
   export FAKE_RELEASE_RUN_PAGE_2=0
+  export FAKE_ATOMIC_REJECT=0
+  export FAKE_ATOMIC_RACE_TAG=0
 
 	  git init -q --bare "$fixture_origin"
 	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
@@ -144,11 +177,14 @@ main_sha: $baseline_sha
 EOF
   git -C "$fixture_repo" add -A
   git -C "$fixture_repo" commit -q -m 'release: accepted main fixture'
-  candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-  candidate_tag="v$version"
+	  candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+	  candidate_tag="v$version"
+	  export FAKE_EXPECTED_SHA="$candidate_sha"
+	  export FAKE_EXPECTED_TAG="$candidate_tag"
 	  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
 	  git -C "$fixture_repo" push -q -u origin main
 	  git --git-dir="$fixture_origin" symbolic-ref HEAD refs/heads/main
+	  export FAKE_ORIGIN="$fixture_origin"
 }
 
 run_release_after_acceptance() (
@@ -206,13 +242,24 @@ fi
 
 setup_fixture moved-before-tag
 export FAKE_MOVE_MAIN_AT_CHECK=2
+export FAKE_ATOMIC_REJECT=1
 run_release_after_acceptance >"$work/moved-before-tag.out"
-grep -q 'before tagging; leaving' "$work/moved-before-tag.out"
+grep -q 'before atomic tagging; leaving' "$work/moved-before-tag.out"
 if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
   echo "main race created a stale release tag" >&2
   exit 1
 fi
 export FAKE_MOVE_MAIN_AT_CHECK=
+export FAKE_ATOMIC_REJECT=0
+
+setup_fixture concurrent-tag
+export FAKE_ATOMIC_REJECT=1
+export FAKE_ATOMIC_RACE_TAG=1
+export FAKE_TAG_SHA="$candidate_sha"
+run_release_after_acceptance >"$work/concurrent-tag.out"
+grep -q 'concurrently created at accepted main' "$work/concurrent-tag.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
+grep -q "workflow run release.yml --repo example/attn --ref main -f tag=$candidate_tag" "$FAKE_GH_LOG"
 
 setup_fixture red-app
 export FAKE_APP_CONCLUSION=failure
@@ -304,6 +351,9 @@ for value in \
   grep -Fq "$value" "$root/.github/workflows/release-after-acceptance.yml"
 done
 grep -Fq 'run-name: ${{ inputs.tag }}' "$root/.github/workflows/release.yml"
+grep -Fq 'updateRefs(input:' "$root/scripts/release-after-acceptance.sh"
+grep -Fq 'beforeOid: $mainSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
+grep -Fq 'beforeOid: $zeroSha, afterOid: $mainSha' "$root/scripts/release-after-acceptance.sh"
 trigger_block="$(sed -n '/^on:/,/^jobs:/p' "$root/.github/workflows/release.yml")"
 grep -Fq 'workflow_dispatch:' <<<"$trigger_block"
 if grep -Fq 'push:' <<<"$trigger_block"; then

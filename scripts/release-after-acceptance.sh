@@ -82,15 +82,59 @@ case "$remote_tag_status" in
     echo "release after acceptance: $tag already points to accepted main $sha"
     ;;
   2)
-    latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
-    latest_main_sha="${latest_main_line%%[[:space:]]*}"
-    if [ "$latest_main_sha" != "$sha" ]; then
-      echo "release after acceptance: main moved to $latest_main_sha before tagging; leaving $sha untagged"
-      exit 0
+    repository_owner="${GITHUB_REPOSITORY%%/*}"
+    repository_name="${GITHUB_REPOSITORY#*/}"
+    repository_id="$({
+      gh api graphql \
+        -f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { id } }' \
+        -F owner="$repository_owner" \
+        -F name="$repository_name" \
+        --jq '.data.repository.id'
+    } || true)"
+    if [ -z "$repository_id" ]; then
+      echo "release after acceptance: cannot resolve repository id for $GITHUB_REPOSITORY" >&2
+      exit 1
     fi
-    git tag "$tag" "$sha"
-    git push origin "refs/tags/$tag"
-    echo "release after acceptance: created $tag at $sha"
+
+    zero_sha=0000000000000000000000000000000000000000
+    atomic_error=""
+    if atomic_error="$({
+      gh api graphql \
+        -f query='mutation($repositoryId: ID!, $mainSha: GitObjectID!, $zeroSha: GitObjectID!, $tagRef: GitRefname!) {
+          updateRefs(input: {repositoryId: $repositoryId, refUpdates: [
+            {name: "refs/heads/main", beforeOid: $mainSha, afterOid: $mainSha, force: false},
+            {name: $tagRef, beforeOid: $zeroSha, afterOid: $mainSha, force: false}
+          ]}) { clientMutationId }
+        }' \
+        -F repositoryId="$repository_id" \
+        -F mainSha="$sha" \
+        -F zeroSha="$zero_sha" \
+        -F tagRef="refs/tags/$tag" \
+        --silent
+    } 2>&1)"; then
+      echo "release after acceptance: atomically created $tag at current main $sha"
+    else
+      latest_main_line="$(git ls-remote --exit-code origin refs/heads/main)"
+      latest_main_sha="${latest_main_line%%[[:space:]]*}"
+      if [ "$latest_main_sha" != "$sha" ]; then
+        echo "release after acceptance: main moved to $latest_main_sha before atomic tagging; leaving $sha untagged"
+        exit 0
+      fi
+
+      raced_tag_status=0
+      raced_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || raced_tag_status=$?
+      if [ "$raced_tag_status" -eq 0 ]; then
+        raced_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+        if [ "$raced_tag_sha" != "$sha" ]; then
+          echo "release after acceptance: manifest $tag was consumed at $raced_tag_sha; nothing to release from $sha"
+          exit 0
+        fi
+        echo "release after acceptance: $tag was concurrently created at accepted main $sha"
+      else
+        echo "release after acceptance: atomic main/tag update failed: $atomic_error" >&2
+        exit 1
+      fi
+    fi
     ;;
   *)
     echo "release after acceptance: cannot inspect remote tag $tag" >&2
