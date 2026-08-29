@@ -289,9 +289,10 @@ Tests must never resolve `config.DataDir()` or derived paths to production
 How much process a change gets is a judgment call. When in
 doubt, ask the maintainer.
 
-- **Plan docs are the norm.** Non-trivial work gets a plan doc first, often
-  written by the same agent that then implements it in the same session, but not
-  necessarily. Only a genuinely small change goes straight to a PR with no plan.
+- **Plans live in the garden.** Start non-trivial work by planting a plot. Write
+  the execution plan in its body and add one child for each piece of work. Add
+  `blocks` edges where order matters. `attn seed guide` shows the format. A
+  small change can go straight to a PR.
 - **Normal work targets `next`.** Feature and fix PRs merge into `next`, and a
   completed `epic/*` branch also targets `next`. PRs within a multi-PR arc target
   its `epic/*` branch. Squash these ordinary PRs.
