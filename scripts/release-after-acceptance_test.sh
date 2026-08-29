@@ -51,8 +51,9 @@ setup_fixture() {
   fixture_repo="$work/$name-repo"
   : >"$FAKE_GH_LOG"
 
-  git init -q --bare "$fixture_origin"
-  git clone -q "$root" "$fixture_repo"
+	  git init -q --bare "$fixture_origin"
+	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
+	  git clone -q --depth 1 "file://$root" "$fixture_repo"
 	  git -C "$fixture_repo" config user.name 'Release Test'
 	  git -C "$fixture_repo" config user.email 'release@example.com'
 	  git -C "$fixture_repo" switch -q -C main
