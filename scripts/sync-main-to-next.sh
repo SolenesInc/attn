@@ -40,7 +40,7 @@ fi
 
 active_candidate="$(
   gh pr list --base main --state open --limit 100 --json headRefName,url \
-    --jq '.[] | select(.headRefName | test("^release/v[0-9]+\\.[0-9]+\\.[0-9]+$")) | "\(.headRefName)\t\(.url)"'
+    --jq '.[] | select(.headRefName | test("^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|hotfix/.+)$")) | "\(.headRefName)\t\(.url)"'
 )"
 if [[ -n "$active_candidate" ]]; then
   echo "sync main: a release candidate is still active:" >&2

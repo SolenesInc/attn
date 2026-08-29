@@ -79,9 +79,10 @@ setup_fixture() {
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
-  if ! git -C "$fixture_repo" diff --quiet -- scripts/compile-changelog.sh; then
-    git -C "$fixture_repo" add scripts/compile-changelog.sh
-    git -C "$fixture_repo" commit -q -m 'test(release): use current changelog compiler'
+  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
+  if ! git -C "$fixture_repo" diff --quiet -- scripts/compile-changelog.sh cmd/release-train/main.go; then
+    git -C "$fixture_repo" add scripts/compile-changelog.sh cmd/release-train/main.go
+    git -C "$fixture_repo" commit -q -m 'test(release): use current release tools'
   fi
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" switch -q -C main
@@ -104,6 +105,50 @@ setup_fixture() {
   fi
 }
 
+setup_hotfix_fixture() {
+  fixture_origin="$work/hotfix-origin.git"
+  fixture_repo="$work/hotfix-repo"
+
+  git init -q --bare "$fixture_origin"
+  git --git-dir="$fixture_origin" config receive.shallowUpdate true
+  git clone -q "$root" "$fixture_repo"
+  git -C "$fixture_repo" config user.name 'Release Test'
+  git -C "$fixture_repo" config user.email 'release@example.com'
+  cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
+  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
+  if ! git -C "$fixture_repo" diff --quiet -- scripts/compile-changelog.sh cmd/release-train/main.go; then
+    git -C "$fixture_repo" add scripts/compile-changelog.sh cmd/release-train/main.go
+    git -C "$fixture_repo" commit -q -m 'test(release): use current release tools'
+  fi
+  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
+  git -C "$fixture_repo" switch -q -C main
+  git -C "$fixture_repo" rm -q -- 'changelog.d/*.yaml'
+
+  local previous_source
+  previous_source="$(git -C "$fixture_repo" rev-parse HEAD)"
+  cat >"$fixture_repo/.github/release-candidate.yml" <<EOF
+version: 98.0.0
+kind: promotion
+source_sha: ${previous_source}
+main_sha: ${previous_source}
+EOF
+  git -C "$fixture_repo" add changelog.d .github/release-candidate.yml
+  git -C "$fixture_repo" commit -q -m 'chore(release): establish released main'
+  released_main_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+  git -C "$fixture_repo" tag v98.0.0
+  git -C "$fixture_repo" push -q -u origin main
+  git --git-dir="$fixture_origin" update-ref refs/tags/v98.0.0 "$released_main_sha"
+  git --git-dir="$fixture_origin" symbolic-ref HEAD refs/heads/main
+
+  git -C "$fixture_repo" switch -q -c hotfix/startup-crash
+  printf '%s\n' 'startup repair' >"$fixture_repo/hotfix.txt"
+  printf '%s\n' 'kind: fixed' 'area: app' 'change: repair startup crash' \
+    >"$fixture_repo/changelog.d/hotfix.yaml"
+  git -C "$fixture_repo" add hotfix.txt changelog.d/hotfix.yaml
+  git -C "$fixture_repo" commit -q -m 'fix(app): repair startup crash'
+  hotfix_source_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+}
+
 export PATH="$work/bin:$PATH"
 export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
@@ -119,6 +164,11 @@ run_release() (
   cd "$fixture_repo"
   acceptance_sha="${FAKE_ACCEPTANCE_SHA_OVERRIDE:-$(git rev-parse origin/next)}"
   FAKE_ACCEPTANCE_SHA="$acceptance_sha" "$release_script" "$@"
+)
+
+run_hotfix() (
+  cd "$fixture_repo"
+  FAKE_ACCEPTANCE_SHA=unused "$release_script" "$@" --hotfix
 )
 
 expect_failure() {
@@ -139,8 +189,9 @@ setup_fixture default
 default_repo="$fixture_repo"
 default_origin="$fixture_origin"
 
+expect_failure 'run --hotfix from a hotfix/* branch' run_hotfix v99.98.98
 git -C "$fixture_repo" switch -q main
-expect_failure 'run from the local next branch' run_release v99.98.97
+expect_failure 'run a promotion from the local next branch' run_release v99.98.97
 git -C "$fixture_repo" switch -q next
 
 printf '%s\n' dirty >"$fixture_repo/untracked.txt"
@@ -211,6 +262,65 @@ grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
 [[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
 if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   echo "candidate preparation crossed a merge or release boundary" >&2
+  exit 1
+fi
+
+setup_hotfix_fixture
+: >"$FAKE_GH_LOG"
+
+git clone -q --branch main "$fixture_origin" "$work/hotfix-main-updater"
+git -C "$work/hotfix-main-updater" config user.name 'Release Test'
+git -C "$work/hotfix-main-updater" config user.email 'release@example.com'
+printf '%s\n' 'main moved' >"$work/hotfix-main-updater/main-moved.txt"
+git -C "$work/hotfix-main-updater" add main-moved.txt
+git -C "$work/hotfix-main-updater" commit -q -m 'fix(release): move released main'
+git -C "$work/hotfix-main-updater" push -q origin main
+expect_failure 'hotfix does not contain current main' run_hotfix v99.98.98
+git --git-dir="$fixture_origin" update-ref refs/heads/main "$released_main_sha"
+
+run_hotfix v99.98.98 --dry-run >"$work/hotfix-dry-run.out"
+for value in 'kind: hotfix' "hotfix source: ${hotfix_source_sha}" \
+  "main baseline: ${released_main_sha}" 'branch: hotfix/startup-crash' \
+  'source gate: final PR gate and App acceptance'; do
+  grep -Fq "$value" "$work/hotfix-dry-run.out"
+done
+if grep -q 'api --method GET' "$FAKE_GH_LOG"; then
+  echo "hotfix dry run queried source Acceptance" >&2
+  exit 1
+fi
+
+run_hotfix v99.98.98 >"$work/hotfix-success.out"
+hotfix_ref='refs/heads/hotfix/startup-crash'
+hotfix_candidate_sha="$(git --git-dir="$fixture_origin" rev-parse "$hotfix_ref")"
+hotfix_manifest="$(git --git-dir="$fixture_origin" show "$hotfix_ref:.github/release-candidate.yml")"
+for value in 'version: 99.98.98' 'kind: hotfix' \
+  "source_sha: ${hotfix_source_sha}" "main_sha: ${released_main_sha}"; do
+  grep -Fq "$value" <<<"$hotfix_manifest"
+done
+if git --git-dir="$fixture_origin" ls-tree -r --name-only "$hotfix_ref" \
+  -- changelog.d | grep -q '\.yaml$'; then
+  echo "hotfix candidate retained changelog fragments" >&2
+  exit 1
+fi
+if [[ "$(git --git-dir="$fixture_origin" rev-list --count \
+  "${hotfix_source_sha}..${hotfix_candidate_sha}")" -ne 1 ]]; then
+  echo "hotfix preparation added more than one commit" >&2
+  exit 1
+fi
+
+grep -Fq 'pr create --draft --base main --head hotfix/startup-crash --title fix(app): repair startup crash' \
+  "$FAKE_GH_LOG"
+for value in "$hotfix_source_sha" "$released_main_sha" "$hotfix_candidate_sha" \
+  'Final `PR gate` and `App acceptance`' '--ref hotfix/startup-crash' \
+  'candidate_sha=' 'hotfix.yaml'; do
+  grep -Fq -- "$value" "$FAKE_PR_BODY"
+done
+if grep -q 'api --method GET' "$FAKE_GH_LOG"; then
+  echo "hotfix preparation queried source Acceptance" >&2
+  exit 1
+fi
+if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
+  echo "hotfix preparation crossed a merge or release boundary" >&2
   exit 1
 fi
 

@@ -13,6 +13,12 @@ expect_failure() {
 }
 
 workflow="$root/.github/workflows/ci.yml"
+changes_job="$(sed -n '/^  changes:/,/^  changelog:/p' "$workflow")"
+if ! grep -Fq 'fetch-depth: 0' <<<"$changes_job" ||
+  ! grep -Fq "token: ''" <<<"$changes_job"; then
+  echo "Changes must classify PR paths from full local git history" >&2
+  exit 1
+fi
 if ! grep -Fq "              - 'scripts/**'" "$workflow"; then
   echo "Daemon path filter must cover every repository script" >&2
   exit 1

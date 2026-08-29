@@ -190,9 +190,13 @@ func TestCandidateValidationAcceptsPromotionAndHotfix(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			repo := newTestRepository(t)
 			mainSHA, _, headSHA := repo.prepareCandidate(kind)
+			acceptance := "success"
+			if kind == "hotfix" {
+				acceptance = ""
+			}
 			err := validateCandidate(repo.root, candidateValidation{
 				manifestPath: defaultManifestPath, currentMainRef: mainSHA, headRef: headSHA,
-				sourceAcceptance: "success", otherOpenCandidates: 0,
+				sourceAcceptance: acceptance, otherOpenCandidates: 0,
 			})
 			if err != nil {
 				t.Fatal(err)

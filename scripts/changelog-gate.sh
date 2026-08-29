@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PR changelog gate. Every PR must either add a fragment under changelog.d/ or
 # modify CHANGELOG.md directly (the release compilation PR does the latter;
-# hand-fixes to changelog copy also pass). Frozen candidates and release sync
+# hand-fixes to changelog copy also pass). Prepared candidates and release sync
 # PRs may only delete already-accounted-for fragments, so they are exempt.
 #
 # usage: changelog-gate.sh <base-ref> [head-branch]
@@ -33,6 +33,19 @@ fi
 RANGE="${BASE_REF}...HEAD"
 if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
   RANGE="origin/${BASE_REF}...HEAD"
+fi
+
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]] &&
+  ! git diff --quiet "$RANGE" -- .github/release-candidate.yml; then
+  main_ref="$BASE_REF"
+  if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
+    main_ref="origin/${BASE_REF}"
+  fi
+  if go run ./cmd/release-train candidate validate \
+    --current-main "$main_ref" --head HEAD --other-open-candidates 0; then
+    echo "changelog gate: prepared hotfix candidate ${HEAD_BRANCH}, skipping"
+    exit 0
+  fi
 fi
 
 # Committed additions, plus staged/untracked ones so the gate is honest when
