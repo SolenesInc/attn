@@ -128,9 +128,17 @@ source_sha="$(git -C "$hotfix_repo" rev-parse HEAD)"
 git -C "$hotfix_repo" rm -q changelog.d/hotfix.yaml
 git -C "$hotfix_repo" add .github/release-candidate.yml app
 git -C "$hotfix_repo" commit -q -m 'chore(release): prepare v99.98.98'
-if ! (cd "$hotfix_repo" && "$gate" main hotfix/prepared) >/dev/null; then
+prepared_sha="$(git -C "$hotfix_repo" rev-parse HEAD)"
+if ! (cd "$hotfix_repo" && "$gate" main hotfix/prepared "$prepared_sha") >/dev/null; then
   echo "prepared hotfix did not receive its changelog exemption" >&2
   exit 1
 fi
+
+for value in \
+  '"${{ github.event.pull_request.head.sha }}"' \
+  'HEAD_REF="${3:-HEAD}"' \
+  'hotfix "$main_ref" "$HEAD_REF"'; do
+  grep -Fq "$value" "$root/.github/workflows/ci.yml" "$root/scripts/changelog-gate.sh"
+done
 
 echo "changelog gate: OK"

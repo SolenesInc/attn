@@ -6,7 +6,7 @@ set -euo pipefail
 # hand-fixes to changelog copy also pass). Prepared candidates and release sync
 # PRs may only delete already-accounted-for fragments, so they are exempt.
 #
-# usage: changelog-gate.sh <base-ref> [head-branch]
+# usage: changelog-gate.sh <base-ref> [head-branch] [head-ref]
 #
 # Runs in CI (.github/workflows/ci.yml, job "Changelog") and locally:
 #   ./scripts/changelog-gate.sh main
@@ -15,6 +15,7 @@ set -euo pipefail
 
 BASE_REF="${1:?usage: changelog-gate.sh <base-ref> [head-branch]}"
 HEAD_BRANCH="${2:-$(git branch --show-current)}"
+HEAD_REF="${3:-HEAD}"
 script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$(git rev-parse --show-toplevel)"
@@ -37,14 +38,14 @@ if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
 fi
 
 if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  "$script_root/candidate-gate.sh" promotion "$main_ref" HEAD "$HEAD_BRANCH"
+  "$script_root/candidate-gate.sh" promotion "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
   echo "changelog gate: validated promotion candidate ${HEAD_BRANCH}, skipping"
   exit 0
 fi
 
 if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]]; then
   if ! git diff --quiet "$RANGE" -- .github/release-candidate.yml; then
-    "$script_root/candidate-gate.sh" hotfix "$main_ref" HEAD "$HEAD_BRANCH"
+    "$script_root/candidate-gate.sh" hotfix "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
     echo "changelog gate: validated hotfix candidate ${HEAD_BRANCH}, skipping"
     exit 0
   fi

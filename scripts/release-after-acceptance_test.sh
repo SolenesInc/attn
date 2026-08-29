@@ -52,7 +52,11 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls/42/commits?'* ]]; th
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/release.yml/runs?'* ]]; then
   if [[ "${FAKE_RELEASE_RUN_PAGE_2:-0}" == 1 ]] || grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
-    printf '%s\n' 99
+    release_status="${FAKE_RELEASE_RUN_STATUS:-completed}"
+    release_conclusion="${FAKE_RELEASE_RUN_CONCLUSION:-success}"
+    if [[ "$release_status" != completed || "$release_conclusion" == success ]]; then
+      printf '99\t%s\t%s\n' "$release_status" "$release_conclusion"
+    fi
   fi
   exit 0
 fi
@@ -137,6 +141,8 @@ export FAKE_MAIN_CHECK_COUNT="$work/main-check-count"
 export FAKE_MOVED_MAIN_SHA=cccccccccccccccccccccccccccccccccccccccc
 export FAKE_MOVE_MAIN_AT_CHECK=
 export FAKE_RELEASE_RUN_PAGE_2=0
+export FAKE_RELEASE_RUN_STATUS=completed
+export FAKE_RELEASE_RUN_CONCLUSION=success
 export FAKE_ATOMIC_REJECT=0
 export FAKE_ATOMIC_RACE_TAG=0
 
@@ -152,6 +158,8 @@ setup_fixture() {
   export FAKE_APP_CONCLUSION=success
   export FAKE_MAIN_TREE="$FAKE_CANDIDATE_TREE"
   export FAKE_RELEASE_RUN_PAGE_2=0
+  export FAKE_RELEASE_RUN_STATUS=completed
+  export FAKE_RELEASE_RUN_CONCLUSION=success
   export FAKE_ATOMIC_REJECT=0
   export FAKE_ATOMIC_RACE_TAG=0
 
@@ -304,6 +312,8 @@ if grep -Fq "$hotfix_sha" <(git --git-dir="$fixture_origin" show-ref --tags); th
 fi
 
 setup_fixture paginated-release-run
+git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
+export FAKE_TAG_SHA="$candidate_sha"
 export FAKE_RELEASE_RUN_PAGE_2=1
 run_release_after_acceptance >"$work/paginated-release-run.out"
 grep -q 'not dispatching again' "$work/paginated-release-run.out"
@@ -313,6 +323,27 @@ if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
 fi
 grep -Fq 'api --paginate repos/example/attn/actions/workflows/release.yml/runs?event=workflow_dispatch&per_page=100' "$FAKE_GH_LOG"
 export FAKE_RELEASE_RUN_PAGE_2=0
+
+setup_fixture failed-release-run
+git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
+export FAKE_TAG_SHA="$candidate_sha"
+export FAKE_RELEASE_RUN_PAGE_2=1
+export FAKE_RELEASE_RUN_CONCLUSION=failure
+run_release_after_acceptance >"$work/failed-release-run.out"
+grep -q "workflow run release.yml --repo example/attn --ref main -f tag=$candidate_tag" "$FAKE_GH_LOG"
+
+setup_fixture active-release-run
+git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
+export FAKE_TAG_SHA="$candidate_sha"
+export FAKE_RELEASE_RUN_PAGE_2=1
+export FAKE_RELEASE_RUN_STATUS=in_progress
+export FAKE_RELEASE_RUN_CONCLUSION=
+run_release_after_acceptance >"$work/active-release-run.out"
+grep -q 'not dispatching again' "$work/active-release-run.out"
+if grep -q '^workflow run release.yml ' "$FAKE_GH_LOG"; then
+  echo "active release run was dispatched again" >&2
+  exit 1
+fi
 
 setup_fixture repaired
 export FAKE_ACCEPTANCE_CONCLUSION=failure
