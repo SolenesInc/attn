@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -50,6 +51,22 @@ func (d *Daemon) replantStrandedTicketByID(ticketID string) bool {
 	if !isStrandedTicket(ticket) {
 		return false
 	}
+	automation, err := d.store.HasAutomationTicketProvenance(ticket.ID)
+	if err != nil {
+		d.logf("garden: checking Automation provenance for stranded ticket %s: %v", ticket.ID, err)
+		return false
+	}
+	if automation {
+		return false
+	}
+	link, err := d.store.LegacyTicketSeedLink(ticket.ID)
+	if err != nil {
+		d.logf("garden: checking the seed linked to stranded ticket %s: %v", ticket.ID, err)
+		return false
+	}
+	if link != nil {
+		return true
+	}
 	seedID, err := d.replantStrandedTicket(ticket)
 	if err != nil {
 		d.logf("garden: replanting stranded ticket %s: %v", ticket.ID, err)
@@ -66,52 +83,81 @@ func isStrandedTicket(ticket *store.Ticket) bool {
 	return ticket.Status == store.TicketStatusCrashed || ticket.Status == store.TicketStatusFailed
 }
 
-// The plant comes first and the archive last: a crash between them duplicates a
-// seed, which a person can wither; the other order loses the work.
 func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 	title := strings.TrimSpace(ticket.Title)
 	body := strings.TrimSpace(ticket.Description)
 	if err := garden.ValidatePlant(title, body); err != nil {
 		return "", err
 	}
-	schema, err := d.seedsCollection()
+	seedSchema, err := d.seedsCollection()
 	if err != nil {
 		return "", err
 	}
-	plant := garden.Seed{
-		Title:    title,
-		Body:     body,
-		Status:   garden.StatusGrowing,
-		StepSlug: garden.StepSlug(title),
-		Edges:    []garden.Edge{},
-		Vars:     []garden.Var{},
-	}
-	if ticket.Status == store.TicketStatusFailed {
-		plant.Status = garden.StatusWithered
-		plant.Reason = "reported failed before the garden; replanted from ticket " + ticket.ID
-	} else {
-		plant.TenderSession = strings.TrimSpace(ticket.Assignee)
-	}
-	seed, _, err := d.mintAndPlant(*schema, plant)
+	noteSchema, err := d.notesCollection()
 	if err != nil {
 		return "", err
 	}
-	if _, err := d.appendSeedNote(seed.ID, strandedProvenanceNote(ticket), "", "", garden.NoteKindNote, nil); err != nil {
-		d.logf("garden: recording ticket %s as the origin of seed %s: %v", ticket.ID, seed.ID, err)
+	dispatchSchema, err := d.dispatchesCollection()
+	if err != nil {
+		return "", err
 	}
 	now := time.Now()
-	if _, _, err := d.store.SetTicketStatusWithOptions(
-		ticket.ID, store.TicketStatusDone, store.TicketAuthorAttn,
-		fmt.Sprintf("replanted as seed %s; the work continues in the garden", seed.ID),
-		mirrorTicketMutationOptions(), now,
-	); err != nil {
-		return "", fmt.Errorf("close %s after planting %s: %w", ticket.ID, seed.ID, err)
+	var linked store.LegacyTicketSeedResult
+	for attempt := 0; attempt < 3; attempt++ {
+		seedID, err := d.mintSeedID()
+		if err != nil {
+			return "", err
+		}
+		noteID, err := d.mintNoteID()
+		if err != nil {
+			return "", err
+		}
+		seed := garden.Seed{
+			ID: seedID, Title: title, Body: body, Status: garden.StatusWithered,
+			StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
+			Reason:          "recovered from legacy ticket " + ticket.ID,
+			ResumeSessionID: ticket.ResumeSessionID, ResumeCwd: ticket.Cwd, ResumeAgent: ticket.LastAgentID,
+		}
+		seedBody, err := seed.Encode()
+		if err != nil {
+			return "", err
+		}
+		note := garden.Note{ID: noteID, Seed: seedID, Kind: garden.NoteKindNote, Body: strandedProvenanceNote(ticket)}
+		noteBody, err := note.Encode()
+		if err != nil {
+			return "", err
+		}
+		spec := store.LegacyTicketSeedSpec{
+			TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody, SeedTitle: title, SeedDescription: body,
+			SeedFact:   documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
+			SeedSchema: *seedSchema, NoteSchema: *noteSchema, DispatchSchema: *dispatchSchema,
+			Notes: []store.LegacyTicketSeedNote{{
+				ID: noteID, Body: noteBody,
+				Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
+			}}, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
+			SourceKind: "stranded", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "stranded"),
+			OriginalTerminalState: ticket.Status, CreatedAt: now,
+		}
+		linked, err = d.store.EnsureLegacyTicketSeed(spec)
+		if err != nil && docstore.IsConflict(err) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if linked.Result == "created" {
+			d.announceLegacyTicketSeedWrites(spec, linked)
+		}
+		break
 	}
-	if err := d.store.ArchiveTicket(ticket.ID, now); err != nil {
-		return "", fmt.Errorf("archive %s after planting %s: %w", ticket.ID, seed.ID, err)
+	if linked.SeedID == "" {
+		return "", fmt.Errorf("ticket %s has no safe one-to-one seed: %s", ticket.ID, linked.Result)
 	}
-	d.publishTicketFact(FactTicketChanged, ticket.ID)
-	return seed.ID, nil
+	if linked.Result == "created" {
+		d.publishFact(FactGardenPlanted, linked.SeedID, nil)
+		d.publishFact(FactGardenNoted, linked.SeedID, nil)
+	}
+	return linked.SeedID, nil
 }
 
 func strandedProvenanceNote(ticket *store.Ticket) string {
@@ -126,7 +172,7 @@ func strandedProvenanceNote(ticket *store.Ticket) string {
 	if verdict := reconcileVerdictComment(ticket); verdict != "" {
 		lines = append(lines, "", verdict)
 	}
-	lines = append(lines, "", fmt.Sprintf("The ticket is archived and still readable in full with `attn ticket show %s`.", ticket.ID))
+	lines = append(lines, "", fmt.Sprintf("The legacy ticket remains unchanged and readable in full with `attn ticket show %s`.", ticket.ID))
 	return strings.Join(lines, "\n")
 }
 

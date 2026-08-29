@@ -38,7 +38,7 @@ func TestBackupNow_ProducesValidSnapshot(t *testing.T) {
 	})
 
 	backupDir := filepath.Join(t.TempDir(), "backups")
-	backupPath, err := s.BackupNow(backupDir, 12)
+	backupPath, err := s.BackupNow(backupDir)
 	if err != nil {
 		t.Fatalf("BackupNow error: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestBackupNow_TargetAlreadyExists(t *testing.T) {
 		}
 	}
 
-	if _, err := s.BackupNow(backupDir, 12); err == nil {
+	if _, err := s.BackupNow(backupDir); err == nil {
 		t.Fatal("expected BackupNow to fail on an existing target, got nil error")
 	}
 }
@@ -135,9 +135,12 @@ func TestBackupNow_Rotation(t *testing.T) {
 		t.Fatalf("seed premigration file: %v", err)
 	}
 
-	newPath, err := s.BackupNow(backupDir, keep)
+	newPath, err := s.BackupNow(backupDir)
 	if err != nil {
 		t.Fatalf("BackupNow error: %v", err)
+	}
+	if err := PruneBackups(backupDir, keep, nil); err != nil {
+		t.Fatalf("PruneBackups error: %v", err)
 	}
 
 	entries, err := os.ReadDir(backupDir)
@@ -182,12 +185,36 @@ func TestBackupNow_Rotation(t *testing.T) {
 	}
 }
 
+func TestPruneBackupsKeepsProtectedSnapshotsBeyondTheRotation(t *testing.T) {
+	dir := t.TempDir()
+	var paths []string
+	for day := 1; day <= 5; day++ {
+		path := filepath.Join(dir, fmt.Sprintf("attn-202601%02d-000000.db", day))
+		if err := os.WriteFile(path, []byte("snapshot"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, path)
+	}
+	protected := map[string]struct{}{paths[0]: {}}
+	if err := PruneBackups(dir, 2, protected); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths[0]); err != nil {
+		t.Fatalf("protected oldest snapshot was removed: %v", err)
+	}
+	for _, path := range paths[3:] {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("newest rotating snapshot was removed: %v", err)
+		}
+	}
+}
+
 func TestBackupNow_RefusesNonDurableStore(t *testing.T) {
 	s := New()
 	defer s.Close()
 
 	backupDir := t.TempDir()
-	if _, err := s.BackupNow(backupDir, 12); err == nil {
+	if _, err := s.BackupNow(backupDir); err == nil {
 		t.Fatal("expected BackupNow to refuse a non-durable (in-memory fallback) store, got nil error")
 	}
 
@@ -270,6 +297,22 @@ func TestBackupPreMigration_CapsSnapshots(t *testing.T) {
 	}
 	if err := migrateDB(s.db, dbPath); err != nil {
 		t.Fatalf("migrateDB error: %v", err)
+	}
+	beforePrune, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var beforePremigration int
+	for _, entry := range beforePrune {
+		if IsPremigrationBackupName(entry.Name()) {
+			beforePremigration++
+		}
+	}
+	if beforePremigration != len(seeded)+1 {
+		t.Fatalf("migration pruned before the recovery fence: got %d snapshots, want %d", beforePremigration, len(seeded)+1)
+	}
+	if err := PrunePremigrationBackups(backupDir, backupPremigrationKeep, nil); err != nil {
+		t.Fatalf("PrunePremigrationBackups error: %v", err)
 	}
 
 	entries, err := os.ReadDir(backupDir)

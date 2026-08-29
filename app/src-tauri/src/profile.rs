@@ -10,6 +10,9 @@ const BUILD_PROFILE: Option<&str> = option_env!("ATTN_BUILD_PROFILE");
 
 const BUILD_WS_PORT: Option<&str> = option_env!("ATTN_BUILD_WS_PORT");
 const BUILD_BUNDLE_ID: Option<&str> = option_env!("ATTN_BUILD_BUNDLE_ID");
+const BUILD_DEFAULT_PROFILE_HARNESS: bool =
+    option_env!("ATTN_BUILD_DEFAULT_PROFILE_HARNESS").is_some();
+const HARNESS_DATA_DIR_ENV: &str = "ATTN_HARNESS_DATA_DIR";
 const ROUTING_PATH_OVERRIDES: [&str; 7] = [
     "ATTN_SOCKET_PATH",
     "ATTN_DB_PATH",
@@ -59,10 +62,53 @@ pub fn apply_build_profile_env() {
     } else {
         env::set_var("ATTN_PROFILE", profile);
     }
+    if BUILD_DEFAULT_PROFILE_HARNESS {
+        let data_dir = validated_harness_data_dir()
+            .unwrap_or_else(|error| panic!("refusing default-profile harness launch: {error}"));
+        env::set_var("ATTN_DATA_DIR", data_dir);
+    }
     env::set_var("ATTN_WS_PORT", default_port_for_build_profile());
 }
 
-fn data_dir() -> Result<PathBuf, String> {
+fn validated_harness_data_dir() -> Result<PathBuf, String> {
+    let raw = env::var(HARNESS_DATA_DIR_ENV)
+        .map_err(|_| format!("{HARNESS_DATA_DIR_ENV} is required"))?;
+    let requested = PathBuf::from(raw.trim());
+    if !requested.is_absolute() {
+        return Err(format!("{HARNESS_DATA_DIR_ENV} must be absolute"));
+    }
+    let metadata = fs::symlink_metadata(&requested)
+        .map_err(|error| format!("inspect {}: {error}", requested.display()))?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(format!(
+            "{} must be a direct directory",
+            requested.display()
+        ));
+    }
+    if metadata.permissions().mode() & 0o077 != 0 {
+        return Err(format!("{} must be owner-only", requested.display()));
+    }
+    let resolved = fs::canonicalize(&requested)
+        .map_err(|error| format!("resolve {}: {error}", requested.display()))?;
+    let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
+    let production = fs::canonicalize(home.join(".attn")).unwrap_or_else(|_| home.join(".attn"));
+    if resolved == production || resolved.starts_with(&production) {
+        return Err(format!(
+            "{} resolves inside production {}",
+            requested.display(),
+            production.display()
+        ));
+    }
+    Ok(resolved)
+}
+
+pub(crate) fn data_dir() -> Result<PathBuf, String> {
+    if let Ok(raw) = env::var("ATTN_DATA_DIR") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
     let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
     let name = match build_profile() {
         "" => ".attn".to_string(),
@@ -194,5 +240,37 @@ mod tests {
         assert!(decide_automation_enabled(Some("  "), Some("ticketqa")));
         assert!(!decide_automation_enabled(Some("  "), None));
         assert!(!decide_automation_enabled(Some(""), Some("")));
+    }
+
+    #[test]
+    fn harness_data_dir_requires_a_direct_owner_only_directory() {
+        let root = env::temp_dir().join(format!(
+            "attn-default-profile-harness-{}",
+            std::process::id()
+        ));
+        let direct = root.join("direct");
+        let link = root.join("link");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&direct).expect("direct dir");
+        fs::set_permissions(&direct, fs::Permissions::from_mode(0o700)).expect("permissions");
+        std::os::unix::fs::symlink(&direct, &link).expect("symlink");
+
+        let previous = env::var_os(HARNESS_DATA_DIR_ENV);
+        env::set_var(HARNESS_DATA_DIR_ENV, &direct);
+        assert_eq!(
+            validated_harness_data_dir().expect("direct harness root"),
+            fs::canonicalize(&direct).unwrap()
+        );
+        env::set_var(HARNESS_DATA_DIR_ENV, &link);
+        assert!(validated_harness_data_dir()
+            .unwrap_err()
+            .contains("direct directory"));
+
+        if let Some(value) = previous {
+            env::set_var(HARNESS_DATA_DIR_ENV, value);
+        } else {
+            env::remove_var(HARNESS_DATA_DIR_ENV);
+        }
+        fs::remove_dir_all(&root).expect("cleanup");
     }
 }

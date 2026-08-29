@@ -22,12 +22,7 @@ fn daemon_socket_path() -> Option<PathBuf> {
         }
     }
 
-    let home = dirs::home_dir()?;
-    let data_dir = match profile::build_profile() {
-        "" => ".attn".to_string(),
-        named => format!(".attn-{named}"),
-    };
-    Some(home.join(data_dir).join("attn.sock"))
+    Some(profile::data_dir().ok()?.join("attn.sock"))
 }
 
 fn daemon_pid_path() -> Option<PathBuf> {

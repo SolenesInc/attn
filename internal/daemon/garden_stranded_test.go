@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -34,9 +35,13 @@ func seedByTitle(t *testing.T, d *Daemon, title string) garden.Seed {
 	return garden.Seed{}
 }
 
-func TestStrandedCrashedTicketBecomesATendedSeed(t *testing.T) {
+func TestStrandedCrashedTicketBecomesAClosedSeedWithoutChangingTheTicket(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
+	before, err := d.store.GetTicket("wire-the-thing")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	d.replantStrandedTickets()
 
@@ -44,14 +49,14 @@ func TestStrandedCrashedTicketBecomesATendedSeed(t *testing.T) {
 	if seed.Body != "the whole brief" {
 		t.Fatalf("replanted seed lost the brief: %+v", seed)
 	}
-	if seed.Status != garden.StatusGrowing {
-		t.Fatalf("replanted seed status = %q, want growing — the work was cut off, not finished", seed.Status)
+	if seed.Status != garden.StatusWithered {
+		t.Fatalf("replanted seed status = %q, want withered", seed.Status)
 	}
-	if seed.TenderSession != "sess-dead" {
-		t.Fatalf("replanted seed tender = %q, want the session that died", seed.TenderSession)
+	if seed.TenderSession != "" {
+		t.Fatalf("replanted seed tender=%q, want an unheld closed seed", seed.TenderSession)
 	}
-	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 1 || ids[0] != seed.ID {
-		t.Fatalf("ready = %v, want just %s — a dead tender holds nothing", ids, seed.ID)
+	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 0 {
+		t.Fatalf("ready = %v, want none", ids)
 	}
 
 	notes, _, err := d.readNotes(seed.ID, 10)
@@ -66,16 +71,12 @@ func TestStrandedCrashedTicketBecomesATendedSeed(t *testing.T) {
 	if err != nil || ticket == nil {
 		t.Fatalf("GetTicket: %v %v", ticket, err)
 	}
-	if ticket.ArchivedAt == nil || ticket.Status != store.TicketStatusDone {
-		t.Fatalf("replanted ticket is still on the board: status=%q archived=%v", ticket.Status, ticket.ArchivedAt)
-	}
-	if ticket.Description != "the whole brief" {
-		t.Fatalf("replanted ticket lost its record: %+v", ticket)
+	if !reflect.DeepEqual(before, ticket) {
+		t.Fatalf("recovery changed the legacy ticket:\nbefore=%#v\nafter=%#v", before, ticket)
 	}
 }
 
-// A seed's tender is derived from session liveness, so no code moves the hold.
-func TestReplantedSeedReturnsToItsSessionWhenItRevives(t *testing.T) {
+func TestReplantedClosedSeedDoesNotBecomeActiveWhenItsSessionRevives(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
 
@@ -89,7 +90,7 @@ func TestReplantedSeedReturnsToItsSessionWhenItRevives(t *testing.T) {
 	})
 
 	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 0 {
-		t.Fatalf("ready = %v, want none — %s is held by a session that is live again", ids, seed.ID)
+		t.Fatalf("ready = %v, want none — %s stays closed", ids, seed.ID)
 	}
 }
 
@@ -143,6 +144,22 @@ func TestStrandedReplantIsIdempotent(t *testing.T) {
 
 	if seeds := gardenSeeds(t, d); len(seeds) != 1 {
 		t.Fatalf("seeds after two passes = %d, want 1: %+v", len(seeds), seeds)
+	}
+	link, err := d.store.LegacyTicketSeedLink("wire-the-thing")
+	if err != nil || link == nil {
+		t.Fatalf("legacy link = %#v, %v", link, err)
+	}
+}
+
+func TestStrandedAutomationLookingUserTicketIsRecovered(t *testing.T) {
+	d := newGardenDaemon(t)
+	seedStrandedTicket(t, d, "auto-abcdef1234567890", "Looks automated", "but has no Automation provenance", store.TicketStatusFailed, "sess-dead")
+
+	d.replantStrandedTickets()
+
+	seed := seedByTitle(t, d, "Looks automated")
+	if seed.Status != garden.StatusWithered {
+		t.Fatalf("seed status = %q, want withered", seed.Status)
 	}
 }
 
@@ -209,7 +226,7 @@ func TestReconcilingADeathReplantsTheTicketIntoTheGarden(t *testing.T) {
 		t.Fatalf("seed planted before the verdict landed on it: %+v", notes)
 	}
 	ticket, err := d.store.GetTicket("wire-the-thing")
-	if err != nil || ticket == nil || ticket.ArchivedAt == nil {
-		t.Fatalf("reconciled ticket is still on the board: %+v (%v)", ticket, err)
+	if err != nil || ticket == nil || ticket.ArchivedAt != nil || ticket.Status != store.TicketStatusCrashed {
+		t.Fatalf("recovery rewrote the reconciled legacy ticket: %+v (%v)", ticket, err)
 	}
 }

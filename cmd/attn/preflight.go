@@ -49,6 +49,7 @@ func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Op
 	agent := fs.String("agent", agentDefault, "agent launch to check")
 	model := fs.String("model", modelDefault, "model pin to check")
 	effort := fs.String("effort", effortDefault, "reasoning effort pin to check")
+	appPath := fs.String("app-path", "", "packaged app whose bundled CLI/protocol should be checked")
 	jsonOutput := fs.Bool("json", false, "emit the stable JSON report")
 	help := fs.Bool("help", false, "show help")
 	fs.BoolVar(help, "h", false, "show help")
@@ -71,6 +72,7 @@ func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Op
 		Agent: *agent, AgentSource: agentSource,
 		Model: *model, ModelSource: modelSource,
 		Effort: *effort, EffortSource: effortSource,
+		AppPath: *appPath,
 	}, *jsonOutput, *help, nil
 }
 
@@ -133,6 +135,7 @@ options:
   --agent <name>   agent launch to check (ATTN_AGENT, then codex)
   --model <name>   model pin to check (ATTN_MODEL, then agent default)
   --effort <level> effort pin to check (ATTN_EFFORT, then agent default)
+  --app-path <path> packaged app to check (defaults to the selected profile app)
   --json           emit the stable machine-readable report
 `)
 }

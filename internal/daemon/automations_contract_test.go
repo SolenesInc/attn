@@ -384,7 +384,7 @@ func TestValidateAutomationContinuationSelfHealsItsOwnVanishedTicket(t *testing.
 		t.Fatalf("run2 ids=%s/%s, want inherited from run1 (%s/%s)", run2.SessionID, run2.TicketID, run1.SessionID, run1.TicketID)
 	}
 
-	if removed, err := s.SweepExpiredTickets(now.Add(6*time.Hour), time.Hour); err != nil || removed != 1 {
+	if removed, err := s.SweepExpiredAutomationTickets(now.Add(6*time.Hour), time.Hour); err != nil || removed != 1 {
 		t.Fatalf("sweep removed=%d err=%v", removed, err)
 	}
 

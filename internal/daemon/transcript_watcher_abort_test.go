@@ -100,6 +100,7 @@ func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 	for _, tc := range haltedTurnCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(toolhome.EnvVar, t.TempDir())
+			t.Setenv("CODEX_HOME", "")
 			home, _ := toolhome.Dir()
 
 			d := newTraceDaemon(t)
@@ -139,6 +140,7 @@ func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 
 func TestWatcherInvalidatesMessagesWhileSessionStaysWorking(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	home, _ := toolhome.Dir()
 	d := newTraceDaemon(t)
 
@@ -192,6 +194,7 @@ func TestWatcherInvalidatesMessagesWhileSessionStaysWorking(t *testing.T) {
 
 func TestWatcherLifecycleRequiresExactNativeTranscriptIdentity(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	home, _ := toolhome.Dir()
 	d := newTraceDaemon(t)
 
@@ -254,6 +257,7 @@ func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 	for _, tc := range haltedTurnCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(toolhome.EnvVar, t.TempDir())
+			t.Setenv("CODEX_HOME", "")
 			home, _ := toolhome.Dir()
 
 			d := newTraceDaemon(t)
@@ -292,6 +296,7 @@ func TestAHaltFromBeforeTheSessionStartedIsIgnored(t *testing.T) {
 
 func TestAnUndatedHaltIsIgnored(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	home, _ := toolhome.Dir()
 
 	d := newTraceDaemon(t)
@@ -355,6 +360,7 @@ func TestAHaltIsDatedByTheAgentNotTheRead(t *testing.T) {
 
 func TestACopilotAbortNobodyAskedForStillClosesTheTurn(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	home, _ := toolhome.Dir()
 
 	d := newTraceDaemon(t)
@@ -407,6 +413,7 @@ func requireClosedTurnBracket(t *testing.T, d *Daemon, sessionID string) session
 
 func TestATranscriptLineThatMerelyMentionsTheMarkerIsNotAHalt(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	home, _ := toolhome.Dir()
 
 	d := newTraceDaemon(t)
