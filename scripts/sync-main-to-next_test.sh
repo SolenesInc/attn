@@ -46,8 +46,13 @@ setup_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
+  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
   git -C "$fixture_repo" config user.name 'Release Train Test'
   git -C "$fixture_repo" config user.email 'release-train@example.com'
+  git -C "$fixture_repo" add cmd/release-train/main.go
+  if ! git -C "$fixture_repo" diff --cached --quiet; then
+    git -C "$fixture_repo" commit -q -m 'test: use current release train command'
+  fi
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" switch -q -C main
   git -C "$fixture_repo" push -q -u origin main
@@ -143,6 +148,25 @@ if [[ "$(wc -w <<<"$parent_line" | tr -d ' ')" -ne 3 ]]; then
   exit 1
 fi
 grep -q 'pr create --base next --head sync/main-into-next-' "$fixture_log"
+
+sync_sha="$(git --git-dir="$fixture_origin" rev-parse "$sync_ref")"
+sync_branch="${sync_ref#refs/heads/}"
+if ! (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
+  "$root/scripts/changelog-gate.sh" next "$sync_branch" "$sync_sha") >/dev/null; then
+  echo "generated sync did not pass its changelog gate" >&2
+  exit 1
+fi
+
+git -C "$fixture_repo" switch -q --detach "$sync_sha"
+printf '%s\n' 'smuggled change' >"$fixture_repo/smuggled.txt"
+git -C "$fixture_repo" add smuggled.txt
+git -C "$fixture_repo" commit -q --amend -m 'chore(release): forged sync'
+forged_sync_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+if (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
+  "$root/scripts/changelog-gate.sh" next "$sync_branch" "$forged_sync_sha") >/dev/null 2>&1; then
+  echo "forged sync tree bypassed the changelog gate" >&2
+  exit 1
+fi
 
 setup_fixture rewritten 1
 if run_sync >"$work/rewritten.out" 2>&1; then

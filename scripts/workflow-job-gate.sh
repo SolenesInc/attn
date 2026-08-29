@@ -31,14 +31,16 @@ if [[ "$workflow" == app-acceptance.yml ]]; then
   runs_url+="&branch=main"
   run_binding="App acceptance $sha"
   run_row="$({
-    gh api "$runs_url" \
-      --jq '.workflow_runs | map(select(.head_branch == "main" and .event == "workflow_dispatch" and .display_title == "'$run_binding'")) | sort_by(.created_at) | last | select(.) | [.id, .display_title, .status, (.conclusion // ""), .html_url] | @tsv'
+    gh api --paginate "$runs_url" \
+      --jq '.workflow_runs[] | select(.head_branch == "main" and .event == "workflow_dispatch" and .display_title == "'$run_binding'") | [.created_at, .id, .display_title, .status, (.conclusion // ""), .html_url] | @tsv' |
+      sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
   } || true)"
 else
   runs_url+="&head_sha=$sha&branch=$branch"
   run_row="$({
-    gh api "$runs_url" \
-      --jq '.workflow_runs | map(select(.head_sha == "'$sha'" and .event == "'$event'")) | sort_by(.created_at) | last | select(.) | [.id, .head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
+    gh api --paginate "$runs_url" \
+      --jq '.workflow_runs[] | select(.head_sha == "'$sha'" and .event == "'$event'") | [.created_at, .id, .head_sha, .status, (.conclusion // ""), .html_url] | @tsv' |
+      sort -t $'\t' -k1,1 | tail -n 1 | cut -f 2-
   } || true)"
 fi
 if [[ -z "$run_row" ]]; then

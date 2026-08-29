@@ -541,10 +541,10 @@ func TestPromotionSyncConsumesOnlyTheFrozenFragments(t *testing.T) {
 	if !repo.exists("changelog.d/frozen.yaml") || !repo.exists("changelog.d/later.yaml") {
 		t.Fatal("test setup did not reproduce squash merge retaining both fragments")
 	}
-	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, false); err == nil || !strings.Contains(err.Error(), "released fragments remain") {
+	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", false); err == nil || !strings.Contains(err.Error(), "released fragments remain") {
 		t.Fatalf("check should catch the retained released fragment, got %v", err)
 	}
-	removed, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, true)
+	removed, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +558,7 @@ func TestPromotionSyncConsumesOnlyTheFrozenFragments(t *testing.T) {
 		t.Fatal("post-candidate fragment was consumed")
 	}
 	repo.commit("chore(release): consume v0.12.0 fragments")
-	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, false); err != nil {
+	if _, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", false); err != nil {
 		t.Fatal(err)
 	}
 	repo.git("merge-base", "--is-ancestor", mainRelease, "HEAD")
@@ -582,7 +582,7 @@ func TestPromotionSyncRefusesARewrittenReleasedFragment(t *testing.T) {
 	repo.commit("rewrite fragment after freeze")
 	repo.git("merge", "--no-ff", "main", "-m", "sync main")
 
-	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, true)
+	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainRelease, "HEAD", true)
 	if err == nil || !strings.Contains(err.Error(), "changed after the candidate") {
 		t.Fatalf("expected rewritten-fragment refusal, got %v", err)
 	}
@@ -598,7 +598,7 @@ func TestPromotionSyncRefusesToDeleteFromADirtyWorktree(t *testing.T) {
 	repo.commit("carry release manifest")
 	repo.write("changelog.d/frozen.yaml", "kind: added\narea: release\nchange: uncommitted rewrite\n")
 
-	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainSHA, true)
+	_, err := syncReleasedFragments(repo.root, defaultManifestPath, mainSHA, "HEAD", true)
 	if err == nil || !strings.Contains(err.Error(), "working tree must be clean") {
 		t.Fatalf("expected dirty-worktree refusal, got %v", err)
 	}

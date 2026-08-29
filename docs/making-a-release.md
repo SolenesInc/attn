@@ -90,9 +90,10 @@ A prepared `hotfix/*` candidate proves the same facts except source
 Acceptance, because its final `PR gate` and `App acceptance` are the source
 gate. A hotfix without a fresh manifest is accepted only as a repair of the
 still-unpublished candidate on `main`, and must update `CHANGELOG.md` directly.
-Generated `sync/main-into-next-*` PRs are exempt because they only reconcile
-fragments already represented in the released changelog. Run the gate locally
-with `./scripts/changelog-gate.sh next`.
+Generated `sync/main-into-next-*` PRs are exempt only after CI verifies the
+exact `main` and `next` parents, the generated merge tree, and deletion of only
+the frozen fragments already represented in the released changelog. Run the
+gate locally with `./scripts/changelog-gate.sh next`.
 
 The `Main route` job rejects ordinary PRs aimed at `main`. These are the only
 allowed routes:

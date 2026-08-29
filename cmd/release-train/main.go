@@ -714,19 +714,23 @@ func validateAcceptedMain(root, headRef, manifestPath string) (candidateManifest
 
 func runSync(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || (args[0] != "apply" && args[0] != "check") {
-		return errors.New("usage: release-train sync <apply|check> --main <ref> [--manifest path]")
+		return errors.New("usage: release-train sync <apply|check> --main <ref> [--head ref] [--manifest path]")
 	}
 	flags := flag.NewFlagSet("sync "+args[0], flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	manifestPath := flags.String("manifest", defaultManifestPath, "candidate manifest")
 	mainRef := flags.String("main", "", "released main ref")
+	headRef := flags.String("head", "HEAD", "next commit to inspect")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
 	if *mainRef == "" {
 		return errors.New("main ref is required")
 	}
-	removed, err := syncReleasedFragments(root, *manifestPath, *mainRef, args[0] == "apply")
+	if args[0] == "apply" && *headRef != "HEAD" {
+		return errors.New("sync apply only accepts the checked-out HEAD")
+	}
+	removed, err := syncReleasedFragments(root, *manifestPath, *mainRef, *headRef, args[0] == "apply")
 	if err != nil {
 		return err
 	}
@@ -738,13 +742,13 @@ func runSync(root string, args []string, stdout io.Writer) error {
 	return err
 }
 
-func syncReleasedFragments(root, manifestPath, mainRef string, apply bool) (int, error) {
+func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bool) (int, error) {
 	if apply {
 		if err := requireCleanWorktree(root); err != nil {
 			return 0, err
 		}
 	}
-	headSHA, err := resolveCommit(root, "HEAD")
+	headSHA, err := resolveCommit(root, headRef)
 	if err != nil {
 		return 0, err
 	}

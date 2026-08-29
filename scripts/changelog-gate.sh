@@ -20,11 +20,6 @@ script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "$(git rev-parse --show-toplevel)"
 
-if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
-  echo "changelog gate: release sync branch ${HEAD_BRANCH}, skipping"
-  exit 0
-fi
-
 # Diff against the merge-base with the base branch; prefer origin/<base> when
 # it exists (CI checks out with full history).
 RANGE="${BASE_REF}...HEAD"
@@ -35,6 +30,12 @@ fi
 main_ref="$BASE_REF"
 if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
   main_ref="origin/${BASE_REF}"
+fi
+
+if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
+  "$script_root/sync-candidate-gate.sh" origin/main "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
+  echo "changelog gate: validated release sync ${HEAD_BRANCH}, skipping"
+  exit 0
 fi
 
 if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

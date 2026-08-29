@@ -15,7 +15,7 @@ if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/pulls?state=open&base=main
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]] && \
   [[ "$*" =~ App\ acceptance\ ([0-9a-f]{40}) ]]; then
-  printf '43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "${BASH_REMATCH[1]}" \
+  printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "${BASH_REMATCH[1]}" \
     'https://github.com/example/attn/actions/runs/43'
   exit 0
 fi
@@ -54,7 +54,7 @@ expect_failure() {
   fi
 }
 
-expect_success next sync/main-into-next-0123456789ab
+expect_failure next sync/main-into-next-0123456789ab
 
 expect_failure main release/v1.2.3
 expect_failure main hotfix/unprepared

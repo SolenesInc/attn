@@ -27,13 +27,13 @@ if [[ "$1" == api ]] && [[ "$*" == *"/git/commits/$FAKE_MAIN_SHA"* ]]; then
   exit 0
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
-  printf '43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "$FAKE_CANDIDATE_SHA" \
+  printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\tsuccess\t%s\n' "$FAKE_CANDIDATE_SHA" \
     'https://github.com/example/attn/actions/runs/43'
   exit 0
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
   if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
-    printf '42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
+    printf '2026-08-29T10:00:00Z\t42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
       'https://github.com/example/attn/actions/runs/42'
   fi
   exit 0

@@ -21,7 +21,7 @@ fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?'* ]]; then
   if [[ "${FAKE_APP_MODE:-success}" != missing ]] && \
     [[ "$*" =~ App\ acceptance\ ([0-9a-f]{40}) ]]; then
-    printf '43\tApp acceptance %s\tcompleted\t%s\t%s\n' "${BASH_REMATCH[1]}" \
+    printf '2026-08-29T10:00:00Z\t43\tApp acceptance %s\tcompleted\t%s\t%s\n' "${BASH_REMATCH[1]}" \
       "${FAKE_APP_CONCLUSION:-success}" \
       'https://github.com/example/attn/actions/runs/43'
   fi
@@ -29,7 +29,7 @@ if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/app-acceptance.yml/runs?
 fi
 if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?'* ]]; then
   if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != missing ]]; then
-    printf '42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
+    printf '2026-08-29T10:00:00Z\t42\t%s\tcompleted\tsuccess\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
       'https://github.com/example/attn/actions/runs/42'
   fi
   exit 0
