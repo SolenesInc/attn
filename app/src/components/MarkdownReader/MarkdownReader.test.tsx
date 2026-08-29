@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MarkdownReader } from './index';
 import { sanitizeLinkUrl } from './markdownLinks';
 import { fileMarkdownSource, seedMarkdownSource } from './documentSource';
@@ -129,6 +130,7 @@ describe('MarkdownReader link sanitization', () => {
   });
 
   it('resolves direct seed links and images through the owning daemon', async () => {
+    const user = userEvent.setup();
     const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (
       purpose === 'image'
         ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
@@ -146,6 +148,11 @@ describe('MarkdownReader link sanitization', () => {
 
     const image = await screen.findByRole('img', { name: 'cover' });
     expect(image).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
+    const imageButton = screen.getByRole('button', { name: 'cover' });
+    imageButton.focus();
+    await user.keyboard('{Enter}');
+    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
     fireEvent.click(screen.getByRole('button', { name: 'report' }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
       path: '/notebook/seeds/s-7k3f9m/report.pdf',

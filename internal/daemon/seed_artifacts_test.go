@@ -101,6 +101,58 @@ func TestSeedArtifactCopyOwnsEveryDirectVisibleRegularFile(t *testing.T) {
 	}
 }
 
+func TestSeedArtifactCopyStartsFreshAfterDetach(t *testing.T) {
+	d, root, seed := newSeedArtifactDaemon(t)
+	source := writeArtifactSource(t, t.TempDir(), "report.bin", []byte("first"))
+	first, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "copy", SourcePath: protocol.Ptr(source),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detached := filepath.Join(t.TempDir(), "report.bin")
+	if _, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "detach", Filename: protocol.Ptr("report.bin"), DestinationPath: protocol.Ptr(detached),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("second"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "copy", SourcePath: protocol.Ptr(source),
+	})
+	if err != nil {
+		t.Fatalf("copy changed source after detach: %v", err)
+	}
+	if second.Recovered {
+		t.Fatalf("copy reused completed operation %+v", second)
+	}
+	if second.OperationID != first.OperationID {
+		t.Fatalf("replacement receipt ID = %q, want %q", second.OperationID, first.OperationID)
+	}
+	managed := filepath.Join(notebook.SeedArtifactsDir(root, seed.ID), "report.bin")
+	if got, err := os.ReadFile(managed); err != nil || string(got) != "second" {
+		t.Fatalf("fresh managed artifact = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(detached); err != nil || string(got) != "first" {
+		t.Fatalf("detached artifact = %q, %v", got, err)
+	}
+	if got, err := os.ReadFile(source); err != nil || string(got) != "second" {
+		t.Fatalf("copy source = %q, %v", got, err)
+	}
+	if err := os.Remove(source); err != nil {
+		t.Fatal(err)
+	}
+	retry, err := transferSeedArtifact(t, d, protocol.SeedArtifactTransferMessage{
+		SeedID: seed.ID, Operation: "copy", SourcePath: protocol.Ptr(source),
+	})
+	if err != nil || !retry.Recovered {
+		t.Fatalf("retry fresh copy after source deletion = %+v, %v", retry, err)
+	}
+}
+
 func TestSeedArtifactMoveRefusesTrackedFilesBeforeCreatingStorage(t *testing.T) {
 	d, root, seed := newSeedArtifactDaemon(t)
 	repo := filepath.Join(t.TempDir(), "repo")

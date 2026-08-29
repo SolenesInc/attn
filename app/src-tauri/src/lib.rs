@@ -830,6 +830,13 @@ fn canonical_regular_seed_artifact(path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+fn validate_seed_artifact_launch(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal || is_safe_markdown_target_extension(path) {
+        return Ok(());
+    }
+    Err("This managed artifact can only be revealed in Finder.".to_string())
+}
+
 #[cfg(target_os = "macos")]
 fn launch_seed_artifact(path: &Path, reveal: bool) -> Result<(), String> {
     let mut command = Command::new("/usr/bin/open");
@@ -852,7 +859,9 @@ fn launch_seed_artifact(_path: &Path, _reveal: bool) -> Result<(), String> {
 #[tauri::command]
 fn open_safe_seed_artifact_target(path: String, reveal: Option<bool>) -> Result<(), String> {
     let canonical = canonical_regular_seed_artifact(Path::new(&path))?;
-    launch_seed_artifact(&canonical, reveal.unwrap_or(false))
+    let reveal = reveal.unwrap_or(false);
+    validate_seed_artifact_launch(&canonical, reveal)?;
+    launch_seed_artifact(&canonical, reveal)
 }
 
 #[cfg(test)]
@@ -908,6 +917,25 @@ mod markdown_target_tests {
         );
 
         fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn seed_artifact_command_can_only_be_revealed() {
+        let command = Path::new("install.command");
+
+        assert_eq!(
+            validate_seed_artifact_launch(command, false),
+            Err("This managed artifact can only be revealed in Finder.".to_string())
+        );
+        assert_eq!(validate_seed_artifact_launch(command, true), Ok(()));
+    }
+
+    #[test]
+    fn seed_artifact_safe_document_can_still_be_opened() {
+        assert_eq!(
+            validate_seed_artifact_launch(Path::new("report.pdf"), false),
+            Ok(())
+        );
     }
 
     #[cfg(unix)]

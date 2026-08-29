@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { SeedArtifact, SeedArtifactReference } from '../types/generated';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { artifactKey } from './seedArtifacts';
+import { isSafeLocalMarkdownTarget } from './MarkdownReader/markdownLinks';
 import './SeedArtifactRows.css';
 
 export interface SeedArtifactRowsProps {
@@ -178,7 +179,9 @@ export function SeedArtifactRows({
               <span className="seed-artifact__primary" title={artifact.filename}>{artifact.filename}</span>
               <span className="seed-artifact__secondary">{artifact.size.toLocaleString()} bytes</span>
               <span className="seed-artifact__actions">
-                <button type="button" disabled={pending === key} onClick={() => void openManaged(artifact, false)}>Open</button>
+                {isSafeLocalMarkdownTarget(artifact.filename) && (
+                  <button type="button" disabled={pending === key} onClick={() => void openManaged(artifact, false)}>Open</button>
+                )}
                 <button type="button" disabled={pending === key} onClick={() => void openManaged(artifact, true)}>Reveal</button>
                 <button type="button" disabled={pending === key} onClick={() => void detachManaged(artifact)}>Move out</button>
               </span>

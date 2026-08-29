@@ -297,7 +297,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 		}
 		dir = notebook.SeedArtifactsDir(root, seedID)
 		destination = filepath.Join(dir, filename)
-		recovering, receiptErr := matchingSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination)
+		recovering, receiptErr := recoverableSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination)
 		if receiptErr != nil {
 			return nil, receiptErr
 		}
@@ -387,7 +387,7 @@ func transferReceiptID(seedID, operation, source, destination string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func matchingSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination string) (bool, error) {
+func recoverableSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination string) (bool, error) {
 	id := transferReceiptID(seedID, operation, source, destination)
 	receipt, found, err := readSeedTransferReceipt(root, id)
 	if err != nil || !found {
@@ -395,6 +395,9 @@ func matchingSeedArtifactTransferReceiptExists(root, seedID, operation, source, 
 	}
 	if receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination {
 		return false, fmt.Errorf("transfer receipt %s does not match this operation", id)
+	}
+	if receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
+		return false, nil
 	}
 	return true, nil
 }
@@ -404,6 +407,12 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 	receipt, found, err := readSeedTransferReceipt(root, id)
 	if err != nil {
 		return nil, false, err
+	}
+	if found && (receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination) {
+		return nil, true, fmt.Errorf("transfer receipt %s does not match this operation", id)
+	}
+	if found && receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
+		found = false
 	}
 	if !found {
 		if _, err := os.Lstat(destination); err == nil {
@@ -426,8 +435,6 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 			_ = os.Remove(staged.path)
 			return nil, false, err
 		}
-	} else if receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination {
-		return nil, true, fmt.Errorf("transfer receipt %s does not match this operation", id)
 	}
 
 	if receipt.State == seedTransferComplete {
@@ -599,6 +606,11 @@ func verifyCompletedTransferSource(receipt *seedArtifactTransferReceipt) error {
 		return fmt.Errorf("artifact already exists at %q from an earlier copy; choose another filename for the changed source", receipt.Destination)
 	}
 	return nil
+}
+
+func completedTransferDestinationMissing(receipt *seedArtifactTransferReceipt) bool {
+	_, err := os.Lstat(receipt.Destination)
+	return os.IsNotExist(err)
 }
 
 func hashRegularFile(path string) (string, error) {
