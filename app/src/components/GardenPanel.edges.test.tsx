@@ -7,6 +7,8 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
     body: '',
     status: 'planted',
+    state_changed_at: new Date().toISOString(),
+    state_changed_at_exact: true,
     step_slug: overrides.title,
     planter_session: '',
     planter_member: '',

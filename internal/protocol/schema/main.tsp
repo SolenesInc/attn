@@ -835,6 +835,17 @@ model DelegateMessage {
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree
   plot?: string; // A crown to dispatch the delegate at: scope inference for its flag-free `ready` and launch priming, never a fence or an assignment
+  // A guarded transfer of one existing seed. The expected fields are the
+  // caller's read receipt; a changed seed is refreshed, never taken over.
+  handover?: SeedHandoverRequest;
+}
+
+model SeedHandoverRequest {
+  seed_id: string;
+  handoff?: string;
+  expected_rev: safeint;
+  expected_tender_session: string;
+  expected_tender_member: string;
 }
 
 model DelegateStatusMessage {
@@ -1355,6 +1366,8 @@ model DelegateWorktreeRequest {
   branch: string;
   path?: string;
   starting_from?: string;
+  // Attach the saved branch instead of creating it from starting_from.
+  existing_branch?: boolean;
 }
 
 model QueryMessage {
@@ -4329,6 +4342,13 @@ model Seed {
   "planter_member": string;
   "tender_session": string;
   "tender_member": string;
+  // The most recent attn session that worked this seed. It survives Park and
+  // session removal; current ownership remains tender_session/tender_member.
+  "last_execution_id"?: string;
+  // The latest lifecycle state transition. Legacy seeds use updated_at as a
+  // conservative fallback and say so through state_changed_at_exact.
+  "state_changed_at": string;
+  "state_changed_at_exact": boolean;
   "edges": SeedEdge[];
   "template": boolean;
   "gate": boolean;
@@ -4338,6 +4358,9 @@ model Seed {
   "resume_session_id"?: string;
   "resume_cwd"?: string;
   "resume_agent"?: string;
+  // Detailed reads only. Garden snapshots omit this filesystem-sensitive
+  // projection so opening the Garden never stats every saved directory.
+  "continuation"?: SeedContinuation;
   // Whether this seed can be tended right now: nothing open blocks it, it holds
   // no live tender, nothing is part of it, and it is neither a packet nor a
   // gate. Computed by the daemon on every read and every push — readiness is
@@ -4356,6 +4379,29 @@ model Seed {
   "rev": safeint;
   "created_at": string;
   "updated_at": string;
+}
+
+model SeedContinuation {
+  "execution_id": string;
+  // execution | legacy
+  "source": string;
+  "session_live": boolean;
+  "native_conversation_id"?: string;
+  "agent": string;
+  "cwd": string;
+  // local | remote | unknown
+  "host_kind": string;
+  "endpoint_id"?: string;
+  "repository_root"?: string;
+  "repository_subdir"?: string;
+  "branch"?: string;
+  // present | missing | remote | unavailable | unknown
+  "directory_state": string;
+  "resume_available": boolean;
+  "resume_reason"?: string;
+  // reuse_cwd | recreate_branch | placement_required
+  "handover_placement": string;
+  "placement_reason"?: string;
 }
 
 // A typed relation to another seed. Structure lives in edges rather than in the
@@ -4633,6 +4679,9 @@ model SeedTransitionMessage {
   "verb": string;
   // Why it closed. Harvest requires one; wither may be wordless.
   "reason"?: string;
+  // A log note committed with Park. It is separate from a closing reason and
+  // absent for every other lifecycle move.
+  "comment"?: string;
   // The crew member asking, recorded as the tender on a claim.
   "member"?: string;
   // Yes, act even though somebody else holds it. Ignored when nobody else
@@ -5964,6 +6013,7 @@ model DelegationOperation {
 
 model DelegateResultMessage {
   event: "delegate_result";
+  request_id?: string;
   success: boolean;
   error?: string;
   result?: DelegateResult;

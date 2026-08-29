@@ -37,6 +37,9 @@ func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, cro
 	if bound, ok := d.gardenDispatchCrown(sessionID); ok {
 		return bound, nil
 	}
+	if err := d.recordGardenDispatch(sessionID, "", plannerSessionID, cwd, agent, fromChief); err != nil {
+		return "", fmt.Errorf("preserve session %s before binding it: %w", sessionID, err)
+	}
 	seedID := strings.TrimSpace(crown)
 	if seedID == "" {
 		seed, err := d.plantDelegatedSeed(sessionID, plannerSessionID, brief, name)
@@ -88,6 +91,7 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 	if err != nil {
 		return garden.Seed{}, err
 	}
+	seed.LastExecutionID = sessionID
 	seed, _, err = d.mintAndPlant(*schema, seed)
 	return seed, err
 }

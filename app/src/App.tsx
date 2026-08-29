@@ -831,6 +831,7 @@ function AppContent({
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
+    sendSeedHandover,
     sendSeedResume,
     sendCrewWake,
     sendCrewSleep,
@@ -3116,8 +3117,16 @@ function AppContent({
   const handleResumeSeed = useCallback((seedId: string) => {
     sendSeedResume(seedId)
       .then((result) => handleSelectSession(result.sessionId))
-      .catch((error) => showError(error instanceof Error ? error.message : 'Failed to reopen the agent'));
+      .catch((error) => showError(error instanceof Error ? error.message : 'Failed to resume the agent'));
   }, [sendSeedResume, handleSelectSession, showError]);
+
+  const handleHandoverSeed = useCallback((options: Parameters<typeof sendSeedHandover>[0]) => (
+    sendSeedHandover({ ...options, sourceSessionId: activeSessionId || undefined })
+      .then((result) => {
+        handleSelectSession(result.session_id);
+        return result;
+      })
+  ), [activeSessionId, handleSelectSession, sendSeedHandover]);
 
   const handleWakeCrewMember = useCallback((member: string) => {
     sendCrewWake(member)
@@ -3899,6 +3908,7 @@ function AppContent({
         onOpenMarkdownArtifact={handleOpenMarkdownArtifact}
         checkArtifactPath={checkArtifactPath}
         onResumeSeed={handleResumeSeed}
+        onHandoverSeed={handleHandoverSeed}
       />
       <NotificationsPanel
         open={notificationsPanelOpen}

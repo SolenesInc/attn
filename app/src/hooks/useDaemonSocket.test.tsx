@@ -2967,6 +2967,50 @@ describe('useDaemonSocket seed resume request/result', () => {
     unmount();
   });
 
+  it('sends a guarded Handover and resolves its delegated session', async () => {
+    const { result, unmount } = renderSeedHook();
+    const ws = await waitForOpenSocket();
+
+    const promise = result.current.sendSeedHandover({
+      seedId: 's-1',
+      expectedRev: 7,
+      expectedTenderSession: 'sess-old',
+      expectedTenderMember: '',
+      sourceSessionId: 'sess-chief',
+      handoff: 'Continue from the parser tests.',
+      cwd: '/tmp/placed',
+    });
+    await Promise.resolve();
+    const sent = lastSent(ws);
+    expect(sent).toMatchObject({
+      cmd: 'delegate',
+      source_session_id: 'sess-chief',
+      brief: '',
+      cwd: '/tmp/placed',
+      handover: {
+        seed_id: 's-1',
+        expected_rev: 7,
+        expected_tender_session: 'sess-old',
+        expected_tender_member: '',
+        handoff: 'Continue from the parser tests.',
+      },
+    });
+
+    ws.emit({
+      event: 'delegate_result',
+      request_id: sent.request_id,
+      success: true,
+      result: {
+        session_id: 'sess-new',
+        workspace_id: 'workspace-new',
+        directory: '/tmp/placed',
+        placement: 'new_workspace',
+      },
+    });
+    await expect(promise).resolves.toMatchObject({ session_id: 'sess-new' });
+    unmount();
+  });
+
   it('resolves sendSeedResume with alreadyRunning when the tender was still tracked', async () => {
     const { result, unmount } = renderSeedHook();
     const ws = await waitForOpenSocket();

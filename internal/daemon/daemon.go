@@ -322,6 +322,7 @@ type Daemon struct {
 	appsBroadcastHook     func([]protocol.AppRegistryEntry)
 	gardenMintID          func() (string, error)
 	gardenMintNoteID      func() (string, error)
+	gardenNow             func() time.Time
 	dispatchSeedsMu       sync.Mutex
 	dispatchSeeds         map[string]string
 	dispatchFromChief     map[string]bool
@@ -1711,6 +1712,11 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
 	}
+	if session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
+		}
+	}
 	d.terminateSession(sessionID, sig)
 	d.forgetSession(sessionID)
 	return session
@@ -1739,6 +1745,9 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before dropping its record: %v", sessionID, err)
+		}
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}
 	d.clearNudgeState(sessionID)

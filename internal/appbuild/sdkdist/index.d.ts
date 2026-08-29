@@ -75,7 +75,7 @@ export type Handler<Collections> = (event: AppEvent, ctx: AppContext<Collections
 /** Why attn requires the app to rebuild its derived collections. `gap`: the consumer
     resumed below the oldest fact still in the log. `version_changed`: a different version serves. */
 export type ReconcileCause = "gap" | "version_changed";
-export type { AppRegistryEntry, AppViewInfo, AutomationProvenance, AuthorState, CrewMember, CurrentStateSnapshot, EndpointCapabilities, EndpointInfo, PR, PullRequestProvenance, RepoState, Seed, SeedEdge, SeedPlotProgress, SeedVar, Session, TicketRow, Workspace, WorkspaceLayout, WorkspacePane, } from "./currentState";
+export type { AppRegistryEntry, AppViewInfo, AutomationProvenance, AuthorState, CrewMember, CurrentStateSnapshot, EndpointCapabilities, EndpointInfo, PR, PullRequestProvenance, RepoState, Seed, SeedContinuation, SeedEdge, SeedPlotProgress, SeedVar, Session, TicketRow, Workspace, WorkspaceLayout, WorkspacePane, } from "./currentState";
 /** The durable requests coalesced into one reconcile invocation. */
 export interface ReconcileReason {
     /** Sorted as gap, version_changed, independent of arrival order. */

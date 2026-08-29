@@ -1,7 +1,8 @@
 // See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { crewDisplayName, crewHolderName } from '../utils/crewName';
 import {
@@ -33,6 +34,7 @@ interface GardenPanelProps {
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
   onResumeSeed?: (seedId: string) => void;
+  onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   viewToggle?: React.ReactNode;
   frame?: 'dock' | 'full';
@@ -406,6 +408,7 @@ export function GardenPanel({
   onOpenAsTile,
   onOpenMarkdownArtifact,
   onResumeSeed,
+  onHandoverSeed,
   checkArtifactPath,
   viewToggle,
   frame,
@@ -419,6 +422,13 @@ export function GardenPanel({
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
   const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [handoverDraft, setHandoverDraft] = useState<{
+    seedId: string;
+    handoff: string;
+    cwd: string;
+    busy: boolean;
+    error: string;
+  } | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
   const [trailOpen, setTrailOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(0);
@@ -565,8 +575,10 @@ export function GardenPanel({
 
   // Keep the frame below controls that register after opening, such as a lightbox.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);
+  useEscapeStack(() => setHandoverDraft(null), handoverDraft !== null);
 
   const hereId = here?.id ?? '';
+  const hereRev = here?.rev ?? 0;
   useEffect(() => {
     if (!isOpen || !hereId || !fetchSeedDocument) {
       setSeedDocument(null);
@@ -585,7 +597,7 @@ export function GardenPanel({
     return () => {
       ignore = true;
     };
-  }, [hereId, fetchSeedDocument, isOpen, seeds]);
+  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds]);
 
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;
@@ -723,6 +735,48 @@ export function GardenPanel({
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
   const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
+  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const continuation = seedDoc?.seed.continuation;
+  const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
+  const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
+  const canHandover = Boolean(documentIsCurrent && onHandoverSeed && seedIsOpen && continuation);
+  const composingHandover = handoverDraft?.seedId === here?.id;
+  const handoverNeedsDirectory = continuation?.handover_placement === 'placement_required';
+  const chooseHandoverDirectory = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false, title: 'Choose where the new agent should work' });
+      if (typeof selected === 'string' && selected.trim()) {
+        setHandoverDraft((draft) => draft ? { ...draft, cwd: selected, error: '' } : draft);
+      }
+    } catch (error) {
+      setHandoverDraft((draft) => draft ? {
+        ...draft,
+        error: error instanceof Error ? error.message : 'Could not choose a directory',
+      } : draft);
+    }
+  };
+  const submitHandover = async () => {
+    if (!seedDoc || !onHandoverSeed || !handoverDraft || handoverDraft.seedId !== seedDoc.seed.id) return;
+    if (handoverNeedsDirectory && !handoverDraft.cwd.trim()) return;
+    setHandoverDraft((draft) => draft ? { ...draft, busy: true, error: '' } : draft);
+    try {
+      await onHandoverSeed({
+        seedId: seedDoc.seed.id,
+        expectedRev: seedDoc.seed.rev,
+        expectedTenderSession: seedDoc.seed.tender_session,
+        expectedTenderMember: seedDoc.seed.tender_member,
+        handoff: handoverDraft.handoff,
+        ...(handoverDraft.cwd.trim() ? { cwd: handoverDraft.cwd.trim() } : {}),
+      });
+      setHandoverDraft(null);
+    } catch (error) {
+      setHandoverDraft((draft) => draft ? {
+        ...draft,
+        busy: false,
+        error: error instanceof Error ? error.message : 'Handover failed',
+      } : draft);
+    }
+  };
   const artifacts = seedDoc?.artifacts ?? [];
   const notes = seedDoc?.notes ?? [];
   const notesTotal = seedDoc?.notes_total ?? 0;
@@ -968,9 +1022,18 @@ export function GardenPanel({
             {onOpenAsTile && (
               <button type="button" onClick={() => onOpenAsTile(here.id)}>Open as tile</button>
             )}
-            {onResumeSeed && (here.tender_session || here.resume_session_id) && (
-              <button type="button" data-testid={`seed-reopen-${here.id}`} onClick={() => onResumeSeed(here.id)}>
-                Reopen agent
+            {canResume && (
+              <button type="button" data-testid={`seed-resume-${here.id}`} onClick={() => onResumeSeed?.(here.id)}>
+                Resume
+              </button>
+            )}
+            {canHandover && !composingHandover && (
+              <button
+                type="button"
+                data-testid={`seed-handover-${here.id}`}
+                onClick={() => setHandoverDraft({ seedId: here.id, handoff: '', cwd: '', busy: false, error: '' })}
+              >
+                Handover
               </button>
             )}
           </div>
@@ -993,6 +1056,50 @@ export function GardenPanel({
             <ProgressBar seed={here} />
             <span>{progressWords(here)}</span>
           </div>
+        )}
+        {composingHandover && handoverDraft && (
+          <form
+            className="garden-handover"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitHandover();
+            }}
+          >
+            <label htmlFor={`garden-handover-${here.id}`}>What should the new agent know? <span>optional</span></label>
+            <textarea
+              id={`garden-handover-${here.id}`}
+              autoFocus
+              value={handoverDraft.handoff}
+              onChange={(event) => setHandoverDraft({ ...handoverDraft, handoff: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void submitHandover();
+                }
+              }}
+            />
+            {handoverNeedsDirectory && (
+              <div className="garden-handover__placement">
+                <span>{continuation?.placement_reason || 'Choose where the new agent should work.'}</span>
+                {handoverDraft.cwd ? (
+                  <code title={handoverDraft.cwd}>{handoverDraft.cwd}</code>
+                ) : (
+                  <button type="button" onClick={() => void chooseHandoverDirectory()}>Choose directory</button>
+                )}
+              </div>
+            )}
+            {handoverDraft.error && <p className="garden-handover__error" role="alert">{handoverDraft.error}</p>}
+            <div className="garden-handover__actions">
+              {handoverDraft.busy ? (
+                <span aria-live="polite">Handing over…</span>
+              ) : (
+                <>
+                  <button type="button" onClick={() => setHandoverDraft(null)}>Cancel</button>
+                  {(!handoverNeedsDirectory || handoverDraft.cwd) && <button type="submit">Handover</button>}
+                </>
+              )}
+            </div>
+          </form>
         )}
       </div>
 

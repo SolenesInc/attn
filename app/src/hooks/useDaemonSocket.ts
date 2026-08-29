@@ -24,6 +24,7 @@ import type {
   Seed as GeneratedSeed,
   SeedNote as GeneratedSeedNote,
   SeedArtifactReference as GeneratedSeedArtifactReference,
+  DelegateResult as GeneratedDelegateResult,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
   Presentation,
@@ -138,6 +139,19 @@ export interface SeedDocument {
   notes_total: number;
   artifacts: GeneratedSeedArtifactReference[];
 }
+export interface SeedHandoverOptions {
+  seedId: string;
+  expectedRev: number;
+  expectedTenderSession: string;
+  expectedTenderMember: string;
+  sourceSessionId?: string;
+  handoff?: string;
+  cwd?: string;
+  agent?: string;
+  model?: string;
+  effort?: string;
+}
+export type SeedHandoverResult = GeneratedDelegateResult;
 export type CrewMember = GeneratedCrewMember;
 export interface CrewSleepResult {
   member: string;
@@ -252,7 +266,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '272';
+export const PROTOCOL_VERSION = '273';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1763,8 +1777,19 @@ export function useDaemonSocket({
                 alreadyRunning: data.already_running === true,
               });
             } else {
-              pending.reject(new Error(data.error || 'Reopening the seed failed'));
+              pending.reject(new Error(data.error || 'Resuming the seed failed'));
             }
+            break;
+          }
+
+          case 'delegate_result': {
+            settlePendingRequest(
+              pendingActionsRef.current,
+              'delegate',
+              data,
+              (event) => event.result as SeedHandoverResult | undefined,
+              'Handover failed',
+            );
             break;
           }
 
@@ -3578,7 +3603,7 @@ export function useDaemonSocket({
   }, [nextRequestID]);
 
   const sendSeedTransition = useCallback(
-    (seedId: string, verb: string, reason?: string, force?: boolean): Promise<Seed> => {
+    (seedId: string, verb: string, reason?: string, force?: boolean, comment?: string): Promise<Seed> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3595,6 +3620,7 @@ export function useDaemonSocket({
             seed_id: seedId,
             verb,
             ...(reason ? { reason } : {}),
+            ...(comment ? { comment } : {}),
             ...(force ? { force: true } : {}),
           }),
         );
@@ -4411,6 +4437,32 @@ export function useDaemonSocket({
     );
   }, [sendRequest]);
 
+  const sendSeedHandover = useCallback((options: SeedHandoverOptions): Promise<SeedHandoverResult> => {
+    const requestId = nextRequestID('seed_handover');
+    return sendKeyedRequest<SeedHandoverResult>(
+      pendingRequestKey('delegate', requestId),
+      {
+        cmd: 'delegate',
+        request_id: requestId,
+        source_session_id: options.sourceSessionId ?? '',
+        brief: '',
+        handover: {
+          seed_id: options.seedId,
+          expected_rev: options.expectedRev,
+          expected_tender_session: options.expectedTenderSession,
+          expected_tender_member: options.expectedTenderMember,
+          ...(options.handoff?.trim() ? { handoff: options.handoff.trim() } : {}),
+        },
+        ...(options.cwd?.trim() ? { cwd: options.cwd.trim() } : {}),
+        ...(options.agent?.trim() ? { agent: options.agent.trim() } : {}),
+        ...(options.model?.trim() ? { model: options.model.trim() } : {}),
+        ...(options.effort?.trim() ? { effort: options.effort.trim() } : {}),
+      },
+      'Handover timed out',
+      120_000,
+    );
+  }, [nextRequestID, sendKeyedRequest]);
+
   const sendSeedResume = useCallback(
     (seedId: string): Promise<{ sessionId: string; workspaceId?: string; alreadyRunning?: boolean }> => {
       return new Promise((resolve, reject) => {
@@ -4426,7 +4478,7 @@ export function useDaemonSocket({
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
-            reject(new Error('Reopening the seed timed out'));
+            reject(new Error('Resuming the seed timed out'));
           }
         }, 10000);
       });
@@ -5083,6 +5135,7 @@ export function useDaemonSocket({
     sendSessionAnnotationsSave,
     sendSessionAnnotationsClear,
     sendSessionAnnotationsSubmit,
+    sendSeedHandover,
     sendSeedResume,
     sendCrewWake,
     sendCrewSleep,

@@ -805,6 +805,67 @@ func TestSeedTransitionCarriesForceAndRecordsTheTakeover(t *testing.T) {
 	}
 }
 
+func TestSeedParkCommitsItsCommentAndKeepsContinuation(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "work to put down"})
+	claimed := move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+	executionID := protocol.Deref(claimed.LastExecutionID)
+	if executionID == "" {
+		t.Fatal("tending did not preserve an execution")
+	}
+
+	msg := protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, SeedID: seed.ID, Verb: string(garden.VerbPark),
+		SourceSessionID: protocol.Ptr("sess-a"), Comment: protocol.Ptr("Waiting for the upstream API."),
+	}
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	if !resp.Ok {
+		t.Fatalf("park with comment: %v", protocol.Deref(resp.Error))
+	}
+	parked := resp.SeedTransitionResult.Seed
+	if parked.Status != garden.StatusDormant || parked.TenderSession != "" || protocol.Deref(parked.LastExecutionID) != executionID {
+		t.Fatalf("parked seed = %+v, want dormant, unclaimed, execution %s", parked, executionID)
+	}
+	notes, _, err := d.readNotes(seed.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 || notes[0].Body != "Waiting for the upstream API." || notes[0].AuthorSession != "sess-a" {
+		t.Fatalf("park notes = %+v", notes)
+	}
+}
+
+func TestSeedParkRollsBackWhenItsCommentCannotLand(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "work to keep claimed"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+
+	d.gardenMintNoteID = func() (string, error) { return "n-000000", nil }
+	note(t, d, "sess-a", seed.ID, "this id is already taken", "")
+	msg := protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, SeedID: seed.ID, Verb: string(garden.VerbPark),
+		SourceSessionID: protocol.Ptr("sess-a"), Comment: protocol.Ptr("must land atomically"),
+	}
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "every one was taken") {
+		t.Fatalf("park response = %+v", resp)
+	}
+	got, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != garden.StatusGrowing || got.TenderSession != "sess-a" {
+		t.Fatalf("seed moved without its comment: %+v", got)
+	}
+	notes, _, err := d.readNotes(seed.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 || notes[0].Body != "this id is already taken" {
+		t.Fatalf("failed Park left a partial comment: %+v", notes)
+	}
+}
+
 func TestSeedTransitionExplicitMemberOutlivesItsSourceSession(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "sess-b")

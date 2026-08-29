@@ -1,6 +1,6 @@
 import FocusTrap from 'focus-trap-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions } from '../hooks/useDaemonSocket';
 import {
   useGardenFullscreenView,
   type GardenMode,
@@ -72,6 +72,7 @@ export interface GardenFrameProps {
   onOpenMarkdownArtifact?: (path: string) => void;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   onResumeSeed?: (seedId: string) => void;
+  onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   liveSessions?: Set<string>;
   loaded?: boolean;
   moveSeed?: (seedId: string, verb: Verb, reason?: string) => Promise<unknown>;
@@ -91,6 +92,7 @@ export function GardenFrame({
   onOpenMarkdownArtifact,
   checkArtifactPath,
   onResumeSeed,
+  onHandoverSeed,
   liveSessions,
   loaded = true,
   moveSeed,
@@ -204,6 +206,7 @@ export function GardenFrame({
                 onOpenMarkdownArtifact={onOpenMarkdownArtifact}
                 checkArtifactPath={checkArtifactPath}
                 onResumeSeed={onResumeSeed}
+                onHandoverSeed={onHandoverSeed}
                 onClose={onClose}
                 viewToggle={viewToggle}
                 frame={mode === 'full' ? 'full' : 'dock'}

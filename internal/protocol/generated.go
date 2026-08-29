@@ -2391,6 +2391,9 @@ type DelegateMessage struct {
 	// Effort corresponds to the JSON schema field "effort".
 	Effort *string `json:"effort,omitempty,omitzero"`
 
+	// Handover corresponds to the JSON schema field "handover".
+	Handover *SeedHandoverRequest `json:"handover,omitempty,omitzero"`
+
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
 
@@ -2449,6 +2452,9 @@ type DelegateResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// Result corresponds to the JSON schema field "result".
 	Result *DelegateResult `json:"result,omitempty,omitzero"`
 
@@ -2467,6 +2473,9 @@ type DelegateStatusMessage struct {
 type DelegateWorktreeRequest struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch string `json:"branch"`
+
+	// ExistingBranch corresponds to the JSON schema field "existing_branch".
+	ExistingBranch *bool `json:"existing_branch,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
@@ -6365,6 +6374,9 @@ type Seed struct {
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
+	// Continuation corresponds to the JSON schema field "continuation".
+	Continuation *SeedContinuation `json:"continuation,omitempty,omitzero"`
+
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
 
@@ -6376,6 +6388,9 @@ type Seed struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// LastExecutionID corresponds to the JSON schema field "last_execution_id".
+	LastExecutionID *string `json:"last_execution_id,omitempty,omitzero"`
 
 	// PlanterMember corresponds to the JSON schema field "planter_member".
 	PlanterMember string `json:"planter_member"`
@@ -6403,6 +6418,13 @@ type Seed struct {
 
 	// Rev corresponds to the JSON schema field "rev".
 	Rev int `json:"rev"`
+
+	// StateChangedAt corresponds to the JSON schema field "state_changed_at".
+	StateChangedAt string `json:"state_changed_at"`
+
+	// StateChangedAtExact corresponds to the JSON schema field
+	// "state_changed_at_exact".
+	StateChangedAtExact bool `json:"state_changed_at_exact"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`
@@ -6444,6 +6466,57 @@ type SeedArtifactReference struct {
 
 	// URL corresponds to the JSON schema field "url".
 	URL *string `json:"url,omitempty,omitzero"`
+}
+
+type SeedContinuation struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Branch corresponds to the JSON schema field "branch".
+	Branch *string `json:"branch,omitempty,omitzero"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// DirectoryState corresponds to the JSON schema field "directory_state".
+	DirectoryState string `json:"directory_state"`
+
+	// EndpointID corresponds to the JSON schema field "endpoint_id".
+	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
+
+	// ExecutionID corresponds to the JSON schema field "execution_id".
+	ExecutionID string `json:"execution_id"`
+
+	// HandoverPlacement corresponds to the JSON schema field "handover_placement".
+	HandoverPlacement string `json:"handover_placement"`
+
+	// HostKind corresponds to the JSON schema field "host_kind".
+	HostKind string `json:"host_kind"`
+
+	// NativeConversationID corresponds to the JSON schema field
+	// "native_conversation_id".
+	NativeConversationID *string `json:"native_conversation_id,omitempty,omitzero"`
+
+	// PlacementReason corresponds to the JSON schema field "placement_reason".
+	PlacementReason *string `json:"placement_reason,omitempty,omitzero"`
+
+	// RepositoryRoot corresponds to the JSON schema field "repository_root".
+	RepositoryRoot *string `json:"repository_root,omitempty,omitzero"`
+
+	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
+	RepositorySubdir *string `json:"repository_subdir,omitempty,omitzero"`
+
+	// ResumeAvailable corresponds to the JSON schema field "resume_available".
+	ResumeAvailable bool `json:"resume_available"`
+
+	// ResumeReason corresponds to the JSON schema field "resume_reason".
+	ResumeReason *string `json:"resume_reason,omitempty,omitzero"`
+
+	// SessionLive corresponds to the JSON schema field "session_live".
+	SessionLive bool `json:"session_live"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source string `json:"source"`
 }
 
 type SeedDocument struct {
@@ -6516,6 +6589,25 @@ type SeedEditMessage struct {
 type SeedEditResult struct {
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
+}
+
+type SeedHandoverRequest struct {
+	// ExpectedRev corresponds to the JSON schema field "expected_rev".
+	ExpectedRev int `json:"expected_rev"`
+
+	// ExpectedTenderMember corresponds to the JSON schema field
+	// "expected_tender_member".
+	ExpectedTenderMember string `json:"expected_tender_member"`
+
+	// ExpectedTenderSession corresponds to the JSON schema field
+	// "expected_tender_session".
+	ExpectedTenderSession string `json:"expected_tender_session"`
+
+	// Handoff corresponds to the JSON schema field "handoff".
+	Handoff *string `json:"handoff,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
 }
 
 type SeedLinkMessage struct {
@@ -6910,6 +7002,9 @@ type SeedShowResult struct {
 type SeedTransitionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Comment corresponds to the JSON schema field "comment".
+	Comment *string `json:"comment,omitempty,omitzero"`
 
 	// Force corresponds to the JSON schema field "force".
 	Force *bool `json:"force,omitempty,omitzero"`

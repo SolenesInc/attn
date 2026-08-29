@@ -1268,6 +1268,14 @@ function clickTestId(testid: string) {
   }
 }
 
+async function waitForTestId(testid: string, maxFrames = 120) {
+  for (let frame = 0; frame < maxFrames; frame += 1) {
+    if (document.querySelector(`[data-testid="${testid}"]`) instanceof HTMLElement) return;
+    await nextAnimationFrame();
+  }
+  throw new Error(`Element not found: [data-testid="${testid}"]`);
+}
+
 function frontGardenPanel(): HTMLElement | null {
   const panel = document.querySelector('.garden-panel');
   return panel instanceof HTMLElement ? panel : null;
@@ -1426,6 +1434,8 @@ function collectGardenSeedPage() {
       kind: note.getAttribute('data-kind') ?? '',
       body: note.querySelector('.garden-log__body')?.textContent?.trim() ?? '',
     })),
+    resumeAvailable: Boolean(page.querySelector('[data-testid^="seed-resume-"]')),
+    handoverAvailable: Boolean(page.querySelector('[data-testid^="seed-handover-"]')),
   };
 }
 
@@ -3400,7 +3410,26 @@ export function useUiAutomationBridge({
       case 'garden_resume_seed': {
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         if (!seedId) throw new Error('garden_resume_seed requires seedId');
-        clickTestId(`seed-reopen-${seedId}`);
+        await waitForTestId(`seed-resume-${seedId}`);
+        clickTestId(`seed-resume-${seedId}`);
+        await settleUi(3);
+        return { ok: true };
+      }
+      case 'garden_handover_seed': {
+        const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
+        const handoff = typeof payload.handoff === 'string' ? payload.handoff : '';
+        if (!seedId) throw new Error('garden_handover_seed requires seedId');
+        await waitForTestId(`seed-handover-${seedId}`);
+        clickTestId(`seed-handover-${seedId}`);
+        await settleUi(2);
+        const form = frontGardenPanel()?.querySelector('.garden-handover');
+        const field = form?.querySelector('textarea');
+        const submit = form?.querySelector('button[type="submit"]');
+        if (!(field instanceof HTMLTextAreaElement) || !(submit instanceof HTMLButtonElement)) {
+          throw new Error(`Handover for ${seedId} needs placement or is not ready to submit`);
+        }
+        setControlValue(field, handoff);
+        submit.click();
         await settleUi(3);
         return { ok: true };
       }
