@@ -1,0 +1,14 @@
+kind: fixed
+area: cli
+change: >
+  A workspace now places a delegated pane without choosing the checkout the
+  agent edits. With --no-worktree the agent stays in the source session's
+  checkout, even when --workspace targets a workspace holding sessions from
+  another repository. --cwd is still the one flag that moves the checkout.
+  attn delegate also refuses conflicting repository flags before an agent
+  starts, and the error names both repositories it resolved: --cwd against
+  --repo, or a --worktree-path that already exists inside a different
+  repository.
+symptom: >
+  attn delegate --workspace <id> --no-worktree could start an agent in an
+  unrelated repository's checkout.
