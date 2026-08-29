@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getNormalizedPaneBounds, type TerminalLayoutNode } from '../../types/workspace';
-import {
-  projectAttentionLayout,
-  reconcileAttentionSuspension,
-  swapSuspendedLeaf,
-} from './attentionLayout';
+import { resolveWorkspaceLayout, swapSuspendedLeaf } from './attentionLayout';
 
 function twoAgentsAndDocument(direction: 'vertical' | 'horizontal' = 'vertical'): TerminalLayoutNode {
   return {
@@ -28,82 +24,78 @@ function twoAgentsAndDocument(direction: 'vertical' | 'horizontal' = 'vertical')
   };
 }
 
+function resolve(
+  sourceTree: TerminalLayoutNode,
+  options: {
+    width: number;
+    height: number;
+    activeLeafId: string;
+    focusOrder?: readonly string[];
+    previousSuspendedLeafIds?: ReadonlySet<string>;
+    pendingRatioOverrides?: ReadonlyMap<string, number>;
+  },
+) {
+  return resolveWorkspaceLayout({
+    sourceTree,
+    viewport: { width: options.width, height: options.height },
+    activeLeafId: options.activeLeafId,
+    focusOrder: options.focusOrder ?? [],
+    previousSuspendedLeafIds: options.previousSuspendedLeafIds ?? new Set(),
+    pendingRatioOverrides: options.pendingRatioOverrides,
+  });
+}
+
 describe('workspace attention layout', () => {
   it('gives a markdown document more room while preserving the split topology', () => {
-    const projected = projectAttentionLayout(twoAgentsAndDocument(), new Set(), { width: 1600, height: 700 });
-    const bounds = getNormalizedPaneBounds(projected);
+    const plan = resolve(twoAgentsAndDocument(), {
+      width: 1600,
+      height: 700,
+      activeLeafId: 'document',
+    });
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
     expect(bounds.get('document')!.width).toBeGreaterThan(bounds.get('agent-a')!.width);
     expect(bounds.get('document')!.width).toBeGreaterThan(bounds.get('agent-b')!.width);
-    expect(projected.type).toBe('split');
+    expect(plan.renderedTree.type).toBe('split');
   });
 
   it('suspends the least recently focused peer as a vertical sliver when width is tight', () => {
-    const tree = twoAgentsAndDocument();
-    const suspended = reconcileAttentionSuspension(
-      tree,
-      new Set(),
-      { width: 840, height: 700 },
-      'document',
-      ['agent-a', 'agent-b'],
-    );
-    expect(suspended).toContain('agent-b');
-    expect(suspended).not.toContain('document');
-    const bounds = getNormalizedPaneBounds(projectAttentionLayout(tree, suspended, { width: 840, height: 700 }));
+    const plan = resolve(twoAgentsAndDocument(), {
+      width: 840,
+      height: 700,
+      activeLeafId: 'document',
+      focusOrder: ['agent-a', 'agent-b'],
+    });
+    expect(plan.suspendedLeafIds).toContain('agent-b');
+    expect(plan.suspendedLeafIds).not.toContain('document');
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
     expect(bounds.get('agent-b')!.width * 840).toBeCloseTo(34, 0);
   });
 
-  it('bends the weights at pane minimums before suspending anything', () => {
-    const tree = twoAgentsAndDocument();
-    const suspended = reconcileAttentionSuspension(
-      tree,
-      new Set(),
-      { width: 1600, height: 700 },
-      'agent-a',
-      ['document', 'agent-b'],
-    );
-    expect(suspended).toEqual(new Set());
-    const bounds = getNormalizedPaneBounds(projectAttentionLayout(tree, suspended, { width: 1600, height: 700 }));
+  it('bends automatic weights at pane minimums before suspending anything', () => {
+    const plan = resolve(twoAgentsAndDocument(), {
+      width: 1600,
+      height: 700,
+      activeLeafId: 'agent-a',
+      focusOrder: ['document', 'agent-b'],
+    });
+    expect(plan.suspendedLeafIds).toEqual(new Set());
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
     expect(bounds.get('agent-a')!.width * 1600).toBeCloseTo(480, 0);
     expect(bounds.get('agent-b')!.width * 1600).toBeCloseTo(480, 0);
     expect(bounds.get('document')!.width * 1600).toBeCloseTo(640, 0);
   });
 
   it('uses a horizontal state sliver for a horizontal split', () => {
-    const tree = twoAgentsAndDocument('horizontal');
-    const suspended = reconcileAttentionSuspension(
-      tree,
-      new Set(),
-      { width: 1000, height: 520 },
-      'document',
-      ['agent-b', 'agent-a'],
-    );
-    expect(suspended.size).toBeGreaterThan(0);
-    const suspendedId = [...suspended][0];
-    const bounds = getNormalizedPaneBounds(projectAttentionLayout(tree, suspended, { width: 1000, height: 520 }));
+    const plan = resolve(twoAgentsAndDocument('horizontal'), {
+      width: 1000,
+      height: 520,
+      activeLeafId: 'document',
+      focusOrder: ['agent-b', 'agent-a'],
+    });
+    expect(plan.suspendedLeafIds.size).toBeGreaterThan(0);
+    const suspendedId = [...plan.suspendedLeafIds][0];
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
     expect(bounds.get(suspendedId)!.height * 520).toBeCloseTo(34, 0);
-  });
-
-  it('suspends one of four horizontal leaves at the live window height', () => {
-    const tree: TerminalLayoutNode = {
-      type: 'split',
-      splitId: 'fourth-leaf',
-      direction: 'horizontal',
-      ratio: 0.75,
-      children: [
-        twoAgentsAndDocument('horizontal'),
-        { type: 'tile', tileId: 'second-document', tileKind: 'markdown' },
-      ],
-    };
-    const suspended = reconcileAttentionSuspension(
-      tree,
-      new Set(),
-      { width: 1816, height: 1258 },
-      'second-document',
-      ['document', 'agent-b', 'agent-a'],
-    );
-    expect(suspended.size).toBe(1);
-    const bounds = getNormalizedPaneBounds(projectAttentionLayout(tree, suspended, { width: 1816, height: 1258 }));
-    expect(bounds.get([...suspended][0])!.height * 1258).toBeCloseTo(34, 0);
   });
 
   it('reserves every sliver before giving a too-narrow remainder to the protected leaf', () => {
@@ -121,31 +113,157 @@ describe('workspace attention layout', () => {
       };
     }
     const viewport = { width: 560, height: 568 };
-    const suspended = reconcileAttentionSuspension(tree, new Set(), viewport, 'agent', []);
-    const bounds = getNormalizedPaneBounds(projectAttentionLayout(tree, suspended, viewport));
+    const plan = resolve(tree, { ...viewport, activeLeafId: 'agent' });
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
 
-    expect(suspended.size).toBe(6);
+    expect(plan.suspendedLeafIds.size).toBe(6);
     expect(bounds.get('agent')!.width * viewport.width).toBeCloseTo(356, 0);
-    for (const documentId of suspended) {
+    for (const documentId of plan.suspendedLeafIds) {
       expect(bounds.get(documentId)!.width * viewport.width).toBeCloseTo(34, 0);
     }
   });
 
-  it('restores a clicked sliver and hands its previous peer to the ring', () => {
-    expect(swapSuspendedLeaf(new Set(['agent-b']), 'agent-b', 'document')).toEqual(new Set(['document']));
+  it('treats a preferred ratio as a target and keeps visible leaves viable', () => {
+    const tree: TerminalLayoutNode = {
+      type: 'split',
+      splitId: 'root',
+      direction: 'vertical',
+      ratio: 0.8,
+      ratioMode: 'preferred',
+      children: [
+        { type: 'pane', paneId: 'agent' },
+        { type: 'tile', tileId: 'document', tileKind: 'markdown' },
+      ],
+    };
+    const plan = resolve(tree, { width: 1000, height: 700, activeLeafId: 'agent' });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set());
+    expect(plan.renderedTree).toMatchObject({ ratio: 0.52 });
   });
 
-  it('honors a manually resized split without dropping weighting elsewhere', () => {
+  it('uses persisted preferred sizing after the source layout is rebuilt', () => {
     const tree = twoAgentsAndDocument();
-    const projected = projectAttentionLayout(
-      tree,
-      new Set(),
-      { width: 1600, height: 600 },
-      new Set(['document-split']),
-    );
-    if (projected.type !== 'split') throw new Error('expected outer split');
-    expect(projected.ratio).toBeCloseTo(0.7, 5);
-    if (projected.children[0].type !== 'split') throw new Error('expected document split');
-    expect(projected.children[0].ratio).toBeCloseTo(0.68, 5);
+    if (tree.type !== 'split' || tree.children[0].type !== 'split') {
+      throw new Error('expected nested split');
+    }
+    tree.children[0] = {
+      ...tree.children[0],
+      ratio: 0.68,
+      ratioMode: 'preferred',
+    };
+    const plan = resolve(tree, { width: 3000, height: 700, activeLeafId: 'document' });
+    if (plan.renderedTree.type !== 'split' || plan.renderedTree.children[0].type !== 'split') {
+      throw new Error('expected nested split');
+    }
+
+    expect(plan.renderedTree.children[0].ratio).toBeCloseTo(0.68, 5);
+  });
+
+  it('restores a preferred ratio after capacity returns', () => {
+    const tree: TerminalLayoutNode = {
+      type: 'split',
+      splitId: 'root',
+      direction: 'vertical',
+      ratio: 0.8,
+      ratioMode: 'preferred',
+      children: [
+        { type: 'pane', paneId: 'agent' },
+        { type: 'tile', tileId: 'document', tileKind: 'markdown' },
+      ],
+    };
+    const crowded = resolve(tree, {
+      width: 900,
+      height: 700,
+      activeLeafId: 'agent',
+      focusOrder: ['document'],
+    });
+    expect(crowded.suspendedLeafIds).toEqual(new Set(['document']));
+
+    const roomy = resolve(tree, {
+      width: 2600,
+      height: 700,
+      activeLeafId: 'agent',
+      focusOrder: ['document'],
+      previousSuspendedLeafIds: crowded.suspendedLeafIds,
+    });
+    expect(roomy.suspendedLeafIds).toEqual(new Set());
+    expect(roomy.renderedTree).toMatchObject({ ratio: 0.8 });
+  });
+
+  it('makes a suspended leaf an exact sliver after a preferred divider resize', () => {
+    const tree: TerminalLayoutNode = {
+      type: 'split',
+      splitId: 'outer',
+      direction: 'vertical',
+      ratio: 0.8048036550110133,
+      ratioMode: 'preferred',
+      children: [
+        {
+          type: 'split',
+          splitId: 'middle',
+          direction: 'vertical',
+          ratio: 0.67,
+          children: [
+            {
+              type: 'split',
+              splitId: 'inner',
+              direction: 'vertical',
+              ratio: 0.5,
+              children: [
+                { type: 'pane', paneId: 'agent' },
+                { type: 'tile', tileId: 'notes', tileKind: 'markdown' },
+              ],
+            },
+            { type: 'tile', tileId: 'design', tileKind: 'markdown' },
+          ],
+        },
+        { type: 'tile', tileId: 'readme', tileKind: 'markdown' },
+      ],
+    };
+    const viewport = { width: 1816, height: 1258 };
+    const collapsed = resolve(tree, {
+      ...viewport,
+      activeLeafId: 'design',
+      focusOrder: ['agent', 'notes', 'readme'],
+    });
+    const collapsedBounds = getNormalizedPaneBounds(collapsed.renderedTree);
+
+    expect(collapsed.suspendedLeafIds).toEqual(new Set(['readme']));
+    expect(collapsedBounds.get('readme')!.width * viewport.width).toBeCloseTo(34, 0);
+
+    const swappedIds = swapSuspendedLeaf(collapsed.suspendedLeafIds, 'readme', 'design');
+    const swapped = resolve(tree, {
+      ...viewport,
+      activeLeafId: 'readme',
+      focusOrder: ['design', 'notes', 'agent'],
+      previousSuspendedLeafIds: swappedIds,
+    });
+    const swappedBounds = getNormalizedPaneBounds(swapped.renderedTree);
+
+    expect(swapped.suspendedLeafIds).toEqual(new Set(['design']));
+    expect(swappedBounds.get('design')!.width * viewport.width).toBeCloseTo(34, 0);
+    expect(swappedBounds.get('readme')!.width * viewport.width).toBeGreaterThanOrEqual(479.5);
+  });
+
+  it('uses a pending drag as preferred intent without weakening constraints', () => {
+    const tree = twoAgentsAndDocument();
+    const plan = resolve(tree, {
+      width: 1600,
+      height: 600,
+      activeLeafId: 'document',
+      pendingRatioOverrides: new Map([['document-split', 0.8]]),
+    });
+    if (plan.renderedTree.type !== 'split' || plan.renderedTree.children[0].type !== 'split') {
+      throw new Error('expected nested split');
+    }
+
+    expect(plan.renderedTree.children[0].ratio).toBeLessThan(0.8);
+    const bounds = getNormalizedPaneBounds(plan.renderedTree);
+    expect(bounds.get('agent-a')!.width * 1600).toBeGreaterThanOrEqual(479.5);
+    expect(bounds.get('document')!.width * 1600).toBeGreaterThanOrEqual(479.5);
+  });
+
+  it('hands the previous peer to the ring when a sliver is restored', () => {
+    expect(swapSuspendedLeaf(new Set(['agent-b']), 'agent-b', 'document')).toEqual(new Set(['document']));
   });
 });
