@@ -879,7 +879,6 @@ async fn screenshot(
     .map_err(|error| format!("join browser screenshot encoder: {error}"))?
 }
 
-// One message shape for both non-mac stubs, so an agent sees the platform and the action.
 #[cfg(not(target_os = "macos"))]
 fn unsupported_capture_message(action: &str) -> String {
     format!(
