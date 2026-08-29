@@ -696,6 +696,7 @@ function ModelCatalog({ policy, models, onPick }: ModelCatalogProps) {
   }
   if (!catalog) return null;
 
+  const chosen = new Set(models);
   const reachable = catalog.providers.filter((provider) => provider.models.length > 0);
   if (reachable.length === 0) {
     return (
@@ -727,7 +728,7 @@ function ModelCatalog({ policy, models, onPick }: ModelCatalogProps) {
             {provider.models.map((model) => {
               const value = `${provider.provider}/${model.id}`;
               return (
-                <option key={value} value={value} disabled={!provider.ready || models.includes(value)}>
+                <option key={value} value={value} disabled={!provider.ready || chosen.has(value)}>
                   {model.name ?? model.id}
                 </option>
               );
