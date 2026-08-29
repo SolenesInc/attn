@@ -543,6 +543,11 @@ it back up. **Harvesting** closes it as done, with a reason, and **withering**
 closes it as abandoned. **Replanting** puts a seed back in the pool: it is the
 one move that lands on `planted`, so it reopens a harvested or withered seed.
 
+The seed body defines done through its outcome and required verification. A
+tender harvests when those are complete. Review, acceptance, or merge is a gate
+only when the body requires it. Independent remaining work becomes a child;
+harvesting that child never moves its plot or siblings.
+
 A seed somebody else still holds is **taken**, not merely moved. Tend, park,
 harvest, wither, and replant refuse it by naming the holder; `--force` acts
 anyway and the log records who forced it. A tender moving its own seed never

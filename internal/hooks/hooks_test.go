@@ -331,6 +331,13 @@ func TestGardenGuidanceMirrorsJiraVocabularyPerConcept(t *testing.T) {
 	}
 }
 
+func TestGardenGuidanceHarvestsTheStatedOutcome(t *testing.T) {
+	want := "Harvest a seed when the outcome and required verification in its body are complete"
+	if !strings.Contains(GardenGuidance, want) {
+		t.Fatalf("garden guidance dropped %q:\n%s", want, GardenGuidance)
+	}
+}
+
 func TestGenerateCodexConfigOverrides_InjectsWorkflowGuidanceWhenEnabled(t *testing.T) {
 	off := strings.Join(GenerateCodexConfigOverrides("s", "/sock", "/attn", Launch{WorkspaceContextPath: "/tmp/context.md"}), "\n")
 	if strings.Contains(off, "hypercode") {

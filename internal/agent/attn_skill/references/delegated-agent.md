@@ -30,9 +30,9 @@ so write to it when you:
     attn seed note <seed-id> -m \
       "Core implementation is ready locally; which event contract should be used?"
 
-Close it yourself when the outcome is settled:
+Close it when its outcome and required verification are complete:
 
-    attn seed harvest <seed-id> -m "The requested PR merged and no follow-up remains"
+    attn seed harvest <seed-id> -m "<what got done>"
     attn seed wither <seed-id> -m "The required API was removed; nobody should pick this up"
 
 Harvest timing, note discipline, and artifact handover are craft:
