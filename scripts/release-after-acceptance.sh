@@ -56,25 +56,30 @@ if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
   exit 0
 fi
 
-tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
+tag="$(go run ./cmd/release-train accepted-main tag --head "$sha")"
 if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "release after acceptance: validator returned invalid tag '$tag'" >&2
+	  echo "release after acceptance: manifest returned invalid tag '$tag'" >&2
   exit 1
 fi
 
 remote_tag_status=0
 remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || remote_tag_status=$?
 case "$remote_tag_status" in
-  0)
-    remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
-    if [ "$remote_tag_sha" != "$sha" ]; then
-      echo "release after acceptance: $tag points to $remote_tag_sha, not accepted main $sha" >&2
-      exit 1
-    fi
-    echo "release after acceptance: $tag already points to accepted main $sha"
-    ;;
-  2)
-    git tag "$tag" "$sha"
+	  0)
+	    remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+	    if [ "$remote_tag_sha" != "$sha" ]; then
+	      echo "release after acceptance: manifest $tag was consumed at $remote_tag_sha; nothing to release from $sha"
+	      exit 0
+	    fi
+	    echo "release after acceptance: $tag already points to accepted main $sha"
+	    ;;
+	  2)
+	    validated_tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
+	    if [ "$validated_tag" != "$tag" ]; then
+	      echo "release after acceptance: manifest tag changed from $tag to $validated_tag during validation" >&2
+	      exit 1
+	    fi
+	    git tag "$tag" "$sha"
     git push origin "refs/tags/$tag"
     echo "release after acceptance: created $tag at $sha"
     ;;

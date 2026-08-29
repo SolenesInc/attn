@@ -122,6 +122,20 @@ run_release_after_acceptance >"$work/duplicate.out"
 [[ "$(grep -c '^workflow run release.yml ' "$FAKE_GH_LOG")" -eq 1 ]]
 grep -q 'not dispatching again' "$work/duplicate.out"
 
+printf '%s\n' 'urgent fix after the release' >"$fixture_repo/post-release-hotfix.txt"
+git -C "$fixture_repo" add post-release-hotfix.txt
+git -C "$fixture_repo" commit -q -m 'fix(release): add post-release hotfix'
+git -C "$fixture_repo" push -q origin main
+hotfix_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+run_release_after_acceptance >"$work/post-release-hotfix.out"
+grep -q "manifest $candidate_tag was consumed at $candidate_sha" "$work/post-release-hotfix.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
+[[ "$(grep -c '^workflow run release.yml ' "$FAKE_GH_LOG")" -eq 1 ]]
+if grep -Fq "$hotfix_sha" <(git --git-dir="$fixture_origin" show-ref --tags); then
+	  echo "post-release hotfix moved or created the consumed tag" >&2
+	  exit 1
+fi
+
 setup_fixture repaired
 export FAKE_ACCEPTANCE_CONCLUSION=failure
 run_release_after_acceptance >/dev/null

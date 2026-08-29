@@ -174,6 +174,12 @@ then creates the immutable tag and explicitly dispatches `release.yml` from
 that tag. A retry recognizes both an existing exact tag and an existing release
 run for the same commit, so it cannot start a second release.
 
+The manifest stays in Git history so `next` can reconcile the release. Once its
+tag points to an earlier `main` SHA, release automation treats that manifest as
+consumed and exits cleanly. It never reuses a published version for a later
+`main` change. A post-release hotfix therefore needs a fresh version and
+manifest; the hotfix preparation path is an activation prerequisite.
+
 If `main` Acceptance fails, make the smallest `hotfix/*` PR from `main`, merge
 it after its PR gate and manual verification pass, and wait for the repaired
 `main` SHA to earn Acceptance. Update `CHANGELOG.md` directly for this
