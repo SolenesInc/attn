@@ -103,6 +103,17 @@ if ! (cd "$hotfix_repo" && "$gate" main hotfix/pre-release-repair) >/dev/null; t
 fi
 
 git -C "$hotfix_repo" switch -q main
+git -C "$hotfix_repo" switch -q -c hotfix/fragment-repair
+printf '%s\n' 'kind: fixed' 'area: app' 'change: invalid repair fragment' \
+  >"$hotfix_repo/changelog.d/invalid-repair.yaml"
+git -C "$hotfix_repo" add changelog.d/invalid-repair.yaml
+git -C "$hotfix_repo" commit -q -m 'fix(app): add invalid repair fragment'
+if (cd "$hotfix_repo" && "$gate" main hotfix/fragment-repair) >/dev/null 2>&1; then
+  echo "pre-release repair fragment bypassed the changelog gate" >&2
+  exit 1
+fi
+
+git -C "$hotfix_repo" switch -q main
 git -C "$hotfix_repo" tag v99.98.96
 git -C "$hotfix_repo" switch -q -c hotfix/unprepared-after-release
 printf '%s\n' 'kind: fixed' 'area: app' 'change: unprepared released hotfix' \

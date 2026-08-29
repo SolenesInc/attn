@@ -31,6 +31,7 @@ main_ref="$BASE_REF"
 if git rev-parse -q --verify "origin/${BASE_REF}" >/dev/null; then
   main_ref="origin/${BASE_REF}"
 fi
+pre_release_repair=0
 
 if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
   "$script_root/sync-candidate-gate.sh" origin/main "$main_ref" "$HEAD_REF" "$HEAD_BRANCH"
@@ -61,6 +62,7 @@ if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" == hotfix/* ]]; then
     echo "run make release-hotfix VERSION_TAG=vX.Y.Z before opening the PR" >&2
     exit 1
   fi
+  pre_release_repair=1
   echo "changelog gate: ${HEAD_BRANCH} repairs the still-unpublished ${base_tag} candidate"
 fi
 
@@ -75,6 +77,27 @@ touched_changelog="$(
   git diff --name-only "$RANGE" -- CHANGELOG.md
   git diff --name-only HEAD -- CHANGELOG.md
 )"
+fragment_changes="$(
+  git diff --name-only "$RANGE" -- 'changelog.d/*.yaml'
+  git diff --name-only HEAD -- 'changelog.d/*.yaml'
+  git ls-files --others --exclude-standard -- 'changelog.d/*.yaml'
+)"
+
+if [[ "$pre_release_repair" -eq 1 ]]; then
+  if [[ -n "$fragment_changes" ]]; then
+    echo "changelog gate: pre-release repair must not change changelog.d fragments" >&2
+    echo "update CHANGELOG.md directly so accepted main remains releasable" >&2
+    exit 1
+  fi
+  if [[ -z "$touched_changelog" ]]; then
+    echo "changelog gate: pre-release repair must update CHANGELOG.md directly" >&2
+    exit 1
+  fi
+  echo "changelog gate: validated direct changelog repair"
+  go run ./cmd/changelog-check
+  echo "changelog gate: OK"
+  exit 0
+fi
 
 if [[ -z "$added_fragment" && -z "$touched_changelog" ]]; then
   cat >&2 <<EOF
