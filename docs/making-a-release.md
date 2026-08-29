@@ -225,7 +225,7 @@ commit, so it cannot start a second release.
 `release.yml` accepts workflow dispatch only. Pushing a `v*` tag by hand cannot
 start publication. The validation job runs the exact protected `main` commit
 that supplied the workflow and treats the tag only as data. Every dispatch
-independently proves that the tag is on `main`, the exact SHA has a green
+independently proves that the tag is the exact current `main`, the SHA has a green
 `Acceptance` job from `ci.yml`, the originating candidate has a green exact-head
 receipt from the protected `main` copy of `app-acceptance.yml`, and the manifest
 and committed versions agree. Runs for the same tag are serialized. The
@@ -284,9 +284,10 @@ daemons, all against a **draft** release. It is published only after every one
 of those has passed. A failed release run leaves any partial release as a
 private draft, not a half-built public release. `Release health` opens one issue
 for that tag with the exact run and draft receipt. Fix the cause and rerun the
-workflow on the same tag
+workflow on the same tag while `main` still points to it
 (`gh workflow run release.yml --ref main -f tag=<tag>`); the rerun replaces
-the assets, publishes when the whole set is right, and closes the issue.
+the assets, publishes when the whole set is right, and closes the issue. If
+`main` has advanced, prepare a fresh candidate and version instead.
 
 ## What's New modal
 

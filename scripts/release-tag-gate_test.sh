@@ -120,6 +120,14 @@ export FAKE_ACCEPTANCE_CONCLUSION=failure
 expect_failure 'Acceptance is completed/failure' run_gate v99.98.97
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
+printf '%s\n' 'repair after acceptance' >"$repo/repair.txt"
+git -C "$repo" add repair.txt
+git -C "$repo" commit -q -m 'fix(release): repair accepted main'
+repaired_sha="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" update-ref refs/remotes/origin/main "$repaired_sha"
+export GITHUB_SHA="$repaired_sha"
+expect_failure 'not current main' run_gate v99.98.97
+
 git -C "$repo" switch -q -c detached-release "$baseline_sha"
 printf '%s\n' 'detached release' >"$repo/detached-release.txt"
 git -C "$repo" add detached-release.txt
@@ -127,7 +135,7 @@ git -C "$repo" commit -q -m 'forge detached release'
 git -C "$repo" tag v99.98.96
 expect_failure 'trusted checkout is' run_gate v99.98.96
 git -C "$repo" switch -q main
-expect_failure 'is not part of main' run_gate v99.98.96
+expect_failure 'not current main' run_gate v99.98.96
 
 (cd "$repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
 git -C "$repo" add app
@@ -136,6 +144,7 @@ forged_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" tag -f v99.98.97 "$forged_sha" >/dev/null
 git -C "$repo" update-ref refs/remotes/origin/main "$forged_sha"
 export FAKE_ACCEPTANCE_SHA="$forged_sha"
+export GITHUB_SHA="$accepted_sha"
 git -C "$repo" switch -q --detach "$accepted_sha"
 expect_failure 'main moved from dispatch SHA' run_gate v99.98.97
 git -C "$repo" switch -q main

@@ -35,8 +35,8 @@ if [[ "$trusted_sha" != "$main_sha" ]]; then
   echo "release tag gate: main moved from dispatch SHA $trusted_sha to $main_sha" >&2
   exit 1
 fi
-if ! git merge-base --is-ancestor "$tag_sha" origin/main; then
-  echo "release tag gate: $tag_sha is not part of main" >&2
+if [[ "$tag_sha" != "$main_sha" ]]; then
+  echo "release tag gate: $tag points to $tag_sha, not current main $main_sha" >&2
   exit 1
 fi
 

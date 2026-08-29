@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to release (for retry/fix), e.g. v0.2.0"
+        description: "Existing current-main tag to release or retry, e.g. v0.2.0"
         required: true
         type: string
 
