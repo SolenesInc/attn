@@ -8,6 +8,16 @@ import { isDirectoryUnderRoot, parseCommonArgs } from './common.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
+
+function installedAppPath(appName) {
+  return process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Applications', `${appName}.app`)
+    : path.join(xdgDataHome(), appName);
+}
+
 function attnBinary() {
   const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(TEST_DIR, '../../../attn')]
     .filter(Boolean);
@@ -44,7 +54,7 @@ describe('parseCommonArgs production safety', () => {
   it('defaults every real-app command to the isolated dev target', () => {
     const options = parseCommonArgs([]);
 
-    expect(options.appPath).toBe(path.join(os.homedir(), 'Applications', 'attn-dev.app'));
+    expect(options.appPath).toBe(installedAppPath('attn-dev'));
     expect(options.wsUrl).toBe('ws://127.0.0.1:29849/ws');
   });
 
