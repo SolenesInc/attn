@@ -263,7 +263,6 @@ run: install
 		app_exec="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appExecutable)"; \
 		data_dir="$$("$$attn" profile resolve --profile "$(PROFILE)" --field dataDir)"; \
 		mkdir -p "$$data_dir"; \
-		: "Its own session, so closing this terminal does not take the app with it."; \
 		setsid "$$app_exec" </dev/null >>"$$data_dir/app.log" 2>&1 & \
 	fi; \
 	echo "Launched $$app_path"

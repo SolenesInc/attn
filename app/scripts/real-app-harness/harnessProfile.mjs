@@ -136,8 +136,7 @@ export function bundleIdentifierForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).bundleId;
 }
 
-// macOS filesystems are case-insensitive: `Attn.app` is the prod bundle. Off
-// darwin the install is a directory tree named `attn` / `attn-<profile>`.
+// macOS filesystems are case-insensitive: `Attn.app` is the prod bundle.
 export function profileForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
   const appName = path.basename(appPath || '').toLowerCase();
   const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?(?:\.app)?$/.exec(appName);
@@ -194,7 +193,6 @@ export function defaultWSURLForProfile(profile = currentHarnessProfile()) {
   return `ws://127.0.0.1:${resolveHarnessResources(profile).wsPort}/ws`;
 }
 
-// Tauri's app_local_data_dir, where the bridge writes its manifest.
 export function manifestPathForProfile(profile = currentHarnessProfile()) {
   const bundleId = resolveHarnessResources(profile).bundleId;
   if (process.platform === 'darwin') {

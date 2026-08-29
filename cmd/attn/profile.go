@@ -646,8 +646,6 @@ func runProfileList(args []string) {
 	fmt.Println("\n* = active (ATTN_PROFILE)")
 }
 
-// A bundle in ~/Applications on macOS; elsewhere an install tree next to the
-// default profile's, recognized by the shell it must contain.
 func installedAppProfiles(home string) []string {
 	root := filepath.Dir(config.AppPathForProfile(""))
 	if runtime.GOOS == "darwin" {

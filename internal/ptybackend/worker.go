@@ -282,8 +282,6 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	return binaryPath
 }
 
-// The running profile's own install first, then the prod bundle macOS also
-// allows in ~/Applications and /Applications.
 func bundledAttnCandidates(home string) []string {
 	candidates := []string{config.AppDaemonBinaryForProfile(config.Profile())}
 	if runtime.GOOS == "darwin" {

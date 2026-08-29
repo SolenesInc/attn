@@ -41,16 +41,13 @@ fi
 
 echo ">>> Building $label app: $app_name (id=$bundle_id, port=$ws_port)"
 
-# macOS ships a .app bundle; Linux builds the plain executable and stages the
-# install tree below.
 if [ "$(uname -s)" = "Darwin" ]; then
   bundle_args="--bundles app"
 else
   bundle_args="--no-bundle"
 fi
 
-# Stage the Go daemon as the Tauri sidecar. Tauri looks it up by the rustc host
-# triple, which is what makes this build work on Linux as well as macOS.
+# Stage the Go daemon as the Tauri sidecar. Tauri finds it by the rustc host triple.
 host_triple="$(rustc -vV | awk '/host:/ {print $2}')"
 if [ -z "$host_triple" ]; then
   echo "could not read the rustc host triple (rustc -vV)" >&2
@@ -122,8 +119,7 @@ write_build_identity() {
     "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" > "$1"
 }
 
-# The install tree `make install` copies from. Cargo honours CARGO_TARGET_DIR, so
-# the executable is read from there while the tree stays where the Makefile looks.
+# Cargo honours CARGO_TARGET_DIR; the tree stays where the Makefile looks for it.
 if [ "$(uname -s)" != "Darwin" ]; then
   release_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}/release"
   tree_dir="app/src-tauri/target/release/linux-tree/${app_name}"

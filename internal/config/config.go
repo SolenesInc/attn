@@ -140,8 +140,6 @@ func AppNameForProfile(profile string) string {
 	return "attn-" + p
 }
 
-// macOS installs a bundle; every other OS gets a plain directory tree
-// (bin/, resources/) under XDG_DATA_HOME.
 func AppPathForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -157,7 +155,7 @@ func AppPathForProfile(profile string) string {
 	return filepath.Join(home, ".local", "share", name)
 }
 
-// The Tauri shell. Cargo names it after the crate ("app") on every platform.
+// Cargo names the Tauri shell after its crate, hence "app".
 func AppExecutableForProfile(profile string) string {
 	return AppExecutableInTree(AppPathForProfile(profile))
 }
@@ -169,7 +167,6 @@ func AppExecutableInTree(appPath string) string {
 	return filepath.Join(appPath, "bin", "attn-app")
 }
 
-// The Go daemon staged beside the shell as its sidecar.
 func AppDaemonBinaryForProfile(profile string) string {
 	return AppDaemonBinaryInTree(AppPathForProfile(profile))
 }
@@ -181,8 +178,8 @@ func AppDaemonBinaryInTree(appPath string) string {
 	return filepath.Join(appPath, "bin", "attn")
 }
 
-// Where the install tree holding this executable stages plugins and the app
-// runtime, "" when it is in none. ~/.local/bin/attn has a bin/ and no tree.
+// ~/.local/bin/attn has a bin/ and no install tree, so resources/ must exist
+// before a tree counts as one.
 func InstallResourcesDir(executable string) string {
 	binDir := filepath.Dir(executable)
 	parent := filepath.Dir(binDir)
