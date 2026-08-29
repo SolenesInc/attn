@@ -1015,7 +1015,6 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 
 func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, agent string, fromChief bool) error {
 	sessionID = strings.TrimSpace(sessionID)
-	current, _ := d.gardenDispatch(sessionID)
 	observed := observedGardenExecution(&protocol.Session{
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
@@ -1026,47 +1025,40 @@ func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, 
 		}
 		observed = observedGardenExecution(session, resumeID, d.gardenTime())
 	}
-	next := mergeGardenExecution(current, observed)
-	next.SessionID = sessionID
-	if strings.TrimSpace(crown) != "" {
-		next.Crown = strings.TrimSpace(crown)
-		next.SupersededBy = ""
-	}
-	if strings.TrimSpace(dispatcherSession) != "" {
-		next.DispatcherSession = strings.TrimSpace(dispatcherSession)
-	}
-	next.FromChief = fromChief
-	return d.writeGardenDispatch(next)
+	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		next := mergeGardenExecution(current, observed)
+		if wanted := strings.TrimSpace(crown); wanted != "" {
+			if successor := strings.TrimSpace(current.SupersededBy); successor != "" {
+				return garden.Dispatch{}, false, fmt.Errorf(
+					"session %s was already superseded by %s while binding it to %s", sessionID, successor, wanted)
+			}
+			next.Crown = wanted
+		}
+		if dispatcher := strings.TrimSpace(dispatcherSession); dispatcher != "" {
+			next.DispatcherSession = dispatcher
+		}
+		next.FromChief = fromChief
+		return next, true, nil
+	})
+	return err
 }
 
-func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) {
+func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) error {
 	sessionID, resumeSessionID = strings.TrimSpace(sessionID), strings.TrimSpace(resumeSessionID)
 	if sessionID == "" || resumeSessionID == "" {
-		return
+		return nil
 	}
-	dispatch, ok := d.gardenDispatch(sessionID)
-	if !ok || dispatch.Resume == resumeSessionID {
-		return
-	}
-	schema, err := d.dispatchesCollection()
-	if err != nil {
-		return
-	}
-	dispatch.Resume = resumeSessionID
-	body, err := dispatch.Encode()
-	if err != nil {
-		d.logf("garden: encoding the dispatch record for %s: %v", sessionID, err)
-		return
-	}
-	fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: *schema, ID: sessionID, Body: body,
-	}, fact, d.gardenTime())
+	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		if current.Resume == resumeSessionID {
+			return current, false, nil
+		}
+		current.Resume = resumeSessionID
+		return current, true, nil
+	})
 	if err != nil {
 		d.logf("garden: recording the resume id for session %s: %v", sessionID, err)
-		return
 	}
-	d.announceCommittedWrite(fact, written.Seq)
+	return err
 }
 
 func (d *Daemon) gardenDispatchResume(sessionID string) string {

@@ -152,29 +152,65 @@ func mergeGardenExecution(current, observed garden.Dispatch) garden.Dispatch {
 	return next
 }
 
-func (d *Daemon) writeGardenDispatch(dispatch garden.Dispatch) error {
-	if strings.TrimSpace(dispatch.SessionID) == "" {
-		return errors.New("garden execution needs a session id")
+func (d *Daemon) updateGardenDispatch(
+	sessionID string,
+	update func(garden.Dispatch) (garden.Dispatch, bool, error),
+) (garden.Dispatch, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return garden.Dispatch{}, errors.New("garden execution needs a session id")
 	}
 	schema, err := d.dispatchesCollection()
 	if err != nil {
-		return err
+		return garden.Dispatch{}, err
 	}
-	body, err := dispatch.Encode()
-	if err != nil {
-		return err
+	const attempts = 3
+	var lastErr error
+	for range attempts {
+		current, doc, found, readErr := d.gardenDispatchDocument(sessionID)
+		if readErr != nil {
+			return garden.Dispatch{}, readErr
+		}
+		if !found {
+			current.SessionID = sessionID
+		}
+		next, changed, updateErr := update(current)
+		if updateErr != nil {
+			return garden.Dispatch{}, updateErr
+		}
+		next.SessionID = sessionID
+		if !changed {
+			return current, nil
+		}
+		body, encodeErr := next.Encode()
+		if encodeErr != nil {
+			return garden.Dispatch{}, encodeErr
+		}
+		expected := docstore.ExpectAbsent
+		if found {
+			expected = doc.Rev
+		}
+		if d.gardenDispatchBeforeWrite != nil {
+			d.gardenDispatchBeforeWrite(sessionID)
+		}
+		fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
+		written, writeErr := d.store.CommitDocumentWrite(store.DocumentWrite{
+			Schema: *schema, ID: sessionID, Body: body, Expected: &expected,
+		}, fact, d.gardenTime())
+		if writeErr != nil {
+			if docstore.IsConflict(writeErr) {
+				lastErr = writeErr
+				continue
+			}
+			return garden.Dispatch{}, writeErr
+		}
+		d.announceCommittedWrite(fact, written.Seq)
+		d.rememberDispatchSeed(sessionID, activeDispatchCrown(next))
+		d.rememberDispatchFromChief(sessionID, next.FromChief)
+		return next, nil
 	}
-	fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, dispatch.SessionID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: *schema, ID: dispatch.SessionID, Body: body,
-	}, fact, d.gardenTime())
-	if err != nil {
-		return err
-	}
-	d.announceCommittedWrite(fact, written.Seq)
-	d.rememberDispatchSeed(dispatch.SessionID, activeDispatchCrown(dispatch))
-	d.rememberDispatchFromChief(dispatch.SessionID, dispatch.FromChief)
-	return nil
+	return garden.Dispatch{}, fmt.Errorf(
+		"dispatch %s changed under all %d metadata refresh attempts: %w", sessionID, attempts, lastErr)
 }
 
 func activeDispatchCrown(dispatch garden.Dispatch) string {
@@ -188,16 +224,14 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	if session == nil || strings.TrimSpace(session.ID) == "" {
 		return garden.Dispatch{}, errors.New("garden execution needs a tracked session")
 	}
-	current, _ := d.gardenDispatch(session.ID)
 	resumeID := ""
 	if d.store.Get(session.ID) != nil {
 		resumeID = d.store.GetResumeSessionID(session.ID)
 	}
-	next := mergeGardenExecution(current, observedGardenExecution(session, resumeID, d.gardenTime()))
-	if err := d.writeGardenDispatch(next); err != nil {
-		return garden.Dispatch{}, err
-	}
-	return next, nil
+	observed := observedGardenExecution(session, resumeID, d.gardenTime())
+	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		return mergeGardenExecution(current, observed), true, nil
+	})
 }
 
 func (d *Daemon) ensureGardenExecution(sessionID string) (garden.Dispatch, error) {

@@ -313,20 +313,21 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu   sync.Mutex
-	workflowDirty         map[string]bool
-	workflowEngineMu      sync.Mutex
-	workflowEngineConn    map[string]workflowEngineSink
-	workflowBroadcastHook func(*protocol.WorkflowRunUpdatedMessage)
-	gardenBroadcastHook   func([]protocol.Seed, int)
-	appsBroadcastHook     func([]protocol.AppRegistryEntry)
-	gardenMintID          func() (string, error)
-	gardenMintNoteID      func() (string, error)
-	gardenNow             func() time.Time
-	dispatchSeedsMu       sync.Mutex
-	dispatchSeeds         map[string]string
-	dispatchFromChief     map[string]bool
-	dispatchSeedsLoaded   bool
+	workflowBroadcastMu       sync.Mutex
+	workflowDirty             map[string]bool
+	workflowEngineMu          sync.Mutex
+	workflowEngineConn        map[string]workflowEngineSink
+	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
+	gardenBroadcastHook       func([]protocol.Seed, int)
+	appsBroadcastHook         func([]protocol.AppRegistryEntry)
+	gardenMintID              func() (string, error)
+	gardenMintNoteID          func() (string, error)
+	gardenNow                 func() time.Time
+	gardenDispatchBeforeWrite func(string)
+	dispatchSeedsMu           sync.Mutex
+	dispatchSeeds             map[string]string
+	dispatchFromChief         map[string]bool
+	dispatchSeedsLoaded       bool
 
 	gardenNotePageSize int
 
