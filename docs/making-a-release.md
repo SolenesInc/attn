@@ -98,45 +98,50 @@ allowed routes:
 
 ## Prepare a frozen candidate
 
-Start only from an exact `next` SHA whose `Acceptance` run is green. Record that
-SHA, the current `main` SHA, and confirm there is no other open
-`release/vX.Y.Z` PR. Then create the candidate from the accepted source:
+Start from a clean, current local `next`:
 
 ```bash
-git fetch origin main next
-source_sha="$(git rev-parse origin/next)"
-main_sha="$(git rev-parse origin/main)"
-git switch -c release/v0.9.5 "$source_sha"
-
-./scripts/compile-changelog.sh            # or --dry-run to inspect the prompt
-go run ./cmd/release-train version set v0.9.5
-(cd app && pnpm install --frozen-lockfile)
-(cd app/src-tauri && cargo check -q)
-go run ./cmd/release-train manifest write \
-  --version v0.9.5 --kind promotion \
-  --source "$source_sha" --main "$main_sha"
+git switch next
+git pull --ff-only origin next
+./scripts/release.sh v0.9.5
 ```
 
-The compile script validates the pending fragments, has `claude` write a dated
-`CHANGELOG.md` section from them, inserts it at the top of the file, and deletes
-the consumed fragments. Everything is left staged. Review and edit the section,
-commit the release-only changes, and open a PR to `main`.
+The command refuses a stale or divergent branch, a missing or red exact-SHA
+`Acceptance`, an existing tag, or another open candidate. It creates
+`release/v0.9.5` from the accepted `next` head, compiles the changelog, updates
+all committed versions, writes `.github/release-candidate.yml`, validates the
+release-only diff, and opens a draft PR to `main`. It never merges, tags, or
+starts a release.
+
+The draft PR links the source Acceptance and both frozen SHAs. It also carries
+the raw changelog inputs so the compiled copy can be reviewed without
+reconstructing the candidate.
 
 If every pending fragment is `internal`, the script removes the fragments
 without adding a section.
 
-Before merging, inspect the changes between the recorded source and the
-candidate, run the required real-app scenarios from the candidate, and record
-the manual result in the PR. The validation command checks the frozen source,
-the unchanged `main` baseline, version agreement, release-only diff, consumed
-fragments, tag availability, and the single-candidate rule:
+## Record app acceptance
+
+Install and exercise the packaged app from the exact candidate head. Record the
+profile, scenarios, and evidence with the command generated in the draft PR:
 
 ```bash
-go run ./cmd/release-train candidate validate \
-  --current-main origin/main \
-  --source-acceptance success \
-  --other-open-candidates 0
+gh workflow run app-acceptance.yml \
+  --ref release/v0.9.5 \
+  -f candidate_sha=<full candidate SHA> \
+  -f profile=<profile> \
+  -f scenarios='<scenarios run>' \
+  -f evidence='<recording URL or concise receipt>' \
+  -f outcome=passed
 ```
+
+The `App acceptance` check attaches to the commit selected by `--ref` and fails
+if it differs from `candidate_sha`. A failed manual run should be recorded with
+`outcome=failed`, which leaves a red receipt on that candidate. Any candidate
+edit creates a new head and requires a new receipt.
+
+Make the PR ready for review only after the changelog reads well and the exact
+head has both `PR gate` and `App acceptance` green.
 
 If `next` Acceptance turns red after the freeze, the candidate remains valid:
 it points to the exact accepted source SHA. If `main` moves, or the candidate

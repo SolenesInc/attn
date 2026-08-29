@@ -43,8 +43,10 @@ jobs:
               - 'scripts/source-fingerprint.sh'
               - 'scripts/claude/**'
               - 'scripts/ci-*.sh'
+              - 'scripts/app-acceptance*.sh'
               - 'scripts/main-route*.sh'
               - 'scripts/pr-evidence*.sh'
+              - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
             frontend:
               - 'app/src/**'
