@@ -299,6 +299,86 @@ func validCandidateInput(main, head, acceptance string) candidateValidation {
 	}
 }
 
+func TestAcceptedMainValidationSurvivesSquashAndRepair(t *testing.T) {
+	repo := newTestRepository(t)
+	_, sourceSHA, _ := repo.prepareCandidate("promotion")
+	repo.git("switch", "-q", "main")
+	repo.git("merge", "--squash", "release/v0.12.0")
+	mainSHA := repo.commit("release: accept v0.12.0")
+
+	command := exec.Command("git", "merge-base", "--is-ancestor", sourceSHA, mainSHA)
+	command.Dir = repo.root
+	if command.Run() == nil {
+		t.Fatal("test setup retained source ancestry across a squash merge")
+	}
+	manifest, err := validateAcceptedMain(repo.root, mainSHA, defaultManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Version != "0.12.0" {
+		t.Fatalf("version = %q", manifest.Version)
+	}
+
+	repo.write("repair.txt", "repair the accepted main tree\n")
+	repairedSHA := repo.commit("fix(release): repair accepted main")
+	if _, err := validateAcceptedMain(repo.root, repairedSHA, defaultManifestPath); err != nil {
+		t.Fatalf("repaired main: %v", err)
+	}
+}
+
+func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*testRepository)
+		wantErr string
+	}{
+		{
+			name: "version disagreement",
+			mutate: func(repo *testRepository) {
+				repo.write("app/package.json", "{\"version\": \"0.12.1\"}\n")
+			},
+			wantErr: "expected 0.12.0",
+		},
+		{
+			name: "pending fragment",
+			mutate: func(repo *testRepository) {
+				repo.write("changelog.d/late.yaml", "kind: fixed\narea: release\nchange: late repair\n")
+			},
+			wantErr: "pending changelog fragments",
+		},
+		{
+			name: "unrelated recorded main",
+			mutate: func(repo *testRepository) {
+				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
+				if err != nil {
+					repo.t.Fatal(err)
+				}
+				repo.git("switch", "-q", "--orphan", "unrelated")
+				repo.write("unrelated.txt", "unrelated history\n")
+				manifest.MainSHA = repo.commit("unrelated root")
+				repo.git("switch", "-q", "main")
+				repo.writeManifest(manifest)
+			},
+			wantErr: "recorded main is not an ancestor",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newTestRepository(t)
+			repo.prepareCandidate("promotion")
+			repo.git("switch", "-q", "main")
+			repo.git("merge", "--squash", "release/v0.12.0")
+			repo.commit("release: accept v0.12.0")
+			tc.mutate(repo)
+			headSHA := repo.commit("unsafe accepted main")
+			_, err := validateAcceptedMain(repo.root, headSHA, defaultManifestPath)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestFragmentRenderingIsStableAndCarriesCommitSubjects(t *testing.T) {
 	repo := newTestRepository(t)
 	repo.write("changelog.d/z-last.yaml", "kind: fixed\narea: z\nchange: last\n")

@@ -176,6 +176,8 @@ test-scripts:
 	@bash ./scripts/changelog-gate_test.sh
 	@bash ./scripts/main-route_test.sh
 	@bash ./scripts/release_test.sh
+	@bash ./scripts/release-after-acceptance_test.sh
+	@bash ./scripts/release-health_test.sh
 	@bash ./scripts/sync-main-to-next_test.sh
 
 # Verbose test output (shows all test names as they run)

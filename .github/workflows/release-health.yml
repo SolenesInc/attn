@@ -1,0 +1,35 @@
+name: Release health
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+concurrency:
+  group: release-health-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Report release health
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update release-health issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_HEALTH_ASSIGNEE: victorarias
+        run: >-
+          ./scripts/release-health.sh
+          "${{ github.event.workflow_run.conclusion }}"
+          "${{ github.event.workflow_run.display_title }}"
+          "${{ github.event.workflow_run.head_sha }}"
+          "${{ github.event.workflow_run.html_url }}"

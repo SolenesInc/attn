@@ -86,6 +86,8 @@ jobs:
             release_preflight:
               - '.github/workflows/ci.yml'
               - '.github/workflows/release.yml'
+              - '.github/workflows/release-after-acceptance.yml'
+              - '.github/workflows/release-health.yml'
               - '.github/workflows/release-preflight.yml'
               - 'Makefile'
               - 'go.mod'

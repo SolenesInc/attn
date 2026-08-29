@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sha="${1:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
+ci_run_id="${2:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
+ci_run_url="${3:?usage: release-after-acceptance.sh <main-sha> <ci-run-id> <ci-run-url>}"
+
+if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "release after acceptance: invalid commit SHA '$sha'" >&2
+  exit 2
+fi
+if ! [[ "$ci_run_id" =~ ^[0-9]+$ ]]; then
+  echo "release after acceptance: invalid CI run id '$ci_run_id'" >&2
+  exit 2
+fi
+
+: "${GITHUB_REPOSITORY:?release after acceptance: GITHUB_REPOSITORY is required}"
+for tool in gh git go; do
+  command -v "$tool" >/dev/null || { echo "release after acceptance: missing $tool" >&2; exit 2; }
+done
+
+head_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+if [ "$head_sha" != "$sha" ]; then
+  echo "release after acceptance: checkout is $head_sha, expected $sha" >&2
+  exit 1
+fi
+
+if ! remote_main_line="$(git ls-remote --exit-code origin refs/heads/main)"; then
+  echo "release after acceptance: cannot resolve origin/main" >&2
+  exit 1
+fi
+remote_main_sha="${remote_main_line%%[[:space:]]*}"
+if [ "$remote_main_sha" != "$sha" ]; then
+  echo "release after acceptance: main moved to $remote_main_sha; ignoring stale result for $sha"
+  exit 0
+fi
+
+if [ ! -f .github/release-candidate.yml ]; then
+  echo "release after acceptance: $sha has no candidate manifest; nothing to release"
+  exit 0
+fi
+
+acceptance_rows="$({
+  gh api --paginate \
+    "repos/$GITHUB_REPOSITORY/actions/runs/$ci_run_id/jobs?filter=latest&per_page=100" \
+    --jq '.jobs[] | select(.name == "Acceptance") | [.status, (.conclusion // ""), .html_url] | @tsv'
+} || true)"
+acceptance_count="$(printf '%s\n' "$acceptance_rows" | awk 'NF { count++ } END { print count + 0 }')"
+if [ "$acceptance_count" -ne 1 ]; then
+  echo "release after acceptance: CI run $ci_run_id has $acceptance_count Acceptance jobs; refusing release" >&2
+  exit 1
+fi
+IFS=$'\t' read -r acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance_rows"
+if [ "$acceptance_status/$acceptance_conclusion" != "completed/success" ]; then
+  echo "release after acceptance: Acceptance is $acceptance_status/$acceptance_conclusion; main stays untagged ($ci_run_url)"
+  exit 0
+fi
+
+tag="$(go run ./cmd/release-train accepted-main validate --head "$sha")"
+if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "release after acceptance: validator returned invalid tag '$tag'" >&2
+  exit 1
+fi
+
+remote_tag_status=0
+remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/$tag" 2>/dev/null)" || remote_tag_status=$?
+case "$remote_tag_status" in
+  0)
+    remote_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+    if [ "$remote_tag_sha" != "$sha" ]; then
+      echo "release after acceptance: $tag points to $remote_tag_sha, not accepted main $sha" >&2
+      exit 1
+    fi
+    echo "release after acceptance: $tag already points to accepted main $sha"
+    ;;
+  2)
+    git tag "$tag" "$sha"
+    git push origin "refs/tags/$tag"
+    echo "release after acceptance: created $tag at $sha"
+    ;;
+  *)
+    echo "release after acceptance: cannot inspect remote tag $tag" >&2
+    exit 1
+    ;;
+esac
+
+release_runs="$(
+  gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?head_sha=$sha&per_page=100" \
+    --jq '[.workflow_runs[] | select(.event == "workflow_dispatch" or .event == "push")] | length'
+)"
+if ! [[ "$release_runs" =~ ^[0-9]+$ ]]; then
+  echo "release after acceptance: invalid release run count '$release_runs'" >&2
+  exit 1
+fi
+if [ "$release_runs" -gt 0 ]; then
+  echo "release after acceptance: release.yml already has $release_runs run(s) for $sha; not dispatching again"
+  exit 0
+fi
+
+gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag" -f "tag=$tag"
+echo "release after acceptance: dispatched release.yml for $tag after $acceptance_url"

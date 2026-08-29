@@ -1,0 +1,39 @@
+name: Release accepted main
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: release-accepted-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release accepted main
+    permissions:
+      actions: write
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Tag and dispatch exact accepted main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: >-
+          ./scripts/release-after-acceptance.sh
+          "${{ github.event.workflow_run.head_sha }}"
+          "${{ github.event.workflow_run.id }}"
+          "${{ github.event.workflow_run.html_url }}"
