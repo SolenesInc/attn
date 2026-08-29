@@ -3,8 +3,8 @@ set -euo pipefail
 
 # PR changelog gate. Every PR must either add a fragment under changelog.d/ or
 # modify CHANGELOG.md directly (the release compilation PR does the latter;
-# hand-fixes to changelog copy also pass). release/* branches are the version
-# bump opened by scripts/release.sh and are exempt.
+# hand-fixes to changelog copy also pass). Frozen candidates and release sync
+# PRs may only delete already-accounted-for fragments, so they are exempt.
 #
 # usage: changelog-gate.sh <base-ref> [head-branch]
 #
@@ -18,8 +18,13 @@ HEAD_BRANCH="${2:-$(git branch --show-current)}"
 
 cd "$(git rev-parse --show-toplevel)"
 
-if [[ "$HEAD_BRANCH" == release/* ]]; then
-  echo "changelog gate: release branch ${HEAD_BRANCH}, skipping"
+if [[ "$BASE_REF" == "main" && "$HEAD_BRANCH" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "changelog gate: frozen candidate ${HEAD_BRANCH}, skipping"
+  exit 0
+fi
+
+if [[ "$BASE_REF" == "next" && "$HEAD_BRANCH" == sync/main-into-next-* ]]; then
+  echo "changelog gate: release sync branch ${HEAD_BRANCH}, skipping"
   exit 0
 fi
 
