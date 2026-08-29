@@ -67,6 +67,7 @@ function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION
 
 // An effect dependency, so the no-op stand-in has to keep one identity.
 const noRequestContent = () => {};
+const EMPTY_SUSPENDED_LEAF_IDS: ReadonlySet<string> = new Set();
 
 export interface SessionTerminalWorkspaceHandle {
   fitPane: (paneId: string) => void;
@@ -236,7 +237,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const [attentionViewport, setAttentionViewport] = useState<AttentionViewport>({ width: 0, height: 0 });
     const [attentionRevision, setAttentionRevision] = useState(0);
     const attentionFocusOrderRef = useRef<string[]>([]);
-    const suspendedLeafIdsRef = useRef<ReadonlySet<string> | null>(null);
+    const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
     const previousAnnotatedTileIdsRef = useRef<ReadonlySet<string> | null>(null);
     const automaticTileFocusRef = useRef<{ tileId: string; whileActivePaneId: string } | null>(null);
     const pendingPaneFocusRef = useRef<{
@@ -486,7 +487,6 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const effectivePaneId = maximizedLeafId && leafIdSet.has(maximizedLeafId) ? maximizedLeafId : null;
     const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
     const layoutPlan = useMemo(() => {
-      const current = suspendedLeafIdsRef.current ?? new Set<string>();
       if (!workspace.layoutTree) {
         return null;
       }
@@ -495,7 +495,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         viewport: attentionViewport,
         activeLeafId: attentionActiveLeafId,
         focusOrder: attentionFocusOrder.slice(1),
-        previousSuspendedLeafIds: current,
+        previousSuspendedLeafIds: suspendedLeafIdsRef.current,
         pendingRatioOverrides,
         view: effectivePaneId
           ? { mode: 'focused', leafId: effectivePaneId }
@@ -513,12 +513,12 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       attentionRevision,
       workspace.layoutTree,
     ]);
-    const suspendedLeafIds = layoutPlan?.suspendedLeafIds
-      ?? suspendedLeafIdsRef.current
-      ?? new Set<string>();
+    const suspendedLeafIds = layoutPlan?.suspendedLeafIds ?? suspendedLeafIdsRef.current;
     useLayoutEffect(() => {
-      suspendedLeafIdsRef.current = suspendedLeafIds;
-    }, [suspendedLeafIds]);
+      if (layoutPlan) {
+        suspendedLeafIdsRef.current = layoutPlan.suspendedLeafIds;
+      }
+    }, [layoutPlan]);
     const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
 
     useLayoutEffect(() => {
