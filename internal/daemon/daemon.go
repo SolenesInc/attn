@@ -313,19 +313,23 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu   sync.Mutex
-	workflowDirty         map[string]bool
-	workflowEngineMu      sync.Mutex
-	workflowEngineConn    map[string]workflowEngineSink
-	workflowBroadcastHook func(*protocol.WorkflowRunUpdatedMessage)
-	gardenBroadcastHook   func([]protocol.Seed, int)
-	appsBroadcastHook     func([]protocol.AppRegistryEntry)
-	gardenMintID          func() (string, error)
-	gardenMintNoteID      func() (string, error)
-	dispatchSeedsMu       sync.Mutex
-	dispatchSeeds         map[string]string
-	dispatchFromChief     map[string]bool
-	dispatchSeedsLoaded   bool
+	workflowBroadcastMu       sync.Mutex
+	workflowDirty             map[string]bool
+	workflowEngineMu          sync.Mutex
+	workflowEngineConn        map[string]workflowEngineSink
+	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
+	gardenBroadcastHook       func([]protocol.Seed, int)
+	appsBroadcastHook         func([]protocol.AppRegistryEntry)
+	gardenMintID              func() (string, error)
+	gardenMintNoteID          func() (string, error)
+	gardenNow                 func() time.Time
+	gardenDispatchBeforeWrite func(string)
+	gardenDispatchAfterWrite  func(string)
+	dispatchSeedsMu           sync.Mutex
+	dispatchSeeds             map[string]string
+	dispatchFromChief         map[string]bool
+	dispatchProjectionRevs    map[string]int64
+	dispatchSeedsLoaded       bool
 
 	gardenNotePageSize int
 
@@ -1711,6 +1715,11 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
 	}
+	if session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
+		}
+	}
 	d.terminateSession(sessionID, sig)
 	d.forgetSession(sessionID)
 	return session
@@ -1739,6 +1748,9 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before dropping its record: %v", sessionID, err)
+		}
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}
 	d.clearNudgeState(sessionID)

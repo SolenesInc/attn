@@ -548,6 +548,23 @@ tender harvests when those are complete. Review, acceptance, or merge is a gate
 only when the body requires it. Independent remaining work becomes a child;
 harvesting that child never moves its plot or siblings.
 
+A seed keeps its last **execution** separately from its current tender: the
+session and native conversation, agent, working directory, host, repository,
+and branch attn actually observed. **Resume** reopens that exact conversation
+in its existing working directory and gives the seed back to it; it is not a
+picker for another conversation. **Handover** starts a new agent on the same
+seed, reusing the existing working directory and its uncommitted work or safely
+recreating the saved branch after that directory is removed. The new agent
+becomes tender only after it starts, and the old conversation remains available
+without owning the seed. When attn cannot reconstruct a safe location,
+Handover asks the user to choose one.
+
+Closing a session or removing its working directory changes execution context,
+not the seed's outcome. A seed's lifecycle clock moves only when its state
+changes; body edits and notes do not make unfinished work look newly planted.
+Parking may record an optional comment in the same move while retaining the
+execution needed for a later Resume or Handover.
+
 A seed somebody else still holds is **taken**, not merely moved. Tend, park,
 harvest, wither, and replant refuse it by naming the holder; `--force` acts
 anyway and the log records who forced it. A tender moving its own seed never

@@ -34,7 +34,7 @@ func (d *Daemon) ensureGardenCollections() {
 		}
 	}
 	d.dispatchSeedsMu.Lock()
-	d.dispatchSeeds, d.dispatchFromChief, d.dispatchSeedsLoaded = nil, nil, false
+	d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, false
 	d.dispatchSeedsMu.Unlock()
 }
 
@@ -46,6 +46,7 @@ func (d *Daemon) seedsCollection() (*docstore.CollectionSchema, error) {
 }
 
 func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
+	seed = d.initializeSeedLifecycle(seed)
 	body, err := seed.Encode()
 	if err != nil {
 		return docstore.Document{}, err
@@ -54,7 +55,7 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	fact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-	}, fact, time.Now())
+	}, fact, d.gardenTime())
 	if err != nil {
 		return docstore.Document{}, err
 	}
@@ -76,7 +77,7 @@ func (d *Daemon) writeSeed(schema docstore.CollectionSchema, seed garden.Seed, e
 	changed := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-	}, changed, time.Now())
+	}, changed, d.gardenTime())
 	if err != nil {
 		return docstore.Document{}, err
 	}
@@ -200,24 +201,35 @@ func (d *Daemon) countSeeds() int {
 }
 
 func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protocol.Seed {
+	stateChangedAt := strings.TrimSpace(seed.StateChangedAt)
+	stateChangedAtExact := stateChangedAt != ""
+	if stateChangedAt == "" {
+		stateChangedAt = doc.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
 	out := protocol.Seed{
-		ID:             seed.ID,
-		Title:          seed.Title,
-		Body:           seed.Body,
-		Status:         seed.Status,
-		StepSlug:       seed.StepSlug,
-		PlanterSession: seed.PlanterSession,
-		PlanterMember:  seed.PlanterMember,
-		TenderSession:  seed.TenderSession,
-		TenderMember:   seed.TenderMember,
-		Edges:          make([]protocol.SeedEdge, 0, len(seed.Edges)),
-		Template:       seed.Template,
-		Gate:           seed.Gate,
-		Ready:          ready,
-		Vars:           make([]protocol.SeedVar, 0, len(seed.Vars)),
-		Rev:            int(doc.Rev),
-		CreatedAt:      doc.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:      doc.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:                  seed.ID,
+		Title:               seed.Title,
+		Body:                seed.Body,
+		Status:              seed.Status,
+		StepSlug:            seed.StepSlug,
+		PlanterSession:      seed.PlanterSession,
+		PlanterMember:       seed.PlanterMember,
+		TenderSession:       seed.TenderSession,
+		TenderMember:        seed.TenderMember,
+		LastExecutionID:     protocol.Ptr(strings.TrimSpace(seed.LastExecutionID)),
+		StateChangedAt:      stateChangedAt,
+		StateChangedAtExact: stateChangedAtExact,
+		Edges:               make([]protocol.SeedEdge, 0, len(seed.Edges)),
+		Template:            seed.Template,
+		Gate:                seed.Gate,
+		Ready:               ready,
+		Vars:                make([]protocol.SeedVar, 0, len(seed.Vars)),
+		Rev:                 int(doc.Rev),
+		CreatedAt:           doc.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:           doc.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if strings.TrimSpace(seed.LastExecutionID) == "" {
+		out.LastExecutionID = nil
 	}
 	if seed.Reason != "" {
 		out.Reason = protocol.Ptr(seed.Reason)
@@ -458,6 +470,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 
 // mintAttempts receipt: at 10k seeds one crypto/rand mint collides with p~1e-5, so three in a row is a broken random source.
 func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
+	seed = d.initializeSeedLifecycle(seed)
 	const mintAttempts = 3
 	var lastErr error
 	for range mintAttempts {
@@ -594,6 +607,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 		d.logf("garden: reading the garden around %s: %v", seed.ID, err)
 	}
 	wire := seedToProtocol(seed, doc, read.ready[seed.ID])
+	d.decorateSeedContinuation(&wire, seed)
 	if progress, ok := read.progress(seed.ID); ok {
 		wire.PlotProgress = progress
 	}
@@ -691,7 +705,11 @@ func (d *Daemon) handleSeedSetResume(conn net.Conn, msg *protocol.SeedSetResumeM
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true, SeedSetResumeResult: &protocol.SeedSetResumeResult{
-			Seed: seedToProtocol(seed, doc, d.gardenReady()[seed.ID]),
+			Seed: func() protocol.Seed {
+				wire := seedToProtocol(seed, doc, d.gardenReady()[seed.ID])
+				d.decorateSeedContinuation(&wire, seed)
+				return wire
+			}(),
 		},
 	})
 }
@@ -784,6 +802,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 		return
 	}
 	wireSeed := seedToProtocol(seed, doc, read.ready[seed.ID])
+	d.decorateSeedContinuation(&wireSeed, seed)
 	if progress, ok := read.progress(seed.ID); ok {
 		wireSeed.PlotProgress = progress
 	}
@@ -995,58 +1014,51 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 }
 
 func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, agent string, fromChief bool) error {
-	schema, err := d.dispatchesCollection()
-	if err != nil {
-		return err
+	sessionID = strings.TrimSpace(sessionID)
+	observed := observedGardenExecution(&protocol.Session{
+		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
+	}, "", d.gardenTime())
+	if session := d.gardenSession(sessionID); session != nil {
+		resumeID := ""
+		if d.store.Get(sessionID) != nil {
+			resumeID = d.store.GetResumeSessionID(sessionID)
+		}
+		observed = observedGardenExecution(session, resumeID, d.gardenTime())
 	}
-	body, err := garden.Dispatch{
-		SessionID: sessionID, Crown: crown, DispatcherSession: dispatcherSession,
-		Cwd: cwd, Agent: agent, FromChief: fromChief,
-	}.Encode()
-	if err != nil {
-		return err
-	}
-	fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: *schema, ID: sessionID, Body: body,
-	}, fact, time.Now())
-	if err != nil {
-		return err
-	}
-	d.announceCommittedWrite(fact, written.Seq)
-	d.rememberDispatchSeed(sessionID, crown)
-	d.rememberDispatchFromChief(sessionID, fromChief)
-	return nil
+	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		next := mergeGardenExecution(current, observed)
+		if wanted := strings.TrimSpace(crown); wanted != "" {
+			if successor := strings.TrimSpace(current.SupersededBy); successor != "" {
+				return garden.Dispatch{}, false, fmt.Errorf(
+					"session %s was already superseded by %s while binding it to %s", sessionID, successor, wanted)
+			}
+			next.Crown = wanted
+		}
+		if dispatcher := strings.TrimSpace(dispatcherSession); dispatcher != "" {
+			next.DispatcherSession = dispatcher
+		}
+		next.FromChief = fromChief
+		return next, true, nil
+	})
+	return err
 }
 
-func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) {
+func (d *Daemon) rememberDispatchResume(sessionID, resumeSessionID string) error {
 	sessionID, resumeSessionID = strings.TrimSpace(sessionID), strings.TrimSpace(resumeSessionID)
 	if sessionID == "" || resumeSessionID == "" {
-		return
+		return nil
 	}
-	dispatch, ok := d.gardenDispatch(sessionID)
-	if !ok || dispatch.Resume == resumeSessionID {
-		return
-	}
-	schema, err := d.dispatchesCollection()
-	if err != nil {
-		return
-	}
-	dispatch.Resume = resumeSessionID
-	body, err := dispatch.Encode()
-	if err != nil {
-		d.logf("garden: encoding the dispatch record for %s: %v", sessionID, err)
-		return
-	}
-	fact := documentChangedFact(garden.Namespace, garden.CollectionDispatches, sessionID, false)
-	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
-		Schema: *schema, ID: sessionID, Body: body,
-	}, fact, time.Now())
+	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+		if current.Resume == resumeSessionID {
+			return current, false, nil
+		}
+		current.Resume = resumeSessionID
+		return current, true, nil
+	})
 	if err != nil {
 		d.logf("garden: recording the resume id for session %s: %v", sessionID, err)
-		return
 	}
-	d.announceCommittedWrite(fact, written.Seq)
+	return err
 }
 
 func (d *Daemon) gardenDispatchResume(sessionID string) string {
@@ -1108,7 +1120,8 @@ func (d *Daemon) gardenDispatchCrown(sessionID string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return dispatch.Crown, dispatch.Crown != ""
+	crown := activeDispatchCrown(dispatch)
+	return crown, crown != ""
 }
 
 func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
@@ -1127,61 +1140,62 @@ func (d *Daemon) gardenDispatchSeedsBySession() map[string]string {
 				d.logf("garden: reading dispatch records for broadcast: %v", err)
 				return nil
 			}
-			d.dispatchSeeds, d.dispatchFromChief, d.dispatchSeedsLoaded = nil, nil, true
+			d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs, d.dispatchSeedsLoaded = nil, nil, nil, true
 			return nil
 		}
 		loaded := make(map[string]string, len(read.Documents))
 		fromChief := map[string]bool{}
+		revisions := make(map[string]int64, len(read.Documents))
 		for _, doc := range read.Documents {
+			revisions[doc.ID] = doc.Rev
 			dispatch, err := garden.DecodeDispatch(doc.Body)
-			if err != nil || dispatch.Crown == "" {
+			if err != nil || activeDispatchCrown(dispatch) == "" {
 				continue
 			}
-			loaded[doc.ID] = dispatch.Crown
+			loaded[doc.ID] = activeDispatchCrown(dispatch)
 			if dispatch.FromChief {
 				fromChief[doc.ID] = true
 			}
 		}
-		d.dispatchSeeds, d.dispatchFromChief = loaded, fromChief
+		d.dispatchSeeds, d.dispatchFromChief, d.dispatchProjectionRevs = loaded, fromChief, revisions
 		d.dispatchSeedsLoaded = true
 	}
 	return d.dispatchSeeds
 }
 
-func (d *Daemon) rememberDispatchSeed(sessionID, crown string) {
+func (d *Daemon) rememberDispatchProjection(sessionID string, dispatch garden.Dispatch, rev int64) {
 	d.dispatchSeedsMu.Lock()
 	defer d.dispatchSeedsMu.Unlock()
 	if !d.dispatchSeedsLoaded {
 		return
 	}
-	if crown == "" {
-		delete(d.dispatchSeeds, sessionID)
+	if current, ok := d.dispatchProjectionRevs[sessionID]; ok && rev < current {
 		return
 	}
-	next := make(map[string]string, len(d.dispatchSeeds)+1)
+	nextSeeds := make(map[string]string, len(d.dispatchSeeds)+1)
 	for id, seed := range d.dispatchSeeds {
-		next[id] = seed
+		nextSeeds[id] = seed
 	}
-	next[sessionID] = crown
-	d.dispatchSeeds = next
-}
-
-func (d *Daemon) rememberDispatchFromChief(sessionID string, fromChief bool) {
-	d.dispatchSeedsMu.Lock()
-	defer d.dispatchSeedsMu.Unlock()
-	if !d.dispatchSeedsLoaded {
-		return
-	}
-	next := make(map[string]bool, len(d.dispatchFromChief)+1)
-	for id := range d.dispatchFromChief {
-		next[id] = true
-	}
-	if fromChief {
-		next[sessionID] = true
+	if crown := activeDispatchCrown(dispatch); crown != "" {
+		nextSeeds[sessionID] = crown
 	} else {
-		delete(next, sessionID)
+		delete(nextSeeds, sessionID)
 	}
-	d.dispatchFromChief = next
+	nextChief := make(map[string]bool, len(d.dispatchFromChief)+1)
+	for id := range d.dispatchFromChief {
+		nextChief[id] = true
+	}
+	if dispatch.FromChief {
+		nextChief[sessionID] = true
+	} else {
+		delete(nextChief, sessionID)
+	}
+	if d.dispatchProjectionRevs == nil {
+		d.dispatchProjectionRevs = map[string]int64{}
+	}
+	d.dispatchSeeds = nextSeeds
+	d.dispatchFromChief = nextChief
+	d.dispatchProjectionRevs[sessionID] = rev
 }
 
 func (d *Daemon) gardenDispatchesFromChief() map[string]bool {
@@ -1248,13 +1262,14 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 		Reason: protocol.Deref(msg.Reason),
 		Force:  protocol.Deref(msg.Force),
 	}
-	seed, doc, audit, err := d.applySeedTransitionDetailed(msg.SeedID, verb, ask)
+	seed, doc, notes, err := d.applySeedTransitionDetailed(
+		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
 		d.sendGardenError(conn, string(verb), err)
 		return
 	}
-	if audit != nil {
-		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, audit.Body)
+	for _, note := range notes.all() {
+		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
 	result := &protocol.SeedTransitionResult{Seed: seedToProtocol(seed, doc, false)}
 	if read, err := d.readGarden(); err == nil {
@@ -1274,33 +1289,59 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, d.sessionExists)
+	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionExists)
 	return seed, doc, err
 }
 
+type seedTransitionNotes struct {
+	Audit   *protocol.SeedNote
+	Comment *protocol.SeedNote
+}
+
+func (n seedTransitionNotes) all() []*protocol.SeedNote {
+	var notes []*protocol.SeedNote
+	if n.Audit != nil {
+		notes = append(notes, n.Audit)
+	}
+	if n.Comment != nil {
+		notes = append(notes, n.Comment)
+	}
+	return notes
+}
+
 func (d *Daemon) applySeedTransitionDetailed(
-	id string, verb garden.Verb, ask garden.Ask,
-) (garden.Seed, docstore.Document, *protocol.SeedNote, error) {
-	return d.applySeedTransitionDetailedAs(id, verb, ask, d.sessionExists)
+	id string, verb garden.Verb, ask garden.Ask, comment string,
+) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+	return d.applySeedTransitionDetailedAs(id, verb, ask, comment, d.sessionExists)
 }
 
 func (d *Daemon) applySeedTransitionAs(
 	id string, verb garden.Verb, ask garden.Ask, sessionLive func(string) bool,
 ) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, sessionLive)
+	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", sessionLive)
 	return seed, doc, err
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(
-	id string, verb garden.Verb, ask garden.Ask, sessionLive func(string) bool,
-) (garden.Seed, docstore.Document, *protocol.SeedNote, error) {
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool,
+) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+	comment = strings.TrimSpace(comment)
+	if comment != "" && verb != garden.VerbPark {
+		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", id, verb)
+	}
+	if comment != "" {
+		if err := garden.ValidateNote(comment); err != nil {
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+		}
+	}
 	schema, err := d.seedsCollection()
 	if err != nil {
-		return garden.Seed{}, docstore.Document{}, nil, err
+		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 	}
 	fact, ok := gardenFacts[verb]
 	if !ok {
-		return garden.Seed{}, docstore.Document{}, nil, fmt.Errorf("no bus fact is declared for %q", verb)
+		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf("no bus fact is declared for %q", verb)
 	}
 	// A conflict means the seed moved between read and write; re-reading turns a
 	// lost race into the honest answer. Tripwire: two agents contending is one retry.
@@ -1308,7 +1349,7 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 	for range attempts {
 		seed, doc, err := d.readSeed(id)
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, nil, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}
 		var displaced *garden.Tender
 		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {
@@ -1316,25 +1357,59 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 		}
 		next, err := garden.Transition(seed, verb, ask, sessionLive)
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, nil, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}
-		var (
-			written docstore.Document
-			audit   *protocol.SeedNote
-		)
-		if displaced == nil {
+		if next.Status != seed.Status {
+			next.StateChangedAt = formatGardenTime(d.gardenTime())
+		}
+		if verb == garden.VerbTend && strings.TrimSpace(ask.Actor.Session) != "" {
+			execution, executionErr := d.ensureGardenExecution(ask.Actor.Session)
+			if executionErr != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, executionErr
+			}
+			next.LastExecutionID = execution.SessionID
+		}
+		var written docstore.Document
+		notes := seedTransitionNotes{}
+		if displaced == nil && comment == "" {
 			written, err = d.writeSeed(*schema, next, doc.Rev, fact)
 		} else {
-			written, audit, err = d.writeForcedSeedMove(*schema, next, doc.Rev, verb, fact, ask.Actor, *displaced)
+			var entries []garden.Note
+			auditIndex, commentIndex := -1, -1
+			if displaced != nil {
+				auditIndex = len(entries)
+				entries = append(entries, garden.Note{
+					Seed: next.ID, Kind: garden.NoteKindNote,
+					Body:          forcedSeedMoveBody(next.ID, verb, ask.Actor, *displaced),
+					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
+				})
+			}
+			if comment != "" {
+				commentIndex = len(entries)
+				entries = append(entries, garden.Note{
+					Seed: next.ID, Kind: garden.NoteKindNote, Body: comment,
+					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
+				})
+			}
+			var writtenNotes []protocol.SeedNote
+			written, writtenNotes, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, fact, entries)
+			if err == nil {
+				if auditIndex >= 0 {
+					notes.Audit = &writtenNotes[auditIndex]
+				}
+				if commentIndex >= 0 {
+					notes.Comment = &writtenNotes[commentIndex]
+				}
+			}
 		}
 		if err == nil {
-			return next, written, audit, nil
+			return next, written, notes, nil
 		}
 		if !docstore.IsConflict(err) {
-			return garden.Seed{}, docstore.Document{}, nil, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
 		}
 	}
-	return garden.Seed{}, docstore.Document{}, nil, fmt.Errorf(
+	return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
 		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
 		id, attempts, verb, id)
 }
@@ -1348,14 +1423,13 @@ func forcedSeedMoveBody(seedID string, verb garden.Verb, actor, displaced garden
 		forcedBy, verb, seedID, displaced.DisplayName())
 }
 
-func (d *Daemon) writeForcedSeedMove(
+func (d *Daemon) writeSeedMoveWithNotes(
 	seedSchema docstore.CollectionSchema,
 	seed garden.Seed,
 	expected int64,
-	verb garden.Verb,
 	transitionFact string,
-	actor, displaced garden.Tender,
-) (docstore.Document, *protocol.SeedNote, error) {
+	notes []garden.Note,
+) (docstore.Document, []protocol.SeedNote, error) {
 	noteSchema, err := d.notesCollection()
 	if err != nil {
 		return docstore.Document{}, nil, err
@@ -1364,47 +1438,44 @@ func (d *Daemon) writeForcedSeedMove(
 	if err != nil {
 		return docstore.Document{}, nil, err
 	}
-	note := garden.Note{
-		Seed:          seed.ID,
-		Kind:          garden.NoteKindNote,
-		Body:          forcedSeedMoveBody(seed.ID, verb, actor, displaced),
-		AuthorSession: actor.Session,
-		AuthorMember:  actor.Member,
-	}
 	seedChanged := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
 
 	const mintAttempts = 3
 	var lastErr error
 	for range mintAttempts {
-		note.ID, err = d.mintNoteID()
-		if err != nil {
-			return docstore.Document{}, nil, err
-		}
-		noteBody, err := note.Encode()
-		if err != nil {
-			return docstore.Document{}, nil, err
-		}
-		noteExpected := docstore.ExpectAbsent
-		noteChanged := documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false)
-		now := time.Now()
-		written, err := d.store.CommitDocumentWrites([]store.DocumentCommit{
-			{
-				Write: store.DocumentWrite{
-					Schema: seedSchema, ID: seed.ID, Body: seedBody, Expected: &expected,
-				},
-				Fact: seedChanged,
+		commits := make([]store.DocumentCommit, 1, len(notes)+1)
+		commits[0] = store.DocumentCommit{
+			Write: store.DocumentWrite{
+				Schema: seedSchema, ID: seed.ID, Body: seedBody, Expected: &expected,
 			},
-			{
+			Fact: seedChanged,
+		}
+		noteBodies := make([][]byte, len(notes))
+		noteFacts := make([]store.BusEvent, len(notes))
+		for i := range notes {
+			notes[i].ID, err = d.mintNoteID()
+			if err != nil {
+				return docstore.Document{}, nil, err
+			}
+			noteBodies[i], err = notes[i].Encode()
+			if err != nil {
+				return docstore.Document{}, nil, err
+			}
+			noteExpected := docstore.ExpectAbsent
+			noteFacts[i] = documentChangedFact(garden.Namespace, garden.CollectionNotes, notes[i].ID, false)
+			commits = append(commits, store.DocumentCommit{
 				Write: store.DocumentWrite{
-					Schema: *noteSchema, ID: note.ID, Body: noteBody, Expected: &noteExpected,
+					Schema: *noteSchema, ID: notes[i].ID, Body: noteBodies[i], Expected: &noteExpected,
 				},
-				Fact: noteChanged,
-			},
-		}, now)
+				Fact: noteFacts[i],
+			})
+		}
+		now := d.gardenTime()
+		written, err := d.store.CommitDocumentWrites(commits, now)
 		if err != nil {
 			var conflict *docstore.ConflictError
 			if errors.As(err, &conflict) && conflict.Namespace == garden.Namespace &&
-				conflict.Collection == garden.CollectionNotes && conflict.ID == note.ID {
+				conflict.Collection == garden.CollectionNotes {
 				lastErr = err
 				continue
 			}
@@ -1413,8 +1484,10 @@ func (d *Daemon) writeForcedSeedMove(
 
 		d.announceCommittedWrite(seedChanged, written[0].Seq)
 		d.publishFact(transitionFact, seed.ID, nil)
-		d.announceCommittedWrite(noteChanged, written[1].Seq)
-		d.publishFact(FactGardenNoted, seed.ID, nil)
+		for i := range notes {
+			d.announceCommittedWrite(noteFacts[i], written[i+1].Seq)
+			d.publishFact(FactGardenNoted, seed.ID, nil)
+		}
 
 		seedDoc, found, readErr := d.store.GetDocument(seedSchema, seed.ID)
 		if readErr != nil || !found {
@@ -1422,14 +1495,17 @@ func (d *Daemon) writeForcedSeedMove(
 				ID: seed.ID, Body: seedBody, Rev: written[0].Rev, CreatedAt: now, UpdatedAt: now,
 			}
 		}
-		noteDoc, found, readErr := d.store.GetDocument(*noteSchema, note.ID)
-		if readErr != nil || !found {
-			noteDoc = &docstore.Document{
-				ID: note.ID, Body: noteBody, Rev: written[1].Rev, CreatedAt: now, UpdatedAt: now,
+		wireNotes := make([]protocol.SeedNote, len(notes))
+		for i := range notes {
+			noteDoc, found, readErr := d.store.GetDocument(*noteSchema, notes[i].ID)
+			if readErr != nil || !found {
+				noteDoc = &docstore.Document{
+					ID: notes[i].ID, Body: noteBodies[i], Rev: written[i+1].Rev, CreatedAt: now, UpdatedAt: now,
+				}
 			}
+			wireNotes[i] = noteToProtocol(notes[i], *noteDoc)
 		}
-		wire := noteToProtocol(note, *noteDoc)
-		return *seedDoc, &wire, nil
+		return *seedDoc, wireNotes, nil
 	}
 	return docstore.Document{}, nil, fmt.Errorf(
 		"minted %d note ids and every one was taken, which a working random source does not do: %v", mintAttempts, lastErr)

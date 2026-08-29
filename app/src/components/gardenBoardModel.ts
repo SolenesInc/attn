@@ -3,7 +3,7 @@ import { crewHolderName } from '../utils/crewName';
 
 export type ColumnKey = 'ready' | 'growing' | 'parked' | 'closed';
 
-export type Verb = 'park' | 'harvest' | 'wither' | 'replant' | 'dispatch';
+export type Verb = 'park' | 'harvest' | 'wither' | 'replant';
 
 const CLOSED = new Set(['harvested', 'withered']);
 
@@ -36,7 +36,7 @@ export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
     case 'ready':
       return status === 'planted' ? [] : ['replant'];
     case 'growing':
-      return status === 'planted' || status === 'dormant' ? ['dispatch'] : [];
+      return [];
   }
 }
 
@@ -77,12 +77,6 @@ export const VERBS: Record<Verb, VerbSpec> = {
   replant: {
     label: 'Replant',
     prompt: 'why it is open again',
-    required: false,
-    reasonOnSeed: false,
-  },
-  dispatch: {
-    label: 'Dispatch an agent',
-    prompt: '',
     required: false,
     reasonOnSeed: false,
   },

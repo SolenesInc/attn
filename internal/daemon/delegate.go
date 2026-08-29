@@ -467,20 +467,33 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		d.delegationWorktreePrepareHook(expectedPath)
 	}
 	startingFrom := request.StartingFrom
-	if strings.TrimSpace(protocol.Deref(startingFrom)) == "" {
+	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
+		return "", false, fmt.Errorf("an existing branch does not accept a starting ref")
+	}
+	if !protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) == "" {
 		ref := delegationDefaultStartRef(repo)
 		if ref == "" {
 			return "", false, fmt.Errorf("cannot determine the repository's default branch; pass --from or --no-worktree")
 		}
 		startingFrom = protocol.Ptr(ref)
 	}
-	worktreePath, err := d.doCreateWorktree(&protocol.CreateWorktreeMessage{
-		Cmd:          protocol.CmdCreateWorktree,
-		MainRepo:     repo,
-		Branch:       branch,
-		Path:         request.Path,
-		StartingFrom: startingFrom,
-	})
+	var (
+		worktreePath string
+		err          error
+	)
+	if protocol.Deref(request.ExistingBranch) {
+		worktreePath, err = d.doCreateWorktreeFromBranch(&protocol.CreateWorktreeFromBranchMessage{
+			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: request.Path,
+		})
+	} else {
+		worktreePath, err = d.doCreateWorktree(&protocol.CreateWorktreeMessage{
+			Cmd:          protocol.CmdCreateWorktree,
+			MainRepo:     repo,
+			Branch:       branch,
+			Path:         request.Path,
+			StartingFrom: startingFrom,
+		})
+	}
 	if err != nil {
 		if worktreePath == "" {
 			return "", false, fmt.Errorf("create delegated worktree: %w", err)
@@ -509,14 +522,22 @@ func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResu
 }
 
 func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID, workspaceID, directory, name, agent, model, effort, brief string, fromChief bool) error {
-	// Bound before the spawn: the launch primer and the delegate's own prompt
-	// both read the seed it reports to.
-	seedID, err := d.bindDelegationSeed(sessionID, strings.TrimSpace(msg.SourceSessionID),
-		brief, name, strings.TrimSpace(protocol.Deref(msg.Plot)), directory, agent, fromChief)
-	if err != nil {
-		return err
+	seedID := ""
+	initialPrompt := ""
+	var err error
+	if msg.Handover != nil {
+		seedID = strings.TrimSpace(msg.Handover.SeedID)
+		initialPrompt = withLeafIdentity(handoverPrompt(brief, protocol.Deref(msg.Handover.Handoff), seedID))
+	} else {
+		// Bound before the spawn: the launch primer and the delegate's own prompt
+		// both read the seed it reports to.
+		seedID, err = d.bindDelegationSeed(sessionID, strings.TrimSpace(msg.SourceSessionID),
+			brief, name, strings.TrimSpace(protocol.Deref(msg.Plot)), directory, agent, fromChief)
+		if err != nil {
+			return err
+		}
+		initialPrompt = withLeafIdentity(delegatedBriefPrompt(brief, seedID))
 	}
-	initialPrompt := withLeafIdentity(delegatedBriefPrompt(brief, seedID))
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
@@ -542,27 +563,44 @@ func (d *Daemon) spawnDelegatedRuntime(msg *protocol.DelegateMessage, sessionID,
 }
 
 func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string) (*protocol.DelegateResult, error) {
-	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
-	if sourceSessionID == "" {
-		return nil, fmt.Errorf("source_session_id is required")
+	sessionID := reservedSessionID
+	if sessionID == "" {
+		sessionID = uuid.NewString()
 	}
-	brief := strings.TrimSpace(msg.Brief)
+	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if ticketID := strings.TrimSpace(protocol.Deref(msg.TicketID)); ticketID != "" {
 		return nil, fmt.Errorf(
 			"delegating onto ticket %s retired: plant the work as a seed and dispatch at it — `attn seed plant \"<title>\" -m \"<brief>\"`, then `attn delegate --brief \"<brief>\" --plot <seed-id>`",
 			ticketID)
 	}
-	if brief == "" {
+	handover, err := d.prepareSeedHandover(msg, operationID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	brief := strings.TrimSpace(msg.Brief)
+	if brief == "" && handover == nil {
 		return nil, fmt.Errorf("a brief is required")
 	}
-	source := d.store.Get(sourceSessionID)
-	if source == nil {
+	var source *protocol.Session
+	if sourceSessionID != "" {
+		source = d.store.Get(sourceSessionID)
+	}
+	if source == nil && handover == nil {
+		if sourceSessionID == "" {
+			return nil, fmt.Errorf("source_session_id is required")
+		}
 		return nil, fmt.Errorf("source session not found: %s", sourceSessionID)
 	}
-	if endpointID := strings.TrimSpace(protocol.Deref(source.EndpointID)); endpointID != "" {
-		return nil, fmt.Errorf("delegation from remote session %s on endpoint %s is not supported", sourceSessionID, endpointID)
+	if source != nil {
+		if endpointID := strings.TrimSpace(protocol.Deref(source.EndpointID)); endpointID != "" {
+			return nil, fmt.Errorf("delegation from remote session %s on endpoint %s is not supported", sourceSessionID, endpointID)
+		}
 	}
-	agent, err := d.resolveDelegationAgent(source.Agent, msg.Agent)
+	sourceAgent := ""
+	if source != nil {
+		sourceAgent = string(source.Agent)
+	}
+	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {
 		return nil, err
 	}
@@ -572,12 +610,10 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		return nil, err
 	}
 	effort = d.defaultDelegationEffort(agent, effort)
-	if err := d.validateDispatchCrown(strings.TrimSpace(protocol.Deref(msg.Plot)), sourceSessionID); err != nil {
-		return nil, err
-	}
-	sessionID := reservedSessionID
-	if sessionID == "" {
-		sessionID = uuid.NewString()
+	if handover == nil {
+		if err := d.validateDispatchCrown(strings.TrimSpace(protocol.Deref(msg.Plot)), sourceSessionID); err != nil {
+			return nil, err
+		}
 	}
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
 	delegatedByChief := initiatingChiefSessionID != "" ||
@@ -593,6 +629,9 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 		expectedWorkspaceID := ""
 		switch placement {
 		case delegationPlacementCurrent:
+			if source == nil {
+				return nil, fmt.Errorf("source session not found: %s", sourceSessionID)
+			}
 			expectedWorkspaceID = source.WorkspaceID
 		case delegationPlacementExisting:
 			expectedWorkspaceID = strings.TrimSpace(protocol.Deref(msg.WorkspaceID))
@@ -616,6 +655,11 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
 		}
+		if handover != nil && !handover.alreadyBound {
+			if _, err := d.bindSeedHandover(msg, operationID, sessionID, existing.Directory, agent, delegatedByChief); err != nil {
+				return nil, fmt.Errorf("finish seed Handover: %w", err)
+			}
+		}
 		if operationID != "" {
 			worktreePath := ""
 			if msg.Worktree != nil {
@@ -629,6 +673,9 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 
 	switch placement {
 	case delegationPlacementCurrent:
+		if source == nil {
+			return nil, fmt.Errorf("source session not found: %s", sourceSessionID)
+		}
 		if strings.TrimSpace(protocol.Deref(msg.WorkspaceID)) != "" || strings.TrimSpace(protocol.Deref(msg.Cwd)) != "" {
 			return nil, fmt.Errorf("current_workspace placement does not accept workspace_id or cwd")
 		}
@@ -660,7 +707,9 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			directory = validatedCwd
 		}
 		if directory == "" {
-			directory = source.Directory
+			if source != nil {
+				directory = source.Directory
+			}
 		}
 	default:
 		return nil, fmt.Errorf("unsupported placement %q", placement)
@@ -706,7 +755,11 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 			createdWorktreePath = worktreePath
 			rollback.onWorktreeCreated(worktreePath)
 		}
-		validatedDirectory, directoryErr := validateDelegationDirectory(worktreePath)
+		resolvedDirectory, directoryErr := handover.applyRecreatedSubdir(worktreePath)
+		if directoryErr != nil {
+			return nil, rollback.fail(directoryErr)
+		}
+		validatedDirectory, directoryErr := validateDelegationDirectory(resolvedDirectory)
 		if directoryErr != nil {
 			return nil, rollback.fail(directoryErr)
 		}
@@ -791,6 +844,11 @@ func (d *Daemon) delegateOperation(msg *protocol.DelegateMessage, operationID, r
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
 			return nil, rollback.fail(fmt.Errorf("make delegated workspace visible: %s", errMsg))
+		}
+	}
+	if handover != nil {
+		if _, err := d.bindSeedHandover(msg, operationID, sessionID, directory, agent, delegatedByChief); err != nil {
+			return nil, rollback.fail(fmt.Errorf("finish seed Handover: %w", err))
 		}
 	}
 	if operationID != "" {
@@ -900,9 +958,10 @@ func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessag
 		}
 	}
 	response := protocol.DelegateResultMessage{
-		Event:   protocol.EventDelegateResult,
-		Success: err == nil,
-		Result:  result,
+		Event:     protocol.EventDelegateResult,
+		RequestID: protocol.Ptr(msg.RequestID),
+		Success:   err == nil,
+		Result:    result,
 	}
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())

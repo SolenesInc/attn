@@ -8,6 +8,8 @@ function seed(overrides: Partial<Seed> & Pick<Seed, 'id' | 'title'>): Seed {
   return {
     body: '',
     status: 'planted',
+    state_changed_at: '2026-08-27T09:00:00Z',
+    state_changed_at_exact: true,
     step_slug: overrides.title,
     planter_session: '',
     planter_member: '',
