@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestClaudeBuildCommand_DeniesPeerMessagingTools(t *testing.T) {
+func TestClaudeBuildCommand_DeniesListAgentsKeepsSendMessage(t *testing.T) {
 	cmd := (&Claude{}).BuildCommand(SpawnOpts{
 		SessionID:  "sess-1",
 		CWD:        "/tmp/project",
@@ -15,10 +15,11 @@ func TestClaudeBuildCommand_DeniesPeerMessagingTools(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("args = %#v, want --disallowed-tools", cmd.Args)
 	}
-	// One element per rule, the form the flag documents. A joined "ListAgents SendMessage"
-	// parses the same on 2.1.228, but tightened parsing would leave the deny inert.
-	if got := cmd.Args[i+1:]; len(got) != 2 || got[0] != "ListAgents" || got[1] != "SendMessage" {
-		t.Fatalf("--disallowed-tools = %#v, want two elements ListAgents, SendMessage", got)
+	if got := cmd.Args[i+1:]; len(got) != 1 || got[0] != "ListAgents" {
+		t.Fatalf("--disallowed-tools = %#v, want one element ListAgents", got)
+	}
+	if slices.Contains(cmd.Args, "SendMessage") {
+		t.Fatalf("args = %#v, want SendMessage not denied", cmd.Args)
 	}
 }
 
