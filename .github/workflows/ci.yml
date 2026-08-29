@@ -106,6 +106,7 @@ jobs:
     needs: changes
     if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
     permissions:
+      actions: read
       checks: read
       contents: read
       pull-requests: read

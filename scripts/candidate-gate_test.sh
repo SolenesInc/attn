@@ -137,4 +137,7 @@ if grep -q '/actions/workflows/ci.yml/runs?' "$FAKE_GH_LOG"; then
   exit 1
 fi
 
+changelog_job="$(sed -n '/^  changelog:/,/^  main-route:/p' "$root/.github/workflows/ci.yml")"
+grep -Fq 'actions: read' <<<"$changelog_job"
+
 echo "candidate gate: OK"

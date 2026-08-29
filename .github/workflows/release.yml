@@ -22,6 +22,7 @@ jobs:
     outputs:
       release_sha: ${{ steps.validate.outputs.release_sha }}
     permissions:
+      actions: read
       checks: read
       contents: read
       pull-requests: read

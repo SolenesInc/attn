@@ -142,4 +142,7 @@ git -C "$repo" switch -q main
 export GITHUB_SHA="$forged_sha"
 expect_failure 'expected 99.98.97' run_gate v99.98.97
 
+validate_job="$(sed -n '/^  validate-tag:/,/^  tauri:/p' "$root/.github/workflows/release.yml")"
+grep -Fq 'actions: read' <<<"$validate_job"
+
 echo "release tag gate: OK"
