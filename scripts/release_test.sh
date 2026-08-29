@@ -92,7 +92,7 @@ setup_fixture() {
   git -C "$fixture_repo" switch -q -C main
   git -C "$fixture_repo" push -q -u origin main
 
-  git -C "$fixture_repo" switch -q -c next
+  git -C "$fixture_repo" switch -q -C next
   printf '%s\n' 'kind: added' 'area: release' 'change: candidate fixture' \
     >"$fixture_repo/changelog.d/candidate-fixture.yaml"
   git -C "$fixture_repo" add changelog.d/candidate-fixture.yaml
