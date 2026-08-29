@@ -9,20 +9,19 @@ const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEV_PROFILE = 'dev';
 const PROD_BUNDLE_ID = 'com.attn.manager';
 const PROD_APP_NAME = 'attn.app';
+const PROD_APP_TREE = 'attn';
 const PROD_DAEMON_PORT = '9849';
 
 // Profile name grammar — mirrors config.profileNamePattern on the Go side.
 const PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
 
-// Fast-path resources for prod ('') and dev, macOS-shaped: off darwin these go
-// to the authority. harnessProfile.test.mjs pins them to `attn profile resolve`.
+// Fast-path resources for prod ('') and dev. The drift guard in
+// harnessProfile.test.mjs pins them to `attn profile resolve`.
 const BUILTIN_RESOURCES = {
   '': {
     profile: '',
     bundleId: PROD_BUNDLE_ID,
     appName: 'attn',
-    appPath: path.join(os.homedir(), 'Applications', PROD_APP_NAME),
-    appExecutable: path.join(os.homedir(), 'Applications', PROD_APP_NAME, 'Contents', 'MacOS', 'app'),
     wsPort: 9849,
     socket: path.join(os.homedir(), '.attn', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn'),
@@ -32,14 +31,35 @@ const BUILTIN_RESOURCES = {
     profile: 'dev',
     bundleId: 'com.attn.manager.dev',
     appName: 'attn-dev',
-    appPath: path.join(os.homedir(), 'Applications', 'attn-dev.app'),
-    appExecutable: path.join(os.homedir(), 'Applications', 'attn-dev.app', 'Contents', 'MacOS', 'app'),
     wsPort: 29849,
     socket: path.join(os.homedir(), '.attn-dev', 'attn.sock'),
     dataDir: path.join(os.homedir(), '.attn-dev'),
     deepLinkScheme: 'attn-dev',
   },
 };
+
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
+
+// Mirrors config.AppPathForProfile, AppExecutableInTree and
+// AppDaemonBinaryInTree on the Go side.
+function installedApp(appName) {
+  if (process.platform === 'darwin') {
+    const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);
+    return {
+      appPath,
+      appExecutable: path.join(appPath, 'Contents', 'MacOS', 'app'),
+      appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attn'),
+    };
+  }
+  const appPath = path.join(xdgDataHome(), appName);
+  return {
+    appPath,
+    appExecutable: path.join(appPath, 'bin', 'attn-app'),
+    appDaemon: path.join(appPath, 'bin', 'attn'),
+  };
+}
 
 function normalizeProfile(raw) {
   const value = (raw ?? '').trim().toLowerCase();
@@ -89,6 +109,7 @@ function resolveViaAuthority(profile) {
     appName: resolved.appName,
     appPath: resolved.appPath,
     appExecutable: resolved.appExecutable,
+    appDaemon: resolved.appDaemon,
     wsPort: Number(resolved.wsPort),
     socket: resolved.socket,
     dataDir: resolved.dataDir,
@@ -98,10 +119,11 @@ function resolveViaAuthority(profile) {
 
 export function resolveHarnessResources(profile = currentHarnessProfile()) {
   const key = normalizeProfile(profile);
-  if (process.platform === 'darwin' && Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
-    return BUILTIN_RESOURCES[key];
+  if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
+    const builtin = BUILTIN_RESOURCES[key];
+    return { ...builtin, ...installedApp(builtin.appName) };
   }
-  if (key !== '' && !PROFILE_NAME.test(key)) {
+  if (!PROFILE_NAME.test(key)) {
     throw new Error(`Invalid attn profile name '${profile}' (expected ${PROFILE_NAME}).`);
   }
   if (!resourceCache.has(key)) {
@@ -178,8 +200,7 @@ export function manifestPathForProfile(profile = currentHarnessProfile()) {
   if (process.platform === 'darwin') {
     return path.join(os.homedir(), 'Library', 'Application Support', bundleId, 'debug', 'ui-automation.json');
   }
-  const dataHome = (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
-  return path.join(dataHome, bundleId, 'debug', 'ui-automation.json');
+  return path.join(xdgDataHome(), bundleId, 'debug', 'ui-automation.json');
 }
 
 export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
@@ -220,9 +241,11 @@ export function isProductionHarnessTarget({
     wsPort = new URL(wsUrl).port;
   } catch {
   }
+  const appName = path.basename(appPath || '').toLowerCase();
   return (
     profile === ''
-    || path.basename(appPath || '').toLowerCase() === PROD_APP_NAME
+    || appName === PROD_APP_NAME
+    || appName === PROD_APP_TREE
     || bundleId === PROD_BUNDLE_ID
     || wsPort === PROD_DAEMON_PORT
   );
