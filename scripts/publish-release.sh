@@ -12,30 +12,17 @@ command -v gh >/dev/null || {
   exit 2
 }
 
-gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
-
-release_tags="$({
-  gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-    --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
-} || true)"
-valid_tags=()
-while IFS= read -r release_tag; do
-  if [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    valid_tags+=("$release_tag")
-  fi
-done <<<"$release_tags"
-if [[ "${#valid_tags[@]}" -eq 0 ]]; then
-  echo "publish release: no published stable versions found after publishing $tag" >&2
+release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq .id)"
+if ! [[ "$release_id" =~ ^[0-9]+$ ]]; then
+  echo "publish release: invalid release id '$release_id' for $tag" >&2
   exit 1
 fi
 
-latest_tag="$(printf '%s\n' "${valid_tags[@]}" | sort -V | tail -n 1)"
-gh release edit "$latest_tag" --repo "$GITHUB_REPOSITORY" --latest
-if [[ "$latest_tag" == "$tag" ]]; then
-  echo "publish release: published $tag as the latest stable version"
-else
-  echo "publish release: published $tag; latest remains newer $latest_tag"
-fi
+gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+  -F draft=false \
+  -f make_latest=legacy \
+  >/dev/null
+echo "publish release: published $tag; GitHub selected the latest stable version"
 
 gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
   --jq '"published draft=\(.isDraft) assets:\n" + (.assets | map("  " + .name) | join("\n"))'

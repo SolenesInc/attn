@@ -9,5 +9,6 @@ change: >
   candidate, prove compiled notes against a digest of the frozen fragments,
   create current-main tags with one atomic compare-and-swap, grant each gate
   only the receipt permissions it uses, pin builds to the validated SHA,
-  serialize each tag, and close the one-time bootstrap route when next is
-  created.
+  serialize each tag, let GitHub atomically preserve semantic latest-version
+  ordering across overlapping releases, and close the one-time bootstrap route
+  when next is created.

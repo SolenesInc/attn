@@ -235,6 +235,8 @@ automatically.
 The validation job passes the accepted commit SHA to every build job. Builds
 check out that SHA, and the publish job resolves the remote tag again before it
 makes the draft public. A moved tag cannot swap the code after validation.
+GitHub selects the latest release atomically by stable semantic version, so
+overlapping versions cannot move the latest or Homebrew path backward.
 Once accepted-main creates the immutable tag, it dispatches that release even
 if a later `main` commit lands; abandoning the tag would strand that version.
 

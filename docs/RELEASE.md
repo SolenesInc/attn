@@ -95,5 +95,5 @@ and committed versions still agree.
 Every build checks out the validated commit SHA. Publication stops if the
 remote tag no longer resolves to that SHA. Publishing an older build after a
 newer version has completed does not move GitHub's latest release or the
-Homebrew stable-download path backward; the highest published stable semantic
-version remains latest.
+Homebrew stable-download path backward. Publication asks GitHub to select the
+latest release atomically with its stable semantic-version policy.
