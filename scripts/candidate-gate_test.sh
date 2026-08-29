@@ -91,7 +91,7 @@ run_gate() (
   "$gate" "$@"
 )
 
-git -C "$repo" switch -q -c next
+git -C "$repo" switch -q --detach "$main_sha"
 printf '%s\n' 'promotion feature' >"$repo/promotion.txt"
 printf '%s\n' 'kind: internal' 'area: release' 'change: promotion fixture' \
   >"$repo/changelog.d/promotion.yaml"
