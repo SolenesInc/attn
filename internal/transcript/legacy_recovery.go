@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -704,21 +703,34 @@ func legacyShellCommandFromJSON(input string) string {
 func legacyJSStringProperties(source, method string, keys ...string) []string {
 	wrapper := "(async function(){\n" + source + "\n})()"
 	program, err := jsparser.ParseFile(nil, "legacy-transcript.js", wrapper, 0)
-	if err != nil {
+	if err != nil || len(program.Body) != 1 {
 		return nil
 	}
+	statement, ok := program.Body[0].(*jsast.ExpressionStatement)
+	if !ok {
+		return nil
+	}
+	invocation, ok := statement.Expression.(*jsast.CallExpression)
+	if !ok {
+		return nil
+	}
+	function, ok := invocation.Callee.(*jsast.FunctionLiteral)
+	if !ok || function.Body == nil {
+		return nil
+	}
+	calls := directLegacyJSCalls(function.Body.List)
 	keySet := make(map[string]struct{}, len(keys))
 	for _, key := range keys {
 		keySet[key] = struct{}{}
 	}
 	var out []string
-	walkGojaAST(reflect.ValueOf(program), func(call *jsast.CallExpression) {
+	for _, call := range calls {
 		if !legacyJSToolMethod(call.Callee, method) || len(call.ArgumentList) != 1 {
-			return
+			continue
 		}
 		object, ok := call.ArgumentList[0].(*jsast.ObjectLiteral)
 		if !ok {
-			return
+			continue
 		}
 		for _, property := range object.Value {
 			keyed, ok := property.(*jsast.PropertyKeyed)
@@ -737,8 +749,61 @@ func legacyJSStringProperties(source, method string, keys ...string) []string {
 				out = append(out, value.Value.String())
 			}
 		}
-	})
-	return uniqueStrings(out)
+	}
+	return out
+}
+
+func directLegacyJSCalls(statements []jsast.Statement) []*jsast.CallExpression {
+	var calls []*jsast.CallExpression
+	for _, statement := range statements {
+		var expressions []jsast.Expression
+		switch statement := statement.(type) {
+		case *jsast.ExpressionStatement:
+			expressions = append(expressions, statement.Expression)
+		case *jsast.VariableStatement:
+			for _, binding := range statement.List {
+				if binding != nil {
+					expressions = append(expressions, binding.Initializer)
+				}
+			}
+		case *jsast.LexicalDeclaration:
+			for _, binding := range statement.List {
+				if binding != nil {
+					expressions = append(expressions, binding.Initializer)
+				}
+			}
+		}
+		for _, expression := range expressions {
+			calls = append(calls, directLegacyJSExpression(expression)...)
+		}
+	}
+	return calls
+}
+
+func directLegacyJSExpression(expression jsast.Expression) []*jsast.CallExpression {
+	switch expression := expression.(type) {
+	case *jsast.AwaitExpression:
+		return directLegacyJSExpression(expression.Argument)
+	case *jsast.CallExpression:
+		if legacyJSToolMethod(expression.Callee, "exec_command") || legacyJSToolMethod(expression.Callee, "wait") {
+			return []*jsast.CallExpression{expression}
+		}
+		var calls []*jsast.CallExpression
+		for _, argument := range expression.ArgumentList {
+			calls = append(calls, directLegacyJSExpression(argument)...)
+		}
+		return calls
+	case *jsast.ArrayLiteral:
+		var calls []*jsast.CallExpression
+		for _, value := range expression.Value {
+			calls = append(calls, directLegacyJSExpression(value)...)
+		}
+		return calls
+	case *jsast.SpreadElement:
+		return directLegacyJSExpression(expression.Expression)
+	default:
+		return nil
+	}
 }
 
 func legacyJSToolMethod(expression jsast.Expression, method string) bool {
@@ -759,56 +824,6 @@ func legacyJSKey(expression jsast.Expression) (string, bool) {
 	default:
 		return "", false
 	}
-}
-
-func walkGojaAST(value reflect.Value, visit func(*jsast.CallExpression)) {
-	if !value.IsValid() {
-		return
-	}
-	for value.Kind() == reflect.Interface {
-		if value.IsNil() {
-			return
-		}
-		value = value.Elem()
-	}
-	if value.Kind() == reflect.Pointer {
-		if value.IsNil() {
-			return
-		}
-		if value.CanInterface() {
-			call, ok := value.Interface().(*jsast.CallExpression)
-			if ok {
-				visit(call)
-			}
-		}
-		value = value.Elem()
-	}
-	switch value.Kind() {
-	case reflect.Struct:
-		for i := 0; i < value.NumField(); i++ {
-			field := value.Field(i)
-			if field.CanInterface() {
-				walkGojaAST(field, visit)
-			}
-		}
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < value.Len(); i++ {
-			walkGojaAST(value.Index(i), visit)
-		}
-	}
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
 }
 
 func parseLegacyShellStatusCalls(command string) []legacyStatusCall {

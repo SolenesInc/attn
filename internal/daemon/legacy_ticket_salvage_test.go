@@ -31,7 +31,7 @@ func newLegacySalvageDaemon(t *testing.T) (*Daemon, *store.Store, string) {
 	}
 	t.Cleanup(func() { _ = target.Close() })
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	return d, target, dataRoot
 }
 
@@ -99,7 +99,7 @@ func TestLegacyDelegationSalvageIsDeterministicCreateOnlyAndOwnerOnly(t *testing
 		if ticket, err := target.GetTicket(id); err != nil || ticket != nil {
 			t.Fatalf("salvage created ticket %s: %#v, %v", id, ticket, err)
 		}
-		if link, err := target.LegacyTicketSeedLink(id); err != nil || link != nil {
+		if link, err := target.TicketSeedLink(id); err != nil || link != nil {
 			t.Fatalf("salvage created seed link %s: %#v, %v", id, link, err)
 		}
 	}

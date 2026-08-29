@@ -145,7 +145,7 @@ func TestStrandedReplantIsIdempotent(t *testing.T) {
 	if seeds := gardenSeeds(t, d); len(seeds) != 1 {
 		t.Fatalf("seeds after two passes = %d, want 1: %+v", len(seeds), seeds)
 	}
-	link, err := d.store.LegacyTicketSeedLink("wire-the-thing")
+	link, err := d.store.TicketSeedLink("wire-the-thing")
 	if err != nil || link == nil {
 		t.Fatalf("legacy link = %#v, %v", link, err)
 	}

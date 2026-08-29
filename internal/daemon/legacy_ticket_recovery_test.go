@@ -216,7 +216,7 @@ func TestLegacyTicketRecoveryRestoresNewestWithoutChangingSourcesOrLiveRows(t *t
 	}
 
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
 		t.Fatalf("prepare wait=%v err=%v", wait, err)
 	}
@@ -277,7 +277,7 @@ func TestLegacyTicketRecoveryRestoresTranscriptOnlyArchiveAndConversation(t *tes
 	createCodexLegacyTranscript(t, codexHome, dataRoot, "native-one", "transcript-only", "completed", "done")
 
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
 		t.Fatalf("prepare wait=%v err=%v", wait, err)
 	}
@@ -338,7 +338,7 @@ func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *
 	path := createCodexLegacyTranscript(t, codexHome, dataRoot, "native-one", "original-ticket", "completed", "done")
 
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if wait, prepareErr := d.prepareLegacyTicketRecovery(); prepareErr != nil || !wait {
 		t.Fatalf("prepare wait=%v err=%v", wait, prepareErr)
 	}
@@ -436,7 +436,7 @@ func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t 
 	}
 
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
 		t.Fatalf("prepare wait=%v err=%v", wait, err)
 	}
@@ -454,7 +454,7 @@ func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t 
 			t.Fatalf("mapping changed ticket %s:\nbefore=%#v\nafter=%#v err=%v", id, before[id], after, err)
 		}
 	}
-	link, err := target.LegacyTicketSeedLink("automation-ticket")
+	link, err := target.TicketSeedLink("automation-ticket")
 	if err != nil || link != nil {
 		t.Fatalf("Automation ticket recovery link = %#v, %v", link, err)
 	}
@@ -462,7 +462,7 @@ func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t 
 
 func recoveredSeedForTicket(t *testing.T, s *store.Store, ticketID string) garden.Seed {
 	t.Helper()
-	link, err := s.LegacyTicketSeedLink(ticketID)
+	link, err := s.TicketSeedLink(ticketID)
 	if err != nil || link == nil {
 		t.Fatalf("link for %s = %#v, %v", ticketID, link, err)
 	}
@@ -506,7 +506,7 @@ func TestLegacyTicketRecoveryChangedSourceWarnsAndStaysProtected(t *testing.T) {
 	makeRecoveryHome(t, dataRoot)
 	path := createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "changed", "Changed", time.Now())
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +543,7 @@ func TestLegacyTicketRecoveryRetriesTransientIOThenWarnsOnce(t *testing.T) {
 	makeRecoveryHome(t, dataRoot)
 	createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "retry-me", "Retry", time.Now())
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +596,7 @@ func TestLegacyTicketRecoveryResumesCommittedItemsAfterCrash(t *testing.T) {
 	makeRecoveryHome(t, dataRoot)
 	createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "crash-safe", "Crash safe", time.Now())
 	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryPostOnce.Do(func() {})
+	d.legacyTicketRecoveryFinishOnce.Do(func() {})
 	if _, err := d.prepareLegacyTicketRecovery(); err != nil {
 		t.Fatal(err)
 	}

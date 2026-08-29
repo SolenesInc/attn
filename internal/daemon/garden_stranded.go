@@ -59,7 +59,7 @@ func (d *Daemon) replantStrandedTicketByID(ticketID string) bool {
 	if automation {
 		return false
 	}
-	link, err := d.store.LegacyTicketSeedLink(ticket.ID)
+	link, err := d.store.TicketSeedLink(ticket.ID)
 	if err != nil {
 		d.logf("garden: checking the seed linked to stranded ticket %s: %v", ticket.ID, err)
 		return false
@@ -102,7 +102,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		return "", err
 	}
 	now := time.Now()
-	var linked store.LegacyTicketSeedResult
+	var linked store.TicketSeedHandoverResult
 	for attempt := 0; attempt < 3; attempt++ {
 		seedID, err := d.mintSeedID()
 		if err != nil {
@@ -127,18 +127,18 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		spec := store.LegacyTicketSeedSpec{
+		handover := store.TicketSeedHandover{
 			TicketID: ticket.ID, SeedID: seedID, SeedBody: seedBody, SeedTitle: title, SeedDescription: body,
 			SeedFact:   documentChangedFact(garden.Namespace, garden.CollectionSeeds, seedID, false),
 			SeedSchema: *seedSchema, NoteSchema: *noteSchema, DispatchSchema: *dispatchSchema,
-			Notes: []store.LegacyTicketSeedNote{{
+			Notes: []store.TicketSeedNote{{
 				ID: noteID, Body: noteBody,
 				Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
 			}}, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
-			SourceKind: "stranded", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "stranded"),
-			OriginalTerminalState: ticket.Status, CreatedAt: now,
+			HandoverKind: "stranded", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "stranded"),
+			OriginalTicketStatus: ticket.Status, CreatedAt: now,
 		}
-		linked, err = d.store.EnsureLegacyTicketSeed(spec)
+		linked, err = d.store.EnsureTicketSeedHandover(handover)
 		if err != nil && docstore.IsConflict(err) {
 			continue
 		}
@@ -146,7 +146,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 			return "", err
 		}
 		if linked.Result == "created" {
-			d.announceLegacyTicketSeedWrites(spec, linked)
+			d.announceTicketSeedHandoverWrites(handover, linked)
 		}
 		break
 	}

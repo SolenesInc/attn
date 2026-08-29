@@ -304,7 +304,7 @@ func legacyTicketSeedTestStore(t *testing.T) (*Store, docstore.CollectionSchema,
 		declOf(t, s, garden.Namespace, garden.CollectionDispatches)
 }
 
-func legacyTicketSeedSpec(t *testing.T, seedSchema, noteSchema, dispatchSchema docstore.CollectionSchema, ticketID, seedID, noteID string) LegacyTicketSeedSpec {
+func ticketSeedHandover(t *testing.T, seedSchema, noteSchema, dispatchSchema docstore.CollectionSchema, ticketID, seedID, noteID string) TicketSeedHandover {
 	t.Helper()
 	seed := garden.Seed{
 		ID: seedID, Title: "Recovered work", Body: "the original brief", Status: garden.StatusHarvested,
@@ -318,25 +318,25 @@ func legacyTicketSeedSpec(t *testing.T, seedSchema, noteSchema, dispatchSchema d
 	if err != nil {
 		t.Fatal(err)
 	}
-	return LegacyTicketSeedSpec{
+	return TicketSeedHandover{
 		TicketID: ticketID, SeedID: seedID, SeedBody: seedBody,
 		SeedFact:  BusEvent{Name: "document.changed", Subject: docstore.Address(garden.Namespace, garden.CollectionSeeds, seedID), Payload: `{}`},
 		SeedTitle: seed.Title, SeedDescription: seed.Body,
 		SeedSchema: seedSchema, NoteSchema: noteSchema, DispatchSchema: dispatchSchema,
-		Notes: []LegacyTicketSeedNote{{
+		Notes: []TicketSeedNote{{
 			ID: noteID, Body: noteBody,
 			Fact: BusEvent{Name: "document.changed", Subject: docstore.Address(garden.Namespace, garden.CollectionNotes, noteID), Payload: `{}`},
 		}},
-		SourceKind: "database", EvidenceFingerprint: "fingerprint-" + ticketID,
-		OriginalTerminalState: TicketStatusDone, CreatedAt: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC),
+		HandoverKind: "database", EvidenceFingerprint: "fingerprint-" + ticketID,
+		OriginalTicketStatus: TicketStatusDone, CreatedAt: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC),
 	}
 }
 
-func TestEnsureLegacyTicketSeedCreatesOnceAndKeepsTheOriginalLink(t *testing.T) {
+func TestEnsureTicketSeedHandoverCreatesOnceAndKeepsTheOriginalLink(t *testing.T) {
 	s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-	spec := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-first", "n-first")
+	handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-first", "n-first")
 
-	created, err := s.EnsureLegacyTicketSeed(spec)
+	created, err := s.EnsureTicketSeedHandover(handover)
 	if err != nil || created.Result != "created" || created.SeedID != "s-first" || len(created.Seqs) != 2 {
 		t.Fatalf("create = %#v, %v", created, err)
 	}
@@ -352,14 +352,14 @@ func TestEnsureLegacyTicketSeedCreatesOnceAndKeepsTheOriginalLink(t *testing.T) 
 	if _, found, err := s.GetDocument(notes, "n-first"); err != nil || !found {
 		t.Fatalf("note after create: found=%v err=%v", found, err)
 	}
-	link, err := s.LegacyTicketSeedLink("ticket-1")
-	if err != nil || link == nil || link.SeedID != "s-first" || link.OriginalTerminalState != TicketStatusDone {
+	link, err := s.TicketSeedLink("ticket-1")
+	if err != nil || link == nil || link.SeedID != "s-first" || link.OriginalTicketStatus != TicketStatusDone {
 		t.Fatalf("link = %#v, %v", link, err)
 	}
 
-	again := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-second", "n-second")
+	again := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-second", "n-second")
 	again.SeedDescription = "new data must not win"
-	adopted, err := s.EnsureLegacyTicketSeed(again)
+	adopted, err := s.EnsureTicketSeedHandover(again)
 	if err != nil || adopted.Result != "adopted_link" || adopted.SeedID != "s-first" {
 		t.Fatalf("rerun = %#v, %v", adopted, err)
 	}
@@ -376,7 +376,7 @@ func TestEnsureLegacyTicketSeedCreatesOnceAndKeepsTheOriginalLink(t *testing.T) 
 	}
 }
 
-func TestEnsureLegacyTicketSeedAdoptsOnlyExactMachineLineage(t *testing.T) {
+func TestEnsureTicketSeedHandoverAdoptsOnlyExactMachineLineage(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		lineage  func(t *testing.T, s *Store, seeds, notes, dispatches docstore.CollectionSchema)
@@ -418,9 +418,9 @@ func TestEnsureLegacyTicketSeedAdoptsOnlyExactMachineLineage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			spec := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-			spec.SessionIDs = tc.sessions
-			got, err := s.EnsureLegacyTicketSeed(spec)
+			handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
+			handover.SessionIDs = tc.sessions
+			got, err := s.EnsureTicketSeedHandover(handover)
 			if err != nil || got.Result != "adopted_lineage" || got.SeedID != "s-existing" {
 				t.Fatalf("adopt = %#v, %v", got, err)
 			}
@@ -435,7 +435,7 @@ func TestEnsureLegacyTicketSeedAdoptsOnlyExactMachineLineage(t *testing.T) {
 	}
 }
 
-func TestEnsureLegacyTicketSeedLeavesAmbiguityUntouched(t *testing.T) {
+func TestEnsureTicketSeedHandoverLeavesAmbiguityUntouched(t *testing.T) {
 	t.Run("several lineage receipts", func(t *testing.T) {
 		s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
 		for _, id := range []string{"s-one", "s-two"} {
@@ -449,8 +449,8 @@ func TestEnsureLegacyTicketSeedLeavesAmbiguityUntouched(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		spec := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-		got, err := s.EnsureLegacyTicketSeed(spec)
+		handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
+		got, err := s.EnsureTicketSeedHandover(handover)
 		if err != nil || got.Result != "ambiguous_lineage" || got.SeedID != "" {
 			t.Fatalf("ambiguity = %#v, %v", got, err)
 		}
@@ -460,8 +460,8 @@ func TestEnsureLegacyTicketSeedLeavesAmbiguityUntouched(t *testing.T) {
 	t.Run("same title and body without lineage", func(t *testing.T) {
 		s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
 		putLegacySeedDocument(t, s, seeds, "s-manual", "Recovered work", "the original brief")
-		spec := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-		got, err := s.EnsureLegacyTicketSeed(spec)
+		handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
+		got, err := s.EnsureTicketSeedHandover(handover)
 		if err != nil || got.Result != "ambiguous_content" || got.SeedID != "" {
 			t.Fatalf("content ambiguity = %#v, %v", got, err)
 		}
@@ -469,14 +469,14 @@ func TestEnsureLegacyTicketSeedLeavesAmbiguityUntouched(t *testing.T) {
 	})
 }
 
-func TestEnsureLegacyTicketSeedRollsBackEveryWriteOnAConflict(t *testing.T) {
+func TestEnsureTicketSeedHandoverRollsBackEveryWriteOnAConflict(t *testing.T) {
 	s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
 	existing := []byte(`{"id":"n-conflict","seed":"s-other","kind":"note","body":"keep me","author_session":"","author_member":""}`)
 	if _, err := s.PutDocument(notes, "n-conflict", existing, time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
-	spec := legacyTicketSeedSpec(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-conflict")
-	if _, err := s.EnsureLegacyTicketSeed(spec); err == nil || !docstore.IsConflict(err) {
+	handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-conflict")
+	if _, err := s.EnsureTicketSeedHandover(handover); err == nil || !docstore.IsConflict(err) {
 		t.Fatalf("conflicting note error = %v", err)
 	}
 	assertNoLegacySeedCreation(t, s, seeds, "ticket-1", "s-proposed")
@@ -506,7 +506,7 @@ func assertNoLegacySeedCreation(t *testing.T, s *Store, seeds docstore.Collectio
 	if _, found, err := s.GetDocument(seeds, proposedSeedID); err != nil || found {
 		t.Fatalf("proposed seed exists: found=%v err=%v", found, err)
 	}
-	link, err := s.LegacyTicketSeedLink(ticketID)
+	link, err := s.TicketSeedLink(ticketID)
 	if err != nil || link != nil {
 		t.Fatalf("ambiguous recovery link = %#v, %v", link, err)
 	}

@@ -39,6 +39,57 @@ const result = await tools.exec_command({cmd: "$ATTN_WRAPPER_PATH ticket status 
 	}
 }
 
+func TestLegacyJSTicketStatusProofRejectsConditionalAndDeferredCalls(t *testing.T) {
+	for name, source := range map[string]string{
+		"dead branch": `if (false) { await tools.exec_command({cmd: "attn ticket status done"}) }
+text("ticket hidden-work → done")`,
+		"uncalled function": `async function closeTicket() { await tools.exec_command({cmd: "attn ticket status done"}) }
+text("ticket hidden-work → done")`,
+		"loop": `for (const item of []) { await tools.exec_command({cmd: "attn ticket status done"}) }
+text("ticket hidden-work → done")`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if commands := legacyJSStringProperties(source, "exec_command", "cmd"); len(commands) != 0 {
+				t.Fatalf("commands = %#v", commands)
+			}
+		})
+	}
+}
+
+func TestLegacyJSTicketStatusProofKeepsDuplicateExecutedCallsDistinct(t *testing.T) {
+	input := `await tools.exec_command({cmd: "attn ticket status done"});
+await tools.exec_command({cmd: "attn ticket status done"});`
+	commands := legacyJSStringProperties(input, "exec_command", "cmd")
+	if len(commands) != 2 {
+		t.Fatalf("commands = %#v", commands)
+	}
+
+	source := LegacyRecoverySource{Provider: "codex", NativeSessionID: "duplicate-calls"}
+	records := legacyRecords(t,
+		mustJSONLine(t, map[string]any{"timestamp": "2026-08-01T10:00:00Z", "type": "response_item", "payload": map[string]any{
+			"type": "custom_tool_call", "name": "functions.exec", "call_id": "exec-1", "input": input,
+		}}),
+		mustJSONLine(t, map[string]any{"timestamp": "2026-08-01T10:00:01Z", "type": "response_item", "payload": map[string]any{
+			"type": "custom_tool_call_output", "call_id": "exec-1", "output": "ticket duplicate-work → done",
+		}}),
+	)
+	receipts := proveLegacyTicketReceipts(source, records)
+	if len(receipts) != 1 || receipts[0].Bound {
+		t.Fatalf("receipts = %#v", receipts)
+	}
+}
+
+func TestLegacyJSTicketStatusProofAcceptsDirectParallelCalls(t *testing.T) {
+	input := `const results = await Promise.all([
+  tools.exec_command({cmd: "attn ticket status done"}),
+  tools.exec_command({cmd: "attn ticket status failed"}),
+]);`
+	commands := legacyJSStringProperties(input, "exec_command", "cmd")
+	if len(commands) != 2 || commands[0] != "attn ticket status done" || commands[1] != "attn ticket status failed" {
+		t.Fatalf("commands = %#v", commands)
+	}
+}
+
 func TestInspectCodexLegacyRecoveryTranscript(t *testing.T) {
 	dataRoot := t.TempDir()
 	contextPath := filepath.Join(dataRoot, "workspace-contexts", "abcd", "context.md")
