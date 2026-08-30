@@ -1,4 +1,4 @@
-kind: fix
+kind: fixed
 area: transcript
 change: >
   The message list no longer shows the state marker an agent writes for the
