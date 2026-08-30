@@ -38,12 +38,16 @@ use crate::reader::{Diagram, Reader};
 const SHELL_ID: AgentId = u64::MAX;
 const BAR_HEIGHT: f32 = 46.;
 const GAP: f32 = 12.;
-const USAGE: &str = "usage: zero-gpui [--scenario calm|busy-morning|all-busy] [--doc <file.md>]...";
+const USAGE: &str = "usage: zero-gpui [--scenario calm|busy-morning|all-busy] [--agents N] [--shell DESKTOP] [--doc [DESKTOP:]file.md]... [--edit [DESKTOP:]file.md]...
+  --agents N             how many simulated agents to seed, 0 to 12; they spread over desktops 1-4
+  --shell DESKTOP        where the real shell lives (default 1)
+  --doc [DESKTOP:]file   a markdown file in a reading tile (default desktop 1)
+  --edit [DESKTOP:]file  the same, opened in the editor";
 /// Document tiles count down from here; the shell holds u64::MAX.
 const DOC_ID_BASE: AgentId = u64::MAX - 1;
 
 fn main() {
-    let (scenario, docs) = match parse_args() {
+    let launch = match parse_args() {
         Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("{error}\n{USAGE}");
@@ -71,7 +75,7 @@ fn main() {
                 window_background: WindowBackgroundAppearance::Opaque,
                 ..Default::default()
             },
-            move |window, cx| cx.new(|cx| Zero::new(scenario, docs, window, cx).expect("zero starts")),
+            move |window, cx| cx.new(|cx| Zero::new(launch, window, cx).expect("zero starts")),
         )
         .expect("the window opens");
         cx.on_window_closed(|cx| {
@@ -84,25 +88,78 @@ fn main() {
     });
 }
 
-fn parse_args() -> Result<(Scenario, Vec<PathBuf>)> {
-    let mut scenario = Scenario::Calm;
-    let mut docs = Vec::new();
-    let mut args = std::env::args().skip(1);
+#[derive(Debug)]
+struct Launch {
+    scenario: Scenario,
+    agents: usize,
+    shell: u8,
+    docs: Vec<DocArg>,
+}
+
+#[derive(Debug)]
+struct DocArg {
+    desktop: u8,
+    path: PathBuf,
+    edit: bool,
+}
+
+fn parse_args() -> Result<Launch> {
+    parse_launch(std::env::args().skip(1))
+}
+
+fn parse_launch(args: impl IntoIterator<Item = String>) -> Result<Launch> {
+    let mut launch = Launch {
+        scenario: Scenario::Calm,
+        agents: zero::simulator::MAX_AGENTS,
+        shell: 1,
+        docs: Vec::new(),
+    };
+    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--scenario" => {
                 let name = args.next().unwrap_or_default();
-                scenario = Scenario::parse(&name)
+                launch.scenario = Scenario::parse(&name)
                     .ok_or_else(|| anyhow::anyhow!("unknown scenario {name:?}"))?;
             }
-            "--doc" => {
-                let path = PathBuf::from(args.next().unwrap_or_default());
-                docs.push(std::fs::canonicalize(&path).unwrap_or(path));
+            "--agents" => {
+                let value = args.next().unwrap_or_default();
+                let count: usize = value
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("--agents wants a number, got {value:?}"))?;
+                if count > zero::simulator::MAX_AGENTS {
+                    bail!("--agents {count}: the crowd has {} names", zero::simulator::MAX_AGENTS);
+                }
+                launch.agents = count;
+            }
+            "--shell" => launch.shell = parse_desktop(&args.next().unwrap_or_default())?,
+            "--doc" | "--edit" => {
+                let (desktop, path) = split_desktop(&args.next().unwrap_or_default())?;
+                launch.docs.push(DocArg { desktop, path, edit: arg == "--edit" });
             }
             other => bail!("unknown argument {other:?}"),
         }
     }
-    Ok((scenario, docs))
+    Ok(launch)
+}
+
+fn parse_desktop(value: &str) -> Result<u8> {
+    match value.parse::<u8>() {
+        Ok(desktop @ 1..=9) => Ok(desktop),
+        _ => bail!("a desktop is a digit 1-9, got {value:?}"),
+    }
+}
+
+/// `3:notes.md` puts the file on desktop 3; a bare path lands on desktop 1.
+fn split_desktop(value: &str) -> Result<(u8, PathBuf)> {
+    let (desktop, path) = match value.split_once(':') {
+        Some((digit, rest)) if digit.len() == 1 && digit.as_bytes()[0].is_ascii_digit() => {
+            (parse_desktop(digit)?, rest)
+        }
+        _ => (1, value),
+    };
+    let path = PathBuf::from(path);
+    Ok((desktop, std::fs::canonicalize(&path).unwrap_or(path)))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -227,22 +284,28 @@ impl DocTile {
 }
 
 impl Zero {
-    fn new(scenario: Scenario, docs: Vec<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+    fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+        let Launch { scenario, agents, shell: shell_desktop, docs } = launch;
         let metrics = Metrics::measure(window)?;
-        let mut source = Simulator::new(scenario);
+        let mut source = Simulator::with_agents(scenario, agents);
         let mut model = Model::new();
         model.apply(source.advance(Duration::ZERO))?;
         let (shell, shell_output) = Shell::spawn(80, 24)?;
-        model.add_shell(SHELL_ID, 1, b"")?;
+        model.add_shell(SHELL_ID, shell_desktop, b"")?;
         let mut doc_tiles = HashMap::new();
-        for (index, path) in docs.into_iter().enumerate() {
+        let mut edits = Vec::new();
+        for (index, doc) in docs.into_iter().enumerate() {
             let id = DOC_ID_BASE - index as u64;
-            let name = path
+            let name = doc
+                .path
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string());
-            model.add_document(id, name, 1)?;
-            doc_tiles.insert(id, DocTile::open(path));
+                .unwrap_or_else(|| doc.path.display().to_string());
+            model.add_document(id, name, doc.desktop)?;
+            doc_tiles.insert(id, DocTile::open(doc.path));
+            if doc.edit {
+                edits.push(id);
+            }
         }
         if let Some(first) = model.queue().first().copied() {
             model.current_desktop = model.agent(first).desktop;
@@ -294,6 +357,9 @@ impl Zero {
             _shell_pump: shell_pump,
         };
         zero.arm_ticker(cx);
+        for id in edits {
+            zero.start_edit(id, cx);
+        }
         Ok(zero)
     }
 
@@ -672,6 +738,10 @@ impl Zero {
 
     /// The cell grid a tile's body holds right now, for an editor spawned into it.
     fn grid_size_for(&self, id: AgentId) -> (u16, u16) {
+        // Before the first layout nothing has a size; the first paint resizes the engine.
+        if self.content.size.width <= px(0.) {
+            return (80, 24);
+        }
         let ids = self.model.desktop_agents();
         let rect = ids
             .iter()
@@ -1590,4 +1660,31 @@ fn timestamp_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn launch(args: &[&str]) -> Result<Launch> {
+        parse_launch(args.iter().map(|arg| arg.to_string()))
+    }
+
+    #[test]
+    fn docs_take_a_desktop_prefix() {
+        let launch = launch(&["--agents", "3", "--shell", "4", "--doc", "notes.md", "--edit", "3:plan.md"]).unwrap();
+        assert_eq!(launch.agents, 3);
+        assert_eq!(launch.shell, 4);
+        let docs: Vec<_> = launch.docs.iter().map(|doc| (doc.desktop, doc.edit)).collect();
+        assert_eq!(docs, [(1, false), (3, true)]);
+        assert!(launch.docs[1].path.ends_with("plan.md"));
+    }
+
+    #[test]
+    fn limits_name_themselves() {
+        let error = launch(&["--agents", "13"]).unwrap_err().to_string();
+        assert!(error.contains("13") && error.contains("12"), "{error}");
+        let error = launch(&["--doc", "0:notes.md"]).unwrap_err().to_string();
+        assert!(error.contains("1-9"), "{error}");
+    }
 }

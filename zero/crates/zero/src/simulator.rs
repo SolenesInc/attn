@@ -8,6 +8,8 @@ use crate::source::{Command, Event, Scenario, ScenarioAction, Source};
 
 const DEFAULT_SEED: u64 = 0xA77E_0000;
 
+pub const MAX_AGENTS: usize = AGENT_NAMES.len();
+
 const AGENT_NAMES: [&str; 12] = [
     "garden/claude",
     "hub/codex",
@@ -88,13 +90,23 @@ impl Simulator {
         Self::seeded(scenario, DEFAULT_SEED)
     }
 
+    pub fn with_agents(scenario: Scenario, count: usize) -> Self {
+        Self::seeded_with(scenario, DEFAULT_SEED, count)
+    }
+
     pub fn seeded(scenario: Scenario, seed: u64) -> Self {
+        Self::seeded_with(scenario, seed, MAX_AGENTS)
+    }
+
+    fn seeded_with(scenario: Scenario, seed: u64, count: usize) -> Self {
+        assert!(count <= MAX_AGENTS, "{count} agents asked, the crowd has {MAX_AGENTS} names");
         let mut simulator = Self {
             scenario,
             speed: 1,
             rng: StdRng::seed_from_u64(seed),
             agents: AGENT_NAMES
                 .iter()
+                .take(count)
                 .enumerate()
                 .map(|(index, name)| SimAgent {
                     id: index as AgentId + 1,
@@ -917,5 +929,19 @@ mod tests {
                 .find(|agent| agent.id == id)
                 .is_some_and(|agent| agent.state.owes_turn())
         }));
+    }
+
+    #[test]
+    fn a_smaller_crowd_spreads_from_desktop_one() {
+        let mut simulator = Simulator::with_agents(Scenario::Calm, 3);
+        let desktops: Vec<u8> = simulator
+            .advance(Duration::ZERO)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::AgentAdded { desktop, .. } => Some(desktop),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(desktops, [1, 2, 3]);
     }
 }
