@@ -215,25 +215,6 @@ func TestHeadlessSwitchOffRefusesTicketReconcile(t *testing.T) {
 	requireRefusal(t, readLog, reconcileKind)
 }
 
-func TestHeadlessSwitchOffRefusesSessionActivity(t *testing.T) {
-	t.Setenv(headless.EnvVar, "off")
-	d, readLog := newHeadlessDaemon(t)
-	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
-	installActivityRunner(t, d)
-	watchingClient(d)
-	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first", "second")
-	touchFile(t, transcriptPath, time.Now())
-
-	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-	assertNoActivityJob(t, d, "session-1")
-
-	d.enqueueSessionActivity("session-1")
-	assertNoActivityJob(t, d, "session-1")
-	requireRefusal(t, readLog, sessionActivityKind)
-}
-
 func TestHeadlessSwitchOffRefusesKeeperCompact(t *testing.T) {
 	t.Setenv(headless.EnvVar, "off")
 	d, readLog := newHeadlessDaemon(t)
@@ -309,47 +290,56 @@ func countRefusals(log, caller string) int {
 	return strings.Count(log, "headless task refused ("+caller+")")
 }
 
-// The receipt the reviewer asked for: with the switch off, an idle daemon must
-// stay silent, and a daemon with work must say so exactly once per run.
 func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
+	t.Run("session_activity/a_fresh_session_only_seeds_its_cursor", func(t *testing.T) {
+		t.Setenv(headless.EnvVar, "off")
+		d, readLog := newHeadlessDaemon(t)
+		installQuietActivityRunner(t, d)
+		watchingClient(d)
+		addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
+		transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
+		modelCalls := countActivityModelCalls(d)
+
+		scanAndRunActivity(t, d, "session-1", transcriptPath, 3)
+
+		if cursor := d.store.GetSessionActivity("session-1").Cursor; cursor == "" {
+			t.Fatal("the cursor was never seeded, so every scan keeps finding the session due")
+		}
+		if *modelCalls != 0 {
+			t.Fatalf("the activity model ran %d times with the switch off, want 0", *modelCalls)
+		}
+		if n := countRefusals(readLog(), sessionActivityKind); n != 0 {
+			t.Fatalf("cursor maintenance refused %d times, want 0", n)
+		}
+	})
+
+	t.Run("session_activity/one_delta_refuses_once", func(t *testing.T) {
+		t.Setenv(headless.EnvVar, "off")
+		d, readLog := newHeadlessDaemon(t)
+		installQuietActivityRunner(t, d)
+		watchingClient(d)
+		addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
+		transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
+		seedActivityCursorFor(t, d, "session-1", transcriptPath)
+		appendActivityTranscript(t, transcriptPath, "second")
+		modelCalls := countActivityModelCalls(d)
+
+		scanAndRunActivity(t, d, "session-1", transcriptPath, 3)
+
+		if *modelCalls != 0 {
+			t.Fatalf("the activity model ran %d times with the switch off, want 0", *modelCalls)
+		}
+		if n := countRefusals(readLog(), sessionActivityKind); n != 1 {
+			t.Fatalf("the same delta refused %d times, want 1", n)
+		}
+	})
+
 	cases := []struct {
 		name   string
 		caller string
 		idle   func(*testing.T, *Daemon)
 		work   func(*testing.T, *Daemon)
 	}{
-		{
-			name:   "session_activity_scan",
-			caller: sessionActivityKind,
-			idle: func(t *testing.T, d *Daemon) {
-				installActivityRunner(t, d)
-				watchingClient(d)
-				runActivityScan(t, d)
-			},
-			work: func(t *testing.T, d *Daemon) {
-				installActivityRunner(t, d)
-				watchingClient(d)
-				addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
-				touchFile(t, discoverableTranscript(t, d, "session-1", "session-1", "first"), time.Now())
-				runActivityScan(t, d)
-			},
-		},
-		{
-			name:   "session_activity_job",
-			caller: sessionActivityKind,
-			idle: func(t *testing.T, d *Daemon) {
-				installActivityRunner(t, d)
-				watchingClient(d)
-				runActivityJob(t, d, "session-gone")
-			},
-			work: func(t *testing.T, d *Daemon) {
-				installActivityRunner(t, d)
-				watchingClient(d)
-				addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
-				touchFile(t, discoverableTranscript(t, d, "session-1", "session-1", "first"), time.Now())
-				runActivityJob(t, d, "session-1")
-			},
-		},
 		{
 			name:   "compact_context",
 			caller: compactContextKind,
@@ -442,18 +432,50 @@ func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
 	}
 }
 
-func runActivityScan(t *testing.T, d *Daemon) {
+// The future mtime is what makes the next scan find the session due again;
+// nothing here advances the wall clock.
+func scanAndRunActivity(t *testing.T, d *Daemon, sessionID, transcriptPath string, passes int) {
 	t.Helper()
-	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
-		t.Fatalf("session activity scan: %v", err)
+	for pass := 0; pass < passes; pass++ {
+		touchFile(t, transcriptPath, time.Now().Add(time.Minute))
+		if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
+			t.Fatalf("session activity scan: %v", err)
+		}
+		runQueuedActivityJob(t, d, sessionID)
 	}
 }
 
-func runActivityJob(t *testing.T, d *Daemon, sessionID string) {
+// The row is dropped after the run so the next pass proves that scan queued a
+// job, rather than finding this one still sitting there.
+func runQueuedActivityJob(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
-	job := &jobs.Job{Kind: sessionActivityKind, UniqueKey: sessionID}
+	job, err := d.jobQueue.GetByKey(sessionActivityKind, sessionID)
+	if err != nil {
+		t.Fatalf("look up activity job: %v", err)
+	}
+	if job == nil {
+		t.Fatalf("the scan queued no activity job for %s", sessionID)
+	}
 	if _, err := d.sessionActivityHandler(context.Background(), job); err != nil {
 		t.Fatalf("session activity job: %v", err)
+	}
+	d.jobQueue.RemoveByKey(sessionActivityKind, sessionID)
+}
+
+func countActivityModelCalls(d *Daemon) *int {
+	calls := 0
+	d.sessionActivityExecution = func(context.Context, agentdriver.HeadlessTaskProvider, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
+		calls++
+		return agentdriver.HeadlessTaskResult{Text: "running the test suite."}, nil
+	}
+	return &calls
+}
+
+func seedActivityCursorFor(t *testing.T, d *Daemon, sessionID, transcriptPath string) {
+	t.Helper()
+	resumeID := d.store.GetResumeSessionID(sessionID)
+	if !d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, seedActivityCursor(t, transcriptPath)) {
+		t.Fatalf("seed activity cursor for %s", sessionID)
 	}
 }
 

@@ -119,9 +119,6 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 		d.logf("session_activity: enabled but not runnable: %v", err)
 		return nil, nil
 	}
-	if d.headlessTaskRefused(sessionActivityKind) {
-		return nil, nil
-	}
 	for _, sessionID := range due {
 		d.enqueueSessionActivity(sessionID)
 	}
@@ -188,8 +185,8 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	if transcriptPath == "" {
 		return
 	}
-	runner := d.headlessJobQueue(sessionActivityKind)
-	if runner == nil {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
 		return
 	}
 	if _, err := runner.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
@@ -246,13 +243,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if transcriptPath == "" {
 		return nil, nil
 	}
-	if d.headlessTaskRefused(sessionActivityKind) {
-		return nil, nil
-	}
-	config, err := d.activityConfigured()
-	if err != nil {
-		return nil, err
-	}
 	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now()
 	})
@@ -277,6 +267,15 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 
 	if window.Empty() {
 		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
+	}
+	// The cursor advances past a refused delta on purpose: holding it would re-refuse
+	// the same bytes on every scan.
+	if d.headlessTaskRefused(sessionActivityKind) {
+		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
+	}
+	config, err := d.activityConfigured()
+	if err != nil {
+		return nil, err
 	}
 
 	prompt := activity.Baseline().Render(activity.Input{
