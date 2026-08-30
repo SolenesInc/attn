@@ -293,9 +293,11 @@ doubt, ask the maintainer.
   the execution plan in its body and add one child for each piece of work. Add
   `blocks` edges where order matters. `attn seed guide` shows the format. A
   small change can go straight to a PR.
-- **Normal work targets `next`.** Feature and fix PRs merge into `next`, and a
-  completed `epic/*` branch also targets `next`. PRs within a multi-PR arc target
-  its `epic/*` branch. Squash these ordinary PRs.
+- **Normal work targets `next`.** The repository default stays `main`, so start
+  feature and fix branches from `origin/next` and pass `--base next` when opening
+  their PRs. A completed `epic/*` branch also targets `next`; PRs within the arc
+  target its `epic/*` branch. Squash these ordinary PRs. The routine workflow is
+  in [docs/working-with-next.md](docs/working-with-next.md).
 - **`main` is the accepted release line.** Only frozen `release/vX.Y.Z`
   candidates and urgent `hotfix/*` branches target `main`. The
   `epic/release-train` PR is the one bootstrap exception.
@@ -332,7 +334,12 @@ them, and do not present them as risks, blockers, or reasons to pause.
 
 ## Pull requests
 
-Ready-for-review (not draft) and rebase onto the PR's target branch first.
+Open PRs ready for review, not as drafts. An ordinary PR to `next` does not
+need rebasing solely because `next` advanced. Rebase when the PR conflicts or
+when the change depends on newer work from `next`; otherwise, merge once the
+exact head is green, approved, and GitHub reports it mergeable. Release,
+hotfix, and main-to-next sync PRs follow
+[docs/making-a-release.md](docs/making-a-release.md).
 
 To wait on a GitHub PR, run `attn pr wait-ready <pr> --repo <owner/repo>
 --reviewer <login>` once; do not poll checks, reviews, and comments separately.

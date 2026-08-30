@@ -48,6 +48,9 @@ Rules:
 Normal work lands on `next`. `main` changes only when an accepted release or an
 urgent repair is ready:
 
+The day-to-day contributor and agent workflow is documented in
+[Working with `next`](working-with-next.md).
+
 ```text
 feature/fix PR ──squash──▶ next ──Acceptance──▶ accepted next SHA
                               │
