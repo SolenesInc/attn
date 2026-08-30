@@ -34,12 +34,17 @@ function parseArgs(argv) {
 
 const { readClipboard, writeClipboard } = appPlatform;
 
-function fishAvailable() {
+// fish 4 is the floor: 3.x emits no OSC 133, so blocks never form and copies silently no-op.
+function requireFish4() {
+  let version = '';
   try {
-    execFileSync('/bin/sh', ['-c', 'command -v fish'], { encoding: 'utf8' });
-    return true;
+    version = execFileSync('fish', ['--version'], { encoding: 'utf8' }).trim();
   } catch {
-    return false;
+    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
+  }
+  const major = Number.parseInt(version.match(/version (\d+)/)?.[1] ?? '', 10);
+  if (!(major >= 4)) {
+    throw new Error(`fish >= 4 is required for this scenario (OSC 133 markers); found: ${version}`);
   }
 }
 
@@ -86,9 +91,7 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-terminal-context-menu.mjs');
     return;
   }
-  if (!fishAvailable()) {
-    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
-  }
+  requireFish4();
 
   // HID clicks land at absolute screen positions, so the default 20px-visible
   // window park would put every click off-window.
