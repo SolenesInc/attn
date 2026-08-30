@@ -31,7 +31,8 @@ import {
 import {
   ensureCodexInitialPanePromptReady,
   ensureClaudeInitialPanePromptReady,
-  promptClaudeForStructuredBlock,
+  promptAgentForStructuredBlock,
+  writeStructuredBlockFixture,
 } from './scenarioAgents.mjs';
 
 function parseArgs(argv) {
@@ -194,7 +195,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-401',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: `scenario-tr401-local-${options.agent}-window-resize`,
     metadata: {
       agent: options.agent,
@@ -234,6 +235,7 @@ async function main() {
     });
 
     sessionId = await runner.step('create_local_session', async () => {
+      if (options.agent === 'claude') writeStructuredBlockFixture(runner.sessionDir, agentToken, 6);
       return createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -257,7 +259,7 @@ async function main() {
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
 
       if (options.agent === 'claude') {
-        const fixture = await promptClaudeForStructuredBlock(client, sessionId, agentToken, 6);
+        const fixture = await promptAgentForStructuredBlock(client, sessionId, agentToken, 6);
         initialPaneId = fixture.paneId;
         runner.writeJson('agent-fixture.json', fixture);
         await waitForPaneText(

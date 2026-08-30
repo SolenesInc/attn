@@ -105,7 +105,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-401-CODEX-MAIN',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-tr401-local-codex-main-window-resize',
     metadata: {
       agent: 'codex',

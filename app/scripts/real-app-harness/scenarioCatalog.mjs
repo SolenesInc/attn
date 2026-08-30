@@ -250,14 +250,12 @@ export const scenarioCatalog = [
   {
     id: 'tr402-local-codex',
     runnerId: 'TR-402',
-    allowRealAgents: true,
     label: 'TR-402 local codex',
     command: ['pnpm', 'run', 'real-app:scenario-tr402-local-codex'],
   },
   {
     id: 'tr402-local-claude',
     runnerId: 'TR-402',
-    allowRealAgents: true,
     label: 'TR-402 local claude',
     command: ['pnpm', 'run', 'real-app:scenario-tr402-local-claude'],
   },
@@ -282,21 +280,18 @@ export const scenarioCatalog = [
   {
     id: 'tr401-local-claude',
     runnerId: 'TR-401',
-    allowRealAgents: true,
     label: 'TR-401 local claude resize',
     command: ['pnpm', 'run', 'real-app:scenario-tr401'],
   },
   {
     id: 'tr401-local-codex',
     runnerId: 'TR-401',
-    allowRealAgents: true,
     label: 'TR-401 local codex resize',
     command: ['pnpm', 'run', 'real-app:scenario-tr401-local-codex'],
   },
   {
     id: 'tr401-codex-initial-pane',
     runnerId: 'TR-401-CODEX-MAIN',
-    allowRealAgents: true,
     label: 'TR-401 Codex fresh initial-pane resize',
     command: ['pnpm', 'run', 'real-app:scenario-tr401-codex-main'],
   },
