@@ -67,6 +67,36 @@ export function packagedAppScenarioLockPath() {
   return process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH || path.join(os.tmpdir(), 'attn-real-app-harness-scenario.lock');
 }
 
+const SCENARIO_LOCK_POLL_MS = 2_000;
+// The longest catalogued scenario budget is 900s (scenarioCatalog.mjs), so a
+// healthy holder clears within 20 minutes; only a stuck one trips the wait.
+const SCENARIO_LOCK_WAIT_MS = 1_200_000;
+
+function scenarioLockWaitMs() {
+  const raw = process.env.ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS;
+  if (raw === undefined || raw === '') {
+    return SCENARIO_LOCK_WAIT_MS;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`invalid ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS: ${raw} (want milliseconds; 0 fails fast)`);
+  }
+  return value;
+}
+
+// Blocking the event loop is the point: the runner is sync and nothing else runs.
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function describeLockOwner(owner) {
+  const scenario = owner?.scenarioId || 'unknown';
+  const pid = Number.isInteger(owner?.pid) ? owner.pid : 'unknown';
+  const runId = owner?.runId || 'unknown';
+  const startedAt = owner?.startedAt || 'unknown';
+  return `${scenario} (pid ${pid}, run ${runId}, started ${startedAt})`;
+}
+
 function readLockOwner(lockDir) {
   const ownerPath = path.join(lockDir, 'owner.json');
   return JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
@@ -78,7 +108,13 @@ function removeDirIfPresent(dirPath) {
   } catch {}
 }
 
-export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }, lockDir = packagedAppScenarioLockPath()) {
+export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }, lockDir = packagedAppScenarioLockPath(), {
+  waitMs = scenarioLockWaitMs(),
+  pollMs = SCENARIO_LOCK_POLL_MS,
+  sleep = sleepSync,
+  now = Date.now,
+  log = (message) => console.error(message),
+} = {}) {
   const ownerPath = path.join(lockDir, 'owner.json');
   const owner = {
     pid: process.pid,
@@ -91,6 +127,8 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
     command: process.argv.join(' '),
   };
 
+  const deadline = now() + waitMs;
+  let announced = false;
   while (true) {
     try {
       fs.mkdirSync(lockDir);
@@ -114,14 +152,18 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
         continue;
       }
 
-      const activeScenario = existingOwner.scenarioId || 'unknown';
-      const activePid = Number.isInteger(existingOwner.pid) ? existingOwner.pid : 'unknown';
-      const activeRunId = existingOwner.runId || 'unknown';
-      const activeStartedAt = existingOwner.startedAt || 'unknown';
-      throw new Error(
-        `invalid run: packaged-app scenarios are single-tenant; ${activeScenario} is already active ` +
-        `(pid ${activePid}, run ${activeRunId}, started ${activeStartedAt})`
-      );
+      if (now() >= deadline) {
+        throw new Error(
+          `packaged-app scenarios are single-tenant; gave up after ${waitMs}ms waiting for ` +
+          `${describeLockOwner(existingOwner)} to release ${lockDir}; ` +
+          `stop the holder or raise ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS (0 fails fast)`
+        );
+      }
+      if (!announced) {
+        announced = true;
+        log(`[scenario-lock] ${scenarioId}: waiting up to ${waitMs}ms for ${describeLockOwner(existingOwner)} to release ${lockDir}`);
+      }
+      sleep(pollMs);
     }
   }
 

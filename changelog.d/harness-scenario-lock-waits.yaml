@@ -1,0 +1,8 @@
+kind: changed
+area: harness
+change: >
+  A packaged-app scenario run that finds the single-tenant lock held no longer
+  fails on the spot: it waits up to 20 minutes for the holder to finish,
+  printing who holds the lock while it waits, and a timeout names the holder
+  and the `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` override (0 restores the old
+  fail-fast).
