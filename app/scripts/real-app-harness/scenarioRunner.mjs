@@ -68,14 +68,15 @@ export function packagedAppScenarioLockPath() {
 }
 
 const SCENARIO_LOCK_POLL_MS = 2_000;
-// The longest catalogued scenario budget is 900s (scenarioCatalog.mjs), so a
-// healthy holder clears within 20 minutes; only a stuck one trips the wait.
-const SCENARIO_LOCK_WAIT_MS = 1_200_000;
+const SCENARIO_LOCK_HEARTBEAT_MS = 15_000;
+// 20 missed 15s heartbeats. A SERIAL-MATRIX holder legitimately runs for hours,
+// so only a wedged event loop (or a pre-heartbeat build) ever looks this stale.
+const SCENARIO_LOCK_STALE_MS = 300_000;
 
 function scenarioLockWaitMs() {
   const raw = process.env.ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS;
   if (raw === undefined || raw === '') {
-    return SCENARIO_LOCK_WAIT_MS;
+    return Infinity;
   }
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 0) {
@@ -97,6 +98,14 @@ function describeLockOwner(owner) {
   return `${scenario} (pid ${pid}, run ${runId}, started ${startedAt})`;
 }
 
+function ownerHeartbeatAgeMs(lockDir, nowMs) {
+  try {
+    return nowMs - fs.statSync(path.join(lockDir, 'owner.json')).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 function readLockOwner(lockDir) {
   const ownerPath = path.join(lockDir, 'owner.json');
   return JSON.parse(fs.readFileSync(ownerPath, 'utf8'));
@@ -111,6 +120,8 @@ function removeDirIfPresent(dirPath) {
 export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }, lockDir = packagedAppScenarioLockPath(), {
   waitMs = scenarioLockWaitMs(),
   pollMs = SCENARIO_LOCK_POLL_MS,
+  heartbeatMs = SCENARIO_LOCK_HEARTBEAT_MS,
+  staleMs = SCENARIO_LOCK_STALE_MS,
   sleep = sleepSync,
   now = Date.now,
   log = (message) => console.error(message),
@@ -127,8 +138,9 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
     command: process.argv.join(' '),
   };
 
-  const deadline = now() + waitMs;
+  const waitStart = now();
   let announced = false;
+  let staleStrikes = 0;
   while (true) {
     try {
       fs.mkdirSync(lockDir);
@@ -152,20 +164,43 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
         continue;
       }
 
-      if (now() >= deadline) {
+      if (now() - waitStart >= waitMs) {
         throw new Error(
-          `packaged-app scenarios are single-tenant; gave up after ${waitMs}ms waiting for ` +
-          `${describeLockOwner(existingOwner)} to release ${lockDir}; ` +
-          `stop the holder or raise ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS (0 fails fast)`
+          `packaged-app scenarios are single-tenant; gave up after ${waitMs}ms ` +
+          `(ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS) waiting for ` +
+          `${describeLockOwner(existingOwner)} to release ${lockDir}`
         );
       }
+
+      const heartbeatAge = ownerHeartbeatAgeMs(lockDir, now());
+      // One stale poll is forgiven: after wake-from-sleep the waiter can stat
+      // the owner before the holder's overdue heartbeat timer has fired.
+      staleStrikes = heartbeatAge >= staleMs ? staleStrikes + 1 : 0;
+      if (staleStrikes >= 2) {
+        throw new Error(
+          `packaged-app scenario lock holder looks wedged: ${describeLockOwner(existingOwner)} ` +
+          `is alive but has not heartbeat ${lockDir} for ${Math.round(heartbeatAge)}ms ` +
+          `(threshold ${staleMs}ms); stop it, or remove the lock dir if it is gone`
+        );
+      }
+
       if (!announced) {
         announced = true;
-        log(`[scenario-lock] ${scenarioId}: waiting up to ${waitMs}ms for ${describeLockOwner(existingOwner)} to release ${lockDir}`);
+        log(`[scenario-lock] ${scenarioId}: waiting for ${describeLockOwner(existingOwner)} to release ${lockDir}`);
       }
       sleep(pollMs);
     }
   }
+
+  // The heartbeat proves this process's event loop is alive; waiters treat a
+  // live pid with a stale owner.json as wedged and give up on it.
+  const heartbeat = setInterval(() => {
+    try {
+      const stamp = new Date();
+      fs.utimesSync(ownerPath, stamp, stamp);
+    } catch {}
+  }, heartbeatMs);
+  heartbeat.unref?.();
 
   let released = false;
   const release = () => {
@@ -173,6 +208,7 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
       return;
     }
     released = true;
+    clearInterval(heartbeat);
     try {
       const existingOwner = readLockOwner(lockDir);
       if (existingOwner?.pid === process.pid && existingOwner?.runId === runId) {
