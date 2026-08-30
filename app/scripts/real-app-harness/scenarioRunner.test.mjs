@@ -143,8 +143,6 @@ describe('packaged app scenario lock', () => {
       log: () => {},
     });
 
-    // 31 one-minute polls: the matrix stayed healthy well past the 900s
-    // single-scenario budget and the waiter never gave up on it.
     expect(sleeps).toBe(31);
     expect(JSON.parse(fs.readFileSync(ownerPath, 'utf8')).scenarioId).toBe('TR-WAITER');
     release();

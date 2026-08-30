@@ -192,8 +192,6 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
     }
   }
 
-  // The heartbeat proves this process's event loop is alive; waiters treat a
-  // live pid with a stale owner.json as wedged and give up on it.
   const heartbeat = setInterval(() => {
     try {
       const stamp = new Date();
