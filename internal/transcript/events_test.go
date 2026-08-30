@@ -398,3 +398,23 @@ func TestHeadCursorOnATranscriptWithNoCompleteRecord(t *testing.T) {
 		t.Errorf("cursor = %q, want empty so the reader starts from the beginning", cursor)
 	}
 }
+
+func TestReadEventPageHidesStateMarkers(t *testing.T) {
+	path := writeEventTranscript(t,
+		`{"timestamp":"2026-07-19T10:00:00Z","type":"session_meta","payload":{"id":"native-id"}}`,
+		`{"timestamp":"2026-07-19T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}`,
+		`{"timestamp":"2026-07-19T10:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Which branch?\n\n<!-- attn:state=waiting_input -->"}]}}`,
+		`{"timestamp":"2026-07-19T10:00:03Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<!-- attn:state=idle -->"}]}}`,
+	)
+
+	page, err := ReadEventPage(path, "codex", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 {
+		t.Fatalf("events = %#v, want one assistant event after the marker-only one is dropped", page.Events)
+	}
+	if got := page.Events[0]; got.Kind != EventKindAssistant || got.Text != "Which branch?" {
+		t.Fatalf("assistant event = %#v, want the reply without its marker", got)
+	}
+}

@@ -1,0 +1,6 @@
+kind: fixed
+area: transcript
+change: >
+  The message list no longer shows the state marker an agent writes for the
+  stop classifier: it is stripped from assistant messages, and a marker-only
+  message (what the mock agent writes at every stop) is dropped.

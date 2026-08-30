@@ -42,3 +42,17 @@ func TestParseNamesTheValueAndTheSet(t *testing.T) {
 		}
 	}
 }
+
+func TestStrip(t *testing.T) {
+	cases := map[string]string{
+		"done\n\n<!-- attn:state=idle -->":                       "done",
+		"<!-- attn:state=waiting_input -->":                      "",
+		"plain reply":                                            "plain reply",
+		"<!-- attn:state=idle --> then <!-- attn:state=idle -->": " then",
+	}
+	for text, want := range cases {
+		if got := Strip(text); got != want {
+			t.Errorf("Strip(%q) = %q, want %q", text, got, want)
+		}
+	}
+}
