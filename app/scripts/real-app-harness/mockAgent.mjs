@@ -122,6 +122,19 @@ export function writeMockAgentFixture(cwd, config) {
 }
 
 export const HEADLESS_TASKS_SETTING = 'headless_tasks.enabled';
+// The daemon publishes the stored value and the env override beside the effective
+// one; internal/daemon/ws_settings.go mints these three keys and must not drift.
+export const HEADLESS_TASKS_STORED_SETTING = `${HEADLESS_TASKS_SETTING}.stored`;
+export const HEADLESS_TASKS_OVERRIDE_SETTING = `${HEADLESS_TASKS_SETTING}.override`;
+export const HEADLESS_TASKS_ENV_VAR = 'ATTN_HEADLESS_TASKS';
+
+function parseHeadlessSwitch(raw) {
+  switch (String(raw ?? '').trim().toLowerCase()) {
+    case 'on': case '1': case 'true': case 'yes': case 'enabled': return true;
+    case 'off': case '0': case 'false': case 'no': case 'disabled': return false;
+    default: return null;
+  }
+}
 
 async function setSettingAndWait(client, observer, key, value, description) {
   await client.request('set_setting', { key, value });
@@ -130,20 +143,39 @@ async function setSettingAndWait(client, observer, key, value, description) {
 
 export async function configureMockAgent({ client, observer, runner, agent = 'codex' }) {
   const key = `${agent}_executable`;
-  const previous = observer.getSetting(key) || '';
-  await setSettingAndWait(client, observer, key, executablePath, `${key} to point at the shared mock agent`);
+  const override = observer.getSetting(HEADLESS_TASKS_OVERRIDE_SETTING) || '';
+  if (parseHeadlessSwitch(override) === true) {
+    throw new Error(
+      `${HEADLESS_TASKS_ENV_VAR}=${override} forces headless tasks on, so ${HEADLESS_TASKS_SETTING} cannot be turned off for the mock agent`,
+    );
+  }
 
-  const previousHeadless = observer.getSetting(HEADLESS_TASKS_SETTING) || 'true';
-  await setSettingAndWait(client, observer, HEADLESS_TASKS_SETTING, 'false', 'headless tasks to be off');
+  const previous = observer.getSetting(key) || '';
+  const previousHeadless = observer.getSetting(HEADLESS_TASKS_STORED_SETTING) || 'true';
 
   let restored = false;
   const restore = async () => {
     if (restored) return;
+    let failure = null;
+    for (const write of [{ key, value: previous }, { key: HEADLESS_TASKS_SETTING, value: previousHeadless }]) {
+      try {
+        await client.request('set_setting', write);
+      } catch (err) {
+        failure ??= err;
+      }
+    }
+    if (failure) throw failure;
     restored = true;
-    await client.request('set_setting', { key, value: previous });
-    await client.request('set_setting', { key: HEADLESS_TASKS_SETTING, value: previousHeadless });
   };
   runner?.registerCleanup(`restore_${key}`, restore);
+
+  try {
+    await setSettingAndWait(client, observer, key, executablePath, `${key} to point at the shared mock agent`);
+    await setSettingAndWait(client, observer, HEADLESS_TASKS_SETTING, 'false', 'headless tasks to be off');
+  } catch (err) {
+    await restore().catch(() => {});
+    throw err;
+  }
   return { executablePath, previous, previousHeadless, restore };
 }
 

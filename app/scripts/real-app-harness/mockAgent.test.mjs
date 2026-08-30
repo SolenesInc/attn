@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   configureMockAgent,
   createMockAgentInputParser,
+  HEADLESS_TASKS_ENV_VAR,
+  HEADLESS_TASKS_OVERRIDE_SETTING,
   HEADLESS_TASKS_SETTING,
+  HEADLESS_TASKS_STORED_SETTING,
   markerStateForActions,
   mockAgentTitle,
   MOCK_AGENT_CONFIG,
@@ -15,6 +18,26 @@ import {
   validateMockAgentConfig,
   writeMockAgentFixture,
 } from './mockAgent.mjs';
+
+function fakeWorld({ settings = {}, failWaitFor = null } = {}) {
+  const writes = [];
+  const cleanups = [];
+  const client = {
+    request: async (verb, payload) => {
+      expect(verb).toBe('set_setting');
+      writes.push(payload);
+      settings[payload.key] = payload.value;
+    },
+  };
+  const observer = {
+    getSetting: (key) => settings[key] || '',
+    waitFor: async (fn, description) => {
+      if (failWaitFor && description.includes(failWaitFor)) throw new Error(`timed out waiting for ${description}`);
+      expect(fn()).toBe(true);
+    },
+  };
+  return { settings, writes, cleanups, client, observer, runner: { registerCleanup: (name, fn) => cleanups.push({ name, fn }) } };
+}
 
 let tmpDir;
 
@@ -98,25 +121,12 @@ describe('mock agent fixture', () => {
   });
 
   it('points Codex at the shared executable, turns headless tasks off, and restores both once', async () => {
-    const settings = { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true' };
-    const writes = [];
-    const cleanups = [];
-    const client = {
-      request: async (verb, payload) => {
-        expect(verb).toBe('set_setting');
-        writes.push(payload);
-        settings[payload.key] = payload.value;
-      },
-    };
-    const observer = {
-      getSetting: (key) => settings[key] || '',
-      waitFor: async (fn) => {
-        expect(fn()).toBe(true);
-      },
-    };
-    const runner = { registerCleanup: (name, fn) => cleanups.push({ name, fn }) };
+    const world = fakeWorld({
+      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
+    });
+    const { writes, cleanups } = world;
 
-    const configured = await configureMockAgent({ client, observer, runner });
+    const configured = await configureMockAgent(world);
     expect(writes[0]).toEqual({ key: 'codex_executable', value: configured.executablePath });
     expect(writes[1]).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'false' });
     expect(cleanups[0].name).toBe('restore_codex_executable');
@@ -126,6 +136,56 @@ describe('mock agent fixture', () => {
     expect(writes).toHaveLength(4);
     expect(writes[2]).toEqual({ key: 'codex_executable', value: '/usr/local/bin/codex' });
     expect(writes[3]).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
+  });
+
+  it('restores both settings when the wait after the executable switch fails', async () => {
+    const world = fakeWorld({
+      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
+      failWaitFor: 'headless tasks to be off',
+    });
+
+    await expect(configureMockAgent(world)).rejects.toThrow('headless tasks to be off');
+    expect(world.cleanups[0].name).toBe('restore_codex_executable');
+    expect(world.settings.codex_executable).toBe('/usr/local/bin/codex');
+    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('true');
+    expect(world.writes.map((write) => write.key)).toEqual([
+      'codex_executable',
+      HEADLESS_TASKS_SETTING,
+      'codex_executable',
+      HEADLESS_TASKS_SETTING,
+    ]);
+  });
+
+  it('restores the stored headless value the environment was masking', async () => {
+    const world = fakeWorld({
+      settings: {
+        codex_executable: '/usr/local/bin/codex',
+        [HEADLESS_TASKS_SETTING]: 'false',
+        [HEADLESS_TASKS_STORED_SETTING]: 'true',
+        [HEADLESS_TASKS_OVERRIDE_SETTING]: 'off',
+      },
+    });
+
+    const configured = await configureMockAgent(world);
+    expect(configured.previousHeadless).toBe('true');
+    await configured.restore();
+    expect(world.writes.at(-1)).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
+    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('true');
+  });
+
+  it('refuses by name before writing anything when the environment forces headless tasks on', async () => {
+    const world = fakeWorld({
+      settings: {
+        codex_executable: '/usr/local/bin/codex',
+        [HEADLESS_TASKS_SETTING]: 'true',
+        [HEADLESS_TASKS_STORED_SETTING]: 'false',
+        [HEADLESS_TASKS_OVERRIDE_SETTING]: 'on',
+      },
+    });
+
+    await expect(configureMockAgent(world)).rejects.toThrow(`${HEADLESS_TASKS_ENV_VAR}=on forces headless tasks on`);
+    expect(world.writes).toEqual([]);
+    expect(world.cleanups).toEqual([]);
   });
 });
 

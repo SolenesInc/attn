@@ -509,3 +509,33 @@ func compactWorkspaceOfSize(t *testing.T, d *Daemon, threshold int) {
 	}
 	d.enqueueWorkspaceContextCompaction(canonical)
 }
+
+func TestSettingsSnapshotSeparatesStoredHeadlessValueFromTheEffectiveOne(t *testing.T) {
+	d, _ := newHeadlessDaemon(t)
+	t.Cleanup(func() { headless.SetStoredEnabled(true) })
+
+	d.store.SetSetting(SettingHeadlessTasksEnabled, "true")
+	d.applyHeadlessTasksMode()
+	settings := d.settingsWithAgentAvailability()
+	if got := settings[SettingHeadlessTasksEnabled]; got != "true" {
+		t.Fatalf("effective = %v, want true", got)
+	}
+	if got := settings[SettingHeadlessTasksEnabledStored]; got != "true" {
+		t.Fatalf("stored = %v, want true", got)
+	}
+	if raw, ok := settings[SettingHeadlessTasksEnabledOverride]; ok {
+		t.Fatalf("override = %v, want it absent with no env var set", raw)
+	}
+
+	t.Setenv(headless.EnvVar, "off")
+	settings = d.settingsWithAgentAvailability()
+	if got := settings[SettingHeadlessTasksEnabled]; got != "false" {
+		t.Fatalf("effective = %v, want false under the env override", got)
+	}
+	if got := settings[SettingHeadlessTasksEnabledStored]; got != "true" {
+		t.Fatalf("stored = %v, want the env override to leave it alone", got)
+	}
+	if got := settings[SettingHeadlessTasksEnabledOverride]; got != "off" {
+		t.Fatalf("override = %v, want off", got)
+	}
+}

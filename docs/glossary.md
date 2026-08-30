@@ -79,6 +79,7 @@
 - HTTP bearer: operator credential for exposed WebSockets.
 - Headless task: model run the daemon starts on its own, with no session and no PTY.
 - Headless tasks switch: `ATTN_HEADLESS_TASKS` / `headless_tasks.enabled`; off refuses every headless task before it spawns. The environment wins.
+- Settings snapshot for that switch: `headless_tasks.enabled` is the effective value, `.stored` the setting alone, `.override` the raw environment value when it decides.
 - State marker: `<!-- attn:state=waiting_input|idle -->` in an agent's last assistant message. With the switch off it is the stop verdict, so no model runs; without one the stop settles on hook evidence.
 - Auto mode: pi permissions. Config: policy/environment snapshot at launch.
 - Proposal: requested policy/model change. Promotion: user applies it. Denial: refused call.

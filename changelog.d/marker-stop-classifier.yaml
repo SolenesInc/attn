@@ -11,4 +11,7 @@ change: >
   of those, because it survives only a yielded stop, which a marker cannot
   express. The real-app harness's mock agent now writes that marker and ends
   every turn through the real Stop hook, so scenarios exercise turn accounting
-  instead of asserting a state.
+  instead of asserting a state. The settings snapshot now publishes that
+  switch's stored value and its environment override beside the effective one,
+  so a client can restore what was actually stored rather than what the
+  environment was masking.

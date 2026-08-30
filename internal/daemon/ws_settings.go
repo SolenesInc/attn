@@ -87,6 +87,8 @@ const (
 	SettingDefaultContextWindowCapPrefix   = "default_context_window_cap_"
 	SettingNotebookTasksEnabled            = "notebook.tasks_enabled"
 	SettingHeadlessTasksEnabled            = headless.SettingKey
+	SettingHeadlessTasksEnabledStored      = headless.SettingKey + ".stored"
+	SettingHeadlessTasksEnabledOverride    = headless.SettingKey + ".override"
 	SettingDBLastBackupAt                  = "db.last_backup_at"
 )
 
@@ -294,6 +296,10 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingNotebookNarrateWorkspaceEnabled] = strconv.FormatBool(d.notebookWorkspaceNarrationEnabled())
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
 	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
+	settings[SettingHeadlessTasksEnabledStored] = strconv.FormatBool(d.headlessTasksStored())
+	if raw, ok := headless.Override(); ok {
+		settings[SettingHeadlessTasksEnabledOverride] = raw
+	}
 	settings[SettingChiefContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingChiefContextWindowCap]))
 	settings[SettingHeadlessContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingHeadlessContextWindowCap]))
 	settings[SettingActivityEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingActivityEnabled]))
@@ -417,12 +423,19 @@ func (d *Daemon) applyHeadlessContextWindowCap() {
 	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.store.GetSetting(SettingHeadlessContextWindowCap)))
 }
 
+func (d *Daemon) headlessTasksStored() bool {
+	if d.store == nil {
+		return true
+	}
+	value, ok := headless.ParseSwitch(d.store.GetSetting(SettingHeadlessTasksEnabled))
+	return !ok || value
+}
+
 func (d *Daemon) applyHeadlessTasksMode() {
 	if d.store == nil {
 		return
 	}
-	value, ok := headless.ParseSwitch(d.store.GetSetting(SettingHeadlessTasksEnabled))
-	headless.SetStoredEnabled(!ok || value)
+	headless.SetStoredEnabled(d.headlessTasksStored())
 	d.logf("headless tasks: %s", headless.Describe())
 }
 
