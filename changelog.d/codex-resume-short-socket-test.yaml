@@ -1,0 +1,6 @@
+kind: internal
+area: tests
+change: >
+  The Codex resume end-to-end test now keeps its daemon socket under a short
+  temporary path, so deep checkout paths cannot exceed the platform's Unix
+  socket limit.
