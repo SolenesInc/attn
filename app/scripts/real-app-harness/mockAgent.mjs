@@ -326,8 +326,8 @@ export function messageRecords({ agent, role, text, sequence, model = MOCK_AGENT
   return records;
 }
 
-export function transcriptTurns(text) {
-  const turns = [];
+export function transcriptMessages(text) {
+  const messages = [];
   for (const line of String(text).split('\n')) {
     if (!line.trim()) continue;
     let entry;
@@ -341,9 +341,13 @@ export function transcriptTurns(text) {
     const message = claude?.role ? claude : (payload?.type === 'message' ? payload : null);
     if (!message || !Array.isArray(message.content)) continue;
     const spoken = message.content.map((block) => block?.text || '').join('');
-    if (spoken && !spoken.startsWith('<!-- attn:state=')) turns.push({ role: message.role, text: spoken });
+    if (spoken) messages.push({ role: message.role, text: spoken });
   }
-  return turns;
+  return messages;
+}
+
+export function transcriptTurns(text) {
+  return transcriptMessages(text).filter((message) => !message.text.startsWith('<!-- attn:state='));
 }
 
 function firstFileEndingWith(root, suffix) {
@@ -438,7 +442,11 @@ async function runMockAgent() {
       notice(`no transcript for ${launch.resumeSessionId}; starting a fresh conversation`);
       return false;
     }
-    for (const turn of transcriptTurns(fs.readFileSync(found, 'utf8'))) {
+    const earlier = fs.readFileSync(found, 'utf8');
+    // The resumed process keeps counting where the transcript stopped: attn keys a
+    // claude cost observation on the message id and drops a repeated usage value.
+    sequence = transcriptMessages(earlier).length;
+    for (const turn of transcriptTurns(earlier)) {
       blocks.push(turn.role === 'assistant' ? `• ${turn.text.replaceAll('\n', '\n  ')}` : `${flavor.prompt}${turn.text}`);
     }
     openConversation(launch.resumeSessionId, found, { headerWritten: true, recordLaunch: true });

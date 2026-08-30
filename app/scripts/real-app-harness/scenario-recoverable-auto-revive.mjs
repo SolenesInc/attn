@@ -75,6 +75,26 @@ function registeredWorkerPid(dataDir, sessionId) {
   return null;
 }
 
+function sessionCostJson(dbPath, sessionId) {
+  const sql = `SELECT session_cost_json FROM sessions WHERE id = '${sessionId.replaceAll("'", "''")}' LIMIT 1;`;
+  try {
+    const raw = execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8' }).trim();
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function costObservationCount(cost) {
+  return Object.keys(cost?.observations || {}).length;
+}
+
+function costTokenTotal(cost) {
+  return Object.values(cost?.ledger || {}).reduce((total, usage) => {
+    return total + Object.values(usage || {}).reduce((sum, value) => sum + (typeof value === 'number' ? value : 0), 0);
+  }, 0);
+}
+
 function processAlive(pid) {
   if (!pid) return false;
   try {
@@ -115,6 +135,8 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
   const token = `REVIVED${Date.now()}`;
+  const secondToken = `AGAIN${Date.now()}`;
+  const dbPath = process.env.ATTN_DB_PATH || path.join(dataDir, 'attn.db');
   const repoDir = path.join(runner.sessionDir, 'target-repo');
   let sessionId = null;
   let paneId = null;
@@ -136,7 +158,10 @@ async function main() {
       writeMockAgentFixture(repoDir, {
         name: 'auto revive mock',
         resumable: true,
-        turns: [{ includes: token, actions: [{ type: 'reply', text: token }] }],
+        turns: [
+          { includes: token, actions: [{ type: 'reply', text: token }] },
+          { includes: secondToken, actions: [{ type: 'reply', text: secondToken }] },
+        ],
       });
     });
 
@@ -211,7 +236,7 @@ async function main() {
     });
     runner.log('worker auto-respawned and recoverable cleared', { revivedPid });
 
-    await runner.step('assert_the_revived_pane_carries_the_conversation', async () => {
+    const revivedPaneId = await runner.step('assert_the_revived_pane_carries_the_conversation', async () => {
       const pane = await waitForFirstWorkspacePane(client, sessionId, 'pane after revive', 20_000);
       const revived = await waitForPaneText(
         client,
@@ -224,9 +249,52 @@ async function main() {
       const text = revived?.text || '';
       runner.writeText('revived-pane.txt', text);
       runner.assert(!/Failed to attach PTY/.test(text), 'the revived pane shows no attach-failure banner');
+      return pane.paneId;
     });
 
-    const summary = await runner.finishSuccess({ sessionId, paneId, token, killedPid, revivedPid });
+    const costAfterRevive = await runner.step('assert_a_turn_after_the_revive_advances_the_cost_ledger', async () => {
+      const before = sessionCostJson(dbPath, sessionId);
+      await client.request('type_pane_via_ui', { sessionId, paneId: revivedPaneId, text: `Reply with exactly ${secondToken}` });
+      await client.request('type_pane_via_ui', { sessionId, paneId: revivedPaneId, text: '\n' });
+      await waitForPaneText(
+        client,
+        sessionId,
+        revivedPaneId,
+        (text) => text.split(secondToken).length > 2,
+        'the resumed session to answer a new prompt',
+        60_000,
+      );
+      const after = await pollFor(
+        () => {
+          const cost = sessionCostJson(dbPath, sessionId);
+          const advanced = costObservationCount(cost) > costObservationCount(before)
+            && costTokenTotal(cost) > costTokenTotal(before);
+          return advanced ? cost : null;
+        },
+        'the session cost ledger to advance after the resumed turn',
+        30_000,
+      );
+      runner.writeJson('cost-after-revive.json', { before, after });
+      for (const [id, observation] of Object.entries(before?.observations || {})) {
+        runner.assert(
+          JSON.stringify(after?.observations?.[id]) === JSON.stringify(observation),
+          'the resumed turn keeps every cost observation taken before the crash',
+          { observationId: id, before: observation, after: after?.observations?.[id] },
+        );
+      }
+      return after;
+    });
+
+    const summary = await runner.finishSuccess({
+      sessionId,
+      paneId,
+      token,
+      secondToken,
+      killedPid,
+      revivedPid,
+      costObservationsAfterRevive: costObservationCount(costAfterRevive),
+      costTokensAfterRevive: costTokenTotal(costAfterRevive),
+    });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     const summary = await runner.finishFailure(error, { sessionId, paneId, token });

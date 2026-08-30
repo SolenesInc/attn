@@ -7,5 +7,7 @@ change: >
   transcripts under the tool home's project folder, and claude's only once the
   session takes a turn — so a resume launch finds it, and the mock replays the
   earlier turns into the pane and appends to that same file. Codex `/new` binds
-  a successor rollout, and both flavors record token usage the way the daemon's
-  cost ledger reads it.
+  a successor rollout. Both flavors record token usage the way the daemon's cost
+  ledger reads it, and a resumed process keeps counting its messages where the
+  transcript stopped, so a turn after a restart advances the ledger instead of
+  overwriting what the session already spent.

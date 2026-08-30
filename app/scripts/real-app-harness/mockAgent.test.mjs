@@ -560,9 +560,17 @@ describe('mock agent conversations', () => {
       name: 'claude resume mock',
       resumable: true,
       minimumWorkingMs: 0,
-      turns: [{ includes: 'hello', actions: [{ type: 'reply', text: 'hello back' }] }],
+      turns: [
+        { includes: 'hello', actions: [{ type: 'reply', text: 'hello back' }] },
+        { includes: 'again', actions: [{ type: 'reply', text: 'still here' }] },
+      ],
     });
     const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const stops = () => calls().filter((call) => call.args[0] === '_hook-stop');
+    const assistantMessages = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.type === 'assistant')
+      .map((entry) => entry.message);
 
     child = startMock(['--session-id', 'attn-sess-7'], ledger, 'claude');
     const start = await waitFor(() => calls().find((call) => call.args[0] === '_hook-session-start'), 'the session start hook');
@@ -572,10 +580,25 @@ describe('mock agent conversations', () => {
     expect(fs.existsSync(transcript)).toBe(false);
 
     child.stdin.write('hello\r');
-    await waitFor(() => calls().find((call) => call.args[0] === '_hook-stop'), 'the turn to close');
-    const entries = fs.readFileSync(transcript, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
-    const assistant = entries.filter((entry) => entry.type === 'assistant');
-    expect(assistant[0].message.content[0].text).toBe('hello back');
-    expect(assistant[0].message.usage.input_tokens).toBeGreaterThan(0);
+    await waitFor(() => stops()[0], 'the first turn to close');
+    const first = assistantMessages(transcript);
+    expect(first[0].content[0].text).toBe('hello back');
+    expect(first[0].usage.input_tokens).toBeGreaterThan(0);
+    child.kill('SIGKILL');
+
+    child = startMock(['-r', 'attn-sess-7'], ledger, 'claude');
+    let painted = '';
+    child.stdout.on('data', (chunk) => { painted += chunk; });
+    await waitFor(() => (painted.includes('hello back') ? painted : null), 'the resumed pane to repaint the earlier reply');
+
+    child.stdin.write('again\r');
+    await waitFor(() => (stops().length > 1 ? stops()[1] : null), 'the turn after the resume to close');
+    const answered = assistantMessages(transcript).filter((message) => !message.content[0].text.startsWith('<!-- attn:state='));
+    expect(answered.map((message) => message.content[0].text)).toEqual(['hello back', 'still here']);
+    // attn keys a claude cost observation on the message id and drops a repeated
+    // usage value, so a resumed turn that reuses either overwrites the earlier one.
+    expect(new Set(assistantMessages(transcript).map((message) => message.id)).size)
+      .toBe(assistantMessages(transcript).length);
+    expect(answered[1].usage.input_tokens).toBeGreaterThan(answered[0].usage.input_tokens);
   });
 });
