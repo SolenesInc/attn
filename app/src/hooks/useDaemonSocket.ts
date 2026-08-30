@@ -1552,7 +1552,13 @@ export function useDaemonSocket({
             const review = data.review as GeneratedGardenReview | undefined;
             if (!review) break;
             setSeedReviewOverview((current) => {
-              if (current.review && current.review.run.id !== review.run.id) return current;
+              if (current.review && current.review.run.id !== review.run.id) {
+                const currentCapturedAt = Date.parse(current.review.run.captured_at);
+                const nextCapturedAt = Date.parse(review.run.captured_at);
+                if (Number.isFinite(currentCapturedAt)
+                  && Number.isFinite(nextCapturedAt)
+                  && nextCapturedAt < currentCapturedAt) return current;
+              }
               return {
                 candidateCount: review.items.filter((item) => item.resolution === 'unresolved').length,
                 review,

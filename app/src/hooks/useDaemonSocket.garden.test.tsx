@@ -138,12 +138,13 @@ describe('useDaemonSocket garden', () => {
     };
   }
 
-  function review(items = [reviewItem()]) {
+  function review(items = [reviewItem()], runOverrides: Record<string, unknown> = {}) {
     return {
       run: {
         id: 'r-1', candidate_ids: items.map((item) => item.seed_id),
         recipe: { agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' },
         status: 'running', captured_at: '2026-08-30T10:00:00Z',
+        ...runOverrides,
       },
       items,
     };
@@ -236,6 +237,47 @@ describe('useDaemonSocket garden', () => {
       });
     });
     expect(hook.result.current.seedReviewOverview.review?.items[0].recommendation).toBe('harvest');
+  });
+
+  it('moves the overview to a newer review run and rejects an older broadcast', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.sendSeedReviewShow();
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw)).find((message) => message.cmd === 'seed_review_show');
+
+    act(() => {
+      ws.emit({
+        event: 'seed_review_result', request_id: command.request_id, operation: 'show',
+        success: true, candidate_count: 0,
+        review: review([], { id: 'r-old', status: 'completed', captured_at: '2026-08-30T10:00:00Z' }),
+      });
+    });
+    await expect(pending).resolves.toEqual(expect.objectContaining({ candidateCount: 0 }));
+
+    act(() => {
+      ws.emit({
+        event: 'garden_review_updated',
+        review: review(
+          [reviewItem({ id: 'r-new.s-review1', run_id: 'r-new' })],
+          { id: 'r-new', captured_at: '2026-08-30T11:00:00Z' },
+        ),
+      });
+    });
+    expect(hook.result.current.seedReviewOverview.review?.run.id).toBe('r-new');
+    expect(hook.result.current.seedReviewOverview.candidateCount).toBe(1);
+
+    act(() => {
+      ws.emit({
+        event: 'garden_review_updated',
+        review: review(
+          [reviewItem({ recommendation: 'wither' })],
+          { id: 'r-old', captured_at: '2026-08-30T10:00:00Z' },
+        ),
+      });
+    });
+    expect(hook.result.current.seedReviewOverview.review?.run.id).toBe('r-new');
   });
 
   it('sends the review receipt with a lifecycle move', async () => {
