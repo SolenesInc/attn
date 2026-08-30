@@ -302,7 +302,7 @@ async function main() {
       runner.assert(turnIds(queue)[1] === beta.sessionId, 'it came back at the tail');
     });
 
-    await runner.step('the_timer_wakes_it_on_its_own', async () => {
+    await runner.step('the_deadline_wakes_it_on_its_own', async () => {
       const until = snoozeUntil(beta.sessionId, 8_000);
       runner.log('deferred by the daemon command', { until });
       await waitForTurns(client, [alpha.sessionId], 'the short deferral to close the turn');
@@ -312,12 +312,12 @@ async function main() {
           const current = await queueState(client);
           return turnIds(current).length === 2 ? current : null;
         },
-        'the wake timer to put it back by itself',
+        'the wake deadline to put it back by itself',
         45_000,
       );
       runner.assert(
         JSON.stringify(turnIds(queue)) === JSON.stringify([alpha.sessionId, beta.sessionId]),
-        `the timer woke it to the tail: ${JSON.stringify(turnIds(queue))}`,
+        `the deadline woke it to the tail: ${JSON.stringify(turnIds(queue))}`,
       );
       runner.assert(
         !queue.snoozed.present,

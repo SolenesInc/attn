@@ -24,7 +24,6 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 		d.stopAllTranscriptWatchers()
 		d.stopNudgeCountdowns()
 		d.stopAutoSettleTimers()
-		d.stopSnoozeTimers()
 		d.stopNotebookWatcher()
 		d.stopFsWatchers()
 		d.pluginDriverSilence().stop()

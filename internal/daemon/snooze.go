@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/attention"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statetrace"
 )
@@ -12,10 +15,10 @@ import (
 // Snooze suppresses turns as they would OPEN, not at read like the
 // shell/chief/pinned/muted exclusions.
 
-// firesAt exists because time.Timer exposes no deadline accessor.
-type snoozeTimer struct {
-	timer   *time.Timer
-	firesAt time.Time
+const snoozeWakeKind = "session_snooze_wake"
+
+type snoozeWakePayload struct {
+	Deadline time.Time `json:"deadline"`
 }
 
 // The client owns the arithmetic: "tomorrow" needs a timezone and locale a
@@ -33,12 +36,16 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) {
 		d.logf("snooze rejected: session=%s bad until=%q: %v", sessionID, msg.Until, err)
 		return
 	}
+	d.snoozeMu.Lock()
+	defer d.snoozeMu.Unlock()
 	if !d.store.SnoozeTurn(sessionID, until, time.Now()) {
 		return
 	}
 	d.cancelAutoSettle(sessionID, "snoozed")
 	d.traceSettle(sessionID)
-	d.scheduleSnoozeWake(sessionID, until)
+	if !d.scheduleSnoozeWake(sessionID, until) {
+		return
+	}
 	d.broadcastSessionStateChanged(sessionID)
 }
 
@@ -57,17 +64,31 @@ func (d *Daemon) wakeSnooze(sessionID string, at time.Time, cause string) {
 	if d == nil || d.store == nil || sessionID == "" {
 		return
 	}
-	d.cancelSnoozeWake(sessionID)
-	if !d.store.WakeTurn(sessionID) {
+	d.snoozeMu.Lock()
+	defer d.snoozeMu.Unlock()
+	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
+	if deadline.IsZero() {
+		return
+	}
+	d.removeSnoozeWake(sessionID)
+	if !d.applySnoozeWakeAt(sessionID, deadline, at) {
 		return
 	}
 	d.finishSnoozeWake(sessionID, at, cause)
 }
 
-func (d *Daemon) finishSnoozeWake(sessionID string, at time.Time, cause string) {
-	if session := d.store.Get(sessionID); session != nil && attention.OpensTurn(session.State) {
-		d.store.OpenTurnIfClosed(sessionID, d.turnOpensAtOnWake(sessionID, at))
+func (d *Daemon) applySnoozeWakeAt(sessionID string, deadline, at time.Time) bool {
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return false
 	}
+	if attention.OpensTurn(session.State) {
+		return d.store.WakeTurnAtAndOpenIfClosed(sessionID, deadline, d.turnOpensAtOnWake(sessionID, at))
+	}
+	return d.store.WakeTurnAt(sessionID, deadline)
+}
+
+func (d *Daemon) finishSnoozeWake(sessionID string, at time.Time, cause string) {
 	if d.debugLogging {
 		d.logf("snooze woken: session=%s cause=%s", sessionID, cause)
 	}
@@ -102,122 +123,151 @@ func (d *Daemon) snoozeSuppressesTurn(sessionID string, state protocol.SessionSt
 	if d == nil || d.store == nil {
 		return false
 	}
-	if d.store.TurnStamps(sessionID).SnoozedUntil.IsZero() {
+	d.snoozeMu.Lock()
+	defer d.snoozeMu.Unlock()
+	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
+	if deadline.IsZero() {
 		return false
 	}
 	reason := d.stateReasons().get(sessionID)
-	if !attention.BreaksSnooze(state, reason) {
+	expired := !deadline.After(time.Now())
+	if !expired && !attention.BreaksSnooze(state, reason) {
 		return true
 	}
-	d.cancelSnoozeWake(sessionID)
-	d.store.WakeTurn(sessionID)
+	if !d.store.WakeTurnAt(sessionID, deadline) {
+		return !d.store.TurnStamps(sessionID).SnoozedUntil.IsZero()
+	}
+	d.removeSnoozeWake(sessionID)
 	if d.debugLogging {
-		d.logf("snooze broken: session=%s state=%s reason=%s", sessionID, state, reason)
+		cause := "broken"
+		if expired {
+			cause = "expired"
+		}
+		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, reason)
 	}
 	return false
 }
 
-func (d *Daemon) scheduleSnoozeWake(sessionID string, until time.Time) {
-	if d == nil || sessionID == "" {
-		return
-	}
-	d.snoozeMu.Lock()
-	defer d.snoozeMu.Unlock()
-	d.scheduleSnoozeWakeLocked(sessionID, until)
+func (d *Daemon) registerSnoozeWakeHandler(runner *jobs.Runner) error {
+	return runner.Register(snoozeWakeKind, d.snoozeWakeHandler)
 }
 
-func (d *Daemon) scheduleSnoozeWakeLocked(sessionID string, until time.Time) {
-	if d.snoozeTimers == nil {
-		d.snoozeTimers = make(map[string]*snoozeTimer)
+func (d *Daemon) enqueueSnoozeWake(sessionID string, deadline time.Time) error {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return jobs.ErrDisabled
 	}
-	if existing, ok := d.snoozeTimers[sessionID]; ok {
-		existing.timer.Stop()
+	delay := time.Until(deadline)
+	if delay < 0 {
+		delay = 0
 	}
-	window := time.Until(until)
-	if window < 0 {
-		window = 0
-	}
-	// Same ready-channel handshake as auto_settle.go: the closure blocks until `timer`
-	// is published, so a zero window firing immediately still reads a written value.
-	ready := make(chan struct{})
-	var timer *time.Timer
-	timer = time.AfterFunc(window, func() {
-		<-ready
-		d.fireSnoozeWake(sessionID, timer, until)
+	_, err := runner.Enqueue(snoozeWakeKind, jobs.EnqueueOptions{
+		UniqueKey: sessionID,
+		Payload:   snoozeWakePayload{Deadline: deadline.UTC()},
+		Delay:     delay,
 	})
-	d.snoozeTimers[sessionID] = &snoozeTimer{timer: timer, firesAt: until}
-	close(ready)
+	return err
 }
 
-// Two staleness checks: the identity check under the lock catches a lost
-// cancel-or-replace race, and WakeTurnAt one made after the lock is dropped.
-func (d *Daemon) fireSnoozeWake(sessionID string, self *time.Timer, deadline time.Time) {
-	d.snoozeMu.Lock()
-	entry, ok := d.snoozeTimers[sessionID]
-	if !ok || entry.timer != self {
-		d.snoozeMu.Unlock()
-		return
-	}
-	delete(d.snoozeTimers, sessionID)
-	d.snoozeMu.Unlock()
-
-	if d.snoozeWakeHook != nil {
-		defer d.snoozeWakeHook(sessionID)
-	}
-	if d.snoozeWakeGapHook != nil {
-		d.snoozeWakeGapHook(sessionID)
-	}
-	if d.store == nil {
-		return
-	}
-	if !d.store.WakeTurnAt(sessionID, deadline) {
-		if d.debugLogging {
-			d.logf("snooze wake superseded: session=%s deadline=%s", sessionID, deadline.UTC().Format(time.RFC3339Nano))
+func (d *Daemon) scheduleSnoozeWake(sessionID string, deadline time.Time) bool {
+	if err := d.enqueueSnoozeWake(sessionID, deadline); err != nil {
+		d.logf("snooze wake schedule failed: session=%s: %v", sessionID, err)
+		at := time.Now()
+		if d.applySnoozeWakeAt(sessionID, deadline, at) {
+			d.finishSnoozeWake(sessionID, at, "schedule_failed")
+		} else {
+			d.broadcastSessionStateChanged(sessionID)
 		}
-		return
+		return false
 	}
-	d.finishSnoozeWake(sessionID, deadline, "deadline")
+	return true
 }
 
-func (d *Daemon) cancelSnoozeWake(sessionID string) {
-	if d == nil {
+func (d *Daemon) snoozeWakeHandler(ctx context.Context, job *jobs.Job) (any, error) {
+	if d == nil || d.store == nil {
+		return nil, nil
+	}
+	sessionID := strings.TrimSpace(jobSubject(job))
+	if sessionID == "" {
+		return nil, errors.New("session_snooze_wake requires a session id")
+	}
+	var payload snoozeWakePayload
+	if err := job.DecodePayload(&payload); err != nil {
+		return nil, err
+	}
+	if payload.Deadline.IsZero() {
+		return nil, errors.New("session_snooze_wake requires a deadline")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	changed, err := func() (bool, error) {
+		if job.CommitGuard != nil {
+			if !job.CommitGuard.Enter() {
+				return false, context.Canceled
+			}
+			defer job.CommitGuard.Leave()
+		}
+		return d.applySnoozeWakeAt(sessionID, payload.Deadline, payload.Deadline), nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+	if !changed {
+		if d.debugLogging {
+			d.logf("snooze wake superseded: session=%s deadline=%s", sessionID,
+				payload.Deadline.UTC().Format(time.RFC3339Nano))
+		}
+		return nil, nil
+	}
+	d.finishSnoozeWake(sessionID, payload.Deadline, "deadline")
+	return nil, nil
+}
+
+func (d *Daemon) removeSnoozeWake(sessionID string) {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
 		return
 	}
-	d.snoozeMu.Lock()
-	defer d.snoozeMu.Unlock()
-	if entry, ok := d.snoozeTimers[sessionID]; ok {
-		entry.timer.Stop()
-		delete(d.snoozeTimers, sessionID)
-	}
+	runner.RemoveByKey(snoozeWakeKind, sessionID)
 }
 
 func (d *Daemon) clearSnoozeState(sessionID string) {
-	d.cancelSnoozeWake(sessionID)
+	d.snoozeMu.Lock()
+	defer d.snoozeMu.Unlock()
+	d.removeSnoozeWake(sessionID)
 }
 
-func (d *Daemon) stopSnoozeTimers() {
-	if d == nil {
+func (d *Daemon) reconcileSnoozeWakeJobs() {
+	if d == nil || d.store == nil {
+		return
+	}
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
 		return
 	}
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
-	for id, entry := range d.snoozeTimers {
-		entry.timer.Stop()
-		delete(d.snoozeTimers, id)
+
+	snoozed := d.store.SnoozedSessions()
+	queued, err := runner.List()
+	if err != nil {
+		d.logf("snooze wake reconcile: list jobs: %v", err)
+	} else {
+		for _, job := range queued {
+			if job.Kind == snoozeWakeKind {
+				if _, live := snoozed[job.UniqueKey]; !live {
+					runner.Remove(job.ID)
+				}
+			}
+		}
+	}
+	for sessionID, deadline := range snoozed {
+		d.scheduleSnoozeWake(sessionID, deadline)
 	}
 }
 
-func (d *Daemon) rescheduleSnoozeWakes() {
-	if d == nil || d.store == nil {
-		return
-	}
-	for sessionID, until := range d.store.SnoozedSessions() {
-		d.scheduleSnoozeWake(sessionID, until)
-	}
-}
-
-// Leaves a lapsed deadline off: the wake is racing this broadcast, and
-// announcing it would park the row snoozed until the timer lands.
+// Leaves a lapsed deadline off while the overdue wake job catches up.
 func (d *Daemon) decorateSessionWithSnooze(session *protocol.Session) {
 	if session == nil || d.store == nil {
 		return

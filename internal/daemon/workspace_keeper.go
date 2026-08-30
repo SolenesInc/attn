@@ -190,6 +190,9 @@ func (d *Daemon) startJobQueue() {
 	// observes a half-registered runner.
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
+		if err := d.registerSnoozeWakeHandler(runner); err != nil {
+			d.logf("snooze wake: register session_snooze_wake: %v", err)
+		}
 		if err := runner.RegisterWith(
 			compactContextKind,
 			d.compactContextHandler,
@@ -291,7 +294,9 @@ func (d *Daemon) startJobQueue() {
 	if err := runner.Start(); err != nil {
 		// A queue that failed to start still accepts Enqueue and dispatches nothing.
 		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
+		return
 	}
+	d.reconcileSnoozeWakeJobs()
 }
 
 func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.WorkspaceContext) {
