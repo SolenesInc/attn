@@ -172,11 +172,7 @@ export class UiAutomationClient {
       manifestPid = null;
     }
 
-    const { pids: ownedPids, staleManifest } = this.platform.ownedPids({
-      appPath: this.appPath,
-      manifestPid,
-      launch: this.launch,
-    });
+    const { pids: ownedPids, staleManifest } = this.#ownedPids(manifestPid);
     if (staleManifest) {
       this.#removeManifest();
     }
@@ -185,27 +181,45 @@ export class UiAutomationClient {
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
+      const stillOwned = this.#ownedPids(manifestPid).pids;
       const appPids = await this.listAppPids();
-      if (!ownedPids.some(processExists) && appPids.length === 0) {
+      if (!stillOwned.some(processExists) && appPids.length === 0) {
         this.launch = null;
         return;
       }
       await delay(200);
     }
 
-    const remainingPids = await this.listAppPids();
-    for (const pid of livePids([...ownedPids, ...remainingPids])) {
+    let escalating = this.#stillOwnedPids(manifestPid, ownedPids);
+    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {}
     }
     await delay(500);
-    for (const pid of livePids([...ownedPids, ...await this.listAppPids()])) {
+    escalating = this.#stillOwnedPids(manifestPid, escalating);
+    for (const pid of livePids([...escalating, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGKILL');
       } catch {}
     }
     this.launch = null;
+  }
+
+  #ownedPids(manifestPid) {
+    return this.platform.ownedPids({ appPath: this.appPath, manifestPid, launch: this.launch });
+  }
+
+  // A pid that stopped passing the ownership fence may already name a stranger
+  // that reused the number, so escalation drops it instead of signalling it.
+  #stillOwnedPids(manifestPid, previous) {
+    const { pids } = this.#ownedPids(manifestPid);
+    for (const pid of previous) {
+      if (!pids.includes(pid)) {
+        console.warn(`[RealAppHarness] pid ${pid} is no longer ours; skipping escalation signal.`);
+      }
+    }
+    return pids;
   }
 
   #removeManifest() {
