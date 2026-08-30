@@ -1,3 +1,0 @@
-kind: internal
-area: tests
-change: Browser tests keep agent transcripts inside their isolated temporary world.

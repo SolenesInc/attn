@@ -1,9 +1,0 @@
-kind: added
-area: sessions
-change: >
-  A session now records the pull requests its agent opens. A Claude Code or
-  Codex agent running "gh pr create" is reported by the tool-use hook, and
-  "attn pr record <url>" is the way in for every other harness and for a pull
-  request opened by hand — with "attn pr ls" to see them and "attn pr forget"
-  to drop one. Recording the same pull request twice is a no-op, so a hook and
-  a manual report costing nothing is the point. The app surfaces come next.

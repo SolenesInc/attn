@@ -11,7 +11,7 @@ example: $0 v0.12.0
          $0 v0.12.1 --hotfix
 
 Freeze the accepted ${remote}/next head into release/vX.Y.Z, compile its
-changelog, bump versions, write the release manifest, and open a draft PR to
+changelog, bump versions, write the release manifest, and open a PR to
 main. With --hotfix, prepare the current hotfix/* branch in place from the
 current ${remote}/main instead. With --hold, prepare a promotion that may merge
 to main after normal CI but cannot create a tag or dispatch a release. This
@@ -196,7 +196,7 @@ Candidate preparation dry run
 ${acceptance_line}
 - main baseline: ${main_sha}
 - branch: ${release_branch}
-- would compile the changelog, update versions, write the manifest, and open a draft PR
+- would compile the changelog, update versions, write the manifest, and open a PR ready for review
 - would not merge, tag, or dispatch a release
 EOF
   exit 0
@@ -359,10 +359,10 @@ fi
 
 echo "Pushing ${release_branch}..."
 git push -u "$remote" "$release_branch"
-pr_url="$(gh pr create --draft --base main --head "$release_branch" \
+pr_url="$(gh pr create --base main --head "$release_branch" \
   --title "$pr_title" --body-file "$body")"
 
-echo "Opened draft candidate ${pr_url}"
+echo "Opened candidate ${pr_url}"
 if [[ "$publication" == held ]]; then
   echo "Next: review the changelog and merge after normal PR CI is green."
 else

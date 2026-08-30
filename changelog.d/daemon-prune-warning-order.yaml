@@ -1,5 +1,0 @@
-kind: internal
-area: testing
-change: >
-  The daemon startup-pruning test now finds its warning by code, so unrelated
-  startup warnings cannot make Linux CI fail when GitHub CLI is unavailable.

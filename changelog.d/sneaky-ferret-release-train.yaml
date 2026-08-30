@@ -1,5 +1,0 @@
-kind: internal
-area: release
-change: >
-  Release preparation now shares one tested policy for version agreement,
-  frozen candidate validation, changelog facts, and main-to-next fragment sync.

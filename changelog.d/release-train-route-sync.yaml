@@ -1,5 +1,0 @@
-kind: internal
-area: release
-change: >
-  Route normal pull requests through next and provide a guarded,
-  merge-preserving command for synchronizing accepted main changes back.

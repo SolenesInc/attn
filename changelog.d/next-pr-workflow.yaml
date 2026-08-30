@@ -1,5 +1,0 @@
-kind: internal
-area: contributing
-change: >
-  Use next for ordinary PRs, retain epic review, and shorten agent guidance
-  with explicit loading rules.

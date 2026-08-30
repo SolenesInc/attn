@@ -1,3 +1,0 @@
-kind: fixed
-area: release
-change: Release controller tests now pass after a candidate consumes every changelog fragment.

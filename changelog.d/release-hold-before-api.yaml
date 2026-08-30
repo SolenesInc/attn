@@ -1,0 +1,3 @@
+kind: fixed
+area: release
+change: Held releases stop before GitHub API calls, and stale train checks are cancelled.

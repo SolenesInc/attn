@@ -1,7 +1,0 @@
-kind: fixed
-area: linux
-change: >
-  The app can now replace a stale daemon that still owns its WebSocket port on
-  Linux, and the real-app harness can identify an agent by its working
-  directory there. Both paths now read Linux procfs instead of depending on
-  lsof, which Ubuntu does not install by default.

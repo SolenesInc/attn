@@ -270,7 +270,11 @@ if git --git-dir="$fixture_origin" ls-tree -r --name-only "$candidate_ref" \
   exit 1
 fi
 
-grep -q 'pr create --draft --base main --head release/v99.98.97' "$FAKE_GH_LOG"
+grep -q 'pr create --base main --head release/v99.98.97' "$FAKE_GH_LOG"
+if grep -Fq -- '--draft' "$FAKE_GH_LOG"; then
+  echo "candidate opened as a draft" >&2
+  exit 1
+fi
 for value in "$source_sha" "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
   'frozen changelog fragment' '--ref main' 'candidate_sha='; do
@@ -358,7 +362,7 @@ if [[ "$(git --git-dir="$fixture_origin" rev-list --count \
   exit 1
 fi
 
-grep -Fq 'pr create --draft --base main --head hotfix/startup-crash --title fix(app): repair startup crash' \
+grep -Fq 'pr create --base main --head hotfix/startup-crash --title fix(app): repair startup crash' \
   "$FAKE_GH_LOG"
 for value in "$hotfix_source_sha" "$released_main_sha" "$hotfix_candidate_sha" \
   'Final `PR gate` and `App acceptance`' '--ref main' \

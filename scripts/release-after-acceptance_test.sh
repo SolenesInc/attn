@@ -248,6 +248,10 @@ setup_fixture held
   --source "$baseline_sha" --main "$baseline_sha" >/dev/null)
 git -C "$fixture_repo" add .github/release-candidate.yml
 git -C "$fixture_repo" commit -q -m 'chore(release): hold publication'
+printf '%s\n' 'kind: fixed' 'area: release' 'change: held follow-up fixture' \
+  >"$fixture_repo/changelog.d/held-followup.yaml"
+git -C "$fixture_repo" add changelog.d/held-followup.yaml
+git -C "$fixture_repo" commit -q -m 'fix(release): follow up on held main'
 held_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 git -C "$fixture_repo" push -q origin main
 export FAKE_EXPECTED_SHA="$held_sha"
@@ -258,8 +262,8 @@ if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candida
   echo "held publication created a tag" >&2
   exit 1
 fi
-if grep -Eq 'updateRefs|app-acceptance.yml|/pulls|repos/example/attn/dispatches' "$FAKE_GH_LOG"; then
-  echo "held publication crossed the App acceptance, tag, or dispatch boundary" >&2
+if [ -s "$FAKE_GH_LOG" ]; then
+  echo "held publication called GitHub" >&2
   cat "$FAKE_GH_LOG" >&2
   exit 1
 fi
