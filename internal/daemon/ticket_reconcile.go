@@ -470,16 +470,12 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	if d.store == nil {
 		return
 	}
-	runner := d.headlessJobQueue(reconcileKind)
-	if runner == nil {
-		return
-	}
 	tickets, err := d.store.ListTickets(store.TicketListFilter{})
 	if err != nil {
 		d.logf("ticket reconcile sweep: list tickets: %v", err)
 		return
 	}
-	claims := 0
+	var candidates []*store.Ticket
 	for _, ticket := range tickets {
 		if ticket == nil {
 			continue
@@ -496,6 +492,18 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 			d.clearOrphanFirstSeen(ticket.ID)
 			continue
 		}
+		candidates = append(candidates, ticket)
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	runner := d.headlessJobQueue(reconcileKind)
+	if runner == nil {
+		return
+	}
+	claims := 0
+	for _, ticket := range candidates {
+		assignee := strings.TrimSpace(ticket.Assignee)
 		if existing, err := runner.GetByKey(reconcileKind, ticket.ID); err != nil {
 			d.logf("ticket reconcile sweep: lookup job for %s: %v", ticket.ID, err)
 			continue
