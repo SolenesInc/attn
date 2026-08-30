@@ -7,6 +7,10 @@ Run commands from the repository root.
 
 - Scenarios share one display; run serially. Batch with
   `pnpm --dir app run real-app:serial-matrix`.
+- A second run waits for the active one's lock, naming the holder. It waits as
+  long as the holder is alive and heartbeating (a matrix can hold for hours) and
+  gives up on a wedged holder (5 min without a heartbeat);
+  `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait (0 fails fast).
 - Profile: `ATTN_HARNESS_PROFILE` overrides `ATTN_PROFILE`, which defaults to `dev`.
   Production needs `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and explicit approval.
 - Install the current checkout; source fingerprint mismatches fail.

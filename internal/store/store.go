@@ -368,6 +368,9 @@ func (s *Store) Remove(id string) {
 	if _, err := s.db.Exec("DELETE FROM session_annotation_drafts WHERE session_id = ?", id); err != nil {
 		log.Printf("[store] Remove: failed to drop annotation draft for session %s: %v", id, err)
 	}
+	if _, err := s.db.Exec("DELETE FROM session_pull_requests WHERE session_id = ?", id); err != nil {
+		log.Printf("[store] Remove: failed to drop pull requests for session %s: %v", id, err)
+	}
 }
 
 func (s *Store) ClearSessions() {
@@ -391,6 +394,9 @@ func (s *Store) ClearSessions() {
 	}
 	if _, err := s.db.Exec("DELETE FROM session_annotation_drafts"); err != nil {
 		log.Printf("[store] ClearSessions: failed to clear annotation drafts: %v", err)
+	}
+	if _, err := s.db.Exec("DELETE FROM session_pull_requests"); err != nil {
+		log.Printf("[store] ClearSessions: failed to clear pull requests: %v", err)
 	}
 	_, err := s.db.Exec("DELETE FROM sessions")
 	if err != nil {
@@ -549,6 +555,12 @@ func (s *Store) RemoveSessionsInDirectory(directory string) {
 		return
 	}
 
+	// Foreign keys are off, so owned rows go first: after the sessions are gone
+	// there is nothing left to select them by.
+	if _, err := s.db.Exec(`DELETE FROM session_pull_requests
+		WHERE session_id IN (SELECT id FROM sessions WHERE directory = ?)`, directory); err != nil {
+		log.Printf("[store] RemoveSessionsInDirectory: failed to drop pull requests for directory %s: %v", directory, err)
+	}
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE directory = ?`, directory)
 	if err != nil {
 		log.Printf("[store] RemoveSessionsInDirectory: failed for directory %s: %v", directory, err)

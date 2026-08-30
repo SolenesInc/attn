@@ -1071,6 +1071,29 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{124, "one model list for both classifier passes", ``},
 	{125, "the environment becomes slots the rules can look up", ``},
 	{126, "seed slugs drop their stop words", ``},
+	{127, "pull requests a session's agent opened", `
+		CREATE TABLE IF NOT EXISTS session_pull_requests (
+			session_id        TEXT NOT NULL,
+			pr_id             TEXT NOT NULL,
+			repository        TEXT NOT NULL,
+			number            INTEGER NOT NULL,
+			url               TEXT NOT NULL,
+			created_at        TEXT NOT NULL,
+			title             TEXT NOT NULL DEFAULT '',
+			draft             INTEGER NOT NULL DEFAULT 0,
+			state             TEXT NOT NULL DEFAULT 'open',
+			ci_status         TEXT NOT NULL DEFAULT '',
+			review_status     TEXT NOT NULL DEFAULT '',
+			mergeable_state   TEXT NOT NULL DEFAULT '',
+			head_sha          TEXT NOT NULL DEFAULT '',
+			head_branch       TEXT NOT NULL DEFAULT '',
+			status_fetched_at TEXT NOT NULL DEFAULT '',
+			last_activity_at  TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY (session_id, pr_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_session_pull_requests_session
+			ON session_pull_requests(session_id, created_at DESC);
+	`},
 }
 
 const migration99SQL = `

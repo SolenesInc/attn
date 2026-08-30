@@ -54,6 +54,210 @@ describe('packaged app scenario lock', () => {
     expect(fs.existsSync(childLock)).toBe(false);
     expect(fs.existsSync(matrixLock)).toBe(false);
   });
+
+  function holdLock(lockDir, { scenarioId = 'TR-HOLDER', runId = 'holder-run' } = {}) {
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({
+      pid: process.pid,
+      scenarioId,
+      runId,
+      startedAt: '2026-08-30T00:00:00.000Z',
+    }), 'utf8');
+  }
+
+  it('waits for a live holder and acquires once it releases', () => {
+    const lockDir = path.join(tmpDir, 'wait.lock');
+    holdLock(lockDir);
+    const logs = [];
+    let sleeps = 0;
+    const release = acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, {
+      waitMs: 10_000,
+      pollMs: 100,
+      sleep: () => {
+        sleeps += 1;
+        if (sleeps === 2) {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        }
+      },
+      log: (message) => logs.push(message),
+    });
+
+    expect(sleeps).toBe(2);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('TR-WAITER: waiting for TR-HOLDER');
+    expect(JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8')).scenarioId).toBe('TR-WAITER');
+    release();
+    expect(fs.existsSync(lockDir)).toBe(false);
+  });
+
+  it('names the holder and the limit when the configured wait budget passes', () => {
+    const lockDir = path.join(tmpDir, 'deadline.lock');
+    holdLock(lockDir, { scenarioId: 'TR-STUCK', runId: 'stuck-run' });
+    let clock = Date.now();
+    expect(() => acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, {
+      waitMs: 5_000,
+      pollMs: 2_000,
+      now: () => clock,
+      sleep: (ms) => { clock += ms; },
+      log: () => {},
+    })).toThrow(/gave up after 5000ms \(ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS\) waiting for TR-STUCK \(pid \d+, run stuck-run/);
+    expect(JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8')).scenarioId).toBe('TR-STUCK');
+  });
+
+  it('keeps waiting on a live heartbeating matrix holder far past any single-scenario budget', () => {
+    const lockDir = path.join(tmpDir, 'matrix-wait.lock');
+    holdLock(lockDir, { scenarioId: 'SERIAL-MATRIX', runId: 'matrix-run' });
+    const ownerPath = path.join(lockDir, 'owner.json');
+    let clock = Date.now();
+    let sleeps = 0;
+    const release = acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, {
+      pollMs: 60_000,
+      now: () => clock,
+      sleep: (ms) => {
+        sleeps += 1;
+        clock += ms;
+        if (sleeps <= 30) {
+          fs.utimesSync(ownerPath, new Date(clock), new Date(clock));
+        } else {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        }
+      },
+      log: () => {},
+    });
+
+    expect(sleeps).toBe(31);
+    expect(JSON.parse(fs.readFileSync(ownerPath, 'utf8')).scenarioId).toBe('TR-WAITER');
+    release();
+  });
+
+  it('gives up on a live holder whose heartbeat has gone stale', () => {
+    const lockDir = path.join(tmpDir, 'wedged.lock');
+    holdLock(lockDir, { scenarioId: 'TR-WEDGED', runId: 'wedged-run' });
+    let clock = Date.now();
+    expect(() => acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, {
+      pollMs: 60_000,
+      now: () => clock,
+      sleep: (ms) => { clock += ms; },
+      log: () => {},
+    })).toThrow(/looks wedged: TR-WEDGED \(pid \d+.*has not heartbeat .* \(threshold 300000ms\)/);
+    expect(JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8')).scenarioId).toBe('TR-WEDGED');
+  });
+
+  it('forgives a single stale poll so a wake-from-sleep race does not fail the waiter', () => {
+    const lockDir = path.join(tmpDir, 'wake.lock');
+    holdLock(lockDir);
+    const ownerPath = path.join(lockDir, 'owner.json');
+    let clock = Date.now();
+    let sleeps = 0;
+    const release = acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, {
+      pollMs: 2_000,
+      now: () => clock,
+      sleep: (ms) => {
+        sleeps += 1;
+        clock += ms;
+        if (sleeps === 1) {
+          clock += 400_000;
+        } else if (sleeps === 2) {
+          fs.utimesSync(ownerPath, new Date(clock), new Date(clock));
+        } else {
+          fs.rmSync(lockDir, { recursive: true, force: true });
+        }
+      },
+      log: () => {},
+    });
+
+    expect(sleeps).toBe(3);
+    expect(JSON.parse(fs.readFileSync(ownerPath, 'utf8')).scenarioId).toBe('TR-WAITER');
+    release();
+  });
+
+  it('heartbeats owner.json while held and stops on release', () => {
+    vi.useFakeTimers();
+    try {
+      const lockDir = path.join(tmpDir, 'beat.lock');
+      const release = acquireScenarioLock({
+        scenarioId: 'TR-HOLDER',
+        tier: 'test',
+        runId: 'holder-run',
+        runDir: tmpDir,
+        appPath: '/tmp/test-attn.app',
+      }, lockDir);
+      const ownerPath = path.join(lockDir, 'owner.json');
+      fs.utimesSync(ownerPath, new Date(1000), new Date(1000));
+      vi.advanceTimersByTime(15_000);
+      expect(fs.statSync(ownerPath).mtimeMs).toBeGreaterThan(1_000_000);
+      release();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails fast without sleeping when the wait budget is zero', () => {
+    const lockDir = path.join(tmpDir, 'failfast.lock');
+    holdLock(lockDir);
+    const sleep = vi.fn();
+    expect(() => acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, { waitMs: 0, sleep, log: () => {} })).toThrow(/single-tenant/);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('still reclaims a dead holder immediately', () => {
+    const lockDir = path.join(tmpDir, 'dead.lock');
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({
+      pid: 2 ** 30,
+      scenarioId: 'TR-DEAD',
+      runId: 'dead-run',
+    }), 'utf8');
+    const sleep = vi.fn();
+    const release = acquireScenarioLock({
+      scenarioId: 'TR-WAITER',
+      tier: 'test',
+      runId: 'waiter-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, lockDir, { waitMs: 0, sleep, log: () => {} });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8')).scenarioId).toBe('TR-WAITER');
+    release();
+  });
 });
 
 function runnerWithTripwire({

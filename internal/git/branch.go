@@ -302,7 +302,14 @@ func GetHeadCommitInfo(repoDir string) (hash string, time string) {
 	return "", ""
 }
 
+// GetDefaultBranch is the branch new worktrees start from: `git config
+// attn.baseBranch` when set, else origin/HEAD, else main or master.
 func GetDefaultBranch(repoDir string) (string, error) {
+	if out, err := runGitOutput(OpMetadata, repoDir, "config", "--get", "attn.baseBranch"); err == nil {
+		if branch := strings.TrimSpace(string(out)); branch != "" {
+			return branch, nil
+		}
+	}
 	out, err := runGitOutput(OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err == nil {
 		ref := strings.TrimSpace(string(out))

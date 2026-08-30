@@ -233,11 +233,14 @@ func runPRCommand() {
 }
 
 func executePRCommand(args []string, stdout, stderr io.Writer) int {
-	if (len(args) == 1 && isHelpArg(args[0])) || (len(args) == 2 && args[0] == "wait-ready" && isHelpArg(args[1])) {
+	if (len(args) == 1 && isHelpArg(args[0])) || (len(args) == 2 && isHelpArg(args[1])) {
 		writePRHelp(stdout)
 		return 0
 	}
-	if len(args) == 0 || args[0] != "wait-ready" {
+	switch {
+	case len(args) > 0 && (args[0] == "record" || args[0] == "forget" || args[0] == "ls"):
+		return executeSessionPRCommand(args[0], args[1:], stdout, stderr)
+	case len(args) == 0 || args[0] != "wait-ready":
 		writePRHelp(stderr)
 		return prWaitExitUsage
 	}
@@ -1011,7 +1014,20 @@ func shortSHA(sha string) string {
 }
 
 func writePRHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn pr wait-ready <number-or-url> --reviewer <login> [options]
+	fmt.Fprint(w, `usage: attn pr <command>
+
+commands:
+  wait-ready <number-or-url> --reviewer <login>   wait for an actionable update
+  record <url> [--session <id>]                   record a pull request this session opened
+  ls [--session <id>] [--json]                    list the pull requests a session opened
+  forget <url> [--session <id>]                   drop one from the session's list
+
+record/ls/forget default to the session in ATTN_SESSION_ID. A Claude Code or
+Codex session records its own "gh pr create" through the tool-use hook; record is
+the way in for every other harness and for a pull request opened by hand. Recording
+the same pull request twice is a no-op, so a double report costs nothing.
+
+attn pr wait-ready <number-or-url> --reviewer <login> [options]
 
 Wait until a pull request has an actionable update: it closes, a check fails, the
 reviewer requests changes, a human comments, a bot comments, or the reviewer

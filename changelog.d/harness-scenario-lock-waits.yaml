@@ -1,0 +1,10 @@
+kind: changed
+area: harness
+change: >
+  A packaged-app scenario run that finds the single-tenant lock held no longer
+  fails on the spot: it waits for the holder, printing who holds the lock. The
+  holder heartbeats the lock while it runs, so a healthy serial matrix can be
+  waited out for hours, while a wedged holder (alive but 5 minutes without a
+  heartbeat) is given up on with the holder named.
+  `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait; 0 restores the
+  old fail-fast.

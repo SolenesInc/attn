@@ -17,6 +17,19 @@ export interface AutomationProvenance {
   readonly pull_request?: PullRequestProvenance
 }
 
+export interface SessionPullRequest {
+  readonly repository: string
+  readonly number: number
+  readonly url: string
+  readonly title?: string
+  readonly created_at: string
+  readonly state: string
+  readonly ci_status?: string
+  readonly review_status?: string
+  readonly mergeable_state?: string
+  readonly status_fetched_at?: string
+}
+
 export interface Session {
   readonly activity?: string
   readonly activity_at?: string
@@ -43,6 +56,7 @@ export interface Session {
   readonly nudge_fires_at?: string
   readonly parent_session_id?: string
   readonly pinned_at?: string
+  readonly pull_requests?: readonly SessionPullRequest[]
   readonly seed_id?: string
   readonly state: "idle" | "launching" | "pending_approval" | "recoverable" | "scheduled" | "unknown" | "waiting_input" | "working"
   readonly state_reason?: string

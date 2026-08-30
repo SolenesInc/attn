@@ -35,6 +35,7 @@ const (
 	FactSessionCostChanged            = "session.cost.changed"
 	FactSessionTerminalBuildChanged   = "session.terminal_build.changed"
 	FactSessionConversationChanged    = "session.conversation.changed"
+	FactSessionPullRequestChanged     = "session.pull_request.changed"
 
 	FactWorktreeSessionsRemoved = "worktree.sessions.removed"
 
@@ -194,6 +195,10 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactSessionConversationChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
+		},
+		{
+			filter: bus.Filter{FactSessionPullRequestChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{

@@ -128,6 +128,22 @@ model PullRequestProvenance {
   head_sha: string;
 }
 
+// SessionPullRequest is a pull request an agent opened from inside a session,
+// reported by the tool-use hook or `attn pr record`. Status fields stay absent
+// until the refresh job has fetched them from GitHub once.
+model SessionPullRequest {
+  repository: string;           // host/owner/repository, same convention as PullRequestProvenance
+  number: int32;
+  url: string;
+  title?: string;
+  created_at: string;           // ISO timestamp the session reported it
+  state: string;                // draft | open | merged | closed
+  ci_status?: string;           // success, failure, pending, none — the PR vocabulary
+  review_status?: string;       // approved, changes_requested, pending, none
+  mergeable_state?: string;     // clean, blocked, dirty, unstable
+  status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
+}
+
 // AutomationProvenance is a derived read model. The daemon joins existing
 // definition/run/occurrence rows when it builds wire snapshots; sessions and
 // tickets do not persist a second copy.
@@ -175,6 +191,7 @@ model Session {
   cost_usd?: float64;           // Accrued token cost in USD. Present only after usage exists and every observed model has a price.
   cost_unknown?: boolean;       // True after usage exists when any observed model has no price. Mutually exclusive with cost_usd; both absent means no usage yet.
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
+  pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
   terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   todos?: string[];             // Optional: can be empty/absent
   last_seen: string;            // ISO timestamp, always set
@@ -814,6 +831,21 @@ model FilesEditedMessage {
   cmd: "files_edited";
   id: string;
   paths: string[];
+}
+
+// A pull request the session's agent just opened. The daemon owns validation
+// (known host, parseable number) and dedup, so a repeated report is a no-op.
+model PullRequestCreatedMessage {
+  cmd: "pull_request_created";
+  id: string;
+  url: string;
+}
+
+// The way out: drops one recorded pull request from a session.
+model PullRequestForgetMessage {
+  cmd: "pull_request_forget";
+  id: string;
+  url: string;
 }
 
 model DelegateMessage {
