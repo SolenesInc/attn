@@ -91,7 +91,7 @@ describe('useDaemonSocket garden', () => {
 
   async function renderWithGarden(initialSeeds?: unknown[]) {
     const onSeedsUpdate = vi.fn();
-    renderHook(() =>
+    const hook = renderHook(() =>
       useDaemonSocket({
         onSessionsUpdate: vi.fn(),
         onWorkspacesUpdate: vi.fn(),
@@ -116,7 +116,37 @@ describe('useDaemonSocket garden', () => {
         ...(initialSeeds ? { seeds: initialSeeds } : {}),
       });
     });
-    return { ws, onSeedsUpdate };
+    return { ws, onSeedsUpdate, hook };
+  }
+
+  function reviewItem(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'r-1.s-review1',
+      run_id: 'r-1',
+      seed_id: 's-review1',
+      seed_rev: 4,
+      evidence_version: 'evidence-1',
+      title: 'Review this seed',
+      body: 'Check the outcome.',
+      evidence: [{ label: 'Review signal', text: 'The seed is stale.' }],
+      actions: ['handover', 'park', 'harvest', 'wither'],
+      status: 'ready',
+      resolution: 'unresolved',
+      recommendation: 'park',
+      explanation: 'Useful work remains, but it does not need an agent now.',
+      ...overrides,
+    };
+  }
+
+  function review(items = [reviewItem()]) {
+    return {
+      run: {
+        id: 'r-1', candidate_ids: items.map((item) => item.seed_id),
+        recipe: { agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' },
+        status: 'running', captured_at: '2026-08-30T10:00:00Z',
+      },
+      items,
+    };
   }
 
   it('seeds the garden from initial_state', async () => {
@@ -179,5 +209,138 @@ describe('useDaemonSocket garden', () => {
       [expect.objectContaining({ id: 's-ccc333' })],
       1,
     );
+  });
+
+  it('correlates the Review garden overview and keeps progressive updates', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.sendSeedReviewShow();
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw)).find((message) => message.cmd === 'seed_review_show');
+    expect(command).toBeTruthy();
+
+    act(() => {
+      ws.emit({
+        event: 'seed_review_result', request_id: command.request_id, operation: 'show',
+        success: true, candidate_count: 1, review: review(),
+      });
+    });
+    await expect(pending).resolves.toEqual(expect.objectContaining({ candidateCount: 1 }));
+    expect(hook.result.current.seedReviewOverview.review?.items[0].recommendation).toBe('park');
+
+    act(() => {
+      ws.emit({
+        event: 'garden_review_updated',
+        review: review([reviewItem({ recommendation: 'harvest', explanation: 'The work is done.' })]),
+      });
+    });
+    expect(hook.result.current.seedReviewOverview.review?.items[0].recommendation).toBe('harvest');
+  });
+
+  it('sends the review receipt with a lifecycle move', async () => {
+    const { ws, hook } = await renderWithGarden();
+    act(() => {
+      void hook.result.current.sendSeedTransition(
+        's-review1', 'park', undefined, undefined, 'Waiting for input.',
+        { reviewId: 'r-1', evidenceVersion: 'evidence-1' },
+      );
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw)).find((message) => message.cmd === 'seed_transition');
+    expect(command).toMatchObject({
+      seed_id: 's-review1',
+      verb: 'park',
+      comment: 'Waiting for input.',
+      review: { review_id: 'r-1', evidence_version: 'evidence-1' },
+    });
+  });
+
+  it('keeps a reviewed seed growing with its evidence receipt', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.sendSeedReviewKeep(
+        's-review1', { reviewId: 'r-1', evidenceVersion: 'evidence-1' },
+      );
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw)).find((message) => message.cmd === 'seed_review_keep');
+    expect(command).toMatchObject({
+      seed_id: 's-review1',
+      review: { review_id: 'r-1', evidence_version: 'evidence-1' },
+    });
+
+    act(() => {
+      ws.emit({
+        event: 'seed_review_result', request_id: command.request_id, operation: 'keep',
+        success: true, candidate_count: 0, review: review(),
+      });
+    });
+    await expect(pending).resolves.toEqual(expect.objectContaining({ candidateCount: 0 }));
+  });
+
+  it('returns an advisory handoff draft', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<string>;
+    act(() => {
+      pending = hook.result.current.sendSeedReviewDraft(
+        's-review1', { reviewId: 'r-1', evidenceVersion: 'evidence-1' },
+      );
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw)).find((message) => message.cmd === 'seed_review_draft');
+    expect(command).toMatchObject({
+      seed_id: 's-review1',
+      review: { review_id: 'r-1', evidence_version: 'evidence-1' },
+    });
+
+    act(() => {
+      ws.emit({
+        event: 'seed_review_draft_result', request_id: command.request_id,
+        success: true, handoff: 'Inspect the remaining edge and run the focused test.',
+      });
+    });
+    await expect(pending).resolves.toBe('Inspect the remaining edge and run the focused test.');
+  });
+
+  it('sends a guarded seed to Chief with optional placement guidance', async () => {
+    const { ws, hook } = await renderWithGarden();
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.sendSeedToChief({
+        seedId: 's-review1',
+        expectedRev: 4,
+        expectedTenderSession: 'sess-old',
+        expectedTenderMember: '',
+        sourceSessionId: 'sess-user',
+        guidance: 'Use branch feature/special under /tmp/special.',
+        review: { reviewId: 'r-1', evidenceVersion: 'evidence-1' },
+      });
+    });
+    const command = ws.sent.map((raw) => JSON.parse(raw))
+      .find((message) => message.cmd === 'seed_send_to_chief');
+    expect(command).toMatchObject({
+      source_session_id: 'sess-user',
+      seed_id: 's-review1',
+      expected_rev: 4,
+      expected_tender_session: 'sess-old',
+      expected_tender_member: '',
+      guidance: 'Use branch feature/special under /tmp/special.',
+      review: { review_id: 'r-1', evidence_version: 'evidence-1' },
+    });
+
+    const result = {
+      seed: seed('s-review1', 'Review this seed'),
+      chief_session_id: 'chief',
+      delivery_status: 'queued',
+      detail: 'queued for Chief',
+    };
+    act(() => {
+      ws.emit({
+        event: 'seed_send_to_chief_result',
+        request_id: command.request_id,
+        success: true,
+        result,
+      });
+    });
+    await expect(pending).resolves.toEqual(result);
   });
 });

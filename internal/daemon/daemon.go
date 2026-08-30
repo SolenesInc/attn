@@ -2333,12 +2333,16 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
 	case protocol.CmdSeedReviewStart: // wire: seed_review_start
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
+	case protocol.CmdSeedSendToChief: // wire: seed_send_to_chief
+		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage))
 	case protocol.CmdSeedReviewShow: // wire: seed_review_show
 		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
 	case protocol.CmdSeedReviewCancel: // wire: seed_review_cancel
 		d.handleSeedReviewCancel(conn, msg.(*protocol.SeedReviewCancelMessage))
 	case protocol.CmdSeedReviewRetry: // wire: seed_review_retry
 		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
+	case protocol.CmdSeedReviewKeep: // wire: seed_review_keep
+		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewList: // wire: crew_list
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake

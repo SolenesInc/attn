@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -54,6 +55,10 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 	if err != nil {
 		return gardenReviewCapture{}, err
 	}
+	reviewAgainAt, err := d.readGardenReviewAgainAt()
+	if err != nil {
+		return gardenReviewCapture{}, err
+	}
 	notes, newestNotes, err := d.readGardenReviewNotes()
 	if err != nil {
 		return gardenReviewCapture{}, err
@@ -61,15 +66,18 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
+	chiefAvailable := d.chiefOfStaffSessionID() != ""
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
 		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
 		continuation := d.continuationForSeed(seed)
 		directoryState := garden.ReviewDirectoryUnknown
 		resumeAvailable := false
+		handoverAvailable := false
 		if continuation != nil {
 			directoryState = garden.ReviewDirectoryState(continuation.DirectoryState)
 			resumeAvailable = continuation.ResumeAvailable
+			handoverAvailable = continuation.HandoverPlacement != handoverNeedsPlacement
 		}
 		observation := garden.ReviewObservation{
 			Seed:              seed,
@@ -80,6 +88,9 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 			TenderHolds:       seed.Tender().Holds(d.sessionExists),
 			DirectoryState:    directoryState,
 			ResumeAvailable:   resumeAvailable,
+			HandoverAvailable: handoverAvailable,
+			ChiefAvailable:    chiefAvailable,
+			ReviewAgainAt:     reviewAgainAt[seed.ID],
 		}
 		observations = append(observations, observation)
 		byID[seed.ID] = observation
@@ -211,11 +222,63 @@ func (capture gardenReviewCapture) reviewItem(candidate garden.ReviewCandidate) 
 }
 
 func gardenReviewActions(candidate garden.ReviewCandidate) []string {
-	actions := make([]string, 0, 5)
+	actions := make([]string, 0, 7)
 	if candidate.ResumeAvailable {
 		actions = append(actions, "resume")
 	}
-	return append(actions, "handover", "park", "harvest", "wither")
+	if candidate.HandoverAvailable {
+		actions = append(actions, "handover")
+	}
+	if candidate.ChiefAvailable {
+		actions = append(actions, "send_to_chief")
+	}
+	return append(actions, "keep_growing", "park", "harvest", "wither")
+}
+
+func gardenAdvisorActions(actions []string) []string {
+	result := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if action != "send_to_chief" {
+			result = append(result, action)
+		}
+	}
+	return result
+}
+
+func (d *Daemon) readGardenReviewAgainAt() (map[string]time.Time, error) {
+	result := make(map[string]time.Time)
+	after := ""
+	for {
+		read, _, err := d.runDocQuery(docstore.Query{
+			Namespace: garden.Namespace, Collection: garden.CollectionReviewItems,
+			Filters: []docstore.Filter{{Field: "resolution", Op: docstore.OpEq, Value: garden.ReviewResolutionResolved}},
+			Sort:    &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
+			Limit:   docstore.MaxLimit, After: after,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, doc := range read.Documents {
+			item, decodeErr := garden.DecodeReviewItem(doc.Body)
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
+			if item.ResolvedAction != "keep_growing" || item.ReviewAgainAt == "" {
+				continue
+			}
+			at, parseErr := time.Parse(time.RFC3339Nano, item.ReviewAgainAt)
+			if parseErr != nil {
+				continue
+			}
+			if at.After(result[item.SeedID]) {
+				result[item.SeedID] = at
+			}
+		}
+		if len(read.Documents) < docstore.MaxLimit {
+			return result, nil
+		}
+		after = read.Documents[len(read.Documents)-1].ID
+	}
 }
 
 func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandidate) []garden.ReviewEvidence {
@@ -501,7 +564,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 
 	advice, err := d.adviseGardenSeedWithConfig(ctx, gardenAdvisorInput{
 		SeedID: item.SeedID, Title: item.Title, Body: item.Body,
-		Evidence: gardenAdvisorEvidenceFromReview(item.Evidence), AvailableActions: item.Actions,
+		Evidence: gardenAdvisorEvidenceFromReview(item.Evidence), AvailableActions: gardenAdvisorActions(item.Actions),
 	}, gardenAdvisorConfig{Agent: run.Recipe.Agent, Model: run.Recipe.Model, Effort: run.Recipe.Effort})
 	if err != nil {
 		return nil, err
@@ -850,22 +913,194 @@ func unresolvedGardenReviewItemCount(items []garden.ReviewItem) int {
 	return count
 }
 
+func (d *Daemon) validateGardenReviewAction(
+	context *protocol.SeedReviewActionContext,
+	seedID, action string,
+) (garden.ReviewItem, error) {
+	if context == nil {
+		return garden.ReviewItem{}, nil
+	}
+	reviewID := strings.TrimSpace(context.ReviewID)
+	evidenceVersion := strings.TrimSpace(context.EvidenceVersion)
+	seedID = strings.TrimSpace(seedID)
+	if reviewID == "" || evidenceVersion == "" {
+		return garden.ReviewItem{}, errors.New("review garden action needs its review and evidence receipt")
+	}
+	run, _, found, err := d.readGardenReviewRun(reviewID)
+	if err != nil {
+		return garden.ReviewItem{}, err
+	}
+	if !found {
+		return garden.ReviewItem{}, fmt.Errorf("no Garden review %s exists", reviewID)
+	}
+	if run.Status != garden.ReviewRunStatusRunning {
+		return garden.ReviewItem{}, fmt.Errorf("garden review %s is %s; refresh the garden", reviewID, run.Status)
+	}
+	item, _, found, err := d.readGardenReviewItem(garden.ReviewItemID(reviewID, seedID))
+	if err != nil {
+		return garden.ReviewItem{}, err
+	}
+	if !found {
+		return garden.ReviewItem{}, fmt.Errorf("seed %s is not part of Garden review %s", seedID, reviewID)
+	}
+	if item.Resolution != garden.ReviewResolutionUnresolved {
+		return garden.ReviewItem{}, fmt.Errorf("seed %s is already resolved in Garden review %s", seedID, reviewID)
+	}
+	switch item.Status {
+	case garden.ReviewItemStatusQueued, garden.ReviewItemStatusRunning,
+		garden.ReviewItemStatusReady, garden.ReviewItemStatusFailed:
+	default:
+		return garden.ReviewItem{}, fmt.Errorf("seed %s is %s in Garden review %s; refresh the garden", seedID, item.Status, reviewID)
+	}
+	if item.EvidenceVersion != evidenceVersion {
+		return garden.ReviewItem{}, fmt.Errorf("seed %s changed since this review item was loaded; refresh the garden", seedID)
+	}
+	if !slices.Contains(item.Actions, action) {
+		return garden.ReviewItem{}, fmt.Errorf("%s is not available for seed %s in this review", action, seedID)
+	}
+
+	capture, err := d.captureGardenReview()
+	if err != nil {
+		return garden.ReviewItem{}, err
+	}
+	current, candidate := capture.items[seedID]
+	if !candidate {
+		return garden.ReviewItem{}, fmt.Errorf("seed %s no longer needs review; refresh the garden", seedID)
+	}
+	if current.EvidenceVersion != item.EvidenceVersion {
+		return garden.ReviewItem{}, fmt.Errorf("seed %s or its plot changed since this review item was loaded; refresh the garden", seedID)
+	}
+	return item, nil
+}
+
+func (d *Daemon) resolveGardenReviewAction(
+	context *protocol.SeedReviewActionContext,
+	seedID, action string,
+) error {
+	if context == nil {
+		return nil
+	}
+	itemKey := garden.ReviewItemID(strings.TrimSpace(context.ReviewID), strings.TrimSpace(seedID))
+	resolved := false
+	d.gardenReviewMu.Lock()
+	defer func() {
+		d.gardenReviewMu.Unlock()
+		if resolved {
+			if runner := d.jobQueueRef(); runner != nil {
+				runner.RemoveByKey(gardenReviewClassifyKind, itemKey)
+			}
+		}
+	}()
+
+	reviewID := strings.TrimSpace(context.ReviewID)
+	itemID := itemKey
+	for range 3 {
+		run, runDoc, found, err := d.readGardenReviewRun(reviewID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("no Garden review %s exists", reviewID)
+		}
+		item, itemDoc, found, err := d.readGardenReviewItem(itemID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("seed %s is not part of Garden review %s", seedID, reviewID)
+		}
+		if item.Resolution == garden.ReviewResolutionResolved {
+			resolved = true
+			return nil
+		}
+		if item.Resolution != garden.ReviewResolutionUnresolved ||
+			item.EvidenceVersion != strings.TrimSpace(context.EvidenceVersion) {
+			return fmt.Errorf("seed %s changed in Garden review %s before the action settled", seedID, reviewID)
+		}
+		item.Resolution = garden.ReviewResolutionResolved
+		now := d.gardenTime()
+		item.ResolvedAction = action
+		item.CompletedAt = formatGardenTime(now)
+		if action == "keep_growing" {
+			item.ReviewAgainAt = formatGardenTime(now.Add(garden.DefaultStaleWindow))
+		}
+		items, err := d.readGardenReviewItems(run.ID)
+		if err != nil {
+			return err
+		}
+		for i := range items {
+			if items[i].ID == item.ID {
+				items[i] = item
+			}
+		}
+		complete := gardenReviewItemsResolved(items)
+		if complete {
+			run.Status = garden.ReviewRunStatusComplete
+			run.CompletedAt = item.CompletedAt
+		}
+		err = d.updateGardenReviewRecords(run, runDoc, item, itemDoc, complete)
+		if err == nil {
+			resolved = true
+			return nil
+		}
+		if !docstore.IsConflict(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("garden review %s changed while seed %s was settling; refresh the garden", reviewID, seedID)
+}
+
 func (d *Daemon) overlayGardenReviewJobStates(items []garden.ReviewItem) []garden.ReviewItem {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {
 		return items
 	}
 	for i := range items {
-		if items[i].Status != garden.ReviewItemStatusQueued {
+		if items[i].Resolution != garden.ReviewResolutionUnresolved ||
+			(items[i].Status != garden.ReviewItemStatusQueued && items[i].Status != garden.ReviewItemStatusRunning) {
 			continue
 		}
 		job, err := runner.GetByKey(gardenReviewClassifyKind, items[i].ID)
-		if err == nil && job != nil && job.State == jobs.StateRunning {
+		if err != nil || job == nil {
+			continue
+		}
+		items[i].JobID = job.ID
+		items[i].AdvisorAttempt = job.Attempts
+		items[i].AdvisorMaxAttempts = job.MaxAttempts
+		if items[i].AdvisorMaxAttempts == 0 {
+			items[i].AdvisorMaxAttempts = gardenReviewMaxAttempts
+		}
+		items[i].AdvisorUpdatedAt = formatGardenTime(job.UpdatedAt)
+		switch job.State {
+		case jobs.StateRunning:
 			items[i].Status = garden.ReviewItemStatusRunning
 			items[i].StartedAt = formatGardenTime(job.UpdatedAt)
+			items[i].AdvisorState = "running"
+		case jobs.StateFailed:
+			items[i].AdvisorState = "retrying"
+			items[i].AdvisorRetryAt = formatGardenTime(job.ScheduledAt)
+			items[i].AdvisorError = gardenAdvisorProgressError(job.LastError)
+		case jobs.StateDead:
+			items[i].AdvisorState = "failed"
+			items[i].AdvisorError = gardenAdvisorProgressError(job.LastError)
+		default:
+			items[i].AdvisorState = string(job.State)
 		}
 	}
 	return items
+}
+
+func gardenAdvisorProgressError(message string) string {
+	switch {
+	case strings.Contains(message, "invalid advice") || strings.Contains(message, "does not match its schema"):
+		return "The last answer did not match the expected format."
+	case strings.Contains(message, "deadline exceeded") || strings.Contains(message, "took too long"):
+		return "The last attempt took too long."
+	case strings.TrimSpace(message) != "":
+		return "The last attempt failed."
+	default:
+		return ""
+	}
 }
 
 func (d *Daemon) cancelGardenReview(runID string) (garden.ReviewRun, []garden.ReviewItem, error) {

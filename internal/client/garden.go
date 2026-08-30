@@ -145,6 +145,45 @@ func (c *Client) SeedReviewRetry(reviewID, seedID string) (*protocol.SeedReviewR
 	return resp.SeedReviewResult, nil
 }
 
+func (c *Client) SeedReviewKeep(seedID string, review protocol.SeedReviewActionContext) (*protocol.SeedReviewResult, error) {
+	resp, err := c.send(protocol.SeedReviewKeepMessage{
+		Cmd: protocol.CmdSeedReviewKeep, SeedID: seedID, Review: review,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedReviewResult == nil {
+		return nil, fmt.Errorf("the daemon kept the seed growing but returned no review")
+	}
+	return resp.SeedReviewResult, nil
+}
+
+func (c *Client) SeedSendToChief(
+	sessionID string,
+	document protocol.Seed,
+	guidance string,
+) (*protocol.SeedSendToChiefResult, error) {
+	msg := protocol.SeedSendToChiefMessage{
+		Cmd: protocol.CmdSeedSendToChief, SeedID: document.ID,
+		ExpectedRev: document.Rev, ExpectedTenderSession: document.TenderSession,
+		ExpectedTenderMember: document.TenderMember,
+	}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	if guidance != "" {
+		msg.Guidance = protocol.Ptr(guidance)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedSendToChiefResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the seed for Chief but returned no result")
+	}
+	return resp.SeedSendToChiefResult, nil
+}
+
 func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error) {
 	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body})
 	if err != nil {

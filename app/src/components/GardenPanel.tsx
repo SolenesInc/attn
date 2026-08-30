@@ -1,8 +1,7 @@
 // See docs/plans/2026-08-20-garden-search.md.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
-import type { Seed, SeedHandoverOptions } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { crewDisplayName, crewHolderName } from '../utils/crewName';
 import {
@@ -33,13 +32,20 @@ interface GardenPanelProps {
   fetchSeedDocument?: (seedId: string) => Promise<SeedDocument>;
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
-  onResumeSeed?: (seedId: string) => void;
+  onResumeSeed?: (seedId: string) => Promise<unknown>;
   onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
+  onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
+  chiefAvailable?: boolean;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   viewToggle?: React.ReactNode;
   frame?: 'dock' | 'full';
   onToggleFrame?: () => void;
   onEscapeFloor?: () => void;
+  reviewCandidateCount?: number;
+  reviewContinues?: boolean;
+  reviewOpening?: boolean;
+  reviewError?: string;
+  onOpenReview?: () => void;
 }
 
 const COLUMNS_MIN = 1160;
@@ -409,11 +415,18 @@ export function GardenPanel({
   onOpenMarkdownArtifact,
   onResumeSeed,
   onHandoverSeed,
+  onSendSeedToChief,
+  chiefAvailable = false,
   checkArtifactPath,
   viewToggle,
   frame,
   onToggleFrame,
   onEscapeFloor,
+  reviewCandidateCount = 0,
+  reviewContinues = false,
+  reviewOpening = false,
+  reviewError = '',
+  onOpenReview,
 }: GardenPanelProps) {
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
@@ -422,10 +435,10 @@ export function GardenPanel({
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
   const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
-  const [handoverDraft, setHandoverDraft] = useState<{
+  const [continuationDraft, setContinuationDraft] = useState<{
     seedId: string;
-    handoff: string;
-    cwd: string;
+    kind: 'handover' | 'chief';
+    text: string;
     busy: boolean;
     error: string;
   } | null>(null);
@@ -575,7 +588,7 @@ export function GardenPanel({
 
   // Keep the frame below controls that register after opening, such as a lightbox.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);
-  useEscapeStack(() => setHandoverDraft(null), handoverDraft !== null);
+  useEscapeStack(() => setContinuationDraft(null), continuationDraft !== null);
 
   const hereId = here?.id ?? '';
   const hereRev = here?.rev ?? 0;
@@ -739,41 +752,39 @@ export function GardenPanel({
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
-  const canHandover = Boolean(documentIsCurrent && onHandoverSeed && seedIsOpen && continuation);
-  const composingHandover = handoverDraft?.seedId === here?.id;
-  const handoverNeedsDirectory = continuation?.handover_placement === 'placement_required';
-  const chooseHandoverDirectory = async () => {
+  const canHandover = Boolean(
+    documentIsCurrent && onHandoverSeed && seedIsOpen && continuation
+      && continuation.handover_placement !== 'placement_required',
+  );
+  const canSendToChief = Boolean(documentIsCurrent && onSendSeedToChief && chiefAvailable && seedIsOpen);
+  const composingContinuation = continuationDraft?.seedId === here?.id;
+  const submitContinuation = async () => {
+    if (!seedDoc || !continuationDraft || continuationDraft.seedId !== seedDoc.seed.id) return;
+    setContinuationDraft((draft) => draft ? { ...draft, busy: true, error: '' } : draft);
     try {
-      const selected = await open({ directory: true, multiple: false, title: 'Choose where the new agent should work' });
-      if (typeof selected === 'string' && selected.trim()) {
-        setHandoverDraft((draft) => draft ? { ...draft, cwd: selected, error: '' } : draft);
-      }
-    } catch (error) {
-      setHandoverDraft((draft) => draft ? {
-        ...draft,
-        error: error instanceof Error ? error.message : 'Could not choose a directory',
-      } : draft);
-    }
-  };
-  const submitHandover = async () => {
-    if (!seedDoc || !onHandoverSeed || !handoverDraft || handoverDraft.seedId !== seedDoc.seed.id) return;
-    if (handoverNeedsDirectory && !handoverDraft.cwd.trim()) return;
-    setHandoverDraft((draft) => draft ? { ...draft, busy: true, error: '' } : draft);
-    try {
-      await onHandoverSeed({
+      const common = {
         seedId: seedDoc.seed.id,
         expectedRev: seedDoc.seed.rev,
         expectedTenderSession: seedDoc.seed.tender_session,
         expectedTenderMember: seedDoc.seed.tender_member,
-        handoff: handoverDraft.handoff,
-        ...(handoverDraft.cwd.trim() ? { cwd: handoverDraft.cwd.trim() } : {}),
-      });
-      setHandoverDraft(null);
+      };
+      if (continuationDraft.kind === 'handover') {
+        if (!onHandoverSeed) throw new Error('Handover is unavailable');
+        await onHandoverSeed({ ...common, handoff: continuationDraft.text });
+      } else {
+        if (!onSendSeedToChief) throw new Error('Chief is unavailable');
+        await onSendSeedToChief({ ...common, guidance: continuationDraft.text });
+      }
+      setContinuationDraft(null);
     } catch (error) {
-      setHandoverDraft((draft) => draft ? {
+      setContinuationDraft((draft) => draft ? {
         ...draft,
         busy: false,
-        error: error instanceof Error ? error.message : 'Handover failed',
+        error: error instanceof Error
+          ? error.message
+          : continuationDraft.kind === 'handover'
+            ? 'Handover failed'
+            : 'Sending the seed to Chief failed',
       } : draft);
     }
   };
@@ -1027,13 +1038,22 @@ export function GardenPanel({
                 Resume
               </button>
             )}
-            {canHandover && !composingHandover && (
+            {canHandover && !composingContinuation && (
               <button
                 type="button"
                 data-testid={`seed-handover-${here.id}`}
-                onClick={() => setHandoverDraft({ seedId: here.id, handoff: '', cwd: '', busy: false, error: '' })}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'handover', text: '', busy: false, error: '' })}
               >
                 Handover
+              </button>
+            )}
+            {canSendToChief && !composingContinuation && (
+              <button
+                type="button"
+                data-testid={`seed-send-to-chief-${here.id}`}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'chief', text: '', busy: false, error: '' })}
+              >
+                Send to Chief
               </button>
             )}
           </div>
@@ -1057,45 +1077,39 @@ export function GardenPanel({
             <span>{progressWords(here)}</span>
           </div>
         )}
-        {composingHandover && handoverDraft && (
+        {composingContinuation && continuationDraft && (
           <form
             className="garden-handover"
             onSubmit={(event) => {
               event.preventDefault();
-              void submitHandover();
+              void submitContinuation();
             }}
           >
-            <label htmlFor={`garden-handover-${here.id}`}>What should the new agent know? <span>optional</span></label>
+            <label htmlFor={`garden-continuation-${here.id}`}>
+              {continuationDraft.kind === 'handover' ? 'What should the new agent know?' : 'What should Chief know?'}<span>optional</span>
+            </label>
             <textarea
-              id={`garden-handover-${here.id}`}
+              id={`garden-continuation-${here.id}`}
               autoFocus
-              value={handoverDraft.handoff}
-              onChange={(event) => setHandoverDraft({ ...handoverDraft, handoff: event.target.value })}
+              value={continuationDraft.text}
+              onChange={(event) => setContinuationDraft({ ...continuationDraft, text: event.target.value })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault();
-                  void submitHandover();
+                  void submitContinuation();
                 }
               }}
             />
-            {handoverNeedsDirectory && (
-              <div className="garden-handover__placement">
-                <span>{continuation?.placement_reason || 'Choose where the new agent should work.'}</span>
-                {handoverDraft.cwd ? (
-                  <code title={handoverDraft.cwd}>{handoverDraft.cwd}</code>
-                ) : (
-                  <button type="button" onClick={() => void chooseHandoverDirectory()}>Choose directory</button>
-                )}
-              </div>
-            )}
-            {handoverDraft.error && <p className="garden-handover__error" role="alert">{handoverDraft.error}</p>}
+            {continuationDraft.error && <p className="garden-handover__error" role="alert">{continuationDraft.error}</p>}
             <div className="garden-handover__actions">
-              {handoverDraft.busy ? (
-                <span aria-live="polite">Handing over…</span>
+              {continuationDraft.busy ? (
+                <span aria-live="polite">
+                  {continuationDraft.kind === 'handover' ? 'Handing over…' : 'Sending to Chief…'}
+                </span>
               ) : (
                 <>
-                  <button type="button" onClick={() => setHandoverDraft(null)}>Cancel</button>
-                  {(!handoverNeedsDirectory || handoverDraft.cwd) && <button type="submit">Handover</button>}
+                  <button type="button" onClick={() => setContinuationDraft(null)}>Cancel</button>
+                  <button type="submit">{continuationDraft.kind === 'handover' ? 'Handover' : 'Send to Chief'}</button>
                 </>
               )}
             </div>
@@ -1196,12 +1210,34 @@ export function GardenPanel({
     </p>
   );
 
+  const reviewPrompt = livingTrail.length === 0 && !searching && onOpenReview && reviewCandidateCount > 0 ? (
+    <div className="garden-review-prompt" data-testid="garden-review-prompt">
+      <div>
+        <strong>{reviewCandidateCount} {reviewCandidateCount === 1 ? 'seed needs' : 'seeds need'} review</strong>
+        <span>Work that may be finished, parked, or ready for another agent.</span>
+      </div>
+      {reviewOpening ? (
+        <span aria-live="polite">Starting review…</span>
+      ) : (
+        <button type="button" onClick={onOpenReview}>
+          {reviewContinues ? 'Continue review' : 'Review garden'}
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  const reviewProblem = livingTrail.length === 0 && !searching && reviewError ? (
+    <p className="garden-review-prompt__error" role="alert">{reviewError}</p>
+  ) : null;
+
   if (layout === 'columns') {
     const panes = searching ? 1 + (here ? 1 : 0) : visibleLevels.length + (here ? 1 : 0);
     return (
       <div ref={measurePanel} className="garden-panel is-columns" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
         {trailNav}
         {searchLine}
+        {reviewPrompt}
+        {reviewProblem}
         <div
           className="garden-columns"
           data-panes={panes}
@@ -1245,6 +1281,8 @@ export function GardenPanel({
     <div ref={measurePanel} className="garden-panel" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
       {trailNav}
       {searchLine}
+      {reviewPrompt}
+      {reviewProblem}
       <div
         className="garden-viewport"
         ref={viewportRef}

@@ -2978,7 +2978,6 @@ describe('useDaemonSocket seed resume request/result', () => {
       expectedTenderMember: '',
       sourceSessionId: 'sess-chief',
       handoff: 'Continue from the parser tests.',
-      cwd: '/tmp/placed',
     });
     await Promise.resolve();
     const sent = lastSent(ws);
@@ -2986,7 +2985,6 @@ describe('useDaemonSocket seed resume request/result', () => {
       cmd: 'delegate',
       source_session_id: 'sess-chief',
       brief: '',
-      cwd: '/tmp/placed',
       handover: {
         seed_id: 's-1',
         expected_rev: 7,
@@ -2995,6 +2993,7 @@ describe('useDaemonSocket seed resume request/result', () => {
         handoff: 'Continue from the parser tests.',
       },
     });
+    expect(sent).not.toHaveProperty('cwd');
 
     ws.emit({
       event: 'delegate_result',

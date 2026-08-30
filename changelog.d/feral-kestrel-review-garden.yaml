@@ -1,0 +1,11 @@
+kind: added
+area: garden
+change: >
+  The Garden now identifies growing seeds whose agent is gone and guides the
+  user through them one at a time. Review garden classifies each captured seed
+  in the background, shows the evidence and a suggested action, and offers only
+  the Resume, Handover, Send to Chief, Keep growing, Park, Harvest, or Wither
+  choices that still apply. Keep growing leaves the seed unchanged for seven
+  quiet days. The daemon rechecks the evidence before acting. Handover can ask
+  the saved advisor recipe for editable draft text, while Send to Chief carries
+  optional guidance for a special branch, folder, or other working context.

@@ -172,6 +172,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       // shell's profile: mismatched routing is refused (ValidateProfileRouting).
       ATTN_PROFILE: '',
       ATTN_DATA_DIR: tempDir,
+      ATTN_TOOL_HOME: path.join(tempDir, 'tool-home'),
       ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
       ATTN_WS_PORT: TEST_DAEMON_PORT,
       ATTN_SOCKET_PATH: socketPath,
@@ -261,6 +262,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
         ATTN_PROFILE: '',
         ATTN_DATA_DIR: tempDir,
+        ATTN_TOOL_HOME: path.join(tempDir, 'tool-home'),
         ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
         ATTN_WS_PORT: TEST_DAEMON_PORT,
         ATTN_SOCKET_PATH: socketPath,

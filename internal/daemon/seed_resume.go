@@ -17,6 +17,13 @@ type seedResumeOutcome struct {
 }
 
 func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
+	return d.resumeSeedFromReview(seedID, nil)
+}
+
+func (d *Daemon) resumeSeedFromReview(
+	seedID string,
+	review *protocol.SeedReviewActionContext,
+) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
 		return nil, fmt.Errorf("seed_id is required")
@@ -24,9 +31,20 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
+	expectedRev := int64(0)
+	if review != nil {
+		item, err := d.validateGardenReviewAction(review, seedID, "resume")
+		if err != nil {
+			return nil, err
+		}
+		expectedRev = item.SeedRev
+	}
 	seed, seedDoc, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, err
+	}
+	if expectedRev > 0 && seedDoc.Rev != expectedRev {
+		return nil, fmt.Errorf("%s changed since you reviewed it; refresh the garden", seedID)
 	}
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
@@ -48,8 +66,12 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 		return nil, err
 	}
 	if existing := d.gardenSession(sessionID); existing != nil {
-		if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: actor}); err != nil {
+		if _, _, _, err := d.applySeedTransitionDetailedAtRevision(
+			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", expectedRev); err != nil {
 			return nil, err
+		}
+		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
 		}
 		return &seedResumeOutcome{
 			SessionID: existing.ID, WorkspaceID: existing.WorkspaceID, AlreadyRunning: true,
@@ -122,10 +144,16 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 		return nil, rollback.fail(fmt.Errorf("resume session was not persisted"))
 	}
 	rollback.onSessionSpawned(sessionID)
+	if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
+		return nil, rollback.fail(err)
+	}
 	if err := d.bindResumedSeed(seed, seedDoc, sessionID, directory, agent, resumeID); err != nil {
 		return nil, rollback.fail(err)
 	}
 	rollback.abandon()
+	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+		d.logf("Garden review: settle %s after Resume: %v", seedID, err)
+	}
 
 	d.logf("resume: reopened seed %q as session %s in %s", seedID, sessionID, directory)
 	return &seedResumeOutcome{SessionID: sessionID, WorkspaceID: workspaceID}, nil
@@ -218,7 +246,7 @@ func (d *Daemon) bindResumedSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeed(msg.SeedID)
+	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review)
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,

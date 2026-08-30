@@ -30,7 +30,7 @@ func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T
 	if first.Status != garden.ReviewRunStatusRunning || len(items) != 1 || items[0].SeedID != seed.ID {
 		t.Fatalf("first review = %+v items=%+v", first, items)
 	}
-	wantActions := []string{"handover", "park", "harvest", "wither"}
+	wantActions := []string{"keep_growing", "park", "harvest", "wither"}
 	if !slices.Equal(items[0].Actions, wantActions) {
 		t.Fatalf("actions = %v, want %v", items[0].Actions, wantActions)
 	}
@@ -49,6 +49,25 @@ func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T
 	job, err := d.jobQueue.GetByKey(gardenReviewClassifyKind, items[0].ID)
 	if err != nil || job == nil {
 		t.Fatalf("classification job = %+v error=%v", job, err)
+	}
+}
+
+func TestGardenReviewOffersChiefWithoutAReconstructableHandover(t *testing.T) {
+	d := newGardenDaemon(t)
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seed := oldUnheldGrowingSeed(t, d, now)
+	addGardenSession(t, d, "chief")
+	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+		t.Fatal(err)
+	}
+
+	capture, err := d.captureGardenReview()
+	if err != nil {
+		t.Fatalf("captureGardenReview: %v", err)
+	}
+	want := []string{"send_to_chief", "keep_growing", "park", "harvest", "wither"}
+	if got := capture.items[seed.ID].Actions; !slices.Equal(got, want) {
+		t.Fatalf("actions = %v, want %v", got, want)
 	}
 }
 
@@ -73,7 +92,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 		t.Fatalf("captureGardenReview: %v", err)
 	}
 	item := capture.items[seed.ID]
-	if !slices.Equal(item.Actions, []string{"resume", "handover", "park", "harvest", "wither"}) {
+	if !slices.Equal(item.Actions, []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("resumable actions = %v", item.Actions)
 	}
 }
@@ -293,6 +312,158 @@ func TestGardenReviewInvalidatesAdviceWhenEvidenceChangesDuringClassification(t 
 	}
 }
 
+func TestGardenReviewLifecycleActionCanResolveBeforeAdviceArrives(t *testing.T) {
+	d := newGardenDaemon(t)
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seed := oldUnheldGrowingSeed(t, d, now)
+	installGardenReviewRunner(t, d, false)
+	run, items, err := d.startGardenReview()
+	if err != nil {
+		t.Fatalf("startGardenReview: %v", err)
+	}
+	item := items[0]
+	review := &protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion}
+	if job, getErr := d.jobQueue.GetByKey(gardenReviewClassifyKind, item.ID); getErr != nil || job == nil {
+		t.Fatalf("queued classification job = %+v error=%v", job, getErr)
+	}
+
+	client := newInternalWSClient()
+	d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-1"),
+		SeedID: seed.ID, Verb: string(garden.VerbHarvest),
+		Reason: protocol.Ptr("The outcome and verification are complete."), Review: review,
+	})
+	var result protocol.SeedTransitionResultMessage
+	if err := json.Unmarshal((<-client.send).payload, &result); err != nil {
+		t.Fatalf("decode transition result: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("transition result = %+v", result)
+	}
+	completed, completedItems, err := d.showGardenReview(run.ID)
+	if err != nil {
+		t.Fatalf("showGardenReview: %v", err)
+	}
+	if completed.Status != garden.ReviewRunStatusComplete ||
+		completedItems[0].Resolution != garden.ReviewResolutionResolved {
+		t.Fatalf("completed review = %+v items=%+v", completed, completedItems)
+	}
+	if job, getErr := d.jobQueue.GetByKey(gardenReviewClassifyKind, item.ID); getErr != nil || job != nil {
+		t.Fatalf("classification job after action = %+v error=%v", job, getErr)
+	}
+}
+
+func TestGardenReviewKeepLeavesSeedGrowingAndWaitsSevenDays(t *testing.T) {
+	d := newGardenDaemon(t)
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seed := oldUnheldGrowingSeed(t, d, now)
+	installGardenReviewRunner(t, d, false)
+	run, items, err := d.startGardenReview()
+	if err != nil {
+		t.Fatalf("startGardenReview: %v", err)
+	}
+	item := items[0]
+	review := protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion}
+
+	completed, completedItems, err := d.keepGardenReviewItem(review, seed.ID)
+	if err != nil {
+		t.Fatalf("keepGardenReviewItem: %v", err)
+	}
+	if completed.Status != garden.ReviewRunStatusComplete ||
+		completedItems[0].ResolvedAction != "keep_growing" ||
+		completedItems[0].ReviewAgainAt != formatGardenTime(now.Add(garden.DefaultStaleWindow)) {
+		t.Fatalf("kept review = %+v items=%+v", completed, completedItems)
+	}
+	current, _, err := d.readSeed(seed.ID)
+	if err != nil || current.Status != garden.StatusGrowing {
+		t.Fatalf("kept seed = %+v err=%v", current, err)
+	}
+	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 0 {
+		t.Fatalf("overview before review window = %d err=%v", count, err)
+	}
+	d.gardenNow = func() time.Time { return now.Add(garden.DefaultStaleWindow) }
+	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 1 {
+		t.Fatalf("overview at review window = %d err=%v", count, err)
+	}
+}
+
+func TestGardenReviewLifecycleActionRefusesChangedEvidence(t *testing.T) {
+	d := newGardenDaemon(t)
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seed := oldUnheldGrowingSeed(t, d, now)
+	installGardenReviewRunner(t, d, false)
+	run, items, err := d.startGardenReview()
+	if err != nil {
+		t.Fatalf("startGardenReview: %v", err)
+	}
+	item := readyGardenReviewItem(t, d, run, items[0])
+	editSeed(t, d, seed.ID, "More work arrived after the advice.")
+
+	client := newInternalWSClient()
+	d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-stale"),
+		SeedID: seed.ID, Verb: string(garden.VerbHarvest),
+		Reason: protocol.Ptr("Done."),
+		Review: &protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion},
+	})
+	var result protocol.SeedTransitionResultMessage
+	if err := json.Unmarshal((<-client.send).payload, &result); err != nil {
+		t.Fatalf("decode transition result: %v", err)
+	}
+	if result.Success || result.Error == nil {
+		t.Fatalf("stale transition result = %+v", result)
+	}
+	current, _, err := d.readSeed(seed.ID)
+	if err != nil || current.Status != garden.StatusGrowing {
+		t.Fatalf("seed after stale action = %+v err=%v", current, err)
+	}
+	_, currentItems, err := d.showGardenReview(run.ID)
+	if err != nil || currentItems[0].Resolution != garden.ReviewResolutionUnresolved {
+		t.Fatalf("review after stale action = %+v err=%v", currentItems, err)
+	}
+}
+
+func TestGardenReviewHandoffDraftUsesTheFrozenRecipe(t *testing.T) {
+	d := newGardenDaemon(t)
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	seed := oldUnheldGrowingSeed(t, d, now)
+	if err := d.recordGardenDispatch("sess-a", seed.ID, "", t.TempDir(), "codex", false); err != nil {
+		t.Fatalf("recordGardenDispatch: %v", err)
+	}
+	d.store.SetSetting(SettingGardenAdvisor, `{"agent":"claude","model":"frozen-sonnet","effort":"high"}`)
+	installGardenReviewRunner(t, d, false)
+	run, items, err := d.startGardenReview()
+	if err != nil {
+		t.Fatalf("startGardenReview: %v", err)
+	}
+	item := readyGardenReviewItem(t, d, run, items[0])
+	d.store.SetSetting(SettingGardenAdvisor, `{"agent":"codex","model":"changed","effort":"low"}`)
+	var got gardenAdvisorConfig
+	d.gardenAdvisorResolve = func(config gardenAdvisorConfig) (agentdriver.HeadlessTaskProvider, string, error) {
+		got = config
+		return gardenAdvisorProviderFunc(func(context.Context, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
+			return agentdriver.HeadlessTaskResult{StructuredOutput: json.RawMessage(`{"handoff":"Check the remaining edge and run the focused verification."}`)}, nil
+		}), "/fake/claude", nil
+	}
+
+	client := newInternalWSClient()
+	d.handleSeedReviewDraftWS(client, &protocol.SeedReviewDraftMessage{
+		Cmd: protocol.CmdSeedReviewDraft, RequestID: "draft-1", SeedID: seed.ID,
+		Review: protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion},
+	})
+	var result protocol.SeedReviewDraftResultMessage
+	if err := json.Unmarshal((<-client.send).payload, &result); err != nil {
+		t.Fatalf("decode draft result: %v", err)
+	}
+	if !result.Success || protocol.Deref(result.Handoff) == "" {
+		t.Fatalf("draft result = %+v", result)
+	}
+	want := gardenAdvisorConfig{Agent: "claude", Model: "frozen-sonnet", Effort: "high"}
+	if got != want {
+		t.Fatalf("draft config = %+v, want %+v", got, want)
+	}
+}
+
 func TestCancelGardenReviewPersistsAndRemovesQueuedJobs(t *testing.T) {
 	d := newGardenDaemon(t)
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
@@ -466,4 +637,24 @@ func installGardenReviewRunner(t *testing.T, d *Daemon, start bool) {
 		t.Cleanup(runner.Stop)
 	}
 	d.jobQueue = runner
+}
+
+func readyGardenReviewItem(
+	t *testing.T,
+	d *Daemon,
+	run garden.ReviewRun,
+	item garden.ReviewItem,
+) garden.ReviewItem {
+	t.Helper()
+	item.Status = garden.ReviewItemStatusReady
+	item.Recommendation = "harvest"
+	item.Explanation = "The captured work looks complete."
+	item.CitedEvidence = []string{"The seed body states the completed outcome."}
+	item.CompletedAt = formatGardenTime(d.gardenTime())
+	if err := d.finishGardenReviewItem(gardenReviewJobPayload{
+		RunID: run.ID, ItemID: item.ID, EvidenceVersion: item.EvidenceVersion,
+	}, item); err != nil {
+		t.Fatalf("finishGardenReviewItem: %v", err)
+	}
+	return item
 }

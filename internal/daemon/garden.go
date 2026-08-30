@@ -1318,18 +1318,30 @@ func (n seedTransitionNotes) all() []*protocol.SeedNote {
 func (d *Daemon) applySeedTransitionDetailed(
 	id string, verb garden.Verb, ask garden.Ask, comment string,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
-	return d.applySeedTransitionDetailedAs(id, verb, ask, comment, d.sessionExists)
+	return d.applySeedTransitionDetailedAtRevision(id, verb, ask, comment, 0)
+}
+
+func (d *Daemon) applySeedTransitionDetailedAtRevision(
+	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
+) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionExists, expectedRev)
 }
 
 func (d *Daemon) applySeedTransitionAs(
 	id string, verb garden.Verb, ask garden.Ask, sessionLive func(string) bool,
 ) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", sessionLive)
+	seed, doc, _, err := d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, "", sessionLive, 0)
 	return seed, doc, err
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool,
+) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
+}
+
+func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
+	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
@@ -1356,6 +1368,10 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 		seed, doc, err := d.readSeed(id)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+		}
+		if expectedRev > 0 && doc.Rev != expectedRev {
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+				"%s changed since you reviewed it; refresh the garden", id)
 		}
 		var displaced *garden.Tender
 		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {
@@ -1413,6 +1429,10 @@ func (d *Daemon) applySeedTransitionDetailedAs(
 		}
 		if !docstore.IsConflict(err) {
 			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+		}
+		if expectedRev > 0 {
+			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+				"%s changed while the reviewed action was being applied; refresh the garden", id)
 		}
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(

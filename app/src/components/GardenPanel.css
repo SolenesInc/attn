@@ -11,6 +11,51 @@
   font-size: var(--font-size-md);
 }
 
+.garden-review-prompt {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-bg-panel) 90%, var(--accent));
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex: none;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 9px 16px;
+}
+
+.garden-review-prompt > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-review-prompt strong {
+  font-weight: 560;
+}
+
+.garden-review-prompt span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.garden-review-prompt button {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  flex: none;
+  padding: 5px 9px;
+}
+
+.garden-review-prompt__error {
+  color: var(--color-error, #d65d5d);
+  flex: none;
+  font-size: var(--font-size-sm);
+  margin: 0;
+  padding: 7px 16px;
+}
+
 /* ---- chrome: the way back, pinned ------------------------------------- */
 
 .garden-chrome {
@@ -403,9 +448,9 @@
   font-size: var(--font-size-sm);
 }
 
-.garden-handover label span,
-.garden-handover__placement > span {
+.garden-handover label span {
   color: var(--color-text-muted);
+  margin-left: 6px;
 }
 
 .garden-handover textarea {
@@ -424,23 +469,6 @@
   outline: none;
 }
 
-.garden-handover__placement {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  font-size: var(--font-size-sm);
-  gap: 8px;
-}
-
-.garden-handover__placement code {
-  color: var(--color-text-secondary);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.garden-handover__placement button,
 .garden-handover__actions button {
   background: var(--color-bg-button);
   border: 1px solid var(--color-border);

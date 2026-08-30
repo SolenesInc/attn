@@ -29,7 +29,7 @@ const gardenAdviceOutputSchema = `{
 	"properties": {
 		"recommendation": {
 			"type": "string",
-			"enum": ["resume", "handover", "park", "harvest", "wither"]
+			"enum": ["resume", "handover", "keep_growing", "park", "harvest", "wither"]
 		},
 		"explanation": { "type": "string", "minLength": 1, "maxLength": 1200 },
 		"evidence": {
@@ -95,6 +95,7 @@ var (
 		prompt: `Recommend one action from available_actions:
 - resume: continue the saved conversation
 - handover: give this seed to a new agent
+- keep_growing: leave the seed growing without an agent and review it again after seven quiet days
 - park: keep the work without starting an agent now
 - harvest: the seed's stated outcome and required verification are complete
 - wither: the work should be abandoned
@@ -143,7 +144,19 @@ func (d *Daemon) adviseGardenSeedWithConfig(
 }
 
 func (d *Daemon) draftGardenHandoff(ctx context.Context, input gardenAdvisorInput) (string, error) {
-	raw, err := d.runGardenAdvisor(ctx, gardenHandoffTask, input)
+	config, err := d.gardenAdvisorConfig()
+	if err != nil {
+		return "", err
+	}
+	return d.draftGardenHandoffWithConfig(ctx, input, config)
+}
+
+func (d *Daemon) draftGardenHandoffWithConfig(
+	ctx context.Context,
+	input gardenAdvisorInput,
+	config gardenAdvisorConfig,
+) (string, error) {
+	raw, err := d.runGardenAdvisorWithConfig(ctx, gardenHandoffTask, input, config)
 	if err != nil {
 		return "", err
 	}
@@ -156,18 +169,6 @@ func (d *Daemon) draftGardenHandoff(ctx context.Context, input gardenAdvisorInpu
 		return "", errors.New("garden advisor returned an empty handoff")
 	}
 	return draft.Handoff, nil
-}
-
-func (d *Daemon) runGardenAdvisor(
-	ctx context.Context,
-	task gardenAdvisorTask,
-	input gardenAdvisorInput,
-) ([]byte, error) {
-	config, err := d.gardenAdvisorConfig()
-	if err != nil {
-		return nil, err
-	}
-	return d.runGardenAdvisorWithConfig(ctx, task, input, config)
 }
 
 func (d *Daemon) runGardenAdvisorWithConfig(

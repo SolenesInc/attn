@@ -118,6 +118,19 @@ func TestReviewCandidatesUseConservativeLegacyLifecycleClock(t *testing.T) {
 	}
 }
 
+func TestReviewCandidatesRespectKeepGrowingWindow(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+	observation := reviewObservation("s-a", now.Add(-DefaultStaleWindow), ReviewDirectoryMissing)
+	observation.ReviewAgainAt = now.Add(DefaultStaleWindow)
+
+	if got := ReviewCandidates([]ReviewObservation{observation}, DefaultStaleWindow, now); len(got) != 0 {
+		t.Fatalf("kept seed returned before its review window: %+v", got)
+	}
+	if got := ReviewCandidates([]ReviewObservation{observation}, DefaultStaleWindow, observation.ReviewAgainAt); len(got) != 1 {
+		t.Fatalf("kept seed returned %d times at its review window, want one", len(got))
+	}
+}
+
 func TestReviewPlotUsesActivityAndClaimsAcrossItsWholeSubtree(t *testing.T) {
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	old := now.Add(-DefaultStaleWindow)

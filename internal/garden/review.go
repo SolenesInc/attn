@@ -47,24 +47,32 @@ type ReviewEvidence struct {
 }
 
 type ReviewItem struct {
-	ID              string           `json:"id"`
-	RunID           string           `json:"run_id"`
-	SeedID          string           `json:"seed_id"`
-	SeedRev         int64            `json:"seed_rev"`
-	EvidenceVersion string           `json:"evidence_version"`
-	Title           string           `json:"title"`
-	Body            string           `json:"body"`
-	Evidence        []ReviewEvidence `json:"evidence"`
-	Actions         []string         `json:"actions"`
-	Status          string           `json:"status"`
-	Resolution      string           `json:"resolution"`
-	Recommendation  string           `json:"recommendation,omitempty"`
-	Explanation     string           `json:"explanation,omitempty"`
-	CitedEvidence   []string         `json:"cited_evidence,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	JobID           string           `json:"job_id,omitempty"`
-	StartedAt       string           `json:"started_at,omitempty"`
-	CompletedAt     string           `json:"completed_at,omitempty"`
+	ID                 string           `json:"id"`
+	RunID              string           `json:"run_id"`
+	SeedID             string           `json:"seed_id"`
+	SeedRev            int64            `json:"seed_rev"`
+	EvidenceVersion    string           `json:"evidence_version"`
+	Title              string           `json:"title"`
+	Body               string           `json:"body"`
+	Evidence           []ReviewEvidence `json:"evidence"`
+	Actions            []string         `json:"actions"`
+	Status             string           `json:"status"`
+	Resolution         string           `json:"resolution"`
+	ResolvedAction     string           `json:"resolved_action,omitempty"`
+	ReviewAgainAt      string           `json:"review_again_at,omitempty"`
+	Recommendation     string           `json:"recommendation,omitempty"`
+	Explanation        string           `json:"explanation,omitempty"`
+	CitedEvidence      []string         `json:"cited_evidence,omitempty"`
+	Error              string           `json:"error,omitempty"`
+	JobID              string           `json:"job_id,omitempty"`
+	StartedAt          string           `json:"started_at,omitempty"`
+	CompletedAt        string           `json:"completed_at,omitempty"`
+	AdvisorState       string           `json:"-"`
+	AdvisorAttempt     int              `json:"-"`
+	AdvisorMaxAttempts int              `json:"-"`
+	AdvisorRetryAt     string           `json:"-"`
+	AdvisorUpdatedAt   string           `json:"-"`
+	AdvisorError       string           `json:"-"`
 }
 
 func ReviewRunsSchema() docstore.CollectionSchema {
@@ -137,6 +145,9 @@ type ReviewObservation struct {
 	TenderHolds       bool
 	DirectoryState    ReviewDirectoryState
 	ResumeAvailable   bool
+	HandoverAvailable bool
+	ChiefAvailable    bool
+	ReviewAgainAt     time.Time
 }
 
 type ReviewCandidate struct {
@@ -147,6 +158,8 @@ type ReviewCandidate struct {
 	LifecycleExact    bool
 	SubtreeActivityAt time.Time
 	ResumeAvailable   bool
+	HandoverAvailable bool
+	ChiefAvailable    bool
 	Plot              bool
 	SubtreeIDs        []string
 }
@@ -171,6 +184,9 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 		if seed.Status != StatusGrowing || seed.Gate || underTemplate(index, seed) {
 			continue
 		}
+		if observation.ReviewAgainAt.After(now) {
+			continue
+		}
 
 		subtree := reviewSubtree(seed.ID, children)
 		isPlot := len(subtree) > 1
@@ -180,13 +196,15 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 
 		lifecycleAt, exact := reviewLifecycleAt(observation)
 		candidate := ReviewCandidate{
-			SeedID:          seed.ID,
-			DirectoryState:  normalizedReviewDirectoryState(observation.DirectoryState),
-			LifecycleAt:     lifecycleAt,
-			LifecycleExact:  exact,
-			ResumeAvailable: observation.ResumeAvailable,
-			Plot:            isPlot,
-			SubtreeIDs:      subtree,
+			SeedID:            seed.ID,
+			DirectoryState:    normalizedReviewDirectoryState(observation.DirectoryState),
+			LifecycleAt:       lifecycleAt,
+			LifecycleExact:    exact,
+			ResumeAvailable:   observation.ResumeAvailable,
+			HandoverAvailable: observation.HandoverAvailable,
+			ChiefAvailable:    observation.ChiefAvailable,
+			Plot:              isPlot,
+			SubtreeIDs:        subtree,
 		}
 		if isPlot {
 			candidate.SubtreeActivityAt = reviewSubtreeActivity(subtree, bySeed)

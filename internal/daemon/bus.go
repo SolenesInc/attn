@@ -386,7 +386,10 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactTaskChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectTasksChanged() },
+			apply: func(d *Daemon, ev bus.Event) {
+				d.projectTasksChanged()
+				d.projectGardenReviewJob(ev.Subject)
+			},
 		},
 		{
 			filter: bus.Filter{FactNotebookFileChanged},

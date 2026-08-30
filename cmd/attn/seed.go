@@ -41,6 +41,8 @@ func runSeed() {
 		runSeedEdit(args)
 	case "handover":
 		runSeedHandover(args)
+	case "send-to-chief":
+		runSeedSendToChief(args)
 	case "set-resume":
 		runSeedSetResume(args)
 	case "export":
@@ -120,9 +122,10 @@ commands:
         every edge that touches it in both directions, its body, and the newest
         notes on its log.
 
-  review start | show [<review-id>] | cancel <review-id> | retry <review-id> <seed-id> [--json]
+  review start | show [<review-id>] | cancel <review-id> | retry <review-id> <seed-id> | keep <review-id> <seed-id> [--json]
         start an advisory Garden review, inspect its progressive results,
-        cancel unfinished classification, or retry one failed or changed item.
+		cancel unfinished classification, retry one failed or changed item, or keep
+		one seed growing and review it again after seven quiet days.
         The review never changes a seed's state.
 
   watch <id> | unwatch <id>
@@ -142,6 +145,11 @@ commands:
         optional handoff lands on its log only after the new agent starts. The
         saved directory is reused; if it was removed, its verified branch is
         recreated when safe. Use --cwd when attn asks you to choose a place.
+
+  send-to-chief <id> [-m "<optional guidance>"]
+        give this seed to the Chief to decide its next working context. The
+        saved folder, branch and placement problem are recorded automatically;
+        -m adds an exception such as a special branch or directory.
 
   tend <id> [--member <name>] [--force]
         claim the seed and start growing it. One tender at a time: tending a
@@ -519,7 +527,7 @@ func runSeedList(args []string) {
 
 func runSeedReview(args []string) {
 	if len(args) == 0 {
-		seedFail("review", fmt.Errorf("needs start, show, cancel, or retry"))
+		seedFail("review", fmt.Errorf("needs start, show, cancel, retry, or keep"))
 	}
 	verb := args[0]
 	positionals, jsonOutput, err := parseSeedReviewArgs(args[1:])
@@ -553,8 +561,31 @@ func runSeedReview(args []string) {
 			seedFail("review retry", fmt.Errorf("needs a review id and seed id"))
 		}
 		result, err = seedClient().SeedReviewRetry(positionals[0], positionals[1])
+	case "keep":
+		if len(positionals) != 2 {
+			seedFail("review keep", fmt.Errorf("needs a review id and seed id"))
+		}
+		shown, showErr := seedClient().SeedReviewShow(positionals[0])
+		if showErr != nil {
+			seedFail("review keep", showErr)
+		}
+		var receipt *protocol.GardenReviewItem
+		if shown.Review != nil {
+			for i := range shown.Review.Items {
+				if shown.Review.Items[i].SeedID == positionals[1] {
+					receipt = &shown.Review.Items[i]
+					break
+				}
+			}
+		}
+		if receipt == nil {
+			seedFail("review keep", fmt.Errorf("seed %s is not part of Garden review %s", positionals[1], positionals[0]))
+		}
+		result, err = seedClient().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
+			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
+		})
 	default:
-		seedFail("review", fmt.Errorf("unknown command %q; use start, show, cancel, or retry", verb))
+		seedFail("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
 	}
 	if err != nil {
 		seedFail("review "+verb, err)
@@ -840,6 +871,31 @@ func runSeedHandover(args []string) {
 		return
 	}
 	fmt.Printf("%s handed over to session %s in %s\n", seedID, operation.Result.SessionID, operation.Result.Directory)
+}
+
+func runSeedSendToChief(args []string) {
+	f := newSeedFlags("send-to-chief")
+	positionals := f.parse("send-to-chief", args)
+	if len(positionals) != 1 {
+		seedFail("send-to-chief", fmt.Errorf(
+			"needs exactly one seed id, got %d: attn seed send-to-chief s-7k3f9m", len(positionals)))
+	}
+	seedID := strings.TrimSpace(positionals[0])
+	c := seedClient()
+	document, err := c.SeedShow(f.sessionID(), seedID)
+	if err != nil {
+		seedFail("send-to-chief", err)
+	}
+	result, err := c.SeedSendToChief(
+		f.sessionID(), document.Seed, strings.TrimSpace(f.text("send-to-chief")))
+	if err != nil {
+		seedFail("send-to-chief", err)
+	}
+	if *f.json {
+		writeJSON(result)
+		return
+	}
+	fmt.Printf("%s sent to Chief (%s)\n", seedID, result.Detail)
 }
 
 func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifactReference) {

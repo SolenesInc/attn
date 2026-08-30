@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { open } from '@tauri-apps/plugin-dialog';
 import { GardenPanel } from './GardenPanel';
 import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   const now = new Date().toISOString();
@@ -176,10 +173,9 @@ describe('GardenPanel continuation actions', () => {
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({ expectedRev: 2 })));
   });
 
-  it('asks for a directory only when the saved context needs placement', async () => {
-    vi.mocked(open).mockResolvedValue('/tmp/new-home');
+  it('offers Chief instead of a manual placement override', async () => {
     const value = seed({ id: 's-place11', title: 'place this handover', tender_session: 'sess-a' });
-    const onHandoverSeed = vi.fn().mockResolvedValue({ session_id: 'sess-b' });
+    const onSendSeedToChief = vi.fn().mockResolvedValue({ chief_session_id: 'chief' });
     render(
       <GardenPanel
         isOpen
@@ -191,18 +187,26 @@ describe('GardenPanel continuation actions', () => {
           handover_placement: 'placement_required',
           placement_reason: 'the old directory is unavailable',
         })))}
-        onHandoverSeed={onHandoverSeed}
+        onHandoverSeed={vi.fn()}
+        onSendSeedToChief={onSendSeedToChief}
+        chiefAvailable
       />,
     );
 
     fireEvent.click(screen.getByText('place this handover'));
-    fireEvent.click(await screen.findByTestId('seed-handover-s-place11'));
-    expect(screen.getByText('the old directory is unavailable')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Handover' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Choose directory' }));
-    await screen.findByText('/tmp/new-home');
-    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+    expect(screen.queryByTestId('seed-handover-s-place11')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('seed-send-to-chief-s-place11'));
+    const guidance = screen.getByLabelText(/What should Chief know/);
+    expect(guidance).toHaveValue('');
+    fireEvent.change(guidance, { target: { value: 'Use feature/special in /tmp/new-home.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Chief' }));
 
-    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({ cwd: '/tmp/new-home' })));
+    await waitFor(() => expect(onSendSeedToChief).toHaveBeenCalledWith({
+      seedId: 's-place11',
+      expectedRev: 1,
+      expectedTenderSession: 'sess-a',
+      expectedTenderMember: '',
+      guidance: 'Use feature/special in /tmp/new-home.',
+    }));
   });
 });

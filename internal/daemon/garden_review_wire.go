@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -60,6 +61,30 @@ func gardenReviewItemToProtocol(item garden.ReviewItem) protocol.GardenReviewIte
 	if item.CompletedAt != "" {
 		wire.CompletedAt = protocol.Ptr(item.CompletedAt)
 	}
+	if item.ResolvedAction != "" {
+		wire.ResolvedAction = protocol.Ptr(item.ResolvedAction)
+	}
+	if item.ReviewAgainAt != "" {
+		wire.ReviewAgainAt = protocol.Ptr(item.ReviewAgainAt)
+	}
+	if item.AdvisorState != "" {
+		wire.AdvisorState = protocol.Ptr(item.AdvisorState)
+	}
+	if item.AdvisorAttempt > 0 {
+		wire.AdvisorAttempt = protocol.Ptr(item.AdvisorAttempt)
+	}
+	if item.AdvisorMaxAttempts > 0 {
+		wire.AdvisorMaxAttempts = protocol.Ptr(item.AdvisorMaxAttempts)
+	}
+	if item.AdvisorRetryAt != "" {
+		wire.AdvisorRetryAt = protocol.Ptr(item.AdvisorRetryAt)
+	}
+	if item.AdvisorUpdatedAt != "" {
+		wire.AdvisorUpdatedAt = protocol.Ptr(item.AdvisorUpdatedAt)
+	}
+	if item.AdvisorError != "" {
+		wire.AdvisorError = protocol.Ptr(item.AdvisorError)
+	}
 	return wire
 }
 
@@ -107,6 +132,15 @@ func (d *Daemon) handleSeedReviewRetry(conn net.Conn, msg *protocol.SeedReviewRe
 		run, items, err = d.showGardenReview(run.ID)
 	}
 	d.sendSeedReviewResponse(conn, "retry", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) handleSeedReviewKeep(conn net.Conn, msg *protocol.SeedReviewKeepMessage) {
+	if err := d.requireHome(garden.Surface); err != nil {
+		d.sendGardenError(conn, "review keep", err)
+		return
+	}
+	run, items, err := d.keepGardenReviewItem(msg.Review, msg.SeedID)
+	d.sendSeedReviewResponse(conn, "keep", &run, items, unresolvedGardenReviewItemCount(items), err)
 }
 
 func (d *Daemon) sendSeedReviewResponse(
@@ -182,6 +216,65 @@ func (d *Daemon) handleSeedReviewRetryWS(client *wsClient, msg *protocol.SeedRev
 	d.sendSeedReviewWSResult(client, protocol.Deref(msg.RequestID), "retry", &run, items, unresolvedGardenReviewItemCount(items), err)
 }
 
+func (d *Daemon) handleSeedReviewKeepWS(client *wsClient, msg *protocol.SeedReviewKeepMessage) {
+	var run garden.ReviewRun
+	var items []garden.ReviewItem
+	err := d.requireHome(garden.Surface)
+	if err == nil {
+		run, items, err = d.keepGardenReviewItem(msg.Review, msg.SeedID)
+	}
+	d.sendSeedReviewWSResult(client, protocol.Deref(msg.RequestID), "keep", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) keepGardenReviewItem(review protocol.SeedReviewActionContext, seedID string) (garden.ReviewRun, []garden.ReviewItem, error) {
+	if _, err := d.validateGardenReviewAction(&review, seedID, "keep_growing"); err != nil {
+		return garden.ReviewRun{}, nil, err
+	}
+	if err := d.resolveGardenReviewAction(&review, seedID, "keep_growing"); err != nil {
+		return garden.ReviewRun{}, nil, err
+	}
+	return d.showGardenReview(review.ReviewID)
+}
+
+func (d *Daemon) handleSeedReviewDraftWS(client *wsClient, msg *protocol.SeedReviewDraftMessage) {
+	response := protocol.SeedReviewDraftResultMessage{
+		Event: protocol.EventSeedReviewDraftResult, RequestID: msg.RequestID,
+	}
+	fail := func(err error) {
+		response.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, response)
+	}
+	if err := d.requireHome(garden.Surface); err != nil {
+		fail(err)
+		return
+	}
+	item, err := d.validateGardenReviewAction(&msg.Review, msg.SeedID, "handover")
+	if err != nil {
+		fail(err)
+		return
+	}
+	run, _, err := d.showGardenReview(msg.Review.ReviewID)
+	if err != nil {
+		fail(err)
+		return
+	}
+	draft, err := d.draftGardenHandoffWithConfig(context.Background(), gardenAdvisorInput{
+		SeedID: item.SeedID, Title: item.Title, Body: item.Body,
+		Evidence: gardenAdvisorEvidenceFromReview(item.Evidence), AvailableActions: gardenAdvisorActions(item.Actions),
+	}, gardenAdvisorConfig{Agent: run.Recipe.Agent, Model: run.Recipe.Model, Effort: run.Recipe.Effort})
+	if err != nil {
+		fail(err)
+		return
+	}
+	if _, err := d.validateGardenReviewAction(&msg.Review, msg.SeedID, "handover"); err != nil {
+		fail(err)
+		return
+	}
+	response.Success = true
+	response.Handoff = protocol.Ptr(draft)
+	d.sendToClient(client, response)
+}
+
 func (d *Daemon) sendSeedReviewWSResult(
 	client *wsClient,
 	requestID string,
@@ -217,4 +310,21 @@ func (d *Daemon) projectGardenReview(runID string) {
 		Event:  protocol.EventGardenReviewUpdated,
 		Review: gardenReviewToProtocol(run, items),
 	})
+}
+
+func (d *Daemon) projectGardenReviewJob(jobID string) {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return
+	}
+	job, err := runner.Get(strings.TrimSpace(jobID))
+	if err != nil || job == nil || job.Kind != gardenReviewClassifyKind {
+		return
+	}
+	var payload gardenReviewJobPayload
+	if err := job.DecodePayload(&payload); err != nil {
+		d.logf("garden review: read changed job %s: %v", job.ID, err)
+		return
+	}
+	d.projectGardenReview(payload.RunID)
 }

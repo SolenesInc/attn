@@ -3603,6 +3603,24 @@ type GardenReviewItem struct {
 	// Actions corresponds to the JSON schema field "actions".
 	Actions []string `json:"actions"`
 
+	// AdvisorAttempt corresponds to the JSON schema field "advisor_attempt".
+	AdvisorAttempt *int `json:"advisor_attempt,omitempty,omitzero"`
+
+	// AdvisorError corresponds to the JSON schema field "advisor_error".
+	AdvisorError *string `json:"advisor_error,omitempty,omitzero"`
+
+	// AdvisorMaxAttempts corresponds to the JSON schema field "advisor_max_attempts".
+	AdvisorMaxAttempts *int `json:"advisor_max_attempts,omitempty,omitzero"`
+
+	// AdvisorRetryAt corresponds to the JSON schema field "advisor_retry_at".
+	AdvisorRetryAt *string `json:"advisor_retry_at,omitempty,omitzero"`
+
+	// AdvisorState corresponds to the JSON schema field "advisor_state".
+	AdvisorState *string `json:"advisor_state,omitempty,omitzero"`
+
+	// AdvisorUpdatedAt corresponds to the JSON schema field "advisor_updated_at".
+	AdvisorUpdatedAt *string `json:"advisor_updated_at,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -3632,6 +3650,12 @@ type GardenReviewItem struct {
 
 	// Resolution corresponds to the JSON schema field "resolution".
 	Resolution string `json:"resolution"`
+
+	// ResolvedAction corresponds to the JSON schema field "resolved_action".
+	ResolvedAction *string `json:"resolved_action,omitempty,omitzero"`
+
+	// ReviewAgainAt corresponds to the JSON schema field "review_again_at".
+	ReviewAgainAt *string `json:"review_again_at,omitempty,omitzero"`
 
 	// RunID corresponds to the JSON schema field "run_id".
 	RunID string `json:"run_id"`
@@ -6362,6 +6386,10 @@ type Response struct {
 	// SeedReviewResult corresponds to the JSON schema field "seed_review_result".
 	SeedReviewResult *SeedReviewResult `json:"seed_review_result,omitempty,omitzero"`
 
+	// SeedSendToChiefResult corresponds to the JSON schema field
+	// "seed_send_to_chief_result".
+	SeedSendToChiefResult *SeedSendToChiefResult `json:"seed_send_to_chief_result,omitempty,omitzero"`
+
 	// SeedSetResumeResult corresponds to the JSON schema field
 	// "seed_set_resume_result".
 	SeedSetResumeResult *SeedSetResumeResult `json:"seed_set_resume_result,omitempty,omitzero"`
@@ -6717,6 +6745,9 @@ type SeedHandoverRequest struct {
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *string `json:"handoff,omitempty,omitzero"`
 
+	// Review corresponds to the JSON schema field "review".
+	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 }
@@ -7024,6 +7055,9 @@ type SeedResumeMessage struct {
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
+	// Review corresponds to the JSON schema field "review".
+	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 }
@@ -7051,6 +7085,14 @@ type SeedResumeResultMessage struct {
 	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
+type SeedReviewActionContext struct {
+	// EvidenceVersion corresponds to the JSON schema field "evidence_version".
+	EvidenceVersion string `json:"evidence_version"`
+
+	// ReviewID corresponds to the JSON schema field "review_id".
+	ReviewID string `json:"review_id"`
+}
+
 type SeedReviewCancelMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7060,6 +7102,51 @@ type SeedReviewCancelMessage struct {
 
 	// ReviewID corresponds to the JSON schema field "review_id".
 	ReviewID string `json:"review_id"`
+}
+
+type SeedReviewDraftMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Review corresponds to the JSON schema field "review".
+	Review SeedReviewActionContext `json:"review"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type SeedReviewDraftResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Handoff corresponds to the JSON schema field "handoff".
+	Handoff *string `json:"handoff,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SeedReviewKeepMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Review corresponds to the JSON schema field "review".
+	Review SeedReviewActionContext `json:"review"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
 }
 
 type SeedReviewResult struct {
@@ -7124,6 +7211,68 @@ type SeedReviewStartMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type SeedSendToChiefMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRev corresponds to the JSON schema field "expected_rev".
+	ExpectedRev int `json:"expected_rev"`
+
+	// ExpectedTenderMember corresponds to the JSON schema field
+	// "expected_tender_member".
+	ExpectedTenderMember string `json:"expected_tender_member"`
+
+	// ExpectedTenderSession corresponds to the JSON schema field
+	// "expected_tender_session".
+	ExpectedTenderSession string `json:"expected_tender_session"`
+
+	// Guidance corresponds to the JSON schema field "guidance".
+	Guidance *string `json:"guidance,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Review corresponds to the JSON schema field "review".
+	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedSendToChiefResult struct {
+	// ChiefSessionID corresponds to the JSON schema field "chief_session_id".
+	ChiefSessionID string `json:"chief_session_id"`
+
+	// DeliveryStatus corresponds to the JSON schema field "delivery_status".
+	DeliveryStatus AgentMsgStatus `json:"delivery_status"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
+type SeedSendToChiefResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SeedSendToChiefResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SeedSetResumeMessage struct {
@@ -7203,6 +7352,9 @@ type SeedTransitionMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Review corresponds to the JSON schema field "review".
+	Review *SeedReviewActionContext `json:"review,omitempty,omitzero"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`

@@ -240,7 +240,7 @@ type HeadlessTaskRequest struct {
 	// Claude: IGNORED (dontAsk is not fs-sandboxed, writes anywhere already).
 	ExtraWritableRoots []string
 
-	// Claude-only; Codex silently ignores all three.
+	// MaxTurns and MaxBudgetUSD are Claude-only. Codex and Claude both honor OutputSchema.
 	MaxTurns     int
 	MaxBudgetUSD string
 	OutputSchema json.RawMessage

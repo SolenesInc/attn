@@ -36,6 +36,8 @@ import type {
   AutomationDefinitionSummary,
   AutomationRunSummary,
   AttachBlock as GeneratedAttachBlock,
+  GardenReview as GeneratedGardenReview,
+  SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
 } from '../types/generated';
 import type { SessionMessageWindowStatus } from './daemonSessionAnnotationEvents';
 import {
@@ -146,12 +148,32 @@ export interface SeedHandoverOptions {
   expectedTenderMember: string;
   sourceSessionId?: string;
   handoff?: string;
-  cwd?: string;
   agent?: string;
   model?: string;
   effort?: string;
+  review?: SeedReviewActionContext;
 }
 export type SeedHandoverResult = GeneratedDelegateResult;
+export interface SeedSendToChiefOptions {
+  seedId: string;
+  expectedRev: number;
+  expectedTenderSession: string;
+  expectedTenderMember: string;
+  sourceSessionId?: string;
+  guidance?: string;
+  review?: SeedReviewActionContext;
+}
+export type SeedSendToChiefResult = GeneratedSeedSendToChiefResult;
+export interface SeedReviewActionContext {
+  reviewId: string;
+  evidenceVersion: string;
+}
+export interface SeedReviewOverview {
+  candidateCount: number;
+  review?: GeneratedGardenReview;
+}
+export type GardenReview = GeneratedGardenReview;
+export type GardenReviewItem = GeneratedGardenReview['items'][number];
 export type CrewMember = GeneratedCrewMember;
 export interface CrewSleepResult {
   member: string;
@@ -266,7 +288,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '274';
+export const PROTOCOL_VERSION = '277';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -931,6 +953,7 @@ export function useDaemonSocket({
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
+  const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
 
   const reconnectAttemptsRef = useRef(0);
   const circuitOpenRef = useRef(false);
@@ -1525,6 +1548,51 @@ export function useDaemonSocket({
             );
             break;
 
+          case 'garden_review_updated': {
+            const review = data.review as GeneratedGardenReview | undefined;
+            if (!review) break;
+            setSeedReviewOverview((current) => {
+              if (current.review && current.review.run.id !== review.run.id) return current;
+              return {
+                candidateCount: review.items.filter((item) => item.resolution === 'unresolved').length,
+                review,
+              };
+            });
+            break;
+          }
+
+          case 'seed_review_result': {
+            const requestId = data.request_id;
+            if (typeof requestId !== 'string') break;
+            const key = pendingRequestKey(`seed_review_${data.operation || 'show'}`, requestId);
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            if (data.success) {
+              const overview: SeedReviewOverview = {
+                candidateCount: typeof data.candidate_count === 'number' ? data.candidate_count : 0,
+                review: data.review as GeneratedGardenReview | undefined,
+              };
+              setSeedReviewOverview(overview);
+              pending.resolve(overview);
+            } else {
+              pending.reject(new Error(data.error || 'Garden review failed'));
+            }
+            break;
+          }
+
+          case 'seed_review_draft_result': {
+            const requestId = data.request_id;
+            if (typeof requestId !== 'string') break;
+            const key = pendingRequestKey('seed_review_draft', requestId);
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            if (data.success && typeof data.handoff === 'string') pending.resolve(data.handoff);
+            else pending.reject(new Error(data.error || 'Drafting the handoff failed'));
+            break;
+          }
+
           case 'apps_updated':
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             break;
@@ -1779,6 +1847,17 @@ export function useDaemonSocket({
             } else {
               pending.reject(new Error(data.error || 'Resuming the seed failed'));
             }
+            break;
+          }
+
+          case 'seed_send_to_chief_result': {
+            settlePendingRequest(
+              pendingActionsRef.current,
+              'seed_send_to_chief',
+              data,
+              (event) => event.result as SeedSendToChiefResult | undefined,
+              'Sending the seed to Chief failed',
+            );
             break;
           }
 
@@ -3603,7 +3682,14 @@ export function useDaemonSocket({
   }, [nextRequestID]);
 
   const sendSeedTransition = useCallback(
-    (seedId: string, verb: string, reason?: string, force?: boolean, comment?: string): Promise<Seed> => {
+    (
+      seedId: string,
+      verb: string,
+      reason?: string,
+      force?: boolean,
+      comment?: string,
+      review?: SeedReviewActionContext,
+    ): Promise<Seed> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3622,6 +3708,7 @@ export function useDaemonSocket({
             ...(reason ? { reason } : {}),
             ...(comment ? { comment } : {}),
             ...(force ? { force: true } : {}),
+            ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
           }),
         );
         setTimeout(() => {
@@ -4452,8 +4539,13 @@ export function useDaemonSocket({
           expected_tender_session: options.expectedTenderSession,
           expected_tender_member: options.expectedTenderMember,
           ...(options.handoff?.trim() ? { handoff: options.handoff.trim() } : {}),
+          ...(options.review ? {
+            review: {
+              review_id: options.review.reviewId,
+              evidence_version: options.review.evidenceVersion,
+            },
+          } : {}),
         },
-        ...(options.cwd?.trim() ? { cwd: options.cwd.trim() } : {}),
         ...(options.agent?.trim() ? { agent: options.agent.trim() } : {}),
         ...(options.model?.trim() ? { model: options.model.trim() } : {}),
         ...(options.effort?.trim() ? { effort: options.effort.trim() } : {}),
@@ -4463,8 +4555,32 @@ export function useDaemonSocket({
     );
   }, [nextRequestID, sendKeyedRequest]);
 
+  const sendSeedToChief = useCallback((options: SeedSendToChiefOptions): Promise<SeedSendToChiefResult> => (
+    sendRequest<SeedSendToChiefResult>(
+      'seed_send_to_chief',
+      {
+        source_session_id: options.sourceSessionId ?? '',
+        seed_id: options.seedId,
+        expected_rev: options.expectedRev,
+        expected_tender_session: options.expectedTenderSession,
+        expected_tender_member: options.expectedTenderMember,
+        ...(options.guidance?.trim() ? { guidance: options.guidance.trim() } : {}),
+        ...(options.review ? {
+          review: {
+            review_id: options.review.reviewId,
+            evidence_version: options.review.evidenceVersion,
+          },
+        } : {}),
+      },
+      'Sending the seed to Chief timed out',
+    )
+  ), [sendRequest]);
+
   const sendSeedResume = useCallback(
-    (seedId: string): Promise<{ sessionId: string; workspaceId?: string; alreadyRunning?: boolean }> => {
+    (
+      seedId: string,
+      review?: SeedReviewActionContext,
+    ): Promise<{ sessionId: string; workspaceId?: string; alreadyRunning?: boolean }> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4474,7 +4590,10 @@ export function useDaemonSocket({
         const requestId = nextRequestID('seed_resume');
         const key = `seed_resume:${requestId}`;
         pendingActionsRef.current.set(key, { resolve, reject });
-        ws.send(JSON.stringify({ cmd: 'seed_resume', request_id: requestId, seed_id: seedId }));
+        ws.send(JSON.stringify({
+          cmd: 'seed_resume', request_id: requestId, seed_id: seedId,
+          ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
+        }));
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);
@@ -4485,6 +4604,55 @@ export function useDaemonSocket({
     },
     [nextRequestID],
   );
+
+  const sendSeedReviewShow = useCallback((reviewId?: string): Promise<SeedReviewOverview> => (
+    sendRequest<SeedReviewOverview>(
+      'seed_review_show',
+      reviewId ? { review_id: reviewId } : {},
+      'Reading Garden review timed out',
+    )
+  ), [sendRequest]);
+
+  const sendSeedReviewStart = useCallback((): Promise<SeedReviewOverview> => (
+    sendRequest<SeedReviewOverview>('seed_review_start', {}, 'Starting Garden review timed out')
+  ), [sendRequest]);
+
+  const sendSeedReviewRetry = useCallback((reviewId: string, seedId: string): Promise<SeedReviewOverview> => (
+    sendRequest<SeedReviewOverview>(
+      'seed_review_retry',
+      { review_id: reviewId, seed_id: seedId },
+      'Retrying Garden review timed out',
+    )
+  ), [sendRequest]);
+
+  const sendSeedReviewKeep = useCallback((
+    seedId: string,
+    review: SeedReviewActionContext,
+  ): Promise<SeedReviewOverview> => (
+    sendRequest<SeedReviewOverview>(
+      'seed_review_keep',
+      {
+        seed_id: seedId,
+        review: { review_id: review.reviewId, evidence_version: review.evidenceVersion },
+      },
+      'Keeping the seed growing timed out',
+    )
+  ), [sendRequest]);
+
+  const sendSeedReviewDraft = useCallback((
+    seedId: string,
+    review: SeedReviewActionContext,
+  ): Promise<string> => (
+    sendRequest<string>(
+      'seed_review_draft',
+      {
+        seed_id: seedId,
+        review: { review_id: review.reviewId, evidence_version: review.evidenceVersion },
+      },
+      'Drafting the handoff timed out',
+      300_000,
+    )
+  ), [sendRequest]);
 
   const sendCrewWake = useCallback(
     (member: string): Promise<{ sessionId: string; alreadyAwake: boolean }> => {
@@ -5136,7 +5304,14 @@ export function useDaemonSocket({
     sendSessionAnnotationsClear,
     sendSessionAnnotationsSubmit,
     sendSeedHandover,
+    sendSeedToChief,
     sendSeedResume,
+    seedReviewOverview,
+    sendSeedReviewShow,
+    sendSeedReviewStart,
+    sendSeedReviewRetry,
+    sendSeedReviewKeep,
+    sendSeedReviewDraft,
     sendCrewWake,
     sendCrewSleep,
     sendTaskList,

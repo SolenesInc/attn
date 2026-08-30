@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -77,6 +79,39 @@ func TestCodexRunHeadlessTaskScopesToolsAndConfiguration(t *testing.T) {
 		if strings.Contains(got, forbidden) {
 			t.Fatalf("Codex args unexpectedly contained %q:\n%s", forbidden, got)
 		}
+	}
+}
+
+func TestCodexRunHeadlessTaskPassesAndRemovesOutputSchema(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "schema.log")
+	scriptPath := filepath.Join(dir, "agent")
+	script := "#!/bin/sh\n" +
+		"previous=''\n" +
+		"for value in \"$@\"; do\n" +
+		"  if [ \"$previous\" = '--output-schema' ]; then printf '%s\\n' \"$value\" > " + shellSingleQuote(logPath+".path") + "; cat \"$value\" > " + shellSingleQuote(logPath) + "; fi\n" +
+		"  previous=\"$value\"\n" +
+		"done\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agent: %v", err)
+	}
+	schema := `{"type":"object","properties":{"verdict":{"type":"string"}},"required":["verdict"]}`
+	if _, err := (&Codex{}).RunHeadlessTask(context.Background(), HeadlessTaskRequest{
+		Executable: scriptPath, Model: "gpt-test", Prompt: "judge", WorkDir: dir,
+		DisableTools: true, OutputSchema: json.RawMessage(schema),
+	}); err != nil {
+		t.Fatalf("RunHeadlessTask error: %v", err)
+	}
+	got, err := os.ReadFile(logPath)
+	if err != nil || string(got) != schema {
+		t.Fatalf("schema file = %q err=%v, want %q", got, err, schema)
+	}
+	path, err := os.ReadFile(logPath + ".path")
+	if err != nil {
+		t.Fatalf("read schema path: %v", err)
+	}
+	if _, err := os.Stat(strings.TrimSpace(string(path))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("schema scratch file survived run: %v", err)
 	}
 }
 

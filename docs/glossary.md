@@ -554,10 +554,19 @@ and branch attn actually observed. **Resume** reopens that exact conversation
 in its existing working directory and gives the seed back to it; it is not a
 picker for another conversation. **Handover** starts a new agent on the same
 seed, reusing the existing working directory and its uncommitted work or safely
-recreating the saved branch after that directory is removed. The new agent
-becomes tender only after it starts, and the old conversation remains available
-without owning the seed. When attn cannot reconstruct a safe location,
-Handover asks the user to choose one.
+recreating the exact saved worktree root on the saved branch after that
+directory is removed. The app offers Handover only when attn can do one of
+those things without asking for placement. The new agent becomes tender only
+after it starts, and the old conversation remains available without owning the
+seed.
+
+**Send to Chief** transfers the seed to the Chief without starting another
+agent. It keeps the last execution as a receipt, records why automatic
+Handover was unavailable, and accepts optional guidance for an exceptional
+branch, folder, or other working context. The Chief reads that context from the
+seed log and decides how to hand the work over. The app may offer Send to Chief
+beside Handover so the user can choose an exception even when the automatic
+placement is safe.
 
 Closing a session or removing its working directory changes execution context,
 not the seed's outcome. A seed's lifecycle clock moves only when its state
@@ -617,6 +626,28 @@ once, and who holds each of its children is always that seed's own tender.
 movement — no note, no move, no edge — for a window (`attn seed ls --stale`,
 default seven days). It is a query for a person's judgment, never a reaper:
 nothing withers because a window passed.
+
+**Review garden** is the user-started pass over growing seeds that have lost
+their active agent and may need a decision. A missing saved working directory
+makes a seed eligible immediately; otherwise seven days without a lifecycle
+change makes it eligible. A plot uses the newest activity anywhere in its
+subtree and stays out while any child has an active agent.
+
+Starting a review captures the eligible seeds and the configured Garden advisor
+recipe. Classification runs in the background, with its queue, attempt, retry,
+and failure state visible. The advisor recommends and explains an available
+action, but never moves a seed or blocks the user's choices. The review reader
+shows the seed's log and lets the user walk through its plot while keeping a
+way back to the reviewed seed. The user chooses Resume, Handover, Send to Chief,
+Keep growing, Park, Harvest, or Wither from the actions that still apply.
+**Keep growing**
+leaves the seed unchanged, resolves this review item, and waits seven quiet days
+before offering the seed in another review. Each choice carries the evidence
+receipt the user saw; the daemon rechecks the seed, its plot, and the action
+before writing, then resolves the review item only after the decision, real
+move, or agent launch succeeds. Handover starts blank; **Draft** asks the same
+saved advisor recipe for editable handoff text and does not send or change
+anything.
 
 "Nobody holds it" is one rule, shared by `ready` and by the claim `tend` makes,
 so a seed offered by one is accepted by the other. A tender whose session the

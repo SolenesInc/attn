@@ -241,6 +241,22 @@ func TestGardenAdvisorUsesStructuredOutputAndValidatesIt(t *testing.T) {
 	}
 }
 
+func TestGardenAdvisorCanRecommendKeepingASeedGrowing(t *testing.T) {
+	provider := gardenAdvisorProviderFunc(func(context.Context, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
+		return agentdriver.HeadlessTaskResult{
+			Text: `{"recommendation":"keep_growing","explanation":"The maintainer is still deciding.","evidence":["The seed log asks for a later decision."]}`,
+		}, nil
+	})
+	d := gardenAdvisorTestDaemon(t, provider)
+
+	advice, err := d.adviseGardenSeed(context.Background(), gardenAdvisorInput{
+		SeedID: "s-test", AvailableActions: []string{"keep_growing", "park"},
+	})
+	if err != nil || advice.Recommendation != "keep_growing" {
+		t.Fatalf("keep-growing advice = %+v err=%v", advice, err)
+	}
+}
+
 func TestGardenAdvisorRejectsMalformedOutputs(t *testing.T) {
 	for _, output := range []string{
 		"not json",
