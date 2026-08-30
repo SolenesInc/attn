@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { openDeepLink } from './deepLink.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -59,7 +60,7 @@ export class MacOSDriver {
   }
 
   async openDeepLink(url) {
-    await execFileAsync('open', [url]);
+    await openDeepLink(url, { appPath: this.appPath });
     await delay(500);
   }
 

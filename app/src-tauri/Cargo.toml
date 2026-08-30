@@ -37,6 +37,11 @@ base64 = "0.22"
 getrandom = "0.2"
 image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
 
+# Linux delivers a deep link as argv to a NEW process; the deep-link feature makes
+# this plugin hand that argv to the already-running app instead.
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"

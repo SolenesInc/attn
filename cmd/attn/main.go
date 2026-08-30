@@ -2529,8 +2529,7 @@ func openAppWithDeepLink() {
 		url.QueryEscape(cwd),
 		url.QueryEscape(label))
 
-	cmd := exec.Command("open", deepLink)
-	if err := cmd.Run(); err != nil {
+	if err := launchDeepLink(deepLink); err != nil {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
 		os.Exit(1)
 	}

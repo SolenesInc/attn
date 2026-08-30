@@ -37,6 +37,28 @@ Open a named app with `make run PROFILE=<name>`.
 Full macOS builds/installs run outside the sandbox for keychain-backed signing;
 ad-hoc signing loses persistent permissions.
 
+## Linux deep links
+
+macOS registers the profile's resolved `<deepLinkScheme>://` on the app bundle
+itself (`attn://` for the default profile; `attn-dev://` or `attn-<name>://`
+for others — see `DeepLinkSchemeForProfile`). Elsewhere, `make install` also
+runs `attn profile register-scheme --profile <name>`: it writes
+`<appName>-handler.desktop` under `~/.local/share/applications` (or
+`$XDG_DATA_HOME/applications`) and refreshes the desktop database
+(`update-desktop-database`, `xdg-mime`). Missing tools are reported, not
+fatal: the entry is still written. Rerun `register-scheme` by hand after
+moving the installed executable.
+
+`attn profile resolve --field desktopEntry` reports the handler path (empty
+off Linux); `attn profile resolve --field deepLinkScheme` reports the scheme;
+`attn profile clean <name>` removes the entry along with everything else.
+
+Launching the app (bare `attn`, or `attn -s <label>`) builds a
+`<deepLinkScheme>://spawn?...` deep link (`attn://spawn?...` for the default
+profile). On Linux this launches the profile's own app executable, which, via
+tauri-plugin-single-instance, hands the URL to an already-running instance
+instead of opening a second window.
+
 ## Verification requirements
 
 - Non-trivial PRs need live verification from their branch in a non-production profile.
