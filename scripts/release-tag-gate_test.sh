@@ -68,9 +68,6 @@ repo="$work/repo"
 git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Release Tag Gate Test'
 git -C "$repo" config user.email 'release-tag-gate@example.com'
-cp "$root/cmd/release-train/main.go" "$repo/cmd/release-train/main.go"
-git -C "$repo" add cmd/release-train/main.go
-git -C "$repo" commit -q -m 'test(release): use current release tool'
 git -C "$repo" switch -q -C main
 git -C "$repo" rm -q -- 'changelog.d/*.yaml'
 git -C "$repo" commit -q -m 'release fixture baseline'
