@@ -1,3 +1,0 @@
-kind: internal
-area: release
-change: Let CI-only promotions reach main with publication held before tag creation.

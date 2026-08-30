@@ -1,8 +1,0 @@
-kind: internal
-area: testing
-change: >
-  The real-app harness's mock agent now answers the brief attn hands it on
-  argv, the way every delegation and automation launch delivers one, captures
-  values it can only learn at runtime (a delegate's seed id) out of that brief,
-  and runs commands. The garden seed-nudge scenario and the scheduled-cleanup
-  automation's worktree removal run on it instead of a real model.

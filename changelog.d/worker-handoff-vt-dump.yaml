@@ -1,8 +1,0 @@
-kind: internal
-area: terminal
-change: >
-  A parsed terminal can serialize itself as plain VT escape sequences —
-  scrollback, styles, modes, and the primary screen under a full-screen
-  app included. Unlike the binary snapshot, that dump replays into any
-  libghostty-vt version, which is what lets a pty-worker hand its screen
-  to a replacement built against a newer one.

@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: Remove two keyboard shortcut e2e tests for the deleted Branch Picker.

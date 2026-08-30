@@ -1,7 +1,0 @@
-kind: fixed
-area: app
-change: >
-  Clicking a workspace header now selects the first session shown in that
-  workspace. Session updates can arrive in a different order from the workspace
-  layout; the header previously used that transient arrival order while the
-  sidebar used layout order, so it could select a different session under load.

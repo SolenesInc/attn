@@ -1,6 +1,0 @@
-kind: internal
-area: linux
-change: >
-  The Tauri crate now compiles and passes clippy on Linux, CI runs it on
-  both macOS and Linux, and browser screenshot/print say which platform
-  they don't work on instead of a generic macOS-only message.

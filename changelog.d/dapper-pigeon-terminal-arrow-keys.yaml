@@ -1,6 +1,0 @@
-kind: fixed
-area: terminal
-change: >
-  Terminal keyboard input now talks directly to the pinned libghostty engine,
-  restoring arrow keys and keeping navigation, modifiers, composition, and
-  paste behavior aligned with future engine updates.
