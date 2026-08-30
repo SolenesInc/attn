@@ -158,7 +158,7 @@
 }
 
 .seed-document__child-id {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   margin-left: auto;
   opacity: 0;
 }
@@ -203,7 +203,7 @@
 .seed-document__state.is-harvested > span { background: var(--color-text-tertiary); }
 
 .seed-document__id {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   margin-left: auto;
 }
 

@@ -3,11 +3,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Binding, Combo, Chord } from '../shortcuts/registry';
-import { shortcutTokens } from '../shortcuts/formatShortcut';
+import { keyCombo, shortcutTokens } from '../shortcuts/formatShortcut';
 import { eventToBinding, isRiskyBinding } from '../shortcuts/resolver';
 import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 import { KeyCombo } from './Keycap';
 import './KeyCaptureInput.css';
+import { modifierGlyphs } from '../shortcuts/platform';
 
 export type CaptureMode = 'combo' | 'chord';
 
@@ -32,6 +33,7 @@ export function KeyCaptureInput({
   onCaptureChord,
   onCancel,
 }: KeyCaptureInputProps) {
+  const glyphs = modifierGlyphs();
   const [error, setError] = useState<string | null>(null);
   const [leader, setLeader] = useState<Combo | null>(null);
 
@@ -72,7 +74,7 @@ export function KeyCaptureInput({
       }
       if (!leaderRef.current) {
         if (isRiskyBinding(result.def)) {
-          setError('A chord leader needs a ⌘ or ⌥ modifier.');
+          setError(`A chord leader needs a ${glyphs.accel} or ${glyphs.alt} modifier.`);
           return;
         }
         setError(null);
@@ -115,7 +117,7 @@ export function KeyCaptureInput({
         className={`key-capture-button${binding && isRiskyBinding(binding) ? ' key-capture-button--risky' : ''}`}
         onClick={onStart}
         title={binding && isRiskyBinding(binding)
-          ? 'No ⌘/⌥ modifier — this may collide with typing in the terminal'
+          ? `No ${glyphs.accel}/${glyphs.alt} modifier — this may collide with typing in the terminal`
           : 'Click to rebind'}
       >
         {binding
@@ -126,7 +128,7 @@ export function KeyCaptureInput({
         type="button"
         className="key-capture-chord-btn"
         onClick={onStartChord}
-        title="Record a leader-key chord (e.g. ⌘K then D)"
+        title={`Record a leader-key chord (e.g. ${keyCombo('accel', 'K')} then D)`}
         aria-label="Record a chord"
       >
         chord

@@ -254,7 +254,7 @@
   background: var(--surface, #1c1c1c);
   border: 1px solid var(--border, #2e2e2e);
   border-radius: 4px;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, 'DejaVu Sans Mono', monospace);
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;

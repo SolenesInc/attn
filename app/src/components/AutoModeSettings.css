@@ -60,7 +60,7 @@
 .automode-value {
   overflow: hidden;
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -97,7 +97,7 @@
 }
 
 .automode-mono {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, 'DejaVu Sans Mono', monospace;
 }
 
 .automode-patterns {

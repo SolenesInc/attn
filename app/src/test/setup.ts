@@ -13,6 +13,12 @@ vi.mock('@tauri-apps/api/app', () => ({
   getVersion: vi.fn(async () => '0.0.0'),
 }));
 
+// happy-dom derives navigator.platform from an X11 user agent. attn ships as a macOS app, so
+// the suite defaults to Mac glyphs and Cmd matching; non-mac tests override this per test.
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+}
+
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,

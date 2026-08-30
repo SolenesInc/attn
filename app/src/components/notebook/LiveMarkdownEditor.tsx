@@ -15,12 +15,9 @@ import { liveMarkdownPreview } from './liveMarkdownPreview';
 import { noteDir } from './linkResolver';
 import { markdownTables } from './tableWidget';
 import { computeMinimalEdit } from './minimalEdit';
+import { acceleratorBindings } from './acceleratorKeymap';
 
-// CM resolves "Mod-" to Meta only when it detects a Mac platform, so a Linux CI
-// browser rebinds Cmd+F to Ctrl+F. attn is macOS only: rewrite "Mod-" to "Cmd-".
-const macSearchKeymap: readonly KeyBinding[] = searchKeymap.map((binding) =>
-  binding.key?.startsWith('Mod-') ? { ...binding, key: `Cmd-${binding.key.slice(4)}` } : binding,
-);
+const acceleratorSearchKeymap: readonly KeyBinding[] = acceleratorBindings(searchKeymap);
 
 export interface LiveSelection {
   text: string;
@@ -178,7 +175,7 @@ export const LiveMarkdownEditor = forwardRef<LiveMarkdownEditorHandle, LiveMarkd
       liveMarkdownPreview({ onFollowLink }),
       brokenLinks({ existsFile, baseDir: noteDir(notePath ?? '') }),
       search({ top: true }),
-      keymap.of(macSearchKeymap),
+      keymap.of(acceleratorSearchKeymap),
       formattingKeymap(),
       editorTheme,
     ],

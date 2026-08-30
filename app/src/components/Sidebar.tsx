@@ -24,6 +24,7 @@ import type { QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
 import { AutomationProvenance } from './AutomationProvenance';
+import { keyCombo } from '../shortcuts/formatShortcut';
 
 interface LocalSession {
   id: string;
@@ -804,7 +805,7 @@ export function Sidebar({
               key={workspace.id}
               className={`icon-btn session-icon ${selectedWorkspaceId === workspace.id ? 'active' : ''} ${isSessionless(workspace) ? 'sessionless' : ''}`}
               onClick={() => onSelectWorkspace(workspace.id)}
-              title={`${workspace.title} (⌘${visualIndexOfWorkspace(workspace.id) + 1})`}
+              title={`${workspace.title} (${keyCombo('accel', String(visualIndexOfWorkspace(workspace.id) + 1))})`}
             >
               ▸
               {workspace.sessions.some(sessionWantsAttention) && (
@@ -812,7 +813,7 @@ export function Sidebar({
               )}
             </button>
           ))}
-          <button className="icon-btn" onClick={onNewSession} title="New Session (⌘N)">
+          <button className="icon-btn" onClick={onNewSession} title={`New Session (${formatShortcut('session.new')})`}>
             <PlusIcon />
           </button>
           <div className="icon-spacer" />
@@ -856,7 +857,7 @@ export function Sidebar({
           </button>
         </div>
         <div className="sidebar-header-row">
-          <button className="new-session-btn" onClick={onNewSession} title="New Session (⌘N)" aria-label="New Session">
+          <button className="new-session-btn" onClick={onNewSession} title={`New Session (${formatShortcut('session.new')})`} aria-label="New Session">
             <PlusIcon />
           </button>
           <div className="sidebar-settings-anchor">
@@ -1022,7 +1023,7 @@ export function Sidebar({
                     {workspace.sessions[0].endpointName}
                   </span>
                 )}
-                <span className="session-shortcut">⌘{workspaceIndex + 1}</span>
+                <span className="session-shortcut">{keyCombo('accel', String(workspaceIndex + 1))}</span>
                 {(onRenameWorkspace || onMuteWorkspace || onPinWorkspace) && (
                   <span className="workspace-actions">
                     {onPinWorkspace && (

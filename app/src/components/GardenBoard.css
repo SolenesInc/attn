@@ -154,7 +154,7 @@
 
 .garden-board__trail-id {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   margin-left: 8px;
@@ -253,7 +253,7 @@
 
 .garden-board__label {
   color: var(--color-text-secondary);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -264,7 +264,7 @@
   background: var(--color-bg-button);
   border-radius: 999px;
   color: var(--color-text-tertiary);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   line-height: 1.6;
@@ -433,7 +433,7 @@
 .garden-card__id {
   color: var(--color-text-muted);
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-variant-numeric: tabular-nums;
   margin-left: auto;
 }
@@ -441,7 +441,7 @@
 .garden-card__age {
   color: var(--color-text-dimmed);
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-variant-numeric: tabular-nums;
   min-width: 2.4em;
   text-align: right;
@@ -652,7 +652,7 @@
 
 .garden-board__carry-id {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -703,7 +703,7 @@
 
 .garden-board__zone-id {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -761,7 +761,7 @@
 .garden-compose__id {
   color: var(--color-text-muted);
   flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
@@ -798,7 +798,7 @@
   background: var(--color-bg-button);
   border-radius: 3px;
   color: var(--color-text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   padding: 1px 4px;
 }
@@ -903,7 +903,7 @@
 }
 
 .garden-sheet__rows dd.is-mono {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-variant-numeric: tabular-nums;
 }
 
@@ -911,7 +911,7 @@
   background: var(--color-bg-elevated);
   border-radius: 4px;
   color: var(--color-text-secondary);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-sm);
   padding: 6px 8px;
 }

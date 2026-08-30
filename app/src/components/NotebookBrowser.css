@@ -510,7 +510,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text-primary);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace);
   font-size: 13px;
   line-height: 1.55;
   overflow: auto;
@@ -765,7 +765,7 @@
 
 .notebook-browser-document-state .notebook-browser-document-subtle {
   margin-top: 4px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace);
   color: var(--color-text-dimmed);
   opacity: 0.8;
 }

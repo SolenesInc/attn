@@ -53,6 +53,7 @@ import {
   swapSuspendedLeaf,
   type AttentionViewport,
 } from './attentionLayout';
+import { keyCombo } from '../../shortcuts/formatShortcut';
 
 const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 // Only swallows the trailing pointerup/synthetic click from the release itself,
@@ -1520,7 +1521,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
               type="button"
               className="workspace-focus-exit"
               onClick={() => setMaximizedLeafId(null)}
-              title="Exit focus mode (⌘⇧Enter)"
+              title={`Exit focus mode (${keyCombo('accel', 'shift', 'Enter')})`}
             >
               Return to split
             </button>

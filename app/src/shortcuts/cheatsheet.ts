@@ -1,6 +1,6 @@
 
 import { ShortcutId } from './registry';
-import { shortcutTokens } from './formatShortcut';
+import { keyComboTokens, shortcutTokens } from './formatShortcut';
 
 export interface CheatsheetRow {
   label: string;
@@ -30,7 +30,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           label: 'Previous / next session',
           combos: [fromId('session.prev'), fromId('session.next')],
         },
-        { label: 'Jump to workspace 1–9', combos: [['⌘', '1–9']] },
+        { label: 'Jump to workspace 1–9', combos: [keyComboTokens('accel', '1–9')] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
         { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },
         { label: 'Jump to next waiting session', combos: [fromId('session.jumpToWaiting')] },
@@ -48,7 +48,7 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'Split pane sideways', combos: [fromId('terminal.splitHorizontal')] },
         {
           label: 'Move focus between panes',
-          combos: [['⌘', '⌥', '←↑→↓']],
+          combos: [keyComboTokens('accel', 'alt', '←↑→↓')],
           note: 'Crosses into the next workspace at an edge.',
         },
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },

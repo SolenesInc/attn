@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ShortcutsModal } from './ShortcutsModal';
+import { withNavigatorPlatform } from '../test/platformStub';
 
 describe('ShortcutsModal', () => {
   it('renders nothing when closed', () => {
@@ -21,6 +22,16 @@ describe('ShortcutsModal', () => {
     expect(newWorkspaceRow!.querySelectorAll('.keycap')).toHaveLength(2);
     expect(newWorkspaceRow!.textContent).toContain('⌘');
     expect(newWorkspaceRow!.textContent).toContain('T');
+  });
+
+  it('labels the accelerator Ctrl off-mac', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      render(<ShortcutsModal isOpen onClose={() => {}} />);
+    });
+    const newWorkspaceRow = screen.getByText('New workspace').closest('.shortcuts-row');
+    const caps = [...newWorkspaceRow!.querySelectorAll('.keycap')].map((c) => c.textContent);
+    expect(caps).toEqual(['Ctrl', 'T']);
+    expect(newWorkspaceRow!.textContent).not.toContain('⌘');
   });
 
   it('closes via the close button', () => {

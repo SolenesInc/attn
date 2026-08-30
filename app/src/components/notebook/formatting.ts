@@ -5,6 +5,7 @@ import { EditorSelection, Prec, type EditorState, type Extension, type Transacti
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
+import { acceleratorBindings } from './acceleratorKeymap';
 
 export type InlineMarkType = 'strong' | 'emphasis' | 'code';
 
@@ -104,13 +105,12 @@ function toggleCommand(type: InlineMarkType) {
   };
 }
 
-// Explicit Cmd- (not Mod-): CodeMirror resolves Mod- by sniffing navigator.platform, wrong on Linux CI.
 export function formattingKeymap(): Extension {
-  const bindings: KeyBinding[] = [
-    { key: 'Cmd-b', run: toggleCommand('strong') },
-    { key: 'Cmd-i', run: toggleCommand('emphasis') },
-    { key: 'Cmd-e', run: toggleCommand('code') },
-  ];
+  const bindings: KeyBinding[] = acceleratorBindings([
+    { key: 'Mod-b', run: toggleCommand('strong') },
+    { key: 'Mod-i', run: toggleCommand('emphasis') },
+    { key: 'Mod-e', run: toggleCommand('code') },
+  ]);
   // basicSetup's defaultKeymap binds Mod-i to selectParentSyntax with preventDefault and runs first at equal precedence.
   return Prec.high(keymap.of(bindings));
 }

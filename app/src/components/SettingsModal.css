@@ -49,7 +49,7 @@
 
 .settings-title h2 {
   margin: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   line-height: 1;
   font-weight: 700;
@@ -130,7 +130,7 @@
 .settings-kicker,
 .settings-label,
 .settings-meta-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   line-height: 1;
   font-weight: 700;
@@ -178,7 +178,7 @@
   border-radius: 999px;
   color: var(--color-text-tertiary);
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
   line-height: 18px;
@@ -334,7 +334,7 @@
   background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
   padding: 2px 8px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -404,7 +404,7 @@
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   outline: none;
 }
@@ -594,7 +594,7 @@
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   padding: 0 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   font-weight: 700;
 }
@@ -612,7 +612,7 @@
 
 .settings-meta-row code {
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   overflow-wrap: anywhere;
 }
@@ -674,7 +674,7 @@
 .settings-price-model {
   min-width: 0;
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -727,7 +727,7 @@
 
 .endpoint-name {
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -776,7 +776,7 @@
 
 .settings-status {
   color: var(--color-text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   line-height: 1.3;
 }
@@ -802,7 +802,7 @@
 
 .agent-capabilities-agent {
   color: var(--color-text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
 }
 
@@ -834,7 +834,7 @@
 
 .muted-item-name {
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   overflow-wrap: anywhere;
 }

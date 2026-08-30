@@ -15,6 +15,7 @@ import appIcon from '../assets/icon.png';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
 import { AutomationProvenance } from './AutomationProvenance';
 import './Dashboard.css';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 
 type DashboardSession = {
   id: string;
@@ -557,7 +558,7 @@ export function Dashboard({
                 className={`refresh-btn ${isRefreshing ? 'refreshing' : ''} ${refreshError ? 'error' : ''}`}
                 onClick={onRefreshPRs}
                 disabled={isRefreshing}
-                title={refreshError || 'Refresh PRs (⌘R)'}
+                title={refreshError || `Refresh PRs (${formatShortcut('session.refreshPRs')})`}
               >
                 {isRefreshing ? (
                   <span className="refresh-dots">

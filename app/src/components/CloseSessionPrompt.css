@@ -30,7 +30,7 @@
 }
 
 .close-session-title {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -48,7 +48,7 @@
 
 .close-session-label,
 .close-session-count {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   color: var(--color-text-primary);
 }
 
