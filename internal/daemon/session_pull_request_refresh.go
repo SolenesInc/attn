@@ -18,8 +18,6 @@ const (
 	sessionPullRequestRefreshTimeout = 2 * time.Minute
 )
 
-// The tick runs at the hottest cadence any row can ask for; each row's own heat
-// decides whether this tick is the one that fetches it.
 const sessionPullRequestRefreshTick = protocol.HeatHotInterval
 
 const (
@@ -28,8 +26,7 @@ const (
 	sessionPullRequestClosed = "closed"
 )
 
-// What the refresh job needs from a GitHub host. The registry hands out a concrete
-// *github.Client, so this narrow view is the seam tests replace.
+// The registry hands out a concrete *github.Client; this narrow view is the test seam.
 type sessionPRHost interface {
 	FetchPullRequestSnapshot(repo string, number int) (*github.PullRequestSnapshot, error)
 	FetchPullRequestReviewStatus(repo string, number int) (string, error)
@@ -67,8 +64,6 @@ func (d *Daemon) sessionPullRequestRefreshHandler(_ context.Context, _ *jobs.Job
 	return map[string]any{"fetched": fetched, "changed": changed}, nil
 }
 
-// One pull request and every session row that points at it. The status belongs to
-// the pull request, so two sessions that opened the same one share a single fetch.
 type sessionPullRequestGroup struct {
 	prID     string
 	host     string
@@ -144,8 +139,6 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	return fetched, changed
 }
 
-// Groups keep the order the rows arrived in, so a replaying consumer sees the same
-// sequence the daemon saw.
 func (d *Daemon) dueSessionPullRequests(records []store.SessionPullRequestRecord, now time.Time) []*sessionPullRequestGroup {
 	var groups []*sessionPullRequestGroup
 	byPR := make(map[string]*sessionPullRequestGroup)
@@ -180,8 +173,6 @@ func (d *Daemon) dueSessionPullRequests(records []store.SessionPullRequestRecord
 	return due
 }
 
-// A session with no runtime cannot move a pull request along, and reloading it puts
-// the row back on the next tick.
 func (d *Daemon) sessionPullRequestSessionActive(sessionID string) bool {
 	session := d.store.Get(sessionID)
 	return session != nil && session.State != protocol.SessionStateRecoverable
@@ -193,8 +184,7 @@ func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessio
 		return store.SessionPullRequestStatus{}, err
 	}
 
-	// A finished pull request keeps the CI and review it ended with: GitHub reports
-	// mergeable_state "unknown" once it is closed, which would erase a real result.
+	// A closed pull request reports mergeable_state "unknown", which would erase a real result.
 	status := group.previous
 	status.Title = snapshot.Title
 	status.Draft = snapshot.Draft
@@ -276,7 +266,6 @@ func splitPullRequestRepository(repository string) (host, repo string, ok bool) 
 	return parts[0], parts[1], true
 }
 
-// Mirrors the inbox's heat pacing, derived from the row rather than stored on it.
 func sessionPullRequestRefreshInterval(rec store.SessionPullRequestRecord, now time.Time) time.Duration {
 	age := now.Sub(protocol.Timestamp(rec.LastActivityAt).Time())
 	switch {
@@ -314,8 +303,7 @@ func (d *Daemon) unsubscribeSessionPullRequestFacts() {
 	}
 }
 
-// The inbox poller saw this move, so the row goes back on the hot cadence and the two
-// pollers agree within a tick. Publishes nothing: it runs inside the bus fan-out.
+// Runs inside the bus fan-out: no nested publish.
 func (d *Daemon) reheatSessionPullRequest(event bus.Event) {
 	if d.store == nil {
 		return

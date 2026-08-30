@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// A GitHub host that answers from memory, so refresh tests never touch a network
-// and never wait on one.
 type fakePRHost struct {
 	snapshot   *github.PullRequestSnapshot
 	review     string
@@ -143,7 +141,6 @@ func TestSessionPullRequestRefreshPublishesOnlyRealChanges(t *testing.T) {
 		t.Fatalf("session updates after the first fetch = %d, want one", len(events))
 	}
 
-	// Same answer from GitHub, one heat interval later: nothing to tell the app.
 	if _, changed := d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval)); changed != 0 {
 		t.Fatalf("changed = %d on an unchanged pull request, want 0", changed)
 	}
@@ -169,8 +166,6 @@ func TestSessionPullRequestRefreshPacesByHeat(t *testing.T) {
 	host := &fakePRHost{snapshot: openSnapshot("Fresh status", "clean", "sha-1"), review: "none"}
 	serveHost(d, "github.com", host)
 
-	// A row is hot for HeatHotDuration after its last activity, warm until
-	// HeatWarmDuration, cold after that; each band has its own interval.
 	tests := []struct {
 		name        string
 		sinceActive time.Duration
@@ -256,7 +251,6 @@ func TestSessionPullRequestRefreshLeavesHostsItCannotReach(t *testing.T) {
 	if entry.State != "open" || entry.CIStatus != nil || entry.StatusFetchedAt != nil {
 		t.Errorf("entry = %+v, want the row as recorded", entry)
 	}
-	// The cursor still moves, so an unreachable host is not retried every tick.
 	rec := storedPullRequest(t, d, "s1")
 	if rec.StatusCheckedAt == "" {
 		t.Error("status_checked_at is unset, want the attempt recorded")
@@ -282,7 +276,6 @@ func TestSessionPullRequestRefreshSkipsRateLimitedHosts(t *testing.T) {
 	if host.snapshots != 0 {
 		t.Errorf("snapshot calls = %d, want none while rate limited", host.snapshots)
 	}
-	// No cursor written: the row is due again the moment the limit lifts.
 	if rec := storedPullRequest(t, d, "s1"); rec.StatusCheckedAt != "" {
 		t.Errorf("status_checked_at = %q, want it untouched by a rate limit", rec.StatusCheckedAt)
 	}
@@ -395,7 +388,6 @@ func TestSessionPullRequestReheatsWhenTheInboxSeesTheSamePullRequest(t *testing.
 
 	now := time.Now()
 	d.refreshSessionPullRequests(now)
-	// Cold: nothing has moved on this pull request for longer than the warm window.
 	stale := now.Add(-2 * protocol.HeatWarmDuration)
 	if err := d.store.TouchSessionPullRequestActivity("github.com:victorarias/attn#71", stale); err != nil {
 		t.Fatalf("age the row: %v", err)

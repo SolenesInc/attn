@@ -583,8 +583,6 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	return details, nil
 }
 
-// mergeable_state is the CI signal already on the pull request payload, so reading
-// it costs no extra call to the checks API.
 func CIStatusFromMergeableState(mergeableState string) string {
 	switch mergeableState {
 	case "clean":

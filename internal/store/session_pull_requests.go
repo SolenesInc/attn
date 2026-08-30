@@ -25,13 +25,10 @@ type SessionPullRequestRecord struct {
 	HeadBranch      string
 	StatusFetchedAt string
 	LastActivityAt  string
-	// The refresh job's pacing cursor: when it last looked, success or not.
-	// StatusFetchedAt is the last status that actually landed, which is what the app shows.
+	// Pacing cursor, moved on every attempt; StatusFetchedAt is the last status that landed.
 	StatusCheckedAt string
 }
 
-// Status the refresh job reads from GitHub. Everything else on a row is set when
-// the pull request is recorded and never moves.
 type SessionPullRequestStatus struct {
 	Title          string
 	Draft          bool
@@ -118,8 +115,6 @@ func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullReque
 	return bySession
 }
 
-// Rows the refresh job may still learn something about. A merged or closed pull
-// request is finished, so it never appears here again.
 func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -140,8 +135,6 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	return records
 }
 
-// Keyed by pull request, not by session: the status belongs to the pull request, so
-// two sessions that opened the same one share a single fetch.
 func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -161,8 +154,6 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 	return err
 }
 
-// The refresh job looked and came back empty-handed. Moving the cursor alone keeps a
-// pull request nobody can read from being retried on every tick.
 func (s *Store) MarkSessionPullRequestChecked(prID string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -176,7 +167,6 @@ func (s *Store) MarkSessionPullRequestChecked(prID string, at time.Time) error {
 	return err
 }
 
-// Something moved on this pull request, so it goes back to the hot refresh cadence.
 func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
