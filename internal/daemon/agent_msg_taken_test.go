@@ -184,3 +184,29 @@ func TestAgentMsgToAWorkingTargetUsesPromptReceiptWithoutAStateEdge(t *testing.T
 		t.Fatalf("pasted %d times, want 1: %q", len(prompts), prompts)
 	}
 }
+
+func TestAgentMsgToAShellDeliversEveryDoorbellNotJustTheFirst(t *testing.T) {
+	withAgentMessageTakenWindow(t, 50*time.Millisecond)
+	d, doorbell := newAgentMsgDaemon(t)
+	addCharacterizationSession(t, d, "sender-session-id", protocol.SessionAgentClaude, protocol.SessionStateIdle)
+	addCharacterizationSession(t, d, "shell-session-id", protocol.SessionAgentShell, protocol.SessionStateIdle)
+
+	for _, content := range []string{"s-abc123 moved: note", "s-abc123 moved: harvested"} {
+		resp := callAgentMsg(t, d, "shell-session-id", "sender-session-id", content)
+		result := resp.AgentMsgResult
+		if result == nil || result.Status != protocol.AgentMsgStatusDelivered {
+			t.Fatalf("%q: result = %+v, want delivered", content, result)
+		}
+	}
+
+	if prompts := doorbell.pasted(); len(prompts) != 2 {
+		t.Fatalf("pasted %d times, want 2: %q", len(prompts), prompts)
+	}
+	queued, err := d.store.UndeliveredAgentMessages("shell-session-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("a shell doorbell stayed queued: %+v", queued)
+	}
+}
