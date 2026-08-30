@@ -52,6 +52,7 @@ type candidateValidation struct {
 	currentMainRef      string
 	headRef             string
 	sourceAcceptance    string
+	tagStatus           string
 	otherOpenCandidates int
 }
 
@@ -472,7 +473,7 @@ func validateManifest(manifest candidateManifest) error {
 
 func runCandidate(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "validate" {
-		return errors.New("usage: release-train candidate validate --current-main <ref> --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
+		return errors.New("usage: release-train candidate validate --current-main <ref> --tag-status absent --other-open-candidates 0 [--source-acceptance success] [--head ref] [--manifest path]")
 	}
 	flags := flag.NewFlagSet("candidate validate", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -481,6 +482,7 @@ func runCandidate(root string, args []string, stdout io.Writer) error {
 	flags.StringVar(&input.currentMainRef, "current-main", "", "current main ref")
 	flags.StringVar(&input.headRef, "head", input.headRef, "candidate head ref")
 	flags.StringVar(&input.sourceAcceptance, "source-acceptance", "", "accepted source conclusion")
+	flags.StringVar(&input.tagStatus, "tag-status", "", "remote candidate tag status")
 	flags.IntVar(&input.otherOpenCandidates, "other-open-candidates", -1, "other open candidate count")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -517,6 +519,12 @@ func validateCandidate(root string, input candidateValidation) error {
 	if input.otherOpenCandidates != 0 {
 		return fmt.Errorf("found %d other open release candidate(s)", input.otherOpenCandidates)
 	}
+	if strings.ToLower(input.tagStatus) != "absent" {
+		if input.tagStatus == "" {
+			return errors.New("remote tag status is missing")
+		}
+		return fmt.Errorf("remote tag status is %s, expected absent", input.tagStatus)
+	}
 	if input.currentMainRef == "" {
 		return errors.New("current main ref is required")
 	}
@@ -539,9 +547,6 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
 		return err
 	}
-	if err := requireTagAbsent(root, "v"+manifest.Version); err != nil {
-		return err
-	}
 	if err := requireNoFragments(root, headSHA); err != nil {
 		return err
 	}
@@ -552,20 +557,6 @@ func validateCandidate(root string, input candidateValidation) error {
 		return err
 	}
 	return nil
-}
-
-func requireTagAbsent(root, tag string) error {
-	command := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/tags/"+tag)
-	command.Dir = root
-	err := command.Run()
-	if err == nil {
-		return fmt.Errorf("tag %s already exists", tag)
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-		return nil
-	}
-	return err
 }
 
 func requireNoFragments(root, ref string) error {

@@ -1,0 +1,3 @@
+kind: internal
+area: release
+change: Release preparation checks only the requested remote tag, so stale local historical tags cannot block a candidate.

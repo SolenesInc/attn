@@ -230,7 +230,7 @@ func TestCandidateValidationAcceptsPromotionAndHotfix(t *testing.T) {
 			}
 			err := validateCandidate(repo.root, candidateValidation{
 				manifestPath: defaultManifestPath, currentMainRef: mainSHA, headRef: headSHA,
-				sourceAcceptance: acceptance, otherOpenCandidates: 0,
+				sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -283,14 +283,13 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "main moved",
 		},
 		{
-			name: "tag exists",
-			mutate: func(repo *testRepository, _, head string) {
-				repo.git("tag", "v0.12.0", head)
-			},
+			name: "remote tag exists",
 			input: func(main, head string) candidateValidation {
-				return validCandidateInput(main, head, "success")
+				input := validCandidateInput(main, head, "success")
+				input.tagStatus = "present"
+				return input
 			},
-			wantErr: "already exists",
+			wantErr: "expected absent",
 		},
 		{
 			name: "version disagreement",
@@ -390,7 +389,7 @@ func TestCandidateValidationAllowsInternalFragmentsWithoutChangelogUpdate(t *tes
 func validCandidateInput(main, head, acceptance string) candidateValidation {
 	return candidateValidation{
 		manifestPath: defaultManifestPath, currentMainRef: main, headRef: head,
-		sourceAcceptance: acceptance, otherOpenCandidates: 0,
+		sourceAcceptance: acceptance, tagStatus: "absent", otherOpenCandidates: 0,
 	}
 }
 
