@@ -51,9 +51,23 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
   });
 
+  it('keeps the turn-accounting family armed on the mock agent', () => {
+    for (const runnerId of ['TR-201', 'TR-204', 'TR-301', 'TR-401', 'TR-401-CODEX-MAIN', 'TR-402']) {
+      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
+    }
+  });
+
   it('takes the permissive flag when one runner id serves several entries', () => {
-    expect(scenarioCatalog.filter((scenario) => scenario.runnerId === 'TR-402').length).toBeGreaterThan(1);
-    expect(allowRealAgentsForRunner('TR-402')).toBe(true);
+    const catalog = [
+      { id: 'a', runnerId: 'DUO' },
+      { id: 'b', runnerId: 'DUO', allowRealAgents: true },
+    ];
+
+    expect(allowRealAgentsForRunner('DUO', catalog)).toBe(true);
+    expect(allowRealAgentsForRunner('DUO', [
+      { id: 'a', runnerId: 'DUO', allowRealAgents: ['pi'] },
+      { id: 'b', runnerId: 'DUO', allowRealAgents: ['pi', 'codex'] },
+    ])).toEqual(['pi', 'codex']);
   });
 });
 

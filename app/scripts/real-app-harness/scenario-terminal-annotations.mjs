@@ -13,7 +13,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createWindowDriver } from './platform.mjs';
-import { configureMockAgent, writeMockAgentFixture } from './mockAgent.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
@@ -283,7 +283,6 @@ async function main() {
   const cwd = path.join(runner.sessionDir, 'annotated');
   let sessionId = null;
   let paneId = null;
-  let mockAgent = null;
   const toolGateDir = path.join(runner.sessionDir, 'tool-gate');
   const toolStartedMarker = path.join(toolGateDir, 'started');
   const toolReleaseMarker = path.join(toolGateDir, 'release');
@@ -334,7 +333,6 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
-      mockAgent = await configureMockAgent({ client, observer, runner });
     });
 
     await runner.step('create_agent_session', async () => {
@@ -811,7 +809,6 @@ async function main() {
         await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
       }
     }
-    if (mockAgent) await mockAgent.restore().catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();
   }

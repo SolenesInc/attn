@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { harnessArtifactsRoot } from './common.mjs';
+import { MOCK_AGENT_AGENTS, MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import {
@@ -124,7 +125,9 @@ export function applyTripwireEnv(env, { dir, binaries }) {
   for (const name of TRIPWIRE_BINARIES) {
     const key = EXECUTABLE_VARS[name];
     if (binaries.includes(name)) {
-      env[key] = path.join(dir, name);
+      // A mocked agent pins at the mock, not the shim, so the scenario gets an
+      // agent; its shim stays on PATH, so a name-resolved exec still trips.
+      env[key] = MOCK_AGENT_AGENTS.includes(name) ? MOCK_AGENT_EXECUTABLE : path.join(dir, name);
       continue;
     }
     // An allowed binary must resolve for real, even if an earlier scenario in
@@ -219,6 +222,10 @@ export function armAgentTripwire({
     log(`REAL AGENTS ALLOWED for ${scenarioId}: ${allowed.join(', ')} — this scenario still runs a real agent binary.`);
   }
   log(`armed for ${scenarioId}: ${binaries.length > 0 ? binaries.join(', ') : '(nothing)'} — ledger ${ledgerPath}`);
+  const mocked = binaries.filter((name) => MOCK_AGENT_AGENTS.includes(name));
+  if (mocked.length > 0) {
+    log(`${mocked.join(', ')} run the mock agent for ${scenarioId}: ${MOCK_AGENT_EXECUTABLE}`);
+  }
   if (armed) {
     log(`${HEADLESS_TASKS_VAR}=off for ${scenarioId}: the daemon refuses narration, classification and every other headless task.`);
   }

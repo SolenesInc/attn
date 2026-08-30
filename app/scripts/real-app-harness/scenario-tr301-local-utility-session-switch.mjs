@@ -9,6 +9,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { widenWindowForSplitPanes } from './nativeWindowCapture.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   assertPaneVisibleContent,
@@ -44,7 +45,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-301',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-tr301-local-utility-session-switch',
     metadata: {
       agent: 'claude',
@@ -64,6 +65,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
     });
 
     primarySessionId = await runner.step('create_primary_session', async () => {

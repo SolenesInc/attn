@@ -29,8 +29,8 @@ import {
 import {
   ensureClaudeInitialPanePromptReady,
   ensureCodexInitialPanePromptReady,
-  preTrustClaudeFolder,
-  promptClaudeForStructuredBlock,
+  promptAgentForStructuredBlock,
+  writeStructuredBlockFixture,
 } from './scenarioAgents.mjs';
 
 function parseArgs(argv) {
@@ -149,7 +149,7 @@ function nativeCoverageThresholdsForAgent(agent) {
 async function prepareAgentBaseline(client, runner, sessionId, agent, token) {
   if (agent === 'claude') {
     await ensureClaudeInitialPanePromptReady(client, sessionId, 45_000);
-    const fixture = await promptClaudeForStructuredBlock(client, sessionId, token, 4);
+    const fixture = await promptAgentForStructuredBlock(client, sessionId, token, 4);
     runner.writeJson('agent-fixture.json', fixture);
     return token;
   }
@@ -169,7 +169,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-402',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: `scenario-tr402-local-${options.agent}-close-redraw`,
     metadata: {
       agent: options.agent,
@@ -201,12 +201,8 @@ async function main() {
       await setFrontWindowBounds({ ...bounds, x: 80, y: 80 }, { client });
     });
 
-    if (options.agent === 'claude') {
-      const trustedFolder = preTrustClaudeFolder(runner.sessionDir);
-      runner.log('claude:pre_trust_folder', { folder: trustedFolder });
-    }
-
     sessionId = await runner.step('create_local_session', async () => {
+      if (options.agent === 'claude') writeStructuredBlockFixture(runner.sessionDir, transcriptAnchorToken, 4);
       return createSessionAndWaitForInitialPane({
         client,
         observer,

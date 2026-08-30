@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
 import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
+import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
   currentHarnessProfile,
@@ -163,46 +164,23 @@ export async function sweepStaleHarnessSessions(observer, {
   return { swept: stale.length };
 }
 
-// Models mirror the "(cheap)" launch-catalog entries. Low effort keeps each
-// pinned recipe compatible and cheap regardless of the user's defaults.
-const CHEAP_LAUNCH_RECIPES = {
-  claude: { model: 'haiku', effort: 'low' },
-  codex: { model: 'gpt-5.4-mini', effort: 'low' },
-};
-
-function launchRecipeFor(agent) {
-  const override = (process.env[`ATTN_HARNESS_LAUNCH_MODEL_${agent.toUpperCase()}`] || '').trim();
-  if (override === 'inherit') {
-    return null;
-  }
-  const recipe = CHEAP_LAUNCH_RECIPES[agent];
-  return { ...recipe, model: override || recipe.model };
-}
-
 // Restores go straight to the daemon, not through the app: by the time the
 // last scenario cleanup runs the app is usually gone.
 const pendingSettingRestores = [];
 
-async function pinCheapLaunchRecipes(client, observer) {
-  for (const agent of Object.keys(CHEAP_LAUNCH_RECIPES)) {
-    const recipe = launchRecipeFor(agent);
-    if (!recipe) {
+// The tripwire pins the mock in the environment the daemon inherits; the app
+// sends this setting with every spawn, so both halves have to name it.
+async function pinMockAgentExecutables(client, observer) {
+  for (const agent of mockPinnedAgents()) {
+    const key = `${agent}_executable`;
+    const previous = observer.getSetting(key) || '';
+    if (previous === MOCK_AGENT_EXECUTABLE) {
       continue;
     }
-    const settings = [
-      { key: `default_model_${agent}`, value: recipe.model },
-      { key: `default_effort_${agent}`, value: recipe.effort },
-    ];
-    for (const { key, value } of settings) {
-      const previous = observer.getSetting(key);
-      if (previous === value) {
-        continue;
-      }
-      await client.request('set_setting', { key, value });
-      console.log(`[harness] pinned ${key}=${value} (was ${previous ? previous : 'unconfigured'})`);
-      if (!pendingSettingRestores.some((restore) => restore.key === key)) {
-        pendingSettingRestores.push({ key, value: previous });
-      }
+    await client.request('set_setting', { key, value: MOCK_AGENT_EXECUTABLE });
+    console.log(`[harness] pinned ${key} at the mock agent (was ${previous ? previous : 'unconfigured'})`);
+    if (!pendingSettingRestores.some((restore) => restore.key === key)) {
+      pendingSettingRestores.push({ key, value: previous });
     }
   }
   installSettingRestoreHook();
@@ -287,7 +265,7 @@ export async function launchFreshAppAndConnect(client, observer, { sweepStaleSes
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();
-  await pinCheapLaunchRecipes(client, observer);
+  await pinMockAgentExecutables(client, observer);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
   }

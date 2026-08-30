@@ -20,6 +20,7 @@ import {
   tripwireMarker,
   writeTripwireShims,
 } from './agentTripwire.mjs';
+import { MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 
 let tmpDir;
 let runDir;
@@ -126,7 +127,11 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
     applyTripwireEnv(env, { dir, binaries: ['claude', 'codex', 'copilot'] });
 
     expect(env.PATH.split(path.delimiter)[0]).toBe(dir);
-    expect(env.ATTN_CLAUDE_EXECUTABLE).toBe(path.join(dir, 'claude'));
+    // claude and codex run the mock instead of the shim, so an armed scenario
+    // gets a deterministic agent; the shim still catches a name-resolved exec.
+    expect(env.ATTN_CLAUDE_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
+    expect(env.ATTN_CODEX_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
+    expect(env.ATTN_COPILOT_EXECUTABLE).toBe(path.join(dir, 'copilot'));
     expect(env.ATTN_PI_EXECUTABLE).toBeUndefined();
     expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex', 'copilot'] }));
   });
@@ -161,8 +166,8 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
       PATH: env.PATH,
       [TRIPWIRE_MARKER_VAR]: tripwire.marker,
       [HEADLESS_TASKS_VAR]: 'off',
-      ATTN_CLAUDE_EXECUTABLE: path.join(tripwire.dir, 'claude'),
-      ATTN_CODEX_EXECUTABLE: path.join(tripwire.dir, 'codex'),
+      ATTN_CLAUDE_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
+      ATTN_CODEX_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
       ATTN_COPILOT_EXECUTABLE: path.join(tripwire.dir, 'copilot'),
       ATTN_PI_EXECUTABLE: path.join(tripwire.dir, 'pi'),
     });

@@ -4,55 +4,21 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  configureMockAgent,
   createMockAgentInputParser,
-  HEADLESS_TASKS_ENV_VAR,
-  HEADLESS_TASKS_OVERRIDE_SETTING,
-  HEADLESS_TASKS_SETTING,
-  HEADLESS_TASKS_STORED_SETTING,
   markerStateForActions,
+  mockAgentFlavor,
+  mockAgentSplash,
   mockAgentTitle,
+  mockPinnedAgents,
+  MOCK_AGENT_AGENTS,
   MOCK_AGENT_CONFIG,
-  parseHeadlessSwitch,
+  MOCK_AGENT_EXECUTABLE,
+  readMockAgentConfig,
   selectMockAgentActions,
   stateMarker,
   validateMockAgentConfig,
   writeMockAgentFixture,
 } from './mockAgent.mjs';
-
-// The daemon stores every headless write, then republishes the effective key as
-// the env override when there is one; the fake keeps that split.
-function applyDaemonWrite(settings, { key, value }) {
-  if (key !== HEADLESS_TASKS_SETTING) {
-    settings[key] = value;
-    return;
-  }
-  settings[HEADLESS_TASKS_STORED_SETTING] = value;
-  const override = parseHeadlessSwitch(settings[HEADLESS_TASKS_OVERRIDE_SETTING]);
-  settings[HEADLESS_TASKS_SETTING] = override === null ? value : String(override);
-}
-
-function fakeWorld({ settings = {}, failWaitFor = null, daemonObserves = () => true } = {}) {
-  const writes = [];
-  const cleanups = [];
-  const client = {
-    request: async (verb, payload) => {
-      expect(verb).toBe('set_setting');
-      writes.push(payload);
-      if (daemonObserves(payload, writes.length - 1)) applyDaemonWrite(settings, payload);
-    },
-  };
-  const observer = {
-    getSetting: (key) => settings[key] || '',
-    waitFor: async (fn, description) => {
-      if (failWaitFor && description.includes(failWaitFor)) throw new Error(`timed out waiting for ${description}`);
-      const value = fn();
-      if (!value) throw new Error(`timed out waiting for ${description}`);
-      return value;
-    },
-  };
-  return { settings, writes, cleanups, client, observer, runner: { registerCleanup: (name, fn) => cleanups.push({ name, fn }) } };
-}
 
 let tmpDir;
 
@@ -135,94 +101,42 @@ describe('mock agent fixture', () => {
     expect(mockAgentTitle('annotation mock', 'ready')).toBe('annotation mock ready');
   });
 
-  it('points Codex at the shared executable, turns headless tasks off, and restores both once', async () => {
-    const world = fakeWorld({
-      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
-    });
-    const { writes, cleanups } = world;
-
-    const configured = await configureMockAgent(world);
-    expect(writes[0]).toEqual({ key: 'codex_executable', value: configured.executablePath });
-    expect(writes[1]).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'false' });
-    expect(cleanups[0].name).toBe('restore_codex_executable');
-
-    await configured.restore();
-    await cleanups[0].fn();
-    expect(writes).toHaveLength(4);
-    expect(writes[2]).toEqual({ key: 'codex_executable', value: '/usr/local/bin/codex' });
-    expect(writes[3]).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
+  it('stands in for the agent attn launched it as', () => {
+    expect(MOCK_AGENT_AGENTS).toEqual(['claude', 'codex']);
+    expect(mockAgentFlavor('claude').prompt).toBe('\u276f ');
+    expect(mockAgentFlavor('codex').header).toContain('OpenAI Codex');
+    expect(mockAgentFlavor('')).toBe(mockAgentFlavor('codex'));
   });
 
-  it('restores both settings when the wait after the executable switch fails', async () => {
-    const world = fakeWorld({
-      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
-      failWaitFor: 'headless tasks to be off',
-    });
+  it('draws a splash whose every row fills the pane and names the header once', () => {
+    const lines = mockAgentSplash({ header: 'OpenAI Codex mock agent', cwd: '/tmp/session', cols: 64 });
 
-    await expect(configureMockAgent(world)).rejects.toThrow('headless tasks to be off');
-    expect(world.cleanups[0].name).toBe('restore_codex_executable');
-    expect(world.settings.codex_executable).toBe('/usr/local/bin/codex');
-    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('true');
-    expect(world.writes.map((write) => write.key)).toEqual([
-      'codex_executable',
-      HEADLESS_TASKS_SETTING,
-      'codex_executable',
-      HEADLESS_TASKS_SETTING,
-    ]);
+    expect(lines).toHaveLength(5);
+    for (const line of lines) expect(line.trimEnd()).toHaveLength(63);
+    expect(lines.join('\n').match(/OpenAI Codex/g)).toHaveLength(1);
+    expect(lines[0].endsWith('\u256e')).toBe(true);
+    expect(lines.at(-1).endsWith('\u256f')).toBe(true);
   });
 
-  it('restores the stored headless value the environment was masking', async () => {
-    const world = fakeWorld({
-      settings: {
-        codex_executable: '/usr/local/bin/codex',
-        [HEADLESS_TASKS_SETTING]: 'false',
-        [HEADLESS_TASKS_STORED_SETTING]: 'true',
-        [HEADLESS_TASKS_OVERRIDE_SETTING]: 'off',
-      },
-    });
-
-    const configured = await configureMockAgent(world);
-    expect(configured.previousHeadless).toBe('true');
-    await configured.restore();
-    expect(world.writes.at(-1)).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
-    expect(world.settings[HEADLESS_TASKS_STORED_SETTING]).toBe('true');
-    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('false');
-
-    await configured.restore();
-    expect(world.writes).toHaveLength(4);
+  it('keeps the splash inside a narrow pane', () => {
+    for (const line of mockAgentSplash({ header: 'Claude Code mock agent', cwd: '/tmp/x', cols: 28 })) {
+      expect(line.length).toBe(27);
+    }
   });
 
-  it('leaves the cleanup armed when a restore dispatch is accepted but never observed', async () => {
-    const world = fakeWorld({
-      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
-      daemonObserves: (_payload, index) => index < 2,
-    });
+  it('is a silent agent when the session directory holds no fixture', () => {
+    const config = readMockAgentConfig(tmpDir);
 
-    const configured = await configureMockAgent(world);
-    await expect(configured.restore()).rejects.toThrow(
-      'the daemon never confirmed codex_executable back to "/usr/local/bin/codex"',
-    );
-    expect(world.writes).toHaveLength(4);
-    expect(world.settings.codex_executable).toBe(configured.executablePath);
-    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('false');
-
-    await expect(world.cleanups[0].fn()).rejects.toThrow('codex_executable back to "/usr/local/bin/codex"');
-    expect(world.writes).toHaveLength(6);
+    expect(config.turns).toEqual([]);
+    expect(selectMockAgentActions(config, 'anything at all')).toEqual([]);
   });
 
-  it('refuses by name before writing anything when the environment forces headless tasks on', async () => {
-    const world = fakeWorld({
-      settings: {
-        codex_executable: '/usr/local/bin/codex',
-        [HEADLESS_TASKS_SETTING]: 'true',
-        [HEADLESS_TASKS_STORED_SETTING]: 'false',
-        [HEADLESS_TASKS_OVERRIDE_SETTING]: 'on',
-      },
-    });
-
-    await expect(configureMockAgent(world)).rejects.toThrow(`${HEADLESS_TASKS_ENV_VAR}=on forces headless tasks on`);
-    expect(world.writes).toEqual([]);
-    expect(world.cleanups).toEqual([]);
+  it('names only the agents whose executable is pinned at the mock', () => {
+    expect(mockPinnedAgents({
+      ATTN_CLAUDE_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
+      ATTN_CODEX_EXECUTABLE: '/opt/homebrew/bin/codex',
+    })).toEqual(['claude']);
+    expect(mockPinnedAgents({})).toEqual([]);
   });
 });
 
@@ -253,6 +167,39 @@ describe('mock agent turns', () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
+
+  it('paints a full-width splash and answers nothing when no fixture was written', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    const wrapper = path.join(tmpDir, 'fake-attn.mjs');
+    fs.writeFileSync(wrapper, FAKE_ATTN, { mode: 0o755 });
+    fs.writeFileSync(ledger, '');
+
+    child = spawn(process.execPath, [MOCK_AGENT_EXECUTABLE], {
+      cwd: tmpDir,
+      env: {
+        ...process.env,
+        ATTN_WRAPPER_PATH: wrapper,
+        MOCK_AGENT_LEDGER: ledger,
+        ATTN_SESSION_ID: 'sess-splash',
+        ATTN_AGENT: 'claude',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+
+    await waitFor(() => stdout.includes('\u276f ') || null, 'the mock to paint its prompt');
+    expect(stdout).toContain('Claude Code mock agent');
+    expect(stdout).toContain('\u256d');
+    expect(stdout.split('\n').some((line) => line.trimEnd().length >= 70)).toBe(true);
+
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    child.stdin.write('nothing matches this\r');
+    await waitFor(() => calls().find((call) => call.args[0] === '_hook-stop'), 'the silent turn to close');
+    expect(stdout).not.toContain('\u2022 ');
+  });
 
   it('closes a turn with the state marker and the real stop hook', async () => {
     const ledger = path.join(tmpDir, 'attn-calls.jsonl');
