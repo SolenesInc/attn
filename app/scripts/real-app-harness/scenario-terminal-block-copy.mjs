@@ -33,7 +33,6 @@ function parseArgs(argv) {
 
 const { readClipboard, writeClipboard } = appPlatform;
 
-// Off-mac the terminal copies with Ctrl+Shift+C (Ctrl+C is SIGINT) and block copy with Ctrl+Alt+C.
 const copyChord = appPlatform.os === 'darwin'
   ? { label: 'Cmd+C', modifiers: { command: true } }
   : { label: 'Ctrl+Shift+C', modifiers: { control: true, shift: true } };
@@ -41,7 +40,6 @@ const copyCommandChord = appPlatform.os === 'darwin'
   ? { label: 'Cmd+Shift+C', modifiers: { command: true, shift: true } }
   : { label: 'Ctrl+Alt+C', modifiers: { control: true, option: true } };
 
-// fish 4 is the floor: 3.x emits no OSC 133, so blocks never form and copies silently no-op.
 function requireFish4() {
   let version = '';
   try {

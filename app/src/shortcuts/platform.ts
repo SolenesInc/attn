@@ -37,6 +37,15 @@ export interface ClipboardChordEvent extends ModifierBearingEvent {
   code: string;
   shiftKey: boolean;
   altKey: boolean;
+  getModifierState(name: string): boolean;
+}
+
+function isAltGraph(e: ClipboardChordEvent): boolean {
+  try {
+    return e.getModifierState('AltGraph');
+  } catch {
+    return false;
+  }
 }
 
 function clipboardLetter(e: ClipboardChordEvent): 'c' | 'v' | null {
@@ -55,7 +64,11 @@ export function terminalClipboardChord(e: ClipboardChordEvent): TerminalClipboar
     return e.shiftKey ? 'copyCommand' : 'copy';
   }
   if (isMacLikePlatform() || !e.ctrlKey) return null;
-  if (e.altKey) return letter === 'c' && !e.shiftKey ? 'copyCommand' : null;
+  if (e.altKey) {
+    // AltGr layouts report Ctrl+Alt; that keystroke is the user's character, not the chord.
+    if (isAltGraph(e)) return null;
+    return letter === 'c' && !e.shiftKey ? 'copyCommand' : null;
+  }
   if (!e.shiftKey) return null;
   return letter === 'v' ? 'paste' : 'copy';
 }

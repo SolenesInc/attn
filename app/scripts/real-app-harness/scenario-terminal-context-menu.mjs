@@ -34,7 +34,6 @@ function parseArgs(argv) {
 
 const { readClipboard, writeClipboard } = appPlatform;
 
-// fish 4 is the floor: 3.x emits no OSC 133, so blocks never form and copies silently no-op.
 function requireFish4() {
   let version = '';
   try {

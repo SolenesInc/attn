@@ -8,8 +8,18 @@ import {
 } from './platform';
 import { withNavigatorPlatform } from '../test/platformStub';
 
+// Not a real KeyboardEvent: jsdom reports AltGraph pressed whenever altKey is set,
+// so the AltGr distinction only exists on a hand-built event.
 function chordEvent(init: Partial<KeyboardEventInit> & { key: string; code: string }) {
-  return new KeyboardEvent('keydown', init);
+  return {
+    key: init.key,
+    code: init.code,
+    metaKey: !!init.metaKey,
+    ctrlKey: !!init.ctrlKey,
+    altKey: !!init.altKey,
+    shiftKey: !!init.shiftKey,
+    getModifierState: (name: string) => name === 'AltGraph' && !!init.modifierAltGraph,
+  };
 }
 
 describe('modifier glyphs', () => {
@@ -88,6 +98,10 @@ describe('terminalClipboardChord', () => {
       )).toBeNull();
       expect(terminalClipboardChord(
         chordEvent({ key: 'c', code: 'KeyC', altKey: true }),
+      )).toBeNull();
+      // AltGr layouts report Ctrl+Alt: that press is the user's character, never the chord.
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true, modifierAltGraph: true }),
       )).toBeNull();
     });
   });
