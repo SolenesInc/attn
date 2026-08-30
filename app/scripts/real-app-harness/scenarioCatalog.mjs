@@ -311,8 +311,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'recoverable-auto-revive',
-    runnerId: null,
-    allowRealAgents: true,
+    runnerId: 'RECOVERABLE-AUTO-REVIVE',
     label: 'Recoverable Claude session auto-revives after daemon restart',
     command: ['pnpm', 'run', 'real-app:scenario-recoverable-auto-revive'],
     timeoutMs: 360_000,
