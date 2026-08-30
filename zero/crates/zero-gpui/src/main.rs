@@ -230,7 +230,7 @@ const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
-const HELP: [(&str, &str); 16] = [
+const HELP: [(&str, &str); 19] = [
     ("⌘⇧E", "settle the focused turn and go to the next one in the queue"),
     ("⌘J", "peek at the next agent in the queue without settling"),
     ("⌘P", "back to the previous agent"),
@@ -239,6 +239,9 @@ const HELP: [(&str, &str); 16] = [
     ("⌘1…9", "go to that desktop"),
     ("⌘⌥1…9", "move the focused pane to that desktop"),
     ("⌘←↑↓→", "focus the neighboring pane"),
+    ("⌘⌥←↑↓→", "swap the focused pane with its neighbor"),
+    ("⌘⏎", "promote the focused pane to the main slot"),
+    ("⌘⌥- ⌘⌥=", "shrink or grow the main column"),
     ("click", "every pill, badge, and pane is clickable; hovering shows its key"),
     ("wheel", "scroll a pane's scrollback"),
     ("type + ⏎", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
@@ -262,6 +265,7 @@ struct Zero {
     docs: HashMap<AgentId, DocTile>,
     popup: Popup,
     queue_morph: Morph,
+    ratios: HashMap<u8, f32>,
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
     slide: (i8, u64),
@@ -388,6 +392,7 @@ impl Zero {
             docs: doc_tiles,
             popup: Popup::None,
             queue_morph: Morph::default(),
+            ratios: HashMap::new(),
             previous_focus: None,
             content: Bounds::default(),
             slide: (0, 0),
@@ -556,6 +561,36 @@ impl Zero {
         }
     }
 
+    fn swap_neighbor(&mut self, direction: Direction, cx: &mut Context<Self>) {
+        let ids = self.model.desktop_agents();
+        let Some(current) = self.model.focus.and_then(|focus| ids.iter().position(|&id| id == focus)) else {
+            return;
+        };
+        let rects = tiles(self.content, ids.len(), px(GAP), self.ratio());
+        if let Some(other) = neighbor(&rects, current, direction) {
+            self.model.swap(ids[current], ids[other]);
+            cx.notify();
+        }
+    }
+
+    fn promote_focused(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.model.focus {
+            self.model.promote(id);
+            cx.notify();
+        }
+    }
+
+    /// The current desktop's main-column share in the main+stack layout.
+    fn ratio(&self) -> f32 {
+        self.ratios.get(&self.model.current_desktop).copied().unwrap_or(0.5)
+    }
+
+    fn nudge_ratio(&mut self, delta: f32, cx: &mut Context<Self>) {
+        let ratio = (self.ratio() + delta).clamp(0.3, 0.7);
+        self.ratios.insert(self.model.current_desktop, ratio);
+        cx.notify();
+    }
+
     fn focus_neighbor(&mut self, direction: Direction, cx: &mut Context<Self>) {
         let ids = self.model.desktop_agents();
         let Some(current) = self
@@ -565,7 +600,7 @@ impl Zero {
         else {
             return;
         };
-        let rects = tiles(self.content, ids.len(), px(GAP));
+        let rects = tiles(self.content, ids.len(), px(GAP), self.ratio());
         if let Some(index) = neighbor(&rects, current, direction) {
             self.focus(Some(ids[index]), SwitchPath::PaneMove, cx);
         }
@@ -627,10 +662,17 @@ impl Zero {
                 "s" => self.open(Popup::Scenario { selected: 0 }, cx),
                 "/" => self.open(Popup::Help, cx),
                 "q" => cx.quit(),
+                "left" if modifiers.alt => self.swap_neighbor(Direction::Left, cx),
+                "right" if modifiers.alt => self.swap_neighbor(Direction::Right, cx),
+                "up" if modifiers.alt => self.swap_neighbor(Direction::Up, cx),
+                "down" if modifiers.alt => self.swap_neighbor(Direction::Down, cx),
                 "left" => self.focus_neighbor(Direction::Left, cx),
                 "right" => self.focus_neighbor(Direction::Right, cx),
                 "up" => self.focus_neighbor(Direction::Up, cx),
                 "down" => self.focus_neighbor(Direction::Down, cx),
+                "enter" => self.promote_focused(cx),
+                "-" if modifiers.alt => self.nudge_ratio(-0.05, cx),
+                "=" if modifiers.alt => self.nudge_ratio(0.05, cx),
                 _ => {}
             }
             return;
@@ -786,7 +828,7 @@ impl Zero {
         let rect = ids
             .iter()
             .position(|&other| other == id)
-            .and_then(|index| tiles(self.content, ids.len(), px(GAP)).into_iter().nth(index));
+            .and_then(|index| tiles(self.content, ids.len(), px(GAP), self.ratio()).into_iter().nth(index));
         let Some(rect) = rect else {
             return (80, 24);
         };
@@ -1577,7 +1619,7 @@ impl Render for Zero {
         }
         let now = self.now();
         let ids = self.model.desktop_agents();
-        let rects = tiles(self.content, ids.len(), px(GAP));
+        let rects = tiles(self.content, ids.len(), px(GAP), self.ratio());
         let panes: Vec<AnyElement> = ids
             .iter()
             .zip(rects)

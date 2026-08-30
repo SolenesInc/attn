@@ -250,6 +250,33 @@ impl Model {
         Some(self.agent_mut(id))
     }
 
+    /// Swap two agents' positions in the layout order.
+    pub fn swap(&mut self, a: AgentId, b: AgentId) {
+        let (Some(&ia), Some(&ib)) = (self.indexes.get(&a), self.indexes.get(&b)) else {
+            return;
+        };
+        self.agents.swap(ia, ib);
+        self.indexes.insert(a, ib);
+        self.indexes.insert(b, ia);
+    }
+
+    /// Move an agent to the front of its desktop's layout order, the main slot.
+    pub fn promote(&mut self, id: AgentId) {
+        let Some(&from) = self.indexes.get(&id) else {
+            return;
+        };
+        let desktop = self.agents[from].desktop;
+        let Some(to) = self.agents.iter().position(|agent| agent.desktop == desktop) else {
+            return;
+        };
+        if to == from {
+            return;
+        }
+        let agent = self.agents.remove(from);
+        self.agents.insert(to, agent);
+        self.indexes = self.agents.iter().enumerate().map(|(index, agent)| (agent.id, index)).collect();
+    }
+
     pub fn desktop_agents(&self) -> Vec<AgentId> {
         self.agents
             .iter()
@@ -500,5 +527,28 @@ mod tests {
 
         assert_eq!(model.first_on_current_desktop(), Some(1));
         assert_eq!(model.focus, None);
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+
+    fn three_on_one_desktop() -> Model {
+        let mut model = Model::new();
+        for id in 1..=3u64 {
+            model.add_document(id, format!("doc{id}"), 1).unwrap();
+        }
+        model
+    }
+
+    #[test]
+    fn swap_and_promote_reorder_the_desktop() {
+        let mut model = three_on_one_desktop();
+        model.swap(1, 3);
+        assert_eq!(model.desktop_agents(), [3, 2, 1]);
+        model.promote(2);
+        assert_eq!(model.desktop_agents(), [2, 3, 1]);
+        assert_eq!(model.agent(1).name, "doc1", "indexes follow the moves");
     }
 }
