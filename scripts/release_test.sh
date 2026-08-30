@@ -220,7 +220,9 @@ grep -Fq 'api --paginate --method GET repos/{owner}/{repo}/pulls?state=open&base
 export FAKE_ACTIVE_CANDIDATE=
 
 git -C "$fixture_repo" tag v99.98.96
+git -C "$fixture_repo" push -q origin refs/tags/v99.98.96
 expect_failure 'tag v99.98.96 already exists' run_release v99.98.96
+git --git-dir="$fixture_origin" update-ref -d refs/tags/v99.98.96
 git -C "$fixture_repo" tag -d v99.98.96 >/dev/null
 
 git clone -q --branch next "$fixture_origin" "$work/updater"
@@ -240,6 +242,11 @@ fixture_repo="$default_repo"
 fixture_origin="$default_origin"
 source_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
 main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
+
+# Historical tag drift must not block an unrelated candidate. Release
+# preparation reads the requested remote tag and leaves local history alone.
+git --git-dir="$fixture_origin" update-ref refs/tags/v90.0.0 "$main_sha"
+git -C "$fixture_repo" tag -f v90.0.0 "$source_sha"
 
 run_release v99.98.97 --dry-run >"$work/dry-run.out"
 grep -Fq "$source_sha" "$work/dry-run.out"
