@@ -1,7 +1,30 @@
 # Frontend (Tauri + React)
 
-The root `AGENTS.md` maps `app/src` (socket, stores, event modules, tests).
-This file holds what the code does not say.
+The root [AGENTS.md](../AGENTS.md) covers repository-wide safety and verification.
+
+## Daemon connection
+
+Connection paths below are relative to `app/src`.
+
+- `hooks/useDaemonSocket.ts` owns connection, reconnect, the event switch,
+  and every `send*` command. `App` is its only caller and publishes the returned
+  API through `contexts/DaemonApiContext.tsx`. Components use `useDaemonApi()`.
+- `hooks/daemonPendingRequests.ts` correlates commands with `*_result` events.
+  `settlePendingRequest` settles the typed pending request. `sendRequest` uses a
+  fresh request id; `sendKeyedRequest` uses a caller-supplied key for last-writer-wins
+  commands. Both reject on a disconnected socket and time out on a silent daemon.
+- `hooks/daemon<Domain>Events.ts` (`Fs`, `Notebook`, `MarkdownAnnotation`)
+  holds the event handlers reached through the switch's `default`. Search a
+  wire name such as `fs_write_result` to find its module. Add a domain with a
+  new module and an entry in that chain.
+- Markdown annotations use `<op>:<documentUri>` keys, last-writer-wins
+  superseding, and `request_id` checks. File and seed messages carry typed
+  source fields; the daemon validates those fields and never infers authority
+  from the URI. `daemonMarkdownAnnotationEvents.ts` only decodes results.
+- `store/daemonSessions.ts` holds session and PR state in Zustand.
+- `pty/` handles transport, attach planning, binary frames, and runtime lifecycle.
+
+Name tests `Source.concern.test.tsx`, with the suffix describing the behavior.
 
 ## Daemon calls in tests
 
@@ -22,9 +45,7 @@ Playwright harness under `test-harness/harnesses/`, registered in its
 In `GhosttyTerminal.tsx` a resize goes model, then renderer, then paint, then
 `onResize` to the PTY. The PTY's SIGWINCH is the last step.
 
-## GPU surfaces outnumber what you can see
-
-Three traps, each worth over 100MB at rest.
+## GPU memory
 
 - `will-change` on an always-mounted component. The right dock mounts all
   five panels and only toggles a class, so a permanent hint gives every closed
@@ -58,3 +79,22 @@ Measure with `scenario-perf-baseline`'s `APP FOOTPRINT` and its
   local repo. Do not run both at once.
 - The reconnect circuit breaker opens after repeated failures and stays open
   until the user clicks retry. Nothing resets it on a timer.
+
+## macOS shortcuts
+
+Packaged-app menu accelerators can consume shortcuts before DOM keydown.
+
+- Handle Cmd+C through the DOM `copy` event in `GhosttyTerminal`; keydown alone
+  misses it. Verify with `real-app:scenario-terminal-block-copy`.
+- Check new shortcuts against `Menu::default` accelerators.
+- Remove conflicting predefined menu items in `src-tauri/src/lib.rs` so the
+  WebView resolver handles rebindings.
+- Use `dispatch_native_shortcut` only for a required visible or relabeled
+  native menu item; it hardcodes the action.
+
+## Diagnostics
+
+Use prefixed console logging and Tauri DevTools. For hard-to-reproduce UI bugs,
+write JSONL under `$APPLOCALDATA/debug/<name>.jsonl`, following
+`terminalDiagnosticsLog.ts` or `terminalLinkHitTestLog.ts`. Remove temporary
+instrumentation after fixing the bug.

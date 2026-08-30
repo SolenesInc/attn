@@ -1,1036 +1,168 @@
 # Glossary
 
-Canonical domain language for attn. When code, prompts, plans, or guidance name
-these concepts, use these words. The goal is one shared vocabulary so every agent
-(and human) working on attn means the same thing.
-
-This file is the source of truth for the terms below. If an implementation detail
-drifts from a definition here, the definition wins — fix the code or fix this file
-in the same change, deliberately.
-
----
+Details: [Notebook](notebook.md), [sessions](sessions.md),
+[Garden/crew](garden-and-crew.md), [apps/events](apps-and-events.md),
+[ownership](daemon-ownership.md), and [auto mode](maintaining.md#auto-mode).
 
 ## Workspace context
 
-The per-workspace **editorial overlay**: `context.md`, one per workspace, managed
-by `internal/store/workspace_context.go`. It is the workspace's own agents' (and
-the user's) running statement of what currently matters here — Area, Current
-Picture, Decisions, Constraints.
-
-- **Authored by the workspace's agents and humans.** Agents provide editorial
-  information into the workspace context as they work. This is the one place a
-  working agent is expected to contribute durable shared state.
-- **Ephemeral, not durable.** It is compacted on a size threshold and **erased**
-  when the workspace is removed (`DELETE FROM workspace_contexts`). It was never
-  meant to outlive the work.
-- **Salience, not truth.** It marks where to point attention; it is the agents'
-  unverified claim of what was important, not a record of what actually happened.
-
-It is SQLite-canonical (the coordination layer), distinct from the Notebook, which
-is filesystem-canonical.
+Shared working context for one workspace.
 
 ## The Notebook
 
-attn's durable, **profile-wide, filesystem-canonical** markdown layer — a dated
-journal plus a PARA knowledge base. The
-`.md` files on disk are the source of truth (unlike the workspace context, which is
-SQLite-canonical), and the Notebook outlives any single session, workspace, or PR.
-
-The write paths are the daemon (over the WebSocket protocol) and native file edits
-on disk — both land in the same filesystem-canonical tree. It holds **the journal
-and the knowledge base** — the journal a dated log, the knowledge base distilled,
-timeless knowledge — alongside the machine-internal raw tier the keeper reads from.
+Durable markdown shared across a profile.
 
 ## The journal
 
-The durable, **curated, cross-workspace log of what was done in attn** —
-`journal/<date>.md` in the Notebook. The user's lasting record for recall and
-performance review: decisions made, things built and shipped, hard-won fixes,
-dead-ends, what was learned. Importance is not recurrence; the most valuable
-entries are singular.
-
-Who writes the journal:
-
-| Writer | What they contribute |
-|--------|----------------------|
-| **The keeper** | per-workspace narratives of the work done in each workspace |
-| **The chief of staff** | a cross-workspace, chief-of-staff-altitude log (what moved across workspaces, what was delegated and decided) |
-| **The human** | direct edits — corrections, additions, curation |
-
-Other agents *can* write to the journal, but we do not ask them to and do not nudge
-them. In practice they do not, and that is fine: automated capture (the keeper) is
-what keeps the journal good. We do not try to prevent other writes — that is not
-enforceable at this abstraction level — we simply say nothing about it.
-
-The journal is **curated**: nothing machine-raw lands in it. Raw machine inputs
-live in the raw tier and are consumed by the keeper, never pasted into the journal.
+Dated, curated work history in the Notebook.
 
 ## Knowledge base
 
-The Notebook's **distilled, durable knowledge subtree** — `knowledge/` — holding
-notes worth keeping beyond a single PR: decisions, gotchas, and domain knowledge. It
-is organized PARA-style into `knowledge/projects/`, `knowledge/areas/`,
-`knowledge/resources/`, and `knowledge/archive/`, and indexed by `knowledge/index.md`
-(each PARA dir also carries its own `index.md`). A note carries OKF frontmatter with a
-`type` field (`type: note`), an open vocabulary rather than a closed set the store
-validates.
-
-Maintained by the **chief of staff** and the **user**, edited directly as files (over
-the daemon/WS write path or as native file edits on disk) — there is no closed-kind
-gate.
-
-Distinct from the journal along one axis: the journal is a **dated log of what
-happened**; a knowledge note is a **timeless statement of what is known**. The
-knowledge base is not a task tracker — capture what is *known*, not what is *to do*.
-Chief-authored knowledge is **grounded** with resolvable `sources:` (journal
-anchors or URLs) rather than written from paraphrase alone; the
-user's own notes in the same space are theirs to keep however they like.
+The Notebook's lasting knowledge.
 
 ## Note title
 
-A note's title is its **first `# H1` heading** — the single canonical title. attn
-does **not** read a frontmatter `title:` field (`Document.Title()` parses the body's
-first level-1 ATX heading, skipping fenced code). When a note has no `# H1`, callers
-fall back to the note's **filename**, which is its stable address (links point at the
-path, so the filename is an ID, not a competing title). Frontmatter carries
-*properties* (`type`, `summary`, `tags`, `sources`, dates) and is rendered as a
-properties card in the editor — never a title. Journals (`# <date>`) and the chief
-inbox (`# Chief inbox`) follow the same rule; they carry their title as the body H1
-and write no frontmatter `title:`.
+First H1, or the filename when absent.
 
 ## The keeper
 
-The single automated entity that **tends each workspace**. One persona, two duties:
-
-1. **Keeps the workspace context tidy** — compacts/prunes `context.md` when it
-   grows past threshold.
-2. **Narrates the workspace's work into the journal** — turns the workspace's
-   sessions into the curated per-workspace
-   journal narrative. On a workspace's final removal pass it also files that
-   workspace's linked `knowledge/projects/<slug>/` folder (the one whose `index.md`
-   carries `resource: attn:workspace/<id>`) under `knowledge/archive/` — a
-   mechanical tidy-up that keeps the active `projects/` view focused; the chief
-   keeps the higher-judgment promotion into `areas/`.
-
-These two duties are **causally coupled**, which is why they are one entity: the
-keeper can safely prune `context.md` *because* it has already preserved the story
-in the journal. "Nothing is lost when the overlay is compacted or erased" is the
-keeper's own promise to keep, not an implicit contract spread across separate
-actors.
-
-The keeper is realized as task kinds on the durable runner (`internal/tasks`):
-`compact_context` (tidy duty), and `summarize_session` + `narrate_workspace`
-(narrate duty). These are internal **mechanisms**, not separate personas — there
-is no separate "janitor," "narrator," or "summarizer" in the domain model, only the
-keeper performing its duties. (The narrate duty runs as a strong-tier agent reading
-per-session digests produced by a cheaper summarize step; both are the keeper.)
+Automates workspace narration and context maintenance.
 
 ## The chief of staff
 
-The cross-workspace operator. The Notebook — not any single workspace's context —
-is its durable home. The chief **journals**, from a chief-of-staff altitude: the
-state of work across workspaces, what it delegated, what was decided — **not** a
-step-by-step of what individual agents are doing inside a workspace.
+Coordinates work across workspaces.
 
-The chief is **keeper-aware**: because the keeper already narrates each workspace's
-own work into the journal, the chief does not duplicate per-workspace play-by-play.
-It writes the cross-workspace layer the keeper cannot see.
+## Session
 
-## Turn, and the queue
+An attn runtime hosting a PTY or headless agent.
 
-A **turn** is the user owing an agent their attention. It **opens** when a session
-reaches a state that wants the user, and it **closes** only when the user settles
-it — steering, approving, snoozing, or pressing settle. Nothing else ever closes
-one; in particular, looking at an agent is not acting on it. `turn_owed` is derived
-at broadcast from the persisted `turn_opened_at`/`turn_settled_at` stamps and is
-never stored. The predicates live in `internal/attention`.
+## Turns and the queue
 
-**Auto-settle** closes a turn the user already dealt with by sending conversation
-input that the agent positively took. The session then holds `working` through an
-invisible arm delay, a visible countdown, and the settle. A heartbeat, ticket
-nudge, peer message, generic `working` observation, or unclassified input never
-grants that credit. Several inputs may join one uninterrupted working stretch;
-user credit joins the facts already present rather than replacing them. Auto-settle
-applies only to sessions the queue includes — the exclusions below are also the
-exclusions here.
-
-A **standing dismissal** is the user answering that settle, whether the countdown
-is on screen or has not started yet: the session's next auto-settle does not run.
-It is spent at the end of the `working` stretch it covers, so the turn after that
-is a fresh decision, and it is off the wire as `auto_settle_dismiss_armed` while
-it stands. Neither of those is settling — the turn stays owed either way.
-
-The **queue** is the sidebar arrangement built on turns (queue mode; off by
-default). Its standing order is the chief's anchored slot, the turns you owe
-(oldest first), the settled rest, pinned agents, pinned workspaces, muted.
-
-**Pinned** — the user saying "I'll come to this one myself". A **pinned agent**
-(`sessions.pinned_at`) leaves the queue on its own and leaves its siblings in it; a
-**pinned workspace** takes the whole workspace. Pinning is not settling: the turn
-goes on accruing underneath, so unpinning surfaces whatever is outstanding at its
-true age.
-
-**Satellite** — a shell split out of an agent, recorded at spawn as
-`sessions.parent_session_id`. It gets no sidebar row of its own: you reach it by
-going to its agent, where it is a pane. Splitting a shell out of a shell inherits
-the same agent, so the link always names an agent and never another shell.
-Attachment is judged at read — the parent must still exist and still be in the same
-workspace — so a satellite whose agent closed, or whose pane moved, gets its own
-row back with no cascade. A satellite with no live parent is an **orphan**, and
-orphans keep their rows.
+- **Turn**: attention the user owes an agent.
+- **Auto-settle**: settlement after the agent takes user conversation input.
+- **Standing dismissal**: suppresses the next auto-settle.
+- **Queue**: sidebar ordering by owed turns.
+- **Pinned**: agent or workspace excluded from the queue.
+- **Satellite**: a shell pane attached to an agent; an **orphan** has no live parent.
 
 ## Session input
 
-**Session input** is the daemon boundary every live-session mutation crosses:
-real user PTY bytes, replay and automation bytes, PTY paste plus Enter, a
-conversation-host message, or a plugin driver's structured message. Product
-domains decide what to say, when it is obsolete, and when to retry. Session input
-owns the per-session order, current route, safe-surface check, same-attempt
-mechanics, and correlation between the submitted input and the agent taking it.
-
-An input attempt has one of four evidence stages:
-
-- **deferred** proves the target was not mutated;
-- **placed** proves a complete input is owned by its adapter, not that the model
-  read it;
-- **taken** is a positive observation that the agent started reading that exact
-  input;
-- **indeterminate** means the target may have changed but the result cannot be
-  attributed safely.
-
-Origin belongs to each taken input, not to a whole working run: user
-conversation, user control, attn maintenance, peer agent, or unknown. Only user
-conversation can grant auto-settle credit, and unknown fails safe. The durable
-`last_model_request_at` clock advances monotonically from positive request-start
-observations; state and classifier timestamps do not move it.
+The boundary for input to a live session. **Deferred** means untouched; placed, held by an adapter; taken, reading begun; indeterminate, uncertain outcome.
 
 ## Agent conversation
 
-An **agent conversation** is the provider-owned history currently hosted by one
-attn session: its native id, transcript, and resume target. The attn session is
-the stable container — its workspace, pane, seed binding, PTY, and turns can
-continue while the agent conversation changes. Codex `/new` is such a change: it
-starts a new rollout inside the same running attn session.
+Provider history and resume target within a session.
 
-Conversation-scoped projections move with that binding. A successor conversation
-invalidates the prior transcript watcher, activity line, and activity cursor;
-reload and other point-in-time readers resolve the newly bound native id. This is
-different from a **conversation session** below, which names attn's headless-agent
-runtime rather than a provider-owned history.
+## Session activity and presence
 
-## Session activity, and presence
-
-A session's **activity** is one short present-tense line saying what that agent is
-doing right now — "running the frontend test suite", "waiting for the user to pick
-a branch". It is written from the session's own transcript by a non-interactive
-agent, stored on the session (`sessions.activity`, with the stamp it was generated
-at), and rendered under the session's name on home. Off by default: it costs money
-per session per refresh.
-
-Beside it sits the **activity cursor** (`sessions.activity_cursor`), the transcript
-position the line was generated through. It is the load-bearing half: a session
-whose transcript has not moved past its cursor has written nothing new, so its
-existing line is still true and no run happens. That is what keeps blocked and
-finished agents free however long home stays open.
-
-The **presence tier** is how much of the user's attention attn currently has,
-reduced across every connected client — the highest anyone reports wins. Clients
-report facts (window visible, dashboard showing, seconds since input); the daemon
-turns them into a tier:
-
-- **watching** — the app is visible and showing home. The line is being read, so it
-  refreshes fastest.
-- **present** — input in the app recently, but home is not what is on screen.
-- **away** — nobody can see it. A hard stop, not a slower rate: nothing is
-  generated at all. Safe as a stop because leaving `away` is always an action that
-  restores a higher tier, so the staleness it creates heals itself the moment it
-  would matter.
-
-Presence is a heartbeat, never a latch. A client repeats itself while nothing
-changes, and a report the daemon has not heard renewed expires to `away` — so a
-window that crashes while showing home cannot pin generation on with nobody
-looking.
-
-Distinct from `internal/daemon/presence.go`'s **last user activity**, which watches
-UI-origin commands go past to answer "did the user act on the daemon". Reading a
-screen produces no commands, so that proxy cannot see the case the tier exists for.
+- **Activity**: what the agent is doing; activity cursor: the transcript position summarized.
+- **Presence**: **watching** home, **present** elsewhere in the app, or **away**.
 
 ## Ticket
 
-A **ticket** is how delegated work was tracked before the garden: one card bound
-to the delegated session (the session is its assignee), moved across a board
-(Todo · Working · Blocked · In Review · Done) by the agent's own reports, with
-comments, status changes, and artifact attachments on its activity thread.
-
-Tickets are retired. A delegation binds a **seed** instead, reports are notes on
-its log, and every `attn ticket` write verb prints the garden command that
-replaced it and exits nonzero. Three things survive, on purpose:
-
-- `attn ticket show` and `attn ticket list` keep reading the archived board
-  forever. `attn ticket inbox` consumes unread activity for participants in
-  tickets that predate the garden. User-created tickets and tickets whose origin
-  is unknown are permanent records, including their activity and attachments.
-- Work that was already ticket-bound at the cutover keeps moving on its ticket:
-  the daemon mirrors its tender's garden moves and notes onto it, so an
-  in-flight delegation still closes where it started.
-- An automation run still mints its own daemon-internal ticket, because
-  continuation, retention, and crash classification are keyed on it. It is not
-  an agent-facing card: no CLI verb creates or moves one, and the seed moves
-  mirror onto it like any other. Only tickets with relational proof that the
-  Automation feature created them, such as a scheduled run or a pull-request
-  update, may age out. A ticket created or updated by an agent is not an
-  automation ticket.
-
-Unbound backlog todos were converted to seeds at the cutover, each carrying its
-description as the seed's body and a log note naming the ticket it came from.
-
-The main profile runs one create-only recovery pass for terminal tickets that
-predate permanent retention. It reads only attn-owned local backups and eligible
-native transcripts, restores missing ticket archives without replacing a live
-row, and represents every user ticket once in the Garden: `done` becomes
-`harvested`; `failed` and `crashed` become `withered`. Existing machine-proven
-ticket-to-seed lineage is adopted without changing the seed. The legacy ticket
-keeps its original state, timestamps, activity, and attachments. Codex and
-Claude carry profile-specific launch proof. Historical Copilot transcripts use
-their native session envelope and an exact implicit ticket-status receipt; the
-one-time pass treats them as main-profile history because Copilot was not used
-under named profiles before permanent retention.
-
-Evidence that cannot prove a terminal ticket creates no work. When present, its
-metadata is preserved create-only in `legacy-ticket-recovery/fragments.json` or
-`legacy-ticket-delegations.json` under the profile data directory, and one
-warning points to those local files. Recovery never scans other profiles or
-arbitrary home directories.
+Archived delegation record predating seeds.
 
 ## The raw tier
 
-Machine-internal capture under `.attn/raw/`, the keeper's **input**, never
-user-facing and never part of the curated journal:
-
-- `sessions/<wsID>/<sessionID>.md` — per-session digests (the summarize step's
-  output), nested under the owning workspace; a session with no workspace lands in
-  the reserved `sessions/_solo/<sessionID>.md` bucket.
-- `context-snapshots/<wsID>.md` — the `context.md` snapshot taken synchronously at
-  workspace removal (the deterministic data-safety floor, so the editorial overlay
-  is never lost before the keeper can narrate it).
-
-The raw tier is physically unreachable through the user-facing notebook APIs
-(`CleanPath` rejects dotdir segments). Capture into it is deterministic and always
-happens; the keeper's narration is best-effort on top of it, so nothing is lost if
-narration never runs.
+Machine inputs to the keeper.
 
 ## App
 
-An **app** is automation built on attn's platform: it declares what it does in a
-manifest, consumes domain facts from the event bus, keeps its state in its own
-document-store namespace, and runs inside attn's one shared supervised runtime.
-Apps are written by agents, applied while attn runs, and are meant to be cheap
-and numerous.
-
-An app has exactly one name, and that name is its whole identity: registry key,
-bus consumer `app:<name>`, document namespace `app/<name>`, directory
-convention. Nothing stores those separately, so they cannot drift apart.
-
-Two consequences of that single identity are worth stating outright, because
-they are what the lifecycle verbs mean:
-
-- An app's **enabled** state *is* its bus consumer's enabled bit. There is no
-  second copy. Flipping it is the one act that both stops delivery and releases
-  the event log's retention floor, and because the bit lives in the database,
-  `attn bus disable app:<name>` kills an app whether or not the daemon is
-  listening.
-- **Removing** an app stops and deletes its bus consumer and deletes its
-  registry row — and nothing else. Its version history, its invocation log, and
-  every document under `app/<name>` survive. Deleting a user's data is a
-  separate, explicit act, and uninstalling is not it.
-
-A **version** is one built artifact, identified by its content hash and frozen
-together with the declaration the manifest carried when it was built. Versions
-are never rewritten: applying is an insert plus a pointer move, and rolling back
-is the same pointer move to an older row. Re-applying byte-identical content
-reuses the version that is already there, which is what keeps "which version
-actually ran" answerable in the invocation log after a long editing session.
-
-An app's **serving history** is the chain of versions it has served, and it is
-what `attn app rollback <name>` walks. Each bare rollback goes one step further
-back, until the oldest version on the chain, where it refuses rather than
-wrapping. Applying a version — or naming one to roll onto — starts the history
-again from there, so the way back from a fix is whatever was running when it was
-applied. The history is not the version list: a version the walk went past is
-still a version, still reachable by name.
-
-A **view** is an app's UI: a React component the app declares in its manifest,
-built for the browser as its own artifact beside the handler bundle. A view docks
-as a tile of kind `app:<app>/<view>`, and the string the user types when docking
-reaches it as `params` — opaque to attn, meaning whatever the app decides. A view
-imports the SDK (`@victorarias/attn-app`) and never React: the specifier is left
-unresolved at build time and answered in the browser by attn's own import map, so
-an app's component and attn's UI share one React instance rather than two that
-cannot share a hook dispatcher.
-
-Views are served over the daemon's own listener at a URL naming the version's
-content hash, so a version flip *is* the reload signal: the URL a docked tile
-imports moves, and the tile remounts against the new one. A view that fails —
-will not load, exports no component, or throws while rendering — costs its own
-tile and nothing beyond it, and the failure is recorded as an invocation of the
-app stamped with the version that served it, so `attn app logs` has it.
-
-A **tile** is a place in a workspace layout: one pane the user split, dragged
-and sized. A view is what an app declares; a tile is where one instance of it
-sits. Keeping them separate words is what makes the mount surface extensible — a
-later kind of mount moves what a *tile* is, and leaves `[[views]]`, the registry
-row and the artifact untouched. Two tiles of one view are two independent
-mounts, told apart by their `params` and by a `tileId` stable for the life of
-each docked tile.
-
-A **command** is how a view acts. The app declares it in a `[[commands]]` block,
-the bundle exports a handler under `command:<name>`, and a view invokes it by
-name — never by app, because which app is asked comes from the mount, the same
-rule the document namespace follows. A command runs where every other handler
-runs: the shared sidecar, the same document access, the same invocation log, the
-same sixty-second abandon. What an app answers is what the *serving* version
-declared, so a rollback takes a command away with it.
-
-A command that fails costs that click and nothing else. It is recorded and
-reported to the view in the handler's own words, and it does not advance the
-clock that disables a stalled app — that clock exists for a consumer pinning the
-durable log, and a person pressing a button pins nothing.
-
-**Applying** is how a directory becomes a version: parse the manifest, generate
-the types the handlers are checked against, typecheck, bundle, hash, write the
-artifact, insert the row, move the pointer. Apply never evaluates the app's
-code — nothing is imported and nothing is run — so every way an apply can fail
-happens before the pointer moves, with the previous version still serving. That
-is what makes applying safe to do repeatedly while attn is running, and it is
-why `attn app dev` can re-apply on every save.
+- **App**: named automation in attn's shared runtime.
+- **Version**: immutable build; serving history: versions served.
+- **View**: app React component; tile: one layout instance.
+- **Command**: view action; enabled: receiving events.
+- **Applying** builds and selects a version; removing uninstalls the app.
 
 ## Plugin
 
-A **plugin** integrates the outside world into attn: agent drivers, worktree
-hooks. It runs as its own supervised process, dials the daemon, is installed
-rarely, and is effectively part of the platform — a device driver.
+External integration with its own supervised process.
 
-App and plugin are deliberately different mechanisms, not two words for one. A
-failing plugin takes an integration down; a failing app is disabled while
-everything else keeps running. Different trust, different rate of change,
-different blast radius.
+## Event bus
+
+Ordered log of domain facts.
+
+- **Fact**: recorded change; subject: changed entity.
+- **Consumer**: fact reader; cursor: reading progress.
+- **Durable** consumers retain cursors across restarts; ephemeral consumers start at the head.
+- **Projection**: converts a fact to app traffic; snapshot projections send whole lists.
 
 ## The retention floor, and the pin alarm
 
-The event log is trimmed by age, but never past the lowest cursor held by an
-**enabled** durable consumer or an **installed app** consumer. That position is
-the **retention floor**, and the consumer sitting on it is said to **pin** the
-log: nothing above its cursor can be trimmed or compacted, because a durable
-consumer must not lose an unread fact. A disabled ordinary consumer does not
-pin. A disabled installed app does: its lane waits until the app is enabled or
-uninstalled, so a history app never silently loses facts.
-
-Holding the floor is ordinary. Every log has a floor holder and it is usually
-just the consumer that read least recently. What is not ordinary is holding it
-without moving: a consumer that participates in the floor and is not consuming
-grows the log for as long as the condition lasts, and nothing ends that on its
-own.
-
-The **pin alarm** is the tripwire that separates the two. Past it — an hour by
-default, measured against every stall attn resolves by itself — the pin stops
-being the system working and becomes an outage worth a warning notification.
-Three surfaces report the same finding from the same predicate: the notification,
-`attn bus status`, and the event bus settings page. It is announced once per
-episode, and a new episode begins only after the consumer's cursor moves.
-
-The alarm makes the condition visible; it never resolves it. No pinned event is
-ever dropped and no consumer is ever disabled on its behalf.
+**Retention floor**: oldest protected cursor; pin: hold that floor; pin alarm: warning of a stalled cursor.
 
 ## The document store
 
-attn's **document store** is where an app keeps its own data. Three names
-locate every record:
+Stores app JSON documents.
 
-- **Namespace** — `owner/name`, e.g. `app/approval-gate`. A namespace is granted
-  to exactly one author and is the isolation boundary: nothing an app does
-  can read or write another namespace, and two namespaces may use the same
-  collection name without meeting. `app/` is the owner segment apps are granted;
-  `core/` is attn's own.
-- **Collection** — a named set of documents inside a namespace, e.g. `requests`.
-- **Document** — one JSON object with a caller-chosen **id**, unique within its
-  collection. The body is stored byte for byte and nothing ever rewrites it, so
-  an author never writes a migration.
-
-Every document also carries a **revision**: a count of the writes to it, starting
-at 1, reported by every read and by every write. Handing a revision back as a
-write's **expectation** makes that write conditional — it lands only if the
-document is still at that revision, and is otherwise refused with both revisions
-named. That is what makes a read-modify-write safe between writers who cannot see
-each other; without an expectation a write always lands, which is what a caller
-setting a value rather than editing one wants. Expecting revision 0 means
-expecting no document at all, and is how a write becomes create-only.
-
-A collection carries a **declaration**: the fields it promises are queryable,
-each with a type. Declaring a field does not constrain what a document may
-contain — undeclared keys are stored and returned untouched — it only says what a
-query may name, and it is what the store indexes that field by. The type decides
-how stored values compare, so a body holding `"5"` in a `number` field sorts as
-the number 5. `created_at` and `updated_at` are always queryable and are never
-declared.
-
-Physically a collection is its own table and a declared field an indexed column
-computed from the body, so a declaration is built rather than merely recorded —
-without any document being rewritten. A **live query** therefore ends, with an
-error saying which, when its collection is removed or redeclared without a field
-it uses: the collection can no longer answer the question that was asked.
-
-A **query** is one JSON object: namespace, collection, filters, sort, limit, and
-an optional **after cursor** — the id of the last document of the previous page.
-The cursor is part of the query rather than a filter a caller writes, because the
-visible order is (sort field, id) and a filter can only constrain one of those:
-with documents tied on the sort field, `sort > value` skips the tied ones and
-`sort >= value` returns the anchor again.
-
-A **live query** is that same query left open. Every delivery is the whole
-current result set, so a subscriber renders what it is handed and never
-accumulates state across deliveries; the daemon re-runs the query when a write to
-the collection says the answer may have moved. A skipped delivery is not a lost
-update — the next one supersedes it.
+- **Namespace**: an owner's isolated data; collection: a named document group.
+- **Document**: JSON object; id: unique key within its collection.
+- **Revision**: write count; expectation: revision required by a write.
+- **Declaration**: queryable fields and their types.
+- **Query**: retrieval criteria; after cursor: pagination anchor; live query: a result subscription.
 
 ## Recoverable
 
-A session is **recoverable** when its runtime is gone but attn can still bring
-its conversation back — the state the sidebar offers a Reload on, and the state
-a pane revives itself from when it mounts. It is decided from two durable
-things and nothing else: a launch intent, which says how to start a
-replacement, and a restoration target that is still on disk, which says what
-the replacement reopens — an agent-native resume id the agent's driver still
-recognises, a conversation host's own session file, the launch intent's seed
-(a source conversation or an initial prompt the host had not said yet), or a
-plugin's persisted per-session handle.
+**Recoverable**: conversation can be restored; reaped: session removed when recovery is impossible.
 
-Recoverability and activity are separate axes. A crash takes `idle`, `working`,
-`waiting_input`, and `pending_approval` sessions down together and leaves them
-equally resumable, so what a session was last seen doing is context for the user
-and never the reason it survives or is reaped. A session that cannot be brought
-back is **reaped**: the row and its pane go, rather than lingering as a Reload
-that cannot work.
 ## The garden
 
-The **garden** is where work lives: all seeds, and the space they live in. It
-belongs to a home daemon, because one garden shared across a fleet is its whole
-point — an outpost has none and passes its asks home.
-
-A **seed** is the unit of work: one document with one short id, a **slug**, a
-title, a markdown body, and a state. The id (`s-7k3f9m`) is what commands and
-agent-to-agent messages use; it is stable and safe across hosts. The slug
-(`mermaid-rendered-grid`) is the title's first six key words, stop words dropped, and is
-how a seed is spoken of to a person: it is a name, not a key, so two seeds may
-share one. **Planting** creates a seed and prints its id, slug and title
-(`attn seed plant "what this is"`). Work that outlives the current turn belongs
-in a seed, including a bug found along the way, a deferred follow-up, or a piece
-split off for somebody else. `attn seed prime` gives every agent the working
-rules and current ready answer.
-
-A seed **artifact** is a direct visible regular file under
-`<Notebook>/seeds/<seed-id>/`. Filesystem membership is authoritative: adding,
-editing, renaming, or deleting a direct file changes the seed's artifacts, while
-hidden transfer receipts and log entries do not. An artifact belongs to the seed
-and survives sessions, workspaces, source worktrees, and seed lifecycle changes.
-Move or Copy explicitly brings a local file into that ownership; moving it back
-out requires an explicit destination and never overwrites. A **linked artifact**
-is the older attach-log association to a repository path, Notebook document, or
-URL. It stays visibly separate and becomes owned only through an explicit Bring
-into seed Move or Copy.
-
-A **plot** is a seed with children, addressed by that seed's id. Its body is the
-execution plan. Its children are parallel unless a `blocks` edge orders them.
-Any seed can become a plot when it gains a child. A **packet** is a plot flagged
-as a template with declared variables, so a proven shape can be planted again
-with its blanks filled.
-
-Seed ids are `s-` plus six Crockford base32 characters (`s-7k3f9m`) — short
-enough to say out loud, with no character pair anyone confuses, and no `/`, so
-qualifying one with its owning daemon at a federation boundary stays a matter of
-prefixing rather than a re-identification.
-
-A seed's life runs `planted` → `growing` → `harvested` or `withered`, with
-`dormant` off to the side. **Tending** is the atomic claim: it sets the
-**tender** — the session and crew member holding the seed — and starts it
-growing in one move, and a seed has one tender at a time. **Parking** pauses a
-seed deliberately (`dormant`) and lets go of the claim; tending it again picks
-it back up. **Harvesting** closes it as done, with a reason, and **withering**
-closes it as abandoned. **Replanting** puts a seed back in the pool: it is the
-one move that lands on `planted`, so it reopens a harvested or withered seed.
-
-A seed somebody else still holds is **taken**, not merely moved. Tend, park,
-harvest, wither, and replant refuse it by naming the holder; `--force` acts
-anyway and the log records who forced it. A tender moving its own seed never
-meets that guard. Neither does anyone moving a seed whose holder's session has
-ended. A claim made with `--member <name>` never expires.
-
-An **edge** is one typed relation between two seeds, stored on the seed it
-points from. Three kinds carry meaning today: **blocks** (`a blocks b`, so b
-waits for a), **part-of** (`b part-of c`, so b is one of plot c's children and
-a seed sits in at most one plot), and **discovered-from** (`a discovered-from
-b`, recording that a was discovered while working on b). A seed may name
-several origins;
-the relation never orders work or affects readiness. `sown-from` and
-`relates-to` remain declared and inert. A cycle in an ordering or containment
-edge is refused when created, naming both seeds and the edge to remove.
-
-**Ready** is the answer to "what can I pick up right now": an open seed that is
-not parked, blocked, held, a gate, a packet, or under a packet. A plot itself is
-never ready; only its children can be. Readiness is computed when asked and
-never stored, so harvesting a blocker frees its dependent at the next call,
-with nobody clearing anything.
-`attn seed ready` answers for the whole garden unless the session reports to a
-seed. Without flags, it then shows that seed's plot; `--all` steps back out to
-the whole garden. `attn seed prime` combines the standing launch guidance with
-the same live answer SessionStart injects, including after compaction. The
-garden is one space: it has no workspace dimension at all, and plots are its
-only grouping (ruled 2026-08-13).
-
-In conversation, **ticket**, **todo**, **epic**, and **done** are Jira-style
-semantic aliases for **seed**, **ready**, **plot**, and **harvested**. Agents use
-the Garden word by default, then mirror whichever alias the user chooses for
-that concept for the rest of the exchange. The aliases are conversational: they
-do not add a stored todo state or revive the retired Ticket entity above.
-
-**Dispatch-at-plot** aims a delegation at an existing seed (`attn delegate
---plot <seed>`). The delegate becomes that seed's tender — its launch prompt
-says so, so the claim has to match — and the dispatch refuses before creating
-anything when a live session already holds it. A tender whose session the
-daemon no longer knows does not hold it (the same liveness `attn seed ready` uses), and
-the delegating session's own claim is a hand-over, not a conflict.
-
-Beyond that one seed it is scope inference: inside that session, `attn seed ready`
-without flags shows the plot, and `attn seed prime` points at the plot seed for
-the plan, then lists the plot's ready seeds and the freshest handoff on each.
-It is not a fence over the plot. The delegate may tend or plant anything
-(`--all` steps back out to the garden), several agents may work one plot at
-once, and who holds each of its children is always that seed's own tender.
-
-**Stale** is a seed claiming attention it is not getting: open, with no log
-movement — no note, no move, no edge — for a window (`attn seed ls --stale`,
-default seven days). It is a query for a person's judgment, never a reaper:
-nothing withers because a window passed.
-
-"Nobody holds it" is one rule, shared by `ready` and by the claim `tend` makes,
-so a seed offered by one is accepted by the other. A tender whose session the
-daemon no longer knows has let go — which is how a successor picks up a seed
-somebody tended and then ended on. A tender that names only a crew member
-always holds: attn has no signal that a person in a terminal pane walked away.
-
-A **note** is one entry on a seed's log: what happened and what was learned,
-written for whoever tends that seed next. Notes are anchored to the work and
-quiet by default — a message with an addressee is a message, not a note — and
-they are read where the tender already looks, in the seed's own `show`. Adding
-`--ring` is a separate speech act: the note stays on the log while a contentless
-bell tells the seed's watchers to look.
-
-A **watch** is one session's standing interest in a seed. Every lifecycle move
-rings watchers automatically; a note rings only by choice. Watching a plot
-covers its whole plot by following `part-of` edges upward when activity lands,
-including children planted after the watch. A delegation automatically makes
-its dispatcher a watcher of the seed it was aimed at. One unread bell per
-watcher and moved seed coalesces a busy log until that watcher reads `show` or
-`notes`; a session never rings itself for its own write. `unwatch` removes an
-explicit watch, while the dispatch relationship remains automatic.
-
-A **handoff** is a note kind: one written to your successor on this seed
-(`attn seed note <id> -m "…" --handoff`). It is still a note on the log and
-stays quiet unless its author rings it, but the freshest one is put in front of
-whoever picks the seed up — `attn seed show` renders it above the seed, and `attn seed tend`
-prints it on the claim — so pickup primes without anybody being told to go
-looking. This is continuity along the *seed*: a crew member's handoff, filed in
-their home when they wrap, is continuity along the *member*, and the two are
-independent.
+- **Garden**: the home's work tracker; seed: a work item; slug: its readable name.
+- **Artifact**: a file owned by a seed; linked artifact: an external reference.
+- **Plot**: a seed with children; packet: a reusable plot template.
+- **Plant/tend/park/harvest/wither/replant**: create/claim/pause/complete/abandon/reopen work.
+- **Seed states**: `planted` (open), `growing` (claimed), `dormant` (paused), `harvested` (done), `withered` (abandoned).
+- **Tender**: the seed's claimant.
+- **Edge**: **blocks** orders work, **part-of** contains it, **discovered-from** records origin.
+- **Ready**: available to claim; stale: open without recent activity.
+- **Dispatch-at-plot**: delegation at an existing seed.
+- **Note**: a log entry; watch: notification interest; handoff: a note for the next tender.
+- Conversational aliases **ticket/todo/epic/done** mean **seed/ready/plot/harvested**.
 
 ## The crew
 
-The **crew** is the roster of durable named identities. A **crew member** —
-Keel, Alder, Trellis — is a charter, a handoff line, and an address; its
-sessions are its **days**. A member belongs to a home daemon, for the same
-reason the garden does: one roster across a fleet is its whole point.
-
-**Display capitalizes, identity does not.** The id is lowercase and stays that
-way wherever it addresses something — the home directory, `--member`, the
-fields on the wire, the store. Wherever a person reads the member, it is
-written as the name it is: you type `attn crew wake trellis` and Trellis is
-who answers.
-
-A member's **home** is plain markdown on disk at `~/.attn/crew/<name>/`: a
-`CHARTER.md` saying what it cares about, and dated **handoffs** it writes to
-its successor at the end of a day. Files are canonical and hand-editable —
-which is what lets any agent be a member, claude or codex or something later.
-The **registry** is the daemon's index over those homes (member id, charter
-path, home dir, cwd, harness, awareness dirs, active binding); it serves reads
-and is never a second authority for the prose. A home the user adds by hand
-joins the roster at the daemon's next start.
-
-**Identity is the invocation, never the files.** A session is a member because
-it was launched as one — the daemon stamps a **binding** at launch
-(`attn <agent> --member <name>`), and that binding is what `attn agent list`
-and `attn agent peek` report. Reading a charter confers nothing. One member has
-one active binding: **two agents with the same identity never run at once**, and
-waking a member whose day is live names that day rather than starting a second.
-Parallelism means another member, never a second copy. A binding naming a
-session the daemon no longer knows has let go on its own, the same liveness
-rule a seed's tender follows.
-
-To **wake** a member is to start its day: `attn crew wake <name>`, or two
-clicks on its row in the sidebar, where every member is drawn awake or asleep.
-The sidebar asks twice because a day cannot be un-rung — the first click arms
-the row and the second wakes, and an armed row that is not confirmed stands
-down. The command does not ask twice: typing it is already the deliberate act
-the clicks reconstruct. Either way the daemon binds the member, then launches
-a session in its recorded cwd — its own home when none is recorded — reaching
-its **awareness dirs**, the directories its charter is about. A member lives on
-the harness its record names — `attn crew set <name> --agent codex`, claude
-when nothing says otherwise — and `attn crew wake <name> --agent <other>` picks
-one for a single day without moving the member. Its model can be chosen with
-`attn crew set <name> --model <model>` for its recorded harness; a one-day
-harness override does not carry that model across harnesses. When absent, the
-configured default for the launch harness applies, then the historical Fable
-fallback for Claude when no default is configured. Any other harness takes its
-own default. The launch carries **priming**:
-what a member is, where its charter is to be read, the freshest letter left
-for it inline, and how a day is closed. Skills retire into verbs and the verbs
-are taught, because an agent never told how to handoff cannot file one.
-
-To **ask a member to sleep** is `attn crew sleep <name>`, or the moon on its
-awake row. The request is delivered into the member's day; it never kills the
-session. The member finishes its letter and files it with `attn handoff
---sleep`, which is the user's explicit sleep request carried through to the
-closure: nobody wakes behind it.
-
-A member is also an address: `attn agent msg <member> "…"` reaches its live
-day when it is awake. When it is asleep, the message wakes it within the same
-wake limit as every autonomous wake and becomes the new day's first attributed
-prompt after priming. The message is persisted before the day starts, so the
-wake-to-delivery gap cannot silently lose it; a refused wake delivers nothing
-and names the limit and its way out.
-
-A member's day ends with a **handoff**: `attn handoff -m "<letter>"`, the
-member's own letter to its successor. attn names the file and files it into the
-member's `handoffs/`; the line is **append-only**, so a name already taken is
-refused and a correction is a new letter rather than an edit. Only the session
-living the day can file one — the binding says whose day is closing.
-
-Filing runs the **nap**: attn closes that session and immediately starts the
-member's next day, primed by the letter that was just filed. The nap is a
-replacement rather than a resume, because carrying a transcript — or a
-compaction summary — into the new day is exactly what the member's letter is
-there instead of. The successor keeps the closed day's launch settings, and the
-binding moves from one session to the other in a single write, so the member is
-never momentarily unbound. A nap that cannot run leaves the letter filed and the
-day running: a member is never torn down with its letter unfiled.
-
-That state has its own way out. Writing the letter and turning the day over are
-one motion but two acts, and only the second can fail, so `attn handoff --retry`
-runs the turnover again against the letter already filed — no second file, no
-overwrite, append-only untouched. The registry records which letter the current
-day filed so the two refusals stay apart: filing again after a failed turnover
-names the retry, and a retry with nothing filed names the verb that writes a
-letter.
-
-Filing does not always start the next day. Whether it naps or **sleeps** is
-attn's call, made from whether the user is around: a day that closes while
-nobody is there does not start another one, because the point of a fresh day is
-somebody to spend it with. A sleeping member is bound to nothing and shows in
-the sidebar one click from a new day. `attn handoff --sleep` and `--nap` decide
-it for one handoff rather than letting attn read presence. Plain `attn handoff`
-is presence-decided day turnover; `--nap` explicitly requests a successor, and
-a user-requested sleep is always filed with `--sleep`.
-
-A binding owns a seat only while its process is live. Process exit releases the
-member immediately even when the generic session row remains recoverable; a
-wake that finds stale state releases it, names the exited session, and starts a
-fresh day.
-
-Between those two, the **crew lifecycle** is what watches an awake member and
-decides when either should happen. It reads two things: how long the user has
-been away, and how close the member's session is to losing its prompt cache —
-an **estimate**, since no API reports a cache entry's life, so it is time since
-the session last talked to the model against an assumed TTL for its harness.
-Cache pressure gates everything, which is what keeps the subsystem silent: a
-member whose cache is fresh is left alone whoever is around. Once it is close,
-who is here decides — the user present means a **heartbeat**, a nudge that reads
-the day's context so its lifetime starts over; the user gone means the member is
-asked to close its day. A heartbeat may reach an `idle` or `waiting_input` member
-only after session input proves the current route or composer is safe. It is
-charged as successful only when taken, and its maintenance-only run never settles
-the open turn. Wakes attn starts on its own are bounded per member by the **wake
-limit**, so an unattended night has a ceiling and every refusal names it.
-
-Tending is not a crew privilege: workers and errand sessions tend seeds too,
-under any free-string name. Where a tender's name happens to match a registered
-member it resolves to that member's id, so the claim compares addresses rather
-than spellings — but the registry is never a requirement to tend. The two
-handoffs stay apart on purpose: a **seed handoff** is the work item's thread,
-written by whoever tends it; a **crew handoff** is the member's day-line.
+- **Crew**: named identities; member: one identity; day: its session.
+- **Member home**: charter and handoff files; registry: their index; binding: a session launched as a member.
+- **Awareness dirs**: charter's directories; priming: launch context.
+- **Wake** starts a day; a **sleep request** asks the member to end it.
+- **Sleep**: no live day; nap: replacement day.
+- **Crew handoff**: letter for the next day.
+- **Crew lifecycle**: day management using presence and cache age.
+- **Heartbeat**: context refresh; wake limit: cap on autonomous starts.
 
 ## Client token
 
-The credential a client presents in `client_hello` to speak the daemon's
-protocol at all. The daemon mints it at first startup into its own profile's
-data directory as `client-token`, owner-only, and reuses it forever after so a
-restart never strands a client.
-
-It exists because the daemon's two front doors are gated differently: the unix
-socket has file permissions, and the loopback WebSocket port has nothing. The
-token gives the port the same gate. Per-profile is the point — the same binary
-serves every profile, so one profile's app cannot drive another's daemon.
-
-Distinct from the two tokens that already existed. The **browser host token**
-says *which* client is the trusted Tauri main webview, once it is already
-inside; `ATTN_WS_AUTH_TOKEN` is an operator-set HTTP bearer for a WS port
-deliberately exposed beyond loopback. The client token answers the earlier
-question: may this process speak here? — and a connection that already cleared
-the bearer is exempt from it, because that is the same question answered at the
-layer that fits a browser.
-
-`attn client-token` prints it. A refused hello names the file and the profile,
-so the fix is readable off the error.
+Profile protocol credential. The **browser host token** identifies the trusted WebView; the **HTTP bearer** protects exposed WebSockets.
 
 ## Home daemon
 
-A daemon that is **its own home** — standalone, complete, owning its garden,
-its crew, and every other piece of user-level shared state. Every fresh
-install starts as a home daemon, and the user's app talks to one. "Home" is
-not a rank or a different binary: it is the default state of any daemon that
-nobody has enrolled, and the one that may have enrolled others.
-
-The ownership rule underneath: **every piece of state has exactly one owner
-daemon; everyone else is a client of it.** Sessions are owned by the daemon
-where they run — including on outposts; the garden and the crew are owned by
-a home daemon, because one board and one roster are their whole point.
-
-The central server (closed, operated, optional) connects **home daemons to
-each other** — federation, a different relationship from home↔outpost
-ownership. Outposts never meet the server; a home represents its whole
-fleet. Plan:
-[docs/plans/2026-08-10-home-garden-crew-arc.md](plans/2026-08-10-home-garden-crew-arc.md).
+Owner of the fleet's Garden and crew.
 
 ## Outpost
 
-A daemon **enrolled to a home**: it keeps owning its own sessions, but
-garden and crew asks pass to its home over the **uplink** (the generic
-outpost-asks-home intent channel). An outpost holds no garden state at all —
-not a copy, not a cache; reads pass through like writes.
-
-**Enrollment** is the recorded, mutual act that makes an outpost: the
-outpost persists its home's daemon id, and only a connection presenting that
-identity acts as home. Every daemon has exactly one home; a second home
-dialing an already-enrolled outpost is a loud re-home decision, never silent
-adoption.
-
-The record lives beside the daemon's own `daemon-id` file in its data dir; a
-home writes it on the remote when it syncs one. `attn enrollment` shows it,
-and `attn enrollment leave` is the way out — it makes the daemon a home
-again, and is what has to happen on an outpost before a different home may
-take it.
-
-Until the uplink is built, outposts are **fenced**: garden and crew surfaces
-refuse on an outpost with an error naming the home and the plan tracking the
-gap. Everything outposts do today — sessions, PTY, PR flows, local
-tickets — is unaffected.
-
-The transport vocabulary is older than these words and stays: **hub** (the
-code's name for the dialing side), **endpoint** (a stored SSH target), and
-**remote** (the dialed machine) describe the plumbing; home and outpost
-describe the ownership relationship carried over it.
-
-A **parked endpoint** is one the hub is deliberately holding back until the
-user clicks Sync: its binary or its protocol version is not the one this
-client speaks (`binary_mismatch`, `version_mismatch`, `version_ahead`). Parked
-is about the remote build, not about a seed being put down. The hub refuses to
-forward commands to a parked endpoint — a binary mismatch keeps its WebSocket
-alive, so refusing on status is what stops a command running on a build attn
-already knows is wrong — and the refusal carries the endpoint's own status
-message, so the command error and the banner cannot drift apart.
+- **Outpost**: enrolled daemon; enrollment: its recorded home relationship.
+- **Uplink**: requests from outpost to home.
+- **Hub**: dialing side; endpoint: SSH target; remote: the dialed machine.
+- **Parked endpoint**: waiting for Sync.
 
 ## Conversation session
 
-A **conversation session** is an attn session whose agent runs headless in a
-process attn spawns, instead of a terminal program driven through a PTY. It is a
-session in every other respect — it has a workspace, a pane, a state, turns, and
-a seed binding — so nothing that reasons about sessions has to know which kind
-it is looking at.
-
-What differs is the surface. A PTY session's surface is a byte stream and a
-terminal grid; a conversation session's is an **envelope** stream going out and
-**verbs** coming in. There is no grid and no scrollback.
-
-The process running the agent is its **host**. The daemon owns a host's lifetime
-exactly as it owns a PTY worker's: it signals the host to tear down, and kills
-its process group as the backstop, so nothing the agent started outlives the
-session.
-
-An **envelope** is one message from a host: a session id, a monotonic sequence
-number, a `kind`, and a body. Kinds fall in two families, and the split is what
-lets an agent's own vocabulary grow without the daemon changing:
-
-- **Declarations** are what the daemon understands and acts on — `session_ready`,
-  `run_started`, `run_settled`, `tool_started`, `tool_finished`. These are the
-  host telling attn something true about the session.
-- **Renderings** are what the app draws — `message_start`, `message_delta`,
-  `message_end`, `queue_update`, `tool_detail`, `conversation_page`, `notice`,
-  `model_changed`. The daemon forwards them opaquely and holds no opinion about
-  them, with one exception: it reads `model_changed` to remember which model the
-  session should relaunch on.
-
-A **state declaration** is the subset of declarations that carries the attn state
-it puts the session in — the run boundaries — so the daemon reads state off the
-host rather than inferring it from the kind. That is what makes a conversation
-session move through `working` and `idle` like any other agent, and it is the
-path a future `pending_approval` travels on too. Tool boundaries are declarations
-without a state: they say what the agent did, not where the session now is.
-
-A **tool call** appears in the transcript as a card: the tool's name, one line
-naming what it was pointed at, and how it ended. What the call actually read,
-wrote or printed is **detail**, and it stays in the host until someone opens the
-card and the app asks for it. That is deliberate — a transcript that inlines
-every tool's output is one nobody can scroll, and most of them are never
-looked at.
-
-A **run** is one prompt and everything the agent does in response to it, from
-`run_started` to `run_settled`. A run is what a turn is opened and settled
-around, the same way a PTY agent's stop is.
-
-Three verbs put a message in front of the agent, and which one you use is a
-statement about *when* it should be read:
-
-- a **prompt** opens a run, and is what the composer sends when nothing is
-  running;
-- a **steer** cuts in at the agent's next turn boundary — the interruption, and
-  what every attn doorbell (a ticket nudge, a chief nudge, a Present notice)
-  becomes for a conversation session, since there is no PTY to type into;
-- a **follow-up** waits for the run to finish and is read before it settles, so
-  the agent never stops with one unread.
-
-A steer or a follow-up sent to a session with no run open starts one. That is
-what makes a doorbell safe to ring at any moment: nothing is dropped for having
-arrived at the wrong time. What has been sent and not yet read is the session's
-**queue**, which the host reports as it fills and drains — queued, then seen. The
-queue can be cleared, which drops everything in it at once; what the strip shows
-is always the host's last word about it, never a local guess.
-
-A **conversation snapshot** is what a client needs to draw a conversation it has
-not been watching: the newest stretch of the transcript, whether a run is open,
-and the queue. It is the conversation's answer to the terminal's restore — one
-authority — so what it carries is what the client draws, and two windows on the
-same conversation show the same thing by construction. The host holds the
-transcript it snapshots, not the session file: a message pi has not finished is
-not on disk yet, and a snapshot rebuilt from disk would stop one paragraph short
-of the truth.
-
-A snapshot is only a **window** onto a long conversation, and everything older is
-**scroll-back** the host still holds and serves a **page** at a time, on request,
-as the reader scrolls up. A snapshot also names its **epoch** — the host process
-that built it — which is what lets a client tell "the same conversation, redrawn"
-from "a different host rebuilt this": the first is spliced onto the scroll-back
-the client has already paged in, the second replaces it. Without that
-distinction, one window opening a long conversation would shorten what every
-other window is showing.
-
-Scroll-back a client is holding can outlive what the host still keeps. The host
-bounds its own transcript, and a conversation that talks long enough for the
-host to drop its oldest items leaves a window that paged those items in still
-drawing them — quietly showing more than a window opened fresh would, until the
-next page request comes back empty. It is bounded and it is inherent to paging
-something that is broadcast: the client's copy is the client's, and the host
-never reaches back into it.
-
-A conversation whose start the host has dropped says so. Once there is no page
-left to ask for and items are known to be gone, the transcript is headed by a
-row naming how many — the same honesty a compaction row gives, for the same
-reason: a history that appears to begin mid-thought is indistinguishable from
-one that did.
-
-A conversation can be **resumed**: a new session picks up an existing
-conversation instead of starting empty. The old conversation is copied into the
-new session's own storage rather than continued in place, so the session it came
-from is untouched and two sessions never write to one history. That is distinct
-from reloading a `recoverable` session, which returns to its own conversation.
-
-A **notice** is a row in the transcript that explains a silence the agent is not
-responsible for — a compaction, a retry. It settles in place rather than
-stacking: the row that says a thing is happening becomes the row that says it
-finished.
-
-A conversation session is **recoverable** when its host is gone but the
-conversation is not: the history is a session file under attn's data dir, and
-reloading the session starts a replacement host that reopens it. That is the same
-`recoverable` state and the same Reload every other session has, and it covers
-the daemon restarting as well as the host dying on its own. A session whose
-reopened history does not end with the agent speaking comes back
-**`waiting_input`** rather than `idle` — both open a turn and both take a nudge,
-so the difference is not what attn does next but what it tells the user: the
-agent stopped without finishing, and something is owed to it.
-
-A **launch prompt** is the first message a session is opened with rather than
-typed into — a delegation brief, most often. It belongs to the session, not to
-the process that first received it: the daemon stores it and hands the same one
-to every replacement host, and the host decides whether to say it by looking at
-the history it just reopened. An empty history means it was never said, which is
-true on a first launch and on a relaunch after a crash so early the agent had not
-spoken yet; anything else means it was, and it is never said twice. Only
-conversation sessions store one — a PTY agent's relaunch resumes its transcript,
-so replaying the brief there would set it to work on something it had already
-finished.
-
-An agent becomes a conversation agent by its plugin driver registering the
-`conversation` capability. Everything else about launching it — argv, env, cwd —
-comes back from the same `driver.spawn` call a PTY-backed agent uses. It never
-has to declare the PTY agents' `resume`: that capability describes an agent
-resumed from an argv flag, and a host is resumed from its own session file.
+- **Conversation session**: a headless agent runtime; host: its process.
+- **Envelope**: a host message; declaration: daemon-understood event; rendering: app display data.
+- **State declaration**: a run-boundary state; tool call: an action; detail: its payload.
+- **Run**: a prompt and response.
+- **Prompt** starts a run; steer arrives at a boundary; follow-up waits for current work.
+- **Input queue**: unread messages, distinct from the sidebar queue.
+- **Snapshot**: current conversation; scroll-back/page: older history/a retrieval unit.
+- **Epoch**: host generation; notice: interruption status.
+- **Resume**: new session from history; launch prompt: opening message.
 
 ## nisse
 
-**nisse** is attn's own agent. It is the first conversation agent: pi's SDK runs
-the loop and the model, and everything around that loop — the host process and
-its lifetime, the envelope stream, the verbs, the delegation, the pane you read
-it in — is attn's. That is why it carries a name of attn's rather than pi's.
-
-A nisse is the Scandinavian household spirit that keeps a house going while
-everyone sleeps and works tirelessly for as long as you leave out its porridge.
-attn is the house, nisse lives in it, and your attention is the porridge.
-
-The word is only ever the agent. Say **host** for the process a conversation
-agent runs in — that machinery is agent-agnostic and would run a second
-conversation agent unchanged — and say **pi** for the engine underneath. On the
-wire and in the CLI the agent is `nisse` (`attn delegate --agent nisse`); its
-launch environment is the `ATTN_NISSE_*` block; the plugin that registers it is
-`plugins/attn-pi`, which also registers the PTY-backed `pi` agent.
+attn's conversation agent, powered by pi's model loop.
 
 ## Auto mode, proposals, and promotion
 
-**Auto mode** is pi's permission system: a set of static rules (work inside
-the session's working directory runs free), a classifier for everything those
-rules cannot place, and denials the agent answers conversationally rather than
-through a dialog. Design:
-[plugins/attn-pi/AGENTS.md](../plugins/attn-pi/AGENTS.md).
-
-Its **config** is daemon-owned and global: the environment prose the classifier
-reads about this machine, the allow and hard-deny patterns, the ordered model
-list both classifier passes walk, and whether attn sessions start with auto
-mode on. A pi session is handed the config it launches with; changing it
-reaches the next session, not the running one.
-
-A **proposal** is a requested change to that config — an allow pattern, a hard
-deny, or a model — recorded and inert. **Promotion** is a human applying one in
-the attn app, and it is the only thing that changes what a session runs under.
-The asymmetry is the point: `attn automode allow …` is reachable by any agent
-and only ever proposes, while promotion has no CLI at all. An agent must not be
-able to write its own leash.
-
-Environment prose is the exception: `attn automode env` and the app's own
-editor write it directly, because it describes the machine to the classifier
-rather than naming a rule that skips it. An **environment template** is one of
-the prewritten documents the app offers as a starting point; picking one copies
-its lines into the config and nothing links the two afterwards.
-
-A **denial** is one call auto mode refused. The session reports it to attn,
-which keeps it in a bounded log, raises a notification naming what was blocked
-and why, and lists it under `attn automode denials`. Every denial says who
-decided — a static rule, the classifier layer that answered
-(`classifier-2a`, `classifier-2b`), or the circuit breaker. A denial never
-stops the run: the agent is given the reason, and a plain reply approving the
-action is what lets it retry.
+- **Auto mode**: pi permissions; config: policy and environment context.
+- **Proposal**: requested config change; promotion: the human applying it.
+- **Environment template**: starting context; denial: a refused call.

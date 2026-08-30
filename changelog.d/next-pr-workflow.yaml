@@ -1,5 +1,6 @@
 kind: internal
 area: contributing
 change: >
-  Document next as the explicit base for routine pull requests and stop
-  requiring rebases when unrelated changes reach next first.
+  Document next as the routine pull request base without unrelated rebases,
+  restore epic-branch guidance, and route specialized agent instructions from
+  compact root guidance into focused docs.
