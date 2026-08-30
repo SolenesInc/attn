@@ -100,7 +100,10 @@ export function SessionPullRequestPopover({
     });
   };
 
+  // Only while the panel itself holds focus. Tabbing onto a list button hands
+  // the keyboard back to that button, so ↵ opens the one the user is on.
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;

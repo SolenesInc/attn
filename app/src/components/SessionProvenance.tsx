@@ -1,5 +1,5 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useCallback, useRef, useState, type MouseEvent, type PointerEvent, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactElement } from 'react';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionPullRequest,
@@ -69,6 +69,10 @@ export function SessionProvenance({
 }) {
   const [popover, setPopover] = useState<{ anchor: PopoverAnchor; focused: boolean } | null>(null);
   const closeTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+  }, []);
 
   const cancelClose = useCallback(() => {
     if (closeTimer.current !== null) {
@@ -152,14 +156,7 @@ export function SessionProvenance({
           </span>
         ) : (
           <span key="pull-request" className="session-provenance__part">
-            <SessionPullRequestDot pullRequest={entry.pullRequest} />
-            <span className="session-provenance__target">#{entry.pullRequest.number}</span>
-            <span
-              className="session-provenance__status"
-              data-tone={describeSessionPullRequest(entry.pullRequest).tone}
-            >
-              {describeSessionPullRequest(entry.pullRequest).label}
-            </span>
+            <CompactPullRequest pullRequest={entry.pullRequest} />
           </span>
         )))}
       </span>
@@ -187,13 +184,14 @@ export function SessionProvenance({
   );
 }
 
-function SessionPullRequestDot({ pullRequest }: { pullRequest: SessionPullRequest }) {
+function CompactPullRequest({ pullRequest }: { pullRequest: SessionPullRequest }) {
+  const { label, tone } = describeSessionPullRequest(pullRequest);
   return (
-    <span
-      className="session-provenance__dot"
-      data-tone={describeSessionPullRequest(pullRequest).tone}
-      aria-hidden="true"
-    />
+    <>
+      <span className="session-provenance__dot" data-tone={tone} aria-hidden="true" />
+      <span className="session-provenance__target">#{pullRequest.number}</span>
+      <span className="session-provenance__status" data-tone={tone}>{label}</span>
+    </>
   );
 }
 

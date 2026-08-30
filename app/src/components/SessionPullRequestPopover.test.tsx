@@ -88,6 +88,22 @@ describe('SessionPullRequestPopover', () => {
     expect(openUrl).toHaveBeenCalledWith(second.url);
   });
 
+  it('leaves ↵ to a list button the user tabbed onto', () => {
+    const second = pr({
+      number: 68,
+      url: 'https://github.com/victorarias/attn/pull/68',
+      state: 'merged',
+      title: 'docs: ledger sweep glossary',
+      created_at: '2026-08-30T09:00:00Z',
+    });
+    show([pr(), second]);
+
+    const items = screen.getAllByRole('button', { name: /#\d+/ });
+    fireEvent.keyDown(items[1], { key: 'Enter' });
+
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
   it('copies the highlighted URL on c', () => {
     show([pr()]);
 
