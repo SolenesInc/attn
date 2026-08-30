@@ -68,7 +68,7 @@ git -C "$repo" config user.name 'Candidate Gate Test'
 git -C "$repo" config user.email 'candidate-gate@example.com'
 git -C "$repo" switch -q -C main
 git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
-git -C "$repo" commit -q -m 'release baseline'
+git -C "$repo" commit -q --allow-empty -m 'release baseline'
 main_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" update-ref refs/remotes/origin/main "$main_sha"
 
