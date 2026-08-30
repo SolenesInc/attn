@@ -18,6 +18,7 @@ import {
   INACTIVE_MARKDOWN_ANNOTATIONS_STATE,
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
+import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
 import { useConversationsStore } from '../store/conversations';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
@@ -1566,6 +1567,10 @@ function collectAutomationFormUiState() {
   return getAutomationFormAutomationHandle()?.getState() ?? INACTIVE_AUTOMATION_FORM_STATE;
 }
 
+function collectAutoModeUiState() {
+  return getAutoModeAutomationHandle()?.getState() ?? INACTIVE_AUTOMODE_STATE;
+}
+
 function getLocationPickerRoot() {
   const root = document.querySelector('[data-testid="location-picker"]');
   return root instanceof HTMLElement ? root : null;
@@ -2091,6 +2096,51 @@ export function useUiAutomationBridge({
         }));
         await settleUi(2);
         return { composed: true, text };
+      }
+      case 'dom_text': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_text requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_text selector not found in DOM: ${selector}`);
+        }
+        return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
+      }
+      case 'dom_scroll_into_view': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_scroll_into_view requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_scroll_into_view selector not found in DOM: ${selector}`);
+        }
+        element.scrollIntoView({ block: 'center', behavior: 'auto' });
+        await settleUi(2);
+        return { scrolled: true, bounds: rectSnapshot(element) };
+      }
+      case 'dom_key': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        const key = typeof payload.key === 'string' ? payload.key : null;
+        if (!selector) throw new Error('dom_key requires selector');
+        if (!key) throw new Error('dom_key requires key');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_key selector not found in DOM: ${selector}`);
+        }
+        const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
+        element.focus();
+        const init: KeyboardEventInit = {
+          key,
+          bubbles: true,
+          cancelable: true,
+          metaKey: modifiers.meta ?? false,
+          ctrlKey: modifiers.ctrl ?? false,
+          shiftKey: modifiers.shift ?? false,
+          altKey: modifiers.alt ?? false,
+        };
+        const delivered = element.dispatchEvent(new KeyboardEvent('keydown', init));
+        element.dispatchEvent(new KeyboardEvent('keyup', init));
+        await settleUi(3);
+        return { key, handled: !delivered };
       }
       case 'dom_hover': {
         // Both the pointer and mouse families are dispatched (handlers here come from either), and
@@ -3530,6 +3580,28 @@ export function useUiAutomationBridge({
         clickTestId(testid);
         await settleUi(3);
         return collectAutomationFormUiState();
+      }
+      case 'automode_get_state':
+        return collectAutoModeUiState();
+      case 'automode_environment_slot': {
+        const slot = typeof payload.slot === 'string' ? payload.slot : null;
+        if (!slot) throw new Error('automode_environment_slot requires slot');
+        const values = Array.isArray(payload.values)
+          ? payload.values.filter((v): v is string => typeof v === 'string')
+          : null;
+        if (values === null) throw new Error('automode_environment_slot requires values');
+        const handle = getAutoModeAutomationHandle();
+        if (!handle) throw new Error('the auto mode settings pane is not mounted');
+        await handle.setEnvironmentSlot(slot, values);
+        await settleUi(3);
+        return collectAutoModeUiState();
+      }
+      case 'automode_environment_edit': {
+        const slot = typeof payload.slot === 'string' ? payload.slot : '';
+        if (!slot) throw new Error('automode_environment_edit requires slot');
+        clickTestId(`automode-slot-edit-${slot}`);
+        await settleUi(3);
+        return collectAutoModeUiState();
       }
       case 'click_nudge_trigger': {
         // The deliver-now trigger renders only in NudgeIndicator's paused mode. The header chip and

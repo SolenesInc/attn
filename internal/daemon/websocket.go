@@ -369,6 +369,7 @@ type wsHub struct {
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
 	wireTap           WireTap
+	evictionListener  func(string, evictionRecord)
 }
 
 const (
@@ -777,16 +778,15 @@ func (d *Daemon) wsWritePump(client *wsClient) {
 		if message.kind != messageKindText {
 			wsType = websocket.MessageBinary
 		}
-		start := time.Now()
 		client.writing.Store(true)
 		err := client.conn.Write(ctx, wsType, message.payload)
 		client.writing.Store(false)
-		elapsed := time.Since(start)
+		// The deadline starts before Write and survives scheduler preemption; an
+		// elapsed stopwatch around Write can miss a deadline that already fired.
+		deadlineExpired := ctx.Err() == context.DeadlineExceeded
 		cancel()
 		if err != nil {
-			// The library reports a timed-out write and a write to a connection closed
-			// underneath it through the same error, and which it picks is a race.
-			stalled = elapsed >= writeTimeout
+			stalled = deadlineExpired
 			if stalled {
 				d.logf("WebSocket client took longer than %s to accept a message, giving up on it", writeTimeout)
 			}
@@ -1020,6 +1020,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.sendNotificationMarkReadWSResult(client, protocol.Deref(notifMark.RequestID), notifMark.NotificationID)
 	case protocol.CmdTicketAttach: // wire: ticket_attach
 		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		go d.handleSeedArtifactTransferWS(client, msg.(*protocol.SeedArtifactTransferMessage))
+	case protocol.CmdSeedArtifactTarget: // wire: seed_artifact_target
+		go d.handleSeedArtifactTarget(client, msg.(*protocol.SeedArtifactTargetMessage))
 	case protocol.CmdSeedResume: // wire: seed_resume
 		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
 	case protocol.CmdSeedSendToChief: // wire: seed_send_to_chief
@@ -1245,10 +1249,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModePromote(client, msg.(*protocol.AutoModePromoteMessage))
 	case protocol.CmdAutoModeDiscard: // wire: automode_discard
 		d.handleAutoModeDiscard(client, msg.(*protocol.AutoModeDiscardMessage))
+	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+		d.handleAutoModeEnvSlotWS(client, msg.(*protocol.AutoModeEnvSlotMessage))
+	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+		d.handleAutoModeEnvNotesWS(client, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePatternAdd: // wire: automode_pattern_add
 		d.handleAutoModePatternAdd(client, msg.(*protocol.AutoModePatternAddMessage))
 	case protocol.CmdAutoModePatternRemove: // wire: automode_pattern_remove
 		d.handleAutoModePatternRemove(client, msg.(*protocol.AutoModePatternRemoveMessage))
+	case protocol.CmdAutoModeModelSet: // wire: automode_model_set
+		d.handleAutoModeModelSet(client, msg.(*protocol.AutoModeModelSetMessage))
+	case protocol.CmdAutoModeModels: // wire: automode_models
+		d.handleAutoModeModels(client, msg.(*protocol.AutoModeModelsMessage))
 	case protocol.CmdPtyResize: // wire: pty_resize
 		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
 	case protocol.CmdKillSession: // wire: kill_session

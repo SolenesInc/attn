@@ -236,9 +236,8 @@ fn stop_running_daemon(socket_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(unix)]
-fn listening_pids_for_daemon_port() -> Vec<u32> {
-    let port = daemon_http_port();
+#[cfg(target_os = "macos")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
     let output = Command::new("lsof")
         .arg("-ti")
         .arg(format!("tcp:{port}"))
@@ -258,9 +257,108 @@ fn listening_pids_for_daemon_port() -> Vec<u32> {
         .collect()
 }
 
-#[cfg(not(unix))]
-fn listening_pids_for_daemon_port() -> Vec<u32> {
+#[cfg(target_os = "linux")]
+fn listening_socket_inodes(table: &str, port: u16) -> std::collections::HashSet<u64> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.len() <= 9 || fields[3] != "0A" {
+                return None;
+            }
+            let (_, local_port) = fields[1].rsplit_once(':')?;
+            if u16::from_str_radix(local_port, 16).ok()? != port {
+                return None;
+            }
+            fields[9].parse::<u64>().ok()
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn socket_inode(path: &Path) -> Option<u64> {
+    path.to_str()?
+        .strip_prefix("socket:[")?
+        .strip_suffix(']')?
+        .parse()
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
+    let mut inodes = std::collections::HashSet::new();
+    for table_path in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        if let Ok(table) = std::fs::read_to_string(table_path) {
+            inodes.extend(listening_socket_inodes(&table, port));
+        }
+    }
+    if inodes.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(processes) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let mut pids = Vec::new();
+    for process in processes.flatten() {
+        let Ok(pid) = process.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let Ok(fds) = std::fs::read_dir(process.path().join("fd")) else {
+            continue;
+        };
+        if fds.flatten().any(|fd| {
+            std::fs::read_link(fd.path())
+                .ok()
+                .and_then(|target| socket_inode(&target))
+                .is_some_and(|inode| inodes.contains(&inode))
+        }) {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn listening_pids_for_port(_port: u16) -> Vec<u32> {
     Vec::new()
+}
+
+fn listening_pids_for_daemon_port() -> Vec<u32> {
+    listening_pids_for_port(daemon_http_port())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_listener_tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    #[test]
+    fn parses_only_listeners_on_the_requested_port() {
+        let table = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+            0: 0100007F:2679 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 12345 1\n\
+            1: 0100007F:2679 0100007F:1234 01 00000000:00000000 00:00000000 00000000 1000 0 23456 1\n\
+            2: 0100007F:2680 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 34567 1\n";
+
+        assert_eq!(
+            listening_socket_inodes(table, 9849),
+            std::collections::HashSet::from([12345])
+        );
+    }
+
+    #[test]
+    fn finds_the_process_holding_a_live_listener() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+        let port = listener.local_addr().expect("listener address").port();
+
+        let pids = listening_pids_for_port(port);
+
+        assert!(
+            pids.contains(&std::process::id()),
+            "current pid missing from {pids:?}"
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -510,6 +608,7 @@ const CANCEL_COUNTDOWN_MENU_ID: &str = "attn-cancel-countdown";
 const NATIVE_SHORTCUT_EVENT: &str = "attn:native-shortcut";
 const NATIVE_BROWSER_CLOSE_EVENT: &str = "attn:native-browser-close";
 
+#[cfg(target_os = "macos")]
 fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, MenuItemKind};
 
@@ -783,25 +882,106 @@ fn canonical_safe_markdown_target(path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-#[cfg(target_os = "macos")]
-fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
-    Command::new("/usr/bin/open")
-        .arg("--")
-        .arg(path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to open Markdown target {}: {}", path.display(), e))
+#[cfg(target_os = "linux")]
+fn linux_session_bus_available() -> bool {
+    // Same call the plugin makes: it unwraps a malformed address and swallows a
+    // failed connect, so only a live connection proves it can own its name.
+    zbus::blocking::Connection::session().is_ok()
 }
 
-#[cfg(not(target_os = "macos"))]
-fn launch_safe_markdown_target(_path: &Path) -> Result<(), String> {
-    Err("Opening Markdown panel links is only supported on macOS.".to_string())
+#[cfg(all(test, target_os = "linux"))]
+mod linux_session_bus_tests {
+    use super::*;
+
+    static BUS_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_bus_address(value: &str) -> bool {
+        let _guard = BUS_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = env::var_os("DBUS_SESSION_BUS_ADDRESS");
+        env::set_var("DBUS_SESSION_BUS_ADDRESS", value);
+        let available = linux_session_bus_available();
+        match previous {
+            Some(value) => env::set_var("DBUS_SESSION_BUS_ADDRESS", value),
+            None => env::remove_var("DBUS_SESSION_BUS_ADDRESS"),
+        }
+        available
+    }
+
+    #[test]
+    fn malformed_inherited_address_is_no_bus() {
+        assert!(!with_bus_address("not-an-address"));
+    }
+
+    #[test]
+    fn well_formed_but_unreachable_address_is_no_bus() {
+        assert!(!with_bus_address("unix:path=/nonexistent/bus"));
+    }
+}
+
+fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open Markdown target {}: {}", path.display(), e))
 }
 
 #[tauri::command]
 fn open_safe_markdown_target(path: String) -> Result<(), String> {
     let canonical = canonical_safe_markdown_target(Path::new(&path))?;
     launch_safe_markdown_target(&canonical)
+}
+
+fn canonical_regular_seed_artifact(path: &Path) -> Result<PathBuf, String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|e| format!("Managed artifact {} is unavailable: {}", path.display(), e))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Managed artifact targets must be regular files, never links.".to_string());
+    }
+    let canonical = std::fs::canonicalize(path).map_err(|e| {
+        format!(
+            "Managed artifact {} could not be resolved: {}",
+            path.display(),
+            e
+        )
+    })?;
+    let canonical_metadata = std::fs::symlink_metadata(&canonical).map_err(|e| {
+        format!(
+            "Managed artifact {} is unavailable: {}",
+            canonical.display(),
+            e
+        )
+    })?;
+    if canonical_metadata.file_type().is_symlink() || !canonical_metadata.is_file() {
+        return Err("Managed artifact targets must resolve to regular files.".to_string());
+    }
+    Ok(canonical)
+}
+
+fn validate_seed_artifact_launch(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal || is_safe_markdown_target_extension(path) {
+        return Ok(());
+    }
+    Err("This managed artifact can only be revealed in Finder.".to_string())
+}
+
+fn launch_seed_artifact(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal {
+        return tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| {
+            format!(
+                "Failed to reveal managed artifact {}: {}",
+                path.display(),
+                e
+            )
+        });
+    }
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open managed artifact {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+fn open_safe_seed_artifact_target(path: String, reveal: Option<bool>) -> Result<(), String> {
+    let canonical = canonical_regular_seed_artifact(Path::new(&path))?;
+    let reveal = reveal.unwrap_or(false);
+    validate_seed_artifact_launch(&canonical, reveal)?;
+    launch_seed_artifact(&canonical, reveal)
 }
 
 #[cfg(test)]
@@ -845,6 +1025,39 @@ mod markdown_target_tests {
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
 
+    #[test]
+    fn canonical_regular_seed_artifact_accepts_binary_files() {
+        let dir = temp_dir("seed-artifact-binary");
+        let file = dir.join("payload.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+
+        assert_eq!(
+            canonical_regular_seed_artifact(&file).expect("regular artifact"),
+            fs::canonicalize(&file).expect("canonical artifact")
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn seed_artifact_command_can_only_be_revealed() {
+        let command = Path::new("install.command");
+
+        assert_eq!(
+            validate_seed_artifact_launch(command, false),
+            Err("This managed artifact can only be revealed in Finder.".to_string())
+        );
+        assert_eq!(validate_seed_artifact_launch(command, true), Ok(()));
+    }
+
+    #[test]
+    fn seed_artifact_safe_document_can_still_be_opened() {
+        assert_eq!(
+            validate_seed_artifact_launch(Path::new("report.pdf"), false),
+            Ok(())
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn canonical_safe_markdown_target_rejects_symbolic_links() {
@@ -857,6 +1070,22 @@ mod markdown_target_tests {
         symlink(&command, &disguised).expect("create symlink");
 
         assert!(canonical_safe_markdown_target(&disguised).is_err());
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_regular_seed_artifact_rejects_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = temp_dir("seed-artifact-symlink");
+        let file = dir.join("payload.bin");
+        let linked = dir.join("linked.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+        symlink(&file, &linked).expect("create symlink");
+
+        assert!(canonical_regular_seed_artifact(&linked).is_err());
 
         fs::remove_dir_all(dir).expect("remove temp dir");
     }
@@ -1044,15 +1273,40 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
 });
 "#;
 
-    tauri::Builder::default()
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(target_os = "linux")]
+    {
+        // zbus panics without a session bus, so a headless launch without one keeps
+        // the old behaviour (a deep link opens a second window) instead of aborting.
+        if linux_session_bus_available() {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
+        } else {
+            eprintln!("[attn] no reachable session D-Bus (DBUS_SESSION_BUS_ADDRESS); a deep link will open a second app instance");
+        }
+    }
+
+    let builder = builder
         .append_invoke_initialization_script(automation_init_script)
         .append_invoke_initialization_script(native_dialog_capture_script)
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .menu(app_menu)
+        .plugin(tauri_plugin_clipboard_manager::init());
+    // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
+    // so only macOS gets a menu.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu);
+    builder
         .on_menu_event(|app, event| {
             use tauri::Manager;
 
@@ -1089,6 +1343,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quit_app,
             open_in_editor,
             open_safe_markdown_target,
+            open_safe_seed_artifact_target,
             get_build_profile,
             get_browser_host_token,
             get_client_token,
@@ -1102,7 +1357,12 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_focus_state,
         ])
         .setup(|app| {
+            #[cfg(target_os = "macos")]
             use tauri::Manager;
+            // Fail closed: an app that starts unlocked can have its profile deleted out
+            // from under it by a `profile clean` that is already past its last check.
+            profile::hold_app_lock()?;
+            profile::write_app_pid_file();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
             // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.
@@ -1157,6 +1417,14 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 let _ = webview.window().set_focus();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .unwrap_or_else(|err| {
+            eprintln!("attn: {err}");
+            std::process::exit(1);
+        })
+        .run(|_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                profile::remove_app_pid_file();
+            }
+        });
 }

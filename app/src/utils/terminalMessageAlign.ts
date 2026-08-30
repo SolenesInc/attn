@@ -1,6 +1,3 @@
-// Measurements behind every threshold here:
-// docs/decisions/2026-08-02-terminal-annotations-anchor-to-the-transcript.md.
-
 // One word of the markdown; offsets are UTF-16 code units into the ORIGINAL.
 export interface SrcToken {
   norm: string;

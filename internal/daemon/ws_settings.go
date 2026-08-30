@@ -13,6 +13,7 @@ import (
 	"github.com/robfig/cron/v3"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modelcapture"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -86,6 +87,9 @@ const (
 	SettingHeadlessContextWindowCap        = "headless_context_window_cap"
 	SettingDefaultContextWindowCapPrefix   = "default_context_window_cap_"
 	SettingNotebookTasksEnabled            = "notebook.tasks_enabled"
+	SettingHeadlessTasksEnabled            = headless.SettingKey
+	SettingHeadlessTasksEnabledStored      = headless.SettingKey + ".stored"
+	SettingHeadlessTasksEnabledOverride    = headless.SettingKey + ".override"
 	SettingDBLastBackupAt                  = "db.last_backup_at"
 )
 
@@ -121,6 +125,9 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 	}
 	if msg.Key == SettingHeadlessContextWindowCap {
 		d.applyHeadlessContextWindowCap()
+	}
+	if msg.Key == SettingHeadlessTasksEnabled {
+		d.applyHeadlessTasksMode()
 	}
 	if msg.Key == SettingAutoSettleEnabled {
 		if parseBooleanSetting(msg.Value) {
@@ -289,6 +296,11 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingNotebookSummarizeSessionEnabled] = strconv.FormatBool(d.notebookSummariesEnabled())
 	settings[SettingNotebookNarrateWorkspaceEnabled] = strconv.FormatBool(d.notebookWorkspaceNarrationEnabled())
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
+	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
+	settings[SettingHeadlessTasksEnabledStored] = strconv.FormatBool(d.headlessTasksStored())
+	if raw, ok := headless.Override(); ok {
+		settings[SettingHeadlessTasksEnabledOverride] = raw
+	}
 	settings[SettingChiefContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingChiefContextWindowCap]))
 	settings[SettingHeadlessContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingHeadlessContextWindowCap]))
 	settings[SettingActivityEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingActivityEnabled]))
@@ -417,6 +429,22 @@ func (d *Daemon) applyHeadlessContextWindowCap() {
 	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.store.GetSetting(SettingHeadlessContextWindowCap)))
 }
 
+func (d *Daemon) headlessTasksStored() bool {
+	if d.store == nil {
+		return true
+	}
+	value, ok := headless.ParseSwitch(d.store.GetSetting(SettingHeadlessTasksEnabled))
+	return !ok || value
+}
+
+func (d *Daemon) applyHeadlessTasksMode() {
+	if d.store == nil {
+		return
+	}
+	headless.SetStoredEnabled(d.headlessTasksStored())
+	d.logf("headless tasks: %s", headless.Describe())
+}
+
 func (d *Daemon) validateSetting(key, value string) error {
 	switch key {
 	case SettingProjectsDirectory:
@@ -436,7 +464,7 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNewSessionAgent(value)
 	case SettingTheme:
 		return validateTheme(value)
-	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingNotebookTasksEnabled, SettingNotebookSummarizeSessionEnabled, SettingNotebookNarrateWorkspaceEnabled, SettingQueueModeEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled:
+	case SettingTailscaleEnabled, SettingWorkflowsEnabled, SettingAutoApproveEnabled, SettingNotebookTasksEnabled, SettingNotebookSummarizeSessionEnabled, SettingNotebookNarrateWorkspaceEnabled, SettingQueueModeEnabled, SettingAutoSettleEnabled, SettingModelCaptureEnabled, SettingActivityEnabled, SettingOpenSentFilesEnabled, SettingHeadlessTasksEnabled:
 		return validateBooleanSetting(value)
 	case SettingModelCaptureIntervalSeconds:
 		return validateModelCaptureInterval(value)

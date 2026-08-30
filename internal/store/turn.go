@@ -97,6 +97,17 @@ func (s *Store) SnoozeTurn(id string, until, now time.Time) bool {
 }
 
 func (s *Store) WakeTurn(id string) bool {
+	return s.clearSnooze(id, nil)
+}
+
+// Clears only the exact deadline given, so stale work cannot clobber a later
+// snooze.
+func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
+	return s.clearSnooze(id, &deadline)
+}
+
+// Clears the exact deadline and reopens a closed turn in one store mutation.
+func (s *Store) WakeTurnAtAndOpenIfClosed(id string, deadline, openedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -105,35 +116,41 @@ func (s *Store) WakeTurn(id string) bool {
 		if !ok || current.SnoozedUntil.IsZero() {
 			return false
 		}
+		if !sameTurnStamp(current.SnoozedUntil, deadline) {
+			return false
+		}
 		current.SnoozedUntil = time.Time{}
+		if !current.OpenedAt.After(current.SettledAt) {
+			current.OpenedAt = openedAt.UTC()
+		}
 		s.setTurnStampsLocked(id, current)
 		return true
 	}
 
 	result, err := s.db.Exec(
-		`UPDATE sessions SET turn_snoozed_until = '' WHERE id = ? AND turn_snoozed_until != ''`, id)
+		`UPDATE sessions SET turn_snoozed_until = '', turn_opened_at = CASE
+			WHEN turn_opened_at = '' OR turn_opened_at <= turn_settled_at THEN ?
+			ELSE turn_opened_at END
+		WHERE id = ? AND turn_snoozed_until = ?`,
+		openedAt.UTC().Format(sortableTimeFormat), id, deadline.UTC().Format(sortableTimeFormat))
 	if err != nil {
-		log.Printf("[store] WakeTurn: failed for session %s: %v", id, err)
+		log.Printf("[store] WakeTurnAtAndOpenIfClosed: failed for session %s: %v", id, err)
 		return false
 	}
 	updated, err := result.RowsAffected()
 	return err == nil && updated == 1
 }
 
-// Clears only the exact deadline given, so a fired timer cannot clobber a snooze
-// re-written while it was waking.
-func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
+func (s *Store) clearSnooze(id string, deadline *time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	stamp := deadline.UTC().Format(sortableTimeFormat)
 
 	if s.db == nil {
 		current, ok := s.turnStamps[id]
 		if !ok || current.SnoozedUntil.IsZero() {
 			return false
 		}
-		if current.SnoozedUntil.UTC().Format(sortableTimeFormat) != stamp {
+		if deadline != nil && !sameTurnStamp(current.SnoozedUntil, *deadline) {
 			return false
 		}
 		current.SnoozedUntil = time.Time{}
@@ -141,14 +158,25 @@ func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
 		return true
 	}
 
-	result, err := s.db.Exec(
-		`UPDATE sessions SET turn_snoozed_until = '' WHERE id = ? AND turn_snoozed_until = ?`, id, stamp)
+	query := `UPDATE sessions SET turn_snoozed_until = '' WHERE id = ?`
+	args := []any{id}
+	if deadline == nil {
+		query += ` AND turn_snoozed_until != ''`
+	} else {
+		query += ` AND turn_snoozed_until = ?`
+		args = append(args, deadline.UTC().Format(sortableTimeFormat))
+	}
+	result, err := s.db.Exec(query, args...)
 	if err != nil {
-		log.Printf("[store] WakeTurnAt: failed for session %s: %v", id, err)
+		log.Printf("[store] clear snooze: failed for session %s: %v", id, err)
 		return false
 	}
 	updated, err := result.RowsAffected()
 	return err == nil && updated == 1
+}
+
+func sameTurnStamp(a, b time.Time) bool {
+	return a.UTC().Format(sortableTimeFormat) == b.UTC().Format(sortableTimeFormat)
 }
 
 func (s *Store) SnoozedSessions() map[string]time.Time {

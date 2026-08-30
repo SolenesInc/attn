@@ -80,6 +80,75 @@ func TestNotBusyHeartbeatEvidenceIsSettled(t *testing.T) {
 	}
 }
 
+func TestRepeatedSettledHeartbeatAvoidsStoreLivenessReads(t *testing.T) {
+	d := newTraceDaemon(t)
+	id := "sess-hb-settled-repeat"
+	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateIdle)
+
+	oldEvidenceHook := evidenceRecordGateHook
+	oldTraceHook := stateTraceRecordGateHook
+	var evidenceReads, traceReads int
+	evidenceRecordGateHook = func(string) { evidenceReads++ }
+	stateTraceRecordGateHook = func(string) { traceReads++ }
+	t.Cleanup(func() {
+		evidenceRecordGateHook = oldEvidenceHook
+		stateTraceRecordGateHook = oldTraceHook
+	})
+
+	start := time.Now()
+	d.handlePTYState(id, heartbeatObs("not_busy", "at prompt", start))
+	first := evidenceOf(t, d, id)
+	d.handlePTYState(id, heartbeatObs("not_busy", "at prompt", start.Add(time.Second)))
+
+	if evidenceReads != 1 || traceReads != 1 {
+		t.Fatalf("exact settled repeat performed liveness reads: evidence=%d trace=%d", evidenceReads, traceReads)
+	}
+	if got := evidenceOf(t, d, id); !got.LastMovement.Equal(first.LastMovement) {
+		t.Fatalf("exact settled repeat moved evidence from %s to %s", first.LastMovement, got.LastMovement)
+	}
+	if got := onlyObservation(t, d, id); got.Repeats != 0 {
+		t.Fatalf("exact settled repeat reached the trace: %+v", got)
+	}
+
+	changedAt := start.Add(2 * time.Second)
+	d.handlePTYState(id, heartbeatObs("not_busy", "different prompt", changedAt))
+	if evidenceReads != 2 || traceReads != 2 {
+		t.Fatalf("changed settled detail reads: evidence=%d trace=%d, want 2 each", evidenceReads, traceReads)
+	}
+	if got := evidenceOf(t, d, id); !got.LastMovement.Equal(changedAt) {
+		t.Fatalf("changed settled detail moved evidence at %s, want %s", got.LastMovement, changedAt)
+	}
+}
+
+func TestRepeatedBusyHeartbeatKeepsRefreshingLiveness(t *testing.T) {
+	d := newTraceDaemon(t)
+	id := "sess-hb-busy-repeat"
+	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
+
+	oldEvidenceHook := evidenceRecordGateHook
+	oldTraceHook := stateTraceRecordGateHook
+	var evidenceReads, traceReads int
+	evidenceRecordGateHook = func(string) { evidenceReads++ }
+	stateTraceRecordGateHook = func(string) { traceReads++ }
+	t.Cleanup(func() {
+		evidenceRecordGateHook = oldEvidenceHook
+		stateTraceRecordGateHook = oldTraceHook
+	})
+
+	start := time.Now()
+	d.handlePTYState(id, heartbeatObs("busy", "working", start))
+	repeatedAt := start.Add(time.Second)
+	d.handlePTYState(id, heartbeatObs("busy", "working", repeatedAt))
+
+	if evidenceReads != 2 || traceReads != 2 {
+		t.Fatalf("busy repeats skipped liveness reads: evidence=%d trace=%d", evidenceReads, traceReads)
+	}
+	got := evidenceOf(t, d, id)
+	if !got.LastMovement.Equal(repeatedAt) || !got.LastBusyAt.Equal(repeatedAt) {
+		t.Fatalf("busy repeat did not refresh liveness at %s: %+v", repeatedAt, got)
+	}
+}
+
 func TestBracketEvidenceOpensAndCloses(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-bracket"

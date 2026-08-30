@@ -31,6 +31,7 @@ import (
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/jobs"
@@ -93,39 +94,44 @@ const (
 )
 
 type Daemon struct {
-	socketPath                        string
-	pidPath                           string
-	pidFile                           *os.File
-	dataRoot                          string
-	daemonInstanceID                  string
-	clientToken                       string
-	store                             *store.Store
-	automationMu                      sync.Mutex
-	wsAutomationMutationTimeout       time.Duration
-	automationObservationMu           sync.Mutex
-	automationObservationLocks        map[string]*sync.Mutex
-	automationRepoMu                  sync.Mutex
-	automationRepos                   map[string]*sync.Mutex
-	automationDeliveryHook            func(*store.AutomationRun) error
-	wsWriteTimeout                    time.Duration
-	wsPingInterval                    time.Duration
-	wsPingTimeout                     time.Duration
-	listener                          net.Listener
-	httpServer                        *http.Server
-	httpListener                      net.Listener
-	httpHandler                       http.Handler
-	diagServer                        *diag.Server
-	wsHub                             *wsHub
-	presentSince                      time.Time
-	presenceMu                        sync.RWMutex
-	crewLifecycleState                *crewLifecycleMemo
-	crewMemoOnce                      sync.Once
-	done                              chan struct{}
-	logger                            *logging.Logger
-	debugLogging                      bool
-	ghRegistry                        *github.ClientRegistry
-	hubManager                        *hub.Manager
-	classifier                        Classifier
+	socketPath                  string
+	pidPath                     string
+	pidFile                     *os.File
+	dataRoot                    string
+	daemonInstanceID            string
+	clientToken                 string
+	store                       *store.Store
+	automationMu                sync.Mutex
+	wsAutomationMutationTimeout time.Duration
+	automationObservationMu     sync.Mutex
+	automationObservationLocks  map[string]*sync.Mutex
+	automationRepoMu            sync.Mutex
+	automationRepos             map[string]*sync.Mutex
+	automationDeliveryHook      func(*store.AutomationRun) error
+	wsWriteTimeout              time.Duration
+	wsPingInterval              time.Duration
+	wsPingTimeout               time.Duration
+	listener                    net.Listener
+	httpServer                  *http.Server
+	httpListener                net.Listener
+	httpHandler                 http.Handler
+	diagServer                  *diag.Server
+	wsHub                       *wsHub
+	presentSince                time.Time
+	presenceMu                  sync.RWMutex
+	crewLifecycleState          *crewLifecycleMemo
+	crewMemoOnce                sync.Once
+	done                        chan struct{}
+	logger                      *logging.Logger
+	debugLogging                bool
+	ghRegistry                  *github.ClientRegistry
+	hubManager                  *hub.Manager
+	classifier                  Classifier
+	// What auto mode's repo_visibility slot knows, keyed "host/owner/name".
+	// A launch reads it and never waits on it; see automode_detect.go.
+	repoVisibilityKnown               map[string]string
+	repoVisibilityPending             map[string]bool
+	repoVisibilityMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
 	warnings                          []protocol.DaemonWarning
@@ -142,6 +148,7 @@ type Daemon struct {
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
+	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
 	classifiedTurn                    map[string]string
 	classifyingTurn                   map[string]string
@@ -159,6 +166,7 @@ type Daemon struct {
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
 	sessionTitleAttempted             map[string]struct{}
 	ticketArtifactMu                  sync.Mutex
+	seedArtifactMu                    sync.Mutex
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
 	delegationWorktreePrepareHook     func(path string)
@@ -217,10 +225,7 @@ type Daemon struct {
 	autoSettleFireHook      func(sessionID, outcome string)
 	autoSettlePreSettleHook func()
 
-	snoozeMu          sync.Mutex
-	snoozeTimers      map[string]*snoozeTimer
-	snoozeWakeHook    func(sessionID string)
-	snoozeWakeGapHook func(sessionID string)
+	snoozeMu sync.Mutex
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -788,6 +793,7 @@ func (d *Daemon) Start() error {
 	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
@@ -926,7 +932,6 @@ func (d *Daemon) Start() error {
 	d.removeLegacyEmbeddedTailscaleState()
 	d.migrateKeeperCompactSettingKey()
 	d.migrateNotebookCronSettingKeys()
-	d.rescheduleSnoozeWakes()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
 	d.hubManager.Start(d.doneContext())
 
@@ -1470,6 +1475,20 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 	}
 }
 
+// Startup recovery dates a session by state_updated_at and runs concurrently with the
+// socket: an unstamped row reads as a leftover of a previous run and is reaped.
+func stampSessionTimestamps(session *protocol.Session, now string) {
+	if strings.TrimSpace(session.StateSince) == "" {
+		session.StateSince = now
+	}
+	if strings.TrimSpace(session.StateUpdatedAt) == "" {
+		session.StateUpdatedAt = now
+	}
+	if strings.TrimSpace(session.LastSeen) == "" {
+		session.LastSeen = now
+	}
+}
+
 func sessionUpdatedAfter(session *protocol.Session, cutoff time.Time) bool {
 	if session == nil || cutoff.IsZero() {
 		return false
@@ -1524,7 +1543,6 @@ func (d *Daemon) Stop() {
 	d.stopNudgeCountdowns()
 	d.pluginDriverSilence().stop()
 	d.stopAutoSettleTimers()
-	d.stopSnoozeTimers()
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
@@ -1775,9 +1793,11 @@ func (d *Daemon) dropSessionRecord(sessionID string) {
 func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
 	state := obs.Claim
 	origin := stateOrigin{source: string(obs.Source), detail: obs.Detail, observedAt: obs.At}
-	d.recordPTYEvidence(sessionID, obs)
+	evidenceChanged := d.recordPTYEvidence(sessionID, obs)
 	if !obs.Source.ClaimsProtocolState() {
-		d.traceStateEvidence(sessionID, origin, state)
+		if evidenceChanged {
+			d.traceStateEvidence(sessionID, origin, state)
+		}
 		return
 	}
 	session := d.store.Get(sessionID)
@@ -2250,10 +2270,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAppWatch(conn, msg.(*protocol.AppWatchMessage))
 	case protocol.CmdAutoModeShow: // wire: automode_show
 		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
-	case protocol.CmdAutoModeEnvAdd: // wire: automode_env_add
-		d.handleAutoModeEnvAdd(conn, msg.(*protocol.AutoModeEnvAddMessage))
-	case protocol.CmdAutoModeEnvRemove: // wire: automode_env_remove
-		d.handleAutoModeEnvRemove(conn, msg.(*protocol.AutoModeEnvRemoveMessage))
+	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+		d.handleAutoModeEnvSlot(conn, msg.(*protocol.AutoModeEnvSlotMessage))
+	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
 	case protocol.CmdAutoModePropose: // wire: automode_propose
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
 	case protocol.CmdAutoModeDenials: // wire: automode_denials
@@ -2315,6 +2335,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
 	case protocol.CmdSeedShow: // wire: seed_show
 		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
+	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit: // wire: seed_edit
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedSetResume: // wire: seed_set_resume
@@ -2581,7 +2603,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 }
 
 func (d *Daemon) persistResumeSessionID(sessionID, resumeSessionID string) {
-	if _, err := d.store.TransitionSessionConversation(sessionID, resumeSessionID); err != nil {
+	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
 		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
 	}
 	d.rememberDispatchResume(sessionID, resumeSessionID)
@@ -2625,7 +2647,12 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			agentdriver.Get(string(session.Agent)),
 			msg.TranscriptPath,
 		); resumeSessionID != "" {
-			d.persistResumeSessionID(msg.ID, resumeSessionID)
+			d.observeAgentConversation(agentConversationObservation{
+				SessionID:      msg.ID,
+				NativeID:       resumeSessionID,
+				TranscriptPath: msg.TranscriptPath,
+			})
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}
 	d.store.Touch(msg.ID)
@@ -2661,15 +2688,9 @@ func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, tran
 		}
 	}
 
-	driver := agentdriver.Get(string(session.Agent))
-	tf, ok := agentdriver.GetTranscriptFinder(driver)
-	if !ok {
-		return path
-	}
-
-	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(session.ID)); resumeID != "" {
-		if resolved := strings.TrimSpace(tf.FindTranscriptForResume(resumeID)); resolved != "" {
-			return resolved
+	if bound := strings.TrimSpace(d.store.GetSessionTranscriptPath(session.ID)); bound != "" {
+		if _, err := os.Stat(bound); err == nil {
+			return bound
 		}
 	}
 
@@ -3422,6 +3443,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 
 	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
+	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	workspaceID := strings.TrimSpace(msg.Session.WorkspaceID)
 	if workspaceID == "" {
 		workspaceID = "workspace-" + msg.Session.ID
@@ -3745,6 +3767,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,
 		"port":               config.WSPort(),
+		"headless_tasks":     headless.Describe(),
 	}
 	if routingPathError != "" {
 		health["routing_path_error"] = routingPathError

@@ -7,39 +7,31 @@ import (
 	"strings"
 )
 
-const (
-	DefaultClassifierModel = "opencode-go/glm-5.3"
-	DefaultEscalationModel = "opencode-go/qwen3.8-max"
-)
-
 type Config struct {
-	EnabledDefault   bool     `json:"enabled_default"`
-	Environment      []string `json:"environment"`
-	Allow            []string `json:"allow"`
-	HardDeny         []string `json:"hard_deny"`
-	ClassifierModels []string `json:"classifier_models"`
-	EscalationModels []string `json:"escalation_models"`
+	EnabledDefault bool        `json:"enabled_default"`
+	Environment    Environment `json:"environment"`
+	Allow          []string    `json:"allow"`
+	HardDeny       []string    `json:"hard_deny"`
+	Models         []string    `json:"models"`
 }
 
 func Defaults() Config {
 	return Config{
-		EnabledDefault:   true,
-		Environment:      []string{},
-		Allow:            []string{},
-		HardDeny:         []string{},
-		ClassifierModels: []string{DefaultClassifierModel},
-		EscalationModels: []string{DefaultEscalationModel},
+		EnabledDefault: true,
+		Environment:    NewEnvironment(),
+		Allow:          []string{},
+		HardDeny:       []string{},
+		Models:         []string{},
 	}
 }
 
 // wsPort is the daemon's own per-profile port, so the deny names the port this machine
 // actually listens on rather than a hardcoded 9849.
 func ShippedHardDeny(wsPort string) []string {
+	// allow, deny and model only ever write a proposal, the path an agent is
+	// meant to take. env writes the config itself, so it stays blocked.
 	patterns := []string{
 		"*attn automode env*",
-		"*attn automode allow*",
-		"*attn automode deny *",
-		"*attn automode model*",
 	}
 	if wsPort = strings.TrimSpace(wsPort); wsPort != "" {
 		patterns = append(patterns,
@@ -85,8 +77,7 @@ func appendUnique(values []string, value string) []string {
 	return append(values, value)
 }
 
-// Receipt: pi stops a session for a human question at 20 denials
-// (docs/plans/2026-08-16-pi-auto-mode.md), and a denial is what prompts a proposal.
+// Receipt: pi stops a session for a human question at 20 denials, and a denial is what prompts a proposal.
 const MaxPendingProposalsPerProposer = 20
 
 const (
@@ -94,8 +85,7 @@ const (
 	KindDeny  = "deny"
 	KindModel = "model"
 
-	TargetClassifier = "classifier"
-	TargetEscalation = "escalation"
+	TargetModels = "models"
 
 	StatePending   = "pending"
 	StatePromoted  = "promoted"
@@ -163,13 +153,10 @@ func ParseModelList(value string) ([]string, error) {
 		}
 		for _, seen := range models {
 			if seen == entry {
-				return nil, fmt.Errorf("model %q is named twice; a layer walks each model once", entry)
+				return nil, fmt.Errorf("model %q is named twice; a pass walks each model once", entry)
 			}
 		}
 		models = append(models, entry)
-	}
-	if len(models) == 0 {
-		return nil, fmt.Errorf("no model named: a layer needs at least one %s-separated provider/id", ModelListSeparator)
 	}
 	return models, nil
 }
@@ -192,8 +179,8 @@ func ValidateProposal(kind, target, value string) error {
 		}
 		return ValidateDenyPattern(value)
 	case KindModel:
-		if target != TargetClassifier && target != TargetEscalation {
-			return fmt.Errorf("model target must be %q or %q, got %q", TargetClassifier, TargetEscalation, target)
+		if target != TargetModels {
+			return fmt.Errorf("model target must be %q, got %q", TargetModels, target)
 		}
 		_, err := ParseModelList(value)
 		return err

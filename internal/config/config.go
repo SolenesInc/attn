@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,7 +145,57 @@ func AppPathForProfile(profile string) string {
 	if err != nil {
 		home = "/tmp"
 	}
-	return filepath.Join(home, "Applications", AppNameForProfile(profile)+".app")
+	name := AppNameForProfile(profile)
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Applications", name+".app")
+	}
+	return filepath.Join(xdgDataHome(home), name)
+}
+
+func xdgDataHome(home string) string {
+	if dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); dataHome != "" {
+		return dataHome
+	}
+	return filepath.Join(home, ".local", "share")
+}
+
+func AppExecutableForProfile(profile string) string {
+	return AppExecutableInTree(AppPathForProfile(profile))
+}
+
+func AppExecutableInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "app")
+	}
+	return filepath.Join(appPath, "bin", "attn-app")
+}
+
+func AppDaemonBinaryForProfile(profile string) string {
+	return AppDaemonBinaryInTree(AppPathForProfile(profile))
+}
+
+func AppDaemonBinaryInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "attn")
+	}
+	return filepath.Join(appPath, "bin", "attn")
+}
+
+// ~/.local/bin/attn has a bin/ and no install tree, so resources/ must exist
+// before a tree counts as one.
+func InstallResourcesDir(executable string) string {
+	binDir := filepath.Dir(executable)
+	parent := filepath.Dir(binDir)
+	if filepath.Base(binDir) == "MacOS" && filepath.Base(parent) == "Contents" {
+		return filepath.Join(parent, "Resources")
+	}
+	if filepath.Base(binDir) == "bin" {
+		resources := filepath.Join(parent, "resources")
+		if info, err := os.Stat(resources); err == nil && info.IsDir() {
+			return resources
+		}
+	}
+	return ""
 }
 
 // A distinct scheme per bundle, so macOS never cross-routes a spawn deep link
@@ -196,7 +247,7 @@ func requireExplicitDataDirUnderTest() {
 	if testing.Testing() && strings.TrimSpace(os.Getenv("ATTN_DATA_DIR")) == "" {
 		panic("config: ATTN_DATA_DIR is not set under go test — tests must never resolve the real data dir. " +
 			"Set ATTN_DATA_DIR to a temp dir (os.Setenv in a package TestMain, or t.Setenv per-test). " +
-			"Never redirect HOME to work around this: see docs/plans/2026-07-18-db-loss-mitigation.md")
+			"Never redirect HOME to work around this.")
 	}
 }
 
@@ -389,17 +440,35 @@ func StatePath() string {
 	return filepath.Join(home, "."+binaryName+"-state"+suffix+".json")
 }
 
-// Mirrors Tauri's BaseDirectory.AppLocalData resolution on macOS.
-func AppSupportDirForProfile(profile string) string {
+// Tauri's app_local_data_dir: automation manifest, debug JSONL, WebKit state.
+func AppLocalDataDirForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	return filepath.Join(home, "Library", "Application Support", BundleIdentifierForProfile(profile))
+	bundleID := BundleIdentifierForProfile(profile)
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", bundleID)
+	}
+	return filepath.Join(xdgDataHome(home), bundleID)
 }
 
-func AppSupportDir() string {
-	return AppSupportDirForProfile(Profile())
+func AppLocalDataDir() string {
+	return AppLocalDataDirForProfile(Profile())
+}
+
+// Outside every tree clean removes, and ".attn.locks" cannot collide with a
+// profile's "~/.attn-<name>" data dir: profile names carry no dot.
+func AppLockPathForProfile(profile string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/tmp"
+	}
+	label := strings.ToLower(strings.TrimSpace(profile))
+	if label == "" || !profileNamePattern.MatchString(label) {
+		label = "default"
+	}
+	return filepath.Join(home, ".attn.locks", "app-"+label+".lock")
 }
 
 func LogPath() string {

@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// See docs/plans/2026-08-06-ext-a4-app-registry-and-runtime.md.
-
 type App struct {
 	Name                     string
 	CurrentVersionID         int64

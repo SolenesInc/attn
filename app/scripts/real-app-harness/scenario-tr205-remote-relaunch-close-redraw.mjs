@@ -42,6 +42,12 @@ import {
   removeStaleHarnessScenarioSessions,
   waitForEndpointConnected,
 } from './scenarioRemote.mjs';
+import {
+  armRemoteAgentTripwire,
+  buildRemoteAgentTripwire,
+  collectRemoteAgentTripwire,
+  verifyRemoteDaemonTripwire,
+} from './remoteAgentTripwire.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
 function isNativeCaptureUnavailable(error) {
@@ -85,15 +91,6 @@ function parseArgs(argv) {
     options,
     help: Boolean(options.help),
   };
-}
-
-function minRecoveredWidth(previousWidth) {
-  if (!Number.isFinite(previousWidth) || previousWidth <= 0) {
-    return 0;
-  }
-  // No absolute px floor: unreachable when 3 panes share the ~560px harness main area;
-  // growth over the pre-close width is the recovery signal.
-  return Math.floor(previousWidth * 1.18);
 }
 
 const PROBE_AGENT_PREFIX = 'probe:';
@@ -141,6 +138,10 @@ export function probeStyleIdentityRegex(style) {
 
 export function probeBannerReadyMatchers(style) {
   return [/ATTN-PROBE \d+x\d+/, probeStyleRowRegex(style)];
+}
+
+function workspaceLayoutPanes(workspace) {
+  return workspace?.workspace?.layout?.panes || workspace?.layout?.panes || [];
 }
 
 // `(?!\d)` guards against a grid like 31x2 matching as a prefix of 31x25.
@@ -268,7 +269,7 @@ async function closePaneAndAssertRecovery({
   initialPaneId,
   paneId,
   baselineNativeMetrics,
-  previousInitialPaneWidth,
+  previousInitialPaneLayoutWidth,
   minPaneCountAfterClose,
   label,
   enforceNativeStability = true,
@@ -280,21 +281,21 @@ async function closePaneAndAssertRecovery({
   await client.request('focus_pane', { sessionId, paneId });
   await waitForPaneVisible(client, sessionId, paneId, 20_000);
   await client.request('close_pane', { sessionId, paneId });
-  await waitForSessionWorkspace(
+  const recoveredWorkspace = await waitForSessionWorkspace(
     client,
     sessionId,
-    (workspace) => (workspace.panes || []).length === minPaneCountAfterClose,
+    (workspace) => {
+      const layoutPane = workspaceLayoutPanes(workspace).find((entry) => entry.paneId === initialPaneId);
+      return (
+        (workspace.panes || []).length === minPaneCountAfterClose &&
+        (layoutPane?.bounds?.width ?? 0) > previousInitialPaneLayoutWidth
+      );
+    },
     `${label} workspace collapse`,
     20_000,
   );
-  const recoveredInitialPaneState = await waitForPaneState(
-    client,
-    sessionId,
-    initialPaneId,
-    (state) => (state?.pane?.bounds?.width ?? 0) >= minRecoveredWidth(previousInitialPaneWidth),
-    `${label} initial pane width recovery`,
-    20_000,
-  );
+  await client.request('focus_pane', { sessionId, paneId: initialPaneId });
+  const recoveredInitialPaneState = await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
   // No line-anchor preservation: every probe row encodes the current geometry,
   // so baseline lines never match once a close widens the pane.
   const anchorState = requiredVisibleText
@@ -336,7 +337,9 @@ async function closePaneAndAssertRecovery({
   }
   const finalMainState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
   if (enforceNativeStability && baselineNativeMetrics && candidateNativeMetrics) {
-    const widenedPastPreviousWidth = (finalMainState?.pane?.bounds?.width ?? 0) > previousInitialPaneWidth + 1;
+    const recoveredLayoutWidth = workspaceLayoutPanes(recoveredWorkspace)
+      .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
+    const widenedPastPreviousWidth = recoveredLayoutWidth > previousInitialPaneLayoutWidth;
     await assertPaneNativePaintRecovered(
       client,
       runner.runDir,
@@ -361,6 +364,8 @@ async function closePaneAndAssertRecovery({
     state: anchorState || finalMainState,
     nativeMetrics: candidateNativeMetrics,
     widthState: recoveredInitialPaneState,
+    layoutWidth: workspaceLayoutPanes(recoveredWorkspace)
+      .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? null,
   };
 }
 
@@ -396,10 +401,16 @@ async function main() {
   const remoteHarnessBase = `${remoteHome}/.attn/harness`;
   const remoteDirectory = options.remoteDirectory || remoteHome;
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
+  const remoteTripwire = buildRemoteAgentTripwire({
+    remoteHome,
+    remotePaths,
+    scenarioId: runner.scenarioId,
+  });
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
     appPath: options.appPath,
     launchEnv: {
+      ...remoteTripwire.launchEnv,
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
       ATTN_REMOTE_SOCKET_PATH: remotePaths.remoteHarnessSocket,
       ATTN_REMOTE_DB_PATH: remotePaths.remoteHarnessDB,
@@ -419,6 +430,8 @@ async function main() {
   let restoredMainState = null;
   let finalMainState = null;
   let anchorText = null;
+  let remoteTripwireReceipt = null;
+  let remoteTripwireLedger = null;
   let cleanupStarted = false;
 
   const runFinalCleanup = async () => {
@@ -460,6 +473,10 @@ async function main() {
       });
     });
 
+    await runner.step('arm_remote_agent_tripwire', async () => {
+      await armRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner });
+    });
+
     await runner.step('launch_app_and_connect_daemon', async () => {
       await launchFreshAppAndConnect(client, observer);
       await removeStaleHarnessEndpoints(observer, 20_000);
@@ -476,6 +493,10 @@ async function main() {
       runner.writeJson('endpoint.json', connected);
       return connected;
     });
+
+    remoteTripwireReceipt = await runner.step('verify_remote_daemon_tripwire', async () => (
+      verifyRemoteDaemonTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
 
     sessionId = await runner.step('create_remote_session', async () => {
       const resultSessionId = await createSessionAndWaitForInitialPane({
@@ -531,6 +552,7 @@ async function main() {
         'initial split before relaunch',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: anchorText,
         allowWrappedContains: true,
@@ -561,9 +583,20 @@ async function main() {
 
     await runner.step('relaunch_and_restore_session', async () => {
       await relaunchAppAndConnect(client, observer);
+      await waitForEndpointConnected(observer, endpoint.name, 45_000);
       await client.request('select_session', { sessionId });
+      await waitForSessionWorkspace(
+        client,
+        sessionId,
+        (workspace) => {
+          const paneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+          return paneIds.has(initialPaneId) && paneIds.has(initialShellPaneId);
+        },
+        `frontend workspace after relaunch for ${sessionId}`,
+        45_000,
+      );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
-      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       restoredMainState = await captureInitialPaneHealthyState(
         client,
         runner,
@@ -609,6 +642,7 @@ async function main() {
         'new shell after relaunch split from initial pane',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: anchorText,
         allowWrappedContains: true,
@@ -628,6 +662,7 @@ async function main() {
 
     postRelaunchShellSplitPaneId = await runner.step('split_from_existing_shell_after_relaunch', async () => {
       await client.request('select_session', { sessionId });
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
       await waitForPaneVisible(client, sessionId, initialShellPaneId, 20_000);
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
@@ -650,7 +685,9 @@ async function main() {
     await runner.step('close_relaunched_splits_and_assert_recovery', async () => {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
-      let previousInitialPaneWidth = (await client.request('get_pane_state', { sessionId, paneId: initialPaneId }))?.pane?.bounds?.width ?? 0;
+      const workspaceBeforeClose = await client.request('get_workspace', { sessionId });
+      let previousInitialPaneLayoutWidth = workspaceLayoutPanes(workspaceBeforeClose)
+        .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
       const firstRecovered = await closePaneAndAssertRecovery({
         client,
         runner,
@@ -658,14 +695,14 @@ async function main() {
         initialPaneId,
         paneId: postRelaunchShellSplitPaneId,
         baselineNativeMetrics: null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 3,
         label: '06-after-closing-shell-split',
         enforceNativeStability: false,
         requiredVisibleText: anchorText,
         probeStyle,
       });
-      previousInitialPaneWidth = firstRecovered?.state?.pane?.bounds?.width ?? firstRecovered?.widthState?.pane?.bounds?.width ?? previousInitialPaneWidth;
+      previousInitialPaneLayoutWidth = firstRecovered?.layoutWidth ?? previousInitialPaneLayoutWidth;
       await captureSessionArtifacts(client, runner.runDir, '06-after-closing-shell-split', sessionId);
 
       const secondRecovered = await closePaneAndAssertRecovery({
@@ -675,14 +712,14 @@ async function main() {
         initialPaneId,
         paneId: postRelaunchMainSplitPaneId,
         baselineNativeMetrics: firstRecovered?.nativeMetrics || restoredMainState?.nativeMetrics || null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 2,
         label: '07-after-closing-initial-pane-split',
         enforceNativeStability: true,
         requiredVisibleText: anchorText,
         probeStyle,
       });
-      previousInitialPaneWidth = secondRecovered?.state?.pane?.bounds?.width ?? secondRecovered?.widthState?.pane?.bounds?.width ?? previousInitialPaneWidth;
+      previousInitialPaneLayoutWidth = secondRecovered?.layoutWidth ?? previousInitialPaneLayoutWidth;
       await captureSessionArtifacts(client, runner.runDir, '07-after-closing-initial-pane-split', sessionId);
 
       finalMainState = await closePaneAndAssertRecovery({
@@ -692,7 +729,7 @@ async function main() {
         initialPaneId,
         paneId: initialShellPaneId,
         baselineNativeMetrics: secondRecovered?.nativeMetrics || baselineMainState?.nativeMetrics || null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 1,
         label: '08-after-closing-initial-split',
         enforceNativeStability: true,
@@ -702,6 +739,9 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '08-after-closing-initial-split', sessionId);
     });
 
+    remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
+      collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
     const finalWorkspace = await client.request('get_workspace', { sessionId });
     const summary = await runner.finishSuccess({
       sessionId,
@@ -711,6 +751,10 @@ async function main() {
       remoteAgent: options.remoteAgent,
       anchorText,
       probeStyle,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
       panes: {
         initialPaneId,
         initialShellPaneId,
@@ -736,6 +780,12 @@ async function main() {
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
+    remoteTripwireLedger ??= await collectRemoteAgentTripwire({
+      target: options.sshTarget,
+      fixture: remoteTripwire,
+      runner,
+      assertClean: false,
+    }).catch(() => null);
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId);
     }
@@ -752,6 +802,10 @@ async function main() {
         baselineMainWidth: baselineMainState?.state?.pane?.bounds?.width ?? null,
         restoredMainWidth: restoredMainState?.state?.pane?.bounds?.width ?? null,
         finalMainWidth: finalMainState?.pane?.bounds?.width ?? null,
+      },
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
       },
     });
     console.error(summary.error);

@@ -8,7 +8,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
-import { delay } from './macosDriver.mjs';
+import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -189,7 +189,7 @@ async function main() {
       artifactPath = path.join(runner.sessionDir, 'evidence.md');
       fs.writeFileSync(artifactPath, '# Evidence\n\nWhat the delegate produced.\n');
       await runInPane(client, pane,
-        `attn seed attach ${seed} --path ${artifactPath} -m "the write-up" --session ${delegated}`,
+        `attn seed attach ${seed} --path ${artifactPath} --repo harness-fixture -m "the write-up" --session ${delegated}`,
         'attached');
 
       await client.request('open_dock_panel', { panelId: 'garden' });
@@ -216,7 +216,7 @@ async function main() {
       await pace();
 
       await runInPane(client, pane,
-        `attn seed detach ${seed} --path ${artifactPath} -m "superseded" --session ${delegated}`,
+        `attn seed detach ${seed} --path ${artifactPath} --repo harness-fixture -m "superseded" --session ${delegated}`,
         'detached');
       const afterTile = await awaitTile(client, seed, (state) => state.notes.some((note) => note.kind === 'detach'));
       runner.assert(afterTile.artifacts.length === 0,

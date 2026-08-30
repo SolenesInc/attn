@@ -212,8 +212,13 @@ func TestWatcherLifecycleRequiresExactNativeTranscriptIdentity(t *testing.T) {
 			}
 		}
 		seed(t, home, session.Directory, "neighboring-native-session")
+		path := filepath.Join(home, ".codex", "sessions", "2026", "08", "01", "rollout-"+nativeID+".jsonl")
+		if changed, err := d.store.TransitionSessionConversation(id, nativeID, path); err != nil || !changed {
+			t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+		}
+		d.transcriptResumeLookup = func(protocol.SessionAgent, string) string { return "" }
 
-		d.startTranscriptWatcher(id, protocol.SessionAgentCodex, session.Directory, time.Now())
+		d.startTranscriptWatcherAtPath(id, protocol.SessionAgentCodex, session.Directory, time.Now(), path)
 		d.watchersMu.Lock()
 		watcher := d.transcriptWatch[id]
 		d.watchersMu.Unlock()
@@ -223,12 +228,19 @@ func TestWatcherLifecycleRequiresExactNativeTranscriptIdentity(t *testing.T) {
 
 		advancePolls(5)
 		if got := watcher.snapshot(); got.Status != protocol.SessionMessageWindowStatusUnavailable || len(got.Messages) != 0 {
-			t.Fatalf("without native identity = %+v, want unavailable and empty", got)
+			t.Fatalf("without transcript file = %+v, want unavailable and empty", got)
 		}
 
-		path := seed(t, home, session.Directory, nativeID)
+		path = seed(t, home, session.Directory, nativeID)
 		writeLine(t, path, `{"type":"event_msg","payload":{"type":"agent_message","message":"Exact live commentary."}}`)
-		d.store.SetResumeSessionID(id, nativeID)
+		d.observeAgentConversation(agentConversationObservation{
+			SessionID:      id,
+			NativeID:       nativeID,
+			TranscriptPath: path,
+		})
+		d.watchersMu.Lock()
+		watcher = d.transcriptWatch[id]
+		d.watchersMu.Unlock()
 		advancePolls(2)
 		ready := watcher.snapshot()
 		if ready.Status != protocol.SessionMessageWindowStatusReady || len(ready.Messages) != 1 || ready.Messages[0].Content != "Exact live commentary." {

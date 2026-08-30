@@ -87,6 +87,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-BUILD-UPGRADE',
+    allowRealAgents: false,
     tier: 'tier1-local-shell',
     prefix: 'terminal-build-upgrade',
     metadata: {

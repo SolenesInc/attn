@@ -71,6 +71,7 @@
     "real-app:scenario-garden-seed-tile-navigation": "node scripts/real-app-harness/scenario-garden-seed-tile-navigation.mjs",
     "real-app:scenario-garden-plot-dispatch": "node scripts/real-app-harness/scenario-garden-plot-dispatch.mjs",
     "real-app:scenario-garden-delegation-reporting": "node scripts/real-app-harness/scenario-garden-delegation-reporting.mjs",
+    "real-app:scenario-delegate-workspace-placement": "node scripts/real-app-harness/scenario-delegate-workspace-placement.mjs",
     "real-app:scenario-garden-seed-nudges": "node scripts/real-app-harness/scenario-garden-seed-nudges.mjs",
     "real-app:scenario-ordinary-delegation-ticket": "node scripts/real-app-harness/scenario-ordinary-delegation-ticket.mjs",
     "real-app:scenario-garden-seed-reopen": "node scripts/real-app-harness/scenario-garden-seed-reopen.mjs",
@@ -109,7 +110,9 @@
     "real-app:scenario-nisse-delegate": "node scripts/real-app-harness/scenario-nisse-delegate.mjs",
     "real-app:scenario-nisse-history": "node scripts/real-app-harness/scenario-nisse-history.mjs",
     "real-app:scenario-nisse-markdown-stream": "node scripts/real-app-harness/scenario-nisse-markdown-stream.mjs",
-    "real-app:scenario-pi-automode": "node scripts/real-app-harness/scenario-pi-automode.mjs"
+    "real-app:scenario-pi-automode": "node scripts/real-app-harness/scenario-pi-automode.mjs",
+    "real-app:scenario-automode-environment": "node scripts/real-app-harness/scenario-automode-environment.mjs",
+    "real-app:scenario-automode-no-model": "node scripts/real-app-harness/scenario-automode-no-model.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

@@ -3,12 +3,12 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/bus"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
@@ -41,7 +41,6 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
 	// Never resurrect during shutdown: a watcher started after Stop() closes d.done leaks a goroutine and an fd.
-	// started after that leaks a goroutine and an fd.
 	select {
 	case <-d.done:
 		return
@@ -63,13 +62,24 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 	w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
 		var mdPaths []string
+		artifactSeeds := map[string]struct{}{}
 		for _, p := range paths {
 			if _, err := notebook.CleanPath(p); err == nil {
 				mdPaths = append(mdPaths, p)
 			}
+			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
+				artifactSeeds[seedID] = struct{}{}
+			}
 		}
 		if len(mdPaths) > 0 {
 			d.broadcastNotebookChanged(originExternal, mdPaths...)
+		}
+		if len(artifactSeeds) > 0 {
+			d.coalesceSnapshots(func() {
+				for seedID := range artifactSeeds {
+					d.publishFact(FactGardenArtifactChanged, seedID, nil)
+				}
+			})
 		}
 	})
 	if err != nil {

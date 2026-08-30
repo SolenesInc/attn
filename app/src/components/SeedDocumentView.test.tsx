@@ -52,6 +52,7 @@ function document(overrides: Partial<SeedDocument> = {}): SeedDocument {
     notes: [],
     notes_total: 0,
     artifacts: [],
+    references: [],
     ...overrides,
   };
 }
@@ -107,15 +108,15 @@ describe('SeedDocumentView', () => {
     const onOpenMarkdownArtifact = vi.fn();
     render(
       <SeedDocumentView
-        document={document({ notes, notes_total: notes.length, artifacts: [current] })}
+        document={document({ notes, notes_total: notes.length, references: [current] })}
         onOpenMarkdownArtifact={onOpenMarkdownArtifact}
       />,
     );
 
     expect(screen.queryByRole('button', { name: /old\.md/ })).not.toBeInTheDocument();
     const artifact = screen.getByRole('button', { name: /current\.md/ });
-    expect(artifact).toHaveTextContent('markdown');
-    expect(artifact).toHaveAttribute('title', '/repo/current.md');
+    expect(artifact.closest('li')).toHaveTextContent('linked file');
+    expect(artifact.closest('li')).toHaveAttribute('title', '/repo/current.md');
     fireEvent.click(artifact);
     expect(onOpenMarkdownArtifact).toHaveBeenCalledWith('/repo/current.md');
   });
@@ -124,7 +125,7 @@ describe('SeedDocumentView', () => {
     render(
       <SeedDocumentView
         document={document({
-          artifacts: [
+          references: [
             { kind: 'notebook', notebook_document_id: 'nb-plan-7' },
             { kind: 'url', url: 'https://example.test/pr/1' },
           ],
@@ -135,7 +136,7 @@ describe('SeedDocumentView', () => {
     expect(screen.getByText('nb-plan-7')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /example\.test/ });
     expect(link).toHaveAttribute('href', 'https://example.test/pr/1');
-    expect(link).toHaveTextContent('link');
+    expect(link.closest('li')).toHaveTextContent('link');
   });
 
   it('renders no artifact section for an empty set', () => {

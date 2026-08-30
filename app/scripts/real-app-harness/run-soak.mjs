@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
-import { ATTN_VERDICT_PREFIX, createRunContext, emitVerdict, ensureDir } from './common.mjs';
+import { ATTN_VERDICT_PREFIX, createRunContext, emitVerdict, ensureDir, harnessArtifactsRoot } from './common.mjs';
 import {
   assertProductionRunAllowed,
   defaultAppPathForProfile,
   defaultWSURLForProfile,
 } from './harnessProfile.mjs';
-import { resolveScenario } from './scenarioCatalog.mjs';
+import { resolveScenario, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 
 if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
   process.env.ATTN_HARNESS_PROFILE = 'dev';
@@ -245,9 +244,13 @@ async function main() {
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
   );
   console.log(`Soak target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
+  for (const allowed of scenariosAllowingRealAgents([scenario])) {
+    const which = allowed.allowRealAgents === true ? 'all' : allowed.allowRealAgents.join(', ');
+    console.log(`[agent-tripwire] REAL AGENTS ALLOWED for every leg of ${allowed.id} (${which}).`);
+  }
   assertPackagedAppBuildMatchesCurrentSource({ appPath, launchEnv: scenario.preflightLaunchEnv || null });
 
-  const artifactsRoot = process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness');
+  const artifactsRoot = harnessArtifactsRoot();
   ensureDir(artifactsRoot);
   const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
 

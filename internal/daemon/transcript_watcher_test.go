@@ -143,25 +143,67 @@ func TestIsTranscriptWatchedAgent(t *testing.T) {
 	}
 }
 
-// Discovery walks the agent's whole session tree and repeats until it lands: a
-// session that never gets a transcript would walk thousands of files twice a second.
-func TestTranscriptDiscoveryBacksOff(t *testing.T) {
-	if got := transcriptDiscoveryDelay(1); got != 0 {
-		t.Fatalf("first attempts should retry on the next poll, got %s", got)
+func TestTranscriptDiscoveryStopsAfterOneCompatibilityLookup(t *testing.T) {
+	d := newTraceDaemon(t)
+	var lookups atomic.Int64
+	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
+		lookups.Add(1)
+		return ""
 	}
-	if got := transcriptDiscoveryDelay(transcriptDiscoveryFastAttempts - 1); got != 0 {
-		t.Fatalf("a transcript still plausibly being created should be looked for eagerly, got %s", got)
+
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		id := "missing-transcript"
+		addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
+		d.store.SetResumeSessionID(id, "native-missing")
+		d.startTranscriptWatcher(id, protocol.SessionAgentCodex, t.TempDir(), time.Now())
+		d.watchersMu.Lock()
+		watcher := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+
+		advancePolls(1)
+		requireDone(t, watcher.doneCh, "watcher kept retrying after its compatibility lookup")
+		if got := lookups.Load(); got != 1 {
+			t.Fatalf("compatibility lookups = %d, want 1", got)
+		}
+		advancePolls(120)
+		if got := lookups.Load(); got != 1 {
+			t.Fatalf("compatibility lookups after one idle minute = %d, want 1", got)
+		}
+	})
+}
+
+func TestTranscriptDiscoveryGivesAPersistedPathOnlyTheCreationGrace(t *testing.T) {
+	d := newTraceDaemon(t)
+	var lookups atomic.Int64
+	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
+		lookups.Add(1)
+		return ""
 	}
-	if got := transcriptDiscoveryDelay(transcriptDiscoveryFastAttempts); got != transcriptDiscoverySlowInterval {
-		t.Fatalf("delay = %s, want %s once the eager window is spent", got, transcriptDiscoverySlowInterval)
-	}
-	if got := transcriptDiscoveryDelay(transcriptDiscoverySlowAttempts); got != transcriptDiscoveryIdleInterval {
-		t.Fatalf("delay = %s, want %s for a session that is never getting one", got, transcriptDiscoveryIdleInterval)
-	}
-	eager := time.Duration(transcriptDiscoveryFastAttempts) * transcriptPollInterval
-	if eager < 5*time.Second || eager > 30*time.Second {
-		t.Fatalf("eager discovery window is %s, which is outside the range any agent takes to start writing", eager)
-	}
+
+	synctest.Test(t, func(t *testing.T) {
+		stopDaemonBackground(t, d)
+		id := "delayed-transcript"
+		path := filepath.Join(t.TempDir(), "rollout-native-delayed.jsonl")
+		addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
+		if changed, err := d.store.TransitionSessionConversation(id, "native-delayed", path); err != nil || !changed {
+			t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+		}
+		d.startTranscriptWatcherAtPath(id, protocol.SessionAgentCodex, t.TempDir(), time.Now(), path)
+		d.watchersMu.Lock()
+		watcher := d.transcriptWatch[id]
+		d.watchersMu.Unlock()
+
+		advancePolls(3)
+		if got := lookups.Load(); got != 0 {
+			t.Fatalf("compatibility lookup ran during creation grace: %d", got)
+		}
+		advancePolls(2)
+		requireDone(t, watcher.doneCh, "watcher kept retrying after creation grace")
+		if got := lookups.Load(); got != 1 {
+			t.Fatalf("compatibility lookups after grace = %d, want 1", got)
+		}
+	})
 }
 
 func TestIsTranscriptWatchedAgent_CapabilityOverride(t *testing.T) {

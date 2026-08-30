@@ -112,6 +112,20 @@ func TestRemoteHarnessCleanupEnabled(t *testing.T) {
 	}
 }
 
+func TestRemoteRoutingProfile(t *testing.T) {
+	t.Setenv("ATTN_REMOTE_SOCKET_PATH", "")
+	t.Setenv("ATTN_REMOTE_DB_PATH", "")
+	t.Setenv("ATTN_REMOTE_ATTN_BIN", "")
+	if got := remoteRoutingProfile(" dev "); got != "dev" {
+		t.Fatalf("remoteRoutingProfile() = %q, want dev without harness routing", got)
+	}
+
+	t.Setenv("ATTN_REMOTE_SOCKET_PATH", "/home/victor/.attn/harness/run-456/attn.sock")
+	if got := remoteRoutingProfile("dev"); got != "" {
+		t.Fatalf("remoteRoutingProfile() = %q, want default profile with harness routing", got)
+	}
+}
+
 func TestStartRemoteDaemonScript_DefaultProfile(t *testing.T) {
 	script := startRemoteDaemonScript("")
 	if !strings.Contains(script, `mkdir -p "$HOME/.attn"`) {

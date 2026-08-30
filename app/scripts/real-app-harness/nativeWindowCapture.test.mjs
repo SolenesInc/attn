@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseSipsPixelDimensions, resolveCaptureRect } from './nativeWindowCapture.mjs';
+import {
+  parseIdentifyPixelDimensions,
+  parseSipsPixelDimensions,
+  resolveCaptureRect,
+} from './nativeWindowCapture.mjs';
 import { parseCropSpec } from './capture-app-screenshot.mjs';
 
 describe('resolveCaptureRect', () => {
@@ -107,6 +111,18 @@ describe('parseSipsPixelDimensions', () => {
     expect(() => parseSipsPixelDimensions('')).toThrow(/Failed to parse sips pixel dimensions/);
     expect(() => parseSipsPixelDimensions('  pixelWidth: 3200\n')).toThrow(
       /Failed to parse sips pixel dimensions/,
+    );
+  });
+});
+
+describe('parseIdentifyPixelDimensions', () => {
+  it('parses ImageMagick identify dimensions', () => {
+    expect(parseIdentifyPixelDimensions('1600 1000')).toEqual({ width: 1600, height: 1000 });
+  });
+
+  it('rejects incomplete ImageMagick output', () => {
+    expect(() => parseIdentifyPixelDimensions('1600')).toThrow(
+      'Failed to parse ImageMagick pixel dimensions',
     );
   });
 });

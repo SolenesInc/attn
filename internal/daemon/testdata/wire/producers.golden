@@ -220,6 +220,8 @@
     "crew.wake_limit_window_seconds": "43200",
     "garden.advisor": "{\"agent\":\"codex\",\"model\":\"gpt-5.6-luna\",\"effort\":\"xhigh\"}",
     "headless_context_window_cap": "128000",
+    "headless_tasks.enabled": "true",
+    "headless_tasks.enabled.stored": "true",
     "model_capture.bytes": "0",
     "model_capture.enabled": "false",
     "model_capture.interval_seconds": "10",

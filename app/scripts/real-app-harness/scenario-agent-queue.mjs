@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// Prereqs: `claude` on PATH; a non-production profile install with the
-// automation layer; a built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
+// Prereqs: a non-production profile install with the automation layer, and a
+// built `./attn` (or ATTN_HARNESS_BIN) for the restart step.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,11 +16,11 @@ import {
   relaunchAppAndConnect,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -78,8 +78,15 @@ async function paneIdFor(client, workspaceSessionId, sessionId) {
   return pane.paneId;
 }
 
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// Auto-settle arms only behind user input, never behind an automation write.
+async function typePromptAsUser(client, sessionId, paneId, text) {
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
+  await delay(600);
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
+}
+
+// A fast write lands as a paste, so the submit has to be a lone carriage
+// return a beat later.
 async function submitPrompt(client, sessionId, paneId, text) {
   await client.request('write_pane', { sessionId, paneId, text, submit: false });
   await delay(600);
@@ -89,7 +96,7 @@ async function submitPrompt(client, sessionId, paneId, text) {
 async function createAgent(client, observer, runner, dirName, label) {
   const cwd = path.join(runner.sessionDir, dirName);
   fs.mkdirSync(cwd, { recursive: true });
-  preTrustClaudeFolder(cwd);
+  writeQueueAgentFixture(cwd, { minimumWorkingMs: WORKING_WINDOW_MS, turns: QUEUE_TURNS });
   const sessionId = await createSessionAndWaitForInitialPane({
     client,
     observer,
@@ -112,19 +119,38 @@ function questionPrompt(token) {
   ].join(' ');
 }
 
-// Generous on purpose: how long a live agent takes to stop is not under test.
-const OWED_TURN_TIMEOUT_MS = 240_000;
+// The queue is read every 500ms; a turn has to be working across a read.
+const WORKING_WINDOW_MS = 4_000;
+const SHORT_RUN_PROMPT = 'Reply with the single word: done. Do not ask me anything and do not use any tools.';
+const LONG_RUN_PROMPT = 'Count from 1 to 500, one number per line, nothing else. Do not use any tools.';
+// Longer than the 5s auto-settle arm, shorter than the 60s countdown.
+const LONG_RUN_MS = 20_000;
+const QUEUE_TURNS = [
+  { includes: 'single word: done', actions: [{ type: 'reply', text: 'done', state: 'idle' }] },
+  {
+    includes: 'Count from 1 to 500',
+    actions: [{ type: 'delay', ms: LONG_RUN_MS }, { type: 'reply', text: '1 ... 500', state: 'idle' }],
+  },
+];
+
+// Measured over a green mock run: the slowest turn opened 6.1s after its prompt.
+const OWED_TURN_TIMEOUT_MS = 45_000;
+const SHORT_RUN_TIMEOUT_MS = 30_000;
+// The long run is LONG_RUN_MS of work plus its stop; its step measured 21.8s.
+const LONG_RUN_TIMEOUT_MS = 60_000;
 
 async function driveToOwedTurn(client, observer, agent, token, description) {
+  const startedAt = Date.now();
   await submitPrompt(client, agent.sessionId, agent.paneId, questionPrompt(token));
-  return pollFor(
+  const state = await pollFor(
     () => {
-      const state = observer.getSession(agent.sessionId)?.state;
-      return TURN_OPENING_STATES.has(state) ? state : null;
+      const current = observer.getSession(agent.sessionId)?.state;
+      return TURN_OPENING_STATES.has(current) ? current : null;
     },
     description,
     OWED_TURN_TIMEOUT_MS,
   );
+  return { state, elapsedMs: Date.now() - startedAt };
 }
 
 async function waitForTurns(client, expected, description, timeoutMs = 30_000) {
@@ -147,7 +173,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'AGENT-QUEUE',
-    tier: 'tier3-local-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'agent-queue',
     metadata: {
       focus: 'a turn opens on a state and closes only when the user settles it',
@@ -156,7 +182,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const profile = currentHarnessProfile();
   const attnBin = resolveAttnBin();
   const daemonEnv = { ...process.env, ATTN_PROFILE: profile };
@@ -193,16 +219,14 @@ async function main() {
       }, 'the queue band to render once the arrangement is on', 15_000);
       await waitForTurns(client, [alpha.sessionId], 'alpha queued from the moment it booted');
 
-      const state = await driveToOwedTurn(client, observer, alpha, 'QUEUE_ALPHA', 'alpha to want the user');
-      runner.log('alpha opened a turn', { state });
+      runner.log('alpha opened a turn', await driveToOwedTurn(client, observer, alpha, 'QUEUE_ALPHA', 'alpha to want the user'));
       await waitForTurns(client, [alpha.sessionId], 'alpha still in the band');
     });
 
     await runner.step('open_second_turn', async () => {
       beta = await createAgent(client, observer, runner, 'beta', `queue-beta-${runner.runId}`);
       createdSessionIds.push(beta.sessionId);
-      const state = await driveToOwedTurn(client, observer, beta, 'QUEUE_BETA', 'beta to want the user');
-      runner.log('beta opened a turn', { state });
+      runner.log('beta opened a turn', await driveToOwedTurn(client, observer, beta, 'QUEUE_BETA', 'beta to want the user'));
     });
 
     await runner.step('band_is_oldest_first_and_each_agent_appears_once', async () => {
@@ -265,7 +289,7 @@ async function main() {
         const queue = await queueState(client);
         const row = (queue.turns || []).find((entry) => entry.id === alpha.sessionId);
         return row && row.state === 'working' ? { queue, row } : null;
-      }, 'alpha to show as working while still queued', 60_000);
+      }, 'alpha to show as working while still queued', SHORT_RUN_TIMEOUT_MS);
       runner.assert(
         turnIds(working.queue).indexOf(alpha.sessionId) === beforeIndex,
         `alpha kept its position while working: ${JSON.stringify(turnIds(working.queue))}`,
@@ -276,7 +300,7 @@ async function main() {
       await pollFor(() => {
         const state = observer.getSession(alpha.sessionId)?.state;
         return state && state !== 'working' ? state : null;
-      }, 'alpha to finish the run it was steered into', 180_000);
+      }, 'alpha to finish the run it was steered into', SHORT_RUN_TIMEOUT_MS);
       const stillThere = await queueState(client);
       runner.assert(
         turnIds(stillThere).includes(alpha.sessionId),
@@ -292,8 +316,7 @@ async function main() {
     });
 
     await runner.step('a_new_turn_returns_at_the_bottom', async () => {
-      const state = await driveToOwedTurn(client, observer, alpha, 'QUEUE_ALPHA_AGAIN', 'alpha to want the user again');
-      runner.log('alpha opened a second turn', { state });
+      runner.log('alpha opened a second turn', await driveToOwedTurn(client, observer, alpha, 'QUEUE_ALPHA_AGAIN', 'alpha to want the user again'));
       await waitForTurns(
         client,
         [beta.sessionId, alpha.sessionId],
@@ -310,12 +333,12 @@ async function main() {
         client,
         alpha.sessionId,
         alpha.paneId,
-        'Reply with the single word: done. Do not ask me anything and do not use any tools.',
+        SHORT_RUN_PROMPT,
       );
       await pollFor(
         () => (observer.getSession(alpha.sessionId)?.state === 'working' ? 'working' : null),
         'alpha to start the run',
-        60_000,
+        SHORT_RUN_TIMEOUT_MS,
       );
       const duringRun = await queueState(client);
       runner.assert(
@@ -329,7 +352,7 @@ async function main() {
           return state && state !== 'working' ? state : null;
         },
         'alpha to finish the run',
-        180_000,
+        SHORT_RUN_TIMEOUT_MS,
       );
       runner.log('alpha finished', { state: finished });
       runner.assert(
@@ -351,26 +374,26 @@ async function main() {
       try {
         await client.request('select_session', { sessionId: alpha.sessionId });
         const pane = await waitForFirstWorkspacePane(client, alpha.sessionId, `current pane for ${alpha.sessionId}`, 20_000);
-        await submitPrompt(
+        await typePromptAsUser(
           client,
           alpha.sessionId,
           pane.paneId,
-          'Count from 1 to 500, one number per line, nothing else. Do not use any tools.',
+          LONG_RUN_PROMPT,
         );
         await pollFor(
           () => (observer.getSession(alpha.sessionId)?.state === 'working' ? true : null),
-          'the short run to start',
-          60_000,
+          'the long run to start',
+          SHORT_RUN_TIMEOUT_MS,
         );
         await pollFor(
           () => observer.getSession(alpha.sessionId)?.auto_settle_fires_at || null,
-          'the short run to reach the auto-settle countdown',
-          60_000,
+          'the long run to reach the auto-settle countdown',
+          SHORT_RUN_TIMEOUT_MS,
         );
         await pollFor(
           () => (observer.getSession(alpha.sessionId)?.state === 'idle' ? true : null),
-          'classification to resolve the short run to idle',
-          60_000,
+          'the stop verdict to resolve the long run to idle',
+          LONG_RUN_TIMEOUT_MS,
         );
 
         const session = observer.getSession(alpha.sessionId);
@@ -412,21 +435,21 @@ async function main() {
         // has goes nowhere silently.
         const pane = await waitForFirstWorkspacePane(client, watched.sessionId, `current pane for ${watched.sessionId}`, 20_000);
 
-        await submitPrompt(
+        await typePromptAsUser(
           client,
           watched.sessionId,
           pane.paneId,
-          'Count from 1 to 500, one number per line, nothing else. Do not use any tools.',
+          LONG_RUN_PROMPT,
         );
         await pollFor(
           () => (observer.getSession(watched.sessionId)?.state === 'working' ? true : null),
           'the steered agent to go back to work',
-          60_000,
+          SHORT_RUN_TIMEOUT_MS,
         );
         await pollFor(
           () => (observer.getSession(watched.sessionId)?.auto_settle_fires_at ? true : null),
           'the auto-settle countdown to start on the agent being watched',
-          60_000,
+          SHORT_RUN_TIMEOUT_MS,
         );
 
         const handed = await pollFor(async () => {
@@ -643,6 +666,8 @@ async function main() {
         `settling selected the next owed turn: ${jumped.activeSessionId}`,
       );
 
+      const betaTurnBefore = observer.getSession(beta.sessionId)?.turn_opened_at ?? null;
+
       // The app respawns the daemon, so it has to be down for this to be a restart.
       await client.quitApp();
       await observer.close();
@@ -650,10 +675,20 @@ async function main() {
       execFileSync(attnBin, ['daemon', 'ensure'], { env: daemonEnv, encoding: 'utf8' });
 
       await relaunchAppAndConnect(client, observer);
-      const queue = await waitForTurns(client, [alpha.sessionId], 'the queue rebuilt from persisted stamps', 60_000);
+      const queue = await pollFor(
+        async () => {
+          const current = await queueState(client);
+          return turnIds(current).includes(alpha.sessionId) ? current : null;
+        },
+        'the queue rebuilt from persisted stamps',
+        60_000,
+      );
+      const betaAfter = observer.getSession(beta.sessionId);
+      runner.assert(Boolean(betaAfter), `beta came back as a session: ${JSON.stringify(queue)}`, queue);
       runner.assert(
-        settledIds(queue).includes(beta.sessionId),
-        `beta came back as a session, just not as a turn: ${JSON.stringify(settledIds(queue))}`,
+        !betaAfter.turn_owed || betaAfter.turn_opened_at !== betaTurnBefore,
+        `the settled turn did not survive the restart (opened_at before=${JSON.stringify(betaTurnBefore)} after=${JSON.stringify(betaAfter.turn_opened_at)})`,
+        betaAfter,
       );
     });
 

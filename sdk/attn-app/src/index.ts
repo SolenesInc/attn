@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-13-ext-a5-ui-host-and-app-sdk.md.
 
 import type { CurrentStateSnapshot } from "./currentState"
 

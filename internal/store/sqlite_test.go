@@ -132,6 +132,37 @@ func TestOpenDBRetainsMeasuredReadBurst(t *testing.T) {
 	}
 }
 
+func TestOpenDBTakesTheWriteLockWhenATransactionBegins(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "txlock.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() error = %v", err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	other, err := sql.Open("sqlite3", "file:"+dbPath+"?_busy_timeout=0")
+	if err != nil {
+		t.Fatalf("open second handle: %v", err)
+	}
+	defer other.Close()
+	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err == nil {
+		t.Fatal("a concurrent write succeeded; the transaction did not take the write lock at BEGIN")
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatalf("write after commit: %v", err)
+	}
+}
+
 func TestOpenDB_CreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "subdir", "nested", "test.db")
@@ -935,6 +966,7 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 		{"sessions", "main_repo"},
 		{"sessions", "agent"},
 		{"sessions", "resume_session_id"},
+		{"sessions", "transcript_path"},
 		{"sessions", "endpoint_id"},
 		{"sessions", "agent_metadata"},
 		{"sessions", "agent_driver_plugin_name"},
@@ -1729,5 +1761,37 @@ func TestMigration121BackfillsTheRequestClockAndIsRewindSafe(t *testing.T) {
 	}
 	if requestAt != observed {
 		t.Fatalf("last_model_request_at = %q, want state observation %q", requestAt, observed)
+	}
+}
+
+func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	s.Add(&protocol.Session{ID: "legacy-session", Agent: protocol.SessionAgentCodex})
+	s.SetResumeSessionID("legacy-session", "native-legacy")
+	if _, err := s.db.Exec(`
+		ALTER TABLE sessions DROP COLUMN transcript_path;
+		DELETE FROM schema_migrations WHERE version >= 123;
+	`); err != nil {
+		t.Fatalf("rewind migration 123: %v", err)
+	}
+
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("first migrateDB: %v", err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 123`); err != nil {
+		t.Fatalf("unrecord migration 123: %v", err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("second migrateDB: %v", err)
+	}
+
+	if got := s.GetSessionConversation("legacy-session"); got != (SessionConversation{NativeID: "native-legacy"}) {
+		t.Fatalf("migrated binding = %+v, want native ID with an empty path", got)
 	}
 }

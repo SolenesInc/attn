@@ -15,6 +15,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -79,6 +80,7 @@ type daemonHealth struct {
 	SocketPath       string `json:"socket_path"`
 	RoutingPathError string `json:"routing_path_error"`
 	Port             any    `json:"port"`
+	HeadlessTasks    string `json:"headless_tasks"`
 }
 
 type prober struct {
@@ -155,7 +157,7 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	paths := []struct{ name, path, action string }{
 		{"path.working_directory", workingDir, "Choose a writable checkout or fix its permissions."},
 		{"path.profile_data", routing.DataDir, "Install or initialize the selected non-production profile, then fix the data directory permissions."},
-		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable Applications directory for the selected profile."},
+		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable app install directory for the selected profile."},
 	}
 	for _, item := range paths {
 		if err := p.writable(item.path); err != nil {
@@ -221,6 +223,8 @@ func run(ctx context.Context, opts Options, p prober) Report {
 		}
 	}
 
+	add(pass("headless.tasks", headlessTasksSummary(health, healthErr)))
+
 	for _, check := range report.Checks {
 		if check.Status == StatusFail {
 			report.Status = StatusFail
@@ -231,6 +235,17 @@ func run(ctx context.Context, opts Options, p prober) Report {
 		}
 	}
 	return report
+}
+
+// The daemon's own mode is the one that decides what runs; this CLI's env only
+// stands in when the daemon cannot be reached or predates the field.
+func headlessTasksSummary(health daemonHealth, healthErr error) string {
+	if healthErr == nil {
+		if mode := strings.TrimSpace(health.HeadlessTasks); mode != "" {
+			return "daemon headless tasks " + mode
+		}
+	}
+	return "daemon mode unavailable; this CLI resolves headless tasks " + headless.Describe()
 }
 
 func resolveLaunch(opts Options) Launch {
@@ -347,7 +362,7 @@ func resolveGoCachePaths(ctx context.Context) ([]string, error) {
 }
 
 func readAppProtocol(ctx context.Context, appPath string) (string, error) {
-	binary := filepath.Join(appPath, "Contents", "MacOS", "attn")
+	binary := config.AppDaemonBinaryInTree(appPath)
 	if _, err := os.Stat(binary); err != nil {
 		return "", fmt.Errorf("%s: %w", binary, err)
 	}

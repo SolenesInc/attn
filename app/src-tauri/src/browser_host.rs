@@ -1,8 +1,6 @@
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::LazyLock;
@@ -17,6 +15,7 @@ const CONTROL_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_PAGE_ACTION_TIMEOUT: Duration = Duration::from_secs(120);
 const PAGE_ACTION_TIMEOUT_MARGIN: Duration = Duration::from_secs(2);
 const BROWSER_DATA_STORE_ID: [u8; 16] = *b"attn-browser-v1!";
+#[cfg(target_os = "macos")]
 const BROWSER_CONTENT_WORLD_NAME: &str = "attn-browser-control";
 static NEXT_RUNTIME_RESULT_ID: AtomicU64 = AtomicU64::new(1);
 static COOKIE_JAR_IO: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -173,6 +172,7 @@ fn single_tab_script() -> &'static str {
 })()"#
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn isolated_initialization_script() -> String {
     format!(
         r#"{}
@@ -211,6 +211,7 @@ fn report_location(app: &AppHandle, label: &str, url: &tauri::Url) {
     ));
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn content_layout_inset(
     window_height: f64,
     layout_x: f64,
@@ -787,6 +788,7 @@ async fn evaluate_script(webview: tauri::Webview, script: String) -> Result<Stri
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 struct SnapshotRect {
     x: f64,
     y: f64,
@@ -799,12 +801,14 @@ async fn screenshot(
     webview: tauri::Webview,
     snapshot_rect: Option<SnapshotRect>,
 ) -> Result<String, String> {
+    use base64::Engine;
     use block2::RcBlock;
     use objc2::MainThreadMarker;
     use objc2_app_kit::NSImage;
     use objc2_core_foundation::{CGPoint, CGRect, CGSize};
     use objc2_foundation::NSError;
     use objc2_web_kit::{WKSnapshotConfiguration, WKWebView};
+    use std::io::Cursor;
     use std::ptr::NonNull;
 
     let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
@@ -876,11 +880,19 @@ async fn screenshot(
 }
 
 #[cfg(not(target_os = "macos"))]
+fn unsupported_capture_message(action: &str) -> String {
+    format!(
+        "browser {action} is not supported on {}",
+        std::env::consts::OS
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
 async fn screenshot(
     _webview: tauri::Webview,
     _snapshot_rect: Option<SnapshotRect>,
 ) -> Result<String, String> {
-    Err("the in-app browser host is only supported on macOS".into())
+    Err(unsupported_capture_message("screenshot"))
 }
 
 #[cfg(target_os = "macos")]
@@ -888,6 +900,7 @@ async fn print_page(
     webview: tauri::Webview,
     params: &Map<String, Value>,
 ) -> Result<String, String> {
+    use base64::Engine;
     use block2::RcBlock;
     use objc2::MainThreadMarker;
     use objc2_foundation::{NSData, NSError};
@@ -953,6 +966,7 @@ async fn print_page(
     result.map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn page_size(width: f64, height: f64, params: &Map<String, Value>) -> (f64, f64) {
     if params.get("orientation").and_then(Value::as_str) == Some("landscape") {
         (height, width)
@@ -966,7 +980,7 @@ async fn print_page(
     _webview: tauri::Webview,
     _params: &Map<String, Value>,
 ) -> Result<String, String> {
-    Err("browser PDF is only supported on macOS".into())
+    Err(unsupported_capture_message("print_page"))
 }
 
 fn cookie_value(cookie: &tauri::webview::Cookie<'_>) -> Value {

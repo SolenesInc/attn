@@ -29,6 +29,7 @@ import {
   toDisplayPath,
 } from '../utils/locationPickerPaths';
 import './LocationPicker.css';
+import { keyCombo } from '../shortcuts/formatShortcut';
 
 interface BackendRepoInfo {
   repo: string;
@@ -1062,8 +1063,8 @@ export function LocationPicker({
                 const available = isAgentAvailable(effectiveAgentAvailability, candidate);
                 const shortcutNumber = agentShortcutByName.get(candidate);
                 const shortcut = candidate === TERMINAL_AGENT
-                  ? '⌥T'
-                  : shortcutNumber && shortcutNumber <= 9 ? `⌥${shortcutNumber}` : null;
+                  ? keyCombo('alt', 'T')
+                  : shortcutNumber && shortcutNumber <= 9 ? keyCombo('alt', String(shortcutNumber)) : null;
                 const label = pickerAgentLabel(candidate);
                 return (
                   <button
@@ -1186,7 +1187,7 @@ export function LocationPicker({
                   )}
                   <div className="endpoint-option-footer">
                     <span className={`endpoint-option-meta ${target.metaClassName || ''}`.trim()}>{target.metaLabel}</span>
-                    {target.connected && shortcutKey && <kbd className="agent-shortcut endpoint-shortcut">{`⌥${shortcutKey.toUpperCase()}`}</kbd>}
+                    {target.connected && shortcutKey && <kbd className="agent-shortcut endpoint-shortcut">{keyCombo('alt', shortcutKey.toUpperCase())}</kbd>}
                   </div>
                 </button>
               );

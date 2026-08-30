@@ -242,6 +242,7 @@ async function main() {
   const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-PR-CONTINUITY',
+    allowRealAgents: false,
     tier: 'tier2-packaged-local-provider',
     prefix: 'automation-pr-continuity',
     metadata: { profile, provider: 'local mock GitHub', transcript: 'copied existing Codex rollout' },

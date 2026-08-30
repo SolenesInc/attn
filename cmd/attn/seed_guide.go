@@ -148,15 +148,28 @@ Harvest when the outcome and required verification in the body are complete.
 
 ARTIFACTS
 
-You attach a document to a seed. The document stays where it lives:
+Bring a local file into durable seed ownership with an explicit Move or Copy:
 
-    attn seed attach <id> --path <file.md> [--repo <repository>]
+    attn seed attach <id> --path <file> --move
+    attn seed attach <id> --path <file> --copy
+    attn seed detach <id> --path <filename> --to <destination>
+
+Move is recommended: the seed owns the one canonical editable file. Copy leaves
+the source alone. A tracked Git file must use Copy. Transfers never overwrite,
+and the seed-owned file survives the source worktree, session and seed closing.
+Direct visible regular files under the seed's artifact directory are membership,
+so ordinary filesystem edits and renames appear in the Garden.
+
+Repository, Notebook and URL documents remain linked where they already live:
+
+    attn seed attach <id> --path <file.md> --repo <repository>
     attn seed attach <id> --notebook <document-id>
     attn seed attach <id> --url <url>
-    attn seed detach <id> --path <file.md>
+    attn seed detach <id> --path <file.md> --reference
 
-Edit only the original, and note a meaningful edit, rename or deletion on the
-seed so the next reader knows to re-read it.
+The Garden labels old path associations as linked files. Bring one into seed
+ownership with its explicit Move or Copy action; the link disappears only after
+the transfer succeeds.
 
 HANDOFFS AND STEERING
 

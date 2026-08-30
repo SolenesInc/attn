@@ -1,0 +1,5 @@
+kind: internal
+area: release
+change: >
+  Let the release and post-release sync fixtures reuse their local next branch
+  so the repository-script suite runs from next itself.

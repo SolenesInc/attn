@@ -17,7 +17,7 @@
   border-radius: 6px;
   background: var(--color-bg-input, rgba(255, 255, 255, 0.04));
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm, 13px);
   line-height: 1.4;
   outline: none;
@@ -30,7 +30,7 @@
 .rename-popover-error {
   margin-top: 6px;
   color: var(--color-danger, #ff6b6b);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
 }
 
@@ -48,7 +48,7 @@
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   line-height: 1;
 }

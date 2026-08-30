@@ -1,0 +1,35 @@
+kind: fixed
+area: cli
+change: >
+  `attn profile clean` now also removes the app's local data dir — Tauri's
+  `app_local_data_dir` (`~/Library/Application Support/<bundle id>` on macOS,
+  `$XDG_DATA_HOME/<bundle id>` on Linux), which holds the harness automation
+  manifest, the frontend's debug JSONL, and WebKit state. It survived clean on
+  both platforms, so a cleaned profile left its app state behind and a rebuilt
+  profile of the same name inherited it. The dir is removed after the app is
+  stopped, `attn profile resolve` reports it as `appLocalDataDir`, and `attn
+  profile` / `profile list` show whether it is present — including for a profile
+  whose data dir and app are already gone, so the leftovers can be cleaned. The
+  default (production) profile is still refused without `--force`.
+
+  Stopping the app is now a fence rather than a request: `attn profile clean` and
+  `attn profile stop-app` wait for the app's pid (`<data-dir>/app.pid`) to be
+  gone, on macOS too, where `quit` only asks and used to return success while the
+  app was still running — long enough for WebKit to recreate the directory that
+  had just been deleted. A pid that is not the profile's app executable is never
+  signalled, and a clean that cannot confirm the app exited now removes nothing
+  and names the pid instead of reporting a profile it did not clean. Ownership is
+  rebuilt from the live process before each signal, since a pid the app releases
+  can be reused; a live pid that cannot be identified stops the clean rather than
+  being assumed dead; and an `app.pid` that names a different pid, or reappears
+  after the stop, is read as a relaunch and aborts before anything is removed.
+
+  The app and clean also share a lock, `~/.attn.locks/app-<profile>.lock`: every
+  app process holds it shared for its lifetime, clean holds it exclusively across
+  the removals, and the one that loses the race gives way, so nothing is ever
+  deleted under a live app. App instances never block each other, so a Linux
+  launch without a session bus can still open a second instance to deliver a deep
+  link. A launching app waits up to 3s for a clean in flight and then refuses to
+  start rather than run unlocked — it writes no `app.pid` and opens no window, and
+  says why on stderr — and a clean that finds the lock held aborts before touching
+  anything.

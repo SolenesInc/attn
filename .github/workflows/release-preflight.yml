@@ -4,18 +4,7 @@ env:
   GH_TOKEN: ${{ github.token }}
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/release.yml"
-      - ".github/workflows/release-preflight.yml"
-      - "Makefile"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - "apphost/**"
-      - "scripts/build-app-runtime-host.sh"
+  workflow_call:
   workflow_dispatch:
 
 jobs:

@@ -189,7 +189,7 @@
 .automations-panel__last-error {
   color: var(--color-text-tertiary);
   flex-basis: 100%;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   margin: 0;
   overflow: hidden;
@@ -261,7 +261,7 @@ button.automations-panel__run-row-main {
 }
 
 .automations-panel__run-state {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -288,7 +288,7 @@ button.automations-panel__run-row-main {
 
 .automations-panel__run-error {
   color: var(--color-error);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   margin: 4px 0 0;
 }

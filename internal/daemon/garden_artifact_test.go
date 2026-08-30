@@ -45,7 +45,7 @@ func TestSeedArtifactsAttachAndDetachThroughTheLog(t *testing.T) {
 		t.Fatalf("attach notebook: %v", protocol.Deref(resp.Error))
 	}
 
-	current := show(t, d, seed.ID).Artifacts
+	current := show(t, d, seed.ID).References
 	if len(current) != 2 {
 		t.Fatalf("artifacts = %+v, want the markdown file and the notebook", current)
 	}
@@ -56,7 +56,7 @@ func TestSeedArtifactsAttachAndDetachThroughTheLog(t *testing.T) {
 	if resp := artifactNote(t, d, seed.ID, garden.NoteKindDetach, "", markdownArtifact("docs/plans/thing.md")); !resp.Ok {
 		t.Fatalf("detach: %v", protocol.Deref(resp.Error))
 	}
-	current = show(t, d, seed.ID).Artifacts
+	current = show(t, d, seed.ID).References
 	if len(current) != 1 || protocol.Deref(current[0].NotebookDocumentID) != "nb-7" {
 		t.Fatalf("after detach artifacts = %+v, want the notebook alone", current)
 	}
@@ -81,8 +81,8 @@ func TestSeedArtifactsSurviveABusyLog(t *testing.T) {
 	if len(result.Notes) > garden.ShowNotes {
 		t.Fatalf("show rendered %d notes, past its own window", len(result.Notes))
 	}
-	if len(result.Artifacts) != 1 || protocol.Deref(result.Artifacts[0].Path) != "plan.md" {
-		t.Fatalf("artifacts = %+v, want plan.md still current", result.Artifacts)
+	if len(result.References) != 1 || protocol.Deref(result.References[0].Path) != "plan.md" {
+		t.Fatalf("references = %+v, want plan.md still current", result.References)
 	}
 }
 
@@ -98,15 +98,15 @@ func TestSeedArtifactsPageToTheEndOfTheLog(t *testing.T) {
 	}
 
 	result := show(t, d, seed.ID)
-	if len(result.Artifacts) != 1 || protocol.Deref(result.Artifacts[0].Path) != "plan.md" {
-		t.Fatalf("artifacts = %+v, want plan.md still current several pages down", result.Artifacts)
+	if len(result.References) != 1 || protocol.Deref(result.References[0].Path) != "plan.md" {
+		t.Fatalf("references = %+v, want plan.md still current several pages down", result.References)
 	}
 
 	if resp := artifactNote(t, d, seed.ID, garden.NoteKindDetach, "", markdownArtifact("plan.md")); !resp.Ok {
 		t.Fatalf("detach: %v", protocol.Deref(resp.Error))
 	}
-	if after := show(t, d, seed.ID); len(after.Artifacts) != 0 {
-		t.Fatalf("artifacts = %+v, want the detach to have taken it back", after.Artifacts)
+	if after := show(t, d, seed.ID); len(after.References) != 0 {
+		t.Fatalf("references = %+v, want the detach to have taken it back", after.References)
 	}
 }
 

@@ -310,7 +310,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
 
       await page.getByText('Browse workspace contexts').click();
-      const contextNavigator = page.getByRole('dialog', { name: 'Workspace contexts on this Mac' });
+      const contextNavigator = page.getByRole('dialog', { name: 'Workspace contexts on this machine' });
       await expect(contextNavigator).toBeVisible();
 
       await page.keyboard.press('Meta+n');
@@ -508,56 +508,6 @@ test.describe('Keyboard Shortcuts', () => {
 
       await page.keyboard.press('Meta+Shift+B');
       await expect(page.locator('.sidebar:not(.collapsed)')).toBeVisible();
-    });
-  });
-
-  test.describe('Branch Picker', () => {
-    test('⌘B opens branch picker when session has git', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await injectLocalSession(page, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
-      await daemon.injectSession({
-        id: 's1',
-        label: 'Test',
-        state: 'working',
-        directory: '/tmp/test/s1',
-      });
-
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s1"]').click();
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-
-      await page.keyboard.press('Meta+b');
-
-    });
-
-    test('Escape closes branch picker', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await injectLocalSession(page, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
-      await daemon.injectSession({
-        id: 's1',
-        label: 'Test',
-        state: 'working',
-        directory: '/tmp/test/s1',
-      });
-
-      await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-      await page.locator('[data-testid="session-s1"]').click();
-
-      await page.keyboard.press('Meta+b');
-
-      const picker = page.locator('.branch-picker-overlay');
-      if (await picker.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await page.keyboard.press('Escape');
-        await expect(picker).not.toBeVisible();
-        await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
-      }
     });
   });
 

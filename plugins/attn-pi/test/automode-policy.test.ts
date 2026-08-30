@@ -39,19 +39,17 @@ describe("config loading", () => {
   test("snake_case fields land on the config value", () => {
     const config = loadAutoModeConfig({
       enabled_default: false,
-      environment: ["this machine has no production access"],
+      environment: { slots: { domains: ["grafana.acme.corp"] }, notes: ["a work laptop"] },
       allow: ["go build ./..."],
       hard_deny: ["git push --force*"],
-      classifier_model: "opencode-go/glm-5.3",
-      escalation_model: "opencode-go/qwen3.8-max",
+      models: ["opencode-go/glm-5.3", "opencode-go/qwen3.8-max"],
     });
     expect(config).toEqual({
       enabledDefault: false,
-      environment: ["this machine has no production access"],
+      environment: { slots: { domains: ["grafana.acme.corp"] }, notes: ["a work laptop"] },
       allow: ["go build ./..."],
       hardDeny: ["git push --force*"],
-      classifierModels: ["opencode-go/glm-5.3"],
-      escalationModels: ["opencode-go/qwen3.8-max"],
+      models: ["opencode-go/glm-5.3", "opencode-go/qwen3.8-max"],
     });
   });
 
@@ -73,8 +71,8 @@ describe("config loading", () => {
 
   test.each([
     ["allow", { allow: "go build" }],
-    ["environment", { environment: [1] }],
-    ["classifier_model", { classifier_model: 7 }],
+    ["environment", { environment: "a work laptop" }],
+    ["models", { models: 7 }],
     ["enabled_default", { enabled_default: "yes" }],
   ])("%s rejects the wrong type", (field, raw) => {
     expect(() => loadAutoModeConfig(raw as never)).toThrow(AutoModeConfigError);
@@ -87,33 +85,40 @@ describe("config loading", () => {
 
   test("blank model names fall back to the receipt's defaults", () => {
     const config = loadAutoModeConfig({ classifier_model: "  ", escalation_model: "" });
-    expect(config.classifierModels).toEqual(defaultAutoModeConfig.classifierModels);
-    expect(config.escalationModels).toEqual(defaultAutoModeConfig.escalationModels);
+    expect(config.models).toEqual(defaultAutoModeConfig.models);
   });
 
-  test("the singular model fields still load, as a one-entry list", () => {
-    const config = loadAutoModeConfig({ classifier_model: "vendor/small", escalation_model: "vendor/big" });
-    expect(config.classifierModels).toEqual(["vendor/small"]);
-    expect(config.escalationModels).toEqual(["vendor/big"]);
+  test("the list names the models in order", () => {
+    const config = loadAutoModeConfig({ models: ["vendor/primary", " vendor/fallback "] });
+    expect(config.models).toEqual(["vendor/primary", "vendor/fallback"]);
   });
 
-  test("a list names the layer's models in order, and wins over the singular field", () => {
+  test("a daemon's per-layer lists fold into one chain, classifier first", () => {
     const config = loadAutoModeConfig({
-      classifier_model: "vendor/ignored",
-      classifier_models: ["vendor/primary", " vendor/fallback "],
-      escalation_models: ["vendor/big"],
+      classifier_models: ["vendor/small", "vendor/shared"],
+      escalation_models: ["vendor/shared", "vendor/big"],
     });
-    expect(config.classifierModels).toEqual(["vendor/primary", "vendor/fallback"]);
-    expect(config.escalationModels).toEqual(["vendor/big"]);
+    expect(config.models).toEqual(["vendor/small", "vendor/shared", "vendor/big"]);
+  });
+
+  test("the older singular fields fold the same way", () => {
+    const config = loadAutoModeConfig({ classifier_model: "vendor/small", escalation_model: "vendor/big" });
+    expect(config.models).toEqual(["vendor/small", "vendor/big"]);
+  });
+
+  test("the folded chain wins over nothing, and `models` wins over the folded chain", () => {
+    const config = loadAutoModeConfig({
+      classifier_models: ["vendor/ignored"],
+      models: ["vendor/picked"],
+    });
+    expect(config.models).toEqual(["vendor/picked"]);
   });
 
   test.each([
-    ["classifier_models", { classifier_models: "vendor/one" }],
-    ["classifier_models", { classifier_models: [7] }],
-    ["classifier_models", { classifier_models: ["vendor/one", "  "] }],
-    ["classifier_models", { classifier_models: [] }],
-    ["escalation_models", { escalation_models: [] }],
-  ])("%s refuses a list it cannot serve a layer from", (field, raw) => {
+    ["models", { models: "vendor/one" }],
+    ["models", { models: [7] }],
+    ["models", { models: ["vendor/one", "  "] }],
+  ])("%s refuses a list it cannot judge from", (field, raw) => {
     let caught: unknown;
     try {
       loadAutoModeConfig(raw as never);
@@ -123,14 +128,19 @@ describe("config loading", () => {
     expect(caught).toBeInstanceOf(AutoModeConfigError);
     expect((caught as AutoModeConfigError).field).toBe(field);
   });
+
+  test.each([["models"], ["classifier_models"]])("%s naming nothing loads, and leaves nothing to judge with", (field) => {
+    const config = loadAutoModeConfig({ [field]: [] } as never);
+    expect(config.models).toEqual([]);
+  });
 });
 
 describe("path location", () => {
   test.each([
-    ["src/main.ts", "in-envelope"],
-    ["./src/main.ts", "in-envelope"],
-    ["/work/repo", "in-envelope"],
-    ["/work/repo/deep/nested/file.txt", "in-envelope"],
+    ["src/main.ts", "in-cwd"],
+    ["./src/main.ts", "in-cwd"],
+    ["/work/repo", "in-cwd"],
+    ["/work/repo/deep/nested/file.txt", "in-cwd"],
     ["../sibling/file.txt", "outside-cwd"],
     ["/etc/hosts", "outside-cwd"],
     ["/work/repo-other/file.txt", "outside-cwd"],
@@ -208,7 +218,7 @@ describe("read-only bash set", () => {
     expect(classifyBashCommand(command).kind).toBe("network");
   });
 
-  test("a plain read-only GET is still network, not envelope", () => {
+  test("a plain read-only GET is still network, not fast path", () => {
     const classification = classifyBashCommand("curl https://example.com");
     expect(classification).toEqual({ kind: "network", command: "curl" });
   });
@@ -243,7 +253,7 @@ describe("static decision tree", () => {
     expect(decision).toEqual({ outcome: "run", rule: "allow-list" });
   });
 
-  test("the allow list beats the envelope for an out-of-cwd write", () => {
+  test("the allow list beats the static rules for an out-of-cwd write", () => {
     const decision = decide({ toolName: "write", input: { path: "/tmp/report.md" } }, { allow: ["write /tmp/*"] });
     expect(decision).toEqual({ outcome: "run", rule: "allow-list" });
   });
@@ -354,7 +364,7 @@ describe("property: a path outside the working directory never runs statically",
         const call: ToolCall = { toolName, input: { path } };
         const decision = decide(call);
         const resolved = locatePath(cwd, path);
-        if (resolved.location === "in-envelope") {
+        if (resolved.location === "in-cwd") {
           expect(isInside(cwd, resolve(cwd, path))).toBe(true);
           continue;
         }
@@ -362,8 +372,7 @@ describe("property: a path outside the working directory never runs statically",
         expect(decision.outcome).not.toBe("run");
       }
     }
-    // Guard against a generator that only ever produced in-cwd paths, which
-    // would make every assertion above vacuous.
+
     expect(outside).toBeGreaterThan(100);
   });
 });

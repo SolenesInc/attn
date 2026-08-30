@@ -37,12 +37,14 @@ func automodePropose(t *testing.T, d *Daemon, kind, target, value string) protoc
 func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 	d := newDaemonForTest(t)
 	result := automodeShow(t, d)
-	if len(result.Config.ClassifierModels) != 1 ||
-		result.Config.ClassifierModels[0] != automode.DefaultClassifierModel {
-		t.Errorf("classifier models = %v", result.Config.ClassifierModels)
+	if len(result.Config.Models) != 0 {
+		t.Errorf("models = %v on a fresh profile, want none until the user names one", result.Config.Models)
 	}
-	if result.Config.Allow == nil || result.Config.Environment == nil || result.Config.HardDeny == nil {
+	if result.Config.Allow == nil || result.Config.HardDeny == nil {
 		t.Fatalf("a config list came back nil: %+v", result.Config)
+	}
+	if result.Config.Environment.Slots == nil || result.Config.Environment.Notes == nil {
+		t.Fatalf("the environment came back nil: %+v", result.Config.Environment)
 	}
 	if len(result.Proposals) != 0 {
 		t.Fatalf("a fresh profile has %d proposals", len(result.Proposals))
@@ -81,34 +83,105 @@ func TestAutoModeProposeRefusesABroadAllowByName(t *testing.T) {
 	}
 }
 
-func TestAutoModeEnvironmentAddAndRemove(t *testing.T) {
+func TestAutoModeEnvironmentSlotWritesAndClears(t *testing.T) {
 	d := newDaemonForTest(t)
-	for _, text := range []string{"pushing to origin is fine", "never touch prod"} {
-		resp := docCall(t, func(c net.Conn) {
-			d.handleAutoModeEnvAdd(c, &protocol.AutoModeEnvAddMessage{Cmd: protocol.CmdAutoModeEnvAdd, Text: text})
-		})
-		if !resp.Ok {
-			t.Fatalf("env add: %v", protocol.Deref(resp.Error))
-		}
-	}
 	resp := docCall(t, func(c net.Conn) {
-		d.handleAutoModeEnvRemove(c, &protocol.AutoModeEnvRemoveMessage{Cmd: protocol.CmdAutoModeEnvRemove, Index: 0})
+		d.handleAutoModeEnvSlot(c, &protocol.AutoModeEnvSlotMessage{
+			Cmd: protocol.CmdAutoModeEnvSlot, Slot: "domains",
+			Values: []string{"grafana.acme.corp", "docs.acme.corp"},
+		})
 	})
 	if !resp.Ok {
-		t.Fatalf("env remove: %v", protocol.Deref(resp.Error))
+		t.Fatalf("env slot: %v", protocol.Deref(resp.Error))
 	}
-	if got := resp.AutomodeEnvResult.Environment; len(got) != 1 || got[0] != "never touch prod" {
-		t.Fatalf("environment = %v", got)
+	if got := envSlotValues(resp.AutomodeEnvResult.Environment, "domains"); len(got) != 2 {
+		t.Fatalf("domains = %v, want both entries", got)
 	}
 
 	resp = docCall(t, func(c net.Conn) {
-		d.handleAutoModeEnvRemove(c, &protocol.AutoModeEnvRemoveMessage{Cmd: protocol.CmdAutoModeEnvRemove, Index: 7})
+		d.handleAutoModeEnvSlot(c, &protocol.AutoModeEnvSlotMessage{
+			Cmd: protocol.CmdAutoModeEnvSlot, Slot: "domains", Values: []string{}})
+	})
+	if !resp.Ok {
+		t.Fatalf("clearing the slot: %v", protocol.Deref(resp.Error))
+	}
+	if got := envSlotValues(resp.AutomodeEnvResult.Environment, "domains"); len(got) != 0 {
+		t.Fatalf("domains = %v after clearing it", got)
+	}
+
+	resp = docCall(t, func(c net.Conn) {
+		d.handleAutoModeEnvSlot(c, &protocol.AutoModeEnvSlotMessage{
+			Cmd: protocol.CmdAutoModeEnvSlot, Slot: "intranet", Values: []string{"acme.corp"}})
 	})
 	if resp.Ok {
-		t.Fatal("removing entry 7 of 1 succeeded")
+		t.Fatal("a slot nothing reads was accepted")
 	}
-	if msg := protocol.Deref(resp.Error); !strings.Contains(msg, "7") || !strings.Contains(msg, "1 environment entries") {
-		t.Fatalf("refusal does not carry the limit and the ask: %q", msg)
+	if msg := protocol.Deref(resp.Error); !strings.Contains(msg, "intranet") || !strings.Contains(msg, "domains") {
+		t.Fatalf("refusal names neither the ask nor the choices: %q", msg)
+	}
+}
+
+func TestAutoModeEnvironmentNotesKeepProseBesideTheSlots(t *testing.T) {
+	d := newDaemonForTest(t)
+	resp := docCall(t, func(c net.Conn) {
+		d.handleAutoModeEnvNotes(c, &protocol.AutoModeEnvNotesMessage{
+			Cmd:   protocol.CmdAutoModeEnvNotes,
+			Notes: []string{"this laptop is mine   ", "", "nothing here serves traffic", "", "  "},
+		})
+	})
+	if !resp.Ok {
+		t.Fatalf("env notes: %v", protocol.Deref(resp.Error))
+	}
+	want := []string{"this laptop is mine", "", "nothing here serves traffic"}
+	if got := resp.AutomodeEnvResult.Environment.Notes; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("notes = %q, want %q", got, want)
+	}
+}
+
+func envSlotValues(env protocol.AutoModeEnvironmentInfo, id string) []string {
+	for _, slot := range env.Slots {
+		if slot.ID == id {
+			return slot.Values
+		}
+	}
+	return nil
+}
+
+func TestAnEnvironmentWriteSaysTheConfigMoved(t *testing.T) {
+	d := newDaemonForTest(t)
+	resp := docCall(t, func(c net.Conn) {
+		d.handleAutoModeEnvSlot(c, &protocol.AutoModeEnvSlotMessage{
+			Cmd: protocol.CmdAutoModeEnvSlot, Slot: "buckets", Values: []string{"s3://acme-artifacts"}})
+	})
+	if !resp.Ok {
+		t.Fatalf("env slot: %v", protocol.Deref(resp.Error))
+	}
+
+	published := docFacts(t, d, FactAutoModeConfigChanged)
+	if len(published) != 1 || published[0].Subject != AutoModeConfigSubject {
+		t.Fatalf("automode.config.changed facts = %+v, want one naming the config", published)
+	}
+}
+
+func TestAutoModeGetOffersTheEnvironmentSchema(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	d.handleAutoModeGet(client, &protocol.AutoModeGetMessage{Cmd: protocol.CmdAutoModeGet, RequestID: "r1"})
+	var result protocol.AutoModeStateResultMessage
+	nextBusMessage(t, client, &result)
+	if !result.Success {
+		t.Fatalf("automode_get failed: %q", protocol.Deref(result.Error))
+	}
+	if len(result.EnvironmentSlots) != len(automode.Slots()) {
+		t.Fatalf("slots = %d, want the schema's %d", len(result.EnvironmentSlots), len(automode.Slots()))
+	}
+	for i, slot := range result.EnvironmentSlots {
+		if slot.ID != automode.Slots()[i].ID {
+			t.Errorf("slot %d is %q, want the schema's order (%q)", i, slot.ID, automode.Slots()[i].ID)
+		}
+		if slot.Label == "" || slot.Detail == "" || slot.Unset == "" || len(slot.ReadBy) == 0 {
+			t.Errorf("slot %+v is missing something the panel renders", slot)
+		}
 	}
 }
 
@@ -172,7 +245,7 @@ func TestAutoModePromoteFromTheAppPutsItInForce(t *testing.T) {
 
 func TestAutoModeDiscardFromTheAppClosesWithoutApplying(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
-	resp := automodePropose(t, d, automode.KindModel, automode.TargetClassifier, "opencode-go/other-model")
+	resp := automodePropose(t, d, automode.KindModel, automode.TargetModels, "opencode-go/other-model")
 	if !resp.Ok {
 		t.Fatalf("propose: %v", protocol.Deref(resp.Error))
 	}
@@ -186,9 +259,8 @@ func TestAutoModeDiscardFromTheAppClosesWithoutApplying(t *testing.T) {
 		t.Fatalf("discard failed: %q", protocol.Deref(discarded.Error))
 	}
 	got := automodeShow(t, d)
-	if len(got.Config.ClassifierModels) != 1 ||
-		got.Config.ClassifierModels[0] != automode.DefaultClassifierModel {
-		t.Errorf("classifier models = %v after a discard", got.Config.ClassifierModels)
+	if len(got.Config.Models) != 0 {
+		t.Errorf("models = %v after a discard", got.Config.Models)
 	}
 	if len(got.Proposals) != 0 {
 		t.Errorf("discarded proposal is still pending")
@@ -385,6 +457,25 @@ func automodePatternRemove(t *testing.T, d *Daemon, list, pattern string) protoc
 	return result
 }
 
+func TestAutoModeEnvSlotFromTheAppAnswersWithTheStoredConfig(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	d.handleAutoModeEnvSlotWS(client, &protocol.AutoModeEnvSlotMessage{
+		Cmd:       protocol.CmdAutoModeEnvSlot,
+		Slot:      "registry",
+		Values:    []string{"registry.acme.corp"},
+		RequestID: protocol.Ptr("r1"),
+	})
+	var result protocol.AutoModeEnvSetResultMessage
+	nextBusMessage(t, client, &result)
+	if !result.Success || result.Config == nil {
+		t.Fatalf("env slot failed: %q", protocol.Deref(result.Error))
+	}
+	if got := envSlotValues(result.Config.Environment, "registry"); len(got) != 1 || got[0] != "registry.acme.corp" {
+		t.Fatalf("registry = %v", got)
+	}
+}
+
 func TestAutoModePatternEditFromTheAppRoundTrips(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 
@@ -488,5 +579,84 @@ func TestPatternEditingIsNotReachableOverTheUnixSocket(t *testing.T) {
 	}
 	if got := automodeShow(t, d); len(got.Config.Allow) != 0 {
 		t.Fatalf("allow = %v after a socket edit attempt", got.Config.Allow)
+	}
+}
+
+func automodeModelSet(t *testing.T, d *Daemon, models []string) protocol.AutoModeModelSetResultMessage {
+	t.Helper()
+	client := busTestClient()
+	d.handleAutoModeModelSet(client, &protocol.AutoModeModelSetMessage{
+		Cmd: protocol.CmdAutoModeModelSet, Models: models, RequestID: "r1",
+	})
+	var result protocol.AutoModeModelSetResultMessage
+	nextBusMessage(t, client, &result)
+	return result
+}
+
+func TestAutoModeModelSetFromTheAppRoundTrips(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+
+	set := automodeModelSet(t, d, []string{"opencode/claude-opus-4-6", "opencode-go/glm-5.3"})
+	if !set.Success || set.Config == nil {
+		t.Fatalf("set failed: %q", protocol.Deref(set.Error))
+	}
+	if len(set.Config.Models) != 2 || set.Config.Models[0] != "opencode/claude-opus-4-6" {
+		t.Fatalf("models after set = %v", set.Config.Models)
+	}
+	if got := automodeShow(t, d).Config.Models; len(got) != 2 || got[1] != "opencode-go/glm-5.3" {
+		t.Fatalf("show after a direct set: %v", got)
+	}
+
+	cleared := automodeModelSet(t, d, nil)
+	if !cleared.Success || len(cleared.Config.Models) != 0 {
+		t.Fatalf("clearing the list is how auto mode is turned off: %+v", cleared)
+	}
+
+	refused := automodeModelSet(t, d, []string{"noprovider"})
+	if refused.Success {
+		t.Fatal("a model with no provider was accepted")
+	}
+	if !strings.Contains(protocol.Deref(refused.Error), "provider/id") {
+		t.Fatalf("refusal did not name the shape it wanted: %q", protocol.Deref(refused.Error))
+	}
+}
+
+func TestAutoModeModelsSaysWhenPiIsNotConnected(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
+	client := busTestClient()
+	d.answerAutoModeModels(client, "r1")
+
+	var result protocol.AutoModeModelsResultMessage
+	nextBusMessage(t, client, &result)
+	if result.Success {
+		t.Fatal("the catalog answered with no pi plugin connected")
+	}
+	if got := protocol.Deref(result.Error); !strings.Contains(got, "attn-pi") || !strings.Contains(got, "not connected") {
+		t.Fatalf("error must name the plugin and what is wrong with it: %q", got)
+	}
+}
+
+func TestModelSettingIsNotReachableOverTheUnixSocket(t *testing.T) {
+	d := newDaemonForTest(t)
+	for _, payload := range []string{
+		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
+		`{"cmd":"automode_models","request_id":"r1"}`,
+	} {
+		client, server := net.Pipe()
+		go func() { d.handleConnection(server) }()
+		if _, err := client.Write([]byte(payload)); err != nil {
+			t.Fatalf("write %s: %v", payload, err)
+		}
+		var resp protocol.Response
+		if err := json.NewDecoder(client).Decode(&resp); err != nil {
+			t.Fatalf("decode response to %s: %v", payload, err)
+		}
+		client.Close()
+		if resp.Ok {
+			t.Fatalf("%s was answered over the unix socket", payload)
+		}
+		if got := protocol.Deref(resp.Error); !strings.Contains(got, "unknown command") {
+			t.Fatalf("%s was refused for the wrong reason: %q", payload, got)
+		}
 	}
 }

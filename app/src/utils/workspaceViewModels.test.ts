@@ -214,8 +214,8 @@ describe('workspaceViewModels', () => {
         },
       }],
       [
-        { id: 'a1', label: 'A1', workspaceId: 'workspace-a' },
         { id: 'a2', label: 'A2', workspaceId: 'workspace-a' },
+        { id: 'a1', label: 'A1', workspaceId: 'workspace-a' },
       ],
     );
 
@@ -224,6 +224,7 @@ describe('workspaceViewModels', () => {
       'tile:tile-browser',
       'session:a2',
     ]);
+    expect(workspace.firstSessionId).toBe('a1');
   });
 
   it('filters sessions that are no longer represented in an authoritative workspace layout', () => {

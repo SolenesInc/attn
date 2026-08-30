@@ -9,7 +9,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
-import { delay, MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -117,9 +117,10 @@ async function main() {
 
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const runner = createScenarioRunner(options, {
     scenarioId: 'GardenSeedTileNavigation',
+    allowRealAgents: false,
     tier: 'local',
     prefix: 'garden-seed-tile-navigation',
   });

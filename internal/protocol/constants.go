@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "277"
+const ProtocolVersion = "278"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -133,6 +133,8 @@ const (
 	CmdSeedList                              = "seed_list"
 	CmdSeedShow                              = "seed_show"
 	CmdSeedDocumentGet                       = "seed_document_get"
+	CmdSeedArtifactTransfer                  = "seed_artifact_transfer"
+	CmdSeedArtifactTarget                    = "seed_artifact_target"
 	CmdSeedEdit                              = "seed_edit"
 	CmdSeedSetResume                         = "seed_set_resume"
 	CmdSeedTransition                        = "seed_transition"
@@ -294,19 +296,26 @@ const (
 // First group is agent-reachable over the unix socket and records proposals
 // only; the second is the app's alone, because promotion needs a human.
 const (
-	CmdAutoModeShow      = "automode_show"
-	CmdAutoModeEnvAdd    = "automode_env_add"
-	CmdAutoModeEnvRemove = "automode_env_remove"
-	CmdAutoModePropose   = "automode_propose"
-	CmdAutoModeDenials   = "automode_denials"
+	CmdAutoModeShow     = "automode_show"
+	CmdAutoModeEnvSlot  = "automode_env_slot"
+	CmdAutoModeEnvNotes = "automode_env_notes"
+	CmdAutoModePropose  = "automode_propose"
+	CmdAutoModeDenials  = "automode_denials"
 
 	CmdAutoModeGet           = "automode_get"
 	CmdAutoModePromote       = "automode_promote"
 	CmdAutoModeDiscard       = "automode_discard"
 	CmdAutoModePatternAdd    = "automode_pattern_add"
 	CmdAutoModePatternRemove = "automode_pattern_remove"
+	CmdAutoModeModelSet      = "automode_model_set"
+	CmdAutoModeModels        = "automode_models"
 )
 
+const EventAutoModeEnvSetResult = "automode_env_set_result"
+
+const EventAutoModeStateChanged = "automode_state_changed"
+
+// Per-action automations result events (socket + WS share one command set;
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
 	EventAutomationValidateResult    = "automation_validate_result"
@@ -434,6 +443,8 @@ const (
 	EventOpenMarkdownResult              = "open_markdown_result"
 	EventOpenSeedResult                  = "open_seed_result"
 	EventSeedDocumentGetResult           = "seed_document_get_result"
+	EventSeedArtifactTransferResult      = "seed_artifact_transfer_result"
+	EventSeedArtifactTargetResult        = "seed_artifact_target_result"
 	EventSeedResumeResult                = "seed_resume_result"
 	EventSeedSendToChiefResult           = "seed_send_to_chief_result"
 	EventSeedReviewResult                = "seed_review_result"
@@ -449,6 +460,8 @@ const (
 	EventAutoModePromoteResult           = "automode_promote_result"
 	EventAutoModeDiscardResult           = "automode_discard_result"
 	EventAutoModePatternResult           = "automode_pattern_result"
+	EventAutoModeModelSetResult          = "automode_model_set_result"
+	EventAutoModeModelsResult            = "automode_models_result"
 	EventSessionAnnotationsGetResult     = "session_annotations_get_result"
 	EventSessionAnnotationsSaveResult    = "session_annotations_save_result"
 	EventSessionAnnotationsClearResult   = "session_annotations_clear_result"
@@ -831,15 +844,15 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeEnvAdd:
-		var msg AutoModeEnvAddMessage
+	case CmdAutoModeEnvSlot:
+		var msg AutoModeEnvSlotMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
 		return peek.Cmd, &msg, nil
 
-	case CmdAutoModeEnvRemove:
-		var msg AutoModeEnvRemoveMessage
+	case CmdAutoModeEnvNotes:
+		var msg AutoModeEnvNotesMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
@@ -1253,6 +1266,20 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdSeedDocumentGet:
 		var msg SeedDocumentGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedArtifactTransfer:
+		var msg SeedArtifactTransferMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedArtifactTarget:
+		var msg SeedArtifactTargetMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
@@ -1976,6 +2003,20 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		var msg AutoModePatternRemoveMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, fmt.Errorf("unmarshal automode_pattern_remove: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdAutoModeModelSet:
+		var msg AutoModeModelSetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal automode_model_set: %w", err)
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdAutoModeModels:
+		var msg AutoModeModelsMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, fmt.Errorf("unmarshal automode_models: %w", err)
 		}
 		return peek.Cmd, &msg, nil
 

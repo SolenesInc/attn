@@ -931,24 +931,32 @@ type AuthorsUpdatedMessage struct {
 	Event string `json:"event"`
 }
 
+type AutoModeCatalogModel struct {
+	// ContextWindow corresponds to the JSON schema field "context_window".
+	ContextWindow *int `json:"context_window,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+}
+
 type AutoModeConfigInfo struct {
 	// Allow corresponds to the JSON schema field "allow".
 	Allow []string `json:"allow"`
-
-	// ClassifierModels corresponds to the JSON schema field "classifier_models".
-	ClassifierModels []string `json:"classifier_models"`
 
 	// EnabledDefault corresponds to the JSON schema field "enabled_default".
 	EnabledDefault bool `json:"enabled_default"`
 
 	// Environment corresponds to the JSON schema field "environment".
-	Environment []string `json:"environment"`
-
-	// EscalationModels corresponds to the JSON schema field "escalation_models".
-	EscalationModels []string `json:"escalation_models"`
+	Environment AutoModeEnvironmentInfo `json:"environment"`
 
 	// HardDeny corresponds to the JSON schema field "hard_deny".
 	HardDeny []string `json:"hard_deny"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []string `json:"models"`
 
 	// ShippedHardDeny corresponds to the JSON schema field "shipped_hard_deny".
 	ShippedHardDeny []string `json:"shipped_hard_deny"`
@@ -1021,25 +1029,93 @@ type AutoModeDiscardResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type AutoModeEnvAddMessage struct {
+type AutoModeEnvNotesMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Text corresponds to the JSON schema field "text".
-	Text string `json:"text"`
-}
+	// Notes corresponds to the JSON schema field "notes".
+	Notes []string `json:"notes"`
 
-type AutoModeEnvRemoveMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Index corresponds to the JSON schema field "index".
-	Index int `json:"index"`
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type AutoModeEnvResult struct {
 	// Environment corresponds to the JSON schema field "environment".
-	Environment []string `json:"environment"`
+	Environment AutoModeEnvironmentInfo `json:"environment"`
+}
+
+type AutoModeEnvSetResultMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AutoModeEnvSlotMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Slot corresponds to the JSON schema field "slot".
+	Slot string `json:"slot"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []string `json:"values"`
+}
+
+type AutoModeEnvironmentInfo struct {
+	// Notes corresponds to the JSON schema field "notes".
+	Notes []string `json:"notes"`
+
+	// Slots corresponds to the JSON schema field "slots".
+	Slots []AutoModeEnvironmentSlotValue `json:"slots"`
+}
+
+type AutoModeEnvironmentSlot struct {
+	// Choices corresponds to the JSON schema field "choices".
+	Choices []string `json:"choices"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// Detected corresponds to the JSON schema field "detected".
+	Detected bool `json:"detected"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// ReadBy corresponds to the JSON schema field "read_by".
+	ReadBy []string `json:"read_by"`
+
+	// Unset corresponds to the JSON schema field "unset".
+	Unset string `json:"unset"`
+}
+
+type AutoModeEnvironmentSlotValue struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []string `json:"values"`
 }
 
 type AutoModeGetMessage struct {
@@ -1048,6 +1124,79 @@ type AutoModeGetMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelProvider struct {
+	// CheckedAt corresponds to the JSON schema field "checked_at".
+	CheckedAt *int `json:"checked_at,omitempty,omitzero"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []AutoModeCatalogModel `json:"models"`
+
+	// Provider corresponds to the JSON schema field "provider".
+	Provider string `json:"provider"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
+}
+
+type AutoModeModelSetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []string `json:"models"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelSetResultMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config *AutoModeConfigInfo `json:"config,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type AutoModeModelsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AutoModeModelsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Problem corresponds to the JSON schema field "problem".
+	Problem *string `json:"problem,omitempty,omitzero"`
+
+	// Providers corresponds to the JSON schema field "providers".
+	Providers []AutoModeModelProvider `json:"providers,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AutoModePatternAddMessage struct {
@@ -1187,12 +1336,32 @@ type AutoModeShowResult struct {
 	Proposals []AutoModeProposalInfo `json:"proposals"`
 }
 
+type AutoModeStateChangedMessage struct {
+	// Config corresponds to the JSON schema field "config".
+	Config AutoModeConfigInfo `json:"config"`
+
+	// Denials corresponds to the JSON schema field "denials".
+	Denials []AutoModeDenialInfo `json:"denials"`
+
+	// EnvironmentSlots corresponds to the JSON schema field "environment_slots".
+	EnvironmentSlots []AutoModeEnvironmentSlot `json:"environment_slots"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Proposals corresponds to the JSON schema field "proposals".
+	Proposals []AutoModeProposalInfo `json:"proposals"`
+}
+
 type AutoModeStateResultMessage struct {
 	// Config corresponds to the JSON schema field "config".
 	Config AutoModeConfigInfo `json:"config"`
 
 	// Denials corresponds to the JSON schema field "denials".
 	Denials []AutoModeDenialInfo `json:"denials"`
+
+	// EnvironmentSlots corresponds to the JSON schema field "environment_slots".
+	EnvironmentSlots []AutoModeEnvironmentSlot `json:"environment_slots"`
 
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
@@ -6359,6 +6528,10 @@ type Response struct {
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`
 
+	// SeedArtifactTransferResult corresponds to the JSON schema field
+	// "seed_artifact_transfer_result".
+	SeedArtifactTransferResult *SeedArtifactTransferResult `json:"seed_artifact_transfer_result,omitempty,omitzero"`
+
 	// SeedEditResult corresponds to the JSON schema field "seed_edit_result".
 	SeedEditResult *SeedEditResult `json:"seed_edit_result,omitempty,omitzero"`
 
@@ -6590,6 +6763,20 @@ type Seed struct {
 	Vars []SeedVar `json:"vars"`
 }
 
+type SeedArtifact struct {
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// ModifiedAt corresponds to the JSON schema field "modified_at".
+	ModifiedAt string `json:"modified_at"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget string `json:"relative_target"`
+
+	// Size corresponds to the JSON schema field "size".
+	Size int `json:"size"`
+}
+
 type SeedArtifactReference struct {
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
@@ -6605,6 +6792,126 @@ type SeedArtifactReference struct {
 
 	// URL corresponds to the JSON schema field "url".
 	URL *string `json:"url,omitempty,omitzero"`
+}
+
+type SeedArtifactTargetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Purpose corresponds to the JSON schema field "purpose".
+	Purpose string `json:"purpose"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget string `json:"relative_target"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type SeedArtifactTargetResult struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 *string `json:"data_base64,omitempty,omitzero"`
+
+	// MimeType corresponds to the JSON schema field "mime_type".
+	MimeType *string `json:"mime_type,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path *string `json:"path,omitempty,omitzero"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget string `json:"relative_target"`
+}
+
+type SeedArtifactTargetResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SeedArtifactTargetResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SeedArtifactTransferMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DestinationPath corresponds to the JSON schema field "destination_path".
+	DestinationPath *string `json:"destination_path,omitempty,omitzero"`
+
+	// Filename corresponds to the JSON schema field "filename".
+	Filename *string `json:"filename,omitempty,omitzero"`
+
+	// LegacyReference corresponds to the JSON schema field "legacy_reference".
+	LegacyReference *SeedArtifactReference `json:"legacy_reference,omitempty,omitzero"`
+
+	// Operation corresponds to the JSON schema field "operation".
+	Operation string `json:"operation"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourcePath corresponds to the JSON schema field "source_path".
+	SourcePath *string `json:"source_path,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedArtifactTransferResult struct {
+	// Artifact corresponds to the JSON schema field "artifact".
+	Artifact *SeedArtifact `json:"artifact,omitempty,omitzero"`
+
+	// DestinationPath corresponds to the JSON schema field "destination_path".
+	DestinationPath string `json:"destination_path"`
+
+	// Operation corresponds to the JSON schema field "operation".
+	Operation string `json:"operation"`
+
+	// OperationID corresponds to the JSON schema field "operation_id".
+	OperationID string `json:"operation_id"`
+
+	// Recovered corresponds to the JSON schema field "recovered".
+	Recovered bool `json:"recovered"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget string `json:"relative_target"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourcePath corresponds to the JSON schema field "source_path".
+	SourcePath string `json:"source_path"`
+}
+
+type SeedArtifactTransferResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SeedArtifactTransferResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SeedContinuation struct {
@@ -6660,7 +6967,7 @@ type SeedContinuation struct {
 
 type SeedDocument struct {
 	// Artifacts corresponds to the JSON schema field "artifacts".
-	Artifacts []SeedArtifactReference `json:"artifacts"`
+	Artifacts []SeedArtifact `json:"artifacts"`
 
 	// Children corresponds to the JSON schema field "children".
 	Children []Seed `json:"children"`
@@ -6670,6 +6977,9 @@ type SeedDocument struct {
 
 	// NotesTotal corresponds to the JSON schema field "notes_total".
 	NotesTotal int `json:"notes_total"`
+
+	// References corresponds to the JSON schema field "references".
+	References []SeedArtifactReference `json:"references"`
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
@@ -7313,7 +7623,7 @@ type SeedShowMessage struct {
 
 type SeedShowResult struct {
 	// Artifacts corresponds to the JSON schema field "artifacts".
-	Artifacts []SeedArtifactReference `json:"artifacts"`
+	Artifacts []SeedArtifact `json:"artifacts"`
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
@@ -7323,6 +7633,9 @@ type SeedShowResult struct {
 
 	// NotesTotal corresponds to the JSON schema field "notes_total".
 	NotesTotal int `json:"notes_total"`
+
+	// References corresponds to the JSON schema field "references".
+	References []SeedArtifactReference `json:"references"`
 
 	// Relations corresponds to the JSON schema field "relations".
 	Relations []SeedRelation `json:"relations"`

@@ -14,6 +14,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -184,15 +185,21 @@ func (d *Daemon) setJobQueue(runner *jobs.Runner) {
 }
 
 func (d *Daemon) startJobQueue() {
-	d.importLegacyTasks()
-	opts := jobs.Options{Log: d.logf}
+	var queueStore jobs.Store
 	if d.store != nil {
-		opts.Store = d.newSQLJobStore()
+		queueStore = d.newSQLJobStore()
 	}
-	// Register on a LOCAL pointer and publish once, so no concurrent reader ever
-	// observes a half-registered runner.
+	d.startJobQueueWithStore(queueStore)
+}
+
+func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
+	d.importLegacyTasks()
+	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
+		if err := d.registerSnoozeWakeHandler(runner); err != nil {
+			d.logf("snooze wake: register session_snooze_wake: %v", err)
+		}
 		if err := runner.RegisterWith(
 			compactContextKind,
 			d.compactContextHandler,
@@ -303,11 +310,12 @@ func (d *Daemon) startJobQueue() {
 		d.notifyTaskTerminalFailure(j)
 		go d.failGardenReviewJob(j)
 	})
-	d.setJobQueue(runner)
 	if err := runner.Start(); err != nil {
-		// A queue that failed to start still accepts Enqueue and dispatches nothing.
 		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
+		return
 	}
+	d.setJobQueue(runner)
+	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 }
 
@@ -327,6 +335,10 @@ func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.Workspace
 		return
 	}
 	if len([]byte(canonical.Content)) <= d.keeperCompactSizeThreshold() {
+		return
+	}
+	// Ahead of the queue lookup: a down queue compacts inline, which also spawns.
+	if d.headlessTaskRefused(compactContextKind) {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -474,6 +486,9 @@ func (d *Daemon) executeKeeperCompact(
 	config keeperCompactConfig,
 	canonical *protocol.WorkspaceContext,
 ) (keeperCompactExecution, error) {
+	if d.headlessTaskRefused(compactContextKind) {
+		return keeperCompactExecution{}, headless.Refusal(compactContextKind)
+	}
 	driver := agentdriver.Get(config.Agent)
 	if driver == nil {
 		return keeperCompactExecution{}, fmt.Errorf("keeper compact agent not found: %s", config.Agent)

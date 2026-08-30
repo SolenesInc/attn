@@ -4,21 +4,56 @@
 export type Denial = {
   action: string;
   reason: string;
+
+  judged?: boolean;
+
+  clearable?: boolean;
 };
 
 export function denialToolResult(denial: Denial): string {
-  return [
-    "attn auto mode blocked this tool call.",
-    "",
+  const lines = [
+    "Permission for this action was denied by the attn auto mode classifier.",
     `Blocked: ${oneLine(denial.action)}`,
     `Reason: ${oneLine(denial.reason)}`,
     "",
-    "Auto mode runs work inside this session's safety envelope and refuses",
-    "what reaches past it. Nothing about this session has stopped: say what",
-    "you wanted to do and why in your reply, and ask. The user's explicit",
-    "approval in the conversation lets you retry the same call. Do not work",
-    "around the block by another route.",
-  ].join("\n");
+  ];
+  if (denial.judged === false) {
+    lines.push(
+      "No classifier answered, so nothing judged this call and nothing refused " +
+        "the action. Auto mode blocks what it cannot ask about. This is an " +
+        "outage, not a verdict.",
+      "",
+    );
+  }
+  lines.push(
+    "If you have other tasks that don't depend on this action, continue working " +
+      "on those. IMPORTANT: You *may* attempt to accomplish this action using " +
+      "other tools that might naturally be used to accomplish this goal, e.g. " +
+      "using head instead of cat. But you *should not* attempt to work around " +
+      "this denial in malicious ways, e.g. do not use your ability to run tests " +
+      "to execute non-test actions. You should only try to work around this " +
+      "restriction in reasonable ways that do not attempt to bypass the intent " +
+      "behind this denial. If you believe this capability is essential to " +
+      "complete the user's request, STOP and explain to the user what you were " +
+      "trying to do and why you need this permission. Let the user decide how to " +
+      "proceed.",
+  );
+  if (denial.clearable === false) {
+    lines.push(
+      "",
+      "Do not ask the user to approve this one. Their approval won't have any " +
+        "effect on this rejection, and neither will retrying. To allow this type " +
+        "of action in the future, the user changes auto mode's own setup: an " +
+        "allow pattern, or the rule that refused it.",
+    );
+  } else {
+    lines.push(
+      "",
+      "To allow this type of action in the future, the user can add an allow " +
+        "pattern in auto mode's settings.",
+    );
+  }
+  return lines.join("\n");
 }
 
 function oneLine(text: string): string {

@@ -5,8 +5,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Prototype: docs/plans/2026-08-20-garden-kanban-board-prototype.md.
-
 func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTransitionMessage) {
 	result := protocol.SeedTransitionResultMessage{
 		Event:     protocol.EventSeedTransitionResult,

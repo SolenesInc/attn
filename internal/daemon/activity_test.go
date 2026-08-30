@@ -20,6 +20,17 @@ import (
 
 func installActivityRunner(t *testing.T, d *Daemon) {
 	t.Helper()
+	runner := installQuietActivityRunner(t, d)
+	if err := runner.Start(); err != nil {
+		t.Fatalf("start runner: %v", err)
+	}
+	t.Cleanup(runner.Stop)
+}
+
+// Registered but not started: a caller that runs the queued job itself must be
+// the only thing running it.
+func installQuietActivityRunner(t *testing.T, d *Daemon) *jobs.Runner {
+	t.Helper()
 	d.store.SetSetting(SettingActivityEnabled, "true")
 	d.store.SetSetting(SettingActivityConfig, `{"agent":"claude","model":"claude-haiku-4-5"}`)
 	d.store.SetSetting(canonicalExecutableSettingKey("claude"), writeFakeAgentExecutable(t))
@@ -33,11 +44,8 @@ func installActivityRunner(t *testing.T, d *Daemon) {
 		jobs.HandlerConfig{Timeout: sessionActivityTimeout}); err != nil {
 		t.Fatalf("register session_activity: %v", err)
 	}
-	if err := runner.Start(); err != nil {
-		t.Fatalf("start runner: %v", err)
-	}
-	t.Cleanup(runner.Stop)
 	d.jobQueue = runner
+	return runner
 }
 
 func watchingClient(d *Daemon) {
@@ -412,7 +420,7 @@ func TestActivityTranscriptPathIsRememberedUntilItMoves(t *testing.T) {
 
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 	if got := d.sessionActivityTranscript(session); got != transcriptPath {
-		t.Errorf("resolved %q after the finder went blind, want the remembered %q", got, transcriptPath)
+		t.Errorf("resolved %q after the tool home moved, want the remembered %q", got, transcriptPath)
 	}
 
 	d.store.SetResumeSessionID("session-1", "resume-2")
@@ -467,7 +475,7 @@ func TestActivityExecutorWritesNothingAfterTheConversationChanges(t *testing.T) 
 	appendActivityTranscript(t, transcriptPath, "second")
 
 	d.sessionActivityExecution = func(context.Context, agentdriver.HeadlessTaskProvider, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		changed, err := d.store.TransitionSessionConversation("session-1", "conversation-new")
+		changed, err := d.store.TransitionSessionConversation("session-1", "conversation-new", "/transcripts/conversation-new.jsonl")
 		if err != nil || !changed {
 			t.Fatalf("transition during activity generation: changed=%v err=%v", changed, err)
 		}
@@ -595,7 +603,9 @@ func discoverableTranscript(t *testing.T, d *Daemon, sessionID, nativeID string,
 	}
 	path := filepath.Join(dir, nativeID+".jsonl")
 	appendActivityTranscript(t, path, texts...)
-	d.store.SetResumeSessionID(sessionID, nativeID)
+	if changed, err := d.store.TransitionSessionConversation(sessionID, nativeID, path); err != nil || !changed {
+		t.Fatalf("bind transcript: changed=%v err=%v", changed, err)
+	}
 	return path
 }
 

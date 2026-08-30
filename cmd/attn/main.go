@@ -746,22 +746,23 @@ task source:
   --brief <text>              delegate a short task; it becomes the seed's body
   --brief-file <path>         delegate a task file; it becomes the seed's body
 
-placement:
-  (no flags)                 add a pane to the source workspace; Git repositories
-                             get a new worktree automatically, and a
-                             non-repository source is refused — place it with a
-                             flag below or pass --no-worktree
-  --new-workspace            create a workspace using the source directory
-  --workspace <id>           add a pane to an existing workspace
-  --cwd <path>               create a workspace at an existing directory
-  --worktree <branch>        choose the new worktree's branch
-  --no-worktree              reuse the resolved checkout instead
+workspace placement (where the pane appears):
+  (no flags)                 add a pane to the source workspace
+  --new-workspace            create a workspace for the delegated pane
+  --workspace <id>           add a pane to an existing workspace; this does not
+                             choose that workspace's repository
+  --cwd <path>               create a workspace and use this checkout/repository
 
-worktree options:
-  combine with any placement (current, --workspace, or --new-workspace);
-  combining with --cwd creates a worktree of the repo at that directory
-  --repo <path>              main repository (defaults to the repository the
-                             target workspace's sessions are in)
+repository placement (where the agent runs):
+  (no flags)                 create a worktree of the source checkout's
+                             repository (with --workspace: the repository that
+                             workspace's sessions are in); a non-repository
+                             source is refused, pass --cwd or --no-worktree
+  --no-worktree              reuse the source checkout; with --workspace, only
+                             the pane moves to the target workspace
+  --worktree <branch>        choose the new worktree's branch
+  --repo <path>              main repository; required when the target
+                             workspace's sessions span several
   --from <ref>               branch or ref to start from
   --worktree-path <path>     override the generated sibling path
 
@@ -2540,8 +2541,7 @@ func openAppWithDeepLink() {
 		url.QueryEscape(cwd),
 		url.QueryEscape(label))
 
-	cmd := exec.Command("open", deepLink)
-	if err := cmd.Run(); err != nil {
+	if err := launchDeepLink(deepLink); err != nil {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
 		os.Exit(1)
 	}
@@ -2604,9 +2604,7 @@ func runHookSessionStart() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
-
-	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, 40, 25*time.Millisecond)
+	output, contextErr, primeErr := sessionStartHookOutput(c, sessionID, input, 40, 25*time.Millisecond)
 	if contextErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not load workspace context guidance: %v\n", contextErr)
 	}
@@ -2614,9 +2612,26 @@ func runHookSessionStart() {
 		fmt.Fprintf(os.Stderr, "warning: could not load garden status: %v\n", primeErr)
 	}
 
-	if output := hooks.SessionStartOutput(contexts...); output != "" {
+	if output != "" {
 		fmt.Fprintln(os.Stdout, output)
 	}
+}
+
+type sessionStartHookClient interface {
+	agentConversationObserver
+	sessionStartClient
+}
+
+func sessionStartHookOutput(
+	c sessionStartHookClient,
+	sessionID string,
+	input hookInput,
+	attempts int,
+	retryDelay time.Duration,
+) (output string, contextErr, primeErr error) {
+	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
+	contexts, contextErr, primeErr := sessionStartContexts(c, sessionID, attempts, retryDelay)
+	return hooks.SessionStartOutput(contexts...), contextErr, primeErr
 }
 
 type sessionStartClient interface {
@@ -2700,6 +2715,7 @@ func runHookState() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	observePromptConversation(c, sessionID, hookEvent, input)
 	if err := c.UpdateStateFromHookEvidence(sessionID, state, input.PermissionMode, hookEvent, input.Prompt); err != nil {
 		fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
 		os.Exit(1)
@@ -2917,9 +2933,21 @@ func hookStateValue(value string) bool {
 	}
 }
 
-func observeAgentConversation(c *client.Client, attnSessionID, agentSessionID, transcriptPath string) {
+type agentConversationObserver interface {
+	ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath string) error
+}
+
+func observePromptConversation(c agentConversationObserver, attnSessionID, hookEvent string, input hookInput) {
+	if !strings.EqualFold(strings.TrimSpace(hookEvent), "user_prompt_submit") {
+		return
+	}
+	observeAgentConversation(c, attnSessionID, input.SessionID, input.TranscriptPath)
+}
+
+func observeAgentConversation(c agentConversationObserver, attnSessionID, agentSessionID, transcriptPath string) {
 	agentSessionID = strings.TrimSpace(agentSessionID)
-	if agentSessionID == "" {
+	transcriptPath = strings.TrimSpace(transcriptPath)
+	if agentSessionID == "" || transcriptPath == "" {
 		return
 	}
 	if err := c.ObserveAgentConversation(attnSessionID, agentSessionID, transcriptPath); err != nil {

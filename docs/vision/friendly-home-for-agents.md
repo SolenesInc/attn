@@ -124,8 +124,7 @@ for user-defined crew members.
   once the garden is usable — no two-system era; a planning crew member
   tends it;
   `/orchestrate-with-fable` and ad-hoc
-  plan-file choreography retire into it. Vertical-slice plan:
-  [docs/plans/2026-08-06-the-garden-vertical-slices.md](../plans/2026-08-06-the-garden-vertical-slices.md).
+  plan-file choreography retire into it.
 - [ ] **Agents converse and observe** — a crew member messages another agent
   and gets a reply, and inspects what another is doing without interrupting
   it. Conversation grows from ticket comments — proven, but indirect and

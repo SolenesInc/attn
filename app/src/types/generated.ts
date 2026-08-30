@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentAttachMessage, AgentClearQueueMessage, AgentEventMessage, AgentHistoryMessage, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPromptMessage, AgentSetModelMessage, AgentToolDetailMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvAddMessage, AutoModeEnvRemoveMessage, AutoModeEnvResult, AutoModeGetMessage, AutoModePatternAddMessage, AutoModePatternRemoveMessage, AutoModePatternResultMessage, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeShowMessage, AutoModeShowResult, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewDayClose, CrewHandoffMessage, CrewHandoffResult, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPastConversationsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PastConversation, PastConversationsResultMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifactReference, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedSetResumeMessage, SeedSetResumeResult, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionContextWindowCapResultMessage, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionRegisteredMessage, SessionSelectedMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopMessage, StoredDocument, SubscribeGitStatusMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceContext, WorkspaceContextChangedMessage, WorkspaceContextCheckoutMessage, WorkspaceContextCompactMessage, WorkspaceContextListMessage, WorkspaceContextListResultMessage, WorkspaceContextMaintenanceAction, WorkspaceContextMaintenanceResult, WorkspaceContextResult, WorkspaceContextResultMessage, WorkspaceContextRollbackMessage, WorkspaceContextStatusMessage, WorkspaceContextUpdateMessage, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentAttachMessage, AgentClearQueueMessage, AgentEventMessage, AgentHistoryMessage, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPromptMessage, AgentSetModelMessage, AgentToolDetailMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeCatalogModel, AutoModeConfigInfo, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeModelProvider, AutoModeModelSetMessage, AutoModeModelSetResultMessage, AutoModeModelsMessage, AutoModeModelsResultMessage, AutoModePatternAddMessage, AutoModePatternRemoveMessage, AutoModePatternResultMessage, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewDayClose, CrewHandoffMessage, CrewHandoffResult, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewSetMessage, CrewSetResult, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPastConversationsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PastConversation, PastConversationsResultMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedSetResumeMessage, SeedSetResumeResult, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionContextWindowCapResultMessage, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionRegisteredMessage, SessionSelectedMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopMessage, StoredDocument, SubscribeGitStatusMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceContext, WorkspaceContextChangedMessage, WorkspaceContextCheckoutMessage, WorkspaceContextCompactMessage, WorkspaceContextListMessage, WorkspaceContextListResultMessage, WorkspaceContextMaintenanceAction, WorkspaceContextMaintenanceResult, WorkspaceContextResult, WorkspaceContextResultMessage, WorkspaceContextRollbackMessage, WorkspaceContextStatusMessage, WorkspaceContextUpdateMessage, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -63,16 +63,26 @@
 //   const attachSnapshot = Convert.toAttachSnapshot(json);
 //   const authorState = Convert.toAuthorState(json);
 //   const authorsUpdatedMessage = Convert.toAuthorsUpdatedMessage(json);
+//   const autoModeCatalogModel = Convert.toAutoModeCatalogModel(json);
 //   const autoModeConfigInfo = Convert.toAutoModeConfigInfo(json);
 //   const autoModeDenialInfo = Convert.toAutoModeDenialInfo(json);
 //   const autoModeDenialsMessage = Convert.toAutoModeDenialsMessage(json);
 //   const autoModeDenialsResult = Convert.toAutoModeDenialsResult(json);
 //   const autoModeDiscardMessage = Convert.toAutoModeDiscardMessage(json);
 //   const autoModeDiscardResultMessage = Convert.toAutoModeDiscardResultMessage(json);
-//   const autoModeEnvAddMessage = Convert.toAutoModeEnvAddMessage(json);
-//   const autoModeEnvRemoveMessage = Convert.toAutoModeEnvRemoveMessage(json);
+//   const autoModeEnvNotesMessage = Convert.toAutoModeEnvNotesMessage(json);
 //   const autoModeEnvResult = Convert.toAutoModeEnvResult(json);
+//   const autoModeEnvSetResultMessage = Convert.toAutoModeEnvSetResultMessage(json);
+//   const autoModeEnvSlotMessage = Convert.toAutoModeEnvSlotMessage(json);
+//   const autoModeEnvironmentInfo = Convert.toAutoModeEnvironmentInfo(json);
+//   const autoModeEnvironmentSlot = Convert.toAutoModeEnvironmentSlot(json);
+//   const autoModeEnvironmentSlotValue = Convert.toAutoModeEnvironmentSlotValue(json);
 //   const autoModeGetMessage = Convert.toAutoModeGetMessage(json);
+//   const autoModeModelProvider = Convert.toAutoModeModelProvider(json);
+//   const autoModeModelSetMessage = Convert.toAutoModeModelSetMessage(json);
+//   const autoModeModelSetResultMessage = Convert.toAutoModeModelSetResultMessage(json);
+//   const autoModeModelsMessage = Convert.toAutoModeModelsMessage(json);
+//   const autoModeModelsResultMessage = Convert.toAutoModeModelsResultMessage(json);
 //   const autoModePatternAddMessage = Convert.toAutoModePatternAddMessage(json);
 //   const autoModePatternRemoveMessage = Convert.toAutoModePatternRemoveMessage(json);
 //   const autoModePatternResultMessage = Convert.toAutoModePatternResultMessage(json);
@@ -83,6 +93,7 @@
 //   const autoModeProposeResult = Convert.toAutoModeProposeResult(json);
 //   const autoModeShowMessage = Convert.toAutoModeShowMessage(json);
 //   const autoModeShowResult = Convert.toAutoModeShowResult(json);
+//   const autoModeStateChangedMessage = Convert.toAutoModeStateChangedMessage(json);
 //   const autoModeStateResultMessage = Convert.toAutoModeStateResultMessage(json);
 //   const automationApplyMessage = Convert.toAutomationApplyMessage(json);
 //   const automationApplyResultMessage = Convert.toAutomationApplyResultMessage(json);
@@ -401,7 +412,14 @@
 //   const reviewComment = Convert.toReviewComment(json);
 //   const runtimeRespawnedMessage = Convert.toRuntimeRespawnedMessage(json);
 //   const seed = Convert.toSeed(json);
+//   const seedArtifact = Convert.toSeedArtifact(json);
 //   const seedArtifactReference = Convert.toSeedArtifactReference(json);
+//   const seedArtifactTargetMessage = Convert.toSeedArtifactTargetMessage(json);
+//   const seedArtifactTargetResult = Convert.toSeedArtifactTargetResult(json);
+//   const seedArtifactTargetResultMessage = Convert.toSeedArtifactTargetResultMessage(json);
+//   const seedArtifactTransferMessage = Convert.toSeedArtifactTransferMessage(json);
+//   const seedArtifactTransferResult = Convert.toSeedArtifactTransferResult(json);
+//   const seedArtifactTransferResultMessage = Convert.toSeedArtifactTransferResultMessage(json);
 //   const seedContinuation = Convert.toSeedContinuation(json);
 //   const seedDocument = Convert.toSeedDocument(json);
 //   const seedDocumentGetMessage = Convert.toSeedDocumentGetMessage(json);
@@ -1431,14 +1449,32 @@ export enum AuthorsUpdatedMessageEvent {
     AuthorsUpdated = "authors_updated",
 }
 
+export interface AutoModeCatalogModel {
+    context_window?: number;
+    id:              string;
+    name?:           string;
+    [property: string]: any;
+}
+
 export interface AutoModeConfigInfo {
     allow:             string[];
-    classifier_models: string[];
     enabled_default:   boolean;
-    environment:       string[];
-    escalation_models: string[];
+    environment:       Environment;
     hard_deny:         string[];
+    models:            string[];
     shipped_hard_deny: string[];
+    [property: string]: any;
+}
+
+export interface Environment {
+    notes: string[];
+    slots: SlotElement[];
+    [property: string]: any;
+}
+
+export interface SlotElement {
+    id:     string;
+    values: string[];
     [property: string]: any;
 }
 
@@ -1516,28 +1552,78 @@ export interface Proposal {
     [property: string]: any;
 }
 
-export interface AutoModeEnvAddMessage {
-    cmd:  AutoModeEnvAddMessageCmd;
-    text: string;
+export interface AutoModeEnvNotesMessage {
+    cmd:         AutoModeEnvNotesMessageCmd;
+    notes:       string[];
+    request_id?: string;
     [property: string]: any;
 }
 
-export enum AutoModeEnvAddMessageCmd {
-    AutomodeEnvAdd = "automode_env_add",
-}
-
-export interface AutoModeEnvRemoveMessage {
-    cmd:   AutoModeEnvRemoveMessageCmd;
-    index: number;
-    [property: string]: any;
-}
-
-export enum AutoModeEnvRemoveMessageCmd {
-    AutomodeEnvRemove = "automode_env_remove",
+export enum AutoModeEnvNotesMessageCmd {
+    AutomodeEnvNotes = "automode_env_notes",
 }
 
 export interface AutoModeEnvResult {
-    environment: string[];
+    environment: Environment;
+    [property: string]: any;
+}
+
+export interface AutoModeEnvSetResultMessage {
+    config?:    Config;
+    error?:     string;
+    event:      AutoModeEnvSetResultMessageEvent;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export interface Config {
+    allow:             string[];
+    enabled_default:   boolean;
+    environment:       Environment;
+    hard_deny:         string[];
+    models:            string[];
+    shipped_hard_deny: string[];
+    [property: string]: any;
+}
+
+export enum AutoModeEnvSetResultMessageEvent {
+    AutomodeEnvSetResult = "automode_env_set_result",
+}
+
+export interface AutoModeEnvSlotMessage {
+    cmd:         AutoModeEnvSlotMessageCmd;
+    request_id?: string;
+    slot:        string;
+    values:      string[];
+    [property: string]: any;
+}
+
+export enum AutoModeEnvSlotMessageCmd {
+    AutomodeEnvSlot = "automode_env_slot",
+}
+
+export interface AutoModeEnvironmentInfo {
+    notes: string[];
+    slots: SlotElement[];
+    [property: string]: any;
+}
+
+export interface AutoModeEnvironmentSlot {
+    choices:  string[];
+    detail:   string;
+    detected: boolean;
+    id:       string;
+    kind:     string;
+    label:    string;
+    read_by:  string[];
+    unset:    string;
+    [property: string]: any;
+}
+
+export interface AutoModeEnvironmentSlotValue {
+    id:     string;
+    values: string[];
     [property: string]: any;
 }
 
@@ -1549,6 +1635,79 @@ export interface AutoModeGetMessage {
 
 export enum AutoModeGetMessageCmd {
     AutomodeGet = "automode_get",
+}
+
+export interface AutoModeModelProvider {
+    checked_at?: number;
+    detail?:     string;
+    models:      ModelElement[];
+    provider:    string;
+    ready:       boolean;
+    [property: string]: any;
+}
+
+export interface ModelElement {
+    context_window?: number;
+    id:              string;
+    name?:           string;
+    [property: string]: any;
+}
+
+export interface AutoModeModelSetMessage {
+    cmd:        AutoModeModelSetMessageCmd;
+    models:     string[];
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum AutoModeModelSetMessageCmd {
+    AutomodeModelSet = "automode_model_set",
+}
+
+export interface AutoModeModelSetResultMessage {
+    config?:    Config;
+    error?:     string;
+    event:      AutoModeModelSetResultMessageEvent;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum AutoModeModelSetResultMessageEvent {
+    AutomodeModelSetResult = "automode_model_set_result",
+}
+
+export interface AutoModeModelsMessage {
+    cmd:        AutoModeModelsMessageCmd;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum AutoModeModelsMessageCmd {
+    AutomodeModels = "automode_models",
+}
+
+export interface AutoModeModelsResultMessage {
+    error?:     string;
+    event:      AutoModeModelsResultMessageEvent;
+    problem?:   string;
+    providers?: ProviderElement[];
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum AutoModeModelsResultMessageEvent {
+    AutomodeModelsResult = "automode_models_result",
+}
+
+export interface ProviderElement {
+    checked_at?: number;
+    detail?:     string;
+    models:      ModelElement[];
+    provider:    string;
+    ready:       boolean;
+    [property: string]: any;
 }
 
 export interface AutoModePatternAddMessage {
@@ -1581,17 +1740,6 @@ export interface AutoModePatternResultMessage {
     event:      AutoModePatternResultMessageEvent;
     request_id: string;
     success:    boolean;
-    [property: string]: any;
-}
-
-export interface Config {
-    allow:             string[];
-    classifier_models: string[];
-    enabled_default:   boolean;
-    environment:       string[];
-    escalation_models: string[];
-    hard_deny:         string[];
-    shipped_hard_deny: string[];
     [property: string]: any;
 }
 
@@ -1669,14 +1817,40 @@ export interface AutoModeShowResult {
     [property: string]: any;
 }
 
+export interface AutoModeStateChangedMessage {
+    config:            Config;
+    denials:           DenialElement[];
+    environment_slots: EnvironmentSlotElement[];
+    event:             AutoModeStateChangedMessageEvent;
+    proposals:         Proposal[];
+    [property: string]: any;
+}
+
+export interface EnvironmentSlotElement {
+    choices:  string[];
+    detail:   string;
+    detected: boolean;
+    id:       string;
+    kind:     string;
+    label:    string;
+    read_by:  string[];
+    unset:    string;
+    [property: string]: any;
+}
+
+export enum AutoModeStateChangedMessageEvent {
+    AutomodeStateChanged = "automode_state_changed",
+}
+
 export interface AutoModeStateResultMessage {
-    config:     Config;
-    denials:    DenialElement[];
-    error?:     string;
-    event:      AutoModeStateResultMessageEvent;
-    proposals:  Proposal[];
-    request_id: string;
-    success:    boolean;
+    config:            Config;
+    denials:           DenialElement[];
+    environment_slots: EnvironmentSlotElement[];
+    error?:            string;
+    event:             AutoModeStateResultMessageEvent;
+    proposals:         Proposal[];
+    request_id:        string;
+    success:           boolean;
     [property: string]: any;
 }
 
@@ -6166,6 +6340,7 @@ export interface Response {
     present_open_result?:                  PresentOpenResultObject;
     prs?:                                  PRElement[];
     repos?:                                RepoElement[];
+    seed_artifact_transfer_result?:        SeedArtifactTransferResultObject;
     seed_edit_result?:                     SeedEditResultObject;
     seed_link_result?:                     SeedLinkResultObject;
     seed_list_result?:                     SeedListResultObject;
@@ -6325,7 +6500,7 @@ export interface AutomodeDenialsResult {
 }
 
 export interface AutomodeEnvResult {
-    environment: string[];
+    environment: Environment;
     [property: string]: any;
 }
 
@@ -6491,6 +6666,26 @@ export interface PresentOpenResultObject {
     [property: string]: any;
 }
 
+export interface SeedArtifactTransferResultObject {
+    artifact?:        SeedArtifactTransferResultArtifact;
+    destination_path: string;
+    operation:        string;
+    operation_id:     string;
+    recovered:        boolean;
+    relative_target:  string;
+    seed_id:          string;
+    source_path:      string;
+    [property: string]: any;
+}
+
+export interface SeedArtifactTransferResultArtifact {
+    filename:        string;
+    modified_at:     string;
+    relative_target: string;
+    size:            number;
+    [property: string]: any;
+}
+
 export interface SeedEditResultObject {
     seed: SeedElement;
     [property: string]: any;
@@ -6515,7 +6710,7 @@ export interface SeedNoteResultObject {
 }
 
 export interface Note {
-    artifact?:      Artifact;
+    artifact?:      LegacyReferenceElement;
     author_member:  string;
     author_session: string;
     body:           string;
@@ -6526,7 +6721,7 @@ export interface Note {
     [property: string]: any;
 }
 
-export interface Artifact {
+export interface LegacyReferenceElement {
     kind:                  string;
     notebook_document_id?: string;
     path?:                 string;
@@ -6582,10 +6777,11 @@ export interface SeedSetResumeResultObject {
 }
 
 export interface SeedShowResultObject {
-    artifacts:   Artifact[];
+    artifacts:   SeedArtifactTransferResultArtifact[];
     handoff?:    Note;
     notes:       Note[];
     notes_total: number;
+    references:  LegacyReferenceElement[];
     relations:   RelationElement[];
     seed:        SeedElement;
     watching:    boolean;
@@ -6919,6 +7115,14 @@ export interface Seed {
     [property: string]: any;
 }
 
+export interface SeedArtifact {
+    filename:        string;
+    modified_at:     string;
+    relative_target: string;
+    size:            number;
+    [property: string]: any;
+}
+
 export interface SeedArtifactReference {
     kind:                  string;
     notebook_document_id?: string;
@@ -6926,6 +7130,90 @@ export interface SeedArtifactReference {
     repository?:           string;
     url?:                  string;
     [property: string]: any;
+}
+
+export interface SeedArtifactTargetMessage {
+    cmd:             SeedArtifactTargetMessageCmd;
+    purpose:         string;
+    relative_target: string;
+    request_id:      string;
+    seed_id:         string;
+    [property: string]: any;
+}
+
+export enum SeedArtifactTargetMessageCmd {
+    SeedArtifactTarget = "seed_artifact_target",
+}
+
+export interface SeedArtifactTargetResult {
+    data_base64?:    string;
+    mime_type?:      string;
+    path?:           string;
+    relative_target: string;
+    [property: string]: any;
+}
+
+export interface SeedArtifactTargetResultMessage {
+    error?:     string;
+    event:      SeedArtifactTargetResultMessageEvent;
+    request_id: string;
+    result?:    SeedArtifactTargetResultMessageResult;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum SeedArtifactTargetResultMessageEvent {
+    SeedArtifactTargetResult = "seed_artifact_target_result",
+}
+
+export interface SeedArtifactTargetResultMessageResult {
+    data_base64?:    string;
+    mime_type?:      string;
+    path?:           string;
+    relative_target: string;
+    [property: string]: any;
+}
+
+export interface SeedArtifactTransferMessage {
+    cmd:                SeedArtifactTransferMessageCmd;
+    destination_path?:  string;
+    filename?:          string;
+    legacy_reference?:  LegacyReferenceElement;
+    operation:          string;
+    request_id?:        string;
+    seed_id:            string;
+    source_path?:       string;
+    source_session_id?: string;
+    [property: string]: any;
+}
+
+export enum SeedArtifactTransferMessageCmd {
+    SeedArtifactTransfer = "seed_artifact_transfer",
+}
+
+export interface SeedArtifactTransferResult {
+    artifact?:        SeedArtifactTransferResultArtifact;
+    destination_path: string;
+    operation:        string;
+    operation_id:     string;
+    recovered:        boolean;
+    relative_target:  string;
+    seed_id:          string;
+    source_path:      string;
+    [property: string]: any;
+}
+
+export interface SeedArtifactTransferResultMessage {
+    error?:     string;
+    event:      SeedArtifactTransferResultMessageEvent;
+    request_id: string;
+    result?:    SeedArtifactTransferResultObject;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum SeedArtifactTransferResultMessageEvent {
+    SeedArtifactTransferResult = "seed_artifact_transfer_result",
 }
 
 export interface SeedContinuation {
@@ -6949,10 +7237,11 @@ export interface SeedContinuation {
 }
 
 export interface SeedDocument {
-    artifacts:    Artifact[];
+    artifacts:    SeedArtifactTransferResultArtifact[];
     children:     SeedElement[];
     notes:        Note[];
     notes_total:  number;
+    references:   LegacyReferenceElement[];
     seed:         SeedElement;
     tender_holds: boolean;
     [property: string]: any;
@@ -6979,10 +7268,11 @@ export interface SeedDocumentGetResultMessage {
 }
 
 export interface SeedDocumentGetResultMessageDocument {
-    artifacts:    Artifact[];
+    artifacts:    SeedArtifactTransferResultArtifact[];
     children:     SeedElement[];
     notes:        Note[];
     notes_total:  number;
+    references:   LegacyReferenceElement[];
     seed:         SeedElement;
     tender_holds: boolean;
     [property: string]: any;
@@ -7063,7 +7353,7 @@ export interface SeedListResult {
 }
 
 export interface SeedNote {
-    artifact?:      Artifact;
+    artifact?:      LegacyReferenceElement;
     author_member:  string;
     author_session: string;
     body:           string;
@@ -7075,7 +7365,7 @@ export interface SeedNote {
 }
 
 export interface SeedNoteMessage {
-    artifact?:          Artifact;
+    artifact?:          LegacyReferenceElement;
     body:               string;
     cmd:                SeedNoteMessageCmd;
     kind?:              string;
@@ -7429,10 +7719,11 @@ export enum SeedShowMessageCmd {
 }
 
 export interface SeedShowResult {
-    artifacts:   Artifact[];
+    artifacts:   SeedArtifactTransferResultArtifact[];
     handoff?:    Note;
     notes:       Note[];
     notes_total: number;
+    references:  LegacyReferenceElement[];
     relations:   RelationElement[];
     seed:        SeedElement;
     watching:    boolean;
@@ -9816,6 +10107,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AuthorsUpdatedMessage")), null, 2);
     }
 
+    public static toAutoModeCatalogModel(json: string): AutoModeCatalogModel {
+        return cast(JSON.parse(json), r("AutoModeCatalogModel"));
+    }
+
+    public static autoModeCatalogModelToJson(value: AutoModeCatalogModel): string {
+        return JSON.stringify(uncast(value, r("AutoModeCatalogModel")), null, 2);
+    }
+
     public static toAutoModeConfigInfo(json: string): AutoModeConfigInfo {
         return cast(JSON.parse(json), r("AutoModeConfigInfo"));
     }
@@ -9864,20 +10163,12 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AutoModeDiscardResultMessage")), null, 2);
     }
 
-    public static toAutoModeEnvAddMessage(json: string): AutoModeEnvAddMessage {
-        return cast(JSON.parse(json), r("AutoModeEnvAddMessage"));
+    public static toAutoModeEnvNotesMessage(json: string): AutoModeEnvNotesMessage {
+        return cast(JSON.parse(json), r("AutoModeEnvNotesMessage"));
     }
 
-    public static autoModeEnvAddMessageToJson(value: AutoModeEnvAddMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeEnvAddMessage")), null, 2);
-    }
-
-    public static toAutoModeEnvRemoveMessage(json: string): AutoModeEnvRemoveMessage {
-        return cast(JSON.parse(json), r("AutoModeEnvRemoveMessage"));
-    }
-
-    public static autoModeEnvRemoveMessageToJson(value: AutoModeEnvRemoveMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeEnvRemoveMessage")), null, 2);
+    public static autoModeEnvNotesMessageToJson(value: AutoModeEnvNotesMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvNotesMessage")), null, 2);
     }
 
     public static toAutoModeEnvResult(json: string): AutoModeEnvResult {
@@ -9888,12 +10179,92 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AutoModeEnvResult")), null, 2);
     }
 
+    public static toAutoModeEnvSetResultMessage(json: string): AutoModeEnvSetResultMessage {
+        return cast(JSON.parse(json), r("AutoModeEnvSetResultMessage"));
+    }
+
+    public static autoModeEnvSetResultMessageToJson(value: AutoModeEnvSetResultMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvSetResultMessage")), null, 2);
+    }
+
+    public static toAutoModeEnvSlotMessage(json: string): AutoModeEnvSlotMessage {
+        return cast(JSON.parse(json), r("AutoModeEnvSlotMessage"));
+    }
+
+    public static autoModeEnvSlotMessageToJson(value: AutoModeEnvSlotMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvSlotMessage")), null, 2);
+    }
+
+    public static toAutoModeEnvironmentInfo(json: string): AutoModeEnvironmentInfo {
+        return cast(JSON.parse(json), r("AutoModeEnvironmentInfo"));
+    }
+
+    public static autoModeEnvironmentInfoToJson(value: AutoModeEnvironmentInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvironmentInfo")), null, 2);
+    }
+
+    public static toAutoModeEnvironmentSlot(json: string): AutoModeEnvironmentSlot {
+        return cast(JSON.parse(json), r("AutoModeEnvironmentSlot"));
+    }
+
+    public static autoModeEnvironmentSlotToJson(value: AutoModeEnvironmentSlot): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvironmentSlot")), null, 2);
+    }
+
+    public static toAutoModeEnvironmentSlotValue(json: string): AutoModeEnvironmentSlotValue {
+        return cast(JSON.parse(json), r("AutoModeEnvironmentSlotValue"));
+    }
+
+    public static autoModeEnvironmentSlotValueToJson(value: AutoModeEnvironmentSlotValue): string {
+        return JSON.stringify(uncast(value, r("AutoModeEnvironmentSlotValue")), null, 2);
+    }
+
     public static toAutoModeGetMessage(json: string): AutoModeGetMessage {
         return cast(JSON.parse(json), r("AutoModeGetMessage"));
     }
 
     public static autoModeGetMessageToJson(value: AutoModeGetMessage): string {
         return JSON.stringify(uncast(value, r("AutoModeGetMessage")), null, 2);
+    }
+
+    public static toAutoModeModelProvider(json: string): AutoModeModelProvider {
+        return cast(JSON.parse(json), r("AutoModeModelProvider"));
+    }
+
+    public static autoModeModelProviderToJson(value: AutoModeModelProvider): string {
+        return JSON.stringify(uncast(value, r("AutoModeModelProvider")), null, 2);
+    }
+
+    public static toAutoModeModelSetMessage(json: string): AutoModeModelSetMessage {
+        return cast(JSON.parse(json), r("AutoModeModelSetMessage"));
+    }
+
+    public static autoModeModelSetMessageToJson(value: AutoModeModelSetMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeModelSetMessage")), null, 2);
+    }
+
+    public static toAutoModeModelSetResultMessage(json: string): AutoModeModelSetResultMessage {
+        return cast(JSON.parse(json), r("AutoModeModelSetResultMessage"));
+    }
+
+    public static autoModeModelSetResultMessageToJson(value: AutoModeModelSetResultMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeModelSetResultMessage")), null, 2);
+    }
+
+    public static toAutoModeModelsMessage(json: string): AutoModeModelsMessage {
+        return cast(JSON.parse(json), r("AutoModeModelsMessage"));
+    }
+
+    public static autoModeModelsMessageToJson(value: AutoModeModelsMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeModelsMessage")), null, 2);
+    }
+
+    public static toAutoModeModelsResultMessage(json: string): AutoModeModelsResultMessage {
+        return cast(JSON.parse(json), r("AutoModeModelsResultMessage"));
+    }
+
+    public static autoModeModelsResultMessageToJson(value: AutoModeModelsResultMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeModelsResultMessage")), null, 2);
     }
 
     public static toAutoModePatternAddMessage(json: string): AutoModePatternAddMessage {
@@ -9974,6 +10345,14 @@ export class Convert {
 
     public static autoModeShowResultToJson(value: AutoModeShowResult): string {
         return JSON.stringify(uncast(value, r("AutoModeShowResult")), null, 2);
+    }
+
+    public static toAutoModeStateChangedMessage(json: string): AutoModeStateChangedMessage {
+        return cast(JSON.parse(json), r("AutoModeStateChangedMessage"));
+    }
+
+    public static autoModeStateChangedMessageToJson(value: AutoModeStateChangedMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeStateChangedMessage")), null, 2);
     }
 
     public static toAutoModeStateResultMessage(json: string): AutoModeStateResultMessage {
@@ -12520,12 +12899,68 @@ export class Convert {
         return JSON.stringify(uncast(value, r("Seed")), null, 2);
     }
 
+    public static toSeedArtifact(json: string): SeedArtifact {
+        return cast(JSON.parse(json), r("SeedArtifact"));
+    }
+
+    public static seedArtifactToJson(value: SeedArtifact): string {
+        return JSON.stringify(uncast(value, r("SeedArtifact")), null, 2);
+    }
+
     public static toSeedArtifactReference(json: string): SeedArtifactReference {
         return cast(JSON.parse(json), r("SeedArtifactReference"));
     }
 
     public static seedArtifactReferenceToJson(value: SeedArtifactReference): string {
         return JSON.stringify(uncast(value, r("SeedArtifactReference")), null, 2);
+    }
+
+    public static toSeedArtifactTargetMessage(json: string): SeedArtifactTargetMessage {
+        return cast(JSON.parse(json), r("SeedArtifactTargetMessage"));
+    }
+
+    public static seedArtifactTargetMessageToJson(value: SeedArtifactTargetMessage): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTargetMessage")), null, 2);
+    }
+
+    public static toSeedArtifactTargetResult(json: string): SeedArtifactTargetResult {
+        return cast(JSON.parse(json), r("SeedArtifactTargetResult"));
+    }
+
+    public static seedArtifactTargetResultToJson(value: SeedArtifactTargetResult): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTargetResult")), null, 2);
+    }
+
+    public static toSeedArtifactTargetResultMessage(json: string): SeedArtifactTargetResultMessage {
+        return cast(JSON.parse(json), r("SeedArtifactTargetResultMessage"));
+    }
+
+    public static seedArtifactTargetResultMessageToJson(value: SeedArtifactTargetResultMessage): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTargetResultMessage")), null, 2);
+    }
+
+    public static toSeedArtifactTransferMessage(json: string): SeedArtifactTransferMessage {
+        return cast(JSON.parse(json), r("SeedArtifactTransferMessage"));
+    }
+
+    public static seedArtifactTransferMessageToJson(value: SeedArtifactTransferMessage): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTransferMessage")), null, 2);
+    }
+
+    public static toSeedArtifactTransferResult(json: string): SeedArtifactTransferResult {
+        return cast(JSON.parse(json), r("SeedArtifactTransferResult"));
+    }
+
+    public static seedArtifactTransferResultToJson(value: SeedArtifactTransferResult): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTransferResult")), null, 2);
+    }
+
+    public static toSeedArtifactTransferResultMessage(json: string): SeedArtifactTransferResultMessage {
+        return cast(JSON.parse(json), r("SeedArtifactTransferResultMessage"));
+    }
+
+    public static seedArtifactTransferResultMessageToJson(value: SeedArtifactTransferResultMessage): string {
+        return JSON.stringify(uncast(value, r("SeedArtifactTransferResultMessage")), null, 2);
     }
 
     public static toSeedContinuation(json: string): SeedContinuation {
@@ -14866,14 +15301,26 @@ const typeMap: any = {
         { json: "author", js: "author", typ: "" },
         { json: "muted", js: "muted", typ: true },
     ], "any"),
+    "AutoModeCatalogModel": o([
+        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
+        { json: "id", js: "id", typ: "" },
+        { json: "name", js: "name", typ: u(undefined, "") },
+    ], "any"),
     "AutoModeConfigInfo": o([
         { json: "allow", js: "allow", typ: a("") },
-        { json: "classifier_models", js: "classifier_models", typ: a("") },
         { json: "enabled_default", js: "enabled_default", typ: true },
-        { json: "environment", js: "environment", typ: a("") },
-        { json: "escalation_models", js: "escalation_models", typ: a("") },
+        { json: "environment", js: "environment", typ: r("Environment") },
         { json: "hard_deny", js: "hard_deny", typ: a("") },
+        { json: "models", js: "models", typ: a("") },
         { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
+    ], "any"),
+    "Environment": o([
+        { json: "notes", js: "notes", typ: a("") },
+        { json: "slots", js: "slots", typ: a(r("SlotElement")) },
+    ], "any"),
+    "SlotElement": o([
+        { json: "id", js: "id", typ: "" },
+        { json: "values", js: "values", typ: a("") },
     ], "any"),
     "AutoModeDenialInfo": o([
         { json: "created_at", js: "created_at", typ: "" },
@@ -14923,20 +15370,99 @@ const typeMap: any = {
         { json: "target", js: "target", typ: "" },
         { json: "value", js: "value", typ: "" },
     ], "any"),
-    "AutoModeEnvAddMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeEnvAddMessageCmd") },
-        { json: "text", js: "text", typ: "" },
-    ], "any"),
-    "AutoModeEnvRemoveMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeEnvRemoveMessageCmd") },
-        { json: "index", js: "index", typ: 0 },
+    "AutoModeEnvNotesMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeEnvNotesMessageCmd") },
+        { json: "notes", js: "notes", typ: a("") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
     "AutoModeEnvResult": o([
-        { json: "environment", js: "environment", typ: a("") },
+        { json: "environment", js: "environment", typ: r("Environment") },
+    ], "any"),
+    "AutoModeEnvSetResultMessage": o([
+        { json: "config", js: "config", typ: u(undefined, r("Config")) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AutoModeEnvSetResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "Config": o([
+        { json: "allow", js: "allow", typ: a("") },
+        { json: "enabled_default", js: "enabled_default", typ: true },
+        { json: "environment", js: "environment", typ: r("Environment") },
+        { json: "hard_deny", js: "hard_deny", typ: a("") },
+        { json: "models", js: "models", typ: a("") },
+        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
+    ], "any"),
+    "AutoModeEnvSlotMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeEnvSlotMessageCmd") },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "slot", js: "slot", typ: "" },
+        { json: "values", js: "values", typ: a("") },
+    ], "any"),
+    "AutoModeEnvironmentInfo": o([
+        { json: "notes", js: "notes", typ: a("") },
+        { json: "slots", js: "slots", typ: a(r("SlotElement")) },
+    ], "any"),
+    "AutoModeEnvironmentSlot": o([
+        { json: "choices", js: "choices", typ: a("") },
+        { json: "detail", js: "detail", typ: "" },
+        { json: "detected", js: "detected", typ: true },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
+        { json: "label", js: "label", typ: "" },
+        { json: "read_by", js: "read_by", typ: a("") },
+        { json: "unset", js: "unset", typ: "" },
+    ], "any"),
+    "AutoModeEnvironmentSlotValue": o([
+        { json: "id", js: "id", typ: "" },
+        { json: "values", js: "values", typ: a("") },
     ], "any"),
     "AutoModeGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeGetMessageCmd") },
         { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "AutoModeModelProvider": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
+        { json: "detail", js: "detail", typ: u(undefined, "") },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
+        { json: "provider", js: "provider", typ: "" },
+        { json: "ready", js: "ready", typ: true },
+    ], "any"),
+    "ModelElement": o([
+        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
+        { json: "id", js: "id", typ: "" },
+        { json: "name", js: "name", typ: u(undefined, "") },
+    ], "any"),
+    "AutoModeModelSetMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeModelSetMessageCmd") },
+        { json: "models", js: "models", typ: a("") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "AutoModeModelSetResultMessage": o([
+        { json: "config", js: "config", typ: u(undefined, r("Config")) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AutoModeModelSetResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "AutoModeModelsMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeModelsMessageCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "AutoModeModelsResultMessage": o([
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AutoModeModelsResultMessageEvent") },
+        { json: "problem", js: "problem", typ: u(undefined, "") },
+        { json: "providers", js: "providers", typ: u(undefined, a(r("ProviderElement"))) },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "ProviderElement": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
+        { json: "detail", js: "detail", typ: u(undefined, "") },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
+        { json: "provider", js: "provider", typ: "" },
+        { json: "ready", js: "ready", typ: true },
     ], "any"),
     "AutoModePatternAddMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModePatternAddMessageCmd") },
@@ -14956,15 +15482,6 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("AutoModePatternResultMessageEvent") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
-    ], "any"),
-    "Config": o([
-        { json: "allow", js: "allow", typ: a("") },
-        { json: "classifier_models", js: "classifier_models", typ: a("") },
-        { json: "enabled_default", js: "enabled_default", typ: true },
-        { json: "environment", js: "environment", typ: a("") },
-        { json: "escalation_models", js: "escalation_models", typ: a("") },
-        { json: "hard_deny", js: "hard_deny", typ: a("") },
-        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
     ], "any"),
     "AutoModePromoteMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModePromoteMessageCmd") },
@@ -15006,9 +15523,27 @@ const typeMap: any = {
         { json: "config", js: "config", typ: r("Config") },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
     ], "any"),
+    "AutoModeStateChangedMessage": o([
+        { json: "config", js: "config", typ: r("Config") },
+        { json: "denials", js: "denials", typ: a(r("DenialElement")) },
+        { json: "environment_slots", js: "environment_slots", typ: a(r("EnvironmentSlotElement")) },
+        { json: "event", js: "event", typ: r("AutoModeStateChangedMessageEvent") },
+        { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
+    ], "any"),
+    "EnvironmentSlotElement": o([
+        { json: "choices", js: "choices", typ: a("") },
+        { json: "detail", js: "detail", typ: "" },
+        { json: "detected", js: "detected", typ: true },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
+        { json: "label", js: "label", typ: "" },
+        { json: "read_by", js: "read_by", typ: a("") },
+        { json: "unset", js: "unset", typ: "" },
+    ], "any"),
     "AutoModeStateResultMessage": o([
         { json: "config", js: "config", typ: r("Config") },
         { json: "denials", js: "denials", typ: a(r("DenialElement")) },
+        { json: "environment_slots", js: "environment_slots", typ: a(r("EnvironmentSlotElement")) },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("AutoModeStateResultMessageEvent") },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
@@ -17769,6 +18304,7 @@ const typeMap: any = {
         { json: "present_open_result", js: "present_open_result", typ: u(undefined, r("PresentOpenResultObject")) },
         { json: "prs", js: "prs", typ: u(undefined, a(r("PRElement"))) },
         { json: "repos", js: "repos", typ: u(undefined, a(r("RepoElement"))) },
+        { json: "seed_artifact_transfer_result", js: "seed_artifact_transfer_result", typ: u(undefined, r("SeedArtifactTransferResultObject")) },
         { json: "seed_edit_result", js: "seed_edit_result", typ: u(undefined, r("SeedEditResultObject")) },
         { json: "seed_link_result", js: "seed_link_result", typ: u(undefined, r("SeedLinkResultObject")) },
         { json: "seed_list_result", js: "seed_list_result", typ: u(undefined, r("SeedListResultObject")) },
@@ -17898,7 +18434,7 @@ const typeMap: any = {
         { json: "ledger_note", js: "ledger_note", typ: u(undefined, "") },
     ], "any"),
     "AutomodeEnvResult": o([
-        { json: "environment", js: "environment", typ: a("") },
+        { json: "environment", js: "environment", typ: r("Environment") },
     ], "any"),
     "AutomodeProposeResult": o([
         { json: "proposal", js: "proposal", typ: r("Proposal") },
@@ -18018,6 +18554,22 @@ const typeMap: any = {
         { json: "title", js: "title", typ: "" },
         { json: "warnings", js: "warnings", typ: u(undefined, a("")) },
     ], "any"),
+    "SeedArtifactTransferResultObject": o([
+        { json: "artifact", js: "artifact", typ: u(undefined, r("SeedArtifactTransferResultArtifact")) },
+        { json: "destination_path", js: "destination_path", typ: "" },
+        { json: "operation", js: "operation", typ: "" },
+        { json: "operation_id", js: "operation_id", typ: "" },
+        { json: "recovered", js: "recovered", typ: true },
+        { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_path", js: "source_path", typ: "" },
+    ], "any"),
+    "SeedArtifactTransferResultArtifact": o([
+        { json: "filename", js: "filename", typ: "" },
+        { json: "modified_at", js: "modified_at", typ: "" },
+        { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
     "SeedEditResultObject": o([
         { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
@@ -18034,7 +18586,7 @@ const typeMap: any = {
         { json: "note", js: "note", typ: r("Note") },
     ], "any"),
     "Note": o([
-        { json: "artifact", js: "artifact", typ: u(undefined, r("Artifact")) },
+        { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
         { json: "author_member", js: "author_member", typ: "" },
         { json: "author_session", js: "author_session", typ: "" },
         { json: "body", js: "body", typ: "" },
@@ -18043,7 +18595,7 @@ const typeMap: any = {
         { json: "kind", js: "kind", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
-    "Artifact": o([
+    "LegacyReferenceElement": o([
         { json: "kind", js: "kind", typ: "" },
         { json: "notebook_document_id", js: "notebook_document_id", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
@@ -18083,10 +18635,11 @@ const typeMap: any = {
         { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
     "SeedShowResultObject": o([
-        { json: "artifacts", js: "artifacts", typ: a(r("Artifact")) },
+        { json: "artifacts", js: "artifacts", typ: a(r("SeedArtifactTransferResultArtifact")) },
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "notes", js: "notes", typ: a(r("Note")) },
         { json: "notes_total", js: "notes_total", typ: 0 },
+        { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "relations", js: "relations", typ: a(r("RelationElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "watching", js: "watching", typ: true },
@@ -18324,12 +18877,72 @@ const typeMap: any = {
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "vars", js: "vars", typ: a(r("VarElement")) },
     ], "any"),
+    "SeedArtifact": o([
+        { json: "filename", js: "filename", typ: "" },
+        { json: "modified_at", js: "modified_at", typ: "" },
+        { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
     "SeedArtifactReference": o([
         { json: "kind", js: "kind", typ: "" },
         { json: "notebook_document_id", js: "notebook_document_id", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "repository", js: "repository", typ: u(undefined, "") },
         { json: "url", js: "url", typ: u(undefined, "") },
+    ], "any"),
+    "SeedArtifactTargetMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SeedArtifactTargetMessageCmd") },
+        { json: "purpose", js: "purpose", typ: "" },
+        { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+    ], "any"),
+    "SeedArtifactTargetResult": o([
+        { json: "data_base64", js: "data_base64", typ: u(undefined, "") },
+        { json: "mime_type", js: "mime_type", typ: u(undefined, "") },
+        { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "relative_target", js: "relative_target", typ: "" },
+    ], "any"),
+    "SeedArtifactTargetResultMessage": o([
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("SeedArtifactTargetResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "result", js: "result", typ: u(undefined, r("SeedArtifactTargetResultMessageResult")) },
+        { json: "success", js: "success", typ: true },
+    ], "any"),
+    "SeedArtifactTargetResultMessageResult": o([
+        { json: "data_base64", js: "data_base64", typ: u(undefined, "") },
+        { json: "mime_type", js: "mime_type", typ: u(undefined, "") },
+        { json: "path", js: "path", typ: u(undefined, "") },
+        { json: "relative_target", js: "relative_target", typ: "" },
+    ], "any"),
+    "SeedArtifactTransferMessage": o([
+        { json: "cmd", js: "cmd", typ: r("SeedArtifactTransferMessageCmd") },
+        { json: "destination_path", js: "destination_path", typ: u(undefined, "") },
+        { json: "filename", js: "filename", typ: u(undefined, "") },
+        { json: "legacy_reference", js: "legacy_reference", typ: u(undefined, r("LegacyReferenceElement")) },
+        { json: "operation", js: "operation", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_path", js: "source_path", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
+    ], "any"),
+    "SeedArtifactTransferResult": o([
+        { json: "artifact", js: "artifact", typ: u(undefined, r("SeedArtifactTransferResultArtifact")) },
+        { json: "destination_path", js: "destination_path", typ: "" },
+        { json: "operation", js: "operation", typ: "" },
+        { json: "operation_id", js: "operation_id", typ: "" },
+        { json: "recovered", js: "recovered", typ: true },
+        { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "source_path", js: "source_path", typ: "" },
+    ], "any"),
+    "SeedArtifactTransferResultMessage": o([
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("SeedArtifactTransferResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "result", js: "result", typ: u(undefined, r("SeedArtifactTransferResultObject")) },
+        { json: "success", js: "success", typ: true },
     ], "any"),
     "SeedContinuation": o([
         { json: "agent", js: "agent", typ: "" },
@@ -18350,10 +18963,11 @@ const typeMap: any = {
         { json: "source", js: "source", typ: "" },
     ], "any"),
     "SeedDocument": o([
-        { json: "artifacts", js: "artifacts", typ: a(r("Artifact")) },
+        { json: "artifacts", js: "artifacts", typ: a(r("SeedArtifactTransferResultArtifact")) },
         { json: "children", js: "children", typ: a(r("SeedElement")) },
         { json: "notes", js: "notes", typ: a(r("Note")) },
         { json: "notes_total", js: "notes_total", typ: 0 },
+        { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "tender_holds", js: "tender_holds", typ: true },
     ], "any"),
@@ -18370,10 +18984,11 @@ const typeMap: any = {
         { json: "success", js: "success", typ: true },
     ], "any"),
     "SeedDocumentGetResultMessageDocument": o([
-        { json: "artifacts", js: "artifacts", typ: a(r("Artifact")) },
+        { json: "artifacts", js: "artifacts", typ: a(r("SeedArtifactTransferResultArtifact")) },
         { json: "children", js: "children", typ: a(r("SeedElement")) },
         { json: "notes", js: "notes", typ: a(r("Note")) },
         { json: "notes_total", js: "notes_total", typ: 0 },
+        { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "tender_holds", js: "tender_holds", typ: true },
     ], "any"),
@@ -18420,7 +19035,7 @@ const typeMap: any = {
         { json: "total", js: "total", typ: 0 },
     ], "any"),
     "SeedNote": o([
-        { json: "artifact", js: "artifact", typ: u(undefined, r("Artifact")) },
+        { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
         { json: "author_member", js: "author_member", typ: "" },
         { json: "author_session", js: "author_session", typ: "" },
         { json: "body", js: "body", typ: "" },
@@ -18430,7 +19045,7 @@ const typeMap: any = {
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedNoteMessage": o([
-        { json: "artifact", js: "artifact", typ: u(undefined, r("Artifact")) },
+        { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
         { json: "body", js: "body", typ: "" },
         { json: "cmd", js: "cmd", typ: r("SeedNoteMessageCmd") },
         { json: "kind", js: "kind", typ: u(undefined, "") },
@@ -18638,10 +19253,11 @@ const typeMap: any = {
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedShowResult": o([
-        { json: "artifacts", js: "artifacts", typ: a(r("Artifact")) },
+        { json: "artifacts", js: "artifacts", typ: a(r("SeedArtifactTransferResultArtifact")) },
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "notes", js: "notes", typ: a(r("Note")) },
         { json: "notes_total", js: "notes_total", typ: 0 },
+        { json: "references", js: "references", typ: a(r("LegacyReferenceElement")) },
         { json: "relations", js: "relations", typ: a(r("RelationElement")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "watching", js: "watching", typ: true },
@@ -19862,14 +20478,29 @@ const typeMap: any = {
     "AutoModeDiscardResultMessageEvent": [
         "automode_discard_result",
     ],
-    "AutoModeEnvAddMessageCmd": [
-        "automode_env_add",
+    "AutoModeEnvNotesMessageCmd": [
+        "automode_env_notes",
     ],
-    "AutoModeEnvRemoveMessageCmd": [
-        "automode_env_remove",
+    "AutoModeEnvSetResultMessageEvent": [
+        "automode_env_set_result",
+    ],
+    "AutoModeEnvSlotMessageCmd": [
+        "automode_env_slot",
     ],
     "AutoModeGetMessageCmd": [
         "automode_get",
+    ],
+    "AutoModeModelSetMessageCmd": [
+        "automode_model_set",
+    ],
+    "AutoModeModelSetResultMessageEvent": [
+        "automode_model_set_result",
+    ],
+    "AutoModeModelsMessageCmd": [
+        "automode_models",
+    ],
+    "AutoModeModelsResultMessageEvent": [
+        "automode_models_result",
     ],
     "AutoModePatternAddMessageCmd": [
         "automode_pattern_add",
@@ -19891,6 +20522,9 @@ const typeMap: any = {
     ],
     "AutoModeShowMessageCmd": [
         "automode_show",
+    ],
+    "AutoModeStateChangedMessageEvent": [
+        "automode_state_changed",
     ],
     "AutoModeStateResultMessageEvent": [
         "automode_state_result",
@@ -20657,6 +21291,18 @@ const typeMap: any = {
     ],
     "RuntimeRespawnedMessageEvent": [
         "runtime_respawned",
+    ],
+    "SeedArtifactTargetMessageCmd": [
+        "seed_artifact_target",
+    ],
+    "SeedArtifactTargetResultMessageEvent": [
+        "seed_artifact_target_result",
+    ],
+    "SeedArtifactTransferMessageCmd": [
+        "seed_artifact_transfer",
+    ],
+    "SeedArtifactTransferResultMessageEvent": [
+        "seed_artifact_transfer_result",
     ],
     "SeedDocumentGetMessageCmd": [
         "seed_document_get",

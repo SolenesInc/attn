@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/toolhome"
 )
@@ -60,6 +61,11 @@ func runHeadlessCommand(
 	workDir string,
 	provider string,
 ) (HeadlessTaskResult, []byte, error) {
+	// Last line of defense: every caller checks the switch first, so reaching
+	// this is a caller that forgot.
+	if !headless.Enabled() {
+		return HeadlessTaskResult{}, nil, headless.Refusal(provider + " headless task")
+	}
 	cmd := exec.CommandContext(ctx, executable, args...)
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		cmd.Dir = dir

@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import FocusTrap from 'focus-trap-react';
 import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { isAccelKeyPressed } from '../shortcuts/platform';
 import { useNotebookFileIndex } from '../hooks/useNotebookFileIndex';
 import { useTileAutoFold } from '../hooks/useTileAutoFold';
 import { notebookLinkPath } from './notebook/brokenLinks';
@@ -14,6 +15,7 @@ import { NotebookFinder } from './notebook/NotebookFinder';
 import { registerPaletteClaim } from './palette/paletteClaim';
 import { parseOutline } from './notebook/outline';
 import './NotebookBrowser.css';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 
 export interface NotebookSurfaceProps {
   variant: 'modal' | 'tile';
@@ -98,7 +100,7 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   }, [finderEnabled, openFinder]);
   // preventDefault stops the WebView print dialog; Shift is excluded because Cmd+Shift+P is the global attention dock.
   const handleSurfaceKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.metaKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
+    if (isAccelKeyPressed(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
       event.preventDefault();
       event.stopPropagation();
       if (finderEnabled) openFinder();
@@ -669,7 +671,7 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
                   className="notebook-finder-open-button"
                   onClick={openFinder}
                 >
-                  <span>Find a note</span><kbd>⌘P</kbd>
+                  <span>Find a note</span><kbd>{formatShortcut('file.open')}</kbd>
                 </button>
               </>
             ) : (

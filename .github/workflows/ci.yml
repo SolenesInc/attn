@@ -5,9 +5,9 @@ env:
 
 on:
   push:
-    branches: [main, 'epic/**']
+    branches: [main, next, 'epic/**']
   pull_request:
-    branches: [main, 'epic/**']
+    branches: [main, next, 'epic/**']
 
 jobs:
   changes:
@@ -17,18 +17,25 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
+      force_all: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')) || (github.event_name == 'pull_request' && github.base_ref == 'main') }}
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
       tauri: ${{ steps.filter.outputs.tauri }}
       plugins: ${{ steps.filter.outputs.plugins }}
+      release_preflight: ${{ steps.filter.outputs.release_preflight }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Classify changed paths
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # PR API quota is shared by the installation. Full history lets the
+          # action use git instead, so an unrelated busy repo cannot break CI.
+          token: ''
           filters: |
             daemon:
               - '**/*.go'
@@ -38,9 +45,8 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
-              - 'scripts/source-fingerprint.sh'
-              - 'scripts/claude/**'
-              - 'scripts/pr-evidence*.sh'
+              - 'scripts/**'
+              - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
             frontend:
               - 'app/src/**'
@@ -82,9 +88,28 @@ jobs:
               - 'scripts/build-bundled-plugins.sh'
               - '.tool-versions'
               - '.github/workflows/ci.yml'
+            release_preflight:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
+              - '.github/workflows/release-after-acceptance.yml'
+              - '.github/workflows/release-health.yml'
+              - '.github/workflows/release-preflight.yml'
+              - 'Makefile'
+              - 'go.mod'
+              - 'go.sum'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'apphost/**'
+              - 'scripts/build-app-runtime-host.sh'
   changelog:
     name: Changelog
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true'
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,8 +121,30 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Gate
-        run: ./scripts/changelog-gate.sh "${{ github.base_ref }}" "${{ github.head_ref }}"
+      - name: Gate pull request
+        if: github.event_name == 'pull_request'
+        run: >-
+          ./scripts/changelog-gate.sh
+          "${{ github.base_ref }}"
+          "${{ github.head_ref }}"
+          "${{ github.event.pull_request.head.sha }}"
+
+      - name: Validate pending fragments
+        if: github.event_name == 'push'
+        run: go run ./cmd/changelog-check
+
+  main-route:
+    name: Main route
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check branch route
+        run: >-
+          ./scripts/main-route.sh "${{ github.event_name }}"
+          "${{ github.base_ref }}" "${{ github.head_ref }}"
 
   # generated.go and generated.ts are compiled from internal/protocol/schema, and
   # nothing was checking that the committed copies match. The other jobs cannot:
@@ -107,7 +154,7 @@ jobs:
   generated-types:
     name: Generated types
     needs: changes
-    if: needs.changes.outputs.generated == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,7 +185,7 @@ jobs:
   backend:
     name: Daemon
     needs: changes
-    if: needs.changes.outputs.daemon == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -190,12 +237,12 @@ jobs:
         run: bash ./scripts/claude/attn-profile-nudge_test.sh
 
       - name: Test repository scripts
-        run: bash ./scripts/pr-evidence_test.sh
+        run: make test-scripts
 
   frontend:
     name: Frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -239,7 +286,7 @@ jobs:
   frontend-e2e:
     name: Frontend E2E (${{ matrix.shard }}/3)
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -315,19 +362,27 @@ jobs:
           echo "shards result: $result"
           [ "$result" = "success" ] || [ "$result" = "skipped" ]
 
-  # macOS, because the app is macOS-only: on Linux the platform half of it is
-  # cfg'd out, so `cargo test` checked a build nobody ships and clippy read the
-  # macOS-only code as dead. The runner is free on a public repo.
   rust:
-    name: Tauri
+    name: Tauri (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.tauri == 'true'
-    runs-on: macos-14
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04]
     defaults:
       run:
         working-directory: app/src-tauri
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Linux webview deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -362,6 +417,20 @@ jobs:
       - name: Cargo test
         run: cargo test
 
+  # Single stable check name over the os matrix, for branch-protection
+  # rulesets. Green when both legs pass or the tauri filter skipped them.
+  rust-gate:
+    name: Tauri
+    needs: rust
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check matrix results
+        run: |
+          result="${{ needs.rust.result }}"
+          echo "matrix result: $result"
+          [ "$result" = "success" ] || [ "$result" = "skipped" ]
+
   # The bundled plugins are compiled by the packaged-app build, which no CI job
   # runs — so a plugin that only builds on a machine with warm node_modules got
   # all the way to a contributor's fresh clone. This stages them the way the app
@@ -369,7 +438,7 @@ jobs:
   plugins:
     name: Plugins
     needs: changes
-    if: needs.changes.outputs.plugins == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -393,3 +462,102 @@ jobs:
             echo ">>> ${plugin}"
             (cd "$plugin" && bun test)
           done
+
+  release-preflight:
+    name: Release preflight
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.release_preflight == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-preflight.yml
+
+  pr-gate:
+    name: PR gate
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - changes
+      - main-route
+      - changelog
+      - generated-types
+      - backend
+      - frontend
+      - frontend-e2e
+      - frontend-e2e-gate
+      - rust
+      - rust-gate
+      - plugins
+      - release-preflight
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate checks
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: >-
+          ./scripts/ci-gate.sh pr
+          changes main-route changelog generated-types backend frontend frontend-e2e
+          frontend-e2e-gate rust rust-gate plugins release-preflight
+
+  acceptance:
+    name: Acceptance
+    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    needs:
+      - changes
+      - main-route
+      - changelog
+      - generated-types
+      - backend
+      - frontend
+      - frontend-e2e
+      - frontend-e2e-gate
+      - rust
+      - rust-gate
+      - plugins
+      - release-preflight
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aggregate exact-SHA acceptance
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: >-
+          ./scripts/ci-gate.sh acceptance
+          changes main-route changelog generated-types backend frontend frontend-e2e
+          frontend-e2e-gate rust rust-gate plugins release-preflight
+
+  branch-health:
+    name: Report branch health
+    if: always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    needs: acceptance
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: branch-health-${{ github.ref_name }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update branch-health issue
+        id: branch-health-issue
+        continue-on-error: true
+        env:
+          ACCEPTANCE_RESULT: ${{ needs.acceptance.result }}
+          BRANCH_HEALTH_ASSIGNEE: victorarias
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          ./scripts/ci-branch-health.sh "$ACCEPTANCE_RESULT"
+          "${{ github.ref_name }}" "${{ github.sha }}" "$RUN_URL"
+
+      - name: Report issue-update failure
+        if: steps.branch-health-issue.outcome == 'failure'
+        run: >-
+          echo "::warning title=Branch health reporting failed::Acceptance is
+          authoritative; the branch-health issue could not be updated."

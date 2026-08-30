@@ -65,6 +65,11 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		return
 	}
 
+	// Ahead of the attempted-mark: a refused title must stay retryable.
+	if d.headlessTaskRefused("session_title") {
+		return
+	}
+
 	// The early check and this mark are separate critical sections, so two
 	// close-together Stop events can both pass it; re-check under the lock.
 	d.sessionTitleMu.Lock()

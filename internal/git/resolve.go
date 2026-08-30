@@ -139,3 +139,38 @@ func repoNameFromRemote(remote string) string {
 	}
 	return parts[len(parts)-1]
 }
+
+// RemoteHostOwnerRepos returns "host/owner/name" for every remote in dir, origin
+func RemoteHostOwnerRepos(dir string) []string {
+	out, err := runGitOutput(OpMetadata, dir, "remote", "-v")
+	if err != nil {
+		return nil
+	}
+	identities := []string{}
+	seen := map[string]bool{}
+	origin := ""
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		host, ownerRepo := hostOwnerRepoFromRemote(fields[1])
+		if host == "" || ownerRepo == "" {
+			continue
+		}
+		identity := host + "/" + ownerRepo
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		if fields[0] == "origin" && origin == "" {
+			origin = identity
+			continue
+		}
+		identities = append(identities, identity)
+	}
+	if origin != "" {
+		identities = append([]string{origin}, identities...)
+	}
+	return identities
+}

@@ -1,10 +1,16 @@
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appPlatformFor } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('UiAutomationClient.request', () => {
@@ -33,6 +39,21 @@ describe('UiAutomationClient.request', () => {
   });
 });
 
+describe('UiAutomationClient.waitForManifest', () => {
+  it('uses the caller timeout without a platform floor', async () => {
+    vi.useFakeTimers();
+    const client = new UiAutomationClient({
+      manifestPath: path.join(os.tmpdir(), `attn-harness-manifest-that-never-appears-${process.pid}.json`),
+    });
+
+    const pending = expect(client.waitForManifest(200)).rejects.toThrow(
+      'Timed out waiting for UI automation manifest after 200ms',
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    await pending;
+  });
+});
+
 describe('UiAutomationClient production safety', () => {
   it('refuses a production app target without the explicit acknowledgement', () => {
     expect(() => new UiAutomationClient({
@@ -49,8 +70,12 @@ describe('UiAutomationClient production safety', () => {
         appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
       });
 
+      const expectedManifestPath = process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager', 'debug', 'ui-automation.json')
+        : path.join(xdgDataHome(), 'com.attn.manager', 'debug', 'ui-automation.json');
+
       expect(client.bundleId).toBe('com.attn.manager');
-      expect(client.manifestPath).toContain('Application Support/com.attn.manager/debug/ui-automation.json');
+      expect(client.manifestPath).toBe(expectedManifestPath);
     } finally {
       process.argv = originalArgv;
     }
@@ -128,3 +153,102 @@ describe('UiAutomationClient.ensureBuildMatchesCurrentSource', () => {
     );
   });
 });
+
+describe('UiAutomationClient.quitApp ownership', () => {
+  it('reaps the pid it spawned on Linux even when no manifest ever appeared', async () => {
+    const client = new UiAutomationClient({
+      manifestPath: path.join(os.tmpdir(), 'attn-harness-manifest-that-never-appeared.json'),
+      platform: appPlatformFor('linux'),
+    });
+    client.launch = { spawned: true, pid: 4242, child: { exitCode: null, signalCode: null } };
+    const signals = [];
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (signal === 0) {
+        throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+      }
+      signals.push([pid, signal]);
+      return true;
+    });
+
+    await client.quitApp(5_000);
+
+    expect(signals).toEqual([[4242, 'SIGTERM']]);
+    expect(client.launch).toBeNull();
+  });
+
+  it('treats a pid that stopped passing the fence as gone while it still answers signal 0', async () => {
+    const { platform, disown } = disownablePlatform(4242);
+    const client = disownableClient(platform);
+    const signals = recordSignals({ alive: true });
+
+    await client.quitApp(5_000);
+
+    expect(signals).toEqual([[4242, 'SIGTERM']]);
+    expect(client.launch).toBeNull();
+    expect(disown).toHaveBeenCalledTimes(1);
+  });
+
+  it('witnesses ownership lost between the quit request and escalation', async () => {
+    vi.useFakeTimers();
+    const owner = { owned: true };
+    const platform = {
+      ...appPlatformFor('linux'),
+      ownedPids: () => ({ pids: owner.owned ? [4242] : [], staleManifest: false }),
+    };
+    const client = disownableClient(platform);
+    const signals = recordSignals({ alive: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const pending = client.quitApp(1_000);
+    await vi.advanceTimersByTimeAsync(800);
+    owner.owned = false;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await pending;
+
+    expect(signals).toEqual([[4242, 'SIGTERM']]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('pid 4242 is no longer ours'));
+    expect(client.launch).toBeNull();
+  });
+});
+
+function disownableClient(platform) {
+  const client = new UiAutomationClient({
+    manifestPath: path.join(os.tmpdir(), 'attn-harness-manifest-that-never-appeared.json'),
+    platform,
+  });
+  client.launch = { spawned: true, pid: 4242, child: { exitCode: null, signalCode: null } };
+  return client;
+}
+
+function disownablePlatform(pid) {
+  const owner = { owned: true };
+  const disown = vi.fn(async ({ pids }) => {
+    for (const signalled of pids) {
+      process.kill(signalled, 'SIGTERM');
+    }
+    owner.owned = false;
+  });
+  return {
+    disown,
+    platform: {
+      ...appPlatformFor('linux'),
+      ownedPids: () => ({ pids: owner.owned ? [pid] : [], staleManifest: false }),
+      requestQuit: disown,
+    },
+  };
+}
+
+function recordSignals({ alive }) {
+  const signals = [];
+  vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (signal === 0) {
+      if (alive) {
+        return true;
+      }
+      throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+    }
+    signals.push([pid, signal]);
+    return true;
+  });
+  return signals;
+}

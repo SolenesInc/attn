@@ -106,6 +106,9 @@ func (d *Daemon) summarizeSessionHandler(ctx context.Context, job *jobs.Job) (an
 	if err != nil {
 		return nil, fmt.Errorf("summarize_session: %w", err)
 	}
+	if d.headlessTaskRefused(notebookSummarizeSessionKind) {
+		return nil, nil
+	}
 	if err := os.MkdirAll(filepath.Dir(digestPath), 0o755); err != nil {
 		return nil, fmt.Errorf("summarize_session: create raw sessions dir: %w", err)
 	}
@@ -215,6 +218,9 @@ func (d *Daemon) narrateWorkspaceHandler(ctx context.Context, job *jobs.Job) (an
 		return nil, err
 	}
 
+	if d.headlessTaskRefused(notebookNarrateWorkspaceKind) {
+		return nil, nil
+	}
 	if err := os.MkdirAll(inputs.JournalDir, 0o755); err != nil {
 		return nil, fmt.Errorf("narrate_workspace: create journal dir: %w", err)
 	}
@@ -402,8 +408,8 @@ func (d *Daemon) enqueueSummarizeSession(sessionID, transcriptPath, workspaceID 
 	if !d.notebookTasksEnabled() || !d.notebookSummariesEnabled() {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(notebookSummarizeSessionKind)
+	if runner == nil {
 		return
 	}
 	carriedWorkspace := strings.TrimSpace(workspaceID)
@@ -427,8 +433,8 @@ func (d *Daemon) enqueueNarrateWorkspace(workspaceID string) {
 	if !d.notebookTasksEnabled() || !d.notebookWorkspaceNarrationEnabled() {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(notebookNarrateWorkspaceKind)
+	if runner == nil {
 		return
 	}
 	if _, err := runner.Enqueue(notebookNarrateWorkspaceKind, jobs.EnqueueOptions{
@@ -461,8 +467,8 @@ func (d *Daemon) enqueueDailyNarrateWorkspace(workspaceID string) {
 	if !d.notebookTasksEnabled() || !d.notebookWorkspaceNarrationEnabled() {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(notebookNarrateWorkspaceKind)
+	if runner == nil {
 		return
 	}
 	if _, err := runner.Enqueue(notebookNarrateWorkspaceKind, jobs.EnqueueOptions{
@@ -483,8 +489,8 @@ func (d *Daemon) enqueueFinalNarrateWorkspace(workspaceID string) {
 	if !d.notebookTasksEnabled() || !d.notebookWorkspaceNarrationEnabled() {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(notebookNarrateWorkspaceKind)
+	if runner == nil {
 		return
 	}
 	if _, err := runner.Enqueue(notebookNarrateWorkspaceKind, jobs.EnqueueOptions{

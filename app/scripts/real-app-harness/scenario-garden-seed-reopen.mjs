@@ -9,7 +9,7 @@ import {
 } from './common.mjs';
 import { waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
-import { delay } from './macosDriver.mjs';
+import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';

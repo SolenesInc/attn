@@ -620,6 +620,11 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 	sessionID := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	watching := d.seedWatching(sessionID, seed.ID)
 	d.consumeSeedBell(sessionID, seed.ID)
+	artifacts, err := d.seedArtifacts(seed.ID)
+	if err != nil {
+		d.sendGardenError(conn, "show", fmt.Errorf("read seed artifacts: %w", err))
+		return
+	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedShowResult: &protocol.SeedShowResult{
@@ -629,23 +634,10 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 			NotesTotal: total,
 			Relations:  gardenRelations(read, seed.ID),
 			Handoff:    d.gardenHandoff(seed.ID),
-			Artifacts:  d.seedArtifacts(seed.ID),
+			Artifacts:  artifacts,
+			References: d.seedArtifactReferences(seed.ID),
 		},
 	})
-}
-
-func (d *Daemon) seedArtifacts(seedID string) []protocol.SeedArtifactReference {
-	notes, err := d.readNotesDomain(seedID)
-	if err != nil {
-		d.logf("garden: reading the artifacts of %s: %v", seedID, err)
-		return []protocol.SeedArtifactReference{}
-	}
-	current := garden.CurrentArtifacts(notes)
-	out := make([]protocol.SeedArtifactReference, 0, len(current))
-	for _, artifact := range current {
-		out = append(out, *artifactToProtocol(artifact))
-	}
-	return out
 }
 
 func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
@@ -812,13 +804,19 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 	if progress, ok := read.progress(seed.ID); ok {
 		wireSeed.PlotProgress = progress
 	}
+	artifacts, err := d.seedArtifacts(seed.ID)
+	if err != nil {
+		fail(fmt.Errorf("read seed artifacts: %w", err))
+		return
+	}
 	result.Document = &protocol.SeedDocument{
 		Seed:        wireSeed,
 		TenderHolds: seed.Tender().Holds(d.sessionExists),
 		Children:    read.wire(children),
 		Notes:       notes,
 		NotesTotal:  notesTotal,
-		Artifacts:   d.seedArtifacts(seed.ID),
+		Artifacts:   artifacts,
+		References:  d.seedArtifactReferences(seed.ID),
 	}
 	result.Success = true
 	d.sendToClient(client, result)

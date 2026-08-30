@@ -1,7 +1,12 @@
-// Design: docs/plans/2026-08-16-pi-auto-mode.md.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AutoModePatternEdit, AutoModePromotion, AutoModeState } from './daemonAutoModeEvents';
+import type {
+  AutoModeModelCatalog,
+  AutoModePatternEdit,
+  AutoModePromotion,
+  AutoModeState,
+} from './daemonAutoModeEvents';
+import { useAutoModePushStore } from '../store/autoMode';
 
 export interface AutoModePolicy {
   state: AutoModeState | null;
@@ -15,6 +20,17 @@ export interface AutoModePolicy {
   addPattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
   removePattern: (list: AutoModePatternList, pattern: string) => Promise<void>;
   editingList: AutoModePatternList | null;
+
+  setEnvironmentSlot: (id: string, values: string[]) => Promise<void>;
+
+  savingEnvironment: boolean;
+
+  setModels: (models: string[]) => Promise<void>;
+  savingModels: boolean;
+  modelCatalog: AutoModeModelCatalog | null;
+  loadModelCatalog: () => Promise<void>;
+  catalogLoading: boolean;
+  catalogError: string | null;
 }
 
 export type AutoModePatternList = 'allow' | 'hard_deny';
@@ -26,6 +42,9 @@ interface AutoModePolicyOptions {
   discardProposal: (id: number) => Promise<AutoModePromotion>;
   addPattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
   removePattern: (list: string, pattern: string) => Promise<AutoModePatternEdit>;
+  setEnvironmentSlot: (slot: string, values: string[]) => Promise<AutoModePatternEdit>;
+  setModels: (models: string[]) => Promise<AutoModePatternEdit>;
+  loadModels: () => Promise<AutoModeModelCatalog>;
 }
 
 const message = (err: unknown, fallback: string): string =>
@@ -34,13 +53,23 @@ const message = (err: unknown, fallback: string): string =>
 export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolicy {
   const {
     enabled, getState, promoteProposal, discardProposal, addPattern, removePattern,
+    setEnvironmentSlot: writeEnvironmentSlot,
+    setModels: writeModels, loadModels,
   } = options;
   const [state, setState] = useState<AutoModeState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resolvingID, setResolvingID] = useState<number | null>(null);
   const [editingList, setEditingList] = useState<AutoModePatternList | null>(null);
+  const [savingEnvironment, setSavingEnvironment] = useState(false);
+  const [savingModels, setSavingModels] = useState(false);
+  const [modelCatalog, setModelCatalog] = useState<AutoModeModelCatalog | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
   const seqRef = useRef(0);
+  const pushedVersion = useAutoModePushStore((store) => store.version);
+  const [adoptedVersion, setAdoptedVersion] = useState(pushedVersion);
 
   const refresh = useCallback(async () => {
     const seq = ++seqRef.current;
@@ -106,6 +135,40 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     [edit, removePattern],
   );
 
+  const setEnvironmentSlot = useCallback(async (id: string, values: string[]) => {
+    setSavingEnvironment(true);
+    try {
+      await writeEnvironmentSlot(id, values);
+      await refresh();
+    } finally {
+      setSavingEnvironment(false);
+    }
+  }, [writeEnvironmentSlot, refresh]);
+
+  const setModels = useCallback(async (models: string[]) => {
+    setSavingModels(true);
+    try {
+      await writeModels(models);
+      await refresh();
+    } finally {
+      setSavingModels(false);
+    }
+  }, [writeModels, refresh]);
+
+  // A catalog nobody could read is the picker's failure, not the config's.
+  const loadModelCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      setModelCatalog(await loadModels());
+    } catch (err) {
+      setModelCatalog(null);
+      setCatalogError(message(err, 'Asking pi which models it can reach failed'));
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [loadModels]);
+
   useEffect(() => {
     if (!enabled) {
       seqRef.current++;
@@ -113,10 +176,24 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
       setError(null);
       setLoading(false);
       setEditingList(null);
+      setSavingEnvironment(false);
+      setModelCatalog(null);
+      setCatalogError(null);
       return;
     }
     void refresh();
   }, [enabled, refresh]);
+
+  useEffect(() => {
+    if (!enabled || pushedVersion <= adoptedVersion) return;
+    const pushed = useAutoModePushStore.getState().pushed;
+    setAdoptedVersion(pushedVersion);
+    if (!pushed) return;
+    seqRef.current++;
+    setState(pushed);
+    setError(null);
+    setLoading(false);
+  }, [enabled, pushedVersion, adoptedVersion]);
 
   return {
     state,
@@ -130,5 +207,13 @@ export function useAutoModePolicy(options: AutoModePolicyOptions): AutoModePolic
     addPattern: add,
     removePattern: remove,
     editingList,
+    setModels,
+    savingModels,
+    modelCatalog,
+    loadModelCatalog,
+    catalogLoading,
+    catalogError,
+    setEnvironmentSlot,
+    savingEnvironment,
   };
 }

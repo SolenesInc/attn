@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 )
 
-// Design: docs/plans/2026-08-18-delegation-reporting-on-seeds.md.
-
 // A bind failure is logged, not fatal — except when the delegation named a
 // crown, which must not launch silently unaimed.
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {

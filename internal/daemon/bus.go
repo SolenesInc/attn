@@ -99,6 +99,8 @@ const (
 
 	FactAutoModeDenied = "automode.denied"
 
+	FactAutoModeConfigChanged = "automode.config.changed"
+
 	FactAutomationChanged  = "automation.changed"
 	FactWorkflowRunUpdated = "workflow.run.updated"
 	FactTaskChanged        = "task.changed"
@@ -128,6 +130,7 @@ const (
 	FactGardenWithered              = "garden.withered"
 	FactGardenReplanted             = "garden.replanted"
 	FactGardenNoted                 = "garden.noted"
+	FactGardenArtifactChanged       = "garden.artifact.changed"
 	FactGardenLinked                = "garden.linked"
 	FactGardenUnlinked              = "garden.unlinked"
 	FactGardenReviewChanged         = "garden.review.changed"
@@ -286,7 +289,8 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{
 				FactGardenPlanted, FactGardenBodyEdited, FactGardenResumeIdentityChanged,
 				FactGardenTended, FactGardenParked, FactGardenHarvested, FactGardenWithered,
-				FactGardenReplanted, FactGardenNoted, FactGardenLinked, FactGardenUnlinked,
+				FactGardenReplanted, FactGardenNoted, FactGardenArtifactChanged,
+				FactGardenLinked, FactGardenUnlinked,
 			},
 			apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
@@ -375,6 +379,10 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactAutoModeDenied},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
+		},
+		{
+			filter: bus.Filter{FactAutoModeConfigChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectAutoModeStateChanged() },
 		},
 		{
 			filter: bus.Filter{FactAutomationChanged},
@@ -540,8 +548,12 @@ const (
 	snapshotAutomations = "automations_changed"
 	snapshotTasks       = "tasks_changed"
 	snapshotApps        = "apps_updated"
+	snapshotAutoMode    = "automode_state_changed"
 )
 
+const AutoModeConfigSubject = "config"
+
+// wireEqual reports whether two values reach clients as the same JSON —
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)
 	rawB, errB := json.Marshal(b)

@@ -1,26 +1,17 @@
 import { useEffect, useId, useState, type Ref } from 'react';
 import type {
   Seed,
-  SeedArtifactReference,
+  SeedDocument as GeneratedSeedDocument,
 } from '../types/generated';
 import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
-import { type SeedDocumentNote } from './seedArtifacts';
+import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
 
 /** The one read model shared by the panel drill and the docked seed tile. */
-export interface SeedDocument {
-  seed: Seed;
-  tender_holds: boolean;
-  children: Seed[];
-  /** Newest first, matching the garden log's wire order. */
-  notes: SeedDocumentNote[];
-  notes_total: number;
-  /** Attach minus detach, projected by the daemon over the seed's whole log. */
-  artifacts: SeedArtifactReference[];
-}
+export type SeedDocument = GeneratedSeedDocument;
 
 export interface SeedDocumentViewProps {
   document: SeedDocument;
@@ -125,7 +116,7 @@ export function SeedDocumentView({
   arrival = 'in',
   ledgerInitiallyOpen = false,
 }: SeedDocumentViewProps) {
-  const { seed, children, notes, notes_total: notesTotal, artifacts } = document;
+  const { seed, children, notes, notes_total: notesTotal, artifacts, references } = document;
   const isPlot = Boolean(seed.plot_progress);
   const tender = holder(seed);
   const progress = progressWords(seed);
@@ -198,18 +189,24 @@ export function SeedDocumentView({
           annotationsEnabled={annotationsEnabled}
           onAnnotationsCountChange={onAnnotationsCountChange}
           annotationsSendRef={annotationsSendRef}
+          seedArtifacts={artifacts}
         />
       ) : (
         <p className="seed-document__empty-body">No body — the title is the whole seed.</p>
       )}
 
-      {artifacts.length > 0 && (
+      {artifacts.length + references.length > 0 && (
         <section className="seed-document__artifacts" aria-labelledby={artifactsHeadingId}>
           <div className="seed-document__section-head">
             <h3 id={artifactsHeadingId}>Artifacts</h3>
-            <span>{artifacts.length}</span>
+            <span>{artifacts.length + references.length}</span>
           </div>
-          <SeedArtifactRows artifacts={artifacts} onOpenMarkdownArtifact={onOpenMarkdownArtifact} />
+          <SeedArtifactRows
+            seedId={seed.id}
+            artifacts={artifacts}
+            references={references}
+            onOpenMarkdownArtifact={onOpenMarkdownArtifact}
+          />
         </section>
       )}
 

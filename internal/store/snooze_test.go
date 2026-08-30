@@ -84,20 +84,67 @@ func TestWakeTurnAtClearsOnlyTheDeadlineItFired(t *testing.T) {
 			s.SnoozeTurn("s1", later, now)
 
 			if s.WakeTurnAt("s1", fired) {
-				t.Error("the expired timer cleared a deadline that had already been replaced")
+				t.Error("the stale wake cleared a deadline that had already been replaced")
 			}
 			if got := s.TurnStamps("s1").SnoozedUntil; !got.Equal(later) {
 				t.Errorf("live deadline = %s, want the replacement's %s", got, later)
 			}
 
 			if !s.WakeTurnAt("s1", later) {
-				t.Fatal("the live deadline's own timer could not clear it")
+				t.Fatal("the current deadline's wake could not clear it")
 			}
 			if !s.TurnStamps("s1").SnoozedUntil.IsZero() {
 				t.Error("deadline survived its own wake")
 			}
 			if s.WakeTurnAt("s1", later) {
 				t.Error("WakeTurnAt reported a change on a session that was not snoozed")
+			}
+		})
+	}
+}
+
+func TestWakeTurnAtAndOpenIfClosedCannotReopenAReplacementSnooze(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T) *Store
+	}{
+		{"sqlite", newTurnStore},
+		{"in-memory", func(t *testing.T) *Store { return New() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := tc.build(t)
+			addTurnSession(t, s, "s1", protocol.SessionStateIdle)
+
+			now := time.Now()
+			opened := now.Add(-time.Hour)
+			if !s.OpenTurnIfClosed("s1", opened) {
+				t.Fatal("setup: no turn opened")
+			}
+			first := now.Add(time.Minute)
+			later := now.Add(time.Hour)
+			s.SnoozeTurn("s1", first, now)
+			s.SnoozeTurn("s1", later, now.Add(time.Second))
+
+			if s.WakeTurnAtAndOpenIfClosed("s1", first, first) {
+				t.Fatal("the stale wake changed the replacement snooze")
+			}
+			stamps := s.TurnStamps("s1")
+			if !stamps.SnoozedUntil.Equal(later) {
+				t.Errorf("live deadline = %s, want %s", stamps.SnoozedUntil, later)
+			}
+			if stamps.OpenedAt.After(stamps.SettledAt) {
+				t.Error("the stale wake reopened the settled turn")
+			}
+
+			if !s.WakeTurnAtAndOpenIfClosed("s1", later, later) {
+				t.Fatal("the current wake did not apply")
+			}
+			stamps = s.TurnStamps("s1")
+			if !stamps.SnoozedUntil.IsZero() {
+				t.Error("the current wake left its deadline stored")
+			}
+			if !stamps.OpenedAt.Equal(later) {
+				t.Errorf("turn opened at %s, want %s", stamps.OpenedAt, later)
 			}
 		})
 	}

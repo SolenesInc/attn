@@ -30,7 +30,7 @@ func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string,
 	return path
 }
 
-func TestResolveTranscriptPathForSession_PrefersCodexNativeSessionID(t *testing.T) {
+func TestResolveTranscriptPathForSession_PrefersPersistedExactPath(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 
@@ -47,11 +47,21 @@ func TestResolveTranscriptPathForSession_PrefersCodexNativeSessionID(t *testing.
 		Agent:     protocol.SessionAgentCodex,
 		Directory: cwd,
 	})
-	d.store.SetResumeSessionID("sess", "native-own")
+	if changed, err := d.store.TransitionSessionConversation("sess", "native-own", own); err != nil || !changed {
+		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+	}
+	lookups := 0
+	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
+		lookups++
+		return newerNeighbor
+	}
 
 	got := d.resolveTranscriptPathForSession(d.store.Get("sess"), "")
 	if got != own {
 		t.Fatalf("resolveTranscriptPathForSession() = %q, want own rollout %q (newer neighbor=%q)", got, own, newerNeighbor)
+	}
+	if lookups != 0 {
+		t.Fatalf("resolution performed %d fallback lookups", lookups)
 	}
 }
 
@@ -75,5 +85,25 @@ func TestResolveTranscriptPathForSession_RejectsCWDGuessWithoutNativeID(t *testi
 	got := d.resolveTranscriptPathForSession(d.store.Get("sess"), "")
 	if got != "" {
 		t.Fatalf("resolveTranscriptPathForSession() = %q, want no exact path (neighbor=%q)", got, neighbor)
+	}
+}
+
+func TestResolveTranscriptPathForSession_DoesNotDiscoverWhenBoundPathIsMissing(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.store.Add(&protocol.Session{ID: "sess", Agent: protocol.SessionAgentCodex})
+	if changed, err := d.store.TransitionSessionConversation("sess", "native-own", filepath.Join(t.TempDir(), "missing.jsonl")); err != nil || !changed {
+		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
+	}
+	lookups := 0
+	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
+		lookups++
+		return "/neighbor.jsonl"
+	}
+
+	if got := d.resolveTranscriptPathForSession(d.store.Get("sess"), ""); got != "" {
+		t.Fatalf("resolveTranscriptPathForSession() = %q, want unavailable", got)
+	}
+	if lookups != 0 {
+		t.Fatalf("resolution performed %d fallback lookups", lookups)
 	}
 }

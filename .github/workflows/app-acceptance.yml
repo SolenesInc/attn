@@ -1,0 +1,60 @@
+name: App Acceptance
+run-name: App acceptance ${{ inputs.candidate_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full release candidate commit SHA
+        required: true
+        type: string
+      profile:
+        description: Non-production profile used for verification
+        required: true
+        type: string
+      scenarios:
+        description: Scenarios exercised against the packaged app
+        required: true
+        type: string
+      evidence:
+        description: Evidence URL or concise manual receipt
+        required: true
+        type: string
+      outcome:
+        description: Manual verification result
+        required: true
+        default: passed
+        type: choice
+        options:
+          - passed
+          - failed
+
+jobs:
+  app-acceptance:
+    name: App acceptance
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: authority
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          path: candidate
+
+      - name: Record exact-head receipt
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          EVIDENCE: ${{ inputs.evidence }}
+          OUTCOME: ${{ inputs.outcome }}
+          PROFILE: ${{ inputs.profile }}
+          SCENARIOS: ${{ inputs.scenarios }}
+        run: |
+          CANDIDATE_CHECKOUT_SHA="$(git -C candidate rev-parse --verify 'HEAD^{commit}')"
+          ./authority/scripts/app-acceptance.sh \
+            "$CANDIDATE_CHECKOUT_SHA" "$CANDIDATE_SHA" \
+            "$OUTCOME" "$PROFILE" "$SCENARIOS" "$EVIDENCE"

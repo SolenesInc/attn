@@ -26,6 +26,8 @@ import type {
 } from "../automode/model-classifier";
 import { FakePi, FakeUI, toolCall, uiContext } from "./automode-fake-pi";
 
+const judgingConfig = { ...defaultAutoModeConfig, models: ["test/judge"] };
+
 class DenyingRegistry implements ModelRegistryLike {
   find(provider: string, id: string): ModelLike | undefined {
     return { provider, id };
@@ -35,7 +37,12 @@ class DenyingRegistry implements ModelRegistryLike {
     return {
       streamSimple: () => ({
         result: async (): Promise<CompletionResult> => ({
-          content: [{ type: "text", text: JSON.stringify({ verdict: "deny", reason: "not asked for" }) }],
+          content: [
+            {
+              type: "text",
+              text: "<severity>80</severity><category>Irreversible Local Destruction</category>",
+            },
+          ],
           stopReason: "stop",
         }),
       }),
@@ -88,21 +95,27 @@ function denial(overrides: Partial<AutoModeDenial> = {}): AutoModeDenial {
     tool: "bash",
     action: "bash: git push --force origin main",
     reason: "not asked for",
-    rule: "classifier-2a",
+    rule: "classifier-harm",
     at: "2026-08-18T10:00:00.000Z",
     ...overrides,
   };
 }
 
-async function denyOneCall(options: { path: string; onDenial?: (denial: AutoModeDenial) => void }): Promise<FakeUI> {
+async function denyOneCall(options: {
+  path: string;
+  onDenial?: (denial: AutoModeDenial) => void;
+
+  opening?: string;
+}): Promise<FakeUI> {
   const mode = new AutoMode({
-    config: defaultAutoModeConfig,
+    config: judgingConfig,
     ledger: new DenialLedger(options.path, "sess-1"),
     onDenial: options.onDenial,
   });
   const pi = new FakePi();
   mode.register(pi);
   pi.start(uiContext(new FakeUI(), { modelRegistry: new DenyingRegistry() }));
+  if (options.opening !== undefined) pi.say(options.opening);
   const ui = new FakeUI();
   expect((await pi.toolCall?.(push(), uiContext(ui)))?.block).toBe(true);
   return ui;
@@ -131,7 +144,7 @@ describe("where the ledger lives", () => {
     expect(locatePath("/work/repo", "/work/repo/attn-automode-denials.jsonl").location).toBe("protected");
     expect(locatePath("/work/repo", "/work/repo/attn-automode.json").location).toBe("protected");
     expect(locatePath("/work/repo", "/work/repo/attn-automode-denials.jsonl.1").location).toBe("protected");
-    expect(locatePath("/work/repo", "/work/repo/notes.md").location).toBe("in-envelope");
+    expect(locatePath("/work/repo", "/work/repo/notes.md").location).toBe("in-cwd");
   });
 });
 
@@ -147,10 +160,40 @@ describe("what a denial leaves behind", () => {
       tool_call_id: "call-1",
       tool: "bash",
       action: "bash: git push --force origin main",
-      reason: "not asked for",
-      rule: "classifier-2a",
+      reason: "the classifier placed this call at severity 80 under the Irreversible Local Destruction rule",
+      rule: "classifier-intent",
       at: expect.any(String),
+      prompt: { layer: "intent", system: expect.any(String), user: expect.any(String) },
     });
+  });
+
+  test("the record keeps the exact prompt the layer was judged on", async () => {
+    const path = tempPath();
+    await denyOneCall({ path, opening: "you may force-push this branch, it is mine" });
+
+    const prompt = readRecords(path)[0]?.prompt;
+    expect(prompt?.layer).toBe("intent");
+    expect(prompt?.system).toContain("You are a security monitor for an autonomous coding agent.");
+    expect(prompt?.user).toContain("you may force-push this branch, it is mine");
+    expect(prompt?.user).toContain('{"bash":"git push --force origin main"}');
+  });
+
+  test("a call no classifier judged carries no prompt", async () => {
+    const path = tempPath();
+    const mode = new AutoMode({
+      config: { ...judgingConfig, hardDeny: ["rm -rf *"] },
+      ledger: new DenialLedger(path, "sess-1"),
+    });
+    const pi = new FakePi();
+    mode.register(pi);
+    pi.start(uiContext(new FakeUI(), { modelRegistry: new DenyingRegistry() }));
+    const call = toolCall("bash", { command: "rm -rf /tmp/whatever" });
+    expect((await pi.toolCall?.(call, uiContext(new FakeUI())))?.block).toBe(true);
+
+    const record = readRecords(path)[0];
+    expect(record?.rule).toBe("hard-deny");
+    expect(record?.prompt).toBeUndefined();
+    expect(record?.clearable).toBe(false);
   });
 
   test("a report that reaches a relay and dies there still leaves the record", async () => {
@@ -197,7 +240,7 @@ describe("what a denial leaves behind", () => {
   test("a record that cannot be written is said out loud, and the call stays blocked", async () => {
     const path = tempPath();
     const mode = new AutoMode({
-      config: defaultAutoModeConfig,
+      config: judgingConfig,
       ledger: {
         record() {
           throw new Error("EACCES");

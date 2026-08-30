@@ -1,210 +1,136 @@
-# attn profiles
+# Profiles
 
-A **profile** fully isolates an attn install: its own data directory, socket,
-websocket port, macOS app bundle, and bundle identifier. Profiles let several
-agents run attn — and its tests — side by side without colliding.
+## Select and inspect
 
-**One knob: `ATTN_PROFILE`.** Set it once in a shell and every entrypoint (CLI,
-daemon, frontend e2e, real-app harness, build) targets the same isolated world.
-You never set per-entrypoint profile variables by hand. `profile-env` first
-clears inherited explicit routing overrides (`ATTN_DATA_DIR`,
-`ATTN_SOCKET_PATH`, `ATTN_DB_PATH`, `ATTN_CONFIG_PATH`, `ATTN_PLUGIN_DIR`, and
-`ATTN_WS_PORT`) so the selected profile actually wins, including inside an
-attn-managed session.
+A profile isolates data, socket, ports, app, and bundle id.
+Select it through `profile-env` to clear inherited routing overrides:
 
-```
-attn profile-env agent7 | source     # fish:  set ATTN_PROFILE=agent7
-eval "$(attn profile-env agent7)"     # bash/zsh
-attn profile-env --unset | source     # back to the default profile
+```bash
+eval "$(attn profile-env <name>)" # bash/zsh
+attn profile-env <name> | source # fish
+attn profile
+attn profile list --json
+attn profile resolve --json
 ```
 
-## See where you are
+- Check the `[attn profile=…]` banner before lifecycle commands.
+- Build/test tooling reads `attn profile resolve --field <field>`; do not
+  duplicate path/port derivation from `internal/config`.
+- `ATTN_DATA_DIR` overrides runtime paths. `profile resolve` and `profile clean`
+  still use canonical profile paths. Use bare `ATTN_DATA_DIR` for test scoping.
+- `ATTN_PROFILE` plus another profile's routing paths/port is rejected.
+  Reselect with `profile-env`; never bypass the check.
+- Clear selection with `eval "$(attn profile-env --unset)"`.
 
-```
-attn profile            # status of the active profile
-attn profile list       # every profile with data and/or an installed app
-```
+## Build and install
 
-`attn profile status` prints the resolved data dir, socket, port, bundle id,
-app path, and e2e ports, and whether the daemon socket / app are present. Any
-non-default `attn` command also prints a one-line `[attn profile=… socket=…
-port=…]` banner so you can never lose track of which world you are touching.
+Follow [production safety](../AGENTS.md#you-are-probably-running-inside-attn).
+Select the named profile before installing; `ATTN_PROFILE` must match `PROFILE`.
 
-`ATTN_DATA_DIR`, when set, overrides every profile-derived data dir outright
-(highest precedence, above `ATTN_PROFILE`) — the knob test suites and
-harnesses use to scope themselves to an explicit temp dir instead of ever
-touching a real profile's data. See
-[docs/plans/2026-07-18-db-loss-mitigation.md](plans/2026-07-18-db-loss-mitigation.md).
-It is a per-process scoping override, not a profile. `attn profile resolve`
-and `attn profile clean` deliberately keep reporting and operating on the
-profile's canonical directories and do not honor it, so under `ATTN_DATA_DIR`
-the live process's runtime paths differ from `resolve`'s output by design.
+| Change | Dev | Named profile |
+| --- | --- | --- |
+| Go-only | `make install-daemon-dev` | `make install-daemon PROFILE=<name>` |
+| App, plugins, protocol, bundle metadata | `make dev` | `make install PROFILE=<name>` |
 
-## The routing fence: a profile never touches another profile's world
+Use a full build when unsure or when the daemon-only build misses the change.
+Open a named app with `make run PROFILE=<name>`.
+Full macOS builds/installs run outside the sandbox for keychain-backed signing;
+ad-hoc signing loses persistent permissions.
 
-Because an explicit override outranks `ATTN_PROFILE`, the two can contradict
-each other: the profile name says `agent7` while every resolved path says
-production. That combination is never intentional, and it is not a scoping
-override — it is an isolation failure. On 2026-08-17 an inherited production
-`ATTN_DATA_DIR` let `make install PROFILE=fb2lists` take the production PID
-lock and run migrations on the production database.
+## Linux deep links
 
-So `ATTN_PROFILE` set alongside a data dir, socket, database, config path,
-plugin dir, or websocket port that is not that profile's is refused, at the
-CLI entry point and again before the daemon boots — before anything opens a
-database, takes the PID lock, binds a socket, or stops another daemon. Nothing
-is corrected: guessing which half was meant is how this gets worse.
+macOS registers the profile's resolved `<deepLinkScheme>://` on the app bundle
+itself (`attn://` for the default profile; `attn-dev://` or `attn-<name>://`
+for others — see `DeepLinkSchemeForProfile`). Elsewhere, `make install` also
+runs `attn profile register-scheme --profile <name>`: it writes
+`<appName>-handler.desktop` under `~/.local/share/applications` (or
+`$XDG_DATA_HOME/applications`) and refreshes the desktop database
+(`update-desktop-database`, `xdg-mime`). Missing tools are reported, not
+fatal: the entry is still written. Rerun `register-scheme` by hand after
+moving the installed executable.
 
-```
-$ ATTN_PROFILE=fb2lists attn daemon ensure
-ATTN_PROFILE=fb2lists disagrees with the routing this process resolved.
-  profile fb2lists is /Users/victor/.attn-fb2lists (port 27441), but:
-    ATTN_DATA_DIR    = /Users/victor/.attn
-    ATTN_SOCKET_PATH = /Users/victor/.attn/attn.sock
-    ...
-  Fix: env -u ATTN_DATA_DIR … ATTN_PROFILE=fb2lists <command>
-  Or clear them in your shell: eval "$(attn profile-env fb2lists)"
-```
+`attn profile resolve --field desktopEntry` reports the handler path (empty
+off Linux); `attn profile resolve --field deepLinkScheme` reports the scheme;
+`attn profile clean <name>` removes the entry along with everything else.
 
-`ATTN_DATA_DIR` with **no** `ATTN_PROFILE` is untouched by this — that is the
-test/harness scoping shape above, and it stays legal. `attn profile` is the one
-command that still runs under the contradiction: it prints the same conflict as
-a warning, so there is always something that explains it and `attn profile
-clean` still works.
+Launching the app (bare `attn`, or `attn -s <label>`) builds a
+`<deepLinkScheme>://spawn?...` deep link (`attn://spawn?...` for the default
+profile). On Linux this launches the profile's own app executable, which, via
+tauri-plugin-single-instance, hands the URL to an already-running instance
+instead of opening a second window.
 
-## The single authority: `attn profile resolve`
+## Verification requirements
 
-Every resource a profile maps to is derived in exactly one place
-(`internal/config`) and surfaced by `resolve`. Tooling (the Makefile, the e2e
-harness, the real-app harness) reads `resolve` instead of re-deriving — so the
-mapping can never drift between entrypoints.
+- Non-trivial PRs need live verification from their branch in a non-production profile.
+- Exempt trivial docs/comments/renames/log strings, or isolated changes fully
+  covered by unit tests with no lifecycle, protocol, PTY, runner, timing, or UI
+  behavior. State the exemption.
+- Self-contained CLI behavior: built binary plus unit tests.
+- Daemon-only verification: only when no behavior reaches the app.
+- App-observable changes, including daemon state/broadcasts, PTYs, and PR/git
+  flows: exercise the running app. Visible changes need a recording.
+- Lifecycle, protocol, PTY, background-runner, and UI changes always need live
+  verification. If unavailable, ask before merging.
 
-```
-attn profile resolve --json                 # full resolution as JSON
-attn profile resolve --field wsPort          # one value (scripting)
-attn profile resolve --profile dev --field bundleId
-```
+## Verify the installed build
 
-Resolved keys: `profile, label, dataDir, socket, dbPath, wsPort, bundleId,
-appName, appPath, deepLinkScheme, e2eDaemonPort, e2eVitePort`.
+Run the selected profile's bundled CLI, with the scenario's launch settings:
 
-## What maps to what
-
-| Resource | default | dev | named (e.g. `agent7`) |
-|---|---|---|---|
-| Data dir | `~/.attn` | `~/.attn-dev` | `~/.attn-agent7` |
-| WS port | 9849 | 29849 | hash → `[20000,29848]` |
-| Bundle id | `com.attn.manager` | `…​.dev` | `…​.agent7` |
-| App | `attn.app` | `attn-dev.app` | `attn-agent7.app` |
-| Deep-link scheme | `attn` | `attn-dev` | `attn-agent7` |
-| e2e daemon port | 19849 | hash → `[30000,30999]` | hash → `[30000,30999]` |
-| e2e Vite port | 1421 | hash → `[31000,31999]` | hash → `[31000,31999]` |
-
-Port bands are disjoint by construction: a throwaway e2e daemon never collides
-with a *real* daemon of the same profile. Names match `[a-z0-9][a-z0-9-]{0,15}`.
-
-## Running tests under a profile
-
-| Suite | Command | Isolation |
-|---|---|---|
-| Go unit/integration | `make test` | already parallel-safe (each test uses `t.TempDir()` + explicit `ATTN_*` env; never touches `~/.attn`) |
-| Frontend e2e | `make test-e2e` | derives this profile's e2e daemon + Vite ports; the per-run daemon kill is scoped to that port |
-| Real-app scenarios | `pnpm --dir app run real-app:…` | targets the active profile's daemon/app via `attn profile resolve`; `ATTN_HARNESS_PROFILE` overrides; default is the dev sibling, never prod |
-
-So two agents in separate worktrees with distinct `ATTN_PROFILE` values can run
-the Go and (soon) e2e suites concurrently with no cross-talk.
-
-## Safety model — hard to point the wrong profile at the wrong place
-
-- **Prod is sacred.** Bare `make`, `make install`, `make install-daemon` build
-  the prod bundle, so they refuse at parse time if `ATTN_PROFILE` is set. Build
-  a profile's own app with `make install PROFILE=<name>` (or `make dev` for the
-  dev sibling, which works from any shell).
-- **Build matches your shell.** `make install PROFILE=<name>` refuses when
-  `<name>` differs from your shell's `ATTN_PROFILE`, so you can't build agent8's
-  app while you think you're agent7. (`make dev` is exempt — it always targets
-  the dev sibling on purpose.)
-- **The packaged app is bound to its build profile.** A profile's `.app` pins
-  `ATTN_PROFILE`/`ATTN_WS_PORT` and strips inherited routing env at launch, so
-  it can never reach another profile's daemon.
-- **Daemon isolation is enforced.** The daemon refuses to start if its socket
-  root and database would straddle two profiles, and restarts when the running
-  daemon's profile no longer matches the caller's.
-- **Single authority.** Because every entrypoint derives from `attn profile
-  resolve`, there is no hand-synced per-entrypoint mapping to get wrong.
-
-## Lifecycle
-
-| Step | How |
-|---|---|
-| Pick | `attn profile-env <name> \| source` |
-| Inspect | `attn profile` / `attn profile list` / `attn profile list --json` |
-| Build + install app | `make install PROFILE=<name>` (opens it: `make run PROFILE=<name>`) |
-| Sign | uniform stable identity via `scripts/macos-codesign-identity.sh`; macOS grants persist per bundle id |
-| Clean | `attn profile clean <name>` — reap pty-workers, stop daemon, quit app, remove data dir + app, forget the bundle |
-
-### Cleaning up after yourself
-
-A profile costs nothing to create and is invisible once made: its daemon (~40MB)
-and each pty-worker (~15MB) keep running long after the branch that needed them
-is merged, and nothing ever reaps them on its own. Clean a throwaway profile as
-soon as the work is done.
-
-**Workers are reaped before the data dir goes.** Stopping a daemon deliberately
-leaves its workers running — they are built to outlive a restart and be
-re-adopted — so `clean` shuts them down explicitly first. It talks to each worker
-over the authenticated control socket recorded in the profile's worker registry,
-which is precise by construction: it cannot hit an unrelated process that
-inherited a recycled PID. A worker whose socket is unreachable is signalled only
-if its argv still identifies it as that registry entry's worker; anything less
-certain is left running and reported by PID, e.g.
-
-```
-  workers  3 registered (2 removed, 1 unidentified)
-           ! session 8f9fb98d: pid 19891 could not be confirmed as its worker
-             (dial unix …: connect: connection refused); left running — check it
-             with `ps -p 19891` and kill it yourself if it is stale
+```bash
+profile_cli="$(./attn profile resolve --field appDaemon)"
+"$profile_cli" preflight
+"$profile_cli" preflight --agent codex --model <model> --effort high --json
 ```
 
-Removing the data dir before reaping is what strands a worker permanently: the
-registry it would be found through goes with the dir, so no daemon can ever adopt
-it again.
+Fix tool/path/routing/daemon/protocol failures before collecting evidence.
+A different `attn` on `PATH` does not verify the installed build.
+Read [harness guidance](../app/scripts/real-app-harness/AGENTS.md) before
+packaged-app scenarios or recordings; those scenarios run serially.
+Go and frontend e2e suites may run concurrently in distinct worktree profiles.
 
-### Provenance
+## Clean up
 
-`make install PROFILE=<name>` and `make install-daemon PROFILE=<name>` record the
-worktree they ran from in `<data-dir>/origin.json`. Install is the only moment
-that link is known for certain — the build fingerprint identifies source
-*content*, not the checkout — and without it a throwaway profile is
-indistinguishable from a long-lived one once the agent that made it is gone.
+Clean temporary profiles when finished with `attn profile clean <name>`.
+It stops workers, conversation hosts, plugins, daemon, and app before removing
+the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
+automation manifest, frontend debug logs, WebKit state). Never delete the data
+directory first: the worker registry is needed for cleanup. Inspect any
+unconfirmed PIDs the command leaves running.
 
-`attn profile list` shows the origin worktree; `attn profile list --json` adds
-the branch, whether the daemon is up, and how many workers are live. Cleaning a
-profile removes its origin record along with everything else, so provenance never
-outlives the profile.
+The app goes first and clean waits for its pid (`<data-dir>/app.pid`, written by
+the Tauri shell) to be gone — a macOS quit request only asks — escalating to
+SIGTERM then SIGKILL if it will not leave. Ownership is rebuilt from the live
+process before every signal: a pid that is not this profile's app executable is
+never signalled, and one that is alive but cannot be identified stops the clean
+rather than being assumed dead. The shell rewrites `app.pid` on every launch, so
+a marker naming a different pid, or one that reappears after the stop, is a
+relaunch and aborts the clean. Whenever the app cannot be confirmed gone, clean
+removes nothing and names the pid: quit it yourself and re-run. `--force` covers
+the production profile, never a live app.
 
-That record is what powers the repository's PR-milestone cleanup hook
-(`scripts/claude/attn-profile-nudge.sh`, wired in `.claude/settings.json`): after
-an agent creates or merges a PR, it reminds the agent to clean any profile
-installed from that worktree, and stays silent otherwise. Record an origin by
-hand with `attn profile set-origin <name> [--worktree <dir>]` if you created a
-profile outside `make install`.
+The last gap a marker cannot close — a launch between the final check and the
+removals — is closed by `~/.attn.locks/app-<profile>.lock`. Every app process
+takes it *shared* at startup and the kernel holds it for that process's
+lifetime, so app instances never block each other and the Linux no-bus fallback
+can still open a second instance to deliver a deep link. Clean takes it
+*exclusive* once the old app is gone and holds it through the last removal, so
+it can only run when no app instance of that profile is left. Whoever loses
+gives way: an app launched into a clean waits up to 3s for it to finish and then
+refuses to start rather than run unlocked, and a clean that finds the lock held
+aborts before touching anything. Taking the lock is mandatory for the app: it
+will not write `app.pid` or open a window without it, and the reason goes to
+stderr. The lock file itself is never removed, and cannot go stale: kernel
+ownership disappears with the process.
 
-## Rollout status
+Use `attn profile stop-app --profile <name>` to stop only the app; it returns
+once the app is gone.
+`attn profile list --json` reports the install's origin worktree and live workers,
+and `appLocalDataDir`/`hasAppLocalData` so a profile whose data dir and app are
+already gone still shows up while its app local data lingers.
+Installs record `<data-dir>/origin.json`; manual installs can use
+`attn profile set-origin <name> --worktree <dir>`.
 
-The model above is fully implemented: the `internal/config` authority and
-`attn profile status|resolve|list|clean`; Go-test parallel-safety; profile-aware
-**frontend e2e** (derives its daemon + Vite ports from the active profile and
-scopes its teardown kill to its own port) and **real-app harness** (honors
-`ATTN_PROFILE` with an `ATTN_HARNESS_PROFILE` override, resolves every resource
-via `attn profile resolve`, never targets prod by omission). Every non-empty
-profile (the `dev` sibling or any named profile) exposes the **UI automation
-layer** — the app writes a `ui-automation.json` manifest and serves the
-localhost+token bridge the harness drives. Production (the empty-profile bundle)
-stays off unless an operator opts in with `ATTN_AUTOMATION=1` (see
-`profile::automation_enabled`). The model also covers the
-**per-profile app build** (`make install PROFILE=<name>` — bundle metadata
-generated from `attn profile tauri-config`, the authority's port and bundle id
-baked into the binary so a profiled app can never reach another profile's
-daemon); and **`attn profile clean`** for teardown. See
-`docs/plans/2026-06-13-parallel-profiles.md` for the design history.
+## UI automation
+
+Named profiles expose a localhost/token bridge through `ui-automation.json`.
+Production requires explicit `ATTN_AUTOMATION=1`.

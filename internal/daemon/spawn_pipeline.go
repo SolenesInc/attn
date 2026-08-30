@@ -317,6 +317,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			if msg.AutoMode != nil {
 				cfg.EnabledDefault = *msg.AutoMode
 			}
+			cfg = d.autoModeConfigForSession(cfg, params.CWD)
 			params.AutoMode = &cfg
 		}
 		result, err := d.resolvePluginDriverLaunch(req.pluginDriver, params, req.existingSession != nil && req.pluginDriver.Capabilities["resume"])

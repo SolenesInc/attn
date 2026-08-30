@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-skip-tests
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -171,6 +171,19 @@ test-hooks:
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
 	@bash ./scripts/pr-evidence_test.sh
+	@bash ./scripts/ci-acceptance_test.sh
+	@bash ./scripts/app-acceptance_test.sh
+	@bash ./scripts/app-acceptance-gate_test.sh
+	@bash ./scripts/candidate-gate_test.sh
+	@bash ./scripts/changelog-gate_test.sh
+	@bash ./scripts/main-route_test.sh
+	@bash ./scripts/release_test.sh
+	@bash ./scripts/release-tag-gate_test.sh
+	@bash ./scripts/workflow-job-gate_test.sh
+	@bash ./scripts/release-after-acceptance_test.sh
+	@bash ./scripts/release-health_test.sh
+	@bash ./scripts/publish-release_test.sh
+	@bash ./scripts/sync-main-to-next_test.sh
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -241,9 +254,18 @@ endif
 # Build + install + open the PROFILE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named profile opens its own bundle.
 run: install
-	@app_name="$$($(CURDIR)/$(OUTPUT) profile resolve --profile "$(PROFILE)" --field appName)"; \
-	open "$(HOME)/Applications/$$app_name.app"; \
-	echo "Launched $(HOME)/Applications/$$app_name.app"
+	@set -e; \
+	attn="$(CURDIR)/$(OUTPUT)"; \
+	app_path="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appPath)"; \
+	if [ "$(UNAME_S)" = "Darwin" ]; then \
+		open "$$app_path"; \
+	else \
+		app_exec="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appExecutable)"; \
+		data_dir="$$("$$attn" profile resolve --profile "$(PROFILE)" --field dataDir)"; \
+		mkdir -p "$$data_dir"; \
+		setsid "$$app_exec" </dev/null >>"$$data_dir/app.log" 2>&1 & \
+	fi; \
+	echo "Launched $$app_path"
 
 # Install-only (no open). `make install` = prod; `make install PROFILE=agent7`
 # = the isolated agent7 bundle. Resources resolved from `attn profile resolve`.
@@ -252,18 +274,25 @@ install: build-app
 	profile="$(PROFILE)"; \
 	attn="$(CURDIR)/$(OUTPUT)"; \
 	app_name="$$("$$attn" profile resolve --profile "$$profile" --field appName)"; \
-	bundle_id="$$("$$attn" profile resolve --profile "$$profile" --field bundleId)"; \
 	ws_port="$$("$$attn" profile resolve --profile "$$profile" --field wsPort)"; \
 	label="$$("$$attn" profile resolve --profile "$$profile" --field label)"; \
-	app_bundle="$(HOME)/Applications/$$app_name.app"; \
-	app_binary="$$app_bundle/Contents/MacOS/attn"; \
+	app_bundle="$$("$$attn" profile resolve --profile "$$profile" --field appPath)"; \
+	app_binary="$$("$$attn" profile resolve --profile "$$profile" --field appDaemon)"; \
+	if [ "$(UNAME_S)" = "Darwin" ]; then \
+		staged="app/src-tauri/target/release/bundle/macos/$$app_name.app"; \
+	else \
+		staged="app/src-tauri/target/release/linux-tree/$$app_name"; \
+	fi; \
 	echo ">>> Installing $$label: $$app_bundle (port=$$ws_port)"; \
-	mkdir -p ~/Applications; \
+	mkdir -p "$$(dirname "$$app_bundle")"; \
 	: "Quit a running instance first. macOS keeps the running image via mmap,"; \
 	: "so rm -rf + cp alone would leave an old process out of a deleted bundle."; \
-	osascript -e "tell application id \"$$bundle_id\" to quit" 2>/dev/null || true; \
+	"$$attn" profile stop-app --profile "$$profile" >/dev/null; \
 	rm -rf "$$app_bundle"; \
-	cp -r "app/src-tauri/target/release/bundle/macos/$$app_name.app" ~/Applications/; \
+	cp -r "$$staged" "$$app_bundle"; \
+	if [ "$(UNAME_S)" != "Darwin" ]; then \
+		"$$attn" profile register-scheme --profile "$$profile"; \
+	fi; \
 	if [ -n "$$profile" ]; then \
 		$(WARN_LEAKED_ROUTING); \
 		env $(PROFILE_DAEMON_UNSET) ATTN_PROFILE="$$profile" "$$app_binary" daemon ensure >/dev/null; \
@@ -281,16 +310,18 @@ install-daemon: ensure-codesign-identity build
 	@set -e; \
 	profile="$(PROFILE)"; \
 	attn="$(CURDIR)/$(OUTPUT)"; \
-	app_name="$$("$$attn" profile resolve --profile "$$profile" --field appName)"; \
 	label="$$("$$attn" profile resolve --profile "$$profile" --field label)"; \
-	app_bundle="$(HOME)/Applications/$$app_name.app"; \
-	app_binary="$$app_bundle/Contents/MacOS/attn"; \
+	app_bundle="$$("$$attn" profile resolve --profile "$$profile" --field appPath)"; \
+	app_binary="$$("$$attn" profile resolve --profile "$$profile" --field appDaemon)"; \
 	if [ ! -d "$$app_bundle" ]; then \
-		echo "No installed $$app_name.app in ~/Applications; run make install$$([ -n "$$profile" ] && echo " PROFILE=$$profile") first"; \
+		echo "No installed app at $$app_bundle; run make install$$([ -n "$$profile" ] && echo " PROFILE=$$profile") first"; \
 		exit 1; \
 	fi; \
 	echo ">>> Updating $$label daemon at $$app_binary"; \
-	cp $(OUTPUT) "$$app_binary"; \
+	: "Rename, not overwrite: Linux refuses to write a running executable"; \
+	: "(ETXTBSY), while a rename leaves the running inode alone."; \
+	cp $(OUTPUT) "$$app_binary.new"; \
+	mv -f "$$app_binary.new" "$$app_binary"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
 		identity="$(MACOS_CODESIGN_IDENTITY)"; \
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \
@@ -479,5 +510,5 @@ dist: build-app
 release:
 	./scripts/release.sh $(VERSION_TAG)
 
-release-skip-tests:
-	./scripts/release.sh $(VERSION_TAG) --skip-tests
+release-hotfix:
+	./scripts/release.sh $(VERSION_TAG) --hotfix

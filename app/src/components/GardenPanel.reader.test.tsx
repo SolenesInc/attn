@@ -45,6 +45,7 @@ function seedDocument(root: Seed, noteBody: string): SeedDocument {
     }] : [],
     notes_total: noteBody ? 1 : 0,
     artifacts: [],
+    references: [],
   };
 }
 
@@ -63,7 +64,7 @@ describe('GardenPanel seed reader drill', () => {
       artifact: { kind: 'markdown_file', path: '/repo/evidence.md' },
     });
     fetched.notes_total += 1;
-    fetched.artifacts = [{ kind: 'markdown_file', path: '/repo/evidence.md' }];
+    fetched.references = [{ kind: 'markdown_file', path: '/repo/evidence.md' }];
     const fetchSeedDocument = vi.fn().mockResolvedValue(fetched);
     const onOpenAsTile = vi.fn();
     const onOpenMarkdownArtifact = vi.fn();
@@ -90,8 +91,8 @@ describe('GardenPanel seed reader drill', () => {
     expect(onOpenAsTile).toHaveBeenCalledWith('s-plan11');
 
     const artifact = screen.getByRole('button', { name: /evidence\.md/ });
-    expect(artifact).toHaveTextContent('markdown');
-    expect(artifact).toHaveTextContent('/repo');
+    expect(artifact.closest('li')).toHaveTextContent('linked file');
+    expect(artifact.closest('li')).toHaveTextContent('/repo');
     fireEvent.click(artifact);
     expect(onOpenMarkdownArtifact).toHaveBeenCalledWith('/repo/evidence.md');
   });

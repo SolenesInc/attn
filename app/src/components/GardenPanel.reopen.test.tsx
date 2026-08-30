@@ -35,6 +35,7 @@ function document(value: Seed, saved: NonNullable<Seed['continuation']>): SeedDo
     notes: [],
     notes_total: 0,
     artifacts: [],
+    references: [],
   };
 }
 

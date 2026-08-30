@@ -1,0 +1,12 @@
+kind: changed
+area: automode
+change: >
+  What auto mode knows about your machine is a list of slots now, not a
+  paragraph. The classifier rules ask it questions — is this domain trusted, is
+  this our registry, what counts as production here — and prose could not answer
+  any of them, so a machine you had described carefully still had nothing
+  trusted. Settings shows every slot with what it holds, and an unfilled one
+  says what the rules assume instead of sitting blank.
+  `attn automode env set <slot> <value>…` and `env clear <slot>` write them
+  from the command line. Prose you had written before is kept as notes beside
+  the slots, where it reads as context; no rule looks anything up in it.

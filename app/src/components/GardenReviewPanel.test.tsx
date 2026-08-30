@@ -49,6 +49,7 @@ function document(overrides: Partial<SeedDocument> = {}): SeedDocument {
     notes: [],
     notes_total: 0,
     artifacts: [],
+    references: [],
     ...overrides,
   };
 }

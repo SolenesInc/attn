@@ -1,4 +1,5 @@
 import type { TerminalKeyEvent } from './keyEncoder';
+import { terminalClipboardChord } from '../shortcuts/platform';
 
 const MOD_SHIFT = 1 << 0;
 const MOD_CTRL = 1 << 1;
@@ -285,8 +286,10 @@ function unshiftedCodepoint(event: KeyboardEvent, text: string | undefined): num
 }
 
 function browserOwnsKey(event: KeyboardEvent): boolean {
-  return ((event.metaKey || event.ctrlKey) && event.code === 'KeyV')
-    || (event.metaKey && event.code === 'KeyC');
+  // Plain Ctrl+V stays the WebView's paste accelerator off-mac; on mac the interceptor
+  // has already turned it into the agent image-paste trigger.
+  return terminalClipboardChord(event) !== null
+    || (event.ctrlKey && !event.shiftKey && event.code === 'KeyV');
 }
 
 function consumeBrowserEvent(event: Event): void {

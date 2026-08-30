@@ -1,0 +1,7 @@
+kind: fixed
+area: delegate
+change: >
+  `attn delegate --help` now says which repository the default worktree
+  branches from: the source checkout's, or with `--workspace`, the one that
+  workspace's sessions are in. It previously claimed the source checkout in
+  both cases.

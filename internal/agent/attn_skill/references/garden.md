@@ -33,8 +33,16 @@ The payload names sibling blockers by slug:
 }
 ```
 
-The slug is the sibling title lowercased. Each run of characters that are not
-ASCII letters or digits becomes one dash. Pass `-` to read the payload from stdin.
+The slug is the sibling title without its stop words (a, the, of, in, on...),
+lowercased and dash-joined; writing the sibling's title works too. Two siblings
+that derive the same slug are refused. Pass `-` to read the payload from stdin.
+
+## Speaking of seeds
+
+Every verb prints a seed as `id  slug  title`. The id is for commands and for
+messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
+(`s-7k3f9m`) on first mention, then the slug alone. A person should never have
+to decode an id.
 
 ## Rings and watches
 
@@ -48,13 +56,23 @@ A bell carries only the seed and what moved, so read it with `attn seed show`;
 
 ## Artifacts
 
-Attach a document where it already lives, and detach the pointer when it stops
-being current:
+Bring a local file into durable seed ownership with an explicit Move or Copy.
+Move is recommended; tracked Git files must use Copy. Detaching moves the owned
+file back out and never overwrites:
 
-    attn seed attach <id> --path <file.md> [--repo <repository>]
+    attn seed attach <id> --path <file> --move
+    attn seed attach <id> --path <file> --copy
+    attn seed detach <id> --path <filename> --to <destination>
+
+Repository, Notebook and URL documents remain links where they already live:
+
+    attn seed attach <id> --path <file.md> --repo <repository>
     attn seed attach <id> --notebook <document-id>
     attn seed attach <id> --url <url>
-    attn seed detach <id> --path <file.md>
+    attn seed detach <id> --path <file.md> --reference
+
+The Garden labels old path associations as linked files. Bring one into seed
+ownership explicitly with Move or Copy; a failed transfer leaves the link alone.
 
 ## Packets
 

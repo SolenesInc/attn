@@ -22,9 +22,12 @@ import type {
   Task as GeneratedTask,
   Notification as GeneratedNotification,
   Seed as GeneratedSeed,
-  SeedNote as GeneratedSeedNote,
+  SeedArtifact as GeneratedSeedArtifact,
   SeedArtifactReference as GeneratedSeedArtifactReference,
   DelegateResult as GeneratedDelegateResult,
+  SeedArtifactTargetResult,
+  SeedArtifactTransferResult,
+  SeedDocument as GeneratedSeedDocument,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
   Presentation,
@@ -79,10 +82,12 @@ import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
   type AutoModePatternEdit,
+  type AutoModeModelCatalog,
   type AutoModePromotion,
   type AutoModeState,
 } from './daemonAutoModeEvents';
 import { handleFsDaemonEvent } from './daemonFsEvents';
+import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleNotebookDaemonEvent } from './daemonNotebookEvents';
 import {
   DocumentSubscriptions,
@@ -112,6 +117,7 @@ import { BUILD_PROFILE, daemonProfileMatches, fetchDaemonHealthProfile, profileM
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
 import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useConversationsStore, type AgentPromptMode } from '../store/conversations';
+import { useAutoModePushStore } from '../store/autoMode';
 import { conversationAgents } from '../utils/agentAvailability';
 import { useAutomationsStore } from '../store/automations';
 
@@ -133,14 +139,9 @@ export interface PastConversationsResult {
 }
 
 export type Seed = GeneratedSeed;
-export interface SeedDocument {
-  seed: Seed;
-  tender_holds: boolean;
-  children: Seed[];
-  notes: GeneratedSeedNote[];
-  notes_total: number;
-  artifacts: GeneratedSeedArtifactReference[];
-}
+export type SeedArtifact = GeneratedSeedArtifact;
+export type SeedArtifactReference = GeneratedSeedArtifactReference;
+export type SeedDocument = GeneratedSeedDocument;
 export interface SeedHandoverOptions {
   seedId: string;
   expectedRev: number;
@@ -288,7 +289,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '277';
+export const PROTOCOL_VERSION = '278';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2867,6 +2868,7 @@ export function useDaemonSocket({
 
           default: {
             const pending = pendingActionsRef.current;
+            if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2892,6 +2894,7 @@ export function useDaemonSocket({
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
+      useAutoModePushStore.getState().clear();
 
       if (circuitOpenRef.current) {
         console.error('[Daemon] Circuit open, not retrying');
@@ -3207,6 +3210,50 @@ export function useDaemonSocket({
         'automode_pattern_add',
         { list, pattern },
         'Adding the pattern timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeModelSet = useCallback(
+    (models: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_model_set',
+        { models },
+        'Saving the models timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  // pi is asked per provider and each ask spawns a process, so this waits far
+  // longer than a command the daemon answers on its own.
+  const sendAutoModeModels = useCallback((): Promise<AutoModeModelCatalog> => {
+    return sendRequest<AutoModeModelCatalog>(
+      'automode_models',
+      {},
+      'Asking pi which models it can reach timed out',
+      30000,
+    );
+  }, [sendRequest]);
+
+  const sendAutoModeEnvSlot = useCallback(
+    (slot: string, values: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_env_slot',
+        { slot, values },
+        'Saving what the classifier knows about this machine timed out',
+      );
+    },
+    [sendRequest],
+  );
+
+  const sendAutoModeEnvNotes = useCallback(
+    (notes: string[]): Promise<AutoModePatternEdit> => {
+      return sendRequest<AutoModePatternEdit>(
+        'automode_env_notes',
+        { notes },
+        'Saving your notes about this machine timed out',
       );
     },
     [sendRequest],
@@ -3767,6 +3814,46 @@ export function useDaemonSocket({
       }, 10000);
     });
   }, [nextRequestID]);
+
+  const sendSeedArtifactTarget = useCallback((
+    seedId: string,
+    relativeTarget: string,
+    purpose: 'image' | 'link' | 'artifact',
+  ): Promise<SeedArtifactTargetResult> => sendRequest(
+    'seed_artifact_target',
+    { seed_id: seedId, relative_target: relativeTarget, purpose },
+    'Seed artifact target resolution timed out',
+  ), [sendRequest]);
+
+  const sendSeedArtifactTransfer = useCallback((input: {
+    seedId: string;
+    operation: 'move' | 'copy' | 'detach';
+    sourcePath?: string;
+    filename?: string;
+    destinationPath?: string;
+    legacyReference?: GeneratedSeedArtifactReference;
+  }): Promise<SeedArtifactTransferResult> => sendRequest(
+    'seed_artifact_transfer',
+    {
+      seed_id: input.seedId,
+      operation: input.operation,
+      ...(input.sourcePath !== undefined && { source_path: input.sourcePath }),
+      ...(input.filename !== undefined && { filename: input.filename }),
+      ...(input.destinationPath !== undefined && { destination_path: input.destinationPath }),
+      ...(input.legacyReference !== undefined && { legacy_reference: input.legacyReference }),
+    },
+    'Seed artifact transfer timed out',
+    5 * 60 * 1000,
+  ), [sendRequest]);
+
+  const sendSeedArtifactReferenceDetach = useCallback((
+    seedId: string,
+    reference: GeneratedSeedArtifactReference,
+  ): Promise<void> => sendRequest(
+    'seed_note',
+    { seed_id: seedId, body: '', kind: 'detach', artifact: reference },
+    'Removing the linked artifact timed out',
+  ), [sendRequest]);
 
   useEffect(() => {
     setPtyBackend({
@@ -5359,6 +5446,10 @@ export function useDaemonSocket({
     sendAutoModePromote,
     sendAutoModeDiscard,
     sendAutoModePatternAdd,
+    sendAutoModeModelSet,
+    sendAutoModeModels,
+    sendAutoModeEnvSlot,
+    sendAutoModeEnvNotes,
     sendAutoModePatternRemove,
     sendBusSetConsumerEnabled,
     sendTriggerNudge,
@@ -5385,6 +5476,9 @@ export function useDaemonSocket({
     sendOpenMarkdown,
     sendOpenSeed,
     sendSeedDocumentGet,
+    sendSeedArtifactTarget,
+    sendSeedArtifactTransfer,
+    sendSeedArtifactReferenceDetach,
     sendSeedTransition,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,

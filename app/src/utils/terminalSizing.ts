@@ -3,7 +3,7 @@ export type ResolvedTheme = 'dark' | 'light';
 // "Symbols Nerd Font Mono" sits last so it only supplies the Private Use Area icon
 // glyphs no system monospace font has.
 export const FONT_FAMILY =
-  'Iosevka, Menlo, Monaco, "Courier New", "Symbols Nerd Font Mono", monospace';
+  'Iosevka, Menlo, Monaco, "DejaVu Sans Mono", "Courier New", "Symbols Nerd Font Mono", monospace';
 export const TERMINAL_SCROLLBACK_BYTES = 8 * 1024 * 1024;
 
 export const DARK_TERMINAL_THEME = {

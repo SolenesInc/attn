@@ -1,0 +1,5 @@
+kind: internal
+area: release
+change: >
+  Prepare frozen release candidates from an accepted next commit and attach
+  manual packaged-app verification to the exact candidate head.

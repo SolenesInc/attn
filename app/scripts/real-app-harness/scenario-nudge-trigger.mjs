@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
+  legacyTicketRequest,
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
@@ -14,7 +14,7 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { configureMockAgent, writeMockAgentFixture } from './mockAgent.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
@@ -38,32 +38,6 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
-}
-
-async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {
-  return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
-    let raw = '';
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(new Error(`timed out waiting for ${message.cmd}`));
-    }, timeoutMs);
-    socket.setEncoding('utf8');
-    socket.once('connect', () => socket.write(`${JSON.stringify(message)}\n`));
-    socket.on('data', (chunk) => {
-      raw += chunk;
-      if (!raw.includes('\n')) return;
-      clearTimeout(timer);
-      socket.end();
-      const value = JSON.parse(raw.split('\n', 1)[0]);
-      if (!value.ok) reject(new Error(value.error || `${message.cmd} failed`));
-      else resolve(value);
-    });
-    socket.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
 }
 
 const IDLE_STATES = new Set(['idle', 'waiting_input']);
@@ -134,7 +108,6 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let targetId = null;
   let authorId = null;
-  let mockAgent = null;
   const note = (m, extra) => runner.log(m, extra);
 
   // Runner cleanups run in REVERSE registration order: observer/app are
@@ -183,7 +156,6 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
-      mockAgent = await configureMockAgent({ client, observer, runner });
     });
 
     await runner.step('boot_target_and_drive_idle', async () => {
@@ -393,7 +365,6 @@ async function main() {
   } finally {
     if (authorId) await client.request('close_session', { sessionId: authorId }).catch(() => {});
     if (targetId) await client.request('close_session', { sessionId: targetId }).catch(() => {});
-    if (mockAgent) await mockAgent.restore().catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
   }

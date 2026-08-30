@@ -1,5 +1,3 @@
-// Design: docs/plans/2026-08-03-ext-a3-doc-store.md
-// Design: docs/plans/2026-08-03-ext-a3.1-doc-store-physical-schema.md
 package docstore
 
 import (

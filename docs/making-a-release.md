@@ -1,98 +1,145 @@
 # Making a release
 
-attn's changelog is compiled, not accreted. PRs never edit `CHANGELOG.md`;
-each PR ships a small **changelog fragment** — a raw statement of what changed
-— and a release-time compilation step turns the accumulated fragments into one
-curated, user-facing `CHANGELOG.md` section. This removes the merge conflicts
-that concurrent branches used to hit on `CHANGELOG.md`, and it means the
-changelog is written once per release by a writer that saw the whole release,
-instead of thirty times by authors who each saw one PR.
+## Changelog fragments
 
-## Per PR: add a changelog fragment
-
-Every PR adds one YAML file under `changelog.d/`. Name it
-`<branch>-<short-slug>.yaml` — uniqueness across in-flight branches is what
-keeps fragments conflict-free.
+Each ordinary PR adds a uniquely named `changelog.d/*.yaml`:
 
 ```yaml
-# changelog.d/amber-manatee-handover.yaml
-kind: fixed            # added | changed | fixed | removed | internal
-area: queue            # the subsystem touched, free-form
-change: >
-  Closing a turn now hands over the next agent that owes one regardless of
-  how the turn closed, not only via Cmd+Shift+E.
-symptom: >             # optional — for fixes, what the user noticed before
-  Auto-settle finishing on the agent you were watching left you sitting on a
-  done agent instead of moving you to the next one.
-notes: >               # optional — extra context for the release writer
-  Same root cause as the sidebar-row settle path; both fixed here.
+kind: fixed # added | changed | fixed | removed | internal
+area: queue
+change: Auto-settle advances to the next agent with an outstanding turn.
 ```
 
-A fragment is **evidence for the release writer, not final copy**. State
-plainly what changed and what a user would notice; do not attempt release-note
-voice. The writer merges related fragments, sets the tone, and decides what
-makes the cut.
+- `kind`, `area`, and `change` are required; `symptom` and `notes` are optional.
+- State observable changes. Invisible work uses `kind: internal` and a one-line
+  `change`; release notes omit it.
+- Validate with `go run ./cmd/changelog-check` or `./scripts/changelog-gate.sh next`.
+- Direct `CHANGELOG.md` edits are for release compilation, copy corrections,
+  and [unpublished-release repairs](#repair-an-unpublished-release).
 
-Rules:
+## Gates
 
-- `kind`, `area`, and `change` are required. `kind` maps to the changelog
-  category (`added` → "### Added", etc.).
-- A change with no user-visible behavior still ships a fragment, with
-  `kind: internal` and a one-line `change`. Internal fragments give the
-  release writer the full picture; they never become bullets.
-- `go run ./cmd/changelog-check` validates fragments locally; the same check
-  runs in CI.
+- Ordinary branches/PRs follow [working-with-next.md](working-with-next.md).
+- `PR gate` checks the proposed merge; `Acceptance` checks the exact merged SHA
+  on `next`/`main`. Filtered/skipped jobs cannot grant Acceptance.
+- Promotions require accepted source SHA, current `main` baseline, matching
+  versions, absent tag, consumed fragments, and a release-only preparation diff.
+  User-facing fragments require compiled changelog copy with the generated receipt.
+- Automatic candidates need protected-`main` `App acceptance` for their exact
+  head. Rerun candidate CI after recording it. Hotfixes earn their own `PR gate`
+  and `App acceptance`; they do not inherit `next` Acceptance. Held promotions
+  are CI-only and cannot create a tag or dispatch a release.
+- Only validated candidates and generated sync PRs get changelog exemptions.
 
-## The CI gate
+## Prepare a frozen candidate
 
-The `Changelog` job in CI fails any PR that neither adds a
-`changelog.d/*.yaml` fragment nor modifies `CHANGELOG.md`. Touching
-`CHANGELOG.md` directly is the escape hatch for the compilation PR itself and
-for hand-fixes to existing copy. Branches named `release/*` (the version-bump
-PR that `scripts/release.sh` opens) are exempt. Run the gate locally with
-`./scripts/changelog-gate.sh main`.
-
-## At release: compile the changelog
-
-When preparing a release, on a fresh branch off `main`:
+From a clean, current local `next`:
 
 ```bash
-./scripts/compile-changelog.sh            # or --dry-run to inspect the prompt
+git switch next
+git pull --ff-only origin next
+./scripts/release.sh vX.Y.Z
 ```
 
-The script validates the pending fragments, has `claude` write a dated
-`CHANGELOG.md` section from them (merging related entries, enforcing the
-user-facing voice, dropping noise), inserts it at the top of the file, and
-deletes the consumed fragments. Everything is left staged: **review the
-section** — the writer drafts, you edit — fix copy where it misses, commit,
-and open a PR. That PR passes the gate because it modifies `CHANGELOG.md`.
+The script requires green exact-SHA Acceptance, no existing tag or open candidate.
+It creates `release/vX.Y.Z`, compiles fragments, updates versions, writes
+`.github/release-candidate.yml`, and opens a draft PR to `main`.
+It does not merge, tag, or publish. Internal-only fragments produce no release-note section.
 
-If every pending fragment is `internal`, the script removes the fragments
-without adding a section.
+Later `next` changes, including red Acceptance, do not change the frozen source.
+If `main` moves, close and prepare the candidate again. Product fixes to a
+promotion go through `next` and a newly accepted source.
 
-## Cut the release
+## Promote without publishing
 
-With the compilation PR merged and `main` clean of pending fragments:
+Use a held promotion to exercise the complete `next` to accepted-`main` path
+without claiming packaged-app verification or creating public release state:
 
 ```bash
-./scripts/release.sh v0.9.5
+./scripts/release.sh vX.Y.Z --hold
 ```
 
-`release.sh` refuses to run while `changelog.d/` still has pending fragments.
-It bumps versions, opens a `release/<tag>` PR, waits for CI, merges, tags the
-merge commit, and the tag triggers `.github/workflows/release.yml`.
+The manifest records `publication: held`. The candidate still needs exact-source
+Acceptance and green normal PR CI. After merge, `main` runs full Acceptance and
+the release controller validates the candidate, then exits before App acceptance,
+tag creation, or release dispatch. The committed hold also stops later `main`
+runs from publishing that version.
 
-That workflow builds the app, stages the bundled plugins into it, checks they
-survived into the bundle, notarizes and staples, and builds the Linux daemons —
-all against a **draft** release. It is published only after every one of those
-has passed. So a failed release run leaves a draft, not a half-built public
-release: fix the cause and re-run the workflow on the same tag
-(`gh workflow run release.yml -f tag=<tag>`), which replaces the assets and
-publishes when the whole set is right.
+Sync held `main` back into `next` normally. A held version is never published;
+prepare a new candidate and version when a public release is wanted.
+
+## Prepare a post-release hotfix
+
+Branch `hotfix/*` from current `main`; commit the fix and changelog fragment.
+On the clean branch, run `make release-hotfix VERSION_TAG=vX.Y.Z` with a fresh version.
+It commits release preparation and a fresh `kind: hotfix` manifest, then opens
+a draft PR to `main`. If `main` moves, prepare again from current `main`.
+
+## Record app acceptance
+
+Install and exercise the packaged app from the exact candidate head.
+Use the command generated in its draft PR:
+
+```bash
+gh workflow run app-acceptance.yml --ref main \
+  -f candidate_sha=<full-candidate-SHA> -f profile=<profile> \
+  -f scenarios='<scenarios run>' -f evidence='<recording URL or receipt>' \
+  -f outcome=passed
+```
+
+Record failures with `outcome=failed`. Any head change needs a new receipt.
+Keep the workflow on protected `main`; it checks out the candidate separately.
+Mark ready after reviewing changelog copy and obtaining green `PR gate` and
+`App acceptance`. Merge only with those checks and required approval.
+
+## Accept and release main
+
+- Merged `main` must earn exact-SHA Acceptance before tagging/publication.
+  Failure leaves it untagged and opens a branch-health issue.
+- `Release accepted main` validates current `main`, its originating candidate's
+  protected-main app receipt, identical candidate/main trees, manifest, and versions.
+  It creates the immutable tag and dispatches protected-`main` `release.yml`.
+- A held promotion validates through `main` Acceptance and exits before the app
+  receipt, tag, and dispatch steps.
+- Manual tag pushes cannot publish. Dispatches revalidate acceptance and tag
+  identity; builds use the validated SHA and publishing rechecks the tag.
+- Retain the manifest for sync. A published version needs a fresh manifest/version
+  for later fixes.
+
+## Repair an unpublished release
+
+If `main` Acceptance fails, make a minimal `hotfix/*` PR from `main`.
+Keep the manifest only while its version is unpublished; update `CHANGELOG.md`
+directly, leaving no pending fragments. Obtain PR/app acceptance, merge, then
+wait for the repaired `main` SHA's Acceptance.
+
+## Sync main back into next
+
+After every `main` change, run `./scripts/sync-main-to-next.sh`.
+It refuses while a candidate is open; otherwise it merges `main` into `next`
+in a temporary worktree and opens `sync/main-into-next-*` against `next`.
+It removes only fragments unchanged from the frozen source; rewritten fragments
+require inspection, and later fragments survive.
+
+Merge the sync PR with a merge commit. Never squash/rebase it or cherry-pick
+the hotfix into `next`. Wait for sync and green `next` Acceptance before
+preparing another candidate.
+
+## Release artifacts
+
+Publication waits for all build, bundled-plugin, signing, and notarization gates.
+Failure leaves a draft and opens `Release health`. Fix the cause, then retry
+the same tag only while it still names current `main`:
+
+```bash
+gh api --method POST repos/victorarias/attn/dispatches \
+  -f event_type=release -F 'client_payload[tag]=<tag>'
+```
+
+If `main` advanced, prepare a fresh candidate/version. Successful retry replaces
+assets, publishes, and closes the issue.
 
 ## What's New modal
 
-The in-app What's New modal (`app/src/components/WhatsNewModal.tsx`,
-`WHATS_NEW_ID` in `app/src/hooks/useWhatsNew.ts`) stays hand-written — it
-tells a story per milestone, not per release. When updating it, draw from the
-compiled changelog sections since the last `WHATS_NEW_ID` bump.
+Write milestone copy in `app/src/components/WhatsNewModal.tsx` from changelog
+sections since the previous `WHATS_NEW_ID` in `app/src/hooks/useWhatsNew.ts`.

@@ -57,9 +57,21 @@ describe('recordingEnabled', () => {
   });
 
   it('accepts 1/true/on in any case', () => {
-    expect(recordingEnabled({ ATTN_HARNESS_RECORD: '1' })).toBe(true);
-    expect(recordingEnabled({ ATTN_HARNESS_RECORD: 'true' })).toBe(true);
-    expect(recordingEnabled({ ATTN_HARNESS_RECORD: 'ON' })).toBe(true);
+    expect(recordingEnabled({ ATTN_HARNESS_RECORD: '1' }, 'darwin')).toBe(true);
+    expect(recordingEnabled({ ATTN_HARNESS_RECORD: 'true' }, 'darwin')).toBe(true);
+    expect(recordingEnabled({ ATTN_HARNESS_RECORD: 'ON' }, 'darwin')).toBe(true);
+  });
+
+  it('reports unsupported recording on Linux and lets the scenario continue', () => {
+    const warnings = [];
+    expect(recordingEnabled(
+      { ATTN_HARNESS_RECORD: '1' },
+      'linux',
+      (message) => warnings.push(message),
+    )).toBe(false);
+    expect(warnings).toEqual([
+      '[RealAppHarness] recording unsupported on linux; continuing without recording.',
+    ]);
   });
 });
 

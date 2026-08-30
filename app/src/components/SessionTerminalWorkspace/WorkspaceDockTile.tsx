@@ -35,6 +35,7 @@ import type { Seed } from '../../hooks/useDaemonSocket';
 import { normalizeBrowserAddress } from './browserAddress';
 import { gardenPathToSeed, seedParentID } from '../../store/gardenWalk';
 import './WorkspaceDockTile.css';
+import { keyCombo } from '../../shortcuts/formatShortcut';
 
 function bodyKindModifier(tileKind: string): string {
   if (parseAppViewTileKind(tileKind)) return 'workspace-dock-tile-body--app';
@@ -346,10 +347,10 @@ export function WorkspaceDockTile({
     ? sendStatusMessage ?? undefined
     : isSeed
       ? seedTenderSessionId
-        ? 'Send annotations to the tending session (⌘Enter)'
-        : 'Leave annotations as a note on the seed (⌘Enter)'
+        ? `Send annotations to the tending session (${keyCombo('accel', 'Enter')})`
+        : `Leave annotations as a note on the seed (${keyCombo('accel', 'Enter')})`
       : targetSessionId
-        ? `Send annotations to ${targetSessionLabel} (⌘Enter)`
+        ? `Send annotations to ${targetSessionLabel} (${keyCombo('accel', 'Enter')})`
         : 'Choose a session before sending annotations';
 
   useEffect(() => {
@@ -779,7 +780,7 @@ export function WorkspaceDockTile({
             <button
               type="button"
               className="workspace-dock-tile-focus-action"
-              title="Focus document (⌘⇧Enter)"
+              title={`Focus document (${keyCombo('accel', 'shift', 'Enter')})`}
               aria-label="Focus document"
               onPointerDown={(event) => event.stopPropagation()}
               onClick={onFocusDocument}

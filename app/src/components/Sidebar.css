@@ -41,7 +41,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.035);
   color: var(--color-text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   line-height: 1.2;
   letter-spacing: 0.02em;
@@ -142,7 +142,7 @@
   border-radius: 999px;
   background: var(--accent);
   color: #111113;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   font-weight: 700;
   line-height: 18px;
@@ -255,7 +255,7 @@
   background: color-mix(in srgb, var(--accent) 16%, var(--color-bg-elevated));
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   color: var(--color-text-primary);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -309,7 +309,7 @@
   border: 1.5px dashed color-mix(in srgb, var(--accent) 50%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 4%, transparent);
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   color: var(--accent);
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
@@ -363,7 +363,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-sm);
   font-weight: 600;
 }
@@ -375,7 +375,7 @@
   padding: 4px 12px;
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
 }
 
 .session-item {
@@ -540,7 +540,7 @@
 }
 
 .session-shortcut {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   color: var(--color-text-dimmed);
   margin-left: auto;
@@ -626,7 +626,7 @@
 }
 
 .session-more-btn {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   letter-spacing: -1px;
   width: 24px;
@@ -653,7 +653,7 @@
 
 .sidebar-footer-label {
   color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -694,7 +694,7 @@
   gap: 4px;
   font-size: var(--font-size-sm);
   color: var(--color-text-dimmed);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
 }
 
 .shortcut-hint-keys {
@@ -778,7 +778,7 @@
   display: block;
   margin-bottom: 7px;
   color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -799,7 +799,7 @@
   display: block;
   margin: 11px 2px 6px;
   color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
 }
 
@@ -813,7 +813,7 @@
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   line-height: 1;
   padding: 6px 4px;
@@ -840,7 +840,7 @@
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
 }
 
@@ -914,7 +914,7 @@
   background: rgba(255, 255, 255, 0.03);
   color: var(--color-text-muted);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   letter-spacing: 0.04em;
   padding: 5px 0;
@@ -961,7 +961,7 @@
 .grid-layout-label {
   text-align: center;
   color: var(--color-text-muted);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   letter-spacing: 0.04em;
 }
@@ -1123,7 +1123,7 @@
   border: none;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1214,7 +1214,7 @@
   flex: 1;
 }
 .sidebar-home-shortcut {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   color: var(--color-text-dimmed);
 }
@@ -1233,7 +1233,7 @@
   gap: 6px;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;

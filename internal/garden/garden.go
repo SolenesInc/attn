@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-06-the-garden-vertical-slices.md and
 // docs/plans/2026-08-10-home-garden-crew-arc.md.
 package garden
 
@@ -188,6 +187,8 @@ const (
 	MaxBodyBytes  = 1 << 20
 	// Past the longest real title measured above, so it never truncates one.
 	MaxSlugChars = 100
+	// Enough to tell seeds apart, few enough to say out loud.
+	MaxSlugWords = 6
 )
 
 func ValidatePlant(title, body string) error {
@@ -208,22 +209,24 @@ func ValidateBody(body string) error {
 	return nil
 }
 
-// A slug is an address others reference: derived once at planting and then
-// editable, never recomputed behind an author's back.
+// A slug is how a seed is spoken of, not addressed: it names the seed in prose
+// while the id names it in commands. Derived once at planting and then editable.
 func StepSlug(title string) string {
-	var b strings.Builder
-	lastDash := true
-	for _, r := range strings.ToLower(strings.TrimSpace(title)) {
-		switch {
-		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
-			b.WriteRune(r)
-			lastDash = false
-		case !lastDash:
-			b.WriteByte('-')
-			lastDash = true
+	words := slugWords(title)
+	kept := words[:0:0]
+	for _, w := range words {
+		if !slugStopWords[w] {
+			kept = append(kept, w)
 		}
 	}
-	slug := strings.Trim(b.String(), "-")
+	// A title made only of stop words ("The One") still needs a name.
+	if len(kept) == 0 {
+		kept = words
+	}
+	if len(kept) > MaxSlugWords {
+		kept = kept[:MaxSlugWords]
+	}
+	slug := strings.Join(kept, "-")
 	if runes := []rune(slug); len(runes) > MaxSlugChars {
 		slug = strings.Trim(string(runes[:MaxSlugChars]), "-")
 	}
@@ -231,6 +234,33 @@ func StepSlug(title string) string {
 		return "seed"
 	}
 	return slug
+}
+
+// Small on purpose: only the English filler that carries no meaning in a title.
+var slugStopWords = map[string]bool{
+	"a": true, "an": true, "the": true, "of": true, "in": true, "on": true, "at": true,
+	"to": true, "for": true, "with": true, "by": true, "from": true, "and": true, "or": true,
+	"as": true, "is": true, "into": true, "its": true, "it": true,
+}
+
+func slugWords(title string) []string {
+	var words []string
+	var b strings.Builder
+	flush := func() {
+		if b.Len() > 0 {
+			words = append(words, b.String())
+			b.Reset()
+		}
+	}
+	for _, r := range strings.ToLower(strings.TrimSpace(title)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			flush()
+		}
+	}
+	flush()
+	return words
 }
 
 func (s Seed) Encode() ([]byte, error) {

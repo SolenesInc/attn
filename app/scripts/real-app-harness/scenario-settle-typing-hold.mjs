@@ -14,8 +14,9 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
-import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
+import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,6 +25,14 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // should make this run fail, not follow it.
 const QUIET_WINDOW_MS = 5_000;
 const COUNTDOWN_SECONDS = 60;
+
+const LONG_RUN_PROMPT = 'Count from 1 to 2000, one number per line, nothing else. Do not use any tools.';
+// Measured over a green mock run: 45.2s of work needed; this outlasts it 4x.
+const LONG_RUN_MS = 210_000;
+const LONG_RUN_TURN = {
+  includes: LONG_RUN_PROMPT,
+  actions: [{ type: 'delay', ms: LONG_RUN_MS }, { type: 'reply', text: '1 ... 2000', state: 'idle' }],
+};
 
 function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
   const { width, height } = windowBounds.logicalBounds;
@@ -59,12 +68,12 @@ async function typeLikeAPerson(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
 }
 
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// Keep the prompt on the user's input path: auto-settle deliberately ignores
+// automation writes, which this scenario checks again at the end.
 async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(600);
-  await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
 }
 
 async function main() {
@@ -85,7 +94,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'SETTLE-TYPING-HOLD',
-    tier: 'tier3-local-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'settle-typing-hold',
     metadata: {
       agent: 'claude',
@@ -95,7 +104,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const note = (message, extra) => runner.log(message, extra);
 
   let agentId = null;
@@ -111,7 +120,7 @@ async function main() {
     await runner.step('boot_agent_owing_a_turn', async () => {
       const cwd = path.join(runner.sessionDir, 'agent-repo');
       fs.mkdirSync(cwd, { recursive: true });
-      preTrustClaudeFolder(cwd);
+      writeQueueAgentFixture(cwd, { turns: [LONG_RUN_TURN] });
       agentId = await createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -130,7 +139,7 @@ async function main() {
       await pollFor(
         () => (observer.getSession(agentId)?.turn_owed === true ? true : null),
         'the booted agent to owe a turn',
-        90_000,
+        45_000,
       );
       note('agent booted and owes a turn', { agentId });
     });
@@ -142,21 +151,16 @@ async function main() {
       await client.request('set_setting', { key: 'auto_settle_countdown_seconds', value: String(COUNTDOWN_SECONDS) });
       await client.request('set_setting', { key: 'auto_settle_enabled', value: 'true' });
 
-      await submitPrompt(
-        client,
-        agentId,
-        agentPaneId,
-        'Count from 1 to 2000, one number per line, nothing else. Do not use any tools.',
-      );
+      await submitPrompt(client, agentId, agentPaneId, LONG_RUN_PROMPT);
       await pollFor(
         () => (observer.getSession(agentId)?.state === 'working' ? true : null),
         'the steered agent to start working',
-        90_000,
+        30_000,
       );
       frozenDeadline = await pollFor(
         () => observer.getSession(agentId)?.auto_settle_fires_at || null,
         'the auto-settle countdown to arm',
-        90_000,
+        30_000,
       );
       const remainingMs = Date.parse(frozenDeadline) - Date.now();
       note('countdown armed', { firesAt: frozenDeadline, remainingMs });
@@ -252,8 +256,13 @@ async function main() {
     });
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
-      const windowBounds = await client.request('get_window_bounds', {});
-      runner.assert(Boolean(windowBounds?.logicalBounds), `window bounds available: ${JSON.stringify(windowBounds)}`);
+      const logicalBounds = await getFrontWindowBounds(null, {
+        appPath: options.appPath,
+        client,
+        driver,
+      });
+      runner.assert(Boolean(logicalBounds), `window bounds available: ${JSON.stringify(logicalBounds)}`);
+      const windowBounds = { logicalBounds };
       const cellA = await client.request('get_pane_cell_rect', {
         sessionId: agentId,
         paneId: agentPaneId,

@@ -2,8 +2,7 @@
 
 > **What vs. why.** This doc is the durable **why** — the north star for the
 > chief's awareness of, and reach into, its delegations. The **what** — the domain
-> model and the surfaces that realize it — lives in
-> [docs/plans/2026-06-26-work-tracker.md](../plans/2026-06-26-work-tracker.md) and the
+> model and the surfaces that realize it — lives in the
 > **Ticket** / **Chief of staff** entries in [docs/glossary.md](../glossary.md). The
 > loop shipped as the **ticket** model. The `dispatch`-based mechanism this doc
 > originally sketched — a per-thread `dispatch watch`, a separate mailbox, a Monitor

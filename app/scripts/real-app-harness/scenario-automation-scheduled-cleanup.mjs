@@ -7,6 +7,7 @@ import { parseCommonArgs, printCommonHelp } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -15,8 +16,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const ANCHOR_POLL_TIMEOUT_MS = 90_000; // the anchor tick lands within one 60s ticker interval of apply, plus margin.
 const DOWNTIME_MS = 135_000; // >= two whole-minute instants missed while stopped.
 const RESTART_RUN_TIMEOUT_MS = 120_000; // daemon start + first post-restart tick + delivery.
-const CLEANUP_EVIDENCE_TIMEOUT_MS = 240_000; // real codex agent doing real git work.
+const CLEANUP_EVIDENCE_TIMEOUT_MS = 90_000; // delivery, launch and the agent's git work measured 12s; the ticker owns the rest.
 const COALESCE_TIMEOUT_MS = 90_000; // one more live tick after cleanup evidence lands.
+const CLEANUP_SUMMARY = 'removed merged-clean, kept dirty-wip';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -103,6 +105,21 @@ function createFixture(root) {
   return { repo, worktrees, mergedClean, dirtyWip };
 }
 
+function writeCleanupFixture(root, fixture) {
+  writeMockAgentFixture(root, {
+    name: 'scheduled cleanup',
+    turns: [{
+      includes: 'Review git worktrees',
+      actions: [
+        { type: 'exec', cwd: fixture.repo, cmd: 'git', args: ['worktree', 'remove', fixture.mergedClean], allowFailure: true },
+        { type: 'exec', cwd: fixture.repo, cmd: 'git', args: ['branch', '-d', 'merged-work'], allowFailure: true },
+        { type: 'capture', from: 'prompt', pattern: 'Your work is seed `(s-[a-z0-9]{6})`', name: 'seed' },
+        { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', CLEANUP_SUMMARY], state: 'idle' },
+      ],
+    }],
+  });
+}
+
 function worktreeListShows(repo, absolutePath) {
   const out = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: repo, encoding: 'utf8' });
   return out.includes(absolutePath);
@@ -143,7 +160,6 @@ prompt: |
   Review git worktrees of \`repo/\`; remove with \`git worktree remove\` (never --force) each linked worktree whose branch is fully merged into main AND whose tree is completely clean, then delete that fully-merged branch with \`git branch -d\`. NEVER remove a worktree with staged, unstaged, or untracked changes — list preserved worktrees with reasons. Summarize actions in the ticket.
 launch:
   driver: codex
-  model: gpt-5.5
   effort: medium
 location:
   type: directory
@@ -209,9 +225,15 @@ async function main() {
   const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SCHEDULED-CLEANUP',
-    tier: 'tier2-local-real-agent',
+    allowRealAgents: false,
+    tier: 'tier2-local',
     prefix: 'automation-scheduled-cleanup',
-    metadata: { profile, provider: 'local fixture repo', legFour: 'storm-guard re-assertion (fresh continuity); skip-discard-beyond-grace covered by unit tests' },
+    metadata: {
+      profile,
+      provider: 'local fixture repo',
+      legTwo: 'delivery proof: the scheduled brief reaches a launched agent that does the real git work; no model judges what to remove',
+      legFour: 'storm-guard re-assertion (fresh continuity); skip-discard-beyond-grace covered by unit tests',
+    },
   });
 
   const suffix = Date.now().toString(36);
@@ -232,6 +254,7 @@ async function main() {
   try {
     daemonEnv = profileEnv(profile);
     fixture = createFixture(fixtureRoot);
+    writeCleanupFixture(fixtureRoot, fixture);
     probe = createCodexProbe(runner.sessionDir);
 
     await runner.step('restart_isolated_daemon', async () => {
@@ -278,7 +301,7 @@ async function main() {
       );
     });
 
-    await runner.step('leg2_real_cleanup_evidence', async () => {
+    await runner.step('leg2_cleanup_evidence', async () => {
       await poll(() => {
         const removedFromDisk = !fs.existsSync(fixture.mergedClean);
         const removedFromGit = !worktreeListShows(fixture.repo, fixture.mergedClean);
@@ -292,12 +315,24 @@ async function main() {
 
       const ticket = sqliteRow(
         dbPath,
-        `SELECT status, (SELECT COUNT(*) FROM ticket_activity WHERE ticket_id=tickets.id) FROM tickets WHERE id='${sqlEscape(cleanupTicketID)}';`,
+        `SELECT status FROM tickets WHERE id='${sqlEscape(cleanupTicketID)}';`,
       );
       runner.assert(ticket !== null, 'cleanup ticket row exists', { cleanupTicketID });
-      const [ticketStatus, activityCountRaw] = ticket;
-      runner.assert(ticketStatus !== 'failed', 'cleanup ticket did not fail', { ticketStatus });
-      runner.assert(Number(activityCountRaw) >= 1, 'cleanup ticket has recorded activity', { activityCount: activityCountRaw });
+      runner.assert(ticket[0] !== 'failed', 'cleanup ticket did not fail', { ticketStatus: ticket[0] });
+
+      const reported = await poll(() => {
+        const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
+        const seed = (listed.seeds || []).find((row) => row.tender_session === cleanupSessionID);
+        if (!seed) return null;
+        const shown = runJSON(binary, ['seed', 'show', seed.id, '--json'], daemonEnv) || {};
+        const notes = (shown.notes || []).map((note) => note.body);
+        return notes.some((body) => body.includes(CLEANUP_SUMMARY)) ? { seed: seed.id, notes } : null;
+      }, 'the automation seed carrying the cleanup summary', CLEANUP_EVIDENCE_TIMEOUT_MS);
+      runner.assert(
+        Boolean(reported),
+        'the launched agent reported its cleanup on the seed it tends',
+        reported,
+      );
     });
 
     await runner.step('leg3_singleton_coalescing', async () => {
@@ -373,6 +408,12 @@ async function main() {
       if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
       if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
     }
+    try {
+      const transcripts = path.join(fixtureRoot, '.attn-mock-agent');
+      for (const name of fs.readdirSync(transcripts)) {
+        runner.writeText(`mock-${name}`, fs.readFileSync(path.join(transcripts, name), 'utf8'));
+      }
+    } catch {}
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
     try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
     await runner.close();

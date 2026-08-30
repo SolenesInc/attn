@@ -3690,6 +3690,61 @@ describe('useDaemonSocket notebook and annotation events', () => {
     await expect(promise).resolves.toEqual(document);
     unmount();
   });
+
+  it('resolves typed seed artifact targets by request id', async () => {
+    const { result, unmount, ws } = await renderAndOpen();
+
+    const promise = result.current.sendSeedArtifactTarget('s-7k3f9m', 'cover%20art.png', 'image');
+    await Promise.resolve();
+    const sent = lastSent(ws);
+    expect(sent).toMatchObject({
+      cmd: 'seed_artifact_target',
+      seed_id: 's-7k3f9m',
+      relative_target: 'cover%20art.png',
+      purpose: 'image',
+    });
+    ws.emit({
+      event: 'seed_artifact_target_result',
+      request_id: sent.request_id,
+      success: true,
+      result: { relative_target: 'cover%20art.png', mime_type: 'image/png', data_base64: 'aW1hZ2U=' },
+    });
+    await expect(promise).resolves.toEqual({
+      relative_target: 'cover%20art.png',
+      mime_type: 'image/png',
+      data_base64: 'aW1hZ2U=',
+    });
+    unmount();
+  });
+
+  it('sends a recoverable transfer with a five minute client timeout', async () => {
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const { result, unmount, ws } = await renderAndOpen();
+    const legacyReference = { kind: 'markdown_file', path: '/tmp/report.pdf' };
+
+    const promise = result.current.sendSeedArtifactTransfer({
+      seedId: 's-7k3f9m', operation: 'move', sourcePath: '/tmp/report.pdf', legacyReference,
+    });
+    await Promise.resolve();
+    const sent = lastSent(ws);
+    expect(sent).toMatchObject({
+      cmd: 'seed_artifact_transfer',
+      seed_id: 's-7k3f9m',
+      operation: 'move',
+      source_path: '/tmp/report.pdf',
+      legacy_reference: legacyReference,
+    });
+    expect(timeoutSpy.mock.calls.some((call) => call[1] === 5 * 60 * 1000)).toBe(true);
+    const transfer = {
+      operation_id: 'op-1', seed_id: 's-7k3f9m', operation: 'move',
+      source_path: '/tmp/report.pdf', destination_path: '/notebook/seeds/s-7k3f9m/report.pdf',
+      relative_target: 'report.pdf', recovered: false,
+    };
+    ws.emit({ event: 'seed_artifact_transfer_result', request_id: sent.request_id, success: true, result: transfer });
+    await expect(promise).resolves.toEqual(transfer);
+    timeoutSpy.mockRestore();
+    unmount();
+  });
 });
 
 describe('useDaemonSocket app commands', () => {

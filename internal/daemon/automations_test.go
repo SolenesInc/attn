@@ -41,7 +41,7 @@ func writeCodexRolloutFixture(t *testing.T, resumeID string) {
 		t.Fatalf("mkdir Codex sessions dir: %v", err)
 	}
 	rollout := []byte(`{"type":"session_meta","payload":{"id":"` + resumeID + `","cwd":"/tmp"}}` + "\n")
-	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-fixture.jsonl"), rollout, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sessionsDir, "rollout-"+resumeID+".jsonl"), rollout, 0o644); err != nil {
 		t.Fatalf("write Codex rollout fixture: %v", err)
 	}
 }

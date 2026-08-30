@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,7 +63,7 @@ async function main() {
   }
   if (verb === 'pointer') {
     const [standDown, woken] = args;
-    const driver = new MacOSDriver({ actionDelayMs: 120 });
+    const driver = createWindowDriver({ actionDelayMs: 120 });
     await driver.activateApp();
     const toWindow = await pointerMapper(client);
 

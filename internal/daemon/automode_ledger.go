@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Design: docs/plans/2026-08-18-automode-denial-ledger.md.
-
 // Without it, a record the store's row cap has since trimmed is re-imported and trimmed forever.
 const settingAutoModeDenialCursor = "automode_denial_ledger_cursor"
 
