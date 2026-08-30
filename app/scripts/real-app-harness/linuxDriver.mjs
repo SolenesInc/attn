@@ -316,16 +316,27 @@ export class LinuxDriver {
         throw new Error(`Linux window capture failed: ${commandErrorDetail(error)}`, { cause: error });
       }
     }
+    const captureDir = fs.mkdtempSync(path.join(path.dirname(outputPath), '.attn-window-capture-'));
+    const xwdPath = path.join(captureDir, 'window.xwd');
     try {
-      await this.run('xwd', ['-silent', '-id', String(windowId), '-out', outputPath], {
+      await this.run('xwd', ['-silent', '-id', String(windowId), '-out', xwdPath], {
+        env: this.env,
+        timeout: 10_000,
+      });
+      await this.run('convert', [xwdPath, `png:${outputPath}`], {
         env: this.env,
         timeout: 10_000,
       });
     } catch (error) {
-      const missing = isMissingCommand(error, 'xwd')
-        ? 'ImageMagick import and xwd are both missing'
-        : commandErrorDetail(error);
-      throw new Error(`Linux window capture failed: ${missing}`, { cause: error });
+      let detail = commandErrorDetail(error);
+      if (isMissingCommand(error, 'xwd')) {
+        detail = 'ImageMagick import is missing and xwd is not installed';
+      } else if (isMissingCommand(error, 'convert')) {
+        detail = 'ImageMagick import and convert are both missing; xwd cannot emit PNG';
+      }
+      throw new Error(`Linux window capture failed: ${detail}`, { cause: error });
+    } finally {
+      fs.rmSync(captureDir, { recursive: true, force: true });
     }
   }
 

@@ -1,11 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   describeLinuxInputFailure,
+  LinuxDriver,
   linuxKeyCodeName,
   linuxKeyName,
   linuxModifierNames,
   parseXdotoolGeometry,
 } from './linuxDriver.mjs';
+
+const tempDirs = [];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  while (tempDirs.length > 0) {
+    fs.rmSync(tempDirs.pop(), { recursive: true, force: true });
+  }
+});
 
 describe('Linux input failures', () => {
   it('names a missing DISPLAY and the Xvfb remedy', () => {
@@ -65,5 +78,58 @@ describe('parseXdotoolGeometry', () => {
 
   it('rejects incomplete geometry', () => {
     expect(() => parseXdotoolGeometry('X=10\nY=20\n')).toThrow('Failed to parse xdotool window geometry');
+  });
+});
+
+describe('Linux window screenshots', () => {
+  it('converts an xwd fallback into explicit PNG output', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-linux-capture-'));
+    tempDirs.push(root);
+    const outputPath = path.join(root, 'evidence.png');
+    const missingImport = Object.assign(new Error('spawn import ENOENT'), {
+      code: 'ENOENT',
+      path: 'import',
+    });
+    const run = vi.fn(async (command) => {
+      if (command === 'import') throw missingImport;
+      return { stdout: '' };
+    });
+    const driver = new LinuxDriver({
+      appPath: '/home/someone/.local/share/attn-dev',
+      run,
+      env: { DISPLAY: ':99' },
+    });
+    driver.requireWindow = vi.fn().mockResolvedValue(42);
+
+    await driver.screenshot(outputPath);
+
+    const xwdCall = run.mock.calls.find(([command]) => command === 'xwd');
+    const convertCall = run.mock.calls.find(([command]) => command === 'convert');
+    const xwdPath = xwdCall[1].at(-1);
+    expect(xwdCall[1]).toEqual(['-silent', '-id', '42', '-out', xwdPath]);
+    expect(xwdPath).toMatch(/window\.xwd$/);
+    expect(xwdPath).not.toBe(outputPath);
+    expect(convertCall[1]).toEqual([xwdPath, `png:${outputPath}`]);
+    expect(fs.existsSync(path.dirname(xwdPath))).toBe(false);
+  });
+
+  it('fails honestly when neither PNG capture route is installed', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-linux-capture-'));
+    tempDirs.push(root);
+    const run = vi.fn(async (command) => {
+      if (command === 'import' || command === 'convert') {
+        throw Object.assign(new Error(`spawn ${command} ENOENT`), { code: 'ENOENT', path: command });
+      }
+      return { stdout: '' };
+    });
+    const driver = new LinuxDriver({
+      appPath: '/home/someone/.local/share/attn-dev',
+      run,
+      env: { DISPLAY: ':99' },
+    });
+    driver.requireWindow = vi.fn().mockResolvedValue(42);
+
+    await expect(driver.screenshot(path.join(root, 'evidence.png')))
+      .rejects.toThrow('ImageMagick import and convert are both missing; xwd cannot emit PNG');
   });
 });
