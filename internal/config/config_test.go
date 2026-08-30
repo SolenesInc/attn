@@ -544,3 +544,25 @@ func TestAppLocalDataDir_UsesActiveProfile(t *testing.T) {
 		t.Errorf("AppLocalDataDir() = %q, want %q", got, want)
 	}
 }
+
+func TestAppLockPathSitsOutsideEveryTreeCleanRemoves(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	for _, profile := range []string{"", "dev", "agent7"} {
+		lock := AppLockPathForProfile(profile)
+		label := profile
+		if label == "" {
+			label = "default"
+		}
+		if want := filepath.Join(home, ".attn.locks", "app-"+label+".lock"); lock != want {
+			t.Errorf("AppLockPathForProfile(%q) = %q, want %q", profile, lock, want)
+		}
+		for _, tree := range []string{DataDirForProfile(profile), AppPathForProfile(profile), AppLocalDataDirForProfile(profile)} {
+			if strings.HasPrefix(lock, tree+string(filepath.Separator)) {
+				t.Errorf("AppLockPathForProfile(%q) = %q, which clean removes with %q", profile, lock, tree)
+			}
+		}
+	}
+}

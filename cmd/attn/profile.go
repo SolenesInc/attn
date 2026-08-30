@@ -70,6 +70,7 @@ type profileResolved struct {
 	AppExecutable  string `json:"appExecutable"`
 	AppDaemon      string `json:"appDaemon"`
 	AppLocalData   string `json:"appLocalDataDir"`
+	AppLock        string `json:"appLockPath"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
 	DesktopEntry   string `json:"desktopEntry,omitempty"`
 	E2EDaemonPort  string `json:"e2eDaemonPort"`
@@ -94,6 +95,7 @@ func resolveProfile(profile string) profileResolved {
 		AppExecutable:  config.AppExecutableForProfile(profile),
 		AppDaemon:      config.AppDaemonBinaryForProfile(profile),
 		AppLocalData:   config.AppLocalDataDirForProfile(profile),
+		AppLock:        config.AppLockPathForProfile(profile),
 		DeepLinkScheme: config.DeepLinkSchemeForProfile(profile),
 		DesktopEntry:   desktopEntryPath(config.AppNameForProfile(profile)),
 		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
@@ -127,6 +129,8 @@ func (r profileResolved) field(key string) (string, bool) {
 		return r.AppDaemon, true
 	case "appLocalDataDir":
 		return r.AppLocalData, true
+	case "appLockPath":
+		return r.AppLock, true
 	case "deepLinkScheme":
 		return r.DeepLinkScheme, true
 	case "desktopEntry":
@@ -200,7 +204,7 @@ func runProfileResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
+			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
 		}
 		fmt.Println(v)
 		return
@@ -318,6 +322,17 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 	}
 	fmt.Fprintf(w, "  app      %s\n", msg)
 
+	// Taken while the app is known gone and held past the last removal: an app that
+	// launches from here on cannot hold it, and clean is not deleting under one.
+	release, err := holdAppLock(r)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := refuseRelaunchedApp(r); err != nil {
+		return err
+	}
+
 	if msg := stopProfileDaemon(r); msg != "" {
 		fmt.Fprintf(w, "  daemon   %s\n", msg)
 	} else {
@@ -333,10 +348,8 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 	reportProcReap(w, "hosts", "session", hostsession.ReapDataDir(r.DataDir))
 	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(r.DataDir))
 
-	// A marker back after the stop is a relaunch, and everything below is the new
-	// app's state.
-	if pidPath := appPIDFilePath(r.DataDir); fileExists(pidPath) {
-		return fmt.Errorf("%s reappeared after the app was stopped: it has been relaunched; nothing was removed", pidPath)
+	if err := refuseRelaunchedApp(r); err != nil {
+		return err
 	}
 
 	// Forget the bundle first, so its id and deep-link scheme stop resolving to a
@@ -379,6 +392,35 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 
 	fmt.Fprintf(w, "Cleaned profile %s.\n", r.Label)
 	return nil
+}
+
+func refuseRelaunchedApp(r profileResolved) error {
+	pidPath := appPIDFilePath(r.DataDir)
+	if !fileExists(pidPath) {
+		return nil
+	}
+	return fmt.Errorf("%s reappeared after the app was stopped: it has been relaunched; nothing was removed", pidPath)
+}
+
+// The lock file itself is never removed: the kernel drops ownership when a process
+// dies, so the path outliving both of us can never go stale.
+func holdAppLock(r profileResolved) (func(), error) {
+	dir := filepath.Dir(r.AppLock)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create app lock dir %s: %w", dir, err)
+	}
+	f, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open app lock %s: %w", r.AppLock, err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("%s is held (%v): a %s app is running and holds it for as long as it lives; nothing was removed. Quit it and re-run", r.AppLock, err, r.Label)
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
 }
 
 func removeAppLocalData(r profileResolved) (string, error) {

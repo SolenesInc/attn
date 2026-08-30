@@ -1261,6 +1261,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             use tauri::Manager;
+            profile::hold_app_lock();
             profile::write_app_pid_file();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never

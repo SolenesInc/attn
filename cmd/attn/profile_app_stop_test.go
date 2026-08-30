@@ -109,6 +109,7 @@ func sandboxedProfile(t *testing.T) profileResolved {
 		AppPath:       filepath.Join(root, "install", "attn-sandbox"),
 		AppExecutable: os.Args[0],
 		AppLocalData:  filepath.Join(root, "app-local-data"),
+		AppLock:       filepath.Join(root, "locks", "app-sandbox.lock"),
 		BundleID:      "com.attn.manager.sandbox-test",
 	}
 	for _, dir := range []string{r.DataDir, r.AppPath, r.AppLocalData} {
@@ -117,6 +118,16 @@ func sandboxedProfile(t *testing.T) profileResolved {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(r.AppLocalData, "debug.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// Not installed, so the stop resolves without a pid file or a LaunchServices probe.
+func stoppedProfile(t *testing.T) profileResolved {
+	t.Helper()
+	r := sandboxedProfile(t)
+	if err := os.RemoveAll(r.AppPath); err != nil {
 		t.Fatal(err)
 	}
 	return r
@@ -279,5 +290,54 @@ func TestCleanProfileAbortsWhenTheAppRelaunchesWhileStopping(t *testing.T) {
 		if !fileExists(dir) {
 			t.Fatalf("%s was removed under a relaunched app", dir)
 		}
+	}
+}
+
+func TestCleanProfileAbortsWhenTheAppLockIsHeld(t *testing.T) {
+	shrinkAppStopWaits(t)
+	r := stoppedProfile(t)
+	if err := os.MkdirAll(filepath.Dir(r.AppLock), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	held, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	if err := syscall.Flock(int(held.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("take the app lock: %v", err)
+	}
+
+	var out strings.Builder
+	if err := cleanProfile(&out, r); err == nil {
+		t.Fatalf("cleanProfile succeeded while another process held %s; output:\n%s", r.AppLock, out.String())
+	} else if !strings.Contains(err.Error(), r.AppLock) || !strings.Contains(err.Error(), "nothing was removed") {
+		t.Fatalf("cleanProfile error = %v, want it to name the held lock and say nothing was removed", err)
+	}
+	for _, dir := range []string{r.DataDir, r.AppLocalData} {
+		if !fileExists(dir) {
+			t.Fatalf("%s was removed while the app lock was held", dir)
+		}
+	}
+	if strings.Contains(out.String(), "daemon") {
+		t.Fatalf("cleanProfile got as far as the daemon under a held lock; output:\n%s", out.String())
+	}
+}
+
+func TestCleanProfileReleasesTheAppLockWhenItFinishes(t *testing.T) {
+	shrinkAppStopWaits(t)
+	r := stoppedProfile(t)
+
+	var out strings.Builder
+	if err := cleanProfile(&out, r); err != nil {
+		t.Fatalf("cleanProfile = %v; output:\n%s", err, out.String())
+	}
+	f, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("the app lock is still held after the clean finished: %v", err)
 	}
 }

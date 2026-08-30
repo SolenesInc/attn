@@ -3,8 +3,11 @@
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
+use std::thread;
+use std::time::{Duration, Instant};
 
 const BUILD_PROFILE: Option<&str> = option_env!("ATTN_BUILD_PROFILE");
 
@@ -14,6 +17,7 @@ const BUILD_DEFAULT_PROFILE_HARNESS: bool =
     option_env!("ATTN_BUILD_DEFAULT_PROFILE_HARNESS").is_some();
 const HARNESS_DATA_DIR_ENV: &str = "ATTN_HARNESS_DATA_DIR";
 const APP_PID_FILE: &str = "app.pid";
+const APP_LOCK_DIR: &str = ".attn.locks";
 const ROUTING_PATH_OVERRIDES: [&str; 7] = [
     "ATTN_SOCKET_PATH",
     "ATTN_DB_PATH",
@@ -116,6 +120,47 @@ pub(crate) fn data_dir() -> Result<PathBuf, String> {
         profile => format!(".attn-{profile}"),
     };
     Ok(home.join(name))
+}
+
+/// Mirrors `config.AppLockPathForProfile()` in Go.
+fn app_lock_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
+    Ok(home
+        .join(APP_LOCK_DIR)
+        .join(format!("app-{}.lock", build_profile_label())))
+}
+
+/// Held for this process's lifetime: the kernel drops it on exit, and while it is
+/// held `attn profile clean` refuses to delete this profile's trees.
+pub fn hold_app_lock() {
+    let Ok(path) = app_lock_path() else { return };
+    let Some(dir) = path.parent() else { return };
+    if fs::create_dir_all(dir).is_err() {
+        return;
+    }
+    let Ok(file) = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&path)
+    else {
+        return;
+    };
+    // Tripwire past a whole `profile clean` (measured 0.44s, 2026-08-30, macOS): a
+    // launch that close to one waits it out instead of racing its removals.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            std::mem::forget(file);
+            return;
+        }
+        if Instant::now() >= deadline {
+            return;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 pub fn write_app_pid_file() {
@@ -237,6 +282,15 @@ mod tests {
         assert_eq!(build_profile(), "");
         assert_eq!(default_port_for_build_profile(), "9849");
         assert_eq!(bundle_identifier(), "com.attn.manager");
+    }
+
+    #[test]
+    fn the_app_lock_mirrors_config_app_lock_path_for_profile() {
+        let home = dirs::home_dir().expect("home dir");
+        assert_eq!(
+            app_lock_path().expect("lock path"),
+            home.join(".attn.locks").join("app-default.lock")
+        );
     }
 
     #[test]

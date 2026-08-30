@@ -23,3 +23,8 @@ change: >
   can be reused; a live pid that cannot be identified stops the clean rather than
   being assumed dead; and an `app.pid` that names a different pid, or reappears
   after the stop, is read as a relaunch and aborts before anything is removed.
+
+  The app and clean also share a lock, `~/.attn.locks/app-<profile>.lock`: the
+  app holds it for its lifetime, clean holds it across the removals, and the one
+  that loses the race waits (a launching app, up to 3s) or aborts (a clean that
+  finds it held), so nothing is ever deleted under a live app.

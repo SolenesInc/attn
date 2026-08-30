@@ -457,6 +457,20 @@ func AppLocalDataDir() string {
 	return AppLocalDataDirForProfile(Profile())
 }
 
+// Outside every tree clean removes, and ".attn.locks" cannot collide with a
+// profile's "~/.attn-<name>" data dir: profile names carry no dot.
+func AppLockPathForProfile(profile string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/tmp"
+	}
+	label := strings.ToLower(strings.TrimSpace(profile))
+	if label == "" || !profileNamePattern.MatchString(label) {
+		label = "default"
+	}
+	return filepath.Join(home, ".attn.locks", "app-"+label+".lock")
+}
+
 func LogPath() string {
 	return filepath.Join(attnDir(), "daemon.log")
 }

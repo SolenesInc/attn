@@ -108,6 +108,15 @@ relaunch and aborts the clean. Whenever the app cannot be confirmed gone, clean
 removes nothing and names the pid: quit it yourself and re-run. `--force` covers
 the production profile, never a live app.
 
+The last gap a marker cannot close — a launch between the final check and the
+removals — is closed by a shared lock, `~/.attn.locks/app-<profile>.lock`. The
+app takes it at startup and the kernel holds it for the process's lifetime;
+clean takes it once the old app is gone and holds it through the last removal.
+Whoever loses waits: an app launched into a clean waits up to 3s for it to
+finish, and a clean that finds the lock held aborts before touching anything.
+The lock file itself is never removed, and cannot go stale: kernel ownership
+disappears with the process.
+
 Use `attn profile stop-app --profile <name>` to stop only the app; it returns
 once the app is gone.
 `attn profile list --json` reports the install's origin worktree and live workers,
