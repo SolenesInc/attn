@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getNormalizedPaneBounds, type TerminalLayoutNode } from '../../types/workspace';
-import { resolveWorkspaceLayout, swapSuspendedLeaf } from './attentionLayout';
+import {
+  releaseSuspendedLeaf,
+  resolveWorkspaceLayout,
+  suspendedLeafIdsWithinSplitSide,
+} from './attentionLayout';
 
 function twoAgentsAndDocument(direction: 'vertical' | 'horizontal' = 'vertical'): TerminalLayoutNode {
   return {
@@ -32,6 +36,7 @@ function resolve(
     activeLeafId: string;
     focusOrder?: readonly string[];
     previousSuspendedLeafIds?: ReadonlySet<string>;
+    previousLeafIds?: ReadonlySet<string>;
     pendingRatioOverrides?: ReadonlyMap<string, number>;
   },
 ) {
@@ -41,6 +46,7 @@ function resolve(
     activeLeafId: options.activeLeafId,
     focusOrder: options.focusOrder ?? [],
     previousSuspendedLeafIds: options.previousSuspendedLeafIds ?? new Set(),
+    previousLeafIds: options.previousLeafIds,
     pendingRatioOverrides: options.pendingRatioOverrides,
   });
 }
@@ -231,18 +237,18 @@ describe('workspace attention layout', () => {
     expect(collapsed.suspendedLeafIds).toEqual(new Set(['readme']));
     expect(collapsedBounds.get('readme')!.width * viewport.width).toBeCloseTo(34, 0);
 
-    const swappedIds = swapSuspendedLeaf(collapsed.suspendedLeafIds, 'readme', 'design');
-    const swapped = resolve(tree, {
+    const releasedIds = releaseSuspendedLeaf(collapsed.suspendedLeafIds, 'readme');
+    const expanded = resolve(tree, {
       ...viewport,
       activeLeafId: 'readme',
       focusOrder: ['design', 'notes', 'agent'],
-      previousSuspendedLeafIds: swappedIds,
+      previousSuspendedLeafIds: releasedIds,
     });
-    const swappedBounds = getNormalizedPaneBounds(swapped.renderedTree);
+    const expandedBounds = getNormalizedPaneBounds(expanded.renderedTree);
 
-    expect(swapped.suspendedLeafIds).toEqual(new Set(['design']));
-    expect(swappedBounds.get('design')!.width * viewport.width).toBeCloseTo(34, 0);
-    expect(swappedBounds.get('readme')!.width * viewport.width).toBeGreaterThanOrEqual(479.5);
+    expect(expanded.suspendedLeafIds).toEqual(new Set(['agent']));
+    expect(expandedBounds.get('agent')!.width * viewport.width).toBeCloseTo(34, 0);
+    expect(expandedBounds.get('readme')!.width * viewport.width).toBeGreaterThanOrEqual(479.5);
   });
 
   it('uses a pending drag as preferred intent without weakening constraints', () => {
@@ -263,7 +269,95 @@ describe('workspace attention layout', () => {
     expect(bounds.get('document')!.width * 1600).toBeGreaterThanOrEqual(479.5);
   });
 
-  it('hands the previous peer to the ring when a sliver is restored', () => {
-    expect(swapSuspendedLeaf(new Set(['agent-b']), 'agent-b', 'document')).toEqual(new Set(['document']));
+  it('releases only the clicked sliver, never folding a peer by itself', () => {
+    expect(releaseSuspendedLeaf(new Set(['agent-b', 'document']), 'agent-b')).toEqual(new Set(['document']));
+    const untouched = new Set(['document']);
+    expect(releaseSuspendedLeaf(untouched, 'agent-b')).toBe(untouched);
+  });
+
+  function threeAgents(): TerminalLayoutNode {
+    return {
+      type: 'split',
+      splitId: 'outer',
+      direction: 'vertical',
+      ratio: 1 / 3,
+      children: [
+        { type: 'pane', paneId: 'agent-a' },
+        {
+          type: 'split',
+          splitId: 'inner',
+          direction: 'vertical',
+          ratio: 0.5,
+          children: [
+            { type: 'pane', paneId: 'agent-b' },
+            { type: 'pane', paneId: 'agent-c' },
+          ],
+        },
+      ],
+    };
+  }
+
+  it('restores a suspended leaf without slack when the tree shrinks', () => {
+    // 1470px fits three 480px agents but not three 504px ones, so viewport
+    // hysteresis alone would leave the third agent suspended forever.
+    const plan = resolve(threeAgents(), {
+      width: 1470,
+      height: 800,
+      activeLeafId: 'agent-b',
+      focusOrder: ['agent-a', 'agent-c'],
+      previousSuspendedLeafIds: new Set(['agent-c']),
+      previousLeafIds: new Set(['agent-a', 'agent-b', 'agent-c', 'seed-tile']),
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set());
+  });
+
+  it('keeps restore hysteresis when only the viewport changed', () => {
+    const plan = resolve(threeAgents(), {
+      width: 1470,
+      height: 800,
+      activeLeafId: 'agent-b',
+      focusOrder: ['agent-a', 'agent-c'],
+      previousSuspendedLeafIds: new Set(['agent-c']),
+      previousLeafIds: new Set(['agent-a', 'agent-b', 'agent-c']),
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
+  });
+
+  it('folds never-focused leaves before anything in the focus order', () => {
+    const plan = resolve(threeAgents(), {
+      width: 1100,
+      height: 800,
+      activeLeafId: 'agent-c',
+      focusOrder: ['agent-a'],
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-b']));
+  });
+
+  it('marks a sliver-adjacent divider instead of dropping it', () => {
+    const plan = resolve(threeAgents(), {
+      width: 1100,
+      height: 800,
+      activeLeafId: 'agent-a',
+      focusOrder: ['agent-b'],
+      previousSuspendedLeafIds: new Set(['agent-c']),
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
+    const byId = new Map(plan.dividers.map((divider) => [divider.splitId, divider]));
+    expect(byId.get('inner')?.suspendedSide).toBe('second');
+    expect(byId.get('outer')?.suspendedSide).toBeUndefined();
+  });
+
+  it('finds the suspended leaves behind one side of a split', () => {
+    const suspended = new Set(['agent-c']);
+    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'inner', 'second', suspended))
+      .toEqual(['agent-c']);
+    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'inner', 'first', suspended))
+      .toEqual([]);
+    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'missing', 'first', suspended))
+      .toEqual([]);
   });
 });

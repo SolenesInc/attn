@@ -7,6 +7,7 @@ import { StateIndicator } from '../StateIndicator';
 import { useShortcut } from '../../shortcuts/useShortcut';
 import {
   getNormalizedPaneBounds,
+  collectLayoutLeaves,
   collectPreferredSplitIds,
   collectSplitRatios,
   findLeafInDirection,
@@ -53,8 +54,10 @@ import type {
 import { SessionProvenance } from '../SessionProvenance';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import {
+  ATTENTION_SLIVER_SIZE,
+  releaseSuspendedLeaf,
   resolveWorkspaceLayout,
-  swapSuspendedLeaf,
+  suspendedLeafIdsWithinSplitSide,
   type AttentionViewport,
 } from './attentionLayout';
 import { keyCombo } from '../../shortcuts/formatShortcut';
@@ -250,6 +253,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     const [attentionRevision, setAttentionRevision] = useState(0);
     const attentionFocusOrderRef = useRef<string[]>([]);
     const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
+    const previousTreeLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
     const previousAnnotatedTileIdsRef = useRef<ReadonlySet<string> | null>(null);
     const automaticTileFocusRef = useRef<{ tileId: string; whileActivePaneId: string } | null>(null);
     const pendingPaneFocusRef = useRef<{
@@ -508,6 +512,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         activeLeafId: attentionActiveLeafId,
         focusOrder: attentionFocusOrder.slice(1),
         previousSuspendedLeafIds: suspendedLeafIdsRef.current,
+        previousLeafIds: previousTreeLeafIdsRef.current,
         pendingRatioOverrides,
         view: effectivePaneId
           ? { mode: 'focused', leafId: effectivePaneId }
@@ -530,7 +535,10 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       if (layoutPlan) {
         suspendedLeafIdsRef.current = layoutPlan.suspendedLeafIds;
       }
-    }, [layoutPlan]);
+      previousTreeLeafIdsRef.current = workspace.layoutTree
+        ? new Set(collectLayoutLeaves(workspace.layoutTree).map(leafSlotId))
+        : EMPTY_SUSPENDED_LEAF_IDS;
+    }, [layoutPlan, workspace.layoutTree]);
     const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
 
     useLayoutEffect(() => {
@@ -843,14 +851,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
     }, [onSetZoomActive, zoomActive]);
 
     const focusLeaf = useCallback((leafId: string) => {
-      const nextSuspendedLeafIds = swapSuspendedLeaf(
-        suspendedLeafIds,
-        leafId,
-        attentionActiveLeafId,
-      );
-      if (nextSuspendedLeafIds !== suspendedLeafIds) {
-        suspendedLeafIdsRef.current = nextSuspendedLeafIds;
-      }
+      suspendedLeafIdsRef.current = releaseSuspendedLeaf(suspendedLeafIdsRef.current, leafId);
       automaticTileFocusRef.current = null;
       if (tileLeafById.has(leafId)) {
         pendingPaneFocusRef.current = null;
@@ -864,7 +865,24 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       setActiveTile(null);
       onFocusPane(leafId);
       runtime.focusPane(leafId);
-    }, [activePaneId, attentionActiveLeafId, focusTile, onFocusPane, runtime, suspendedLeafIds, tileLeafById]);
+    }, [activePaneId, focusTile, onFocusPane, runtime, tileLeafById]);
+
+// Dragging a sliver's divider past its edge means the same as clicking it:
+// expand and focus; reconciliation folds the LRU tile only if space runs out.
+    const expandSuspendedSplitSide = useCallback((splitId: string, side: 'first' | 'second') => {
+      const releasedIds = workspace.layoutTree
+        ? suspendedLeafIdsWithinSplitSide(workspace.layoutTree, splitId, side, suspendedLeafIdsRef.current)
+        : [];
+      if (releasedIds.length === 0) {
+        return;
+      }
+      let next = suspendedLeafIdsRef.current;
+      for (const id of releasedIds) {
+        next = releaseSuspendedLeaf(next, id);
+      }
+      suspendedLeafIdsRef.current = next;
+      focusLeaf(releasedIds[0]);
+    }, [focusLeaf, workspace.layoutTree]);
     useLayoutEffect(() => {
       focusLeafRequestRef.current = focusLeaf;
     }, [focusLeaf]);
@@ -1390,22 +1408,33 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
         direction === 'vertical' ? 'col-resize' : 'row-resize',
       );
 
-      const computeRatio = (clientX: number, clientY: number): number => {
-        let ratio = 0.5;
-        if (spanNorm > 0) {
-          if (direction === 'vertical') {
-            ratio = ((clientX - rect.left) / rect.width - left) / spanNorm;
-          } else {
-            ratio = ((clientY - rect.top) / rect.height - top) / spanNorm;
-          }
+      const computeRawRatio = (clientX: number, clientY: number): number => {
+        if (spanNorm <= 0) {
+          return 0.5;
         }
-        return Math.min(1 - minRatio, Math.max(minRatio, ratio));
+        return direction === 'vertical'
+          ? ((clientX - rect.left) / rect.width - left) / spanNorm
+          : ((clientY - rect.top) / rect.height - top) / spanNorm;
       };
+      const computeRatio = (clientX: number, clientY: number): number =>
+        Math.min(1 - minRatio, Math.max(minRatio, computeRawRatio(clientX, clientY)));
 
+      const suspendedSide = divider.suspendedSide;
+      let sliverExpanded = suspendedSide == null;
       const onMove = (ev: PointerEvent) => {
         ev.preventDefault();
         ev.stopPropagation();
         suppressTerminalMouseDuringResize();
+        if (suspendedSide && !sliverExpanded) {
+          const raw = computeRawRatio(ev.clientX, ev.clientY);
+          const sliverPx = (suspendedSide === 'first' ? raw : 1 - raw) * spanPx;
+          // Intent is unambiguous only once the pointer crosses the sliver's own edge.
+          if (sliverPx <= ATTENTION_SLIVER_SIZE) {
+            return;
+          }
+          sliverExpanded = true;
+          expandSuspendedSplitSide(splitId, suspendedSide);
+        }
         pendingRatioRef.current = { splitId, ratio: computeRatio(ev.clientX, ev.clientY) };
         if (ratioRafRef.current == null) {
           ratioRafRef.current = window.requestAnimationFrame(flushRatioOverride);
@@ -1456,6 +1485,10 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       const onUp = (ev: PointerEvent) => {
         ev.preventDefault();
         ev.stopPropagation();
+        if (!sliverExpanded) {
+          onCancel();
+          return;
+        }
         const ratio = computeRatio(ev.clientX, ev.clientY);
         teardown();
         pendingRatioRef.current = { splitId, ratio };
@@ -1472,7 +1505,7 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
       window.addEventListener('pointerup', onUp, true);
       window.addEventListener('pointercancel', onCancel, true);
       window.addEventListener('blur', onCancel);
-    }, [clearRatioOverride, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize]);
+    }, [clearRatioOverride, expandSuspendedSplitSide, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize]);
 
     useEffect(() => () => {
       dragCleanupRef.current?.();

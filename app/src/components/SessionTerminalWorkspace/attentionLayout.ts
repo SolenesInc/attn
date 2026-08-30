@@ -12,6 +12,8 @@ import {
 export const ATTENTION_MIN_WIDTH = 480;
 export const ATTENTION_MIN_HEIGHT = 320;
 export const ATTENTION_SLIVER_SIZE = 34;
+// Restore hysteresis for viewport-driven reconciliation only: it stops
+// resize flicker at the fit boundary. A tree change restores with zero slack.
 const RESTORE_GUTTER = 24;
 const ZOOM_PATH_RATIO = 0.76;
 
@@ -31,6 +33,9 @@ export interface ResolveWorkspaceLayoutInput {
   activeLeafId: string;
   focusOrder: readonly string[];
   previousSuspendedLeafIds: ReadonlySet<string>;
+  // Leaf ids of the previously rendered tree; a leaf gone from the current
+  // tree means it shrank, and restore then runs without hysteresis slack.
+  previousLeafIds?: ReadonlySet<string>;
   pendingRatioOverrides?: ReadonlyMap<string, number>;
   view?: WorkspaceLayoutView;
 }
@@ -211,6 +216,7 @@ function reconcileSuspension(
   protectedLeafId: string,
   focusOrder: readonly string[],
   pendingPreferredSplitIds: ReadonlySet<string>,
+  restoreSlack: number,
 ): ReadonlySet<string> {
   const leafIds = collectLayoutLeaves(node).map(leafSlotId);
   const valid = new Set(leafIds);
@@ -219,9 +225,12 @@ function reconcileSuspension(
     return sameIds(current, next) ? current : next;
   }
 
+// Never-focused leaves are staler than anything in the focus order, so they
+// fold first; the most recently focused leaf is the last possible victim.
+  const focusedIds = new Set(focusOrder);
   const orderedVictims = [
+    ...[...leafIds].reverse().filter((id) => !focusedIds.has(id)),
     ...[...focusOrder].reverse(),
-    ...[...leafIds].reverse(),
   ].filter((id, index, all) => all.indexOf(id) === index);
 
   while (!visibleLeavesFit(node, next, viewport, pendingPreferredSplitIds)) {
@@ -239,7 +248,7 @@ function reconcileSuspension(
   for (const candidate of [...next].reverse()) {
     const restored = new Set(next);
     restored.delete(candidate);
-    if (visibleLeavesFit(node, restored, viewport, pendingPreferredSplitIds, RESTORE_GUTTER)) {
+    if (visibleLeavesFit(node, restored, viewport, pendingPreferredSplitIds, restoreSlack)) {
       next.delete(candidate);
     }
   }
@@ -247,22 +256,23 @@ function reconcileSuspension(
   return sameIds(current, next) ? current : next;
 }
 
-function splitIdsBesideSuspendedSubtrees(
+type SuspendedSide = 'first' | 'second' | 'both';
+
+function suspendedSidesBySplit(
   node: TerminalLayoutNode,
   suspended: ReadonlySet<string>,
-  result = new Set<string>(),
-): ReadonlySet<string> {
+  result = new Map<string, SuspendedSide>(),
+): ReadonlyMap<string, SuspendedSide> {
   if (node.type !== 'split') {
     return result;
   }
-  if (
-    allLeavesSuspended(node.children[0], suspended)
-    || allLeavesSuspended(node.children[1], suspended)
-  ) {
-    result.add(node.splitId);
+  const first = allLeavesSuspended(node.children[0], suspended);
+  const second = allLeavesSuspended(node.children[1], suspended);
+  if (first || second) {
+    result.set(node.splitId, first && second ? 'both' : first ? 'first' : 'second');
   }
-  splitIdsBesideSuspendedSubtrees(node.children[0], suspended, result);
-  splitIdsBesideSuspendedSubtrees(node.children[1], suspended, result);
+  suspendedSidesBySplit(node.children[0], suspended, result);
+  suspendedSidesBySplit(node.children[1], suspended, result);
   return result;
 }
 
@@ -315,6 +325,9 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     };
   }
 
+  const leafIdSet = new Set(collectLayoutLeaves(sourceTree).map(leafSlotId));
+  const treeShrank = input.previousLeafIds != null
+    && [...input.previousLeafIds].some((id) => !leafIdSet.has(id));
   const suspendedLeafIds = reconcileSuspension(
     sourceTree,
     input.previousSuspendedLeafIds,
@@ -322,6 +335,7 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     input.activeLeafId,
     input.focusOrder,
     pendingPreferredSplitIds,
+    treeShrank ? 0 : RESTORE_GUTTER,
   );
   const renderedTree = projectLayout(
     sourceTree,
@@ -329,27 +343,58 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     input.viewport,
     pendingPreferredSplitIds,
   );
-  const fixedSplitIds = splitIdsBesideSuspendedSubtrees(sourceTree, suspendedLeafIds);
+  const suspendedSides = suspendedSidesBySplit(sourceTree, suspendedLeafIds);
 
   return {
     renderedTree,
     suspendedLeafIds,
-    dividers: getSplitDividers(renderedTree).filter((divider) => !fixedSplitIds.has(divider.splitId)),
+    dividers: getSplitDividers(renderedTree).flatMap((divider) => {
+      const side = suspendedSides.get(divider.splitId);
+      if (side === 'both') {
+        return [];
+      }
+      return [side ? { ...divider, suspendedSide: side } : divider];
+    }),
   };
 }
 
-export function swapSuspendedLeaf(
+// Releasing never folds a peer here: reconcileSuspension picks the
+// least-recently-focused victim, and only when space actually runs out.
+export function releaseSuspendedLeaf(
   current: ReadonlySet<string>,
   targetLeafId: string,
-  previouslyFocusedLeafId: string,
 ): ReadonlySet<string> {
   if (!current.has(targetLeafId)) {
     return current;
   }
   const next = new Set(current);
   next.delete(targetLeafId);
-  if (previouslyFocusedLeafId && previouslyFocusedLeafId !== targetLeafId) {
-    next.add(previouslyFocusedLeafId);
-  }
   return next;
+}
+
+function findSplit(
+  node: TerminalLayoutNode,
+  splitId: string,
+): Extract<TerminalLayoutNode, { type: 'split' }> | null {
+  if (node.type !== 'split') {
+    return null;
+  }
+  if (node.splitId === splitId) {
+    return node;
+  }
+  return findSplit(node.children[0], splitId) || findSplit(node.children[1], splitId);
+}
+
+export function suspendedLeafIdsWithinSplitSide(
+  tree: TerminalLayoutNode,
+  splitId: string,
+  side: 'first' | 'second',
+  suspended: ReadonlySet<string>,
+): string[] {
+  const split = findSplit(tree, splitId);
+  if (!split) {
+    return [];
+  }
+  const child = split.children[side === 'first' ? 0 : 1];
+  return collectLayoutLeaves(child).map(leafSlotId).filter((id) => suspended.has(id));
 }

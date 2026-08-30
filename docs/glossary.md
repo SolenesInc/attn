@@ -16,6 +16,8 @@
 - Standing dismissal: suppresses the next auto-settle for the current working stretch.
 - Queue: sidebar ordering by owed turns. Pinning excludes an agent/workspace without settling turns.
 - Satellite: shell pane attached to an agent. Orphan: satellite without a live parent.
+- Sliver: a pane or tile suspended to a thin strip showing its name and state, when the workspace cannot give every leaf its minimum size or a drag pushes one below it. The victim is the smallest unfocused leaf, never the focused one; it expands on its own when room returns.
+- Pinned sliver: folded by a drag; stays folded until clicked or a drag gives its side room. Boundaries beside a sliver resize its visible neighbors.
 - Activity: generated status line. Activity cursor: transcript position already summarized.
 - Presence: watching = home visible; present = recent input elsewhere in app; away = neither.
 - Recoverable: runtime gone, conversation restorable. Reaped: unrestorable session removed.

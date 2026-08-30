@@ -359,7 +359,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     expect(container.querySelector('[data-pane-id="document"]')).not.toHaveAttribute('data-pane-suspended');
   });
 
-  it('turns the previous peer into a state sliver and swaps it when clicked', async () => {
+  it('expands a clicked sliver and folds the least-recently-focused leaf, not the previous one', async () => {
     const onFocusPane = vi.fn();
     const { container } = render(
       <SessionTerminalWorkspace
@@ -397,9 +397,71 @@ describe('SessionTerminalWorkspace attention ring', () => {
     fireEvent.click(beta);
     expect(onFocusPane).toHaveBeenCalledWith('agent-b');
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Expand Alpha' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: 'Expand Beta' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand Alpha' })).toBeNull();
+  });
+
+  it('expands a sliver dragged open by its adjacent divider', async () => {
+    const onFocusPane = vi.fn();
+    const boundingRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 1100, bottom: 700, width: 1100, height: 700,
+      toJSON: () => ({}),
+    } as DOMRect);
+    try {
+      const { container } = render(
+        <SessionTerminalWorkspace
+          workspaceId="workspace-drag"
+          workspaceSessions={[
+            { id: 'session-a', label: 'Alpha', agent: 'shell', cwd: '/tmp' },
+            { id: 'session-b', label: 'Beta', agent: 'shell', cwd: '/tmp' },
+          ]}
+          workspace={crowdedWorkspace()}
+          activePaneId="agent-a"
+          fontSize={13}
+          enabled
+          isActiveSession
+          eventRouter={createPaneRuntimeEventRouterController()}
+          onSplitPane={vi.fn()}
+          onClosePane={vi.fn()}
+          onFocusPane={onFocusPane}
+          onNavigateOutOfSession={vi.fn()}
+          onUndockTile={vi.fn()}
+          tileContents={{
+            [tileContentKey('workspace-drag', 'document')]: {
+              path: '/tmp/review.md',
+              content: '# Review me',
+            },
+          }}
+          onRequestTileContent={vi.fn()}
+        />,
+        { wrapper: Wrapper },
+      );
+
+      await screen.findByRole('button', { name: 'Expand Beta' });
+      // Beta is the second child of the outer split, pinned to a 34px sliver.
+      const divider = container.querySelector('.workspace-split-divider[data-split-id="outer"]') as HTMLElement;
+      expect(divider).not.toBeNull();
+
+      fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 1066, clientY: 350 });
+      // First move stays inside the sliver's 34px: nothing may change yet.
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 1080, clientY: 350 });
+      expect(screen.getByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
+      // Crossing the sliver's edge expands and focuses it.
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 500, clientY: 350 });
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 500, clientY: 350 });
+
+      expect(onFocusPane).toHaveBeenCalledWith('agent-b');
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Expand Beta' })).toBeNull();
+      });
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
+      });
+    } finally {
+      boundingRect.mockRestore();
+    }
   });
 
   it('opens a tabbed review deck and unwinds inspector then Focus with Escape', async () => {
