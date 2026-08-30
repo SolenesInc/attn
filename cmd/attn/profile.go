@@ -311,8 +311,7 @@ func runProfileClean(args []string) {
 func cleanProfile(w io.Writer, r profileResolved) error {
 	fmt.Fprintf(w, ">>> Cleaning profile %s\n", r.Label)
 
-	// The daemon outlives the app by design, so quit the app first. An app that is
-	// still up owns everything below: nothing is removed until it is gone.
+	// The daemon outlives the app by design, so quit the app first.
 	msg, err := stopProfileApp(r)
 	if err != nil {
 		return fmt.Errorf("app not stopped: %w; nothing was removed, since a live app rewrites %s as fast as it is deleted. Quit it and re-run; --force does not cover a live app", err, r.AppLocalData)
@@ -517,8 +516,6 @@ var (
 	appStopPollInterval = 50 * time.Millisecond
 )
 
-// Whoever asked for the app to stop wants it *stopped*: every caller removes or
-// replaces state the app owns, so this returns only once its pid is gone.
 func stopProfileApp(r profileResolved) (string, error) {
 	pidPath := appPIDFilePath(r.DataDir)
 	raw, err := os.ReadFile(pidPath)
@@ -540,8 +537,6 @@ func stopProfileApp(r profileResolved) (string, error) {
 		_ = os.Remove(pidPath)
 		return fmt.Sprintf("not running (pid %d is gone; removed stale %s)", pid, pidPath), nil
 	}
-	// Alive but unidentifiable is not "gone": say so instead of signalling a
-	// stranger or reporting a stop that never happened.
 	exe, err := processExecutable(pid)
 	if err != nil {
 		return "", fmt.Errorf("pid %d from %s is alive and could not be identified (%v); left running — check it with `ps -p %d`", pid, pidPath, err, pid)
@@ -553,27 +548,39 @@ func stopProfileApp(r profileResolved) (string, error) {
 }
 
 func quitAppPID(r profileResolved, pid int, pidPath string) (string, error) {
-	if requestAppQuit(r.BundleID) && appProcessGoneWithin(pid, appStopQuitWait) {
+	stopped := func(note string) (string, error) {
 		_ = os.Remove(pidPath)
-		return fmt.Sprintf("quit pid %d", pid), nil
+		return note, nil
+	}
+	if requestAppQuit(r.BundleID) && appProcessGoneWithin(pid, appStopQuitWait) {
+		return stopped(fmt.Sprintf("quit pid %d", pid))
+	}
+	// A released pid can be reused between polls, so ownership is rebuilt per signal.
+	if !ownsAppPID(r, pid) {
+		return stopped(fmt.Sprintf("quit pid %d (it is another process now)", pid))
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 		if errors.Is(err, syscall.ESRCH) {
-			_ = os.Remove(pidPath)
-			return fmt.Sprintf("not running (stale %s)", pidPath), nil
+			return stopped(fmt.Sprintf("not running (stale %s)", pidPath))
 		}
 		return "", fmt.Errorf("SIGTERM pid %d failed: %w", pid, err)
 	}
 	if appProcessGoneWithin(pid, appStopSigtermWait) {
-		_ = os.Remove(pidPath)
-		return fmt.Sprintf("stopped pid %d", pid), nil
+		return stopped(fmt.Sprintf("stopped pid %d", pid))
+	}
+	if !ownsAppPID(r, pid) {
+		return stopped(fmt.Sprintf("stopped pid %d (it is another process now)", pid))
 	}
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 	if appProcessGoneWithin(pid, appStopSigkillWait) {
-		_ = os.Remove(pidPath)
-		return fmt.Sprintf("force-killed pid %d (did not exit on SIGTERM)", pid), nil
+		return stopped(fmt.Sprintf("force-killed pid %d (did not exit on SIGTERM)", pid))
 	}
 	return "", fmt.Errorf("pid %d survived SIGKILL; check it with `ps -p %d`", pid, pid)
+}
+
+func ownsAppPID(r profileResolved, pid int) bool {
+	exe, err := processExecutable(pid)
+	return err == nil && sameExecutable(exe, r.AppExecutable)
 }
 
 // /proc/<pid>/exe is already resolved, so an install root behind a symlink

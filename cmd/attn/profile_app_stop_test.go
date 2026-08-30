@@ -12,8 +12,7 @@ import (
 	"time"
 )
 
-// Not a real test: re-exec'd so a process other than this one holds app.pid. It
-// ignores SIGTERM, which is how an app that will not shut down is modelled.
+// Not a test: re-exec'd as an app that will not shut down. Ignores SIGTERM.
 func TestProfileAppStopHelperProcess(t *testing.T) {
 	readyPath := os.Getenv("ATTN_APP_STOP_HELPER_READY")
 	if readyPath == "" {
@@ -26,8 +25,6 @@ func TestProfileAppStopHelperProcess(t *testing.T) {
 	time.Sleep(time.Hour)
 }
 
-// The helper is this test binary, so it passes the ownership gate against an
-// AppExecutable of os.Args[0] exactly as the installed app passes against its own.
 func spawnStubbornApp(t *testing.T) int {
 	t.Helper()
 	readyPath := filepath.Join(t.TempDir(), "helper-ready")
@@ -70,8 +67,6 @@ func spawnForeignProcess(t *testing.T) int {
 	return cmd.Process.Pid
 }
 
-// The waits are tripwires sized for a real app; a test that has to reach one waits
-// for it, so shrink them to keep that honest and fast.
 func shrinkAppStopWaits(t *testing.T) {
 	t.Helper()
 	quit, term, poll := appStopQuitWait, appStopSigtermWait, appStopPollInterval
@@ -88,7 +83,6 @@ func writeAppPID(t *testing.T, dataDir string, pid int) {
 	}
 }
 
-// A profile whose every path is disposable, so a clean can really run against it.
 func sandboxedProfile(t *testing.T) profileResolved {
 	t.Helper()
 	root := t.TempDir()
@@ -150,8 +144,6 @@ func TestStopProfileAppLeavesAForeignPIDAlone(t *testing.T) {
 	}
 }
 
-// The whole point of the fence: a clean that could not stop the app removes nothing,
-// or a WebKit writer that outlives the command recreates what was just deleted.
 func TestCleanProfileRemovesNothingWhileTheAppIsUp(t *testing.T) {
 	shrinkAppStopWaits(t)
 	r := sandboxedProfile(t)
@@ -193,5 +185,27 @@ func TestCleanProfileRemovesTheAppLocalDataOnlyAfterTheAppExits(t *testing.T) {
 		if fileExists(dir) {
 			t.Fatalf("%s survived a clean that did stop the app", dir)
 		}
+	}
+}
+
+func TestQuitAppPIDRevalidatesOwnershipBeforeSignalling(t *testing.T) {
+	shrinkAppStopWaits(t)
+	r := sandboxedProfile(t)
+	pid := spawnForeignProcess(t)
+	writeAppPID(t, r.DataDir, pid)
+	pidPath := filepath.Join(r.DataDir, "app.pid")
+
+	msg, err := quitAppPID(r, pid, pidPath)
+	if err != nil {
+		t.Fatalf("quitAppPID = %v, want the app treated as gone once the pid is a stranger", err)
+	}
+	if !strings.Contains(msg, "another process") {
+		t.Fatalf("quitAppPID = %q, want it to report the pid is another process now", msg)
+	}
+	if processGone(pid) {
+		t.Fatalf("pid %d was signalled after ownership was lost", pid)
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("stale app.pid survived: %v", err)
 	}
 }

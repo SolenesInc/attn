@@ -16,8 +16,7 @@ func processExecutable(pid int) (string, error) {
 	return strings.TrimSuffix(exe, " (deleted)"), nil
 }
 
-// SIGTERM to the pid file's owner is the whole quit request here; there is no
-// bundle broker to ask first.
+// SIGTERM is the whole quit request here; there is no bundle broker to ask.
 func requestAppQuit(string) bool { return false }
 
 func stopAppWithoutPIDFile(_ profileResolved, pidPath string) (string, error) {
