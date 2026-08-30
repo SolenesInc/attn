@@ -30,7 +30,6 @@
   color: var(--color-text-primary);
 }
 
-/* Assigned but not yet tended: outline only, nothing filled in yet. */
 .pane-seed-chip[data-kind='crown'] {
   background: none;
   border-style: dashed;
@@ -61,7 +60,6 @@
   background: none;
 }
 
-/* Four beds in a grid: a plot is a place seeds grow in. */
 .pane-seed-chip-mark--plot {
   display: grid;
   grid-template-columns: 3px 3px;
@@ -115,8 +113,7 @@
   box-shadow: 0 0 7px 1px color-mix(in srgb, var(--color-error, #ef4444) 70%, transparent);
 }
 
-/* Per-status tint, mirroring GardenPanel.css's seed-row statuses. The chip-level
-   kinds (crown, plot, multi) tint from what they stand for, not a seed status. */
+/* Per-status tint, mirroring GardenPanel.css's seed-row statuses. */
 .pane-seed-chip[data-status='planted'] {
   --psc-tint: var(--color-border-hover);
 }

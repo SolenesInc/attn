@@ -94,7 +94,6 @@ describe('PaneSeedChip', () => {
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.getByText('first step')).toBeInTheDocument();
 
-    // A second click on the chip toggles the pinned popover closed.
     fireEvent.click(screen.getByTestId('seed-chip-sess-c'));
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(onOpenSeed).not.toHaveBeenCalled();

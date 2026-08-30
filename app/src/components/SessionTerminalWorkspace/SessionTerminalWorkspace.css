@@ -412,8 +412,7 @@
   flex-shrink: 0;
 }
 
-/* In a narrow pane the garden chip gives ground before the title does, but
-   never collapses past a readable stub. */
+/* Gives ground before the pane title does, but never past a readable stub. */
 .workspace-pane-header .pane-seed-chip {
   flex: 0 1 auto;
   min-width: 76px;

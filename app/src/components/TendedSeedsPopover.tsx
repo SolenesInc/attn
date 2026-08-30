@@ -8,11 +8,9 @@ const VIEWPORT_MARGIN = 8;
 
 interface TendedSeedsPopoverProps {
   rows: PaneSeedPopoverRow[];
-  /** Viewport-relative; the popover opens below, right edges aligned. */
   anchor: { top: number; right: number };
   /** The chip owns its own click-to-toggle; outside-dismiss must ignore it. */
   anchorRef?: React.RefObject<HTMLElement | null>;
-  /** Pinned popovers take keyboard focus; hover ones must not steal it. */
   pinned: boolean;
   onOpenSeed: (seedId: string) => void;
   onClose: () => void;

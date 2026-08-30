@@ -22,7 +22,6 @@ export function PaneSeedChip({
   crownSeedId?: string;
   unread: boolean;
   sessionId: string;
-  /** True while the action menu has requested this pane's popover. */
   pinned: boolean;
   onOpenSeed: (seedId: string) => void;
   onPopoverClosed: () => void;
@@ -108,7 +107,6 @@ export function PaneSeedChip({
     }
   }
 
-  // A single target opens straight away; a set pins the popover to choose from.
   const clickTarget = display.kind === 'crown' ? display.seedId : display.kind === 'seed' ? display.seed.id : null;
 
   return (

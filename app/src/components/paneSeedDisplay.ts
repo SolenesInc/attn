@@ -1,18 +1,13 @@
 import type { Seed } from '../hooks/useDaemonSocket';
 
-// What the pane header says about an agent's garden work. Tended seeds win over
-// the dispatch crown: the crown is scope inference, live tending is the truth.
 export type PaneSeedDisplay =
   | { kind: 'none' }
-  // Dispatched at a seed but tending nothing yet.
   | { kind: 'crown'; seedId: string; seed?: Seed }
   | { kind: 'seed'; seed: Seed }
-  // Every tended seed sits under one plot (possibly one of the tended seeds).
   | { kind: 'plot'; plot: Seed; tended: Seed[] }
   | { kind: 'multi'; tended: Seed[] };
 
-// Tender is cleared on park/harvest/wither, so a matching tender_session IS
-// "actively tended"; no status filter needed.
+// Tender is cleared on park/harvest/wither: a matching tender_session IS "actively tended".
 export function tendedSeeds(seeds: Seed[], sessionId: string): Seed[] {
   if (!sessionId) return [];
   return seeds.filter((seed) => seed.tender_session === sessionId);
@@ -20,8 +15,7 @@ export function tendedSeeds(seeds: Seed[], sessionId: string): Seed[] {
 
 const MAX_ANCESTRY = 32;
 
-// Self-inclusive part-of chain, nearest first. Capped and cycle-guarded: edges
-// come off the wire and a bad link must not hang the render.
+// Capped and cycle-guarded: edges come off the wire and a bad link must not hang the render.
 export function plotAncestry(seed: Seed, byId: Map<string, Seed>): string[] {
   const chain: string[] = [];
   const seen = new Set<string>();
@@ -38,7 +32,6 @@ export function plotAncestry(seed: Seed, byId: Map<string, Seed>): string[] {
 function commonPlot(tended: Seed[], byId: Map<string, Seed>): Seed | undefined {
   const chains = tended.map((seed) => plotAncestry(seed, byId));
   const [first, ...rest] = chains;
-  // Nearest ancestor of the first seed that appears in every other chain.
   for (const candidate of first) {
     if (rest.every((chain) => chain.includes(candidate))) {
       return byId.get(candidate);
@@ -64,8 +57,6 @@ export function derivePaneSeedDisplay(
   return { kind: 'multi', tended };
 }
 
-// Rows the popover lists: the display's seeds plus the crown as context when it
-// is not already among them.
 export interface PaneSeedPopoverRow {
   seed?: Seed;
   seedId: string;
