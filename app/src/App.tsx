@@ -1753,7 +1753,7 @@ function AppContent({
     {
       id: 'workspace-contexts',
       title: 'Browse workspace contexts',
-      description: 'Navigate shared contexts stored on this Mac',
+      description: 'Navigate shared contexts stored on this machine',
       keywords: ['memory', 'shared', 'agents', 'context'],
       icon: <ContextActionIcon />,
       run: openWorkspaceContextNavigator,
