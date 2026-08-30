@@ -358,3 +358,69 @@ func TestMaybeGenerateSessionTitle_CrewBindingRace(t *testing.T) {
 		t.Fatalf("session label = %+v, want unchanged %q (a session that became a member must not be titled)", got, wantLabel)
 	}
 }
+
+func TestMaybeGenerateSessionTitleFromPrompt_TitlesBeforeStop(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	var gotBrief string
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		gotBrief = slice.Brief
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "  fix the login flow\n")
+	if calls != 1 || gotBrief != "fix the login flow" {
+		t.Fatalf("exec calls = %d brief = %q, want 1 call with the trimmed prompt", calls, gotBrief)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Fix login flow" {
+		t.Fatalf("session label = %+v, want %q", got, "Fix login flow")
+	}
+
+	// The Stop that follows must not title a second time.
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+	if calls != 1 {
+		t.Fatalf("exec calls after Stop = %d, want 1", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_EmptyPromptLeavesStopPath(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "   ")
+	if calls != 0 {
+		t.Fatalf("exec calls after empty prompt = %d, want 0", calls)
+	}
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+	if calls != 1 {
+		t.Fatalf("exec calls after Stop = %d, want 1", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_CapsLongPrompt(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	var gotBrief string
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		gotBrief = slice.Brief
+		return "Long prompt", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", strings.Repeat("é", sessionTitleBriefCharCap+10))
+	if n := len([]rune(gotBrief)); n != sessionTitleBriefCharCap {
+		t.Fatalf("brief runes = %d, want %d", n, sessionTitleBriefCharCap)
+	}
+}

@@ -2563,6 +2563,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
+		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt))
 	}
 	d.noteInitialAgentMessageSubmitted(msg.ID, msg.State)
 	d.runPostInitialPrompt(msg.ID, msg.State)

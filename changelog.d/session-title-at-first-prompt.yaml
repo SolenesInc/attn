@@ -1,0 +1,7 @@
+kind: fixed
+area: daemon
+change: >
+  Sessions get their generated name when the first prompt is submitted
+  instead of when the first turn ends, so a one-shot agent that runs for
+  hours is named seconds in. The transcript-based path at Stop remains
+  as the fallback for harnesses whose prompt hook carries no text.

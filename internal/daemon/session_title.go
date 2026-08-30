@@ -18,8 +18,9 @@ import (
 
 const (
 	// Distinct from maxDelegationNameRunes (delegate.go), the clamp on delegation names.
-	maxSessionTitleRunes = 48
-	sessionTitleTimeout  = 90 * time.Second
+	maxSessionTitleRunes     = 48
+	sessionTitleTimeout      = 90 * time.Second
+	sessionTitleBriefCharCap = 1500
 )
 
 const sessionTitleOutputSchema = `{
@@ -31,25 +32,13 @@ const sessionTitleOutputSchema = `{
 	"additionalProperties": false
 }`
 
+// Stop-time path: the first human turn is read back from the transcript. It is
+// the fallback for harnesses whose prompt hook carries no text.
 func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
-	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
+	if !d.sessionWantsAutoTitle(sessionID) {
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil {
-		return
-	}
-	if !d.sessionMayBeAutoTitled(session) {
-		return
-	}
-
-	d.sessionTitleMu.Lock()
-	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
-		d.sessionTitleMu.Unlock()
-		return
-	}
-	d.sessionTitleMu.Unlock()
-
 	path := d.resolveTranscriptPathForSession(session, transcriptPath)
 	if strings.TrimSpace(path) == "" {
 		return
@@ -57,7 +46,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	slice, err := transcript.ExtractConversationSlice(path, transcript.SliceOptions{
 		MaxRescopingTurns: 2,
 		MaxAgentTurns:     1,
-		TurnCharCap:       1500,
+		TurnCharCap:       sessionTitleBriefCharCap,
 		SummaryCharCap:    2000,
 	})
 	if err != nil || slice.Empty() || slice.Brief == "" {
@@ -65,14 +54,44 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		// permanently skipping this session.
 		return
 	}
+	d.generateSessionTitle(sessionID, slice, "transcript")
+}
 
+// Prompt-submit path: the first prompt is enough for a title, so a one-shot
+// agent gets its name seconds in instead of when its first turn ends.
+func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
+		return
+	}
+	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
+		prompt = string(runes[:sessionTitleBriefCharCap])
+	}
+	d.generateSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}, "prompt")
+}
+
+func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
+	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	if session == nil || !d.sessionMayBeAutoTitled(session) {
+		return false
+	}
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	_, attempted := d.sessionTitleAttempted[sessionID]
+	return !attempted
+}
+
+func (d *Daemon) generateSessionTitle(sessionID string, slice transcript.ConversationSlice, source string) {
 	// Ahead of the attempted-mark: a refused title must stay retryable.
 	if d.headlessTaskRefused("session_title") {
 		return
 	}
 
-	// The early check and this mark are separate critical sections, so two
-	// close-together Stop events can both pass it; re-check under the lock.
+	// The early check and this mark are separate critical sections, so a prompt
+	// submit and a Stop can both pass it; re-check under the lock.
 	d.sessionTitleMu.Lock()
 	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
 		d.sessionTitleMu.Unlock()
@@ -84,6 +103,10 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	d.sessionTitleAttempted[sessionID] = struct{}{}
 	d.sessionTitleMu.Unlock()
 
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), sessionTitleTimeout)
 	defer cancel()
 	result, err := d.sessionTitleExec(ctx, session, slice)
@@ -102,6 +125,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	}
 	d.store.UpdateSessionLabel(sessionID, title)
 	session.Label = title
+	d.logf("session title %s: %q from %s", sessionID, title, source)
 	d.publishFact(FactSessionRenamed, sessionID, nil)
 }
 
