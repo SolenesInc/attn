@@ -233,22 +233,40 @@ func TestSnoozeWakeReconciliationFailsOpenWhenSchedulingFails(t *testing.T) {
 	}
 }
 
-func TestSnoozeFailsOpenWhenJobQueueFailsToStart(t *testing.T) {
-	d := newTurnDaemon(t)
-	lockHolder := jobs.New(jobs.Options{Store: d.newSQLJobStore()})
-	if err := lockHolder.Start(); err != nil {
-		t.Fatalf("start lock holder: %v", err)
-	}
-	t.Cleanup(lockHolder.Stop)
+type blockingSnoozeJobStore struct {
+	jobs.Store
+	acquiring chan struct{}
+	release   chan struct{}
+}
 
-	d.startJobQueue()
-	if runner := d.jobQueueRef(); runner != nil {
-		t.Fatal("the failed job queue remained available")
+func (s *blockingSnoozeJobStore) AcquireLock() (string, error) {
+	close(s.acquiring)
+	<-s.release
+	return "", jobs.ErrAlreadyRunning
+}
+
+func TestSnoozeFailsOpenWhileJobQueueStartFails(t *testing.T) {
+	d := newTurnDaemon(t)
+	store := &blockingSnoozeJobStore{
+		Store:     d.newSQLJobStore(),
+		acquiring: make(chan struct{}),
+		release:   make(chan struct{}),
+	}
+	startDone := make(chan struct{})
+	go func() {
+		d.startJobQueueWithStore(store)
+		close(startDone)
+	}()
+	<-store.acquiring
+	if runner := d.jobQueueRef(); runner == nil || !runner.Disabled() {
+		t.Fatal("the starting job queue was published before it acquired its lock")
 	}
 
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
 	moveTo(d, "s1", protocol.StateIdle)
 	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
+	close(store.release)
+	<-startDone
 
 	if !owed(t, d, "s1") {
 		t.Error("the unscheduled snooze left the idle session settled")
