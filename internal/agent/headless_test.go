@@ -2,8 +2,11 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -79,16 +82,136 @@ func TestCodexRunHeadlessTaskScopesToolsAndConfiguration(t *testing.T) {
 	}
 }
 
+func TestCodexRunHeadlessTaskPassesAndRemovesOutputSchema(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "schema.log")
+	scriptPath := filepath.Join(dir, "agent")
+	script := "#!/bin/sh\n" +
+		"previous=''\n" +
+		"for value in \"$@\"; do\n" +
+		"  if [ \"$previous\" = '--output-schema' ]; then printf '%s\\n' \"$value\" > " + shellSingleQuote(logPath+".path") + "; cat \"$value\" > " + shellSingleQuote(logPath) + "; fi\n" +
+		"  previous=\"$value\"\n" +
+		"done\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agent: %v", err)
+	}
+	schema := `{"type":"object","properties":{"verdict":{"type":"string"}},"required":["verdict"]}`
+	if _, err := (&Codex{}).RunHeadlessTask(context.Background(), HeadlessTaskRequest{
+		Executable: scriptPath, Model: "gpt-test", Prompt: "judge", WorkDir: dir,
+		DisableTools: true, OutputSchema: json.RawMessage(schema),
+	}); err != nil {
+		t.Fatalf("RunHeadlessTask error: %v", err)
+	}
+	got, err := os.ReadFile(logPath)
+	if err != nil || string(got) != schema {
+		t.Fatalf("schema file = %q err=%v, want %q", got, err, schema)
+	}
+	path, err := os.ReadFile(logPath + ".path")
+	if err != nil {
+		t.Fatalf("read schema path: %v", err)
+	}
+	if _, err := os.Stat(strings.TrimSpace(string(path))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("schema scratch file survived run: %v", err)
+	}
+}
+
 func TestHeadlessEnvironment_CodexSetsDefaultHomeWhenUnset(t *testing.T) {
 	t.Setenv("CODEX_HOME", "")
 	homeDir := t.TempDir()
 	t.Setenv(toolhome.EnvVar, homeDir)
-	if !environmentContains(headlessEnvironment("codex"), "CODEX_HOME") {
+	if !environmentContains(headlessEnvironment("codex", ""), "CODEX_HOME") {
 		t.Fatal("Codex headless environment did not set CODEX_HOME")
 	}
 	want := "CODEX_HOME=" + filepath.Join(homeDir, ".codex")
-	if !strings.Contains(strings.Join(headlessEnvironment("codex"), "\n"), want) {
+	if !strings.Contains(strings.Join(headlessEnvironment("codex", ""), "\n"), want) {
 		t.Fatalf("Codex headless environment missing %q", want)
+	}
+}
+
+func TestHeadlessEnvironment_CopilotKeepsAuthenticationAndDropsBehaviorOverrides(t *testing.T) {
+	t.Setenv("COPILOT_GITHUB_TOKEN", "test-token")
+	t.Setenv("COPILOT_HOME", "/unsafe/persisted-home")
+	t.Setenv("COPILOT_ALLOW_ALL", "1")
+	t.Setenv("COPILOT_MODEL", "wrong-model")
+	t.Setenv("GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS", "true")
+	t.Setenv("GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS", "true")
+	t.Setenv("GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP", "true")
+
+	scratch := t.TempDir()
+	env := headlessEnvironment("copilot", scratch)
+	for _, name := range []string{"COPILOT_GITHUB_TOKEN", "COPILOT_HOME", "COPILOT_MCP_TOOL_CACHE"} {
+		if !environmentContains(env, name) {
+			t.Fatalf("Copilot headless environment did not include %s", name)
+		}
+	}
+	for _, name := range []string{
+		"COPILOT_ALLOW_ALL",
+		"COPILOT_MODEL",
+		"GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS",
+		"GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
+		"GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP",
+	} {
+		if environmentContains(env, name) {
+			t.Fatalf("Copilot headless environment leaked %s", name)
+		}
+	}
+	if !slices.Contains(env, "COPILOT_HOME="+scratch) {
+		t.Fatalf("Copilot headless environment did not isolate its home: %#v", env)
+	}
+	if slices.Contains(env, "COPILOT_HOME=/unsafe/persisted-home") {
+		t.Fatalf("Copilot headless environment reused persisted state: %#v", env)
+	}
+}
+
+func TestCopilotRunHeadlessTaskUsesToolFreeProgrammaticMode(t *testing.T) {
+	executable, logPath := writeHeadlessArgsRecorder(t)
+	result, err := (&Copilot{}).RunHeadlessTask(context.Background(), HeadlessTaskRequest{
+		Executable:      executable,
+		Model:           "claude-sonnet-4.6",
+		ReasoningEffort: "high",
+		Prompt:          "classify",
+		WorkDir:         t.TempDir(),
+		DisableTools:    true,
+	})
+	if err != nil {
+		t.Fatalf("RunHeadlessTask error: %v", err)
+	}
+	if result.Text != "" {
+		t.Fatalf("result text = %q, want empty recorder output", result.Text)
+	}
+	args, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := string(args)
+	for _, want := range []string{
+		"-p",
+		"classify",
+		"-s",
+		"--model",
+		"claude-sonnet-4.6",
+		"--effort",
+		"high",
+		"--available-tools=ask_user",
+		"--disable-builtin-mcps",
+		"--no-custom-instructions",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Copilot args missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestCopilotRunHeadlessTaskRejectsCapabilitiesItCannotIsolate(t *testing.T) {
+	provider := &Copilot{}
+	for _, request := range []HeadlessTaskRequest{
+		{DisableTools: false},
+		{DisableTools: true, AllowedTools: []string{"view"}},
+		{DisableTools: true, MCPServerName: "external"},
+	} {
+		if _, err := provider.RunHeadlessTask(context.Background(), request); err == nil {
+			t.Fatalf("RunHeadlessTask(%+v) succeeded", request)
+		}
 	}
 }
 

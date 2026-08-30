@@ -348,28 +348,60 @@ func inspectContinuationDirectory(execution garden.Dispatch) string {
 	}
 }
 
-func branchCanBeRecreated(execution garden.Dispatch) (bool, string) {
+func savedWorktreeRoot(execution garden.Dispatch) (string, bool) {
+	cwd := attngit.CanonicalizePath(strings.TrimSpace(execution.Cwd))
+	if cwd == "" {
+		return "", false
+	}
+	subdir := filepath.Clean(strings.TrimSpace(execution.RepositorySubdir))
+	if subdir == "" || subdir == "." {
+		return cwd, true
+	}
+	if filepath.IsAbs(subdir) || subdir == ".." || strings.HasPrefix(subdir, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	root := cwd
+	for range strings.Split(subdir, string(filepath.Separator)) {
+		root = filepath.Dir(root)
+	}
+	root = attngit.CanonicalizePath(root)
+	if attngit.CanonicalizePath(filepath.Join(root, subdir)) != cwd {
+		return "", false
+	}
+	return root, true
+}
+
+func branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
 	repo := strings.TrimSpace(execution.RepositoryRoot)
 	branch := strings.TrimSpace(execution.Branch)
 	if repo == "" || branch == "" {
-		return false, "the saved execution has no verified repository and branch"
+		return "", false, "the saved execution has no verified repository and branch"
+	}
+	target, ok := savedWorktreeRoot(execution)
+	if !ok {
+		return "", false, "the saved worktree location could not be reconstructed"
+	}
+	if _, err := os.Stat(target); err == nil {
+		return "", false, "the saved worktree location already exists"
+	} else if !os.IsNotExist(err) {
+		return "", false, "the saved worktree location could not be verified"
 	}
 	if _, err := os.Stat(repo); err != nil {
-		return false, "the saved repository is unavailable"
+		return "", false, "the saved repository is unavailable"
 	}
 	if !attngit.RefExists(repo, branch) {
-		return false, "the saved branch no longer exists"
+		return "", false, "the saved branch no longer exists"
 	}
 	worktrees, err := attngit.ListWorktrees(repo)
 	if err != nil {
-		return false, "the saved repository could not be inspected"
+		return "", false, "the saved repository could not be inspected"
 	}
 	for _, worktree := range worktrees {
 		if strings.TrimSpace(worktree.Branch) == branch {
-			return false, "the saved branch is already checked out"
+			return "", false, "the saved branch is already checked out"
 		}
 	}
-	return true, ""
+	return target, true, ""
 }
 
 func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
@@ -402,7 +434,7 @@ func (d *Daemon) continuationForSeed(seed garden.Seed) *seedContinuation {
 		switch continuation.DirectoryState {
 		case directoryMissing:
 			continuation.ResumeReason = fmt.Sprintf("the original directory no longer exists: %s", execution.Cwd)
-			if safe, reason := branchCanBeRecreated(execution); safe {
+			if _, safe, reason := branchCanBeRecreated(execution); safe {
 				continuation.HandoverPlacement = handoverRecreateBranch
 			} else {
 				continuation.PlacementReason = reason

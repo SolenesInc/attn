@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -187,6 +188,10 @@ var wireFixtures = map[string]wireFixture{
 	FactGardenNoted:                 {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenLinked:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenUnlinked:              {events: []string{protocol.EventGardenSeedsUpdated}},
+	FactGardenReviewChanged: {
+		events:  []string{protocol.EventGardenReviewUpdated},
+		subject: (*wireWorld).gardenReview,
+	},
 
 	FactPRAppeared:       {events: []string{protocol.EventPRsUpdated}},
 	FactPRUpdated:        {events: []string{protocol.EventPRsUpdated}},
@@ -434,6 +439,19 @@ func (w *wireWorld) session() string      { return w.sessionID }
 func (w *wireWorld) workspace() string    { return w.workspaceID }
 func (w *wireWorld) presentation() string { return w.presentationID }
 func (w *wireWorld) worktree() string     { return w.worktreePath }
+
+func (w *wireWorld) gardenReview() string {
+	w.d.ensureGardenCollections()
+	run := garden.ReviewRun{
+		ID: "r-wire", Status: garden.ReviewRunStatusComplete,
+		CapturedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Recipe:     garden.ReviewRecipe{Agent: "codex", Model: "gpt-5.6-luna", Effort: "xhigh"},
+	}
+	if err := w.d.createGardenReview(run, nil); err != nil {
+		w.t.Fatalf("seed Garden review: %v", err)
+	}
+	return run.ID
+}
 
 func (w *wireWorld) layout() *protocol.WorkspaceLayout {
 	layout, err := w.d.protocolWorkspaceLayout(w.workspaceID)

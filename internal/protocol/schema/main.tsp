@@ -846,6 +846,8 @@ model SeedHandoverRequest {
   expected_rev: safeint;
   expected_tender_session: string;
   expected_tender_member: string;
+  // Present only when Handover resolves one captured Review garden item.
+  review?: SeedReviewActionContext;
 }
 
 model DelegateStatusMessage {
@@ -4687,6 +4689,8 @@ model SeedTransitionMessage {
   // Yes, act even though somebody else holds it. Ignored when nobody else
   // holds the seed.
   "force"?: boolean;
+  // Present only when this lifecycle move resolves one captured Review garden item.
+  "review"?: SeedReviewActionContext;
 }
 
 // SeedTransitionResultMessage replies to a WebSocket seed_transition,
@@ -4814,6 +4818,8 @@ model SeedResumeMessage {
   "cmd": "seed_resume";
   "request_id"?: string;
   "seed_id": string;
+  // Present only when Resume resolves one captured Review garden item.
+  "review"?: SeedReviewActionContext;
 }
 
 // SeedResumeResultMessage replies to seed_resume, correlated by request_id.
@@ -4830,6 +4836,37 @@ model SeedResumeResultMessage {
   "already_running"?: boolean;
 }
 
+// Give an open seed to the Chief when its next working context needs judgment.
+// The optional guidance is the user's exception to the saved placement, not a
+// replacement for the seed body or log.
+model SeedSendToChiefMessage {
+  "cmd": "seed_send_to_chief";
+  "request_id"?: string;
+  "source_session_id"?: string;
+  "seed_id": string;
+  "expected_rev": safeint;
+  "expected_tender_session": string;
+  "expected_tender_member": string;
+  "guidance"?: string;
+  // Present only when this resolves one captured Review garden item.
+  "review"?: SeedReviewActionContext;
+}
+
+model SeedSendToChiefResult {
+  "seed": Seed;
+  "chief_session_id": string;
+  "delivery_status": AgentMsgStatus;
+  "detail": string;
+}
+
+model SeedSendToChiefResultMessage {
+  "event": "seed_send_to_chief_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedSendToChiefResult;
+}
+
 // The whole garden, re-pushed whenever a seed changes. Clients filter by
 // workspace themselves: the panel's scope is a view, and a client that switches
 // workspaces must not have to ask the daemon again.
@@ -4839,6 +4876,143 @@ model GardenSeedsUpdatedMessage {
   // How many seeds the garden holds. Equal to `seeds`'s length until the
   // garden outgrows one push, and then the receipt that says so.
   total: int32;
+}
+
+model GardenReviewRecipe {
+  "agent": string;
+  "model": string;
+  "effort"?: string;
+}
+
+model GardenReviewEvidence {
+  "label": string;
+  "text": string;
+}
+
+model GardenReviewItem {
+  "id": string;
+  "run_id": string;
+  "seed_id": string;
+  "seed_rev": safeint;
+  "evidence_version": string;
+  "title": string;
+  "body": string;
+  "evidence": GardenReviewEvidence[];
+  // Actions that apply to this captured seed. Unavailable actions are absent.
+  "actions": string[];
+  // queued | running | ready | failed | invalidated.
+  "status": string;
+  // unresolved | resolved | no_longer_applicable.
+  "resolution": string;
+  "resolved_action"?: string;
+  "review_again_at"?: string;
+  "recommendation"?: string;
+  "explanation"?: string;
+  "cited_evidence"?: string[];
+  "error"?: string;
+  "started_at"?: string;
+  "completed_at"?: string;
+  // Live job progress projected onto a read. These fields are not part of the
+  // captured evidence and do not change the review receipt.
+  "advisor_state"?: string;
+  "advisor_attempt"?: int32;
+  "advisor_max_attempts"?: int32;
+  "advisor_retry_at"?: string;
+  "advisor_updated_at"?: string;
+  "advisor_error"?: string;
+}
+
+model GardenReviewRun {
+  "id": string;
+  "candidate_ids": string[];
+  "recipe": GardenReviewRecipe;
+  // running includes classified items awaiting a decision; complete means every item was resolved.
+  "status": string;
+  "captured_at": string;
+  "completed_at"?: string;
+}
+
+model GardenReview {
+  "run": GardenReviewRun;
+  "items": GardenReviewItem[];
+}
+
+// The read receipt carried from one Review garden item into the action that
+// resolves it. The daemon rechecks both fields against current seed evidence.
+model SeedReviewActionContext {
+  "review_id": string;
+  "evidence_version": string;
+}
+
+model SeedReviewStartMessage {
+  "cmd": "seed_review_start";
+  "request_id"?: string;
+}
+
+model SeedReviewShowMessage {
+  "cmd": "seed_review_show";
+  "request_id"?: string;
+  // Omitted reads the newest run.
+  "review_id"?: string;
+}
+
+model SeedReviewCancelMessage {
+  "cmd": "seed_review_cancel";
+  "request_id"?: string;
+  "review_id": string;
+}
+
+model SeedReviewRetryMessage {
+  "cmd": "seed_review_retry";
+  "request_id"?: string;
+  "review_id": string;
+  "seed_id": string;
+}
+
+model SeedReviewKeepMessage {
+  "cmd": "seed_review_keep";
+  "request_id"?: string;
+  "seed_id": string;
+  "review": SeedReviewActionContext;
+}
+
+model SeedReviewDraftMessage {
+  "cmd": "seed_review_draft";
+  "request_id": string;
+  "seed_id": string;
+  "review": SeedReviewActionContext;
+}
+
+model SeedReviewResult {
+  "candidate_count": int32;
+  "review"?: GardenReview;
+}
+
+// Correlated answer for every app-origin Review garden operation.
+model SeedReviewResultMessage {
+  "event": "seed_review_result";
+  "request_id": string;
+  "operation": string;
+  "success": boolean;
+  "candidate_count": int32;
+  "error"?: string;
+  "review"?: GardenReview;
+}
+
+// An advisory handoff draft. It never changes the seed or Review garden item.
+model SeedReviewDraftResultMessage {
+  "event": "seed_review_draft_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "handoff"?: string;
+}
+
+// Progressive run/item snapshots. They are advisory records; this event never
+// implies that a seed changed state.
+model GardenReviewUpdatedMessage {
+  "event": "garden_review_updated";
+  "review": GardenReview;
 }
 
 // ============================================================================
@@ -5624,11 +5798,13 @@ model Response {
   seed_edit_result?: SeedEditResult;
   seed_set_resume_result?: SeedSetResumeResult;
   seed_transition_result?: SeedTransitionResult;
+  seed_send_to_chief_result?: SeedSendToChiefResult;
   seed_note_result?: SeedNoteResult;
   seed_notes_result?: SeedNotesResult;
   seed_watch_result?: SeedWatchResult;
   seed_link_result?: SeedLinkResult;
   seed_ready_result?: SeedReadyResult;
+  seed_review_result?: SeedReviewResult;
   doc_define_result?: DocDefineResult;
   doc_undefine_result?: DocUndefineResult;
   doc_collections_result?: DocCollectionsResult;
@@ -6549,7 +6725,11 @@ alias DaemonEvent =
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
+  | GardenReviewUpdatedMessage
+  | SeedReviewResultMessage
+  | SeedReviewDraftResultMessage
   | SeedResumeResultMessage
+  | SeedSendToChiefResultMessage
   | SeedDocumentGetResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage

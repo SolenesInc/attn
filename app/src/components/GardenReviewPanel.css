@@ -1,0 +1,717 @@
+.garden-review {
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+  display: grid;
+  font-size: var(--font-size-md);
+  height: 100%;
+  min-height: 0;
+}
+
+.garden-review.is-full {
+  grid-template-areas:
+    "chrome chrome"
+    "rail reader";
+  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.garden-review.is-dock {
+  grid-template-areas:
+    "chrome"
+    "rail"
+    "reader";
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.garden-review button {
+  font: inherit;
+}
+
+.garden-review__chrome {
+  align-items: baseline;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  gap: 10px;
+  grid-area: chrome;
+  min-width: 0;
+  padding: 10px 14px 9px;
+}
+
+.garden-review__back,
+.garden-review__frame,
+.garden-review__close {
+  background: none;
+  border: 0;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.garden-review__back:hover,
+.garden-review__frame:hover,
+.garden-review__close:hover {
+  color: var(--color-text-primary);
+}
+
+.garden-review__title {
+  align-items: baseline;
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+}
+
+.garden-review__title strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.garden-review__title span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.garden-review__close {
+  font-size: 18px;
+  line-height: 12px;
+}
+
+.garden-review__rail {
+  border-right: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  grid-area: rail;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 8px;
+}
+
+.garden-review__rail button {
+  align-items: flex-start;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px;
+  text-align: left;
+}
+
+.garden-review__rail button:hover {
+  background: var(--color-bg-hover);
+}
+
+.garden-review__rail button.is-current {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.garden-review__rail button.is-resolved {
+  opacity: 0.52;
+}
+
+.garden-review__rail-number {
+  align-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  height: 19px;
+  justify-content: center;
+  width: 19px;
+}
+
+.garden-review__rail button.is-current .garden-review__rail-number {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.garden-review__rail-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-review__rail-copy strong {
+  font-weight: 530;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-review__rail-copy span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.garden-review.is-dock .garden-review__rail {
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-right: 0;
+  flex-direction: row;
+  min-height: 72px;
+  overflow-x: auto;
+  padding: 7px 8px;
+}
+
+.garden-review.is-dock .garden-review__rail button {
+  flex: 0 0 190px;
+}
+
+.garden-review__reader {
+  display: grid;
+  grid-area: reader;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 35%);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.garden-review.is-dock .garden-review__reader {
+  display: block;
+  overflow: auto;
+}
+
+.garden-review__seed,
+.garden-review__decision {
+  min-height: 0;
+  overflow: auto;
+  padding: 26px clamp(20px, 4vw, 56px);
+}
+
+.garden-review__seed {
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.garden-review__seed-nav {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin: -8px 0 20px;
+  min-height: 24px;
+}
+
+.garden-review__seed-nav ol {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-size-sm);
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.garden-review__seed-nav li {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.garden-review__seed-nav li:not(:last-child)::after {
+  color: var(--color-text-muted);
+  content: "›";
+  margin-left: 5px;
+}
+
+.garden-review__seed-nav button,
+.garden-review__return {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.garden-review__seed-nav li button {
+  color: var(--color-text-tertiary);
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-review__seed-nav li button:hover,
+.garden-review__return:hover {
+  color: var(--color-text-primary);
+}
+
+.garden-review__return {
+  border-right: 1px solid var(--color-border-subtle);
+  flex: none;
+  padding-right: 12px;
+}
+
+.garden-review.is-dock .garden-review__seed,
+.garden-review.is-dock .garden-review__decision {
+  overflow: visible;
+  padding: 20px 18px;
+}
+
+.garden-review.is-dock .garden-review__seed {
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-right: 0;
+}
+
+.garden-review__seed-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.garden-review__eyebrow {
+  color: var(--color-text-muted);
+  display: block;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-sm);
+  margin-bottom: 5px;
+}
+
+.garden-review__seed h2,
+.garden-review__complete h2 {
+  font-size: clamp(19px, 2vw, 25px);
+  font-weight: 570;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.garden-review__status {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-tertiary);
+  flex: none;
+  font-size: var(--font-size-sm);
+  padding: 3px 8px;
+}
+
+.garden-review__status.is-ready {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--color-border-subtle));
+  color: var(--accent);
+}
+
+.garden-review__seed .markdown-reader,
+.garden-review__seed > .markdown {
+  line-height: 1.58;
+  max-width: 760px;
+}
+
+.garden-review__empty {
+  color: var(--color-text-muted);
+}
+
+.garden-review__plot {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 30px;
+  padding-top: 20px;
+}
+
+.garden-review__plot h3,
+.garden-review__evidence h3,
+.garden-review__problem h3,
+.garden-review__waiting h3,
+.garden-review__actions h3 {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.garden-review__plot > div {
+  border-left: 2px solid var(--color-border-subtle);
+  margin: 10px 0;
+  padding: 2px 0 2px 12px;
+}
+
+.garden-review__plot > div > strong {
+  font-weight: 560;
+}
+
+.garden-review__decision {
+  background: color-mix(in srgb, var(--color-bg-panel) 88%, var(--color-bg-hover));
+}
+
+.garden-review__advice {
+  border-left: 3px solid var(--accent);
+  margin-bottom: 28px;
+  padding: 2px 0 2px 14px;
+}
+
+.garden-review__advice > span {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: var(--font-size-sm);
+  margin-bottom: 3px;
+}
+
+.garden-review__advice > strong {
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.garden-review__advice p {
+  line-height: 1.5;
+  margin: 11px 0 0;
+}
+
+.garden-review__advice ul {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.garden-review__evidence dl {
+  margin: 0;
+}
+
+.garden-review__evidence dl > div {
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 10px 0;
+}
+
+.garden-review__evidence dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: 3px;
+}
+
+.garden-review__evidence dd {
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.garden-review__problem,
+.garden-review__waiting {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.garden-review__waiting {
+  display: block;
+}
+
+.garden-review__progress-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.garden-review__progress-head h3 {
+  margin-bottom: 4px;
+}
+
+.garden-review__progress-head > span {
+  color: var(--color-text-muted);
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-review__progress-track {
+  display: grid;
+  gap: 4px;
+  grid-auto-columns: minmax(10px, 1fr);
+  grid-auto-flow: column;
+  height: 5px;
+  margin: 16px 0 12px;
+}
+
+.garden-review__progress-track span {
+  background: var(--color-border-subtle);
+  border-radius: 999px;
+}
+
+.garden-review__progress-track span.is-ready {
+  background: var(--accent);
+}
+
+.garden-review__progress-track span.is-failed,
+.garden-review__progress-track span.is-invalidated,
+.garden-review__progress-track span.is-advisor-failed {
+  background: var(--color-error, #d65d5d);
+}
+
+.garden-review__progress-track span.is-running,
+.garden-review__progress-track span.is-advisor-retrying {
+  background: color-mix(in srgb, var(--accent) 55%, var(--color-border-subtle));
+}
+
+.garden-review__waiting .garden-review__progress-detail {
+  color: var(--color-text-primary);
+  margin-bottom: 5px;
+}
+
+.garden-review__waiting .garden-review__progress-error {
+  color: var(--color-error, #d65d5d);
+  font-size: var(--font-size-sm);
+  margin-bottom: 8px;
+}
+
+.garden-review__waiting > p:last-child {
+  font-size: var(--font-size-sm);
+  margin-top: 12px;
+}
+
+.garden-review__context {
+  border-left: 3px solid var(--color-border-subtle);
+  padding-left: 14px;
+}
+
+.garden-review__context > span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+}
+
+.garden-review__context h3 {
+  font-size: 17px;
+  font-weight: 570;
+  margin: 5px 0 8px;
+}
+
+.garden-review__context p {
+  color: var(--color-text-tertiary);
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+
+.garden-review__context button {
+  background: none;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.garden-review__problem p,
+.garden-review__waiting p {
+  color: var(--color-text-tertiary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.garden-review__problem button {
+  background: none;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  padding: 5px 9px;
+}
+
+.garden-review__actions {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 26px;
+  min-width: 0;
+  padding-top: 18px;
+}
+
+.garden-review__action-row {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.garden-review__action-row button,
+.garden-review__composer-actions button,
+.garden-review__complete button {
+  background: none;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  padding: 6px 11px;
+}
+
+.garden-review__action-row button {
+  text-align: left;
+}
+
+.garden-review__action-row button:hover,
+.garden-review__composer-actions button:hover,
+.garden-review__complete button:hover {
+  border-color: var(--color-text-tertiary);
+}
+
+.garden-review__action-row button.is-recommended {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.garden-review__composer {
+  max-width: 100%;
+}
+
+.garden-review__composer-head {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.garden-review__composer-head label {
+  flex: 1;
+  font-weight: 540;
+}
+
+.garden-review__composer-head label span,
+.garden-review__composer-head > span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.garden-review__composer-head label span {
+  margin-left: 6px;
+}
+
+.garden-review__draft,
+.garden-review__draft-ready button {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.garden-review__composer textarea {
+  background: var(--color-bg-input, var(--color-bg-panel));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 5px;
+  color: var(--color-text-primary);
+  display: block;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 82px;
+  padding: 8px 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.garden-review__composer textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.garden-review__draft-ready,
+.garden-review__error {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  margin: 7px 0 0;
+}
+
+.garden-review__draft-ready button {
+  margin-left: 7px;
+}
+
+.garden-review__error {
+  color: var(--color-error, #d65d5d);
+}
+
+.garden-review__composer-actions {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+  margin-top: 9px;
+}
+
+.garden-review__composer-actions span {
+  color: var(--color-text-muted);
+}
+
+.garden-review__complete {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  grid-area: reader;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.garden-review__complete > span {
+  align-items: center;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  display: flex;
+  font-size: 20px;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.garden-review__complete p {
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 430px;
+}
+
+@media (max-width: 900px) {
+  .garden-review.is-full {
+    grid-template-areas:
+      "chrome"
+      "rail"
+      "reader";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .garden-review.is-full .garden-review__rail {
+    border-bottom: 1px solid var(--color-border-subtle);
+    border-right: 0;
+    flex-direction: row;
+    min-height: 72px;
+    overflow-x: auto;
+  }
+
+  .garden-review.is-full .garden-review__rail button {
+    flex: 0 0 190px;
+  }
+
+  .garden-review__reader {
+    display: block;
+    overflow: auto;
+  }
+
+  .garden-review__seed,
+  .garden-review__decision {
+    overflow: visible;
+    padding: 20px 18px;
+  }
+
+  .garden-review__seed {
+    border-bottom: 1px solid var(--color-border-subtle);
+    border-right: 0;
+  }
+}

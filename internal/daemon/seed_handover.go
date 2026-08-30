@@ -79,6 +79,15 @@ func (d *Daemon) prepareSeedHandover(
 		}
 		return plan, nil
 	}
+	if request.Review != nil {
+		item, reviewErr := d.validateGardenReviewAction(request.Review, seedID, "handover")
+		if reviewErr != nil {
+			return nil, reviewErr
+		}
+		if item.SeedRev != doc.Rev {
+			return nil, fmt.Errorf("%s changed since you reviewed it; refresh the garden", seedID)
+		}
+	}
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before handing it over", seed.ID, seed.Status)
 	}
@@ -114,12 +123,17 @@ func (d *Daemon) prepareSeedHandover(
 			msg.Worktree = nil
 			msg.AllowWorktreeReuse = protocol.Ptr(true)
 		case handoverRecreateBranch:
+			target, safe, reason := branchCanBeRecreated(continuation.Execution)
+			if !safe {
+				return nil, fmt.Errorf("%s can no longer restore its saved worktree: %s; choose one with --cwd", seed.ID, reason)
+			}
 			plan.recreated = true
 			plan.repositorySub = continuation.Execution.RepositorySubdir
 			msg.Placement = protocol.Ptr(delegationPlacementNew)
 			msg.Worktree = &protocol.DelegateWorktreeRequest{
 				Repo:           protocol.Ptr(continuation.Execution.RepositoryRoot),
 				Branch:         continuation.Execution.Branch,
+				Path:           protocol.Ptr(target),
 				ExistingBranch: protocol.Ptr(true),
 			}
 		default:
@@ -186,7 +200,13 @@ func (d *Daemon) bindSeedHandover(
 		return nil, errors.New("missing Handover request")
 	}
 	if d.handoverAlreadyBound(operationID, sessionID, request.SeedID) {
+		if err := d.resolveGardenReviewAction(request.Review, request.SeedID, "handover"); err != nil {
+			d.logf("Garden review: settle %s after recovered Handover: %v", request.SeedID, err)
+		}
 		return nil, nil
+	}
+	if _, err := d.validateGardenReviewAction(request.Review, request.SeedID, "handover"); err != nil {
+		return nil, err
 	}
 	seed, doc, err := d.readSeed(request.SeedID)
 	if err != nil {
@@ -345,6 +365,9 @@ func (d *Daemon) bindSeedHandover(
 		d.rememberDispatchProjection(oldExecutionID, oldDispatch, written[oldIndex].Rev)
 	}
 	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, msg.SourceSessionID)
+	if err := d.resolveGardenReviewAction(request.Review, seed.ID, "handover"); err != nil {
+		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)
+	}
 
 	if noteIndex < 0 {
 		return nil, nil

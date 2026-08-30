@@ -205,3 +205,42 @@ func TestCodexToolFreeHeadlessArgsExposeOnlyThePrompt(t *testing.T) {
 		"mcp_servers.",
 	)
 }
+
+func TestCopilotToolFreeHeadlessArgsExposeOnlyThePrompt(t *testing.T) {
+	args := copilotToolFreeHeadlessArgs(HeadlessTaskRequest{
+		Model:           "claude-sonnet-4.6",
+		ReasoningEffort: "high",
+		Prompt:          "judge the supplied seed",
+		SystemPrompt:    "Return only JSON.",
+		DisableTools:    true,
+	})
+
+	assertContainsAll(t, "Copilot tool-free args", args,
+		"-p",
+		"Return only JSON.\n\njudge the supplied seed",
+		"-s",
+		"--model",
+		"claude-sonnet-4.6",
+		"--effort",
+		"high",
+		"--available-tools=ask_user",
+		"--disable-builtin-mcps",
+		"--no-ask-user",
+		"--no-auto-update",
+		"--no-bash-env",
+		"--no-custom-instructions",
+		"--no-experimental",
+		"--no-remote",
+		"--no-remote-export",
+	)
+	assertContainsNone(t, "Copilot tool-free args", args,
+		"--allow-all-tools",
+		"--allow-tool",
+		"--reasoning-effort",
+	)
+	for _, arg := range args {
+		if arg == "--available-tools=" {
+			t.Fatal("Copilot tool-free args used an empty allowlist, which the CLI treats as no filter")
+		}
+	}
+}

@@ -63,7 +63,7 @@ import {
   readWorkspaceSelectionStyle,
   type WorkspaceSelectionStyle,
 } from './utils/workspaceSelectionStyle';
-import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState } from './hooks/useDaemonSocket';
+import { useDaemonSocket, DaemonWorktree, DaemonSession, DaemonWorkspace, DaemonPR, DaemonEndpoint, DaemonPlugin, DaemonPluginIssue, GitStatusUpdate, SessionExitInfo, CriticalNotificationState, type SeedReviewActionContext } from './hooks/useDaemonSocket';
 import type { Presentation } from './types/generated';
 import { useSessionWorkspaceController } from './hooks/useSessionWorkspaceController';
 import { useGardenPresentation } from './hooks/useGardenPresentation';
@@ -832,7 +832,14 @@ function AppContent({
     applyAutomationDefinition,
     deleteAutomationDefinition,
     sendSeedHandover,
+    sendSeedToChief,
     sendSeedResume,
+    seedReviewOverview,
+    sendSeedReviewShow,
+    sendSeedReviewStart,
+    sendSeedReviewRetry,
+    sendSeedReviewKeep,
+    sendSeedReviewDraft,
     sendCrewWake,
     sendCrewSleep,
   } = useDaemonApi();
@@ -3114,10 +3121,17 @@ function AppContent({
       });
   }, [focusWorkspaceLeaf, sendOpenMarkdown, showError]);
 
-  const handleResumeSeed = useCallback((seedId: string) => {
-    sendSeedResume(seedId)
-      .then((result) => handleSelectSession(result.sessionId))
-      .catch((error) => showError(error instanceof Error ? error.message : 'Failed to resume the agent'));
+  const handleResumeSeed = useCallback((seedId: string, review?: SeedReviewActionContext) => {
+    const resume = sendSeedResume(seedId, review)
+      .then((result) => {
+        handleSelectSession(result.sessionId);
+        return result;
+      });
+    if (review) return resume;
+    return resume.catch((error) => {
+      showError(error instanceof Error ? error.message : 'Failed to resume the agent');
+      throw error;
+    });
   }, [sendSeedResume, handleSelectSession, showError]);
 
   const handleHandoverSeed = useCallback((options: Parameters<typeof sendSeedHandover>[0]) => (
@@ -3127,6 +3141,10 @@ function AppContent({
         return result;
       })
   ), [activeSessionId, handleSelectSession, sendSeedHandover]);
+
+  const handleSendSeedToChief = useCallback((options: Parameters<typeof sendSeedToChief>[0]) => (
+    sendSeedToChief({ ...options, sourceSessionId: activeSessionId || undefined })
+  ), [activeSessionId, sendSeedToChief]);
 
   const handleWakeCrewMember = useCallback((member: string) => {
     sendCrewWake(member)
@@ -3909,6 +3927,14 @@ function AppContent({
         checkArtifactPath={checkArtifactPath}
         onResumeSeed={handleResumeSeed}
         onHandoverSeed={handleHandoverSeed}
+        onSendSeedToChief={handleSendSeedToChief}
+        chiefAvailable={hasChiefOfStaff}
+        reviewOverview={seedReviewOverview}
+        showReview={sendSeedReviewShow}
+        startReview={sendSeedReviewStart}
+        retryReviewItem={sendSeedReviewRetry}
+        keepReviewItem={sendSeedReviewKeep}
+        draftReviewHandover={sendSeedReviewDraft}
       />
       <NotificationsPanel
         open={notificationsPanelOpen}

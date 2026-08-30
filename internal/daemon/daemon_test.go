@@ -3617,8 +3617,8 @@ func TestDaemon_SettingsWithAgentAvailability(t *testing.T) {
 	if got := settings["codex_cap_headless_task"]; got != "true" {
 		t.Fatalf("settings[codex_cap_headless_task] = %v, want true", got)
 	}
-	if got := settings["copilot_cap_headless_task"]; got != "false" {
-		t.Fatalf("settings[copilot_cap_headless_task] = %v, want false", got)
+	if got := settings["copilot_cap_headless_task"]; got != "true" {
+		t.Fatalf("settings[copilot_cap_headless_task] = %v, want true", got)
 	}
 	if got := settings[SettingPTYBackendMode]; got != "unknown" {
 		t.Fatalf("settings[%s] = %v, want unknown", SettingPTYBackendMode, got)

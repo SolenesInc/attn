@@ -509,7 +509,7 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	if done.State != protocol.DelegationOperationStateCompleted || done.Result == nil {
 		t.Fatalf("operation = %+v", done)
 	}
-	wantRoot := attngit.GenerateWorktreePath(repo, "feature/handover")
+	wantRoot := attngit.CanonicalizePath(worktree)
 	wantDirectory := filepath.Join(wantRoot, "nested")
 	if done.Result.Directory != wantDirectory || !protocol.Deref(done.Result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want recreated directory %s", done.Result, wantDirectory)

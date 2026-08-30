@@ -14,10 +14,12 @@ import (
 const Surface = "the garden"
 
 const (
-	Namespace            = "core/garden"
-	CollectionSeeds      = "seeds"
-	CollectionNotes      = "notes"
-	CollectionDispatches = "dispatches"
+	Namespace             = "core/garden"
+	CollectionSeeds       = "seeds"
+	CollectionNotes       = "notes"
+	CollectionDispatches  = "dispatches"
+	CollectionReviewRuns  = "review-runs"
+	CollectionReviewItems = "review-items"
 )
 
 const (
