@@ -300,8 +300,6 @@ func (m *sessionInputModule) release(sessionID string, id sessionInputAttemptID)
 	lane.mu.Unlock()
 }
 
-// forget drops an attempt the lane will never see taken. A composer attempt
-// left placed blocks every later delivery to that session.
 func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) {
 	key := id.String()
 	if key == "" || strings.TrimSpace(sessionID) == "" {

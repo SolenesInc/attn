@@ -105,8 +105,6 @@ function createFixture(root) {
   return { repo, worktrees, mergedClean, dirtyWip };
 }
 
-// The location directory is the launched session's cwd. A coalesced re-delivery
-// replays the turn, and the second removal finds nothing left to remove.
 function writeCleanupFixture(root, fixture) {
   writeMockAgentFixture(root, {
     name: 'scheduled cleanup',
@@ -322,8 +320,6 @@ async function main() {
       runner.assert(ticket !== null, 'cleanup ticket row exists', { cleanupTicketID });
       runner.assert(ticket[0] !== 'failed', 'cleanup ticket did not fail', { ticketStatus: ticket[0] });
 
-      // Tickets kept no agent-facing write verb after the garden era, so the
-      // seed log is where a launched agent reports what it did.
       const reported = await poll(() => {
         const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
         const seed = (listed.seeds || []).find((row) => row.tender_session === cleanupSessionID);
@@ -412,8 +408,6 @@ async function main() {
       if (cleanupApplied) { try { disableDefinition(binary, cleanupID, daemonEnv); } catch {} }
       if (stormGuardApplied) { try { disableDefinition(binary, stormGuardID, daemonEnv); } catch {} }
     }
-    // The launched agent's turn lives under the fixture root this deletes, and
-    // it is the only account of what the automation actually delivered.
     try {
       const transcripts = path.join(fixtureRoot, '.attn-mock-agent');
       for (const name of fs.readdirSync(transcripts)) {

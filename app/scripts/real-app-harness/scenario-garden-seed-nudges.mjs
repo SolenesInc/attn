@@ -86,8 +86,6 @@ async function waitForPane(client, pane, expected, timeoutMs = 20_000) {
   throw new Error(`pane never received ${JSON.stringify(expected)}:\n${text}`);
 }
 
-// --no-worktree puts the delegate in the dispatcher's own checkout, so this is
-// the fixture the delegated mock reads.
 function writeDelegateFixture(cwd) {
   writeMockAgentFixture(cwd, {
     name: 'seed-bell',
@@ -96,8 +94,6 @@ function writeDelegateFixture(cwd) {
         includes: 'Read your assigned seed id from this prompt',
         actions: [
           { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
-          // The pane keeps no line breaks to slice on, so the assertion reads
-          // everything after the doorbell: nothing may print the note first.
           { type: 'wait_for_file', path: RING_RELEASE_FILE },
           { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', RINGING_NOTE, '--ring'] },
         ],
@@ -162,15 +158,11 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
-      // The delegate exists before `attn delegate` exits, and anything typed
-      // before it does lands in that process instead of the shell.
       await observer.waitFor(
         () => observer.sessionsById.get(dispatcher.sessionId)?.state === 'idle',
         'the dispatcher shell back at its prompt',
         60_000,
       );
-      // The app opens the delegation it just spawned, which releases the
-      // dispatcher's terminal; only the shown pane answers read_pane_text.
       await client.request('select_session', { sessionId: dispatcher.sessionId });
       await runInPane(client, dispatcher, 'true', '');
       return spawned;

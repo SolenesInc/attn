@@ -146,8 +146,6 @@ func TestOpenDBTakesTheWriteLockWhenATransactionBegins(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	// A second handle that never waits: it reports the lock the transaction
-	// holds instead of blocking this test on the busy timeout.
 	other, err := sql.Open("sqlite3", "file:"+dbPath+"?_busy_timeout=0")
 	if err != nil {
 		t.Fatalf("open second handle: %v", err)

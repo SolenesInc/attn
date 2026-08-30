@@ -123,8 +123,6 @@ export function selectMockAgentActions(config, input) {
   return turn?.actions ?? config.defaultActions ?? [];
 }
 
-// internal/agent BuildCommand hands the brief over as the argv tail after `--`,
-// and resume as `-r <id>` (claude) or `resume <id>` (codex).
 export function parseMockAgentArgv(argv = []) {
   const args = argv.map(String);
   const separator = args.indexOf('--');
