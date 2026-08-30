@@ -1,0 +1,8 @@
+kind: fixed
+area: sessions
+change: >
+  Annotation drafts survived `RemoveSessionsInDirectory`, so clearing a
+  directory's sessions left their drafts behind forever and a reused session id
+  would inherit one. This store runs with foreign keys off, so every
+  session-removal path deletes owned rows by hand; the three paths now share one
+  list of session-owned tables instead of each naming them again.
