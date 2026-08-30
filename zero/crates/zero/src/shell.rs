@@ -17,7 +17,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn spawn(cols: u16, rows: u16) -> Result<(Self, Receiver<ShellOutput>)> {
+    pub fn spawn(cols: u16, rows: u16, cwd: Option<std::path::PathBuf>) -> Result<(Self, Receiver<ShellOutput>)> {
         let pair = native_pty_system().openpty(PtySize {
             rows,
             cols,
@@ -27,7 +27,7 @@ impl Shell {
         let shell = std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into());
         let mut command = CommandBuilder::new(shell);
         command.env("TERM", "xterm-256color");
-        command.cwd(std::env::current_dir()?);
+        command.cwd(cwd.map(Ok).unwrap_or_else(std::env::current_dir)?);
         let child = pair
             .slave
             .spawn_command(command)

@@ -135,9 +135,9 @@ fn run_tui(scenario: Scenario) -> Result<()> {
     let mut source = Simulator::new(scenario);
     let mut model = Model::new();
     model.apply(source.advance(Duration::ZERO))?;
-    model.add_shell(SHELL_ID, 1, b"starting local shell...\r\n")?;
+    model.add_shell(SHELL_ID, "shell".to_string(), 1, b"starting local shell...\r\n")?;
     model.focus = model.first_on_current_desktop();
-    let (mut shell, mut shell_events) = Shell::spawn(80, 24)?;
+    let (mut shell, mut shell_events) = Shell::spawn(80, 24, None)?;
     let (terminal_sender, terminal_events) = unbounded();
     thread::spawn(move || {
         while let Ok(event) = event::read() {
@@ -620,7 +620,7 @@ impl App {
                     }
                     KeyCode::Enter => {
                         let action = scenario_action(*selected, self.model.current_desktop);
-                        let events = source.command(now, Command::Scenario(action));
+                        let events = source.command(now, Command::Scenario(action.clone()));
                         self.apply_events(events)?;
                         if matches!(action, ScenarioAction::AddAgent { .. })
                             && self.model.focus.is_none()
@@ -895,7 +895,7 @@ fn scenario_action(index: usize, desktop: u8) -> ScenarioAction {
         1 => ScenarioAction::Set(Scenario::BusyMorning),
         2 => ScenarioAction::Set(Scenario::AllBusy),
         3 => ScenarioAction::ToggleSpeed,
-        4 => ScenarioAction::AddAgent { desktop },
+        4 => ScenarioAction::AddAgent { desktop, name: None },
         5 => ScenarioAction::FinishOneNow,
         _ => ScenarioAction::MakeThreeWaitNow,
     }

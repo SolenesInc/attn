@@ -15,7 +15,8 @@ use futures::StreamExt;
 use futures::channel::mpsc;
 use gpui::{
     Animation, AnimationExt, AnyElement, AnyView, App, Application, Bounds, BoxShadow, Context,
-    Div, ElementId, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton,
+    Div, ElementId, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, ModifiersChangedEvent,
+    MouseButton,
     MouseDownEvent, Pixels, Render, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
     Stateful, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
     WindowOptions, canvas, div, ease_in_out, linear_color_stop, linear_gradient, point,
@@ -25,6 +26,7 @@ use libghostty_vt::terminal::ScrollViewport;
 use zero::editor::{Editor, EditorEvent, Engine, Open};
 use zero::markdown::{self, Block};
 use zero::model::{Agent, AgentId, AgentKind, Model};
+use zero::palette::{self, Expect, PaletteCommand, Verb};
 use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
@@ -165,7 +167,7 @@ fn split_desktop(value: &str) -> Result<(u8, PathBuf)> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Popup {
     None,
-    Switcher { query: String, selected: usize },
+    Palette { query: String, selected: usize },
     Scenario { selected: usize },
     Help,
 }
@@ -224,38 +226,71 @@ const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::BusyMorning)) },
     ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::AllBusy)) },
     ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: ItemAction::Source(|_| ScenarioAction::ToggleSpeed) },
-    ScenarioItem { label: "add an agent", detail: "on this desktop", action: ItemAction::Source(|zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop }) },
+    ScenarioItem { label: "add an agent", detail: "on this desktop", action: ItemAction::Source(|zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop, name: None }) },
     ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: ItemAction::Source(|_| ScenarioAction::FinishOneNow) },
     ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: ItemAction::Source(|_| ScenarioAction::MakeThreeWaitNow) },
     ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
-const HELP: [(&str, &str); 19] = [
-    ("⌘⇧E", "settle the focused turn and go to the next one in the queue"),
-    ("⌘J", "peek at the next agent in the queue without settling"),
-    ("⌘P", "back to the previous agent"),
-    ("⌘K", "the agent list: waiting first; type to filter, ⏎ jumps"),
-    ("hover", "the waiting pill unfolds into the same list; click a row to jump"),
-    ("⌘1…9", "go to that desktop"),
-    ("⌘⌥1…9", "move the focused pane to that desktop"),
-    ("⌘←↑↓→", "focus the neighboring pane"),
-    ("⌘⌥←↑↓→", "swap the focused pane with its neighbor"),
-    ("⌘⏎", "promote the focused pane to the main slot"),
-    ("⌘⌥- ⌘⌥=", "shrink or grow the main column"),
-    ("click", "every pill, badge, and pane is clickable; hovering shows its key"),
-    ("wheel", "scroll a pane's scrollback"),
-    ("type + ⏎", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
-    ("y / n", "answer an approval in its terminal"),
-    ("e", "edit the focused document in place (neovim); :wq saves and returns to reading"),
-    ("j k ␣ g G", "scroll a document by a line, a page, to the top or the bottom"),
-    ("⌘S", "scenario menu"),
-    ("⌘Q", "quit"),
+struct Binding {
+    keys: &'static str,
+    terse: &'static str,
+    help: &'static str,
+}
+
+struct Group {
+    title: &'static str,
+    /// Whether the hold-⌘ overlay shows the group; the help popup shows everything.
+    overlay: bool,
+    bindings: &'static [Binding],
+}
+
+const fn bind(keys: &'static str, terse: &'static str, help: &'static str) -> Binding {
+    Binding { keys, terse, help }
+}
+
+const GROUPS: [Group; 5] = [
+    Group { title: "queue", overlay: true, bindings: &[
+        bind("⌘⇧E", "settle & next", "settle the focused turn and go to the next one in the queue"),
+        bind("⌘J", "next in queue", "peek at the next agent in the queue without settling"),
+        bind("⌘P", "previous", "back to the previous agent"),
+        bind("⌘K", "palette", "agents and commands: type to jump, or new · term · doc · close"),
+    ]},
+    Group { title: "desktops", overlay: true, bindings: &[
+        bind("⌘1…9", "go", "go to that desktop"),
+        bind("⌘⌥1…9", "send pane", "move the focused pane to that desktop"),
+    ]},
+    Group { title: "tiles", overlay: true, bindings: &[
+        bind("⌘←↑↓→", "focus", "focus the neighboring pane"),
+        bind("⌘⌥←↑↓→", "swap", "swap the focused pane with its neighbor"),
+        bind("⌘⏎", "promote", "promote the focused pane to the main slot"),
+        bind("⌘⌥- ⌘⌥=", "main column", "shrink or grow the main column"),
+        bind("⌘W", "close tile", "close the focused shell or document tile"),
+    ]},
+    Group { title: "zero", overlay: true, bindings: &[
+        bind("⌘S", "scenario", "the scenario menu"),
+        bind("⌘/", "keys", "this list; holding ⌘ shows the short version"),
+        bind("⌘Q", "quit", "quit"),
+    ]},
+    Group { title: "mouse & typing", overlay: false, bindings: &[
+        bind("hover", "", "the waiting pill unfolds into the agent list; click a row to jump"),
+        bind("click", "", "every pill, badge, and pane is clickable; hovering shows its key"),
+        bind("wheel", "", "scroll a pane's scrollback"),
+        bind("type + ⏎", "", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
+        bind("y / n", "", "answer an approval in its terminal"),
+        bind("e", "", "edit the focused document in place (neovim); :wq saves and returns to reading"),
+        bind("j k ␣ g G", "", "scroll a document by a line, a page, to the top or the bottom"),
+    ]},
 ];
+
+/// How long ⌘ is held before the overlay appears; a feel knob, not a measured limit.
+const WHICH_KEY_MS: u64 = 400;
 
 struct Zero {
     model: Model,
     source: Simulator,
-    shell: Shell,
+    shells: HashMap<AgentId, Shell>,
+    next_tile_id: AgentId,
     log: SwitchLog,
     started: Instant,
     focus_handle: FocusHandle,
@@ -264,6 +299,9 @@ struct Zero {
     dirty: HashSet<AgentId>,
     docs: HashMap<AgentId, DocTile>,
     popup: Popup,
+    cmd_held: bool,
+    which_key: bool,
+    which_key_gen: u64,
     queue_morph: Morph,
     ratios: HashMap<u8, f32>,
     previous_focus: Option<AgentId>,
@@ -271,7 +309,7 @@ struct Zero {
     slide: (i8, u64),
     motion_ms: u64,
     ticker: Option<Task<()>>,
-    _shell_pump: Task<()>,
+    _shell_pumps: Vec<Task<()>>,
 }
 
 /// A markdown file in a tile: read through the reader, edited in place through the editor adapter.
@@ -332,8 +370,9 @@ impl Zero {
         let mut source = Simulator::with_agents(scenario, agents);
         let mut model = Model::new();
         model.apply(source.advance(Duration::ZERO))?;
-        let (shell, shell_output) = Shell::spawn(80, 24)?;
-        model.add_shell(SHELL_ID, shell_desktop, b"")?;
+        let (shell, shell_output) = Shell::spawn(80, 24, None)?;
+        model.add_shell(SHELL_ID, "shell".to_string(), shell_desktop, b"")?;
+        let launch_docs = docs.len() as u64;
         let mut doc_tiles = HashMap::new();
         let mut edits = Vec::new();
         for (index, doc) in docs.into_iter().enumerate() {
@@ -355,34 +394,13 @@ impl Zero {
         } else {
             model.focus = model.first_on_current_desktop();
         }
-        let (sender, mut receiver) = mpsc::unbounded::<ShellOutput>();
-        thread::spawn(move || {
-            for output in shell_output {
-                if sender.unbounded_send(output).is_err() {
-                    break;
-                }
-            }
-        });
-        let shell_pump = cx.spawn(async move |this, cx| {
-            while let Some(output) = receiver.next().await {
-                let mut batch = vec![output];
-                while let Ok(more) = receiver.try_recv() {
-                    batch.push(more);
-                }
-                if this
-                    .update(cx, |zero, cx| zero.on_shell_output(batch, cx))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle);
         let mut zero = Self {
             model,
             source,
-            shell,
+            shells: HashMap::new(),
+            next_tile_id: DOC_ID_BASE - launch_docs,
             log: SwitchLog::open_default()?,
             started: Instant::now(),
             focus_handle,
@@ -391,6 +409,9 @@ impl Zero {
             dirty: HashSet::new(),
             docs: doc_tiles,
             popup: Popup::None,
+            cmd_held: false,
+            which_key: false,
+            which_key_gen: 0,
             queue_morph: Morph::default(),
             ratios: HashMap::new(),
             previous_focus: None,
@@ -398,9 +419,10 @@ impl Zero {
             slide: (0, 0),
             motion_ms: 600,
             ticker: None,
-            _shell_pump: shell_pump,
+            _shell_pumps: Vec::new(),
         };
         zero.arm_ticker(cx);
+        zero.adopt_shell(SHELL_ID, shell, shell_output, cx);
         for id in edits {
             zero.start_edit(id, cx);
         }
@@ -456,31 +478,69 @@ impl Zero {
         self.model.apply(events).expect("the model accepts simulator events");
     }
 
-    fn on_shell_output(&mut self, batch: Vec<ShellOutput>, cx: &mut Context<Self>) {
+    fn adopt_shell(
+        &mut self,
+        id: AgentId,
+        shell: Shell,
+        output: impl IntoIterator<Item = ShellOutput> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        self.shells.insert(id, shell);
+        let (sender, mut receiver) = mpsc::unbounded::<ShellOutput>();
+        thread::spawn(move || {
+            for item in output {
+                if sender.unbounded_send(item).is_err() {
+                    break;
+                }
+            }
+        });
+        self._shell_pumps.push(cx.spawn(async move |this, cx| {
+            while let Some(item) = receiver.next().await {
+                let mut batch = vec![item];
+                while let Ok(more) = receiver.try_recv() {
+                    batch.push(more);
+                }
+                if this
+                    .update(cx, |zero, cx| zero.on_shell_output(id, batch, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }));
+    }
+
+    fn on_shell_output(&mut self, id: AgentId, batch: Vec<ShellOutput>, cx: &mut Context<Self>) {
+        // A closed tile's pump can still deliver a tail; there is nowhere to paint it.
+        if !self.model.agents.iter().any(|agent| agent.id == id) {
+            return;
+        }
         for output in batch {
             match output {
                 ShellOutput::Bytes(bytes) => {
-                    let agent = self.model.agent_mut(SHELL_ID);
+                    let agent = self.model.agent_mut(id);
                     agent.terminal.vt_write(&bytes);
                     for response in agent.take_pty_responses() {
-                        self.shell.write(&response).ok();
+                        if let Some(shell) = self.shells.get_mut(&id) {
+                            shell.write(&response).ok();
+                        }
                     }
                 }
                 ShellOutput::Closed => {
                     self.model
-                        .agent_mut(SHELL_ID)
+                        .agent_mut(id)
                         .terminal
                         .vt_write(b"\r\n\x1b[2m[shell exited]\x1b[0m");
                 }
             }
         }
-        self.dirty.insert(SHELL_ID);
+        self.dirty.insert(id);
         cx.notify();
     }
 
     fn resize(&mut self, id: AgentId, cols: u16, rows: u16) {
-        if id == SHELL_ID {
-            self.shell.resize(cols, rows).ok();
+        if let Some(shell) = self.shells.get(&id) {
+            shell.resize(cols, rows).ok();
             self.model.resize_terminal(id, cols, rows).ok();
             self.dirty.insert(id);
         } else {
@@ -658,10 +718,11 @@ impl Zero {
                 "e" if modifiers.shift => self.settle_and_next(cx),
                 "j" => self.next_in_queue(cx),
                 "p" => self.back(cx),
-                "k" => self.open(Popup::Switcher { query: String::new(), selected: 0 }, cx),
+                "k" => self.open(Popup::Palette { query: String::new(), selected: 0 }, cx),
                 "s" => self.open(Popup::Scenario { selected: 0 }, cx),
                 "/" => self.open(Popup::Help, cx),
                 "q" => cx.quit(),
+                "w" => self.close_focused(cx),
                 "left" if modifiers.alt => self.swap_neighbor(Direction::Left, cx),
                 "right" if modifiers.alt => self.swap_neighbor(Direction::Right, cx),
                 "up" if modifiers.alt => self.swap_neighbor(Direction::Up, cx),
@@ -687,15 +748,21 @@ impl Zero {
         let Some(bytes) = keys::keystroke_bytes(keystroke) else {
             return;
         };
-        if self.model.agent(id).kind == AgentKind::Shell {
-            self.shell.write(&bytes).ok();
-        } else {
-            self.command(Command::Input { id, bytes }, cx);
+        match self.model.agent(id).kind {
+            AgentKind::Shell => {
+                if let Some(shell) = self.shells.get_mut(&id) {
+                    shell.write(&bytes).ok();
+                }
+            }
+            AgentKind::Simulated => self.command(Command::Input { id, bytes }, cx),
+            AgentKind::Document => {}
         }
     }
 
     fn open(&mut self, popup: Popup, cx: &mut Context<Self>) {
         self.queue_morph = Morph::default();
+        self.which_key = false;
+        self.which_key_gen += 1;
         self.popup = popup;
         cx.notify();
     }
@@ -707,27 +774,13 @@ impl Zero {
             cx.notify();
             return;
         }
-        let mut jump: Option<AgentId> = None;
+        if let Popup::Palette { query, selected } = &self.popup {
+            let (query, selected) = (query.clone(), *selected);
+            self.palette_key(keystroke, query, selected, cx);
+            return;
+        }
         let mut run: Option<usize> = None;
         match &mut self.popup {
-            Popup::Switcher { query, selected } => match key {
-                "up" => *selected = selected.saturating_sub(1),
-                "down" => *selected += 1,
-                "backspace" => {
-                    query.pop();
-                    *selected = 0;
-                }
-                "enter" => {
-                    let matches = rows(&self.model.agents, query);
-                    jump = matches.get((*selected).min(matches.len().saturating_sub(1))).copied();
-                }
-                _ => {
-                    if let Some(text) = keys::typed_text(keystroke) {
-                        query.push_str(&text);
-                        *selected = 0;
-                    }
-                }
-            },
             Popup::Scenario { selected } => match key {
                 "up" => *selected = selected.saturating_sub(1),
                 "down" => *selected = (*selected + 1).min(SCENARIO_ITEMS.len() - 1),
@@ -739,16 +792,312 @@ impl Zero {
                 }
             },
             Popup::Help => self.popup = Popup::None,
-            Popup::None => {}
-        }
-        if let Some(id) = jump {
-            self.popup = Popup::None;
-            self.focus(Some(id), SwitchPath::Switcher, cx);
+            Popup::Palette { .. } | Popup::None => {}
         }
         if let Some(index) = run {
             self.run_scenario_item(index, cx);
         }
         cx.notify();
+    }
+
+    fn palette_key(&mut self, keystroke: &Keystroke, query: String, selected: usize, cx: &mut Context<Self>) {
+        let view = self.palette_view(&query);
+        let list = palette_rows(&view);
+        let selected = selected.min(list.len().saturating_sub(1));
+        match keystroke.key.as_str() {
+            "up" => self.popup = Popup::Palette { query, selected: selected.saturating_sub(1) },
+            "down" => self.popup = Popup::Palette { query, selected: (selected + 1).min(list.len().saturating_sub(1)) },
+            "backspace" => {
+                let mut query = query;
+                query.pop();
+                self.popup = Popup::Palette { query, selected: 0 };
+            }
+            "tab" => {
+                // On the run row, tab still means "complete": fall through to the first candidate.
+                let fill = match list.get(selected) {
+                    Some(PaletteRow::Candidate(index)) => Some(*index),
+                    Some(PaletteRow::Run) => view.completions.iter().enumerate().map(|(index, _)| index).next(),
+                    _ => None,
+                };
+                if let Some(index) = fill {
+                    let candidate = &view.completions[index];
+                    self.popup = Popup::Palette { query: palette_fill(&query, view.replace_from, &candidate.insert, candidate.space), selected: 0 };
+                } else if let Some(PaletteRow::Verb(verb)) = list.get(selected) {
+                    self.popup = Popup::Palette { query: format!("{} ", verb.word()), selected: 0 };
+                } else {
+                    self.popup = Popup::Palette { query, selected };
+                }
+            }
+            "enter" => match list.get(selected) {
+                Some(PaletteRow::Run) => {
+                    let command = view.run.clone().expect("a run row carries its command");
+                    self.popup = Popup::None;
+                    self.run_palette_command(command, cx);
+                }
+                Some(PaletteRow::Agent(id)) => {
+                    let id = *id;
+                    self.popup = Popup::None;
+                    self.focus(Some(id), SwitchPath::Switcher, cx);
+                }
+                Some(PaletteRow::Verb(verb)) => {
+                    self.popup = Popup::Palette { query: format!("{} ", verb.word()), selected: 0 };
+                }
+                Some(PaletteRow::Candidate(index)) => {
+                    let candidate = &view.completions[*index];
+                    self.popup = Popup::Palette { query: palette_fill(&query, view.replace_from, &candidate.insert, candidate.space), selected: 0 };
+                }
+                None => self.popup = Popup::Palette { query, selected },
+            },
+            _ => {
+                if let Some(text) = keys::typed_text(keystroke) {
+                    let mut query = query;
+                    query.push_str(&text);
+                    self.popup = Popup::Palette { query, selected: 0 };
+                } else {
+                    self.popup = Popup::Palette { query, selected };
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn palette_view(&self, query: &str) -> PaletteView {
+        let analysis = palette::analyze(query);
+        match analysis.verb {
+            None => {
+                let trimmed = query.trim();
+                PaletteView {
+                    agents: rows(&self.model.agents, query),
+                    verbs: Verb::ALL.into_iter().filter(|verb| trimmed.is_empty() || verb.word().starts_with(trimmed)).collect(),
+                    run: None,
+                    completions: Vec::new(),
+                    grammar: None,
+                    replace_from: 0,
+                }
+            }
+            Some(verb) => {
+                let mut completions = Vec::new();
+                for expect in &analysis.expects {
+                    completions.extend(candidates(*expect, &analysis.prefix));
+                }
+                PaletteView {
+                    agents: Vec::new(),
+                    verbs: Vec::new(),
+                    run: analysis.ready,
+                    completions,
+                    grammar: Some(verb.grammar()),
+                    replace_from: analysis.replace_from,
+                }
+            }
+        }
+    }
+
+    fn describe(&self, command: &PaletteCommand) -> String {
+        let here = self.model.current_desktop;
+        match command {
+            PaletteCommand::New { kind, cwd, desktop, name } => {
+                let name = name.clone()
+                    .or_else(|| cwd.as_deref().map(|cwd| format!("{}/{kind}", basename(cwd))))
+                    .unwrap_or_else(|| format!("sandbox/{kind}"));
+                format!("start {kind} as {name} on desktop {}", desktop.unwrap_or(here))
+            }
+            PaletteCommand::Term { cwd, desktop } => format!(
+                "open a terminal{} on desktop {}",
+                cwd.as_deref().map(|cwd| format!(" in {cwd}")).unwrap_or_default(),
+                desktop.unwrap_or(here),
+            ),
+            PaletteCommand::Doc { path, edit, desktop } => format!(
+                "open {path}{} on desktop {}",
+                if *edit { " in the editor" } else { "" },
+                desktop.unwrap_or(here),
+            ),
+            PaletteCommand::Close => match self.model.focus.map(|id| self.model.agent(id)) {
+                Some(agent) if agent.kind != AgentKind::Simulated => format!("close {}", agent.name),
+                _ => "only shells and documents close in the prototype".to_string(),
+            },
+        }
+    }
+
+    fn run_palette_command(&mut self, command: PaletteCommand, cx: &mut Context<Self>) {
+        match command {
+            PaletteCommand::New { kind, cwd, desktop, name } => {
+                let desktop = desktop.unwrap_or(self.model.current_desktop);
+                let name = name
+                    .or_else(|| cwd.as_deref().map(|cwd| format!("{}/{kind}", basename(cwd))))
+                    .unwrap_or_else(|| format!("sandbox/{kind}"));
+                self.command(Command::Scenario(ScenarioAction::AddAgent { desktop, name: Some(name) }), cx);
+                let id = self.model.agents.iter()
+                    .filter(|agent| agent.kind == AgentKind::Simulated)
+                    .map(|agent| agent.id)
+                    .max();
+                if let Some(id) = id {
+                    self.focus(Some(id), SwitchPath::Switcher, cx);
+                }
+            }
+            PaletteCommand::Term { cwd, desktop } => {
+                let desktop = desktop.unwrap_or(self.model.current_desktop);
+                let id = self.mint_tile_id();
+                let cwd = cwd.map(|cwd| expand_tilde(&cwd));
+                let name = cwd.as_deref()
+                    .map(|cwd| format!("{}/term", basename(&cwd.to_string_lossy())))
+                    .unwrap_or_else(|| "term".to_string());
+                match Shell::spawn(80, 24, cwd) {
+                    Ok((shell, output)) => {
+                        self.model.add_shell(id, name, desktop, b"").expect("a fresh tile id");
+                        self.adopt_shell(id, shell, output, cx);
+                    }
+                    Err(error) => {
+                        let message = format!("\x1b[31m{error}\x1b[0m\r\n");
+                        self.model.add_shell(id, name, desktop, message.as_bytes()).expect("a fresh tile id");
+                    }
+                }
+                self.dirty.insert(id);
+                self.focus(Some(id), SwitchPath::Switcher, cx);
+            }
+            PaletteCommand::Doc { path, edit, desktop } => {
+                let desktop = desktop.unwrap_or(self.model.current_desktop);
+                let id = self.mint_tile_id();
+                let path = expand_tilde(&path);
+                let path = std::fs::canonicalize(&path).unwrap_or(path);
+                let name = path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.display().to_string());
+                self.model.add_document(id, name, desktop).expect("a fresh tile id");
+                self.docs.insert(id, DocTile::open(path));
+                if edit {
+                    self.start_edit(id, cx);
+                }
+                self.focus(Some(id), SwitchPath::Switcher, cx);
+            }
+            PaletteCommand::Close => self.close_focused(cx),
+        }
+    }
+
+    fn close_focused(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.model.focus else {
+            return;
+        };
+        if self.model.agent(id).kind == AgentKind::Simulated {
+            return;
+        }
+        self.shells.remove(&id);
+        self.docs.remove(&id);
+        self.grids.remove(&id);
+        self.dirty.remove(&id);
+        self.model.remove(id);
+        cx.notify();
+    }
+
+    fn mint_tile_id(&mut self) -> AgentId {
+        let id = self.next_tile_id;
+        self.next_tile_id -= 1;
+        id
+    }
+
+    fn on_modifiers(&mut self, event: &ModifiersChangedEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let held = event.modifiers.platform;
+        if held == self.cmd_held {
+            return;
+        }
+        self.cmd_held = held;
+        self.which_key_gen += 1;
+        if held {
+            let generation = self.which_key_gen;
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(Duration::from_millis(WHICH_KEY_MS)).await;
+                this.update(cx, |zero, cx| {
+                    if zero.which_key_gen == generation && zero.cmd_held && zero.popup == Popup::None {
+                        zero.which_key = true;
+                        cx.notify();
+                    }
+                })
+                .ok();
+            })
+            .detach();
+        } else if self.which_key {
+            self.which_key = false;
+            cx.notify();
+        }
+    }
+
+    /// The plain keys the focused pane answers to, for the overlay's contextual column.
+    fn focused_hints(&self) -> Option<(&'static str, Vec<(&'static str, &'static str)>)> {
+        let id = self.model.focus?;
+        Some(match self.model.agent(id).kind {
+            AgentKind::Document => match self.docs.get(&id).map(|doc| matches!(doc.face, Face::Edit(_))) {
+                Some(true) => ("this document", vec![("vim", "keys go to neovim"), (":wq", "save & read"), (":q!", "discard")]),
+                _ => ("this document", vec![("e", "edit"), ("j k ␣", "scroll"), ("g G", "top · bottom")]),
+            },
+            AgentKind::Shell => ("this shell", vec![("type ⏎", "runs in the shell")]),
+            AgentKind::Simulated => ("this agent", vec![("type ⏎", "prompt"), ("y n", "approve · decline")]),
+        })
+    }
+
+    fn render_which_key(&self) -> Option<AnyElement> {
+        if !self.which_key || self.popup != Popup::None {
+            return None;
+        }
+        let mut strip = div().flex().items_start().gap(px(28.));
+        let mut columns: Vec<(&'static str, Vec<(String, &'static str)>)> = GROUPS
+            .iter()
+            .filter(|group| group.overlay)
+            .map(|group| (group.title, group.bindings.iter().map(|binding| (binding.keys.to_string(), binding.terse)).collect()))
+            .collect();
+        if let Some((title, hints)) = self.focused_hints() {
+            columns.push((title, hints.into_iter().map(|(keys, terse)| (keys.to_string(), terse)).collect()));
+        }
+        for (title, hints) in columns {
+            let mut column = div().flex().flex_col().gap(px(6.)).child(
+                div()
+                    .text_size(px(10.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme::comment())
+                    .child(title.to_uppercase()),
+            );
+            for (keys, terse) in hints {
+                column = column.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(key_cap(&keys))
+                        .child(div().text_size(px(11.5)).text_color(theme::fg_dark()).child(terse)),
+                );
+            }
+            strip = strip.child(column);
+        }
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .bottom_0()
+                .w_full()
+                .flex()
+                .justify_center()
+                .pb(px(GAP + 2.))
+                .child(
+                    div()
+                        .rounded(px(12.))
+                        .bg(theme::bg_dark().alpha(0.96))
+                        .border_1()
+                        .border_color(theme::gutter())
+                        .shadow(vec![BoxShadow {
+                            color: gpui::black().alpha(0.5),
+                            offset: point(px(0.), px(10.)),
+                            blur_radius: px(34.),
+                            spread_radius: px(0.),
+                        }])
+                        .px(px(18.))
+                        .py(px(12.))
+                        .child(strip)
+                        .with_animation(
+                            ("which-key", self.which_key_gen),
+                            Animation::new(Duration::from_millis(120)).with_easing(ease_in_out),
+                            |panel, delta| panel.opacity(delta),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 
     fn prepare_grid(
@@ -1246,7 +1595,7 @@ impl Zero {
             .rounded_bl(px(13. * (1. - open)))
             .rounded_br(px(13. * (1. - open)))
             .cursor_pointer()
-            .when(tips && open == 0., |pill| pill.tooltip(tip("every agent, waiting first", "⌘K")))
+            .when(tips && open == 0., |pill| pill.tooltip(tip("agents & commands", "⌘K")))
             .on_hover(cx.listener(|zero, hovered: &bool, _, cx| {
                 zero.queue_morph.on_pill = *hovered;
                 zero.queue_morph.retarget();
@@ -1256,7 +1605,7 @@ impl Zero {
                 MouseButton::Left,
                 cx.listener(|zero, _, _, cx| {
                     cx.stop_propagation();
-                    zero.open(Popup::Switcher { query: String::new(), selected: 0 }, cx);
+                    zero.open(Popup::Palette { query: String::new(), selected: 0 }, cx);
                 }),
             );
         if waiting > 0 {
@@ -1447,13 +1796,18 @@ impl Zero {
     }
 
     fn render_popup(&self, now: Duration, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let anchored = matches!(self.popup, Popup::Switcher { .. });
+        let anchored = matches!(self.popup, Popup::Palette { .. });
         let panel = match &self.popup {
             Popup::None => return None,
-            Popup::Switcher { query, selected } => {
-                let matches = rows(&self.model.agents, query);
-                let selected = (*selected).min(matches.len().saturating_sub(1));
+            Popup::Palette { query, selected } => {
+                let view = self.palette_view(query);
+                let list = palette_rows(&view);
+                let selected = (*selected).min(list.len().saturating_sub(1));
                 let first = selected.saturating_sub(11);
+                let right = match view.grammar {
+                    Some(grammar) => grammar.to_string(),
+                    None => format!("{} of {}", view.agents.len(), self.model.agents.len()),
+                };
                 let mut panel = popup_panel(px(640.)).child(
                     div()
                         .h(px(46.))
@@ -1472,64 +1826,171 @@ impl Zero {
                                 .text_color(theme::fg())
                                 .child(format!("{query}▍")),
                         )
-                        .child(div().text_color(theme::comment()).text_size(px(11.)).child(format!("{} of {}", matches.len(), self.model.agents.len()))),
+                        .child(div().text_color(theme::comment()).text_size(px(11.)).child(right)),
                 );
-                if matches.is_empty() {
-                    panel = panel.child(div().p(px(16.)).text_color(theme::comment()).child("nothing matches"));
+                if list.is_empty() {
+                    panel = panel.child(div().p(px(16.)).text_color(theme::comment()).child(
+                        if view.grammar.is_some() { "keep typing…" } else { "nothing matches" },
+                    ));
                 }
-                for (index, id) in matches.iter().copied().enumerate().skip(first).take(12) {
-                    let agent = self.model.agent(id);
-                    let color = theme::state_color(agent.kind, agent.state);
-                    let age = agent.turn_opened_at.map(|opened| format_age(now.saturating_sub(opened))).unwrap_or_default();
+                let verbs_start = list.len() - view.verbs.len();
+                for (index, row) in list.iter().enumerate().skip(first).take(12) {
                     let is_selected = index == selected;
-                    panel = panel.child(
-                        div()
-                            .id(("row", id))
-                            .h(px(34.))
-                            .px(px(16.))
-                            .flex()
-                            .items_center()
-                            .gap(px(10.))
-                            .cursor_pointer()
-                            .when(is_selected, |row| row.bg(theme::bg_highlight()))
-                            .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |zero, _, _, cx| {
-                                    cx.stop_propagation();
-                                    zero.popup = Popup::None;
-                                    zero.focus(Some(id), SwitchPath::Switcher, cx);
-                                }),
-                            )
-                            .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
-                            .child(dot(color))
-                            .child(div().flex_1().text_color(if is_selected { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
-                            .child(key_cap(&format!("⌘{}", agent.desktop)))
-                            .child(chip(label(agent), color))
-                            .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age))
-                            .child(div().w(px(40.)).flex().justify_end().when(
-                                index == 0 && query.is_empty() && agent.turn_opened_at.is_some(),
-                                |cell| cell.child(key_cap("⌘J")),
-                            )),
-                    );
+                    if index == verbs_start && !view.verbs.is_empty() && !view.agents.is_empty() {
+                        panel = panel.child(
+                            div()
+                                .h(px(24.))
+                                .px(px(16.))
+                                .flex()
+                                .items_end()
+                                .text_size(px(10.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(theme::comment())
+                                .child("COMMANDS"),
+                        );
+                    }
+                    panel = panel.child(match row {
+                        PaletteRow::Run => {
+                            let command = view.run.clone().expect("a run row carries its command");
+                            let description = self.describe(&command);
+                            div()
+                                .id("palette-run")
+                                .h(px(38.))
+                                .px(px(16.))
+                                .flex()
+                                .items_center()
+                                .gap(px(10.))
+                                .cursor_pointer()
+                                .bg(theme::blue().alpha(if is_selected { 0.18 } else { 0.10 }))
+                                .hover(|row| row.bg(theme::blue().alpha(0.22)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |zero, _, _, cx| {
+                                        cx.stop_propagation();
+                                        zero.popup = Popup::None;
+                                        zero.run_palette_command(command.clone(), cx);
+                                    }),
+                                )
+                                .child(div().w(px(10.)).text_color(theme::blue()).child("›"))
+                                .child(div().flex_1().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(description))
+                                .child(key_cap("⏎"))
+                        }
+                        PaletteRow::Candidate(candidate_index) => {
+                            let candidate = &view.completions[*candidate_index];
+                            let insert = candidate.insert.clone();
+                            let space = candidate.space;
+                            let from = view.replace_from;
+                            let base = query.clone();
+                            div()
+                                .id(("palette-candidate", *candidate_index as u64))
+                                .h(px(32.))
+                                .px(px(16.))
+                                .flex()
+                                .items_center()
+                                .gap(px(10.))
+                                .cursor_pointer()
+                                .when(is_selected, |row| row.bg(theme::bg_highlight()))
+                                .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |zero, _, _, cx| {
+                                        cx.stop_propagation();
+                                        zero.popup = Popup::Palette { query: palette_fill(&base, from, &insert, space), selected: 0 };
+                                        cx.notify();
+                                    }),
+                                )
+                                .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
+                                .child(div().font_family("JetBrains Mono").text_size(px(12.5)).text_color(theme::fg()).child(candidate.insert.clone()))
+                                .child(div().flex_1())
+                                .child(div().text_size(px(11.)).text_color(theme::comment()).child(candidate.note.clone()))
+                                .when(is_selected, |row| row.child(key_cap("⇥")))
+                        }
+                        PaletteRow::Agent(id) => {
+                            let id = *id;
+                            let agent = self.model.agent(id);
+                            let color = theme::state_color(agent.kind, agent.state);
+                            let age = agent.turn_opened_at.map(|opened| format_age(now.saturating_sub(opened))).unwrap_or_default();
+                            div()
+                                .id(("row", id))
+                                .h(px(34.))
+                                .px(px(16.))
+                                .flex()
+                                .items_center()
+                                .gap(px(10.))
+                                .cursor_pointer()
+                                .when(is_selected, |row| row.bg(theme::bg_highlight()))
+                                .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |zero, _, _, cx| {
+                                        cx.stop_propagation();
+                                        zero.popup = Popup::None;
+                                        zero.focus(Some(id), SwitchPath::Switcher, cx);
+                                    }),
+                                )
+                                .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
+                                .child(dot(color))
+                                .child(div().flex_1().text_color(if is_selected { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
+                                .child(key_cap(&format!("⌘{}", agent.desktop)))
+                                .child(chip(label(agent), color))
+                                .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age))
+                                .child(div().w(px(40.)).flex().justify_end().when(
+                                    index == 0 && query.is_empty() && agent.turn_opened_at.is_some(),
+                                    |cell| cell.child(key_cap("⌘J")),
+                                ))
+                        }
+                        PaletteRow::Verb(verb) => {
+                            let verb = *verb;
+                            div()
+                                .id(("palette-verb", index as u64))
+                                .h(px(32.))
+                                .px(px(16.))
+                                .flex()
+                                .items_center()
+                                .gap(px(10.))
+                                .cursor_pointer()
+                                .when(is_selected, |row| row.bg(theme::bg_highlight()))
+                                .hover(|row| row.bg(theme::bg_highlight().alpha(0.7)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |zero, _, _, cx| {
+                                        cx.stop_propagation();
+                                        zero.popup = Popup::Palette { query: format!("{} ", verb.word()), selected: 0 };
+                                        cx.notify();
+                                    }),
+                                )
+                                .child(div().w(px(10.)).text_color(theme::blue()).child(if is_selected { "›" } else { "" }))
+                                .child(div().font_family("JetBrains Mono").text_size(px(12.5)).text_color(theme::fg()).child(verb.word()))
+                                .child(div().flex_1().text_size(px(11.5)).text_color(theme::comment()).child(verb.detail()))
+                                .when(is_selected, |row| row.child(key_cap("⇥")))
+                        }
+                    });
                 }
-                panel.child(
-                    div()
-                        .h(px(30.))
-                        .px(px(16.))
-                        .flex()
-                        .items_center()
-                        .gap(px(14.))
-                        .border_t_1()
-                        .border_color(theme::gutter().alpha(0.6))
-                        .text_size(px(11.))
-                        .text_color(theme::comment())
+                let footer = div()
+                    .h(px(30.))
+                    .px(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(14.))
+                    .border_t_1()
+                    .border_color(theme::gutter().alpha(0.6))
+                    .text_size(px(11.))
+                    .text_color(theme::comment());
+                let footer = match view.grammar {
+                    Some(grammar) => footer
+                        .child(div().font_family("JetBrains Mono").child(grammar))
+                        .child(div().flex_1())
+                        .child("⇥ fill")
+                        .child("⏎ run")
+                        .child("esc closes"),
+                    None => footer
                         .child("↑↓ move")
                         .child("⏎ jump")
-                        .child("type to filter")
-                        .child("or click anything")
+                        .child("type a name to filter")
+                        .child("or new · term · doc · close")
                         .child("esc closes"),
-                )
+                };
+                panel.child(footer)
             }
             Popup::Scenario { selected } => {
                 let mut panel = popup_panel(px(520.)).child(popup_title("scenario", format!("{} · x{}", self.scenario_name(), self.source.speed())));
@@ -1564,20 +2025,33 @@ impl Zero {
                 panel
             }
             Popup::Help => {
-                let mut panel = popup_panel(px(560.)).child(popup_title("keys", "no leader, no chords".to_string()));
-                for (key, what) in HELP {
+                let mut panel = popup_panel(px(640.)).child(popup_title("keys", "hold ⌘ for the short version".to_string()));
+                for group in GROUPS.iter() {
                     panel = panel.child(
                         div()
-                            .h(px(30.))
+                            .h(px(26.))
                             .px(px(16.))
                             .flex()
-                            .items_center()
-                            .gap(px(12.))
-                            .child(div().w(px(76.)).child(key_cap(key)))
-                            .child(div().text_color(theme::fg_dark()).child(what)),
+                            .items_end()
+                            .text_size(px(10.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(theme::comment())
+                            .child(group.title.to_uppercase()),
                     );
+                    for binding in group.bindings {
+                        panel = panel.child(
+                            div()
+                                .h(px(24.))
+                                .px(px(16.))
+                                .flex()
+                                .items_center()
+                                .gap(px(12.))
+                                .child(div().w(px(96.)).flex().child(key_cap(binding.keys)))
+                                .child(div().text_color(theme::fg_dark()).child(binding.help)),
+                        );
+                    }
                 }
-                panel.child(div().h(px(8.)))
+                panel.child(div().h(px(10.)))
             }
         };
         Some(
@@ -1648,6 +2122,7 @@ impl Render for Zero {
             ))
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
+            .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .font_family(".SystemUIFont")
             .text_size(px(12.5))
             .text_color(theme::fg())
@@ -1667,11 +2142,135 @@ impl Render for Zero {
             );
         }
         root = root.child(self.render_bar(now, cx));
+        if let Some(overlay) = self.render_which_key() {
+            root = root.child(overlay);
+        }
         if let Some(popup) = self.render_popup(now, cx) {
             root = root.child(popup);
         }
         root
     }
+}
+
+/// What the palette shows for a query: agents to jump to, verbs, completions, and a runnable command.
+struct PaletteView {
+    agents: Vec<AgentId>,
+    verbs: Vec<Verb>,
+    run: Option<PaletteCommand>,
+    completions: Vec<Candidate>,
+    grammar: Option<&'static str>,
+    replace_from: usize,
+}
+
+struct Candidate {
+    insert: String,
+    note: String,
+    /// Whether accepting moves to the next argument; directories keep the cursor for deeper paths.
+    space: bool,
+}
+
+enum PaletteRow {
+    Run,
+    Candidate(usize),
+    Agent(AgentId),
+    Verb(Verb),
+}
+
+fn palette_rows(view: &PaletteView) -> Vec<PaletteRow> {
+    let mut rows = Vec::new();
+    if view.run.is_some() {
+        rows.push(PaletteRow::Run);
+    }
+    rows.extend((0..view.completions.len()).map(PaletteRow::Candidate));
+    rows.extend(view.agents.iter().copied().map(PaletteRow::Agent));
+    rows.extend(view.verbs.iter().copied().map(PaletteRow::Verb));
+    rows
+}
+
+fn palette_fill(query: &str, from: usize, insert: &str, space: bool) -> String {
+    let mut next = query[..from].to_string();
+    next.push_str(insert);
+    if space {
+        next.push(' ');
+    }
+    next
+}
+
+fn candidates(expect: Expect, prefix: &str) -> Vec<Candidate> {
+    let keyword_note = |word: &str| match word {
+        "on" => "on <desktop>",
+        "as" => "as <name>",
+        "edit" => "open in the editor",
+        _ => "",
+    };
+    match expect {
+        Expect::Kind => palette::KINDS
+            .iter()
+            .filter(|kind| kind.starts_with(prefix))
+            .map(|kind| Candidate { insert: kind.to_string(), note: "agent kind".to_string(), space: true })
+            .collect(),
+        Expect::Desktop => (1..=9)
+            .map(|n| n.to_string())
+            .filter(|n| n.starts_with(prefix))
+            .map(|n| Candidate { insert: n, note: "desktop".to_string(), space: true })
+            .collect(),
+        Expect::Keyword(word) => std::iter::once(word)
+            .filter(|word| word.starts_with(prefix))
+            .map(|word| Candidate { insert: word.to_string(), note: keyword_note(word).to_string(), space: true })
+            .collect(),
+        Expect::Name => Vec::new(),
+        Expect::Dir => fs_candidates(prefix, true),
+        Expect::Path => fs_candidates(prefix, false),
+    }
+}
+
+/// Real paths under the typed prefix: directories always, .md files when files are wanted.
+fn fs_candidates(prefix: &str, dirs_only: bool) -> Vec<Candidate> {
+    let (dir_part, name_prefix) = match prefix.rfind('/') {
+        Some(index) => (&prefix[..=index], &prefix[index + 1..]),
+        None => ("", prefix),
+    };
+    let search = if dir_part.is_empty() { PathBuf::from(".") } else { expand_tilde(dir_part) };
+    let Ok(entries) = std::fs::read_dir(&search) else {
+        return Vec::new();
+    };
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with(name_prefix) || (name.starts_with('.') && !name_prefix.starts_with('.')) {
+            continue;
+        }
+        let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        if is_dir {
+            dirs.push(Candidate { insert: format!("{dir_part}{name}/"), note: "dir".to_string(), space: false });
+        } else if !dirs_only && name.ends_with(".md") {
+            files.push(Candidate { insert: format!("{dir_part}{name}"), note: "file".to_string(), space: true });
+        }
+    }
+    dirs.sort_by(|a, b| a.insert.cmp(&b.insert));
+    files.sort_by(|a, b| a.insert.cmp(&b.insert));
+    // 8 rows fit the panel beside the run row and footer.
+    files.into_iter().chain(dirs).take(8).collect()
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if path == "~" || path.starts_with("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join(path[1..].trim_start_matches('/'));
+        }
+    }
+    PathBuf::from(path)
+}
+
+fn basename(path: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    trimmed
+        .rsplit('/')
+        .next()
+        .filter(|part| !part.is_empty() && *part != "~")
+        .unwrap_or("sandbox")
+        .to_string()
 }
 
 fn popup_panel(width: Pixels) -> Div {

@@ -159,10 +159,10 @@ impl Model {
         }
     }
 
-    pub fn add_shell(&mut self, id: AgentId, desktop: u8, output: &[u8]) -> Result<()> {
+    pub fn add_shell(&mut self, id: AgentId, name: String, desktop: u8, output: &[u8]) -> Result<()> {
         let agent = Agent::new(
             id,
-            "shell".to_string(),
+            name,
             desktop,
             AgentKind::Shell,
             AgentState::Idle,
@@ -183,6 +183,14 @@ impl Model {
         let id = agent.id;
         self.indexes.insert(id, self.agents.len());
         self.agents.push(agent);
+    }
+
+    pub fn remove(&mut self, id: AgentId) {
+        self.agents.retain(|agent| agent.id != id);
+        self.indexes = self.agents.iter().enumerate().map(|(index, agent)| (agent.id, index)).collect();
+        if self.focus == Some(id) {
+            self.focus = self.first_on_current_desktop();
+        }
     }
 
     pub fn first_on_current_desktop(&self) -> Option<AgentId> {

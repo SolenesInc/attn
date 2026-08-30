@@ -27,11 +27,11 @@ impl Scenario {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ScenarioAction {
     Set(Scenario),
     ToggleSpeed,
-    AddAgent { desktop: u8 },
+    AddAgent { desktop: u8, name: Option<String> },
     FinishOneNow,
     MakeThreeWaitNow,
 }

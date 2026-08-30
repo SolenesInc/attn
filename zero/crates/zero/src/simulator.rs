@@ -519,12 +519,12 @@ impl Simulator {
         }
     }
 
-    fn add_agent(&mut self, desktop: u8, now: Duration) -> Vec<Event> {
+    fn add_agent(&mut self, desktop: u8, name: Option<String>, now: Duration) -> Vec<Event> {
         let id = self.next_id;
         self.next_id += 1;
         let mut agent = SimAgent {
             id,
-            name: format!("sandbox-{id}/codex"),
+            name: name.unwrap_or_else(|| format!("sandbox-{id}/codex")),
             desktop,
             state: AgentState::Working,
             finish_at: None,
@@ -635,7 +635,7 @@ impl Source for Simulator {
                     self.toggle_speed(now);
                     Vec::new()
                 }
-                ScenarioAction::AddAgent { desktop } => self.add_agent(desktop, now),
+                ScenarioAction::AddAgent { desktop, name } => self.add_agent(desktop, name, now),
                 ScenarioAction::FinishOneNow => self.finish_one_now(now),
                 ScenarioAction::MakeThreeWaitNow => self.make_three_wait_now(now),
             },
@@ -874,13 +874,22 @@ mod tests {
         simulator.advance(Duration::ZERO);
         let added = simulator.command(
             Duration::from_secs(1),
-            Command::Scenario(ScenarioAction::AddAgent { desktop: 4 }),
+            Command::Scenario(ScenarioAction::AddAgent { desktop: 4, name: None }),
         );
         assert!(matches!(
             added.as_slice(),
             [Event::AgentAdded { desktop: 4, .. }]
         ));
         assert_eq!(simulator.agents.len(), 13);
+
+        let named = simulator.command(
+            Duration::from_secs(1),
+            Command::Scenario(ScenarioAction::AddAgent { desktop: 2, name: Some("api/codex".into()) }),
+        );
+        assert!(matches!(
+            named.as_slice(),
+            [Event::AgentAdded { name, desktop: 2, .. }] if name == "api/codex"
+        ));
 
         let waiting = simulator.command(
             Duration::from_secs(2),
