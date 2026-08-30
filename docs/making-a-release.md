@@ -25,9 +25,10 @@ change: Auto-settle advances to the next agent with an outstanding turn.
 - Promotions require accepted source SHA, current `main` baseline, matching
   versions, absent tag, consumed fragments, and a release-only preparation diff.
   User-facing fragments require compiled changelog copy with the generated receipt.
-- Every candidate needs protected-`main` `App acceptance` for its exact head.
-  Rerun candidate CI after recording it. Hotfixes earn their own `PR gate`
-  and `App acceptance`; they do not inherit `next` Acceptance.
+- Automatic candidates need protected-`main` `App acceptance` for their exact
+  head. Rerun candidate CI after recording it. Hotfixes earn their own `PR gate`
+  and `App acceptance`; they do not inherit `next` Acceptance. Held promotions
+  are CI-only and cannot create a tag or dispatch a release.
 - Only validated candidates and generated sync PRs get changelog exemptions.
 
 ## Prepare a frozen candidate
@@ -48,6 +49,24 @@ It does not merge, tag, or publish. Internal-only fragments produce no release-n
 Later `next` changes, including red Acceptance, do not change the frozen source.
 If `main` moves, close and prepare the candidate again. Product fixes to a
 promotion go through `next` and a newly accepted source.
+
+## Promote without publishing
+
+Use a held promotion to exercise the complete `next` to accepted-`main` path
+without claiming packaged-app verification or creating public release state:
+
+```bash
+./scripts/release.sh vX.Y.Z --hold
+```
+
+The manifest records `publication: held`. The candidate still needs exact-source
+Acceptance and green normal PR CI. After merge, `main` runs full Acceptance and
+the release controller validates the candidate, then exits before App acceptance,
+tag creation, or release dispatch. The committed hold also stops later `main`
+runs from publishing that version.
+
+Sync held `main` back into `next` normally. A held version is never published;
+prepare a new candidate and version when a public release is wanted.
 
 ## Prepare a post-release hotfix
 
@@ -80,6 +99,8 @@ Mark ready after reviewing changelog copy and obtaining green `PR gate` and
 - `Release accepted main` validates current `main`, its originating candidate's
   protected-main app receipt, identical candidate/main trees, manifest, and versions.
   It creates the immutable tag and dispatches protected-`main` `release.yml`.
+- A held promotion validates through `main` Acceptance and exits before the app
+  receipt, tag, and dispatch steps.
 - Manual tag pushes cannot publish. Dispatches revalidate acceptance and tag
   identity; builds use the validated SHA and publishing rechecks the tag.
 - Retain the manifest for sync. A published version needs a fresh manifest/version

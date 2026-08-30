@@ -124,6 +124,21 @@ expect_failure 'has no app-acceptance.yml workflow_dispatch run' \
   run_gate promotion origin/main HEAD release/v99.98.97
 export FAKE_APP_MODE=success
 
+(cd "$repo" && go run ./cmd/release-train manifest write \
+  --version v99.98.97 --kind promotion --publication held \
+  --source "$promotion_source" --main "$main_sha")
+git -C "$repo" add .github/release-candidate.yml
+git -C "$repo" commit -q -m 'chore(release): hold publication'
+: >"$FAKE_GH_LOG"
+export FAKE_APP_MODE=missing
+run_gate promotion origin/main HEAD release/v99.98.97 >"$work/held.out"
+grep -Fq 'publication is held; App acceptance is not claimed' "$work/held.out"
+if grep -q '/actions/workflows/app-acceptance.yml/runs?' "$FAKE_GH_LOG"; then
+  echo "held candidate queried App acceptance" >&2
+  exit 1
+fi
+export FAKE_APP_MODE=success
+
 export FAKE_CANDIDATES_PAGE_2=$'hotfix/other\thttps://github.com/example/attn/pull/102\n'
 expect_failure 'another release candidate is open' \
   run_gate promotion origin/main HEAD release/v99.98.97

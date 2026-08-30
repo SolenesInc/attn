@@ -28,6 +28,8 @@ if [[ ! -f "$manifest" ]]; then
 fi
 
 manifest_kind="$(awk '$1 == "kind:" { print $2 }' "$manifest")"
+publication="$(awk '$1 == "publication:" { print $2 }' "$manifest")"
+publication="${publication:-automatic}"
 source_sha="$(awk '$1 == "source_sha:" { print $2 }' "$manifest")"
 if [[ "$manifest_kind" != "$kind" ]]; then
   echo "candidate gate: $head_branch requires kind $kind, found ${manifest_kind:-missing}" >&2
@@ -35,6 +37,14 @@ if [[ "$manifest_kind" != "$kind" ]]; then
 fi
 if [[ ! "$source_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
   echo "candidate gate: manifest source_sha must be a full commit SHA" >&2
+  exit 1
+fi
+case "$publication" in
+  automatic|held) ;;
+  *) echo "candidate gate: unsupported publication '$publication'" >&2; exit 1 ;;
+esac
+if [[ "$kind" == hotfix && "$publication" == held ]]; then
+  echo "candidate gate: hotfix publication cannot be held" >&2
   exit 1
 fi
 
@@ -61,9 +71,13 @@ if [[ "$kind" == promotion ]]; then
 fi
 
 candidate_sha="$(git rev-parse --verify "${head_ref}^{commit}")"
-"$script_root/workflow-job-gate.sh" \
-  app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
-echo "candidate gate: protected-main App acceptance is green for $candidate_sha"
+if [[ "$publication" == automatic ]]; then
+  "$script_root/workflow-job-gate.sh" \
+    app-acceptance.yml "$candidate_sha" workflow_dispatch main 'App acceptance'
+  echo "candidate gate: protected-main App acceptance is green for $candidate_sha"
+else
+  echo "candidate gate: publication is held; App acceptance is not claimed"
+fi
 
 go run ./cmd/release-train candidate validate "${candidate_args[@]}"
 echo "candidate gate: $head_branch is a valid $kind candidate"
