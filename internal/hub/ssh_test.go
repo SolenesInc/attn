@@ -32,6 +32,7 @@ func TestRemoteShellCommandExportsRemoteOverrideEnv(t *testing.T) {
 
 func TestRemoteShellCommandArmsTheRemoteAgentTripwire(t *testing.T) {
 	t.Setenv("ATTN_REMOTE_PATH_PREFIX", "/home/attn/.attn/real-app-harness/agent-fixtures/bin")
+	t.Setenv("ATTN_REMOTE_DATA_DIR", "/home/attn/.attn/harness/run")
 	t.Setenv("ATTN_REMOTE_HEADLESS_TASKS", "off")
 	t.Setenv("ATTN_REMOTE_AGENT_TRIPWIRE", "TR-502|fixture-bin")
 	t.Setenv("ATTN_REMOTE_AGENT_TRIPWIRE_LEDGER", "/home/attn/.attn/harness/run/agent-tripwire.ledger")
@@ -44,6 +45,7 @@ func TestRemoteShellCommandArmsTheRemoteAgentTripwire(t *testing.T) {
 	script := remoteShellEnvScript("")
 	for _, fragment := range []string{
 		`export PATH='/home/attn/.attn/real-app-harness/agent-fixtures/bin':"$PATH"`,
+		"export ATTN_DATA_DIR='/home/attn/.attn/harness/run'",
 		"export ATTN_HEADLESS_TASKS='off'",
 		"export ATTN_AGENT_TRIPWIRE='TR-502|fixture-bin'",
 		"export ATTN_AGENT_TRIPWIRE_LEDGER='/home/attn/.attn/harness/run/agent-tripwire.ledger'",

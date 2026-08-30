@@ -41,6 +41,7 @@ func remoteShellEnvScript(profile string) string {
 		remote string
 	}{
 		{"ATTN_REMOTE_ATTN_BIN", "ATTN_REMOTE_ATTN_BIN"},
+		{"ATTN_REMOTE_DATA_DIR", "ATTN_DATA_DIR"},
 		{"ATTN_REMOTE_SOCKET_PATH", "ATTN_SOCKET_PATH"},
 		{"ATTN_REMOTE_WS_PORT", "ATTN_WS_PORT"},
 		{"ATTN_REMOTE_DB_PATH", "ATTN_DB_PATH"},

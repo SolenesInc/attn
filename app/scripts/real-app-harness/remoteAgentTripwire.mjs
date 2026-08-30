@@ -36,6 +36,7 @@ export function buildRemoteAgentTripwire({ remoteHome, remotePaths, scenarioId }
     remoteHarnessRoot: remotePaths.remoteHarnessRoot,
     remoteHarnessBinary: remotePaths.remoteHarnessBinary,
     launchEnv: {
+      ATTN_REMOTE_DATA_DIR: remotePaths.remoteHarnessRoot,
       ATTN_REMOTE_PATH_PREFIX: binDir,
       ATTN_REMOTE_HEADLESS_TASKS: 'off',
       ATTN_REMOTE_AGENT_TRIPWIRE: marker,

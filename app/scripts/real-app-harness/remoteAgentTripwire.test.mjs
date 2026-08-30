@@ -38,6 +38,7 @@ afterEach(() => {
 describe('remote agent tripwire', () => {
   it('pins the remote daemon to provisioned shims and turns headless tasks off', () => {
     expect(fixture.launchEnv).toMatchObject({
+      ATTN_REMOTE_DATA_DIR: '/home/attn-remote/.attn/harness/run-1',
       ATTN_REMOTE_PATH_PREFIX: '/home/attn-remote/.attn/real-app-harness/agent-fixtures/bin',
       ATTN_REMOTE_HEADLESS_TASKS: 'off',
       ATTN_REMOTE_AGENT_TRIPWIRE_LEDGER: fixture.ledgerPath,
