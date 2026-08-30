@@ -1,0 +1,7 @@
+kind: added
+area: sessions
+change: >
+  A repo can name the branch new worktrees start from with
+  `git config attn.baseBranch <branch>`. The new-session dialog and
+  `attn delegate --worktree` read it before origin/HEAD, so a repo whose
+  integration branch is `next` branches from `origin/next` by default.
