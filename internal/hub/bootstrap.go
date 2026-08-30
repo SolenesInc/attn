@@ -829,6 +829,13 @@ func remoteHarnessCleanupEnabled() bool {
 		isRemoteHarnessOverridePath(os.Getenv("ATTN_REMOTE_ATTN_BIN"))
 }
 
+func remoteRoutingProfile(profile string) string {
+	if remoteHarnessCleanupEnabled() {
+		return ""
+	}
+	return strings.TrimSpace(profile)
+}
+
 type remoteDaemonState struct {
 	Running  bool
 	Starting bool

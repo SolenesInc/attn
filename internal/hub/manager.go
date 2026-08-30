@@ -371,7 +371,7 @@ func isolatedRemoteShutdownTarget(record store.EndpointRecord) isolatedShutdownT
 	if target == "" {
 		return isolatedShutdownTarget{}
 	}
-	return isolatedShutdownTarget{Target: target, Profile: strings.TrimSpace(record.Profile)}
+	return isolatedShutdownTarget{Target: target, Profile: remoteRoutingProfile(record.Profile)}
 }
 
 func (m *Manager) stopIsolatedRemoteDaemons(targets []isolatedShutdownTarget) {
@@ -441,10 +441,11 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		if !ok {
 			return
 		}
+		profile := remoteRoutingProfile(record.Profile)
 
 		if m.consumeBootstrapFlag(id) {
 			m.updateStatus(id, "bootstrapping", "Installing remote binary", nil, nil)
-			err := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, record.Profile, m.homeDaemonID())
+			err := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, profile, m.homeDaemonID())
 			if err != nil {
 				m.updateStatus(id, "error", err.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -456,10 +457,10 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		}
 
 		m.updateStatus(id, "connecting", "Connecting to remote daemon", nil, nil)
-		conn, cmd, err := connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), record.Profile)
+		conn, cmd, err := connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), profile)
 		if err != nil {
 			m.updateStatus(id, "bootstrapping", "Checking remote platform", nil, nil)
-			bootErr := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, record.Profile, m.homeDaemonID())
+			bootErr := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, profile, m.homeDaemonID())
 			if bootErr != nil {
 				m.updateStatus(id, "error", bootErr.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -469,7 +470,7 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 				continue
 			}
 			m.updateStatus(id, "connecting", "Connecting to remote daemon", nil, nil)
-			conn, cmd, err = connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), record.Profile)
+			conn, cmd, err = connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), profile)
 			if err != nil {
 				m.updateStatus(id, "error", err.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -482,7 +483,7 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 
 		// Read after connecting, not before: a host whose daemon has never run has
 		// no token to read yet, and reaching here means it is up.
-		clientToken := m.remoteClientToken(ctx, record.SSHTarget, record.Profile)
+		clientToken := m.remoteClientToken(ctx, record.SSHTarget, profile)
 
 		// Until this hello passes, the remote daemon refuses every gated command.
 		// publishConnectionAndSendHello holds writeMu so ForwardEndpointCommand cannot write first.
