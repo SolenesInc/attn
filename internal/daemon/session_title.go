@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,8 +19,9 @@ import (
 
 const (
 	// Distinct from maxDelegationNameRunes (delegate.go), the clamp on delegation names.
-	maxSessionTitleRunes = 48
-	sessionTitleTimeout  = 90 * time.Second
+	maxSessionTitleRunes     = 48
+	sessionTitleTimeout      = 90 * time.Second
+	sessionTitleBriefCharCap = 1500
 )
 
 const sessionTitleOutputSchema = `{
@@ -32,24 +34,10 @@ const sessionTitleOutputSchema = `{
 }`
 
 func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
-	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
+	if !d.sessionWantsAutoTitle(sessionID) {
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil {
-		return
-	}
-	if !d.sessionMayBeAutoTitled(session) {
-		return
-	}
-
-	d.sessionTitleMu.Lock()
-	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
-		d.sessionTitleMu.Unlock()
-		return
-	}
-	d.sessionTitleMu.Unlock()
-
 	path := d.resolveTranscriptPathForSession(session, transcriptPath)
 	if strings.TrimSpace(path) == "" {
 		return
@@ -57,7 +45,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	slice, err := transcript.ExtractConversationSlice(path, transcript.SliceOptions{
 		MaxRescopingTurns: 2,
 		MaxAgentTurns:     1,
-		TurnCharCap:       1500,
+		TurnCharCap:       sessionTitleBriefCharCap,
 		SummaryCharCap:    2000,
 	})
 	if err != nil || slice.Empty() || slice.Brief == "" {
@@ -65,14 +53,80 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		// permanently skipping this session.
 		return
 	}
+	d.generateSessionTitle(sessionID, slice, "transcript")
+}
 
+// UserPromptSubmit also delivers maintenance and peer-agent text; only a
+// correlated user turn or the session's own initial prompt may title it.
+func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, origin sessionInputOrigin) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
+		return
+	}
+	if origin.kind != sessionInputOriginUserConversation && !d.matchSessionTitleInitialPrompt(sessionID, prompt) {
+		return
+	}
+	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
+		prompt = string(runes[:sessionTitleBriefCharCap])
+	}
+	d.generateSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}, "prompt")
+}
+
+// A fingerprint, not the prompt: the body can be 1 MiB and the marker may
+// outlive the attempt on durable sessions that never settle a title.
+func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		delete(d.sessionTitleInitialPrompt, sessionID)
+		return
+	}
+	if d.sessionTitleInitialPrompt == nil {
+		d.sessionTitleInitialPrompt = make(map[string][sha256.Size]byte)
+	}
+	d.sessionTitleInitialPrompt[sessionID] = sha256.Sum256([]byte(prompt))
+}
+
+func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID string) {
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	delete(d.sessionTitleInitialPrompt, sessionID)
+}
+
+func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
+	if !ok || remembered != sha256.Sum256([]byte(prompt)) {
+		return false
+	}
+	delete(d.sessionTitleInitialPrompt, sessionID)
+	return true
+}
+
+func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
+	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	if session == nil || !d.sessionMayBeAutoTitled(session) {
+		return false
+	}
+	d.sessionTitleMu.Lock()
+	defer d.sessionTitleMu.Unlock()
+	_, attempted := d.sessionTitleAttempted[sessionID]
+	return !attempted
+}
+
+func (d *Daemon) generateSessionTitle(sessionID string, slice transcript.ConversationSlice, source string) {
 	// Ahead of the attempted-mark: a refused title must stay retryable.
 	if d.headlessTaskRefused("session_title") {
 		return
 	}
 
-	// The early check and this mark are separate critical sections, so two
-	// close-together Stop events can both pass it; re-check under the lock.
+	// The early check and this mark are separate critical sections, so a prompt
+	// submit and a Stop can both pass it; re-check under the lock.
 	d.sessionTitleMu.Lock()
 	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
 		d.sessionTitleMu.Unlock()
@@ -82,8 +136,13 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		d.sessionTitleAttempted = make(map[string]struct{})
 	}
 	d.sessionTitleAttempted[sessionID] = struct{}{}
+	delete(d.sessionTitleInitialPrompt, sessionID)
 	d.sessionTitleMu.Unlock()
 
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), sessionTitleTimeout)
 	defer cancel()
 	result, err := d.sessionTitleExec(ctx, session, slice)
@@ -102,6 +161,7 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	}
 	d.store.UpdateSessionLabel(sessionID, title)
 	session.Label = title
+	d.logf("session title %s: %q from %s", sessionID, title, source)
 	d.publishFact(FactSessionRenamed, sessionID, nil)
 }
 

@@ -367,7 +367,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	intent.AutoMode = msg.AutoMode
 	d.store.SetLaunchIntent(session.ID, intent)
+	// After the already-live no-op returns, before the runtime whose first
+	// UserPromptSubmit can beat commitSpawn.
+	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
+		d.forgetSessionTitleInitialPrompt(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 		} else if restoreErr := d.store.AddChecked(req.existingSession); restoreErr != nil {
@@ -399,12 +403,15 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
-	// A state transition can land between executeSpawn's persist and this commit, so
-	// the upsert must not rewind it to the pre-spawn snapshot.
+	// A state transition or a rename (auto-title included) can land between
+	// executeSpawn's persist and this commit; the upsert must not rewind them.
 	if current := d.store.Get(session.ID); current != nil {
 		session.State = current.State
 		session.StateSince = current.StateSince
 		session.StateUpdatedAt = current.StateUpdatedAt
+		if strings.TrimSpace(current.Label) != "" {
+			session.Label = current.Label
+		}
 	}
 	if err := d.store.AddChecked(session); err != nil {
 		if req.hasPluginDriver {
@@ -512,6 +519,7 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 		return nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
+		d.forgetSessionTitleInitialPrompt(msg.ID)
 		return &spawnRejection{err: outcome.err}
 	}
 	return nil

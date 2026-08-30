@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -356,5 +357,244 @@ func TestMaybeGenerateSessionTitle_CrewBindingRace(t *testing.T) {
 	wantLabel := defaultSessionLabel(directory, "sess-1")
 	if got := d.store.Get("sess-1"); got == nil || got.Label != wantLabel {
 		t.Fatalf("session label = %+v, want unchanged %q (a session that became a member must not be titled)", got, wantLabel)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_TitlesBeforeStop(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	var gotBrief string
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		gotBrief = slice.Brief
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "  fix the login flow\n", userConversationInput())
+	if calls != 1 || gotBrief != "fix the login flow" {
+		t.Fatalf("exec calls = %d brief = %q, want 1 call with the trimmed prompt", calls, gotBrief)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Fix login flow" {
+		t.Fatalf("session label = %+v, want %q", got, "Fix login flow")
+	}
+
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+	if calls != 1 {
+		t.Fatalf("exec calls after Stop = %d, want 1", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_EmptyPromptLeavesStopPath(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "   ", userConversationInput())
+	if calls != 0 {
+		t.Fatalf("exec calls after empty prompt = %d, want 0", calls)
+	}
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+	if calls != 1 {
+		t.Fatalf("exec calls after Stop = %d, want 1", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_CapsLongPrompt(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	var gotBrief string
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		gotBrief = slice.Brief
+		return "Long prompt", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", strings.Repeat("é", sessionTitleBriefCharCap+10), userConversationInput())
+	if n := len([]rune(gotBrief)); n != sessionTitleBriefCharCap {
+		t.Fatalf("brief runes = %d, want %d", n, sessionTitleBriefCharCap)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_UncorrelatedReceiptLeavesAttemptAvailable(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "ticket nudge: please reconcile", maintenanceInput("tickets"))
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "peer says hi", peerAgentInput("sess-2"))
+	if calls != 0 {
+		t.Fatalf("exec calls after maintenance and peer receipts = %d, want 0", calls)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != defaultSessionLabel(directory, "sess-1") {
+		t.Fatalf("session label = %+v, want the default label untouched", got)
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "fix the login flow", userConversationInput())
+	if calls != 1 {
+		t.Fatalf("exec calls after user turn = %d, want 1 (receipts must not consume the attempt)", calls)
+	}
+}
+
+func TestMaybeGenerateSessionTitleFromPrompt_InitialPromptTitlesWithoutCorrelation(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	d.rememberSessionTitleInitialPrompt("sess-1", "investigate the retry queue")
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "Investigate retry queue", nil
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "unrelated injected text", sessionInputOrigin{})
+	if calls != 0 {
+		t.Fatalf("exec calls after non-matching uncorrelated prompt = %d, want 0", calls)
+	}
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-1", "investigate the retry queue", sessionInputOrigin{})
+	if calls != 1 {
+		t.Fatalf("exec calls after the initial prompt = %d, want 1", calls)
+	}
+	if got := d.store.Get("sess-1"); got == nil || got.Label != "Investigate retry queue" {
+		t.Fatalf("session label = %+v, want %q", got, "Investigate retry queue")
+	}
+}
+
+func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+
+	titled := make(chan string, 1)
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		titled <- slice.Brief
+		return "One-shot investigation", nil
+	}
+	backend := &fakeSpawnBackend{}
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		d.maybeGenerateSessionTitleFromPrompt(opts.ID, "investigate the retry queue", sessionInputOrigin{})
+	}
+	d.ptyBackend = backend
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-oneshot",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	select {
+	case brief := <-titled:
+		if brief != "investigate the retry queue" {
+			t.Fatalf("titled from brief %q, want the initial prompt", brief)
+		}
+	default:
+		t.Fatal("the early prompt hook did not reach the title exec; marker missing at backend-spawn time")
+	}
+	if got := d.store.Get("sess-oneshot"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
+	}
+}
+
+func TestSpawnPipeline_FailedLaunchRollsBackInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	d.ptyBackend = &fakeSpawnBackend{spawnErr: errors.New("boom")}
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-failed",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	d.sessionTitleMu.Lock()
+	_, held := d.sessionTitleInitialPrompt["sess-failed"]
+	d.sessionTitleMu.Unlock()
+	if held {
+		t.Fatal("failed launch left the initial-prompt marker behind")
+	}
+}
+
+func TestMaybeGenerateSessionTitle_StopPathClearsInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	d.rememberSessionTitleInitialPrompt("sess-1", "a prompt the hook never carried")
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+
+	d.sessionTitleMu.Lock()
+	_, held := d.sessionTitleInitialPrompt["sess-1"]
+	d.sessionTitleMu.Unlock()
+	if held {
+		t.Fatal("Stop-path title left the initial-prompt marker behind")
+	}
+}
+
+func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "One-shot investigation", nil
+	}
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	spawn := &protocol.SpawnSessionMessage{
+		ID:            "sess-dup",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	}
+	d.handleSpawnSession(client, spawn)
+	backend.mu.Lock()
+	backend.sessionIDs = []string{"sess-dup"}
+	backend.mu.Unlock()
+
+	duplicate := *spawn
+	duplicate.InitialPrompt = nil
+	d.handleSpawnSession(client, &duplicate)
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-dup", "investigate the retry queue", sessionInputOrigin{})
+	if calls != 1 {
+		t.Fatalf("exec calls after the original receipt = %d, want 1 (the no-op spawn must not disturb the marker)", calls)
+	}
+	if got := d.store.Get("sess-dup"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
 	}
 }
