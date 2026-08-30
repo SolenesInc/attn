@@ -1,4 +1,5 @@
 use gpui::Keystroke;
+use zero::editor::Key;
 
 /// Bytes a terminal program expects for a keystroke; None for keys that mean nothing to a PTY.
 pub fn keystroke_bytes(keystroke: &Keystroke) -> Option<Vec<u8>> {
@@ -79,6 +80,22 @@ pub fn typed_text(keystroke: &Keystroke) -> Option<String> {
     chars.next().is_none().then(|| first.to_string())
 }
 
+/// The keystroke as the editor adapter sees it; None for command chords, which stay with zero.
+pub fn editor_key(keystroke: &Keystroke) -> Option<Key> {
+    let m = keystroke.modifiers;
+    if m.platform {
+        return None;
+    }
+    let text = if m.control || m.function {
+        None
+    } else if keystroke.key == "space" {
+        Some(" ".to_string())
+    } else {
+        keystroke.key_char.clone()
+    };
+    Some(Key { name: keystroke.key.clone(), text, shift: m.shift, control: m.control, alt: m.alt })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +128,16 @@ mod tests {
         );
         assert_eq!(keystroke_bytes(&key("s", Modifiers { platform: true, ..none }, None)), None);
         assert_eq!(keystroke_bytes(&key("a", Modifiers { shift: true, ..none }, Some("A"))), Some(b"A".to_vec()));
+    }
+
+    #[test]
+    fn editor_keys_carry_text_and_modifiers_but_never_command_chords() {
+        let none = Modifiers::default();
+        let shifted = editor_key(&key("a", Modifiers { shift: true, ..none }, Some("A"))).unwrap();
+        assert_eq!((shifted.name.as_str(), shifted.text.as_deref(), shifted.shift), ("a", Some("A"), true));
+        let control = editor_key(&key("a", Modifiers { control: true, ..none }, None)).unwrap();
+        assert_eq!((control.text, control.control), (None, true));
+        assert_eq!(editor_key(&key("space", none, None)).unwrap().text.as_deref(), Some(" "));
+        assert!(editor_key(&key("k", Modifiers { platform: true, ..none }, None)).is_none());
     }
 }

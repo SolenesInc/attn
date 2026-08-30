@@ -1,5 +1,5 @@
-//! Paints a libghostty-vt terminal into a GPUI window: backgrounds as quads, text as shaped runs
-//! positioned per cell so wide glyphs and fallback fonts never drift the columns.
+//! Paints a cell frame, a libghostty-vt terminal or an editor engine's grid, into a GPUI window:
+//! backgrounds as quads, text as shaped runs positioned per cell so wide glyphs never drift columns.
 use anyhow::Result;
 use gpui::{
     App, BorderStyle, Bounds, Font, FontStyle, FontWeight, Hsla, Pixels, Point, SharedString,
@@ -10,6 +10,7 @@ use libghostty_vt::render::{CellIteration, CellIterator, Dirty, RenderState, Row
 use libghostty_vt::screen::CellWide;
 use libghostty_vt::style::{RgbColor, StyleColor, Underline};
 use libghostty_vt::terminal::Terminal;
+use zero::editor::{self, CursorShape, Rgb};
 
 use crate::theme;
 
@@ -48,67 +49,36 @@ struct Cell {
     wide: bool,
 }
 
-pub struct Grid {
-    state: RenderState<'static>,
-    rows: RowIterator<'static>,
-    cells: CellIterator<'static>,
-    scratch: String,
+/// One paint's worth of cells, wherever they came from, with the cursor and its shape.
+#[derive(Default)]
+pub struct Frame {
     lines: Vec<Vec<Cell>>,
     cursor: Option<(u16, u16)>,
-    size: (u16, u16),
+    cursor_shape: CursorShape,
 }
 
-impl Grid {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            state: RenderState::new()?,
-            rows: RowIterator::new()?,
-            cells: CellIterator::new()?,
-            scratch: String::with_capacity(16),
-            lines: Vec::new(),
-            cursor: None,
-            size: (0, 0),
-        })
-    }
-
-    pub fn size(&self) -> (u16, u16) {
-        self.size
-    }
-
-    pub fn refresh(&mut self, terminal: &Terminal<'static, 'static>, cols: u16, rows: u16) -> Result<()> {
-        let mut lines = Vec::with_capacity(rows as usize);
-        {
-            let snapshot = self.state.update(terminal)?;
-            self.cursor = if snapshot.cursor_visible()? {
-                snapshot.cursor_viewport()?.map(|cursor| (cursor.x, cursor.y))
-            } else {
-                None
-            };
-            {
-                let mut row_iter = self.rows.update(&snapshot)?;
-                while let Some(row) = row_iter.next() {
-                    if lines.len() >= rows as usize {
-                        break;
-                    }
-                    let mut line = Vec::with_capacity(cols as usize);
-                    {
-                        let mut cell_iter = self.cells.update(row)?;
-                        while let Some(cell) = cell_iter.next() {
-                            if line.len() >= cols as usize {
-                                break;
-                            }
-                            line.push(convert(cell, &mut self.scratch)?);
-                        }
-                    }
-                    row.set_dirty(false)?;
-                    lines.push(line);
-                }
-            }
-            snapshot.set_dirty(Dirty::Clean)?;
-        }
-        self.lines = lines;
-        self.size = (cols, rows);
-        Ok(())
+impl Frame {
+    pub fn from_editor(frame: &editor::Frame) -> Self {
+        let default_fg = frame.default_fg.map(rgb_to_hsla).unwrap_or_else(theme::fg);
+        let lines = frame
+            .lines
+            .iter()
+            .map(|line| {
+                line.iter()
+                    .map(|cell| Cell {
+                        text: cell.text.clone(),
+                        fg: cell.fg.map(rgb_to_hsla).unwrap_or(default_fg),
+                        bg: cell.bg.map(rgb_to_hsla),
+                        bold: cell.bold,
+                        italic: cell.italic,
+                        underline: cell.underline,
+                        strikethrough: cell.strikethrough,
+                        wide: cell.wide,
+                    })
+                    .collect()
+            })
+            .collect();
+        Self { lines, cursor: frame.cursor, cursor_shape: frame.cursor_shape }
     }
 
     pub fn prepare(
@@ -156,17 +126,89 @@ impl Grid {
             }
             segment.flush(metrics, origin, top, window, &mut lines);
         }
-        let cursor = self.cursor.map(|(x, y)| {
-            (
-                Bounds {
-                    origin: point(origin.x + cw * x as f32, origin.y + lh * y as f32),
-                    size: size(cw, lh),
-                },
-                cursor_color,
-                focused,
-            )
+        let cursor = self.cursor.map(|(x, y)| Cursor {
+            bounds: Bounds {
+                origin: point(origin.x + cw * x as f32, origin.y + lh * y as f32),
+                size: size(cw, lh),
+            },
+            color: cursor_color,
+            focused,
+            shape: self.cursor_shape,
         });
         Prepared { quads, lines, cursor, line_height: lh }
+    }
+}
+
+pub struct Grid {
+    state: RenderState<'static>,
+    rows: RowIterator<'static>,
+    cells: CellIterator<'static>,
+    scratch: String,
+    frame: Frame,
+    size: (u16, u16),
+}
+
+impl Grid {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            state: RenderState::new()?,
+            rows: RowIterator::new()?,
+            cells: CellIterator::new()?,
+            scratch: String::with_capacity(16),
+            frame: Frame::default(),
+            size: (0, 0),
+        })
+    }
+
+    pub fn size(&self) -> (u16, u16) {
+        self.size
+    }
+
+    pub fn refresh(&mut self, terminal: &Terminal<'static, 'static>, cols: u16, rows: u16) -> Result<()> {
+        let mut lines = Vec::with_capacity(rows as usize);
+        {
+            let snapshot = self.state.update(terminal)?;
+            self.frame.cursor = if snapshot.cursor_visible()? {
+                snapshot.cursor_viewport()?.map(|cursor| (cursor.x, cursor.y))
+            } else {
+                None
+            };
+            {
+                let mut row_iter = self.rows.update(&snapshot)?;
+                while let Some(row) = row_iter.next() {
+                    if lines.len() >= rows as usize {
+                        break;
+                    }
+                    let mut line = Vec::with_capacity(cols as usize);
+                    {
+                        let mut cell_iter = self.cells.update(row)?;
+                        while let Some(cell) = cell_iter.next() {
+                            if line.len() >= cols as usize {
+                                break;
+                            }
+                            line.push(convert(cell, &mut self.scratch)?);
+                        }
+                    }
+                    row.set_dirty(false)?;
+                    lines.push(line);
+                }
+            }
+            snapshot.set_dirty(Dirty::Clean)?;
+        }
+        self.frame.lines = lines;
+        self.size = (cols, rows);
+        Ok(())
+    }
+
+    pub fn prepare(
+        &self,
+        metrics: &Metrics,
+        origin: Point<Pixels>,
+        focused: bool,
+        cursor_color: Hsla,
+        window: &mut Window,
+    ) -> Prepared {
+        self.frame.prepare(metrics, origin, focused, cursor_color, window)
     }
 }
 
@@ -254,10 +296,17 @@ impl Segment {
     }
 }
 
+struct Cursor {
+    bounds: Bounds<Pixels>,
+    color: Hsla,
+    focused: bool,
+    shape: CursorShape,
+}
+
 pub struct Prepared {
     quads: Vec<(Bounds<Pixels>, Hsla)>,
     lines: Vec<(Point<Pixels>, ShapedLine)>,
-    cursor: Option<(Bounds<Pixels>, Hsla, bool)>,
+    cursor: Option<Cursor>,
     line_height: Pixels,
 }
 
@@ -266,18 +315,29 @@ impl Prepared {
         for (bounds, color) in self.quads {
             window.paint_quad(fill(bounds, color));
         }
-        if let Some((bounds, color, focused)) = self.cursor {
-            if focused {
-                window.paint_quad(fill(bounds, color.alpha(0.6)));
-            } else {
-                window.paint_quad(quad(
+        if let Some(cursor) = self.cursor {
+            let Cursor { bounds, color, focused, shape } = cursor;
+            match shape {
+                CursorShape::Block if focused => window.paint_quad(fill(bounds, color.alpha(0.6))),
+                CursorShape::Block => window.paint_quad(quad(
                     bounds,
                     0.,
                     gpui::transparent_black(),
                     1.,
                     color.alpha(0.45),
                     BorderStyle::Solid,
-                ));
+                )),
+                CursorShape::Vertical => window.paint_quad(fill(
+                    Bounds { origin: bounds.origin, size: size(px(2.), bounds.size.height) },
+                    color,
+                )),
+                CursorShape::Horizontal => window.paint_quad(fill(
+                    Bounds {
+                        origin: point(bounds.origin.x, bounds.origin.y + bounds.size.height - px(2.)),
+                        size: size(bounds.size.width, px(2.)),
+                    },
+                    color,
+                )),
             }
         }
         for (origin, line) in self.lines {
@@ -339,4 +399,8 @@ fn convert(cell: &CellIteration<'_, '_>, scratch: &mut String) -> Result<Cell> {
 
 fn to_hsla(color: RgbColor) -> Hsla {
     gpui::rgb(((color.r as u32) << 16) | ((color.g as u32) << 8) | color.b as u32).into()
+}
+
+fn rgb_to_hsla(color: Rgb) -> Hsla {
+    gpui::rgb(((color.0 as u32) << 16) | ((color.1 as u32) << 8) | color.2 as u32).into()
 }

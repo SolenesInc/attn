@@ -1,5 +1,9 @@
+pub mod editor;
 pub mod layout;
+pub mod markdown;
+pub mod mermaid;
 pub mod model;
+pub mod nvim;
 pub mod shell;
 pub mod simulator;
 pub mod source;

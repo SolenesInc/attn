@@ -1,6 +1,7 @@
 //! Tokyo Night (night variant), the palette the maintainer asked to be inspired by.
 use gpui::{Hsla, rgb};
 
+use zero::mermaid::Palette;
 use zero::model::{AgentKind, AgentState};
 
 fn c(hex: u32) -> Hsla {
@@ -57,6 +58,16 @@ pub fn red() -> Hsla {
 pub fn teal() -> Hsla {
     c(0x1abc9c)
 }
+pub fn green() -> Hsla {
+    c(0x9ece6a)
+}
+pub fn cyan() -> Hsla {
+    c(0x7dcfff)
+}
+/// Document tiles: a softer purple than the scenario pill so the two never read as one thing.
+pub fn doc() -> Hsla {
+    c(0x9d7cd8)
+}
 
 /// The 16 ANSI colors as Tokyo Night paints them, indexed like the terminal palette.
 pub const ANSI: [u32; 16] = [
@@ -72,10 +83,39 @@ pub fn state_color(kind: AgentKind, state: AgentState) -> Hsla {
     if kind == AgentKind::Shell {
         return teal();
     }
+    if kind == AgentKind::Document {
+        return doc();
+    }
     match state {
         AgentState::Working => blue(),
         AgentState::WaitingInput => yellow(),
         AgentState::PendingApproval => red(),
         AgentState::Idle => comment(),
+    }
+}
+
+/// An editor mode as the header shows it: the label and its color.
+pub fn mode(mode: &str) -> (&'static str, Hsla) {
+    match mode {
+        "" | "normal" => ("NORMAL", blue()),
+        m if m.starts_with("insert") => ("INSERT", green()),
+        m if m.starts_with("visual") => ("VISUAL", purple()),
+        m if m.starts_with("replace") => ("REPLACE", red()),
+        m if m.starts_with("cmdline") => ("COMMAND", yellow()),
+        m if m.starts_with("operator") => ("PENDING", orange()),
+        m if m.starts_with("terminal") => ("TERMINAL", teal()),
+        _ => ("OTHER", yellow()),
+    }
+}
+
+/// The palette mermaid diagrams are drawn in, the same Tokyo Night surfaces as the cards.
+pub fn mermaid_palette() -> Palette {
+    Palette {
+        background: "#1a1b26".to_string(),
+        surface: "#292e42".to_string(),
+        border: "#7aa2f7".to_string(),
+        text: "#c0caf5".to_string(),
+        line: "#a9b1d6".to_string(),
+        font_family: "Helvetica Neue, Helvetica, Arial, sans-serif".to_string(),
     }
 }

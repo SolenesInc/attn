@@ -42,6 +42,8 @@ impl AgentState {
 pub enum AgentKind {
     Simulated,
     Shell,
+    /// A markdown file in a tile: read by the client's reader, edited through the editor adapter.
+    Document,
 }
 
 pub struct Agent {
@@ -167,6 +169,12 @@ impl Model {
             Duration::ZERO,
             output,
         )?;
+        self.insert(agent);
+        Ok(())
+    }
+
+    pub fn add_document(&mut self, id: AgentId, name: String, desktop: u8) -> Result<()> {
+        let agent = Agent::new(id, name, desktop, AgentKind::Document, AgentState::Idle, Duration::ZERO, b"")?;
         self.insert(agent);
         Ok(())
     }

@@ -1,10 +1,12 @@
 mod grid;
 mod keys;
 mod layout;
+mod reader;
 mod theme;
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -13,30 +15,36 @@ use futures::StreamExt;
 use futures::channel::mpsc;
 use gpui::{
     Animation, AnimationExt, AnyElement, AnyView, App, Application, Bounds, BoxShadow, Context,
-    Div, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton, Pixels, Render,
-    ScrollDelta, ScrollWheelEvent, SharedString, Task, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowOptions, canvas, div, ease_in_out,
-    linear_color_stop, linear_gradient, point, prelude::*, px, size,
+    Div, ElementId, FocusHandle, FontWeight, Hsla, KeyDownEvent, Keystroke, MouseButton,
+    MouseDownEvent, Pixels, Render, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
+    Stateful, Task, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowOptions, canvas, div, ease_in_out, linear_color_stop, linear_gradient, point,
+    prelude::*, px, relative, size,
 };
 use libghostty_vt::terminal::ScrollViewport;
-use zero::model::{AgentId, AgentKind, Model};
+use zero::editor::{Editor, EditorEvent, Engine, Open};
+use zero::markdown::{self, Block};
+use zero::model::{Agent, AgentId, AgentKind, Model};
 use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
 use zero::switch_log::{SwitchLog, SwitchPath};
 use zero::switcher::rows;
 
-use crate::grid::{Grid, Metrics, Prepared};
+use crate::grid::{Frame, Grid, Metrics, Prepared};
 use crate::layout::{Direction, neighbor, tiles};
+use crate::reader::{Diagram, Reader};
 
 const SHELL_ID: AgentId = u64::MAX;
 const BAR_HEIGHT: f32 = 46.;
 const GAP: f32 = 12.;
-const USAGE: &str = "usage: zero-gpui [--scenario calm|busy-morning|all-busy]";
+const USAGE: &str = "usage: zero-gpui [--scenario calm|busy-morning|all-busy] [--doc <file.md>]...";
+/// Document tiles count down from here; the shell holds u64::MAX.
+const DOC_ID_BASE: AgentId = u64::MAX - 1;
 
 fn main() {
-    let scenario = match parse_args() {
-        Ok(scenario) => scenario,
+    let (scenario, docs) = match parse_args() {
+        Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("{error}\n{USAGE}");
             std::process::exit(2);
@@ -63,7 +71,7 @@ fn main() {
                 window_background: WindowBackgroundAppearance::Opaque,
                 ..Default::default()
             },
-            move |window, cx| cx.new(|cx| Zero::new(scenario, window, cx).expect("zero starts")),
+            move |window, cx| cx.new(|cx| Zero::new(scenario, docs, window, cx).expect("zero starts")),
         )
         .expect("the window opens");
         cx.on_window_closed(|cx| {
@@ -76,8 +84,9 @@ fn main() {
     });
 }
 
-fn parse_args() -> Result<Scenario> {
+fn parse_args() -> Result<(Scenario, Vec<PathBuf>)> {
     let mut scenario = Scenario::Calm;
+    let mut docs = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -86,10 +95,14 @@ fn parse_args() -> Result<Scenario> {
                 scenario = Scenario::parse(&name)
                     .ok_or_else(|| anyhow::anyhow!("unknown scenario {name:?}"))?;
             }
+            "--doc" => {
+                let path = PathBuf::from(args.next().unwrap_or_default());
+                docs.push(std::fs::canonicalize(&path).unwrap_or(path));
+            }
             other => bail!("unknown argument {other:?}"),
         }
     }
-    Ok(scenario)
+    Ok((scenario, docs))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,7 +137,7 @@ const SCENARIO_ITEMS: [ScenarioItem; 8] = [
     ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
-const HELP: [(&str, &str); 13] = [
+const HELP: [(&str, &str); 15] = [
     ("⌘⇧E", "settle the focused turn and go to the next one in the queue"),
     ("⌘J", "peek at the next agent in the queue without settling"),
     ("⌘P", "back to the previous agent"),
@@ -136,6 +149,8 @@ const HELP: [(&str, &str); 13] = [
     ("wheel", "scroll a pane's scrollback"),
     ("type + ⏎", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
     ("y / n", "answer an approval in its terminal"),
+    ("e", "edit the focused document in place (neovim); :wq saves and returns to reading"),
+    ("j k ␣ g G", "scroll a document by a line, a page, to the top or the bottom"),
     ("⌘S", "scenario menu"),
     ("⌘Q", "quit"),
 ];
@@ -150,6 +165,7 @@ struct Zero {
     metrics: Metrics,
     grids: HashMap<AgentId, Grid>,
     dirty: HashSet<AgentId>,
+    docs: HashMap<AgentId, DocTile>,
     popup: Popup,
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
@@ -159,14 +175,75 @@ struct Zero {
     _shell_pump: Task<()>,
 }
 
+/// A markdown file in a tile: read through the reader, edited in place through the editor adapter.
+struct DocTile {
+    path: PathBuf,
+    blocks: Vec<Block>,
+    error: Option<String>,
+    scroll: ScrollHandle,
+    face: Face,
+    diagrams: HashMap<u64, Diagram>,
+}
+
+enum Face {
+    Read,
+    Edit(EditSession),
+}
+
+struct EditSession {
+    editor: Box<dyn Editor>,
+    frame: Frame,
+    mode: String,
+    size: (u16, u16),
+    _pump: Task<()>,
+}
+
+impl DocTile {
+    fn open(path: PathBuf) -> Self {
+        let mut tile = Self {
+            path,
+            blocks: Vec::new(),
+            error: None,
+            scroll: ScrollHandle::new(),
+            face: Face::Read,
+            diagrams: HashMap::new(),
+        };
+        tile.reload();
+        tile
+    }
+
+    fn reload(&mut self) {
+        match std::fs::read_to_string(&self.path) {
+            Ok(source) => {
+                self.blocks = markdown::parse(&source);
+                self.error = None;
+            }
+            Err(error) => {
+                self.blocks.clear();
+                self.error = Some(format!("{}: {error}", self.path.display()));
+            }
+        }
+    }
+}
+
 impl Zero {
-    fn new(scenario: Scenario, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
+    fn new(scenario: Scenario, docs: Vec<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
         let metrics = Metrics::measure(window)?;
         let mut source = Simulator::new(scenario);
         let mut model = Model::new();
         model.apply(source.advance(Duration::ZERO))?;
         let (shell, shell_output) = Shell::spawn(80, 24)?;
         model.add_shell(SHELL_ID, 1, b"")?;
+        let mut doc_tiles = HashMap::new();
+        for (index, path) in docs.into_iter().enumerate() {
+            let id = DOC_ID_BASE - index as u64;
+            let name = path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            model.add_document(id, name, 1)?;
+            doc_tiles.insert(id, DocTile::open(path));
+        }
         if let Some(first) = model.queue().first().copied() {
             model.current_desktop = model.agent(first).desktop;
             model.focus = Some(first);
@@ -207,6 +284,7 @@ impl Zero {
             metrics,
             grids: HashMap::new(),
             dirty: HashSet::new(),
+            docs: doc_tiles,
             popup: Popup::None,
             previous_focus: None,
             content: Bounds::default(),
@@ -455,6 +533,10 @@ impl Zero {
         let Some(id) = self.model.focus else {
             return;
         };
+        if self.model.agent(id).kind == AgentKind::Document {
+            self.doc_key(id, keystroke, cx);
+            return;
+        }
         let Some(bytes) = keys::keystroke_bytes(keystroke) else {
             return;
         };
@@ -554,11 +636,190 @@ impl Zero {
         Some(grid.prepare(&self.metrics, origin, focused, color, window))
     }
 
+    fn doc_key(&mut self, id: AgentId, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        let reading = matches!(self.docs.get(&id).map(|tile| &tile.face), Some(Face::Read));
+        if reading && keystroke.key == "e" && !keystroke.modifiers.shift {
+            self.start_edit(id, cx);
+            return;
+        }
+        let Some(tile) = self.docs.get_mut(&id) else {
+            return;
+        };
+        if let Face::Edit(session) = &mut tile.face {
+            if let Some(key) = keys::editor_key(keystroke) {
+                session.editor.input(&key);
+            }
+            return;
+        }
+        let page = f32::from(tile.scroll.bounds().size.height) - 40.;
+        let shift = keystroke.modifiers.shift;
+        let by = match keystroke.key.as_str() {
+            "j" | "down" => 40.,
+            "k" | "up" => -40.,
+            "space" if shift => -page,
+            "space" | "pagedown" => page,
+            "pageup" => -page,
+            "g" if shift => f32::INFINITY,
+            "g" | "home" => f32::NEG_INFINITY,
+            "end" => f32::INFINITY,
+            _ => return,
+        };
+        let max = f32::from(tile.scroll.max_offset().height);
+        let next = (f32::from(tile.scroll.offset().y) - by).clamp(-max, 0.);
+        tile.scroll.set_offset(point(px(0.), px(next)));
+        cx.notify();
+    }
+
+    /// The cell grid a tile's body holds right now, for an editor spawned into it.
+    fn grid_size_for(&self, id: AgentId) -> (u16, u16) {
+        let ids = self.model.desktop_agents();
+        let rect = ids
+            .iter()
+            .position(|&other| other == id)
+            .and_then(|index| tiles(self.content, ids.len(), px(GAP)).into_iter().nth(index));
+        let Some(rect) = rect else {
+            return (80, 24);
+        };
+        let cols = ((f32::from(rect.size.width) - 20.) / f32::from(self.metrics.cell_width)).floor().max(1.);
+        let rows = ((f32::from(rect.size.height) - 40.) / f32::from(self.metrics.line_height)).floor().max(1.);
+        (cols as u16, rows as u16)
+    }
+
+    fn start_edit(&mut self, id: AgentId, cx: &mut Context<Self>) {
+        let (cols, rows) = self.grid_size_for(id);
+        let Some(tile) = self.docs.get_mut(&id) else {
+            return;
+        };
+        if matches!(tile.face, Face::Edit(_)) {
+            return;
+        }
+        let open = Open { path: tile.path.clone(), line: 1, cols, rows, clean: false };
+        match zero::editor::spawn(Engine::Neovim, open) {
+            Ok((editor, events)) => {
+                let (sender, mut receiver) = mpsc::unbounded::<EditorEvent>();
+                thread::spawn(move || {
+                    for event in events {
+                        if sender.unbounded_send(event).is_err() {
+                            break;
+                        }
+                    }
+                });
+                let pump = cx.spawn(async move |this, cx| {
+                    while let Some(event) = receiver.next().await {
+                        let mut batch = vec![event];
+                        while let Ok(more) = receiver.try_recv() {
+                            batch.push(more);
+                        }
+                        if this.update(cx, |zero, cx| zero.on_editor_event(id, batch, cx)).is_err() {
+                            break;
+                        }
+                    }
+                });
+                tile.face = Face::Edit(EditSession {
+                    editor,
+                    frame: Frame::default(),
+                    mode: String::new(),
+                    size: (cols, rows),
+                    _pump: pump,
+                });
+            }
+            Err(error) => tile.error = Some(format!("{error:#}")),
+        }
+        cx.notify();
+    }
+
+    fn on_editor_event(&mut self, id: AgentId, batch: Vec<EditorEvent>, cx: &mut Context<Self>) {
+        let Some(tile) = self.docs.get_mut(&id) else {
+            return;
+        };
+        if batch.contains(&EditorEvent::Exited) {
+            tile.face = Face::Read;
+            tile.reload();
+        } else if let Face::Edit(session) = &mut tile.face {
+            let frame = session.editor.frame();
+            session.mode = frame.mode.clone();
+            session.frame = Frame::from_editor(&frame);
+        }
+        cx.notify();
+    }
+
+    fn close_editor(&mut self, id: AgentId, save: bool, cx: &mut Context<Self>) {
+        if let Some(DocTile { face: Face::Edit(session), .. }) = self.docs.get_mut(&id) {
+            if save {
+                session.editor.save_and_quit();
+            } else {
+                session.editor.quit();
+            }
+        }
+        cx.notify();
+    }
+
+    fn prepare_editor(
+        &mut self,
+        id: AgentId,
+        bounds: Bounds<Pixels>,
+        focused: bool,
+        window: &mut Window,
+    ) -> Option<Prepared> {
+        let origin = point(bounds.origin.x + px(10.), bounds.origin.y + px(6.));
+        let avail = size(bounds.size.width - px(20.), bounds.size.height - px(10.));
+        let cols = (f32::from(avail.width) / f32::from(self.metrics.cell_width)).floor().max(1.) as u16;
+        let rows = (f32::from(avail.height) / f32::from(self.metrics.line_height)).floor().max(1.) as u16;
+        let Some(DocTile { face: Face::Edit(session), .. }) = self.docs.get_mut(&id) else {
+            return None;
+        };
+        if session.size != (cols, rows) {
+            session.size = (cols, rows);
+            session.editor.resize(cols, rows);
+        }
+        let (_, color) = theme::mode(&session.mode);
+        Some(session.frame.prepare(&self.metrics, origin, focused, color, window))
+    }
+
+    fn render_reader(&mut self, id: AgentId, tile_width: Pixels, cx: &mut Context<Self>) -> AnyElement {
+        let _ = cx;
+        let Some(tile) = self.docs.get_mut(&id) else {
+            return div().into_any_element();
+        };
+        let width = (tile_width - px(56.)).min(px(720.));
+        let mut content: Vec<AnyElement> = Vec::new();
+        if let Some(error) = &tile.error {
+            content.push(reader::error_card(error.clone()).into_any_element());
+        }
+        let dir = tile.path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let mut reader = Reader::new(dir, &mut tile.diagrams, width);
+        content.extend(reader.render(&tile.blocks));
+        div()
+            .id(("reader", id))
+            .flex_1()
+            .w_full()
+            .min_h(px(0.))
+            .overflow_y_scroll()
+            .track_scroll(&tile.scroll)
+            .px(px(28.))
+            .py(px(18.))
+            .font_family(".SystemUIFont")
+            .text_size(px(14.5))
+            .line_height(relative(1.55))
+            .text_color(theme::fg())
+            .child(div().w_full().max_w(width).flex().flex_col().gap(px(12.)).children(content))
+            .into_any_element()
+    }
+
     fn render_pane(&mut self, id: AgentId, rect: Bounds<Pixels>, now: Duration, cx: &mut Context<Self>) -> AnyElement {
         let agent = self.model.agent(id);
         let focused = self.model.focus == Some(id);
         let owes = agent.turn_opened_at.is_some();
-        let color = theme::state_color(agent.kind, agent.state);
+        let is_doc = agent.kind == AgentKind::Document;
+        let editing = self.docs.get(&id).and_then(|tile| match &tile.face {
+            Face::Edit(session) => Some(session.mode.clone()),
+            Face::Read => None,
+        });
+        let (label, color) = match &editing {
+            Some(mode) => theme::mode(mode),
+            None if is_doc => ("read", theme::doc()),
+            None => (agent.state.label(), theme::state_color(agent.kind, agent.state)),
+        };
         let age = agent.turn_opened_at.map(|opened| now.saturating_sub(opened));
         let warmth = age.map_or(0., |age| (age.as_secs_f32() / 120.).min(1.));
         let ring = if focused {
@@ -576,9 +837,8 @@ impl Zero {
             gpui::transparent_black()
         };
         let name = agent.name.clone();
-        let label = agent.state.label();
         let entity = cx.entity();
-        let header = div()
+        let mut header = div()
             .flex_none()
             .h(px(30.))
             .px(px(12.))
@@ -621,39 +881,84 @@ impl Zero {
                         .child(format_age(age)),
                 )
             })
-            .child(div().flex_1())
-            .when(owes, |header| {
-                header.child(
-                    div()
-                        .id(("settle", id))
-                        .flex_none()
-                        .h(px(20.))
-                        .pl(px(7.))
-                        .pr(px(4.))
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .rounded(px(5.))
-                        .cursor_pointer()
-                        .text_size(px(11.))
-                        .text_color(theme::fg_dark())
-                        .hover(|el| el.bg(theme::bg_highlight()).text_color(theme::fg()))
-                        .tooltip(tip("close this turn and go to the next one", "⌘⇧E"))
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(move |zero, _, _, cx| {
-                                cx.stop_propagation();
-                                if zero.model.focus == Some(id) {
-                                    zero.settle_and_next(cx);
-                                } else {
-                                    zero.settle(id, cx);
-                                }
-                            }),
-                        )
-                        .child("settle")
-                        .child(key_cap("⌘⇧E")),
-                )
-            });
+            .child(div().flex_1());
+        if owes {
+            header = header.child(header_button(
+                ("settle", id),
+                "settle",
+                "⌘⇧E",
+                tip("close this turn and go to the next one", "⌘⇧E"),
+                cx.listener(move |zero, _, _, cx| {
+                    cx.stop_propagation();
+                    if zero.model.focus == Some(id) {
+                        zero.settle_and_next(cx);
+                    } else {
+                        zero.settle(id, cx);
+                    }
+                }),
+            ));
+        }
+        if is_doc && editing.is_none() {
+            header = header.child(header_button(
+                ("edit", id),
+                "edit",
+                "e",
+                tip("edit this file in place with neovim", "e"),
+                cx.listener(move |zero, _, window, cx| {
+                    cx.stop_propagation();
+                    window.focus(&zero.focus_handle);
+                    zero.focus(Some(id), SwitchPath::Click, cx);
+                    zero.start_edit(id, cx);
+                }),
+            ));
+        }
+        if editing.is_some() {
+            header = header
+                .child(header_button(
+                    ("save", id),
+                    "save & close",
+                    ":wq",
+                    tip("write the file and go back to reading it", ":wq"),
+                    cx.listener(move |zero, _, _, cx| {
+                        cx.stop_propagation();
+                        zero.close_editor(id, true, cx);
+                    }),
+                ))
+                .child(header_button(
+                    ("discard", id),
+                    "discard",
+                    ":q!",
+                    tip("drop the changes and go back to reading", ":q!"),
+                    cx.listener(move |zero, _, _, cx| {
+                        cx.stop_propagation();
+                        zero.close_editor(id, false, cx);
+                    }),
+                ));
+        }
+        let body: AnyElement = if is_doc && editing.is_none() {
+            self.render_reader(id, rect.size.width, cx)
+        } else {
+            let editing_now = editing.is_some();
+            canvas(
+                move |bounds, window, cx| {
+                    entity.update(cx, |zero, _| {
+                        if editing_now {
+                            zero.prepare_editor(id, bounds, focused, window)
+                        } else {
+                            zero.prepare_grid(id, bounds, focused, window)
+                        }
+                    })
+                },
+                |_, prepared, window, cx| {
+                    if let Some(prepared) = prepared {
+                        prepared.paint(window, cx);
+                    }
+                },
+            )
+            .flex_1()
+            .w_full()
+            .into_any_element()
+        };
         div()
             .absolute()
             .left(rect.origin.x)
@@ -690,22 +995,11 @@ impl Zero {
                     zero.focus(Some(id), SwitchPath::Click, cx);
                 }),
             )
-            .on_scroll_wheel(cx.listener(move |zero, event, _, cx| zero.scroll(id, event, cx)))
+            .when(!is_doc, |card| {
+                card.on_scroll_wheel(cx.listener(move |zero, event, _, cx| zero.scroll(id, event, cx)))
+            })
             .child(header)
-            .child(
-                canvas(
-                    move |bounds, window, cx| {
-                        entity.update(cx, |zero, _| zero.prepare_grid(id, bounds, focused, window))
-                    },
-                    |_, prepared, window, cx| {
-                        if let Some(prepared) = prepared {
-                            prepared.paint(window, cx);
-                        }
-                    },
-                )
-                .flex_1()
-                .w_full(),
-            )
+            .child(body)
             .into_any_element()
     }
 
@@ -782,7 +1076,7 @@ impl Zero {
             let color = theme::state_color(agent.kind, agent.state);
             right = right
                 .child(div().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(agent.name.clone()))
-                .child(chip(agent.state.label(), color));
+                .child(chip(label(agent), color));
         }
         let speed = self.source.speed();
         right = right
@@ -972,7 +1266,7 @@ impl Zero {
                             .child(dot(color))
                             .child(div().flex_1().text_color(if is_selected { theme::fg() } else { theme::fg_dark() }).child(agent.name.clone()))
                             .child(key_cap(&format!("⌘{}", agent.desktop)))
-                            .child(chip(agent.state.label(), color))
+                            .child(chip(label(agent), color))
                             .child(div().w(px(40.)).font_family("JetBrains Mono").text_size(px(11.)).text_color(theme::comment()).child(age))
                             .child(div().w(px(40.)).flex().justify_end().when(
                                 index == 0 && query.is_empty() && agent.turn_opened_at.is_some(),
@@ -1181,6 +1475,39 @@ fn key_cap(text: &str) -> Div {
         .text_size(px(11.))
         .text_color(theme::fg_dark())
         .child(text.to_string())
+}
+
+/// What the bar and the list call an agent: its state, or "doc" for a document tile.
+fn label(agent: &Agent) -> &'static str {
+    if agent.kind == AgentKind::Document { "doc" } else { agent.state.label() }
+}
+
+/// A small header action that shows the key it stands for.
+fn header_button(
+    id: impl Into<ElementId>,
+    text: &'static str,
+    key: &str,
+    tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex_none()
+        .h(px(20.))
+        .pl(px(7.))
+        .pr(px(4.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .rounded(px(5.))
+        .cursor_pointer()
+        .text_size(px(11.))
+        .text_color(theme::fg_dark())
+        .hover(|el| el.bg(theme::bg_highlight()).text_color(theme::fg()))
+        .tooltip(tooltip)
+        .on_mouse_down(MouseButton::Left, on_click)
+        .child(text)
+        .child(key_cap(key))
 }
 
 fn chip(label: &'static str, color: Hsla) -> Div {
