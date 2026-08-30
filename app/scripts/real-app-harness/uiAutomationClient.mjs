@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { MacOSDriver } from './macosDriver.mjs';
+import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -63,13 +63,6 @@ function readNonEmptyString(value) {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function bundledDaemonPathForApp(appPath) {
-  if (appPath.endsWith('.app')) {
-    return path.join(appPath, 'Contents', 'MacOS', 'attn');
-  }
-  return path.join(path.dirname(appPath), 'attn');
 }
 
 function normalizeBuildInfo(raw) {
@@ -138,40 +131,29 @@ export class UiAutomationClient {
       : this.launchEnv;
 
     const focusDriver = this.#focusDriver();
-
-    if (effectiveLaunchEnv && Object.keys(effectiveLaunchEnv).length > 0) {
-      // LaunchServices and `open` do not reliably propagate env into Tauri's
-      // window-creation path, so custom env needs spawn-style delivery.
-      const executablePath = this.appPath.endsWith('.app')
-        ? path.join(this.appPath, 'Contents', 'MacOS', 'app')
-        : this.appPath;
-      const child = spawn(executablePath, [], {
-        detached: true,
-        stdio: 'ignore',
-        env: {
-          ...process.env,
-          ...effectiveLaunchEnv,
-        },
-      });
-      child.unref();
-      await focusDriver.waitForMainWindow(10_000).catch(() => null);
-      // The AX set-position call also nudges the WebView out of the
-      // off-screen-init throttle state it otherwise enters.
-      const parkPx = Number.parseInt(parkPxStr || '', 10);
-      if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
-        await focusDriver.parkWindow(parkPx).catch((error) => {
-          console.warn(`[RealAppHarness] Park failed: ${error?.message || error}`);
-        });
-      }
+    const launched = await appPlatform.launchApp({
+      appPath: this.appPath,
+      env: effectiveLaunchEnv,
+      background: this.backgroundLaunch,
+    });
+    if (!launched.spawned) {
       return;
     }
-    const openArgs = this.backgroundLaunch ? ['-g', this.appPath] : [this.appPath];
-    await execFileAsync('open', openArgs);
+
+    await focusDriver.waitForMainWindow(10_000, 150, { pid: launched.pid }).catch(() => null);
+    // The AX set-position call also nudges the WebView out of the
+    // off-screen-init throttle state it otherwise enters.
+    const parkPx = Number.parseInt(parkPxStr || '', 10);
+    if (alwaysOnTop && Number.isInteger(parkPx) && parkPx > 0) {
+      await focusDriver.parkWindow(parkPx).catch((error) => {
+        console.warn(`[RealAppHarness] Park failed: ${error?.message || error}`);
+      });
+    }
   }
 
   #focusDriver() {
     if (!this._focusDriver) {
-      this._focusDriver = new MacOSDriver({ bundleId: this.bundleId, appPath: this.appPath });
+      this._focusDriver = appPlatform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath });
     }
     return this._focusDriver;
   }
@@ -186,10 +168,7 @@ export class UiAutomationClient {
       existingPid = null;
     }
 
-    try {
-      await execFileAsync('osascript', ['-e', `tell application id "${this.bundleId}" to quit`]);
-    } catch {
-    }
+    await appPlatform.requestQuit({ bundleId: this.bundleId, pid: existingPid });
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
@@ -201,13 +180,13 @@ export class UiAutomationClient {
     }
 
     const remainingPids = await this.listAppPids();
-    for (const pid of new Set([existingPid, ...remainingPids].filter((value) => Number.isInteger(value) && value > 0))) {
+    for (const pid of livePids([existingPid, ...remainingPids])) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {}
     }
     await delay(500);
-    for (const pid of await this.listAppPids()) {
+    for (const pid of livePids([existingPid, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGKILL');
       } catch {}
@@ -223,10 +202,12 @@ export class UiAutomationClient {
   }
 
   async waitForManifest(timeoutMs = 15_000) {
+    // A caller's budget is what a healthy launch costs on its own platform.
+    const budgetMs = Math.max(timeoutMs, appPlatform.manifestWaitFloorMs);
     const startedAt = Date.now();
     let lastError = null;
 
-    while (Date.now() - startedAt < timeoutMs) {
+    while (Date.now() - startedAt < budgetMs) {
       try {
         const manifest = this.readManifest();
         if (manifest?.enabled && manifest.port && manifest.token && processExists(manifest.pid)) {
@@ -239,7 +220,7 @@ export class UiAutomationClient {
     }
 
     throw new Error(
-      `Timed out waiting for UI automation manifest at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
+      `Timed out waiting for UI automation manifest after ${budgetMs}ms at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
     );
   }
 
@@ -248,15 +229,7 @@ export class UiAutomationClient {
   }
 
   async listAppPids() {
-    try {
-      const { stdout } = await execFileAsync('pgrep', ['-f', `${this.appPath}/Contents/MacOS/app`]);
-      return stdout
-        .split(/\s+/)
-        .map((value) => Number.parseInt(value, 10))
-        .filter((value) => Number.isInteger(value) && value > 0);
-    } catch {
-      return [];
-    }
+    return appPlatform.listAppPids({ appPath: this.appPath });
   }
 
   async request(action, payload = {}, options = {}) {
@@ -381,7 +354,7 @@ export class UiAutomationClient {
   }
 
   resolveDaemonBinaryPath() {
-    const bundledPath = bundledDaemonPathForApp(this.appPath);
+    const bundledPath = appDaemonInTree(this.appPath);
     const explicitPath = this.launchEnv && typeof this.launchEnv === 'object' && typeof this.launchEnv.ATTN_DAEMON_BINARY === 'string'
       ? this.launchEnv.ATTN_DAEMON_BINARY.trim()
       : (typeof process.env.ATTN_DAEMON_BINARY === 'string' ? process.env.ATTN_DAEMON_BINARY.trim() : '');
@@ -502,6 +475,10 @@ export class UiAutomationClient {
       `Timed out waiting for frontend automation responsiveness via ${action}: ${lastError instanceof Error ? lastError.message : lastError || 'unknown error'}`
     );
   }
+}
+
+function livePids(candidates) {
+  return new Set(candidates.filter((value) => processExists(value)));
 }
 
 function processExists(pid) {

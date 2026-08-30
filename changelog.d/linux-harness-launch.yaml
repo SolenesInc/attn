@@ -1,0 +1,13 @@
+kind: internal
+area: linux
+change: >
+  The real-app harness launches, observes, and quits the Linux install tree, so
+  `pnpm --dir app run real-app:bridge-smoke` and the scenarios that drive the
+  app through the DOM bridge alone run under xvfb-run. A new
+  `app/scripts/real-app-harness/platform.mjs` is the single place the harness
+  branches on the OS: it knows where the app executable, the bundled daemon, and
+  build-identity.json sit in each install shape, spawns `<appPath>/bin/attn-app`
+  on Linux, waits for a window with `xdotool search --pid` when xdotool is
+  present, and quits by signalling the pid from the automation manifest.
+  Scenarios that need native input, native screenshots, or an `attn-dev://` deep
+  link are still macOS-only. macOS behavior is unchanged.
