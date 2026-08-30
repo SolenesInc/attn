@@ -19,7 +19,6 @@ type ProvenanceEntry =
   | { kind: 'automation'; automation: AutomationProvenanceValue }
   | { kind: 'pull-request'; pullRequest: SessionPullRequest; all: SessionPullRequest[] };
 
-// Hover has to survive the gap between the line and the popover below it.
 const HOVER_CLOSE_DELAY_MS = 120;
 
 function shortDefinitionName(name: string): string {

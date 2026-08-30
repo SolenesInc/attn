@@ -79,7 +79,6 @@
   color: var(--pr-tone, var(--color-text-tertiary));
 }
 
-/* The status dot the compact density and the popover share. */
 .session-provenance__dot {
   flex: none;
   width: 7px;

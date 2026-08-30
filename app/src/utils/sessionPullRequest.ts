@@ -7,8 +7,6 @@ export interface SessionPullRequestDescription {
   tone: SessionPullRequestTone;
 }
 
-// Draft shares the open bucket: both are live work worth a surface. Closed
-// sorts last and never reaches one, so the popover list is its only home.
 const STATE_RANK: Record<string, number> = { draft: 0, open: 0, merged: 1, closed: 2 };
 const CLOSED_RANK = 2;
 
@@ -21,7 +19,6 @@ function createdAt(pr: SessionPullRequest): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Open first, then merged, then closed; newest first inside each bucket. */
 export function sortSessionPullRequests(
   pullRequests: readonly SessionPullRequest[],
 ): SessionPullRequest[] {
@@ -30,7 +27,6 @@ export function sortSessionPullRequests(
   );
 }
 
-/** The one a surface shows: newest open, else newest merged, else nothing. */
 export function pickSessionPullRequest(
   pullRequests?: readonly SessionPullRequest[],
 ): SessionPullRequest | undefined {
@@ -39,8 +35,6 @@ export function pickSessionPullRequest(
   return stateRank(best) === CLOSED_RANK ? undefined : best;
 }
 
-// Strongest blocker wins, and every status field can be absent until the
-// refresh job has fetched from GitHub once.
 export function describeSessionPullRequest(pr: SessionPullRequest): SessionPullRequestDescription {
   if (pr.state === 'merged') return { label: 'merged', tone: 'merged' };
   if (pr.state === 'closed') return { label: 'closed', tone: 'neutral' };
@@ -92,7 +86,6 @@ export function describeSessionPullRequestMerge(
   }
 }
 
-/** True until the refresh job has fetched this PR's status from GitHub once. */
 export function sessionPullRequestAwaitsStatus(pr: SessionPullRequest): boolean {
   return !pr.status_fetched_at;
 }

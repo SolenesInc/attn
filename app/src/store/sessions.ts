@@ -113,8 +113,6 @@ declare global {
   }
 }
 
-// Identity plus every field the surfaces render, so a status refresh repaints
-// but an unrelated broadcast does not churn the session list.
 function samePullRequests(
   a: readonly SessionPullRequest[] | undefined,
   b: readonly SessionPullRequest[] | undefined,
