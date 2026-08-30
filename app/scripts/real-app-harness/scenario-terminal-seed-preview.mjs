@@ -10,7 +10,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { delay } from './macosDriver.mjs';
+import { delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,

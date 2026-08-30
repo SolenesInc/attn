@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import {
   captureScreenshot,
@@ -36,7 +36,7 @@ async function main() {
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const client = new UiAutomationClient({ appPath: options.appPath });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
 
   console.log(`[RealAppHarness] runDir=${runDir}`);
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);

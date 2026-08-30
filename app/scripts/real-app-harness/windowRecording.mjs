@@ -3,9 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { requireInstalledWindowRecorderLaunch } from './windowRecorderApp.mjs';
 
-export function recordingEnabled(env = process.env) {
+export function recordingEnabled(env = process.env, platform = process.platform, warn = console.warn) {
   const value = String(env.ATTN_HARNESS_RECORD ?? '').trim().toLowerCase();
-  return value === '1' || value === 'true' || value === 'on';
+  const requested = value === '1' || value === 'true' || value === 'on';
+  if (requested && platform !== 'darwin') {
+    warn(`[RealAppHarness] recording unsupported on ${platform}; continuing without recording.`);
+    return false;
+  }
+  return requested;
 }
 
 export async function ensureWindowRecorder(options) {

@@ -6,7 +6,7 @@ process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -86,7 +86,7 @@ async function main() {
   }
 
   const finalFrontmost = await frontmost();
-  const attnDriver = new MacOSDriver({ bundleId: client.bundleId, appPath: client.appPath });
+  const attnDriver = createWindowDriver({ bundleId: client.bundleId, appPath: client.appPath });
   const attnWid = await attnDriver.mainWindowId();
   console.log(`[probe] attn window id after launch=${attnWid}`);
   await client.quitApp().catch(() => {});

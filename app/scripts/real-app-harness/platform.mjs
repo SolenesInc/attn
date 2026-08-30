@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -79,41 +80,6 @@ function spawnedOwnedPid(launch) {
   return pid;
 }
 
-export class LinuxWindowDriver {
-  constructor({ appPath = null, run = execFileAsync } = {}) {
-    this.appPath = appPath;
-    this.run = run;
-  }
-
-  async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150, opts = {}) {
-    const pid = Number.isInteger(opts.pid) && opts.pid > 0 ? opts.pid : null;
-    if (!pid) {
-      return null;
-    }
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      let stdout = '';
-      try {
-        // Without --onlyvisible the first hit is GTK's unmapped 10x10 helper window.
-        ({ stdout } = await this.run('xdotool', ['search', '--onlyvisible', '--pid', String(pid)]));
-      } catch (error) {
-        if (error?.code === 'ENOENT') {
-          return null;
-        }
-      }
-      const [windowId] = parsePids(stdout);
-      if (windowId) {
-        return windowId;
-      }
-      await delay(pollIntervalMs);
-    }
-    return null;
-  }
-
-  // The app reads ATTN_HARNESS_PARK_VISIBLE_PX only under cfg(macos).
-  async parkWindow() {}
-}
-
 const darwinPlatform = {
   os: 'darwin',
   manifestWaitFloorMs: 0,
@@ -134,8 +100,8 @@ const darwinPlatform = {
       : path.join(path.dirname(appPath), 'build-identity.json');
   },
 
-  createWindowDriver({ appPath, bundleId }) {
-    return new MacOSDriver({ appPath, bundleId });
+  createWindowDriver(options) {
+    return new MacOSDriver(options);
   },
 
   async launchApp({ appPath, env = null, background = false }) {
@@ -190,8 +156,8 @@ const linuxPlatform = {
     return path.join(appPath, 'resources', 'build-identity.json');
   },
 
-  createWindowDriver({ appPath }) {
-    return new LinuxWindowDriver({ appPath });
+  createWindowDriver(options) {
+    return new LinuxDriver(options);
   },
 
   async launchApp({ appPath, env = null }) {
@@ -240,6 +206,10 @@ export function appPlatformFor(platform = process.platform) {
 
 export const appPlatform = appPlatformFor();
 
+export function createWindowDriver(options = {}) {
+  return appPlatform.createWindowDriver(options);
+}
+
 export function appExecutableInTree(appPath) {
   return appPlatform.appExecutableInTree(appPath);
 }
@@ -251,3 +221,5 @@ export function appDaemonInTree(appPath) {
 export function appBuildIdentityInTree(appPath) {
   return appPlatform.appBuildIdentityInTree(appPath);
 }
+
+export { delay };

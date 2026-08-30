@@ -14,7 +14,8 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
-import { MacOSDriver } from './macosDriver.mjs';
+import { createWindowDriver } from './platform.mjs';
+import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
@@ -59,12 +60,12 @@ async function typeLikeAPerson(client, sessionId, paneId, text) {
   await client.request('type_pane_via_ui', { sessionId, paneId, text });
 }
 
-// Claude treats a fast multi-line write as a paste, so the submit has to be a
-// lone carriage return a beat later.
+// Keep the prompt on the user's input path: auto-settle deliberately ignores
+// automation writes, which this scenario checks again at the end.
 async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(600);
-  await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\r' });
 }
 
 async function main() {
@@ -95,7 +96,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = new MacOSDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath });
   const note = (message, extra) => runner.log(message, extra);
 
   let agentId = null;
@@ -252,8 +253,13 @@ async function main() {
     });
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
-      const windowBounds = await client.request('get_window_bounds', {});
-      runner.assert(Boolean(windowBounds?.logicalBounds), `window bounds available: ${JSON.stringify(windowBounds)}`);
+      const logicalBounds = await getFrontWindowBounds(null, {
+        appPath: options.appPath,
+        client,
+        driver,
+      });
+      runner.assert(Boolean(logicalBounds), `window bounds available: ${JSON.stringify(logicalBounds)}`);
+      const windowBounds = { logicalBounds };
       const cellA = await client.request('get_pane_cell_rect', {
         sessionId: agentId,
         paneId: agentPaneId,

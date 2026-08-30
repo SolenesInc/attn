@@ -7,7 +7,7 @@ function printHelp() {
   console.log(`Usage: node scripts/real-app-harness/capture-app-screenshot.mjs [options]
 
 Options:
-  --path <file>      Save a native macOS window screenshot to an explicit path
+  --path <file>      Save a native app-window screenshot to an explicit path
   --launch           Launch the selected packaged app before capturing
   --fresh-launch     Quit and relaunch the selected packaged app before capturing
   --crop x,y,WxH     Crop to a window-relative region (also accepts x,y,w,h)
