@@ -51,6 +51,18 @@ fails the scenario on a non-empty ledger and prints the lines.
   needs. Every arming logs what it allowed. The pi scenarios carry
   `['pi']` — they exec the real `pi` binary against a stub provider or a
   recording, and keep claude/codex/copilot armed.
+- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses narration,
+  classification, titling and every other headless LLM task (`internal/headless`)
+  instead of enqueueing one. Without it the ledger check races the daemon:
+  `narrate_workspace` debounces two minutes and retries, so its `claude --print`
+  lands after `summary.json`, and the single `current-run` pointer stamps it with
+  whichever scenario is armed by then. A scenario that allows real agents keeps
+  headless tasks on.
+- `summary.json` carries `headlessTasks`, read from the environment of the
+  daemon the scenario ran against, so a green run states the switch was in force
+  rather than leaving it assumed. Counting `headless task refused` lines instead
+  does not work: the daemon logs them as a scenario tears its sessions down, in
+  the same second `summary.json` is written.
 
 ## Reading results
 

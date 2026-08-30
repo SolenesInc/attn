@@ -21,6 +21,10 @@ export const TRIPWIRE_EXIT_CODE = 97;
 export const TRIPWIRE_MARKER_VAR = 'ATTN_AGENT_TRIPWIRE';
 export const TRIPWIRE_LEDGER_NAME = 'agent-tripwire.ledger';
 
+// internal/headless: `off` makes the daemon refuse every headless LLM task
+// (narration, classifier, title, reconcile) and log the refusal.
+export const HEADLESS_TASKS_VAR = 'ATTN_HEADLESS_TASKS';
+
 // A real `attn agent claude` launch measured 8584 bytes of argv (the appended
 // system prompt); the ledger names what ran, it does not archive it.
 const LEDGER_ARGV_CHARS = 512;
@@ -104,10 +108,19 @@ export function writeTripwireShims({ dir, binaries }) {
   return dir;
 }
 
+function headlessTasksOff(binaries) {
+  return binaries.length > 0;
+}
+
 export function applyTripwireEnv(env, { dir, binaries }) {
   const entries = (env.PATH || '').split(path.delimiter).filter((entry) => entry && entry !== dir);
   env.PATH = [dir, ...entries].join(path.delimiter);
   env[TRIPWIRE_MARKER_VAR] = tripwireMarker({ dir, binaries });
+  if (headlessTasksOff(binaries)) {
+    env[HEADLESS_TASKS_VAR] = 'off';
+  } else {
+    delete env[HEADLESS_TASKS_VAR];
+  }
   for (const name of TRIPWIRE_BINARIES) {
     const key = EXECUTABLE_VARS[name];
     if (binaries.includes(name)) {
@@ -127,6 +140,9 @@ export function agentTripwireLaunchEnv(env = process.env) {
     return {};
   }
   const launchEnv = { PATH: env.PATH, [TRIPWIRE_MARKER_VAR]: marker };
+  if (env[HEADLESS_TASKS_VAR]) {
+    launchEnv[HEADLESS_TASKS_VAR] = env[HEADLESS_TASKS_VAR];
+  }
   for (const name of TRIPWIRE_BINARIES) {
     const key = EXECUTABLE_VARS[name];
     if (env[key]) {
@@ -162,10 +178,13 @@ export function armAgentTripwire({
   runDir,
   allowRealAgents,
   env = process.env,
+  profile = currentHarnessProfile(),
+  readSwitch = readDaemonHeadlessSwitch,
   log = (message) => console.log(`[agent-tripwire] ${message}`),
 }) {
   const dir = tripwireDir(env);
   const binaries = armedBinaries(allowRealAgents);
+  const headlessOff = headlessTasksOff(binaries);
   const ledgerPath = path.join(runDir, TRIPWIRE_LEDGER_NAME);
 
   writeTripwireShims({ dir, binaries });
@@ -178,6 +197,9 @@ export function armAgentTripwire({
     log(`REAL AGENTS ALLOWED for ${scenarioId}: ${allowed.join(', ')} — this scenario still runs a real agent binary.`);
   }
   log(`armed for ${scenarioId}: ${binaries.length > 0 ? binaries.join(', ') : '(nothing)'} — ledger ${ledgerPath}`);
+  if (headlessOff) {
+    log(`${HEADLESS_TASKS_VAR}=off for ${scenarioId}: the daemon refuses narration, classification and every other headless task.`);
+  }
 
   return {
     scenarioId,
@@ -185,8 +207,10 @@ export function armAgentTripwire({
     binaries,
     allowed,
     ledgerPath,
+    headlessOff,
     marker: tripwireMarker({ dir, binaries }),
     read: () => readTripwireLedger(ledgerPath),
+    readHeadlessSwitch: () => (headlessOff ? readSwitch({ profile }) : null),
   };
 }
 
@@ -215,10 +239,29 @@ function livingDaemonPid(pidPath) {
   return pid;
 }
 
+// The daemon reads ATTN_HEADLESS_TASKS from its own environment, so that
+// environment is the receipt that the switch was in force for the whole run.
+export function readDaemonHeadlessSwitch({
+  profile = currentHarnessProfile(),
+  pidPath = daemonPidFilePathForProfile(profile),
+  readEnvironment = readProcessEnvironment,
+} = {}) {
+  const pid = livingDaemonPid(pidPath);
+  if (!pid) {
+    return 'no daemon';
+  }
+  try {
+    return readEnvironment(pid).includes(`${HEADLESS_TASKS_VAR}=off`) ? 'off' : 'on';
+  } catch {
+    return 'unreadable';
+  }
+}
+
 // A daemon started before this scenario carries another run's PATH and agent
 // overrides, so the tripwire would watch a door the daemon never uses.
 export function ensureDaemonCarriesTripwire({
   marker,
+  headlessOff = false,
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
   pidPath = daemonPidFilePathForProfile(profile),
@@ -238,7 +281,9 @@ export function ensureDaemonCarriesTripwire({
     log(`could not read the environment of daemon pid ${pid}: ${error?.message || error}`);
     return { restarted: false, reason: 'daemon environment unreadable' };
   }
-  if (environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`)) {
+  const carriesMarker = environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`);
+  const carriesSwitch = !headlessOff || environment.includes(`${HEADLESS_TASKS_VAR}=off`);
+  if (carriesMarker && carriesSwitch) {
     return { restarted: false, reason: 'daemon already armed' };
   }
 

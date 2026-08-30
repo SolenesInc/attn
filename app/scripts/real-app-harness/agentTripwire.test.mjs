@@ -9,6 +9,8 @@ import {
   armAgentTripwire,
   armedBinaries,
   ensureDaemonCarriesTripwire,
+  HEADLESS_TASKS_VAR,
+  readDaemonHeadlessSwitch,
   readTripwireLedger,
   TRIPWIRE_BINARIES,
   TRIPWIRE_EXIT_CODE,
@@ -157,11 +159,79 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
     expect(agentTripwireLaunchEnv(env)).toEqual({
       PATH: env.PATH,
       [TRIPWIRE_MARKER_VAR]: tripwire.marker,
+      [HEADLESS_TASKS_VAR]: 'off',
       ATTN_CLAUDE_EXECUTABLE: path.join(tripwire.dir, 'claude'),
       ATTN_CODEX_EXECUTABLE: path.join(tripwire.dir, 'codex'),
       ATTN_COPILOT_EXECUTABLE: path.join(tripwire.dir, 'copilot'),
       ATTN_PI_EXECUTABLE: path.join(tripwire.dir, 'pi'),
     });
+  });
+
+  it('leaves headless tasks on for a scenario the catalog lets run a real agent', () => {
+    const env = freshEnv();
+
+    armAgentTripwire({ scenarioId: 'PI-AUTOMODE', runDir, allowRealAgents: true, env, log: () => {} });
+
+    expect(env[HEADLESS_TASKS_VAR]).toBeUndefined();
+    expect(agentTripwireLaunchEnv(env)[HEADLESS_TASKS_VAR]).toBeUndefined();
+  });
+
+  it('clears the switch an earlier armed scenario set in the same shell', () => {
+    const env = freshEnv();
+    armAgentTripwire({ scenarioId: 'TR-401', runDir, env, log: () => {} });
+
+    armAgentTripwire({ scenarioId: 'PI-AUTOMODE', runDir, allowRealAgents: true, env, log: () => {} });
+
+    expect(env[HEADLESS_TASKS_VAR]).toBeUndefined();
+  });
+});
+
+describe('the receipt that the switch was in force', () => {
+  const pidPath = () => {
+    const file = path.join(tmpDir, 'attn.pid');
+    fs.writeFileSync(file, `${process.pid}\n`, 'utf8');
+    return file;
+  };
+
+  it('reads the switch off the daemon the scenario ran against', () => {
+    const tripwire = armAgentTripwire({
+      scenarioId: 'NUDGE-TRIGGER',
+      runDir,
+      env: freshEnv(),
+      readSwitch: () => readDaemonHeadlessSwitch({
+        pidPath: pidPath(),
+        readEnvironment: () => `PATH=/usr/bin ${HEADLESS_TASKS_VAR}=off`,
+      }),
+      log: () => {},
+    });
+
+    expect(tripwire.readHeadlessSwitch()).toBe('off');
+  });
+
+  it('says on when the daemon never got the switch', () => {
+    expect(readDaemonHeadlessSwitch({
+      pidPath: pidPath(),
+      readEnvironment: () => 'PATH=/usr/bin',
+    })).toBe('on');
+  });
+
+  it('says so rather than guessing when no daemon is running', () => {
+    expect(readDaemonHeadlessSwitch({
+      pidPath: path.join(tmpDir, 'missing.pid'),
+      readEnvironment: () => 'unused',
+    })).toBe('no daemon');
+  });
+
+  it('reports nothing for a scenario that may run a real agent', () => {
+    const tripwire = armAgentTripwire({
+      scenarioId: 'PI-AUTOMODE',
+      runDir,
+      allowRealAgents: true,
+      env: freshEnv(),
+      log: () => {},
+    });
+
+    expect(tripwire.readHeadlessSwitch()).toBeNull();
   });
 });
 
@@ -181,6 +251,38 @@ describe('the daemon a scenario inherits', () => {
       marker: 'shims|claude',
       pidPath: pidFileFor(process.pid),
       readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('stops a daemon carrying this marker but not the headless switch', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      headlessOff: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
+    expect(run).toHaveBeenCalled();
+  });
+
+  it('leaves an armed daemon alone once it also carries the headless switch', () => {
+    const run = vi.fn();
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      headlessOff: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ${HEADLESS_TASKS_VAR}=off`,
       run,
       log: () => {},
     });

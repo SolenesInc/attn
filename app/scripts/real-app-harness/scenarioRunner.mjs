@@ -24,10 +24,16 @@ function writeJson(filePath, value) {
 
 const FAILURE_DIGEST_MAX_ERROR_LINES = 60;
 
-function buildFailureDigest({ scenarioId, runId, steps, error, runDir }) {
+function buildFailureDigest({ scenarioId, runId, steps, error, runDir, tripwire = null }) {
   const failingStep = [...steps].reverse().find((step) => step.status === 'error');
   const errorLines = normalizeError(error).split(/\r?\n/).slice(0, FAILURE_DIGEST_MAX_ERROR_LINES);
+  // The tripwire kills the session the failing step was waiting on, so its
+  // lines have to come before the step error they caused.
+  const tripwireLines = tripwire
+    ? [formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: tripwire.lines }), '']
+    : [];
   return [
+    ...tripwireLines,
     `scenario: ${scenarioId}`,
     `run: ${runId}`,
     `failing step: ${failingStep ? failingStep.name : '(none — failed outside a step)'}`,
@@ -177,7 +183,7 @@ export function createScenarioRunner(options, {
   }
   const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents });
   try {
-    ensureDaemonArmed({ marker: tripwire.marker, appPath: options?.appPath });
+    ensureDaemonArmed({ marker: tripwire.marker, headlessOff: tripwire.headlessOff, appPath: options?.appPath });
   } catch (error) {
     console.warn(`[agent-tripwire] could not check the running daemon: ${error?.message || error}`);
   }
@@ -192,6 +198,21 @@ export function createScenarioRunner(options, {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
     fs.appendFileSync(tracePath, line, 'utf8');
     process.stdout.write(line);
+  };
+
+  let tripwireTraced = false;
+  const collectTripwireLedger = () => {
+    const lines = tripwire.read();
+    if (lines.length > 0 && !tripwireTraced) {
+      tripwireTraced = true;
+      appendTrace('agent_tripwire:tripped', { count: lines.length, lines });
+    }
+    return lines;
+  };
+
+  const headlessSwitchField = () => {
+    const mode = tripwire.readHeadlessSwitch?.();
+    return mode ? { headlessTasks: mode } : {};
   };
 
   let recorder = null;
@@ -378,10 +399,9 @@ export function createScenarioRunner(options, {
     async finishSuccess(summary = {}) {
       const recorderError = await finalizeRunner();
       if (recorderError) throw recorderError;
-      const ledger = tripwire.read();
+      const ledger = collectTripwireLedger();
       if (ledger.length > 0) {
         const digest = formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: ledger });
-        appendTrace('agent_tripwire:tripped', { count: ledger.length, lines: ledger });
         process.stdout.write(`${digest}\n`);
         throw new Error(digest);
       }
@@ -395,6 +415,7 @@ export function createScenarioRunner(options, {
         metadata,
         steps,
         assertions,
+        ...headlessSwitchField(),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'summary.json');
@@ -413,6 +434,7 @@ export function createScenarioRunner(options, {
     },
     async finishFailure(error, summary = {}) {
       const recorderError = await finalizeRunner();
+      const ledger = collectTripwireLedger();
       const finalSummary = {
         ok: false,
         scenarioId,
@@ -427,11 +449,22 @@ export function createScenarioRunner(options, {
         ...(recorderError && recorderError !== error
           ? { recordingError: normalizeError(recorderError) }
           : {}),
+        ...headlessSwitchField(),
+        ...(ledger.length > 0
+          ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
+          : {}),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'failure.json');
       writeJson(summaryPath, finalSummary);
-      const digest = buildFailureDigest({ scenarioId, runId, steps, error, runDir });
+      const digest = buildFailureDigest({
+        scenarioId,
+        runId,
+        steps,
+        error,
+        runDir,
+        tripwire: ledger.length > 0 ? { ledgerPath: tripwire.ledgerPath, lines: ledger } : null,
+      });
       fs.writeFileSync(path.join(runDir, 'failure-digest.txt'), `${digest}\n`, 'utf8');
       process.stdout.write(`--- failure digest ---\n${digest}\n--- end digest ---\n`);
       emitRunnerVerdict({

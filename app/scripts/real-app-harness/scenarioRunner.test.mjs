@@ -27,7 +27,13 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function runnerWithTripwire({ scenarioId = 'tripwire-contract', ledger = [], verdicts = [], allowRealAgents } = {}) {
+function runnerWithTripwire({
+  scenarioId = 'tripwire-contract',
+  ledger = [],
+  verdicts = [],
+  allowRealAgents,
+  headlessSwitch = null,
+} = {}) {
   let ledgerPath = null;
   const runner = createScenarioRunner({
     appPath: '/tmp/test-attn.app',
@@ -41,7 +47,12 @@ function runnerWithTripwire({ scenarioId = 'tripwire-contract', ledger = [], ver
     assertBuildMatches: vi.fn(),
     armTripwire: vi.fn(({ runDir }) => {
       ledgerPath = path.join(runDir, 'agent-tripwire.ledger');
-      return { marker: 'test-marker', ledgerPath, read: () => ledger };
+      return {
+        marker: 'test-marker',
+        ledgerPath,
+        read: () => ledger,
+        readHeadlessSwitch: () => headlessSwitch,
+      };
     }),
     ensureDaemonArmed: vi.fn(),
     emitRunnerVerdict: (verdict) => verdicts.push(verdict),
@@ -74,8 +85,41 @@ describe('createScenarioRunner agent tripwire', () => {
     expect(fs.readFileSync(runner.tracePath, 'utf8')).toContain('agent_tripwire:tripped');
   });
 
+  it('names the tripwire before the step the killed session failed', async () => {
+    const ledger = ['TR-201\tclaude --session-id 93678622'];
+    const { runner } = runnerWithTripwire({ scenarioId: 'TR-201', ledger });
+
+    await runner.step('create_session', async () => {
+      throw new Error('session not found: 93678622');
+    }).catch(() => {});
+    const failure = await runner.finishFailure(new Error('session not found: 93678622'));
+
+    const digest = fs.readFileSync(path.join(runner.runDir, 'failure-digest.txt'), 'utf8');
+    expect(digest.split('\n')[0]).toContain('1 real agent exec(s) during TR-201');
+    expect(digest).toContain('TR-201\tclaude --session-id 93678622');
+    expect(digest.indexOf('agent tripwire:')).toBeLessThan(digest.indexOf('failing step: create_session'));
+    expect(failure.agentTripwire).toMatchObject({ count: 1, lines: ledger });
+  });
+
+  it('records that the daemon it ran against had headless tasks off', async () => {
+    const { runner } = runnerWithTripwire({ headlessSwitch: 'off' });
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary.headlessTasks).toBe('off');
+    expect(JSON.parse(fs.readFileSync(path.join(runner.runDir, 'summary.json'), 'utf8')).headlessTasks).toBe('off');
+  });
+
+  it('omits the switch for a scenario that may run a real agent', async () => {
+    const { runner } = runnerWithTripwire({ allowRealAgents: true });
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary).not.toHaveProperty('headlessTasks');
+  });
+
   it('arms what the catalog says the scenario may still run for real', () => {
-    const armTripwire = vi.fn(() => ({ marker: 'm', ledgerPath: '/dev/null', read: () => [] }));
+    const armTripwire = vi.fn(() => ({ marker: 'm', ledgerPath: '/dev/null', read: () => [], readHeadlessSwitch: () => null }));
     createScenarioRunner({
       appPath: '/tmp/test-attn.app',
       artifactsDir: path.join(tmpDir, 'artifacts'),
@@ -112,7 +156,7 @@ describe('createScenarioRunner recording contract', () => {
       tier: 'test',
     }, {
       assertBuildMatches: vi.fn(),
-      armTripwire: () => ({ marker: 'test-marker', ledgerPath: path.join(tmpDir, 'ledger'), read: () => [] }),
+      armTripwire: () => ({ marker: 'test-marker', ledgerPath: path.join(tmpDir, 'ledger'), read: () => [], readHeadlessSwitch: () => null }),
       ensureDaemonArmed: vi.fn(),
       createRecorder: () => recorder,
       createRecordingDriver: () => ({ mainWindowId: async () => 1 }),
