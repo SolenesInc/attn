@@ -88,7 +88,7 @@ func runDebugLs(args []string) {
 		os.Exit(2)
 	}
 
-	debugDir := filepath.Join(config.AppSupportDir(), "debug")
+	debugDir := filepath.Join(config.AppLocalDataDir(), "debug")
 	logPath := config.LogPath()
 
 	fmt.Printf("frontend debug dir: %s\n", debugDir)
@@ -141,7 +141,7 @@ func runDebugJSONL(fileName, cmdName string, args []string) {
 		os.Exit(2)
 	}
 
-	path := filepath.Join(config.AppSupportDir(), "debug", fileName)
+	path := filepath.Join(config.AppLocalDataDir(), "debug", fileName)
 	lines, err := readLinesFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

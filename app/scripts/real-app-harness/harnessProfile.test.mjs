@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  appLocalDataDirForProfile,
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
   bundleIdentifierForProfile,
@@ -206,10 +207,11 @@ describe('real-app harness production safety', () => {
 
 describe('ui automation manifest', () => {
   it('follows the platform app_local_data_dir', () => {
-    const expected = process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager.dev', 'debug', 'ui-automation.json')
-      : path.join(xdgDataHome(), 'com.attn.manager.dev', 'debug', 'ui-automation.json');
-    expect(manifestPathForProfile('dev')).toBe(expected);
+    const expectedDir = process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager.dev')
+      : path.join(xdgDataHome(), 'com.attn.manager.dev');
+    expect(appLocalDataDirForProfile('dev')).toBe(expectedDir);
+    expect(manifestPathForProfile('dev')).toBe(path.join(expectedDir, 'debug', 'ui-automation.json'));
   });
 });
 
@@ -238,6 +240,7 @@ describeWithBinary('single authority (attn profile resolve)', () => {
       expect(resources.appPath).toBe(r.appPath);
       expect(resources.appExecutable).toBe(r.appExecutable);
       expect(resources.appDaemon).toBe(r.appDaemon);
+      expect(resources.appLocalDataDir).toBe(r.appLocalDataDir);
       expect(resources.wsPort).toBe(Number(r.wsPort));
       expect(resources.socket).toBe(r.socket);
       expect(resources.dataDir).toBe(r.dataDir);

@@ -149,10 +149,14 @@ func AppPathForProfile(profile string) string {
 	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Applications", name+".app")
 	}
+	return filepath.Join(xdgDataHome(home), name)
+}
+
+func xdgDataHome(home string) string {
 	if dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); dataHome != "" {
-		return filepath.Join(dataHome, name)
+		return dataHome
 	}
-	return filepath.Join(home, ".local", "share", name)
+	return filepath.Join(home, ".local", "share")
 }
 
 func AppExecutableForProfile(profile string) string {
@@ -436,17 +440,35 @@ func StatePath() string {
 	return filepath.Join(home, "."+binaryName+"-state"+suffix+".json")
 }
 
-// Mirrors Tauri's BaseDirectory.AppLocalData resolution on macOS.
-func AppSupportDirForProfile(profile string) string {
+// Tauri's app_local_data_dir: automation manifest, debug JSONL, WebKit state.
+func AppLocalDataDirForProfile(profile string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	return filepath.Join(home, "Library", "Application Support", BundleIdentifierForProfile(profile))
+	bundleID := BundleIdentifierForProfile(profile)
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", bundleID)
+	}
+	return filepath.Join(xdgDataHome(home), bundleID)
 }
 
-func AppSupportDir() string {
-	return AppSupportDirForProfile(Profile())
+func AppLocalDataDir() string {
+	return AppLocalDataDirForProfile(Profile())
+}
+
+// Outside every tree clean removes, and ".attn.locks" cannot collide with a
+// profile's "~/.attn-<name>" data dir: profile names carry no dot.
+func AppLockPathForProfile(profile string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/tmp"
+	}
+	label := strings.ToLower(strings.TrimSpace(profile))
+	if label == "" || !profileNamePattern.MatchString(label) {
+		label = "default"
+	}
+	return filepath.Join(home, ".attn.locks", "app-"+label+".lock")
 }
 
 func LogPath() string {

@@ -42,6 +42,13 @@ function xdgDataHome() {
   return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
 }
 
+function appLocalDataDir(bundleId) {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', bundleId);
+  }
+  return path.join(xdgDataHome(), bundleId);
+}
+
 function installedApp(appName) {
   if (process.platform === 'darwin') {
     const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);
@@ -108,6 +115,7 @@ function resolveViaAuthority(profile) {
     appPath: resolved.appPath,
     appExecutable: resolved.appExecutable,
     appDaemon: resolved.appDaemon,
+    appLocalDataDir: resolved.appLocalDataDir,
     wsPort: Number(resolved.wsPort),
     socket: resolved.socket,
     dataDir: resolved.dataDir,
@@ -119,7 +127,11 @@ export function resolveHarnessResources(profile = currentHarnessProfile()) {
   const key = normalizeProfile(profile);
   if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
     const builtin = BUILTIN_RESOURCES[key];
-    return { ...builtin, ...installedApp(builtin.appName) };
+    return {
+      ...builtin,
+      ...installedApp(builtin.appName),
+      appLocalDataDir: appLocalDataDir(builtin.bundleId),
+    };
   }
   if (!PROFILE_NAME.test(key)) {
     throw new Error(`Invalid attn profile name '${profile}' (expected ${PROFILE_NAME}).`);
@@ -199,12 +211,12 @@ export function defaultWSURLForProfile(profile = currentHarnessProfile()) {
   return `ws://127.0.0.1:${resolveHarnessResources(profile).wsPort}/ws`;
 }
 
+export function appLocalDataDirForProfile(profile = currentHarnessProfile()) {
+  return resolveHarnessResources(profile).appLocalDataDir;
+}
+
 export function manifestPathForProfile(profile = currentHarnessProfile()) {
-  const bundleId = resolveHarnessResources(profile).bundleId;
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', bundleId, 'debug', 'ui-automation.json');
-  }
-  return path.join(xdgDataHome(), bundleId, 'debug', 'ui-automation.json');
+  return path.join(appLocalDataDirForProfile(profile), 'debug', 'ui-automation.json');
 }
 
 export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {

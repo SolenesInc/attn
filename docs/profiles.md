@@ -92,11 +92,41 @@ Go and frontend e2e suites may run concurrently in distinct worktree profiles.
 
 Clean temporary profiles when finished with `attn profile clean <name>`.
 It stops workers, conversation hosts, plugins, daemon, and app before removing
-the bundle/data. Never delete the data directory first: the worker registry
-is needed for cleanup. Inspect any unconfirmed PIDs the command leaves running.
+the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
+automation manifest, frontend debug logs, WebKit state). Never delete the data
+directory first: the worker registry is needed for cleanup. Inspect any
+unconfirmed PIDs the command leaves running.
 
-Use `attn profile stop-app --profile <name>` to stop only the app.
-`attn profile list --json` reports the install's origin worktree and live workers.
+The app goes first and clean waits for its pid (`<data-dir>/app.pid`, written by
+the Tauri shell) to be gone — a macOS quit request only asks — escalating to
+SIGTERM then SIGKILL if it will not leave. Ownership is rebuilt from the live
+process before every signal: a pid that is not this profile's app executable is
+never signalled, and one that is alive but cannot be identified stops the clean
+rather than being assumed dead. The shell rewrites `app.pid` on every launch, so
+a marker naming a different pid, or one that reappears after the stop, is a
+relaunch and aborts the clean. Whenever the app cannot be confirmed gone, clean
+removes nothing and names the pid: quit it yourself and re-run. `--force` covers
+the production profile, never a live app.
+
+The last gap a marker cannot close — a launch between the final check and the
+removals — is closed by `~/.attn.locks/app-<profile>.lock`. Every app process
+takes it *shared* at startup and the kernel holds it for that process's
+lifetime, so app instances never block each other and the Linux no-bus fallback
+can still open a second instance to deliver a deep link. Clean takes it
+*exclusive* once the old app is gone and holds it through the last removal, so
+it can only run when no app instance of that profile is left. Whoever loses
+gives way: an app launched into a clean waits up to 3s for it to finish and then
+refuses to start rather than run unlocked, and a clean that finds the lock held
+aborts before touching anything. Taking the lock is mandatory for the app: it
+will not write `app.pid` or open a window without it, and the reason goes to
+stderr. The lock file itself is never removed, and cannot go stale: kernel
+ownership disappears with the process.
+
+Use `attn profile stop-app --profile <name>` to stop only the app; it returns
+once the app is gone.
+`attn profile list --json` reports the install's origin worktree and live workers,
+and `appLocalDataDir`/`hasAppLocalData` so a profile whose data dir and app are
+already gone still shows up while its app local data lingers.
 Installs record `<data-dir>/origin.json`; manual installs can use
 `attn profile set-origin <name> --worktree <dir>`.
 

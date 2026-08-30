@@ -2,7 +2,6 @@
 
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   assertCommonTargetAllowed,
@@ -12,7 +11,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { currentHarnessProfile, resolveHarnessResources } from './harnessProfile.mjs';
+import { appLocalDataDirForProfile, currentHarnessProfile } from './harnessProfile.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
@@ -50,14 +49,7 @@ function parseArgs(argv) {
 // Same on-disk location terminalDiagnosticsLog.ts writes to
 // ($APPLOCALDATA/debug/terminal-diagnostics.jsonl).
 function terminalDiagnosticsLogPath(profile) {
-  return path.join(
-    os.homedir(),
-    'Library',
-    'Application Support',
-    resolveHarnessResources(profile).bundleId,
-    'debug',
-    'terminal-diagnostics.jsonl',
-  );
+  return path.join(appLocalDataDirForProfile(profile), 'debug', 'terminal-diagnostics.jsonl');
 }
 
 function readRecoveryEvents(logPath, paneId) {
