@@ -19,8 +19,6 @@ async function main() {
   const sessionLabel = `attn-bridge-${runId}`;
   const utilityToken = `__ATTN_BRIDGE_UTILITY_${Date.now()}__`;
 
-  // The smoke session is a real claude today; the mock-agent migration flips
-  // this to an armed tripwire.
   const tripwire = armAgentTripwire({ scenarioId: 'bridge-smoke', runDir, allowRealAgents: true });
   ensureDaemonCarriesTripwire({ marker: tripwire.marker, appPath: options.appPath });
 

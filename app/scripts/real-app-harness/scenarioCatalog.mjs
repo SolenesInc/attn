@@ -1,5 +1,3 @@
-// runnerId is the scenarioId the entry's script hands createScenarioRunner (null
-// when it has no runner), and the key allowRealAgents is looked up by.
 export const scenarioCatalog = [
   {
     id: 'workspace-shell-lifecycle',
@@ -476,8 +474,6 @@ export function scenariosAllowingRealAgents(catalog = scenarioCatalog) {
   return catalog.filter((scenario) => scenario.allowRealAgents !== undefined);
 }
 
-// A runner outside the catalog runs outside the matrix, so it keeps whatever
-// binaries it needs; the runner says so out loud when it arms nothing.
 export function allowRealAgentsForRunner(runnerId, catalog = scenarioCatalog) {
   const entries = typeof runnerId === 'string' && runnerId
     ? catalog.filter((scenario) => scenario.runnerId === runnerId)

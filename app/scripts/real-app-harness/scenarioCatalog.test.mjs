@@ -48,7 +48,6 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('takes the permissive flag when one runner id serves several entries', () => {
-    // TR-402 is both the local claude/codex scenario and the remote probe.
     expect(scenarioCatalog.filter((scenario) => scenario.runnerId === 'TR-402').length).toBeGreaterThan(1);
     expect(allowRealAgentsForRunner('TR-402')).toBe(true);
   });
