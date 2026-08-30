@@ -67,6 +67,9 @@ func parseKeeperCompactConfig(raw string) (keeperCompactConfig, error) {
 	if available, reason := agentdriver.HeadlessTaskAvailability(driver); !available {
 		return keeperCompactConfig{}, fmt.Errorf("agent %s cannot run headless tasks: %s", config.Agent, reason)
 	}
+	if !agentdriver.HeadlessTasksSupportTools(driver) {
+		return keeperCompactConfig{}, fmt.Errorf("agent %s supports only tool-free headless tasks", config.Agent)
+	}
 	return config, nil
 }
 

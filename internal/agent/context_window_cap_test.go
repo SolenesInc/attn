@@ -141,16 +141,16 @@ func TestHeadlessEnvironment_ClaudeContextWindowCap(t *testing.T) {
 	t.Cleanup(func() { SetHeadlessContextWindowCap(0) })
 
 	SetHeadlessContextWindowCap(150000)
-	claudeEnv := headlessEnvironment("claude")
+	claudeEnv := headlessEnvironment("claude", "")
 	if !slices.Contains(claudeEnv, "CLAUDE_CODE_AUTO_COMPACT_WINDOW=150000") {
 		t.Fatalf("claude headless env missing the cap: %#v", claudeEnv)
 	}
-	if envHasCap(headlessEnvironment("codex")) {
+	if envHasCap(headlessEnvironment("codex", "")) {
 		t.Fatalf("codex headless env unexpectedly carried the Claude cap")
 	}
 
 	SetHeadlessContextWindowCap(0)
-	if envHasCap(headlessEnvironment("claude")) {
+	if envHasCap(headlessEnvironment("claude", "")) {
 		t.Fatalf("uncapped headless env unexpectedly carried the cap")
 	}
 }

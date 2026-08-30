@@ -282,6 +282,10 @@ type HeadlessTaskAvailabilityProvider interface {
 	HeadlessTaskAvailability() (bool, string)
 }
 
+type ToolFreeOnlyHeadlessTaskProvider interface {
+	HeadlessTasksAreToolFreeOnly() bool
+}
+
 func HeadlessTaskAvailability(driver Driver) (bool, string) {
 	if driver == nil {
 		return false, "agent is not installed"
@@ -293,6 +297,19 @@ func HeadlessTaskAvailability(driver Driver) (bool, string) {
 		return provider.HeadlessTaskAvailability()
 	}
 	return true, ""
+}
+
+func HeadlessTasksSupportTools(driver Driver) bool {
+	if driver == nil {
+		return false
+	}
+	if _, ok := driver.(HeadlessTaskProvider); !ok {
+		return false
+	}
+	if provider, ok := driver.(ToolFreeOnlyHeadlessTaskProvider); ok {
+		return !provider.HeadlessTasksAreToolFreeOnly()
+	}
+	return true
 }
 
 type TranscriptFinder interface {

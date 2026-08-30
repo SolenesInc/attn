@@ -385,6 +385,9 @@ type Daemon struct {
 		provider agentdriver.HeadlessTaskProvider,
 		request agentdriver.HeadlessTaskRequest,
 	) (agentdriver.HeadlessTaskResult, error)
+	gardenAdvisorResolve func(
+		config gardenAdvisorConfig,
+	) (agentdriver.HeadlessTaskProvider, string, error)
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
