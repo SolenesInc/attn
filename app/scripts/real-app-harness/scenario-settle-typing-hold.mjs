@@ -15,6 +15,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 import { createWindowDriver } from './platform.mjs';
+import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { preTrustClaudeFolder, ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
@@ -252,8 +253,13 @@ async function main() {
     });
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
-      const windowBounds = await client.request('get_window_bounds', {});
-      runner.assert(Boolean(windowBounds?.logicalBounds), `window bounds available: ${JSON.stringify(windowBounds)}`);
+      const logicalBounds = await getFrontWindowBounds(null, {
+        appPath: options.appPath,
+        client,
+        driver,
+      });
+      runner.assert(Boolean(logicalBounds), `window bounds available: ${JSON.stringify(logicalBounds)}`);
+      const windowBounds = { logicalBounds };
       const cellA = await client.request('get_pane_cell_rect', {
         sessionId: agentId,
         paneId: agentPaneId,
