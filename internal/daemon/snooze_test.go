@@ -233,6 +233,31 @@ func TestSnoozeWakeReconciliationFailsOpenWhenSchedulingFails(t *testing.T) {
 	}
 }
 
+func TestSnoozeFailsOpenWhenJobQueueFailsToStart(t *testing.T) {
+	d := newTurnDaemon(t)
+	lockHolder := jobs.New(jobs.Options{Store: d.newSQLJobStore()})
+	if err := lockHolder.Start(); err != nil {
+		t.Fatalf("start lock holder: %v", err)
+	}
+	t.Cleanup(lockHolder.Stop)
+
+	d.startJobQueue()
+	if runner := d.jobQueueRef(); runner != nil {
+		t.Fatal("the failed job queue remained available")
+	}
+
+	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
+	moveTo(d, "s1", protocol.StateIdle)
+	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
+
+	if !owed(t, d, "s1") {
+		t.Error("the unscheduled snooze left the idle session settled")
+	}
+	if got := d.store.TurnStamps("s1").SnoozedUntil; !got.IsZero() {
+		t.Errorf("the unscheduled snooze left its deadline stored: %s", got)
+	}
+}
+
 func TestSnoozeWakeJobOpensAnAttentionTurn(t *testing.T) {
 	d := newSnoozeDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")

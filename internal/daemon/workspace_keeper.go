@@ -292,7 +292,7 @@ func (d *Daemon) startJobQueue() {
 	runner.OnTerminalFailure(func(j *jobs.Job) { d.notifyTaskTerminalFailure(j) })
 	d.setJobQueue(runner)
 	if err := runner.Start(); err != nil {
-		// A queue that failed to start still accepts Enqueue and dispatches nothing.
+		d.setJobQueue(nil)
 		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
 		return
 	}
