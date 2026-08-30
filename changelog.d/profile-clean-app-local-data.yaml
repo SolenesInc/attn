@@ -11,3 +11,11 @@ change: >
   profile` / `profile list` show whether it is present — including for a profile
   whose data dir and app are already gone, so the leftovers can be cleaned. The
   default (production) profile is still refused without `--force`.
+
+  Stopping the app is now a fence rather than a request: `attn profile clean` and
+  `attn profile stop-app` wait for the app's pid (`<data-dir>/app.pid`) to be
+  gone, on macOS too, where `quit` only asks and used to return success while the
+  app was still running — long enough for WebKit to recreate the directory that
+  had just been deleted. A pid that is not the profile's app executable is never
+  signalled, and a clean that cannot confirm the app exited now removes nothing
+  and names the pid instead of reporting a profile it did not clean.

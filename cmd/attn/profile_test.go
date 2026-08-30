@@ -148,16 +148,16 @@ func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
 	}
 }
 
-func TestStopProfileAppByPIDFileExitStatus(t *testing.T) {
-	if msg, err := stopProfileAppByPIDFile(profileResolved{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("stopProfileAppByPIDFile (no pid file) = %v, want a 'not running' success: %q", err, msg)
+func TestStopProfileAppExitStatus(t *testing.T) {
+	if msg, err := stopProfileApp(profileResolved{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("stopProfileApp (no pid file) = %v, want a 'not running' success: %q", err, msg)
 	}
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "app.pid"), []byte("not-a-pid"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if msg, err := stopProfileAppByPIDFile(profileResolved{DataDir: dir}); err == nil {
-		t.Fatalf("stopProfileAppByPIDFile (unreadable pid) = %q, want an error", msg)
+	if msg, err := stopProfileApp(profileResolved{DataDir: dir}); err == nil {
+		t.Fatalf("stopProfileApp (unreadable pid) = %q, want an error", msg)
 	}
 }

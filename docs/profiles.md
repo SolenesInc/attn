@@ -97,7 +97,15 @@ automation manifest, frontend debug logs, WebKit state). Never delete the data
 directory first: the worker registry is needed for cleanup. Inspect any
 unconfirmed PIDs the command leaves running.
 
-Use `attn profile stop-app --profile <name>` to stop only the app.
+The app goes first and clean waits for its pid (`<data-dir>/app.pid`, written by
+the Tauri shell) to be gone — a macOS quit request only asks — escalating to
+SIGTERM then SIGKILL if it will not leave. A pid that is not this profile's app
+executable is never signalled. If the app cannot be confirmed gone, clean removes
+nothing and names the pid: quit it yourself and re-run. `--force` covers the
+production profile, never a live app.
+
+Use `attn profile stop-app --profile <name>` to stop only the app; it returns
+once the app is gone.
 `attn profile list --json` reports the install's origin worktree and live workers,
 and `appLocalDataDir`/`hasAppLocalData` so a profile whose data dir and app are
 already gone still shows up while its app local data lingers.
