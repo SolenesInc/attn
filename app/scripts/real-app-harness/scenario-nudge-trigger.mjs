@@ -14,7 +14,7 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { configureMockAgent, writeMockAgentFixture } from './mockAgent.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
 
@@ -134,7 +134,6 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let targetId = null;
   let authorId = null;
-  let mockAgent = null;
   const note = (m, extra) => runner.log(m, extra);
 
   // Runner cleanups run in REVERSE registration order: observer/app are
@@ -183,7 +182,6 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
-      mockAgent = await configureMockAgent({ client, observer, runner });
     });
 
     await runner.step('boot_target_and_drive_idle', async () => {
@@ -393,7 +391,6 @@ async function main() {
   } finally {
     if (authorId) await client.request('close_session', { sessionId: authorId }).catch(() => {});
     if (targetId) await client.request('close_session', { sessionId: targetId }).catch(() => {});
-    if (mockAgent) await mockAgent.restore().catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
   }

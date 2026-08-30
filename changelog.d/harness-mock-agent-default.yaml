@@ -1,0 +1,10 @@
+kind: internal
+area: harness
+change: >
+  The real-app harness launches the mock agent for claude and codex by
+  default: the tripwire pins each executable at the mock and the harness
+  writes the matching executable setting, so an armed scenario gets a
+  deterministic agent instead of a dead session. The turn-accounting
+  scenarios (TR-201, TR-204, TR-301, TR-401, TR-401-CODEX-MAIN, TR-402)
+  no longer allow real agents, and the cheap launch-model pinning they
+  needed is gone with them.

@@ -7,6 +7,7 @@ import {
   waitForPaneInputFocus,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 
 // Writes into the real ~/.claude.json. Safe only because the harness session dir
 // is fresh per run, so the entry cannot shadow a user-curated trust decision.
@@ -235,41 +236,49 @@ export async function ensureCodexPromptReadyViaPty(client, sessionId, timeoutMs 
   });
 }
 
-export async function promptClaudeForStructuredBlock(client, sessionId, token, lineCount = 8) {
-  const lines = Array.from({ length: lineCount }, (_, index) =>
+export function structuredBlockLines(token, lineCount) {
+  return Array.from({ length: lineCount }, (_, index) =>
     `${token} line ${index + 1} render width coverage verification payload ${index + 1} for split stability`
   );
-  const prompt = [
-    'Reply with exactly the following lines and nothing else.',
-    'Preserve uppercase letters, digits, and spacing exactly.',
-    'Do not add a preamble.',
-    'Do not use a code block.',
-    ...lines,
-  ].join('\n');
+}
 
-  const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for Claude prompt ${sessionId}`, 20_000);
+export function structuredBlockPrompt(token) {
+  return `render block ${token}`;
+}
+
+// The block is the pane content every render assertion in the tr family anchors
+// on, so the fixture has to be in the session cwd before the agent starts.
+export function writeStructuredBlockFixture(cwd, token, lineCount) {
+  return writeMockAgentFixture(cwd, {
+    name: 'render block mock',
+    turns: [{
+      includes: structuredBlockPrompt(token),
+      actions: [{ type: 'reply', text: structuredBlockLines(token, lineCount).join('\n') }],
+    }],
+  });
+}
+
+export async function promptAgentForStructuredBlock(client, sessionId, token, lineCount = 8) {
+  const prompt = structuredBlockPrompt(token);
+  const lines = structuredBlockLines(token, lineCount);
+
+  const initialPane = await waitForFirstWorkspacePane(client, sessionId, `initial pane for structured block ${sessionId}`, 20_000);
   await client.request('click_pane', { sessionId, paneId: initialPane.paneId });
   await waitForPaneInputFocus(client, sessionId, initialPane.paneId, 15_000);
-  // Claude Code treats a rapid multi-line write_pane as a paste, so a trailing \r
-  // inserts a newline instead of submitting.
-  await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: prompt, submit: false });
-  await delay(500);
-  await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: '\r', submit: false });
+  await client.request('write_pane', { sessionId, paneId: initialPane.paneId, text: prompt, submit: true });
 
-  // The input box echoes the prompt, up to lineCount occurrences of token before
-  // submit, so only a higher count means the reply rendered.
+  // The pane echoes the one-line prompt, so only lineCount + 1 occurrences of
+  // the token mean the reply itself rendered.
   const replyTimeoutMs = 45_000;
   const startedAt = Date.now();
-  let lastText = '';
   while (Date.now() - startedAt < replyTimeoutMs) {
     const pane = await client.request('read_pane_text', { sessionId, paneId: initialPane.paneId }, { timeoutMs: 20_000 });
-    lastText = pane?.text || '';
-    const occurrences = lastText.split(token).length - 1;
+    const occurrences = (pane?.text || '').split(token).length - 1;
     if (occurrences >= lineCount + 1) {
       return { prompt, expectedLines: lines, paneId: initialPane.paneId };
     }
-    await delay(1_000);
+    await delay(500);
   }
 
-  throw new Error(`Timed out waiting for Claude structured block reply for ${token} in session ${sessionId}`);
+  throw new Error(`Timed out waiting for a structured block reply for ${token} in session ${sessionId}`);
 }

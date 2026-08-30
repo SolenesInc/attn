@@ -19,6 +19,43 @@ function resolveFixturePath(cwd, value) {
 export const MOCK_AGENT_STATES = ['waiting_input', 'idle'];
 const REPLYING_ACTIONS = ['reply', 'attn'];
 
+// Header and prompt glyph are what scenarioAgents.mjs reads to call a pane
+// ready, so an agent the mock stands in for must be recognisable by both.
+const MOCK_AGENT_FLAVORS = {
+  claude: { header: 'Claude Code mock agent', prompt: '❯ ' },
+  codex: { header: 'OpenAI Codex mock agent', prompt: '› ' },
+};
+
+export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
+export const MOCK_AGENT_EXECUTABLE = executablePath;
+
+export function mockAgentExecutableVar(agent) {
+  return `ATTN_${String(agent).toUpperCase()}_EXECUTABLE`;
+}
+
+export function mockPinnedAgents(env = process.env) {
+  return MOCK_AGENT_AGENTS.filter((agent) => env[mockAgentExecutableVar(agent)] === MOCK_AGENT_EXECUTABLE);
+}
+
+export function mockAgentFlavor(agent) {
+  return MOCK_AGENT_FLAVORS[String(agent || '').trim().toLowerCase()] || MOCK_AGENT_FLAVORS.codex;
+}
+
+// Every row is drawn to the pane's width so the harness's width, density and
+// native-paint gates see an agent TUI rather than two words on a blank screen.
+export function mockAgentSplash({ header, cwd = '', cols = 80 }) {
+  const width = Math.max(24, Math.trunc(Number(cols) || 80)) - 1;
+  const inner = width - 4;
+  const row = (text) => `│ ${String(text).slice(0, inner).padEnd(inner)} │`;
+  return [
+    `╭${'─'.repeat(width - 2)}╮`,
+    row(header),
+    row(`no model is called; replies come from ${MOCK_AGENT_CONFIG}`),
+    row(`cwd ${cwd}`),
+    `╰${'─'.repeat(width - 2)}╯`,
+  ];
+}
+
 export function stateMarker(state) {
   return `<!-- attn:state=${state} -->`;
 }
@@ -121,73 +158,6 @@ export function writeMockAgentFixture(cwd, config) {
   return { configPath, executablePath };
 }
 
-export const HEADLESS_TASKS_SETTING = 'headless_tasks.enabled';
-// The daemon publishes the stored value and the env override beside the effective
-// one; internal/daemon/ws_settings.go mints these three keys and must not drift.
-export const HEADLESS_TASKS_STORED_SETTING = `${HEADLESS_TASKS_SETTING}.stored`;
-export const HEADLESS_TASKS_OVERRIDE_SETTING = `${HEADLESS_TASKS_SETTING}.override`;
-export const HEADLESS_TASKS_ENV_VAR = 'ATTN_HEADLESS_TASKS';
-
-export function parseHeadlessSwitch(raw) {
-  switch (String(raw ?? '').trim().toLowerCase()) {
-    case 'on': case '1': case 'true': case 'yes': case 'enabled': return true;
-    case 'off': case '0': case 'false': case 'no': case 'disabled': return false;
-    default: return null;
-  }
-}
-
-// An env override pins the effective headless key, so only `.stored` can ever
-// reach a written value; every headless write observes that key instead.
-async function setSettingAndWait(client, observer, key, value, description, observedKey = key) {
-  await client.request('set_setting', { key, value });
-  await observer.waitFor(() => (observer.getSetting(observedKey) === value ? true : null), description, 20_000);
-}
-
-export async function configureMockAgent({ client, observer, runner, agent = 'codex' }) {
-  const key = `${agent}_executable`;
-  const override = observer.getSetting(HEADLESS_TASKS_OVERRIDE_SETTING) || '';
-  if (parseHeadlessSwitch(override) === true) {
-    throw new Error(
-      `${HEADLESS_TASKS_ENV_VAR}=${override} forces headless tasks on, so ${HEADLESS_TASKS_SETTING} cannot be turned off for the mock agent`,
-    );
-  }
-
-  const previous = observer.getSetting(key) || '';
-  const previousHeadless = observer.getSetting(HEADLESS_TASKS_STORED_SETTING) || 'true';
-
-  let restored = false;
-  const restore = async () => {
-    if (restored) return;
-    let failure = null;
-    const writes = [
-      { key, value: previous, observe: key },
-      { key: HEADLESS_TASKS_SETTING, value: previousHeadless, observe: HEADLESS_TASKS_STORED_SETTING },
-    ];
-    for (const write of writes) {
-      const target = `${write.key} back to ${JSON.stringify(write.value)}`;
-      try {
-        await setSettingAndWait(client, observer, write.key, write.value, target, write.observe);
-      } catch (err) {
-        failure ??= new Error(`the daemon never confirmed ${target}: ${err.message}`, { cause: err });
-      }
-    }
-    if (failure) throw failure;
-    restored = true;
-  };
-  runner?.registerCleanup(`restore_${key}`, restore);
-
-  try {
-    await setSettingAndWait(client, observer, key, executablePath, `${key} to point at the shared mock agent`);
-    await setSettingAndWait(
-      client, observer, HEADLESS_TASKS_SETTING, 'false', 'headless tasks to be off', HEADLESS_TASKS_STORED_SETTING,
-    );
-  } catch (err) {
-    await restore().catch(() => {});
-    throw err;
-  }
-  return { executablePath, previous, previousHeadless, restore };
-}
-
 function runAttn(args, input = '') {
   return spawnSync(process.env.ATTN_WRAPPER_PATH || 'attn', args, {
     encoding: 'utf8',
@@ -209,10 +179,20 @@ function transcriptRecord(type, payload) {
   return JSON.stringify({ timestamp: new Date().toISOString(), type, payload });
 }
 
+// Every scenario launches the mock, most without a fixture: an absent one is a
+// silent agent, not a crashed session.
+export function readMockAgentConfig(cwd) {
+  try {
+    return validateMockAgentConfig(JSON.parse(fs.readFileSync(path.join(cwd, MOCK_AGENT_CONFIG), 'utf8')));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    return validateMockAgentConfig({ version: 1, turns: [] });
+  }
+}
+
 async function runMockAgent() {
   const cwd = process.cwd();
-  const configPath = path.join(cwd, MOCK_AGENT_CONFIG);
-  const config = validateMockAgentConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
+  const config = readMockAgentConfig(cwd);
   const nativeId = `mock-${randomUUID()}`;
   const transcriptDir = path.join(cwd, '.attn-mock-agent');
   const transcriptPath = path.join(transcriptDir, `rollout-${nativeId}.jsonl`);
@@ -237,14 +217,30 @@ async function runMockAgent() {
       content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text }],
     })}\n`, 'utf8');
   };
-  const setTitle = (value) => process.stdout.write(`\u001b]0;${value}\u0007`);
+  const flavor = mockAgentFlavor(config.agent || process.env.ATTN_AGENT);
+  const header = config.banner || flavor.header;
+  const blocks = [];
+  let phase = 'ready';
+
+  const setTitle = () => process.stdout.write(`\u001b]0;${mockAgentTitle(config.name, phase)}\u0007`);
   const prompt = () => {
-    setTitle(mockAgentTitle(config.name, 'ready'));
-    process.stdout.write('\n› ');
+    setTitle();
+    process.stdout.write(`\n${flavor.prompt}`);
+  };
+  const splash = () => mockAgentSplash({ header, cwd, cols: process.stdout.columns }).join('\n');
+  // A resized pane has to come back at the new width, and the header exactly
+  // once: the codex header-frame gate counts it over the whole screen.
+  const repaint = () => {
+    process.stdout.write(`\u001b[2J\u001b[H${[splash(), ...blocks].join('\n\n')}\n`);
+    prompt();
+  };
+  const emit = (block) => {
+    blocks.push(block);
+    process.stdout.write(`\n${block}\n`);
   };
   const reply = (text) => {
     appendMessage('assistant', text);
-    process.stdout.write(`\n• ${text.replaceAll('\n', '\n  ')}\n`);
+    emit(`• ${text.replaceAll('\n', '\n  ')}`);
   };
 
   const runAction = async (action) => {
@@ -293,23 +289,26 @@ async function runMockAgent() {
       return;
     }
     appendMessage('user', input);
-    setTitle(mockAgentTitle(config.name, 'working'));
+    phase = 'working';
+    setTitle();
     requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
     const workingSince = Date.now();
     const actions = selectMockAgentActions(config, input);
     for (const action of actions) await runAction(action);
     await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
     stop(markerStateForActions(actions));
+    phase = 'ready';
     prompt();
   };
 
-  process.stdout.write(`${config.banner || 'OpenAI Codex mock agent'}\n`);
-  prompt();
+  repaint();
+  process.stdout.on('resize', repaint);
   let turns = Promise.resolve();
   const parseInput = createMockAgentInputParser((input) => {
     turns = turns.then(() => answer(input)).catch((error) => {
-      process.stdout.write(`\n• mock agent error: ${error.message}\n`);
+      emit(`• mock agent error: ${error.message}`);
       try { stop('idle'); } catch { /* the daemon may be closing */ }
+      phase = 'ready';
       prompt();
     });
   });

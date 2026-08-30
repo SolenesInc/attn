@@ -16,17 +16,20 @@ Run commands from the repository root.
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.
-- Use `mockAgent.mjs`, `writeMockAgentFixture`, and `configureMockAgent`
-  unless testing a provider integration; state why a real provider is needed.
+- The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
+  for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
+  and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
+  restoring what it found. Sessions need both halves — the env reaches the daemon,
+  the setting reaches each spawn.
+- A scenario needing a real provider says so with `allowRealAgents` and states why.
+  That list shrinks; adding to it needs a reason in the catalog entry.
+- Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
+  session starts. No fixture is a silent agent, not a broken one: the pane paints
+  the splash and every prompt closes its turn with no reply.
 - The mock ends every turn with the real Stop hook and a `<!-- attn:state=… -->`
   marker; an action's `state` sets it (default: `waiting_input` after a reply,
-  `idle` when the turn was silent). `configureMockAgent` turns headless tasks
-  off, which is what makes the daemon read that marker instead of a model. It
-  registers its rollback before the first write and restores the *stored*
-  values, and refuses by name when `ATTN_HEADLESS_TASKS` forces them back on.
-- `launchFreshAppAndConnect` pins cheap models/low effort and restores settings.
-  Never pin `fable`. `ATTN_HARNESS_LAUNCH_MODEL_<AGENT>=inherit` needs explicit request.
-  Stronger scenario-specific models need an explanatory comment.
+  `idle` when the turn was silent). Arming turns headless tasks off, which is what
+  makes the daemon read that marker instead of a model.
 - Crew fixtures use synthetic names and `claude-haiku-4-5` unless stronger reasoning is required.
 - Resolve pane ids from app/daemon state. Assert empty workspaces are removed.
   Shortcuts use registry ids.
@@ -45,6 +48,10 @@ fails the scenario on a non-empty ledger and prints the lines.
   calls two ways: the shim dir first on `PATH`, and `ATTN_<AGENT>_EXECUTABLE`
   pins. Sessions need the pins — the login shell rebuilds `PATH` (see
   `internal/pty/manager.go`), so only the pins survive that hop.
+- `claude` and `codex` pin at the mock agent rather than at their shim, so an
+  armed scenario gets a working agent instead of a dead session. Their shims stay
+  on `PATH`, so a name-resolved exec still lands in the ledger. `copilot` and `pi`
+  have no mock and pin at their shims.
 - A command a scenario types by hand into a shell pane resolves on the login
   `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
   covers every agent attn itself launches, not that.
