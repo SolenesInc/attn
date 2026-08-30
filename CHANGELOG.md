@@ -6,6 +6,353 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-08-30]
+
+### Added
+
+- **The Garden is where work lives now.** Plant a seed, tend it to
+  claim it, park it to pause, harvest it when done. Seeds relate
+  through `blocks` and `part-of` edges, and `attn seed ready` says
+  what can be picked up right now — nothing blocking it, nobody
+  holding it. Plots group seeds under a crown;
+  `attn delegate --plot` sends an agent to one, already knowing the
+  plan in the crown's body and the seeds it can pick up. The app
+  carries a searchable garden panel with a kanban board, navigable
+  plot drill-down, and Cmd+Shift+T to go fullscreen — one panel
+  that animates between dock and window, carrying everything you
+  were doing with it. Seeds dock as rendered, annotatable tiles
+  with durable file attachments, a live log, and open documents
+  that re-anchor annotations as their body changes. `attn seed
+  watch` gives a session a quiet stake in a seed's whole plot, and
+  lifecycle moves ring watchers automatically. Delegations plant
+  and report on seeds; seed IDs in terminal output carry a hover
+  preview whose icon docks the seed as a tile.
+
+- **Crew members give agents durable identities across days.** A
+  crew member is a named identity whose charter and letters live as
+  plain markdown in `~/.attn/crew/<name>/`. The sidebar shows every
+  member, awake or asleep; click to wake one into a new day, primed
+  by its charter and the letter its predecessor left. attn keeps an
+  awake member's context warm while you are around — measured, not
+  guessed — and asks it to write its letter and sleep when you
+  leave. `attn handoff` files the letter and turns the day over in
+  one motion; the line is append-only, so a filed letter is never
+  overwritten. Members address each other by name through
+  `attn agent msg`, wake on any harness and model, and keep their
+  ticket threads and subscriptions across days. A context nearing
+  full triggers a handoff before the harness auto-compacts.
+
+- **Apps dock as tiles and act on commands.** An app declares views
+  and commands in its manifest, and `attn app apply` builds and
+  installs it — parse, typecheck, bundle, hash, and record the
+  result as an immutable version; nothing in the app is imported
+  and nothing is run. A view appears in the command menu; docking
+  it puts a live tile in your workspace, drawn with attn's own
+  React and the SDK's controls. `useQuery` reads live documents;
+  commands invoke handlers in the shared runtime. Applying a new
+  version reloads the tile while keeping the UI stable; a crash
+  costs that tile and nothing else. `attn app new` scaffolds a
+  working tile with a live query, a command, and an AGENTS.md that
+  teaches the whole surface. Apps reconcile after a version change
+  or a bus gap; an owed rebuild is visible in `attn app status`,
+  refusable with a named code, and self-limiting. Rollback walks
+  serving history one step at a time.
+
+- **Meet nisse, attn's own conversation agent.** A conversation
+  session runs inside attn — a message list and a composer, not a
+  terminal. The reply streams as rendered markdown with
+  syntax-colored code and mermaid diagrams that draw themselves as
+  the fence closes. Every tool call becomes a collapsible card
+  naming what the agent touched and whether it worked; a file edit
+  draws as a diff. History scrolls back, conversations survive
+  crashes and daemon restarts, the model changes mid-conversation,
+  and a delegation brief arrives as the first prompt. Queued
+  messages can be cancelled, compactions and retries are visible in
+  the transcript, and nisse sits in the queue like every other
+  agent — working, idle, owing you a turn.
+
+- **Auto mode guards what pi sessions can do unattended.** Work
+  inside the session's directory runs untouched; anything reaching
+  past it is judged by a two-pass classifier and refused as a tool
+  result the agent can adapt to — approving it in your next reply
+  lets it retry. Configure everything in Settings: the allow and
+  hard-deny pattern lists (editable by hand, with built-in denies
+  marked), the environment slots the classifier reads about this
+  machine, the models that judge, and a feed of everything auto
+  mode refused. A delegation brief's authorization reaches the
+  classifier whole. Auto mode ships with no classifier model and
+  stays off until you name one; denials are recorded durably on the
+  spot and reach attn as notifications.
+
+- **Agents can observe and message each other.**
+  `attn agent list` names every session on the daemon;
+  `attn agent peek` reads one's state, todos, last message, and
+  screen without disturbing it; `attn agent msg` delivers an
+  attributed message into another session's conversation, waits for
+  the target to actually start the turn it asked for, and says what
+  happened. A target that cannot take input yet has the message
+  queued for its next state change. Crew members can be addressed
+  whether awake or asleep — a sleeping member wakes on its pinned
+  model and receives the message as its new day's first prompt.
+
+- **Images render in the terminal.** Anything that draws with the
+  kitty graphics protocol — chafa, timg, kitten icat — shows up as
+  a picture. Images are sharp on retina, survive session switches
+  and reattaches, honor z-index layering under or over text, and
+  work the same on a remote machine. 320 MB budget per session;
+  ATTN_KITTY_STORAGE_LIMIT tunes it.
+
+- **Annotate an agent's answer in the terminal.** Hold Option and
+  drag across a recent message to highlight it, pick a label or
+  write a note, and Cmd+Return sends the batch into the session's
+  prompt. Highlights anchor to the transcript's markdown, survive
+  redraws and scrolling, and are persisted by the daemon.
+  Annotation labels are unified across terminal and markdown:
+  agreement, disagreement, and clarification are one-click marks;
+  the rest are in a grouped picker. The note goes out ahead of the
+  marks, so the marks read as the detail that qualifies it.
+
+- **Snooze any agent until a time you name.** Defer for 30 minutes,
+  an hour, 8 hours, or until tomorrow, Saturday, or Monday morning.
+  Snoozed agents collect at the foot of the sidebar, each showing
+  when it comes back; a wake-now action wakes one early. Only what
+  you could not have anticipated — an unexplained state change, a
+  dead process — breaks through. When the time arrives the agent
+  returns at the tail of the queue, not the head.
+
+- **Pin one agent out of the queue.** The pin on a sidebar row now
+  pins that agent, not its workspace. Pinned agents collect in a
+  band below Settled, in the order you pinned them; the turn keeps
+  accruing underneath, so unpinning surfaces whatever is
+  outstanding at its true age. A shell split from an agent is now
+  that agent's satellite — no row of its own, reachable by going to
+  the agent it sits beside.
+
+- **Cmd+. stops whatever countdown is on screen.** Both the
+  settling countdown and the ticket-nudge countdown answer to one
+  key, and the indicator says which key. Press it before sending an
+  agent back to work and attn will not auto-settle that turn —
+  "Turn kept" stays on the pane header until you press it again.
+
+- **Home can wait for the next agent that needs you.** When the
+  queue runs dry, the all-settled banner offers "Take me to the
+  next agent that needs you." Arriving from an auto-settle, a
+  snooze, or Cmd+Shift+E ticks it automatically; walking home
+  yourself leaves it unticked.
+
+- **One short line per session says what each agent is doing right
+  now.** Off by default — pick the model and refresh rate in
+  Settings, because the two supported models differ enough in speed
+  and price that choosing for you would be choosing how your money
+  is spent. Lines are generated only while you are using attn; a
+  session that has written nothing since its last line is skipped.
+
+- **Per-agent and per-session context-window caps.** Set a default
+  per agent type in Settings; pin a single session from its command
+  menu. The pin outranks both the chief cap and the per-agent
+  default, and takes effect by reloading the agent in place.
+
+- **Notifications carry a severity — info, warning, or critical.**
+  While any critical notification is unread, a strip sits at the
+  top of the sidebar and the bell turns red. A parked app or plugin
+  runtime is critical; an auto-disabled app is a warning.
+
+- **Live USD cost beside each agent's name.** Input, output, and
+  cache are priced separately; the per-session total persists
+  across daemon restarts. An unpriced model says `unknown` instead
+  of implying it was free. Settings can add or correct rates.
+
+- **When a Claude session hands you a file, attn opens it.**
+  Markdown files dock as live-reloading tiles beside the terminal.
+  A toggle in Settings turns it off.
+
+- **Hovering a truncated sidebar name reveals the full name
+  immediately**, wrapping outward into the pane area without
+  covering the row's actions.
+
+- **The event bus can be looked at.** `attn bus status` and
+  Settings → Event Bus show the log, each consumer's lag, which
+  one is holding retention open, and health findings the daemon
+  writes as sentences. A stuck consumer gets a warning notification
+  after an hour, naming what it is holding and how to end it.
+
+- **Pull-request review automations tell agents exactly which
+  repository, PR, URL, and checked-out head they are reviewing.**
+  Pushing another commit to a still-requested PR continues the
+  existing reviewer on the new head instead of leaving it on the
+  old one.
+
+- **An update that moves the terminal engine now upgrades each
+  running session's pty-worker underneath it.** The worker swaps
+  its own binary while keeping the pane, the scrollback, and
+  whatever is running — about 8 ms, no output lost. Nothing to
+  click and nothing to notice.
+
+### Changed
+
+- **Terminal output renders faster.** Streaming reuses GPU-ready
+  vertex buffers between paints, rebuilds only dirty rows in large
+  redraws, and limits sustained output to 30 paints per second
+  while preserving immediate interaction paints. A moved cursor
+  repaints only its old and new rows.
+
+- **Typing or moving the pointer over an agent pauses its settling
+  countdown.** Five quiet seconds after the last input the
+  countdown returns. Auto-settle also waits for a stop-time
+  classification to finish before closing a turn.
+
+- **Settings is grouped by what you are trying to do** rather than
+  by which part of attn the code lives in. Settings apply as you
+  change them, with a quiet "Saved" beside the field. Auto mode
+  sits beside the agents whose reach it decides.
+
+- **The agent pane header is now always shown**, carrying the
+  session's name in sentence case beside the same state dot the
+  sidebar shows.
+
+- **Session summaries and journal narration can each be switched
+  off independently** in Settings, without affecting the other or
+  context compaction.
+
+- **The new session picker remembers, per repository, whether the
+  last session ran in a worktree or the main checkout**, and opens
+  on that choice next time.
+
+- **Tickets retired into the garden.** Every `attn ticket` write
+  verb now prints the garden command that replaced it and exits
+  nonzero. `attn ticket show` and `attn ticket list` keep reading
+  the board forever.
+
+- **Claude sessions launched by attn no longer carry Claude Code's
+  own cross-session messaging tools.** They offered a second
+  address book that named sessions by working directory instead of
+  by name. `attn agent list` and `attn agent msg` remain the way
+  across, and they reach Codex sessions too. SendMessage stays for
+  native subagent follow-ups.
+
+- **The daemon's local WebSocket port now requires a credential.**
+  A per-profile token is minted on first startup; every client
+  presents it when it connects. Nothing to set up.
+
+- **`attn delegate` now requires the dispatcher to choose a model
+  explicitly** and defaults supported agents to medium reasoning
+  effort. A flag-free delegation from a non-Git directory is
+  refused instead of launching with no checkout.
+
+- **Markdown reviews keep the document wide with floating notes**,
+  balance open documents against agent panes, suspend crowded peers
+  as restorable state slivers, and offer a tabbed Focus view.
+
+- **The home screen splits your PRs from review requests** and
+  collects snoozed agents in their own section showing when each
+  comes back.
+
+### Fixed
+
+- **A computer crash no longer deletes sessions attn could have
+  brought back.** Recovery now keeps any session whose conversation
+  is still on disk and there is a launch intent to relaunch from.
+  Restarting the daemon also no longer resets running agents to
+  "launching" — the state attn last concluded now stands, and an
+  agent that finished while the daemon was down settles and reaches
+  your queue.
+
+- **A Claude session running a long tool call no longer goes grey.**
+  attn now reads whether an agent is running from the shape of the
+  terminal title rather than a list of specific spinner glyphs, so
+  a spinner Claude has not shipped yet still reads as running.
+
+- **Snoozed agents now wake promptly after their deadline when the
+  Mac slept through it.**
+
+- **Scrolling a terminal no longer freezes or gets stuck.** Each
+  wheel event was painting the viewport synchronously and reading
+  every visible row up to seven times; it now happens once per
+  frame. The check for whether a program wants the wheel itself
+  also no longer picks up stale data, so scrolling after wrapped
+  output moves the viewport instead of sending arrow keys.
+
+- **Links under the pointer stay highlighted and clickable while an
+  agent is streaming output** elsewhere in the terminal.
+
+- **Scrollback lines now keep their foreground and background
+  colors** when the viewport scrolls up to show them. The standard
+  256-color palette is also preserved when applying attn's custom
+  ANSI colors.
+
+- **Terminal arrow keys restored.** Keyboard input now talks
+  directly to the pinned libghostty engine.
+
+- **Codex output no longer crashes the browser terminal** after
+  scrollback reflow exposes hyperlink-heavy rows. A separate VT
+  engine bug that could enter an infinite loop on resize after
+  link-heavy output — leaving the pane frozen at 100% CPU — is
+  also fixed by the same engine pin update.
+
+- **The dashboard header no longer animates its gradient**, dropping
+  idle CPU from 14% of a core to 2%. Hidden panes hand their GPU
+  surface back; closed dock panels do the same; terminal panes no
+  longer reserve a depth buffer they never read. Together, about
+  110 MB less memory at rest.
+
+- **Typing in a settings field is no longer wiped when some
+  unrelated setting changes underneath you.**
+
+- **The daemon now refuses to start when something else holds its
+  WebSocket port**, naming the address, the profile, and the likely
+  owner instead of running on with the app talking to the wrong
+  daemon.
+
+- **`attn daemon stop` and `attn profile clean` now work on Linux
+  without lsof.** Both prove the pid holder through the kernel's
+  /proc instead.
+
+- **Closed tickets, including their activity and attachments, now
+  remain in the archive forever.** A one-time upgrade recovers
+  terminal tickets from local backups and proven transcripts.
+
+- **`attn agent msg` now says a message was delivered only once the
+  target actually picked it up.** A session with something in front
+  of its prompt — a dialog, an overlay, an unfocused composer — no
+  longer silently swallows the message.
+
+- **Sessions that were already running when you update attn now
+  reopen normally.** A snapshot the new app cannot read is skipped
+  instead of looping behind an error banner; the session comes back
+  without its earlier scrollback and keeps running.
+
+- **A pi session now keeps reporting its state after attn's daemon
+  restarts.** Until now a restart quietly ended state reporting for
+  every running pi session, and nothing short of relaunching
+  brought the two back together.
+
+- **Agents that ask the terminal whether it is light or dark now
+  get an answer**, so pi styles itself from the actual theme
+  instead of guessing from the environment.
+
+- **A profile can no longer act on another profile's data.**
+  Conflicting routing is refused outright — before anything opens a
+  database — with an error naming every variable that disagreed.
+
+- **Large Mermaid diagrams now keep readable labels inside a
+  scrollable viewport** instead of shrinking text to a few pixels.
+  Oversized diagrams open in a focused view with Fit, 100%, zoom,
+  and pan controls.
+
+- **A running session no longer renames itself once a second.** A
+  busy turn crossing a freshness window was being reported as a
+  state change, writing a durable event and pushing the session to
+  every open client on every crossing.
+
+### Removed
+
+- **attn no longer supports OpenCode.** The bundled driver plugin
+  is gone; existing OpenCode conversations stay in their own tool.
+
+<!-- changelog-fragments-sha256: eac10c622f3777647bd260c806f0679134dd2f50fcf31533910acc1d2b1c2510 -->
+
+---
+
 ## [2026-08-02]
 
 ### Added

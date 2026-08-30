@@ -1,5 +1,0 @@
-kind: internal
-area: release
-change: >
-  Make the release-candidate gate fixture use its own source branch so the
-  repository-script suite also runs from the real next branch.

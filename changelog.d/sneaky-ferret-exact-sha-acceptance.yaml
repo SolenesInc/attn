@@ -1,5 +1,0 @@
-kind: internal
-area: release
-change: >
-  CI now publishes exact-commit acceptance for next and main, exercises the
-  complete automated matrix, and keeps branch-health issues in sync.

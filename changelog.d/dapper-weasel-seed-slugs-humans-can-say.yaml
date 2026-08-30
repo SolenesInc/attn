@@ -1,8 +1,0 @@
-kind: changed
-area: garden
-change: >
-  Seed slugs drop their stop words ("Mermaid rendered in the grid, in Rust"
-  becomes mermaid-rendered-grid-rust), every seed verb prints id, slug and
-  title, and agents are guided to speak of a seed by its slug to the user
-  while keeping the id for commands and other agents. Existing seeds are
-  re-slugged once on upgrade.

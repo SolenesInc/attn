@@ -1,9 +1,0 @@
-kind: internal
-area: codebase
-change: >
-  Comment length is now enforced: a lint pass in Go (a go/analysis analyzer,
-  `make lint-go`) and TypeScript (oxlint with a repo plugin, `make
-  lint-frontend`) fails CI on any comment block longer than two lines, with
-  tool directives, cgo preambles, and generated files exempt. The
-  anti-slop oxlint rules are vendored under app/lint/anti-slop, all switched
-  off until the tree is clean under each one.
