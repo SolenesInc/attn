@@ -12,6 +12,8 @@ Run commands from the repository root.
 - Install the current checkout; source fingerprint mismatches fail.
 - Remote target: `attn-remote@orb`; provision with
   `pnpm --dir app run real-app:provision-remote`.
+  Provisioning installs the mock-agent command and four tripwire shims; it does
+  not need provider credentials.
 
 ## Writing scenarios
 
@@ -88,6 +90,12 @@ fails the scenario on a non-empty ledger and prints the lines.
   `on`, `no daemon` or `unreadable`, or a marker from another run, fails the
   scenario with the value in the digest. A scenario allowing real agents keeps
   the old warn-and-continue: it has nothing to prove.
+- Remote probe scenarios arm a second tripwire on the fixture VM. Their launch
+  environment puts the provisioned shim directory first, pins all four agent
+  executables, and sets `ATTN_HEADLESS_TASKS=off`. Each scenario saves the
+  remote daemon's environment receipt and copies the remote ledger into its
+  local artifacts before it can pass. TR-502 and TR-504 launch the provisioned
+  mock through the same command name on macOS and Linux.
 
 ## Reading results
 

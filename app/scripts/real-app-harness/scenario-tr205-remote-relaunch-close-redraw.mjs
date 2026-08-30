@@ -42,6 +42,12 @@ import {
   removeStaleHarnessScenarioSessions,
   waitForEndpointConnected,
 } from './scenarioRemote.mjs';
+import {
+  armRemoteAgentTripwire,
+  buildRemoteAgentTripwire,
+  collectRemoteAgentTripwire,
+  verifyRemoteDaemonTripwire,
+} from './remoteAgentTripwire.mjs';
 import { currentHarnessProfile } from './harnessProfile.mjs';
 
 function isNativeCaptureUnavailable(error) {
@@ -396,10 +402,16 @@ async function main() {
   const remoteHarnessBase = `${remoteHome}/.attn/harness`;
   const remoteDirectory = options.remoteDirectory || remoteHome;
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
+  const remoteTripwire = buildRemoteAgentTripwire({
+    remoteHome,
+    remotePaths,
+    scenarioId: runner.scenarioId,
+  });
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
     appPath: options.appPath,
     launchEnv: {
+      ...remoteTripwire.launchEnv,
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
       ATTN_REMOTE_SOCKET_PATH: remotePaths.remoteHarnessSocket,
       ATTN_REMOTE_DB_PATH: remotePaths.remoteHarnessDB,
@@ -419,6 +431,8 @@ async function main() {
   let restoredMainState = null;
   let finalMainState = null;
   let anchorText = null;
+  let remoteTripwireReceipt = null;
+  let remoteTripwireLedger = null;
   let cleanupStarted = false;
 
   const runFinalCleanup = async () => {
@@ -460,6 +474,10 @@ async function main() {
       });
     });
 
+    await runner.step('arm_remote_agent_tripwire', async () => {
+      await armRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner });
+    });
+
     await runner.step('launch_app_and_connect_daemon', async () => {
       await launchFreshAppAndConnect(client, observer);
       await removeStaleHarnessEndpoints(observer, 20_000);
@@ -476,6 +494,10 @@ async function main() {
       runner.writeJson('endpoint.json', connected);
       return connected;
     });
+
+    remoteTripwireReceipt = await runner.step('verify_remote_daemon_tripwire', async () => (
+      verifyRemoteDaemonTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
 
     sessionId = await runner.step('create_remote_session', async () => {
       const resultSessionId = await createSessionAndWaitForInitialPane({
@@ -702,6 +724,9 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '08-after-closing-initial-split', sessionId);
     });
 
+    remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
+      collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
     const finalWorkspace = await client.request('get_workspace', { sessionId });
     const summary = await runner.finishSuccess({
       sessionId,
@@ -711,6 +736,10 @@ async function main() {
       remoteAgent: options.remoteAgent,
       anchorText,
       probeStyle,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
       panes: {
         initialPaneId,
         initialShellPaneId,
@@ -736,6 +765,12 @@ async function main() {
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
+    remoteTripwireLedger ??= await collectRemoteAgentTripwire({
+      target: options.sshTarget,
+      fixture: remoteTripwire,
+      runner,
+      assertClean: false,
+    }).catch(() => null);
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId);
     }
@@ -752,6 +787,10 @@ async function main() {
         baselineMainWidth: baselineMainState?.state?.pane?.bounds?.width ?? null,
         restoredMainWidth: restoredMainState?.state?.pane?.bounds?.width ?? null,
         finalMainWidth: finalMainState?.pane?.bounds?.width ?? null,
+      },
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
       },
     });
     console.error(summary.error);
