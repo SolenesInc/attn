@@ -44,16 +44,15 @@ function clipboardLetter(e: ClipboardChordEvent): 'c' | 'v' | null {
   return null;
 }
 
-// Off-mac Ctrl+C is the PTY's interrupt, so the terminal's clipboard moves to Ctrl+Shift, as in
-// every Linux terminal. `copyCommand` has no off-mac chord; the context menu still reaches it.
+// Off-mac Ctrl+C is the PTY's interrupt, so the terminal's clipboard also takes Ctrl+Shift.
+// Meta is never a PTY key, so the Mac chords answer everywhere, Ctrl+Shift as a fallback.
 export function terminalClipboardChord(e: ClipboardChordEvent): TerminalClipboardChord {
   const letter = clipboardLetter(e);
   if (!letter) return null;
-  if (isMacLikePlatform()) {
-    if (!e.metaKey) return null;
+  if (e.metaKey) {
     if (letter === 'v') return 'paste';
     return e.shiftKey ? 'copyCommand' : 'copy';
   }
-  if (e.metaKey || !e.ctrlKey || !e.shiftKey) return null;
+  if (isMacLikePlatform() || !e.ctrlKey || !e.shiftKey) return null;
   return letter === 'v' ? 'paste' : 'copy';
 }

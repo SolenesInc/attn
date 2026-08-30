@@ -71,4 +71,16 @@ describe('terminalClipboardChord', () => {
       )).toBe('paste');
     });
   });
+
+  it('also answers the Mac chords off-mac, since Meta is never a PTY key', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(terminalClipboardChord(chordEvent({ key: 'c', code: 'KeyC', metaKey: true })))
+        .toBe('copy');
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', metaKey: true, shiftKey: true }),
+      )).toBe('copyCommand');
+      expect(terminalClipboardChord(chordEvent({ key: 'v', code: 'KeyV', metaKey: true })))
+        .toBe('paste');
+    });
+  });
 });

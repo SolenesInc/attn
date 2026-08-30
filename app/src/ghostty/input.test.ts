@@ -185,6 +185,21 @@ describe('attachTerminalInput', () => {
     input.dispose();
   });
 
+  it('off-mac also leaves the Mac clipboard chords to the browser', () => {
+    const input = setup();
+    withNavigatorPlatform('Linux aarch64', () => {
+      const copy = key(input.window, 'keydown', { key: 'c', code: 'KeyC', metaKey: true });
+      const paste = key(input.window, 'keydown', { key: 'v', code: 'KeyV', metaKey: true });
+      input.element.dispatchEvent(copy);
+      input.element.dispatchEvent(paste);
+
+      expect(input.target!.encodeKey).not.toHaveBeenCalled();
+      expect(copy.defaultPrevented).toBe(false);
+      expect(paste.defaultPrevented).toBe(false);
+    });
+    input.dispose();
+  });
+
   it('leaves the browser default alone when libghostty produces no bytes', () => {
     const target = {
       encodeKey: vi.fn(() => ''),
