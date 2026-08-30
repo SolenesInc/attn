@@ -39,6 +39,21 @@ describe('UiAutomationClient.request', () => {
   });
 });
 
+describe('UiAutomationClient.waitForManifest', () => {
+  it('uses the caller timeout without a platform floor', async () => {
+    vi.useFakeTimers();
+    const client = new UiAutomationClient({
+      manifestPath: path.join(os.tmpdir(), `attn-harness-manifest-that-never-appears-${process.pid}.json`),
+    });
+
+    const pending = expect(client.waitForManifest(200)).rejects.toThrow(
+      'Timed out waiting for UI automation manifest after 200ms',
+    );
+    await vi.advanceTimersByTimeAsync(200);
+    await pending;
+  });
+});
+
 describe('UiAutomationClient production safety', () => {
   it('refuses a production app target without the explicit acknowledgement', () => {
     expect(() => new UiAutomationClient({

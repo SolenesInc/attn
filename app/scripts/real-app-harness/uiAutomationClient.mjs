@@ -240,11 +240,10 @@ export class UiAutomationClient {
   }
 
   async waitForManifest(timeoutMs = 15_000) {
-    const budgetMs = Math.max(timeoutMs, this.platform.manifestWaitFloorMs);
     const startedAt = Date.now();
     let lastError = null;
 
-    while (Date.now() - startedAt < budgetMs) {
+    while (Date.now() - startedAt < timeoutMs) {
       try {
         const manifest = this.readManifest();
         if (manifest?.enabled && manifest.port && manifest.token && processExists(manifest.pid)) {
@@ -257,7 +256,7 @@ export class UiAutomationClient {
     }
 
     throw new Error(
-      `Timed out waiting for UI automation manifest after ${budgetMs}ms at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
+      `Timed out waiting for UI automation manifest after ${timeoutMs}ms at ${this.manifestPath}: ${lastError instanceof Error ? lastError.message : lastError || 'manifest unavailable'}`
     );
   }
 
