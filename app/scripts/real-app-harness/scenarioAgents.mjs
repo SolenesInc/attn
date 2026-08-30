@@ -282,3 +282,12 @@ export async function promptAgentForStructuredBlock(client, sessionId, token, li
 
   throw new Error(`Timed out waiting for a structured block reply for ${token} in session ${sessionId}`);
 }
+
+export function writeQueueAgentFixture(cwd, { minimumWorkingMs, turns = [] } = {}) {
+  return writeMockAgentFixture(cwd, {
+    name: 'queue mock',
+    ...(minimumWorkingMs === undefined ? {} : { minimumWorkingMs }),
+    defaultActions: [{ type: 'reply', text: 'Which part should I start with?', state: 'waiting_input' }],
+    turns,
+  });
+}

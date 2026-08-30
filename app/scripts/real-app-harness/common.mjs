@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -308,6 +309,34 @@ export async function createSessionAndWaitForInitialPane({
     await waitForPaneVisible(client, result.sessionId, pane.paneId, paneWaitMs);
   }
   return result.sessionId;
+}
+
+// `attn ticket new` is retired; the daemon commands behind it are not, and this
+// is the only way left to a legacy ticket.
+export async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(socketPath);
+    let raw = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`timed out waiting for ${message.cmd}`));
+    }, timeoutMs);
+    socket.setEncoding('utf8');
+    socket.once('connect', () => socket.write(`${JSON.stringify(message)}\n`));
+    socket.on('data', (chunk) => {
+      raw += chunk;
+      if (!raw.includes('\n')) return;
+      clearTimeout(timer);
+      socket.end();
+      const value = JSON.parse(raw.split('\n', 1)[0]);
+      if (!value.ok) reject(new Error(value.error || `${message.cmd} failed`));
+      else resolve(value);
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 export function timestampSlug() {

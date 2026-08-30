@@ -42,7 +42,7 @@ describe('scenarioCatalog agent tripwire flags', () => {
   });
 
   it('allows every binary for a scenario that still launches a real agent', () => {
-    expect(allowRealAgentsForRunner('AGENT-QUEUE')).toBe(true);
+    expect(allowRealAgentsForRunner('CRASH-REC')).toBe(true);
   });
 
   it('refuses a runner outside the catalog rather than allowing every binary', () => {
@@ -53,6 +53,23 @@ describe('scenarioCatalog agent tripwire flags', () => {
 
   it('keeps the turn-accounting family armed on the mock agent', () => {
     for (const runnerId of ['TR-201', 'TR-204', 'TR-301', 'TR-401', 'TR-401-CODEX-MAIN', 'TR-402']) {
+      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
+    }
+  });
+
+  it('keeps the scenarios that never prompt their agent armed on the mock agent', () => {
+    for (const runnerId of [
+      'FOCUS-PROBE',
+      'GHOSTTY-SCROLLBACK-ANCHOR',
+      'SNAPSHOT-SCROLLBACK-RESTORE',
+      'DELEGATE-WORKSPACE-PLACEMENT',
+    ]) {
+      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
+    }
+  });
+
+  it('keeps the queue family armed on the mock agent', () => {
+    for (const runnerId of ['AGENT-QUEUE', 'AGENT-QUEUE-SNOOZE', 'COUNTDOWN-CANCEL', 'SETTLE-TYPING-HOLD']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
     }
   });
