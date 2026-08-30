@@ -14,10 +14,12 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
-import { preTrustClaudeFolder } from './scenarioAgents.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 
 const RINGING_NOTE = 'RING7';
 const BRIEF = `Live proof only. Read your assigned seed id from this prompt, run attn seed note SEED_ID -m ${RINGING_NOTE} --ring, then wait. Do not harvest until you are told.`;
+const HARVEST_REASON = 'the live doorbell proof is done';
+const RING_RELEASE_FILE = 'ring-now';
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 
 function parseArgs(argv) {
@@ -84,6 +86,32 @@ async function waitForPane(client, pane, expected, timeoutMs = 20_000) {
   throw new Error(`pane never received ${JSON.stringify(expected)}:\n${text}`);
 }
 
+// --no-worktree puts the delegate in the dispatcher's own checkout, so this is
+// the fixture the delegated mock reads.
+function writeDelegateFixture(cwd) {
+  writeMockAgentFixture(cwd, {
+    name: 'seed-bell',
+    turns: [
+      {
+        includes: 'Read your assigned seed id from this prompt',
+        actions: [
+          { type: 'capture', from: 'prompt', pattern: '(s-[a-z0-9]{6})', name: 'seed' },
+          // The pane keeps no line breaks to slice on, so the assertion reads
+          // everything after the doorbell: nothing may print the note first.
+          { type: 'wait_for_file', path: RING_RELEASE_FILE },
+          { type: 'attn', args: ['seed', 'note', '{{seed}}', '-m', RINGING_NOTE, '--ring'] },
+        ],
+      },
+      {
+        includes: 'Now harvest your assigned seed',
+        actions: [
+          { type: 'attn', args: ['seed', 'harvest', '{{seed}}', '-m', HARVEST_REASON], state: 'idle' },
+        ],
+      },
+    ],
+  });
+}
+
 async function openDispatcher(client, observer, runner) {
   const cwd = path.join(runner.sessionDir, 'dispatcher');
   fs.mkdirSync(cwd, { recursive: true });
@@ -122,7 +150,7 @@ async function main() {
 
     delegated = await runner.step('dispatch_delegate', async () => {
       const known = new Set(observer.sessionsById.keys());
-      preTrustClaudeFolder(path.join(runner.sessionDir, 'dispatcher'));
+      writeDelegateFixture(path.join(runner.sessionDir, 'dispatcher'));
       await client.request('write_pane', {
         ...dispatcher,
         text: `attn delegate --agent claude --model claude-haiku-4-5 ` +
@@ -134,6 +162,16 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
+      // The delegate exists before `attn delegate` exits, and anything typed
+      // before it does lands in that process instead of the shell.
+      await observer.waitFor(
+        () => observer.sessionsById.get(dispatcher.sessionId)?.state === 'idle',
+        'the dispatcher shell back at its prompt',
+        60_000,
+      );
+      // The app opens the delegation it just spawned, which releases the
+      // dispatcher's terminal; only the shown pane answers read_pane_text.
+      await client.request('select_session', { sessionId: dispatcher.sessionId });
       await runInPane(client, dispatcher, 'true', '');
       return spawned;
     });
@@ -148,6 +186,7 @@ async function main() {
     });
 
     await runner.step('ring_note_reaches_dispatcher', async () => {
+      fs.writeFileSync(path.join(runner.sessionDir, 'dispatcher', RING_RELEASE_FILE), 'ring\n');
       const text = await waitForPane(client, dispatcher, `${seed} moved: note`, 60_000);
       const delivered = text.slice(text.lastIndexOf(`🔔 ${seed} moved: note`));
       runner.assert(!saw(delivered, RINGING_NOTE), 'the doorbell carries no note content', { delivered });
@@ -161,7 +200,7 @@ async function main() {
       await runInPane(client, dispatcher,
         `attn seed show ${seed} --session ${dispatcher.sessionId}`, RINGING_NOTE);
       await runInPane(client, dispatcher,
-        `attn agent msg ${seed} "Now harvest your assigned seed with reason: the live doorbell proof is done" ` +
+        `attn agent msg ${seed} "Now harvest your assigned seed with reason: ${HARVEST_REASON}" ` +
           `--source-session ${dispatcher.sessionId}`,
         'delivered');
       const text = await waitForPane(client, dispatcher, `${seed} moved: harvested`, 60_000);
