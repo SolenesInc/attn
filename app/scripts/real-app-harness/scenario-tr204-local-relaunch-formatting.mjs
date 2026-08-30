@@ -58,7 +58,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-204',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-tr204-local-relaunch-formatting',
     metadata: {
       agent: 'claude',

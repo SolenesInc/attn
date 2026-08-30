@@ -264,21 +264,18 @@ export const scenarioCatalog = [
   {
     id: 'tr201-local-claude',
     runnerId: 'TR-201',
-    allowRealAgents: true,
     label: 'TR-201 local claude existing split relaunch',
     command: ['pnpm', 'run', 'real-app:scenario-tr201'],
   },
   {
     id: 'tr204-local-claude',
     runnerId: 'TR-204',
-    allowRealAgents: true,
     label: 'TR-204 local claude relaunch formatting',
     command: ['pnpm', 'run', 'real-app:scenario-tr204'],
   },
   {
     id: 'tr301-local-claude',
     runnerId: 'TR-301',
-    allowRealAgents: true,
     label: 'TR-301 local claude utility focus',
     command: ['pnpm', 'run', 'real-app:scenario-tr301'],
   },

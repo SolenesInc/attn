@@ -44,7 +44,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-301',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-tr301-local-utility-session-switch',
     metadata: {
       agent: 'claude',
