@@ -460,6 +460,9 @@ type PullRequestSnapshot struct {
 	Author         string
 	Draft          bool
 	State          string
+	Merged         bool
+	Mergeable      *bool
+	MergeableState string
 	HeadSHA        string
 	HeadRef        string
 	HeadRepository string
@@ -474,13 +477,16 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 		return nil, fmt.Errorf("fetch pull request snapshot: %w", err)
 	}
 	var response struct {
-		Number  int    `json:"number"`
-		HTMLURL string `json:"html_url"`
-		Title   string `json:"title"`
-		Body    string `json:"body"`
-		Draft   bool   `json:"draft"`
-		State   string `json:"state"`
-		User    struct {
+		Number         int    `json:"number"`
+		HTMLURL        string `json:"html_url"`
+		Title          string `json:"title"`
+		Body           string `json:"body"`
+		Draft          bool   `json:"draft"`
+		State          string `json:"state"`
+		Merged         bool   `json:"merged"`
+		Mergeable      *bool  `json:"mergeable"`
+		MergeableState string `json:"mergeable_state"`
+		User           struct {
 			Login string `json:"login"`
 		} `json:"user"`
 		Head struct {
@@ -503,7 +509,8 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 	}
 	return &PullRequestSnapshot{
 		Number: response.Number, URL: response.HTMLURL, Title: response.Title, Body: response.Body,
-		Author: response.User.Login, Draft: response.Draft, State: response.State,
+		Author: response.User.Login, Draft: response.Draft, State: response.State, Merged: response.Merged,
+		Mergeable: response.Mergeable, MergeableState: response.MergeableState,
 		HeadSHA: response.Head.SHA, HeadRef: response.Head.Ref, HeadRepository: response.Head.Repo.FullName,
 		BaseSHA: response.Base.SHA, BaseRef: response.Base.Ref, BaseRepository: response.Base.Repo.FullName,
 	}, nil
@@ -569,31 +576,40 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 		HeadBranch:     prData.Head.Ref,
 	}
 
-	switch prData.MergeableState {
-	case "clean":
-		details.CIStatus = "success"
-	case "blocked":
-		details.CIStatus = "pending"
-	case "dirty":
-		details.CIStatus = "failure"
-	case "unstable":
-		details.CIStatus = "pending"
-	default:
-		details.CIStatus = "none"
-	}
-
-	reviewPath := fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number)
-	reviewBody, err := c.doRequest("GET", reviewPath, nil)
-	if err == nil {
-		var reviews []struct {
-			State string `json:"state"`
-		}
-		if json.Unmarshal(reviewBody, &reviews) == nil {
-			details.ReviewStatus = computeReviewStatus(reviews)
-		}
-	}
+	details.CIStatus = CIStatusFromMergeableState(prData.MergeableState)
+	// Unreadable reviews leave the field empty; mergeability is still worth reporting.
+	details.ReviewStatus, _ = c.FetchPullRequestReviewStatus(repo, number)
 
 	return details, nil
+}
+
+// mergeable_state is the CI signal already on the pull request payload, so reading
+// it costs no extra call to the checks API.
+func CIStatusFromMergeableState(mergeableState string) string {
+	switch mergeableState {
+	case "clean":
+		return "success"
+	case "blocked", "unstable":
+		return "pending"
+	case "dirty":
+		return "failure"
+	default:
+		return "none"
+	}
+}
+
+func (c *Client) FetchPullRequestReviewStatus(repo string, number int) (string, error) {
+	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number), nil)
+	if err != nil {
+		return "", fmt.Errorf("fetch PR reviews: %w", err)
+	}
+	var reviews []struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &reviews); err != nil {
+		return "", fmt.Errorf("parse PR reviews: %w", err)
+	}
+	return computeReviewStatus(reviews), nil
 }
 
 func computeReviewStatus(reviews []struct {

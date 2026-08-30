@@ -122,6 +122,68 @@ func TestFetchPullRequestSnapshotUsesOneReadOnlyRequest(t *testing.T) {
 	}
 }
 
+func TestFetchPullRequestSnapshotSeparatesMergedFromClosed(t *testing.T) {
+	tests := []struct {
+		name      string
+		payload   string
+		wantState string
+		wantMerge bool
+	}{
+		{"merged", `"state":"closed","merged":true`, "closed", true},
+		{"closed unmerged", `"state":"closed","merged":false`, "closed", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"number":42,` + tc.payload + `,
+					"mergeable":true,"mergeable_state":"clean","head":{"sha":"abc123","ref":"topic"}}`))
+			}))
+			defer server.Close()
+			client, err := NewClient(server.URL, "test-token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := client.FetchPullRequestSnapshot("owner/repo", 42)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snapshot.State != tc.wantState || snapshot.Merged != tc.wantMerge {
+				t.Errorf("state = %q merged = %v, want %q and %v", snapshot.State, snapshot.Merged, tc.wantState, tc.wantMerge)
+			}
+			if snapshot.MergeableState != "clean" || snapshot.Mergeable == nil || !*snapshot.Mergeable {
+				t.Errorf("mergeability = %v/%q, want a clean mergeable pull request", snapshot.Mergeable, snapshot.MergeableState)
+			}
+		})
+	}
+}
+
+func TestCIStatusFromMergeableState(t *testing.T) {
+	tests := map[string]string{
+		"clean": "success", "blocked": "pending", "unstable": "pending",
+		"dirty": "failure", "unknown": "none", "": "none",
+	}
+	for mergeableState, want := range tests {
+		if got := CIStatusFromMergeableState(mergeableState); got != want {
+			t.Errorf("CIStatusFromMergeableState(%q) = %q, want %q", mergeableState, got, want)
+		}
+	}
+}
+
+func TestFetchPullRequestReviewStatusReportsFailureInsteadOfNone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !contains(r.URL.Path, "/reviews") {
+			t.Fatalf("path = %q, want the reviews endpoint", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client, _ := NewClient(server.URL, "test-token")
+
+	if status, err := client.FetchPullRequestReviewStatus("owner/repo", 42); err == nil {
+		t.Fatalf("status = %q with no error, want the failure reported so a caller can keep what it has", status)
+	}
+}
+
 func TestClient_SearchAuthoredPRs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/search/issues" {

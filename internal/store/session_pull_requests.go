@@ -25,10 +25,27 @@ type SessionPullRequestRecord struct {
 	HeadBranch      string
 	StatusFetchedAt string
 	LastActivityAt  string
+	// The refresh job's pacing cursor: when it last looked, success or not.
+	// StatusFetchedAt is the last status that actually landed, which is what the app shows.
+	StatusCheckedAt string
+}
+
+// Status the refresh job reads from GitHub. Everything else on a row is set when
+// the pull request is recorded and never moves.
+type SessionPullRequestStatus struct {
+	Title          string
+	Draft          bool
+	State          string
+	CIStatus       string
+	ReviewStatus   string
+	MergeableState string
+	HeadSHA        string
+	HeadBranch     string
 }
 
 const sessionPullRequestColumns = `session_id, pr_id, repository, number, url, created_at, title, draft,
-	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at`
+	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at,
+	status_checked_at`
 
 // Reports false when the row was already there; a hook and a manual `attn pr
 // record` reporting the same pull request is normal.
@@ -39,11 +56,12 @@ func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.
 		return false, errors.New("store has no database")
 	}
 
+	stamp := now.Format(time.RFC3339Nano)
 	result, err := s.db.Exec(`
 		INSERT OR IGNORE INTO session_pull_requests
-			(session_id, pr_id, repository, number, url, created_at, state)
-		VALUES (?, ?, ?, ?, ?, ?, 'open')`,
-		rec.SessionID, rec.PRID, rec.Repository, rec.Number, rec.URL, now.Format(time.RFC3339Nano))
+			(session_id, pr_id, repository, number, url, created_at, state, last_activity_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`,
+		rec.SessionID, rec.PRID, rec.Repository, rec.Number, rec.URL, stamp, stamp)
 	if err != nil {
 		return false, err
 	}
@@ -100,6 +118,78 @@ func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullReque
 	return bySession
 }
 
+// Rows the refresh job may still learn something about. A merged or closed pull
+// request is finished, so it never appears here again.
+func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+
+	rows, err := s.db.Query(`
+		SELECT ` + sessionPullRequestColumns + `
+		FROM session_pull_requests
+		WHERE state NOT IN ('merged', 'closed')
+		ORDER BY created_at DESC, rowid DESC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	records, _ := scanSessionPullRequests(rows)
+	return records
+}
+
+// Keyed by pull request, not by session: the status belongs to the pull request, so
+// two sessions that opened the same one share a single fetch.
+func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+
+	stamp := at.Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`
+		UPDATE session_pull_requests
+		SET title = ?, draft = ?, state = ?, ci_status = ?, review_status = ?,
+			mergeable_state = ?, head_sha = ?, head_branch = ?,
+			status_fetched_at = ?, status_checked_at = ?
+		WHERE pr_id = ?`,
+		status.Title, status.Draft, status.State, status.CIStatus, status.ReviewStatus,
+		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID)
+	return err
+}
+
+// The refresh job looked and came back empty-handed. Moving the cursor alone keeps a
+// pull request nobody can read from being retried on every tick.
+func (s *Store) MarkSessionPullRequestChecked(prID string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+
+	_, err := s.db.Exec(
+		`UPDATE session_pull_requests SET status_checked_at = ? WHERE pr_id = ?`,
+		at.Format(time.RFC3339Nano), prID)
+	return err
+}
+
+// Something moved on this pull request, so it goes back to the hot refresh cadence.
+func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+
+	_, err := s.db.Exec(
+		`UPDATE session_pull_requests SET last_activity_at = ? WHERE pr_id = ?`,
+		at.Format(time.RFC3339Nano), prID)
+	return err
+}
+
 func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -127,6 +217,7 @@ func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error)
 			&rec.SessionID, &rec.PRID, &rec.Repository, &rec.Number, &rec.URL, &rec.CreatedAt,
 			&rec.Title, &rec.Draft, &rec.State, &rec.CIStatus, &rec.ReviewStatus,
 			&rec.MergeableState, &rec.HeadSHA, &rec.HeadBranch, &rec.StatusFetchedAt, &rec.LastActivityAt,
+			&rec.StatusCheckedAt,
 		); err != nil {
 			return nil, err
 		}

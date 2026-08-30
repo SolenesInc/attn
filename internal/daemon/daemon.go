@@ -353,6 +353,11 @@ type Daemon struct {
 	docSubsSeq             int64
 	docUnsubHooks          func()
 	conversationUnsubHooks func()
+	sessionPRUnsubHooks    func()
+
+	// How the session pull request refresh reaches a GitHub host. Nil means the
+	// client registry; tests answer without a network.
+	sessionPRHosts func(host string) (sessionPRHost, bool)
 
 	notebookPendingMu    sync.Mutex
 	notebookPendingPaths map[string][]string
