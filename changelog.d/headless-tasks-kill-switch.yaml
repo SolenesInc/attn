@@ -1,0 +1,13 @@
+kind: added
+area: daemon
+change: >
+  One switch now turns off every headless task — the model runs the daemon starts
+  on its own for stop-time classification, session titles, Notebook session
+  summaries and workspace narration, ticket reconciliation, session activity,
+  workspace-context compaction, and session instructions. Set
+  `ATTN_HEADLESS_TASKS=off` or the `headless_tasks.enabled` setting (the
+  environment wins), and each duty refuses before it enqueues or spawns, logging
+  `headless task refused (<duty>)`. A refused stop classifier falls back to the
+  hook evidence already recorded, so sessions still settle. The daemon logs the
+  mode at startup, reports it in `/health`, and `attn preflight` shows it as
+  `headless.tasks`.

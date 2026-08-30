@@ -173,7 +173,8 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 	}
 	// Read before dropSessionRecord deletes the row.
 	session := d.store.Get(sessionID)
-	runner := d.jobQueueRef()
+	// nil still lets the crash marking below run; only the verdict needs a model.
+	runner := d.headlessJobQueue(reconcileKind)
 
 	intentionalClose := d.sessionCloseWasIntentional(sessionID)
 
@@ -188,7 +189,7 @@ func (d *Daemon) reconcileTicketsOnSessionEnd(sessionID, state string) {
 			}
 			statusAtClaim = store.TicketStatusCrashed
 		}
-		if runner == nil || runner.Disabled() {
+		if runner == nil {
 			continue
 		}
 		claimed, err := d.store.ClaimTicketReconciliation(ticket.ID, time.Now())
@@ -279,6 +280,9 @@ func (d *Daemon) resolveReconcileTranscript(agentID, sessionID, cwd string, anch
 func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any, retErr error) {
 	if d.ticketReconcileDone != nil {
 		defer d.ticketReconcileDone(jobSubject(job))
+	}
+	if d.headlessTaskRefused(reconcileKind) {
+		return nil, nil
 	}
 	in, err := reconcileInputsFromJob(job)
 	if err != nil {
@@ -466,8 +470,8 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	if d.store == nil {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(reconcileKind)
+	if runner == nil {
 		return
 	}
 	tickets, err := d.store.ListTickets(store.TicketListFilter{})

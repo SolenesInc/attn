@@ -86,6 +86,9 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	if !d.activityEnabled() {
 		return nil, nil
 	}
+	if d.headlessTaskRefused(sessionActivityKind) {
+		return nil, nil
+	}
 	tier := d.PresenceTier()
 	interval := d.activityInterval(tier)
 	if interval <= 0 {
@@ -169,8 +172,8 @@ func (d *Daemon) enqueueSessionActivity(sessionID string) {
 	if d.PresenceTier() == PresenceAway {
 		return
 	}
-	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() {
+	runner := d.headlessJobQueue(sessionActivityKind)
+	if runner == nil {
 		return
 	}
 	session := d.store.Get(sessionID)
@@ -213,6 +216,9 @@ func sessionGeneratesActivity(session *protocol.Session) bool {
 
 func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any, error) {
 	if !d.activityEnabled() || d.PresenceTier() == PresenceAway {
+		return nil, nil
+	}
+	if d.headlessTaskRefused(sessionActivityKind) {
 		return nil, nil
 	}
 

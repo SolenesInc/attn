@@ -14,6 +14,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -308,6 +309,10 @@ func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.Workspace
 	if !d.notebookTasksEnabled() {
 		return
 	}
+	// Ahead of the queue lookup: a down queue compacts inline, which also spawns.
+	if d.headlessTaskRefused(compactContextKind) {
+		return
+	}
 	config, err := d.keeperCompactConfig()
 	if err != nil {
 		d.logf("keeper compact: configuration: %v", err)
@@ -464,6 +469,9 @@ func (d *Daemon) executeKeeperCompact(
 	config keeperCompactConfig,
 	canonical *protocol.WorkspaceContext,
 ) (keeperCompactExecution, error) {
+	if d.headlessTaskRefused(compactContextKind) {
+		return keeperCompactExecution{}, headless.Refusal(compactContextKind)
+	}
 	driver := agentdriver.Get(config.Agent)
 	if driver == nil {
 		return keeperCompactExecution{}, fmt.Errorf("keeper compact agent not found: %s", config.Agent)

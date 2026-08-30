@@ -7,6 +7,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -198,7 +199,12 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 	apply(decision)
 }
 
+// A refusal takes the classifier-error route on purpose: an unknown verdict
+// files no classifier claim, so the hook evidence already recorded settles the turn.
 func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout time.Duration) (string, error) {
+	if d.headlessTaskRefused("classifier") {
+		return protocol.StateUnknown, headless.Refusal("classifier")
+	}
 	if d.classifier != nil {
 		return d.classifier.Classify(text, timeout)
 	}

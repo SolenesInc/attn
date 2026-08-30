@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/headless"
 )
 
 const promptTemplate = `Classify how this assistant message ends the agent's turn: waiting for user input, done, or paused on its own background work.
@@ -272,6 +274,9 @@ func parseVerdictFromCodexJSONL(output []byte) (string, bool) {
 }
 
 func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoningEffort, prompt, workDir string) (string, string, error) {
+	if !headless.Enabled() {
+		return "", "", headless.Refusal("codex classifier")
+	}
 	tempDir, err := os.MkdirTemp("", "attn-codex-classifier-*")
 	if err != nil {
 		return "", "", err
@@ -346,6 +351,9 @@ func ClassifyWithCopilot(text string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")
 		return "idle", nil
+	}
+	if !headless.Enabled() {
+		return "unknown", headless.Refusal("copilot classifier")
 	}
 	DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
 
