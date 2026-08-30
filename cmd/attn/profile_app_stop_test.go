@@ -293,24 +293,29 @@ func TestCleanProfileAbortsWhenTheAppRelaunchesWhileStopping(t *testing.T) {
 	}
 }
 
-func TestCleanProfileAbortsWhenTheAppLockIsHeld(t *testing.T) {
+func TestCleanProfileAbortsWhileAnAppHoldsTheLockAndProceedsOnceItReleases(t *testing.T) {
 	shrinkAppStopWaits(t)
 	r := stoppedProfile(t)
 	if err := os.MkdirAll(filepath.Dir(r.AppLock), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	held, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer held.Close()
-	if err := syscall.Flock(int(held.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		t.Fatalf("take the app lock: %v", err)
+	// An app instance holds it shared, the way the Tauri shell does; several may.
+	held := make([]*os.File, 2)
+	for i := range held {
+		f, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+			t.Fatalf("app instance %d could not take the shared app lock: %v", i, err)
+		}
+		held[i] = f
 	}
 
 	var out strings.Builder
 	if err := cleanProfile(&out, r); err == nil {
-		t.Fatalf("cleanProfile succeeded while another process held %s; output:\n%s", r.AppLock, out.String())
+		t.Fatalf("cleanProfile succeeded while apps held %s shared; output:\n%s", r.AppLock, out.String())
 	} else if !strings.Contains(err.Error(), r.AppLock) || !strings.Contains(err.Error(), "nothing was removed") {
 		t.Fatalf("cleanProfile error = %v, want it to name the held lock and say nothing was removed", err)
 	}
@@ -321,6 +326,21 @@ func TestCleanProfileAbortsWhenTheAppLockIsHeld(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "daemon") {
 		t.Fatalf("cleanProfile got as far as the daemon under a held lock; output:\n%s", out.String())
+	}
+
+	for _, f := range held {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out.Reset()
+	if err := cleanProfile(&out, r); err != nil {
+		t.Fatalf("cleanProfile = %v once every app released the lock; output:\n%s", err, out.String())
+	}
+	for _, dir := range []string{r.DataDir, r.AppLocalData} {
+		if fileExists(dir) {
+			t.Fatalf("%s survived the clean that ran after the apps released the lock", dir)
+		}
 	}
 }
 

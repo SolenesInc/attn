@@ -1,11 +1,11 @@
 //! Build-profile awareness for the Tauri shell. See docs/profiles.md.
 
 use std::env;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -18,6 +18,9 @@ const BUILD_DEFAULT_PROFILE_HARNESS: bool =
 const HARNESS_DATA_DIR_ENV: &str = "ATTN_HARNESS_DATA_DIR";
 const APP_PID_FILE: &str = "app.pid";
 const APP_LOCK_DIR: &str = ".attn.locks";
+// Tripwire past a whole `profile clean` (measured 0.44s, 2026-08-30, macOS): a launch
+// that close to one waits it out instead of refusing to start.
+const APP_LOCK_WAIT: Duration = Duration::from_secs(3);
 const ROUTING_PATH_OVERRIDES: [&str; 7] = [
     "ATTN_SOCKET_PATH",
     "ATTN_DB_PATH",
@@ -130,34 +133,38 @@ fn app_lock_path() -> Result<PathBuf, String> {
         .join(format!("app-{}.lock", build_profile_label())))
 }
 
-/// Held for this process's lifetime: the kernel drops it on exit, and while it is
-/// held `attn profile clean` refuses to delete this profile's trees.
-pub fn hold_app_lock() {
-    let Ok(path) = app_lock_path() else { return };
-    let Some(dir) = path.parent() else { return };
-    if fs::create_dir_all(dir).is_err() {
-        return;
-    }
-    let Ok(file) = OpenOptions::new()
+/// Shared for this process's lifetime; `attn profile clean` wants it exclusively,
+/// so it gives way while any app instance holds it.
+pub fn hold_app_lock() -> Result<(), String> {
+    let file = acquire_app_lock(&app_lock_path()?, APP_LOCK_WAIT)?;
+    std::mem::forget(file);
+    Ok(())
+}
+
+fn acquire_app_lock(path: &Path, wait: Duration) -> Result<File, String> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| format!("{} has no parent directory", path.display()))?;
+    fs::create_dir_all(dir).map_err(|err| format!("create {}: {err}", dir.display()))?;
+    let file = OpenOptions::new()
         .create(true)
         .read(true)
         .write(true)
         .truncate(false)
         .mode(0o600)
-        .open(&path)
-    else {
-        return;
-    };
-    // Tripwire past a whole `profile clean` (measured 0.44s, 2026-08-30, macOS): a
-    // launch that close to one waits it out instead of racing its removals.
-    let deadline = Instant::now() + Duration::from_secs(3);
+        .open(path)
+        .map_err(|err| format!("open {}: {err}", path.display()))?;
+    let deadline = Instant::now() + wait;
     loop {
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
-            std::mem::forget(file);
-            return;
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH | libc::LOCK_NB) } == 0 {
+            return Ok(file);
         }
         if Instant::now() >= deadline {
-            return;
+            return Err(format!(
+                "{} is still held exclusively after {}s: `attn profile clean` is removing this profile",
+                path.display(),
+                wait.as_secs_f64()
+            ));
         }
         thread::sleep(Duration::from_millis(50));
     }
@@ -282,6 +289,68 @@ mod tests {
         assert_eq!(build_profile(), "");
         assert_eq!(default_port_for_build_profile(), "9849");
         assert_eq!(bundle_identifier(), "com.attn.manager");
+    }
+
+    fn hold_exclusive(path: &Path) -> File {
+        let file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(path)
+            .expect("open lock");
+        assert_eq!(
+            unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            0,
+            "take the exclusive lock"
+        );
+        file
+    }
+
+    #[test]
+    fn two_app_instances_hold_the_lock_together() {
+        // #51's no-bus fallback launches a second app instance to deliver a deep link.
+        let dir = env::temp_dir().join(format!("attn-lock-shared-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("app-test.lock");
+
+        let first = acquire_app_lock(&path, Duration::from_millis(50)).expect("first instance");
+        let second = acquire_app_lock(&path, Duration::from_millis(50))
+            .expect("a second app instance must hold the lock alongside the first");
+
+        drop(first);
+        drop(second);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_exclusive_holder_stops_startup() {
+        let dir = env::temp_dir().join(format!("attn-lock-held-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("app-test.lock");
+        let held = hold_exclusive(&path);
+
+        let err = acquire_app_lock(&path, Duration::from_millis(50))
+            .expect_err("an exclusive holder must refuse startup");
+        assert!(err.contains(&path.display().to_string()), "{err}");
+        assert!(err.contains("profile clean"), "{err}");
+
+        drop(held);
+        acquire_app_lock(&path, Duration::from_millis(50))
+            .expect("startup resumes once the exclusive holder is gone");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_lock_path_that_cannot_be_created_stops_startup() {
+        let blocker = env::temp_dir().join(format!("attn-lock-blocker-{}", std::process::id()));
+        fs::write(&blocker, b"not a directory").expect("blocker file");
+
+        let err = acquire_app_lock(&blocker.join("app-test.lock"), Duration::from_millis(50))
+            .expect_err("an unusable lock path must refuse startup");
+        assert!(err.starts_with("create "), "{err}");
+        fs::remove_file(&blocker).ok();
     }
 
     #[test]

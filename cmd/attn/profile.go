@@ -322,8 +322,8 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 	}
 	fmt.Fprintf(w, "  app      %s\n", msg)
 
-	// Taken while the app is known gone and held past the last removal: an app that
-	// launches from here on cannot hold it, and clean is not deleting under one.
+	// Exclusive, while the app is known gone and held past the last removal: app
+	// instances hold this shared, so one launching from here on cannot get in.
 	release, err := holdAppLock(r)
 	if err != nil {
 		return err
@@ -415,7 +415,7 @@ func holdAppLock(r profileResolved) (func(), error) {
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("%s is held (%v): a %s app is running and holds it for as long as it lives; nothing was removed. Quit it and re-run", r.AppLock, err, r.Label)
+		return nil, fmt.Errorf("%s is held (%v): a %s app instance is running and holds it for as long as it lives; nothing was removed. Quit every one and re-run", r.AppLock, err, r.Label)
 	}
 	return func() {
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)

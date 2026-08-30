@@ -109,13 +109,18 @@ removes nothing and names the pid: quit it yourself and re-run. `--force` covers
 the production profile, never a live app.
 
 The last gap a marker cannot close — a launch between the final check and the
-removals — is closed by a shared lock, `~/.attn.locks/app-<profile>.lock`. The
-app takes it at startup and the kernel holds it for the process's lifetime;
-clean takes it once the old app is gone and holds it through the last removal.
-Whoever loses waits: an app launched into a clean waits up to 3s for it to
-finish, and a clean that finds the lock held aborts before touching anything.
-The lock file itself is never removed, and cannot go stale: kernel ownership
-disappears with the process.
+removals — is closed by `~/.attn.locks/app-<profile>.lock`. Every app process
+takes it *shared* at startup and the kernel holds it for that process's
+lifetime, so app instances never block each other and the Linux no-bus fallback
+can still open a second instance to deliver a deep link. Clean takes it
+*exclusive* once the old app is gone and holds it through the last removal, so
+it can only run when no app instance of that profile is left. Whoever loses
+gives way: an app launched into a clean waits up to 3s for it to finish and then
+refuses to start rather than run unlocked, and a clean that finds the lock held
+aborts before touching anything. Taking the lock is mandatory for the app: it
+will not write `app.pid` or open a window without it, and the reason goes to
+stderr. The lock file itself is never removed, and cannot go stale: kernel
+ownership disappears with the process.
 
 Use `attn profile stop-app --profile <name>` to stop only the app; it returns
 once the app is gone.

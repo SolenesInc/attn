@@ -1261,7 +1261,9 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             use tauri::Manager;
-            profile::hold_app_lock();
+            // Fail closed: an app that starts unlocked can have its profile deleted out
+            // from under it by a `profile clean` that is already past its last check.
+            profile::hold_app_lock()?;
             profile::write_app_pid_file();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
@@ -1318,7 +1320,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
+        .unwrap_or_else(|err| {
+            eprintln!("attn: {err}");
+            std::process::exit(1);
+        })
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 profile::remove_app_pid_file();
