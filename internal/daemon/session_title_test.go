@@ -477,8 +477,6 @@ func TestMaybeGenerateSessionTitleFromPrompt_InitialPromptTitlesWithoutCorrelati
 	}
 }
 
-// The initial UserPromptSubmit can land between executeSpawn and commitSpawn;
-// the marker must already exist at backend-spawn time.
 func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
 	d := newDaemonForTest(t)
 	addTestWorkspace(d, "workspace-title", t.TempDir())
@@ -558,5 +556,45 @@ func TestMaybeGenerateSessionTitle_StopPathClearsInitialPromptMarker(t *testing.
 	d.sessionTitleMu.Unlock()
 	if held {
 		t.Fatal("Stop-path title left the initial-prompt marker behind")
+	}
+}
+
+func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+
+	calls := 0
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		calls++
+		return "One-shot investigation", nil
+	}
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	spawn := &protocol.SpawnSessionMessage{
+		ID:            "sess-dup",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	}
+	d.handleSpawnSession(client, spawn)
+	backend.mu.Lock()
+	backend.sessionIDs = []string{"sess-dup"}
+	backend.mu.Unlock()
+
+	duplicate := *spawn
+	duplicate.InitialPrompt = nil
+	d.handleSpawnSession(client, &duplicate)
+
+	d.maybeGenerateSessionTitleFromPrompt("sess-dup", "investigate the retry queue", sessionInputOrigin{})
+	if calls != 1 {
+		t.Fatalf("exec calls after the original receipt = %d, want 1 (the no-op spawn must not disturb the marker)", calls)
+	}
+	if got := d.store.Get("sess-dup"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
 	}
 }

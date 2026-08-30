@@ -367,7 +367,11 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	intent.AutoMode = msg.AutoMode
 	d.store.SetLaunchIntent(session.ID, intent)
+	// After the already-live no-op returns, before the runtime whose first
+	// UserPromptSubmit can beat commitSpawn.
+	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
+		d.forgetSessionTitleInitialPrompt(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 		} else if restoreErr := d.store.AddChecked(req.existingSession); restoreErr != nil {
@@ -509,13 +513,9 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 	if rejection != nil {
 		return rejection
 	}
-	// Before the runtime exists: its first UserPromptSubmit can beat commitSpawn.
-	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
 	if outcome := d.executeSpawn(req, plan); outcome.err != nil {
-		d.forgetSessionTitleInitialPrompt(msg.ID)
 		return &spawnRejection{err: outcome.err}
 	} else if outcome.alreadyLive {
-		d.forgetSessionTitleInitialPrompt(msg.ID)
 		return nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
