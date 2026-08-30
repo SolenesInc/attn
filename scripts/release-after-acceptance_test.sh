@@ -173,7 +173,7 @@ setup_fixture() {
 	  git -C "$fixture_repo" add cmd/release-train/main.go
 	  find "$fixture_repo/changelog.d" -type f -name '*.yaml' -delete
 	  git -C "$fixture_repo" add -A changelog.d
-	  git -C "$fixture_repo" commit -q -m 'release fixture baseline'
+	  git -C "$fixture_repo" commit -q --allow-empty -m 'release fixture baseline'
 	  baseline_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
 
 	  (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
