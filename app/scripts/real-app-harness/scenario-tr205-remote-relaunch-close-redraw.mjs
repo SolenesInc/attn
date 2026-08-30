@@ -585,10 +585,20 @@ async function main() {
 
     await runner.step('relaunch_and_restore_session', async () => {
       await relaunchAppAndConnect(client, observer);
+      await waitForEndpointConnected(observer, endpoint.name, 45_000);
+      await waitForSessionWorkspace(
+        client,
+        sessionId,
+        (workspace) => {
+          const paneIds = new Set((workspace.panes || []).map((pane) => pane.paneId));
+          return paneIds.has(initialPaneId) && paneIds.has(initialShellPaneId);
+        },
+        `frontend workspace after relaunch for ${sessionId}`,
+        45_000,
+      );
       await client.request('select_session', { sessionId });
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
-      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       restoredMainState = await captureInitialPaneHealthyState(
         client,
         runner,
@@ -654,6 +664,7 @@ async function main() {
 
     postRelaunchShellSplitPaneId = await runner.step('split_from_existing_shell_after_relaunch', async () => {
       await client.request('select_session', { sessionId });
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
       await waitForPaneVisible(client, sessionId, initialShellPaneId, 20_000);
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));

@@ -321,6 +321,7 @@ async function main() {
       if (!initialPane?.paneId) {
         throw new Error('Initial remote split pane missing');
       }
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -386,6 +387,7 @@ async function main() {
       await relaunchAppAndConnect(client, observer, {
         agentExecutables: { [options.remoteAgent]: REMOTE_MOCK_AGENT_COMMAND },
       });
+      await waitForEndpointConnected(observer, endpoint.name, 45_000);
       await waitForSessionWorkspace(
         client,
         sessionId,
@@ -397,8 +399,8 @@ async function main() {
         45_000,
       );
       await client.request('select_session', { sessionId });
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
-      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -421,6 +423,8 @@ async function main() {
         minBBoxHeightRatio: 0.12,
         description: 'remote initial pane native paint coverage after relaunch',
       });
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
+      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       await waitForPaneText(
         client,
         sessionId,
@@ -441,6 +445,7 @@ async function main() {
     });
 
     postRelaunchMainSplitPaneId = await runner.step('split_from_main_after_relaunch', async () => {
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
@@ -455,6 +460,7 @@ async function main() {
         'new remote shell after relaunch split from initial pane',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -523,6 +529,7 @@ async function main() {
     });
 
     postRelaunchShellSplitPaneId = await runner.step('split_from_existing_shell_after_relaunch', async () => {
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
