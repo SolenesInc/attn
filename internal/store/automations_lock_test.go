@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// A schedule tick shares the connection pool with every other writer in the
-// daemon. The claim must wait for a concurrent write, not fail with SQLITE_BUSY.
 func TestScheduledAutomationClaimWaitsForConcurrentWriter(t *testing.T) {
 	s, err := NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
 	if err != nil {
@@ -28,6 +26,8 @@ func TestScheduledAutomationClaimWaitsForConcurrentWriter(t *testing.T) {
 	}
 	released := make(chan struct{})
 	go func() {
+		// The busy wait is native SQLite real time, out of synctest's reach; a
+		// held write is the only way to stage the collision, so the hold is a sleep.
 		time.Sleep(200 * time.Millisecond)
 		if err := writer.Commit(); err != nil {
 			t.Error(err)
