@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GardenFrame, type FrameRect } from './GardenFrame';
 import { useGardenWalk } from '../store/gardenWalk';
 import type { Seed } from '../hooks/useDaemonSocket';
@@ -13,6 +13,8 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
     body: '',
     status: 'planted',
+    state_changed_at: '2026-08-20T09:00:00Z',
+    state_changed_at_exact: true,
     step_slug: overrides.title,
     planter_session: '',
     planter_member: '',
@@ -140,6 +142,11 @@ describe('GardenFrame', () => {
   describe('the list/board switch', () => {
     const board = { moveSeed: vi.fn(), noteSeed: vi.fn(), loaded: true };
 
+    function openMoveMenu(title: string) {
+      fireEvent.focus(screen.getByRole('button', { name: new RegExp(title) }));
+      fireEvent.click(screen.getByRole('button', { name: `Move ${title}` }));
+    }
+
     it('is offered in the window and not in the dock', () => {
       const { rerender } = render(<GardenFrame {...props('dock')} {...board} />);
       expect(screen.queryByRole('group', { name: 'Garden view' })).toBeNull();
@@ -183,6 +190,67 @@ describe('GardenFrame', () => {
 
       fireEvent.keyDown(window, { key: 'Escape' });
       expect(base.onEscapeFloor).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards a forced takeover through the fullscreen frame', async () => {
+      const held = seed({
+        id: 's-held11',
+        title: 'held work',
+        status: 'growing',
+        tender_session: 'live-tender',
+      });
+      const moveSeed = vi.fn().mockResolvedValue(held);
+      window.localStorage.setItem(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY, 'board');
+      render(
+        <GardenFrame
+          {...props('full')}
+          seeds={[held]}
+          seedsTotal={1}
+          liveSessions={new Set(['live-tender'])}
+          loaded
+          moveSeed={moveSeed}
+          noteSeed={vi.fn()}
+        />,
+      );
+
+      openMoveMenu('held work');
+      fireEvent.click(screen.getByRole('menuitem', { name: /Harvest/ }));
+      const reason = screen.getByRole('textbox', { name: 'Harvest s-held11: what got done' });
+      fireEvent.change(reason, { target: { value: 'the work is complete' } });
+      fireEvent.keyDown(reason, { key: 'Enter' });
+
+      await waitFor(() => expect(moveSeed).toHaveBeenCalledWith(
+        's-held11', 'harvest', 'the work is complete', true, undefined,
+      ));
+    });
+
+    it('forwards a Park comment atomically through the fullscreen frame', async () => {
+      const growing = seed({ id: 's-quiet1', title: 'quiet work', status: 'growing' });
+      const moveSeed = vi.fn().mockResolvedValue(growing);
+      const noteSeed = vi.fn();
+      window.localStorage.setItem(GARDEN_FULLSCREEN_VIEW_STORAGE_KEY, 'board');
+      render(
+        <GardenFrame
+          {...props('full')}
+          seeds={[growing]}
+          seedsTotal={1}
+          liveSessions={new Set()}
+          loaded
+          moveSeed={moveSeed}
+          noteSeed={noteSeed}
+        />,
+      );
+
+      openMoveMenu('quiet work');
+      fireEvent.click(screen.getByRole('menuitem', { name: /Park/ }));
+      const comment = screen.getByRole('textbox', { name: 'Park s-quiet1: what you are leaving it at' });
+      fireEvent.change(comment, { target: { value: 'waiting for product input' } });
+      fireEvent.keyDown(comment, { key: 'Enter' });
+
+      await waitFor(() => expect(moveSeed).toHaveBeenCalledWith(
+        's-quiet1', 'park', undefined, false, 'waiting for product input',
+      ));
+      expect(noteSeed).not.toHaveBeenCalled();
     });
   });
 });

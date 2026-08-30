@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"time"
@@ -17,6 +19,8 @@ var _ TranscriptFinder = (*Copilot)(nil)
 var _ TranscriptWatcherBehaviorProvider = (*Copilot)(nil)
 var _ ClassifierProvider = (*Copilot)(nil)
 var _ RecoveredStatePolicyProvider = (*Copilot)(nil)
+var _ HeadlessTaskProvider = (*Copilot)(nil)
+var _ ToolFreeOnlyHeadlessTaskProvider = (*Copilot)(nil)
 
 func init() {
 	Register(&Copilot{})
@@ -92,4 +96,60 @@ func (c *Copilot) RecoveredRunningState(ptyState string) (protocol.SessionState,
 
 func (c *Copilot) Classify(text string, timeout time.Duration) (string, error) {
 	return classifier.ClassifyWithCopilot(text, timeout)
+}
+
+func (c *Copilot) HeadlessTasksAreToolFreeOnly() bool { return true }
+
+func (c *Copilot) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
+	if !request.usesNativeToolsPath() {
+		return HeadlessTaskResult{}, errors.New("copilot headless tasks support only the native tool-free path")
+	}
+	if !request.DisableTools || len(request.AllowedTools) > 0 || len(request.ExtraWritableRoots) > 0 {
+		return HeadlessTaskResult{}, errors.New("copilot headless tasks require tools to be disabled")
+	}
+	result, stdout, err := runHeadlessCommand(
+		ctx,
+		request.Executable,
+		copilotToolFreeHeadlessArgs(request),
+		request.WorkDir,
+		"copilot",
+	)
+	if err != nil {
+		return result, err
+	}
+	result.Text = strings.TrimSpace(string(stdout))
+	return result, nil
+}
+
+func copilotToolFreeHeadlessArgs(request HeadlessTaskRequest) []string {
+	args := []string{
+		"-p", copilotPrompt(request),
+		"-s",
+	}
+	if model := strings.TrimSpace(request.Model); model != "" {
+		args = append(args, "--model", model)
+	}
+	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
+		args = append(args, "--effort", effort)
+	}
+	return append(args,
+		"--available-tools=ask_user",
+		"--disable-builtin-mcps",
+		"--no-ask-user",
+		"--no-auto-update",
+		"--no-bash-env",
+		"--no-color",
+		"--no-custom-instructions",
+		"--no-experimental",
+		"--no-remote",
+		"--no-remote-export",
+	)
+}
+
+func copilotPrompt(request HeadlessTaskRequest) string {
+	system := strings.TrimSpace(request.SystemPrompt)
+	if system == "" {
+		return request.Prompt
+	}
+	return system + "\n\n" + request.Prompt
 }

@@ -13,3 +13,14 @@ func TestSeedHelpNamesTheGuide(t *testing.T) {
 		t.Fatalf("seed help does not name the guide:\n%s", b.String())
 	}
 }
+
+func TestSeedGuideDefinesCompletionFromTheBody(t *testing.T) {
+	for _, want := range []string{
+		"Harvest when the outcome and required verification in the body are complete",
+		"behavior exists and its required verification is green",
+	} {
+		if !strings.Contains(seedGuideText, want) {
+			t.Fatalf("seed guide dropped %q:\n%s", want, seedGuideText)
+		}
+	}
+}

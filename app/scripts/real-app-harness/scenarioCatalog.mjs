@@ -108,7 +108,7 @@ export const scenarioCatalog = [
   {
     id: 'garden-seed-reopen',
     runnerId: 'GardenSeedReopen',
-    label: 'Garden surfaces: a delegated pane names its seed, and a closed tender is reopened from the drill',
+    label: 'Garden continuation: a closed tender resumes exactly, then hands the same seed to a new agent',
     command: ['pnpm', 'run', 'real-app:scenario-garden-seed-reopen'],
     timeoutMs: 240_000,
   },

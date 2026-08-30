@@ -146,7 +146,9 @@ func TestDelegationAtASeedHeldByADeadSessionRebindsIt(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
 	seed := plantForDelegation(t, d, sourceSessionID, "Held by a ghost")
+	addGardenSession(t, d, "gone-session")
 	tendAs(t, d, seed.ID, "gone-session")
+	d.store.Remove("gone-session")
 
 	result, err := d.delegate(&protocol.DelegateMessage{
 		Cmd:             protocol.CmdDelegate,

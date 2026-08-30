@@ -13,6 +13,8 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
     planter_session: '',
     ready: false,
     rev: 1,
+    state_changed_at: '',
+    state_changed_at_exact: true,
     status,
     step_slug: '',
     template: false,

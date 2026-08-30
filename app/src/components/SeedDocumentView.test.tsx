@@ -13,6 +13,8 @@ function seed(overrides: Partial<Seed> = {}): Seed {
     title: 'The plan',
     body: '## Rendered plan\n\nRead **this**.',
     status: 'growing',
+    state_changed_at: '2026-08-15T08:00:00Z',
+    state_changed_at_exact: true,
     step_slug: 'the-plan',
     planter_session: '',
     planter_member: '',

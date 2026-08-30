@@ -11,6 +11,51 @@
   font-size: var(--font-size-md);
 }
 
+.garden-review-prompt {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-bg-panel) 90%, var(--accent));
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex: none;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 9px 16px;
+}
+
+.garden-review-prompt > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-review-prompt strong {
+  font-weight: 560;
+}
+
+.garden-review-prompt span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.garden-review-prompt button {
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  cursor: pointer;
+  flex: none;
+  padding: 5px 9px;
+}
+
+.garden-review-prompt__error {
+  color: var(--color-error, #d65d5d);
+  flex: none;
+  font-size: var(--font-size-sm);
+  margin: 0;
+  padding: 7px 16px;
+}
+
 /* ---- chrome: the way back, pinned ------------------------------------- */
 
 .garden-chrome {
@@ -385,6 +430,72 @@
 .garden-head__actions button:hover {
   border-color: var(--accent);
   color: var(--color-text-primary);
+}
+
+.garden-handover {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px;
+}
+
+.garden-handover label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.garden-handover label span {
+  color: var(--color-text-muted);
+  margin-left: 6px;
+}
+
+.garden-handover textarea {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text-primary);
+  font: inherit;
+  min-height: 72px;
+  padding: 7px 8px;
+  resize: vertical;
+}
+
+.garden-handover textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.garden-handover__actions button {
+  background: var(--color-bg-button);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  padding: 3px 8px;
+}
+
+.garden-handover__actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.garden-handover__actions span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.garden-handover__error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin: 0;
 }
 
 .garden-head__meta {

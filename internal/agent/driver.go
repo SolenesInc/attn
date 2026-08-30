@@ -240,7 +240,7 @@ type HeadlessTaskRequest struct {
 	// Claude: IGNORED (dontAsk is not fs-sandboxed, writes anywhere already).
 	ExtraWritableRoots []string
 
-	// Claude-only; Codex silently ignores all three.
+	// MaxTurns and MaxBudgetUSD are Claude-only. Codex and Claude both honor OutputSchema.
 	MaxTurns     int
 	MaxBudgetUSD string
 	OutputSchema json.RawMessage
@@ -282,6 +282,10 @@ type HeadlessTaskAvailabilityProvider interface {
 	HeadlessTaskAvailability() (bool, string)
 }
 
+type ToolFreeOnlyHeadlessTaskProvider interface {
+	HeadlessTasksAreToolFreeOnly() bool
+}
+
 func HeadlessTaskAvailability(driver Driver) (bool, string) {
 	if driver == nil {
 		return false, "agent is not installed"
@@ -293,6 +297,19 @@ func HeadlessTaskAvailability(driver Driver) (bool, string) {
 		return provider.HeadlessTaskAvailability()
 	}
 	return true, ""
+}
+
+func HeadlessTasksSupportTools(driver Driver) bool {
+	if driver == nil {
+		return false
+	}
+	if _, ok := driver.(HeadlessTaskProvider); !ok {
+		return false
+	}
+	if provider, ok := driver.(ToolFreeOnlyHeadlessTaskProvider); ok {
+		return !provider.HeadlessTasksAreToolFreeOnly()
+	}
+	return true
 }
 
 type TranscriptFinder interface {

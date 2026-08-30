@@ -29,7 +29,7 @@ export interface GardenBoardProps {
   seedsTotal: number;
   liveSessions: Set<string>;
   loaded: boolean;
-  onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean) => Promise<unknown>;
+  onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean, comment?: string) => Promise<unknown>;
   onNote: (seedId: string, body: string) => Promise<unknown>;
   viewToggle?: ReactNode;
   onClose: () => void;
@@ -105,7 +105,6 @@ export function GardenBoard({
   const [hover, setHover] = useState<ColumnKey | null>(null);
   const [zoneHover, setZoneHover] = useState<Verb | null>(null);
   const [compose, setCompose] = useState<{ seed: Seed; verb: Verb; column: ColumnKey } | null>(null);
-  const [dispatchFor, setDispatchFor] = useState<Seed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const composeInput = useRef<HTMLInputElement | null>(null);
@@ -193,7 +192,6 @@ export function GardenBoard({
     setCompose(null);
     setError(null);
   }, compose !== null);
-  useEscapeStack(() => setDispatchFor(null), dispatchFor !== null);
 
   const drillInto = useCallback((id: string) => {
     setSelected(null);
@@ -217,10 +215,6 @@ export function GardenBoard({
     setMenuFor(null);
     setError(null);
     endDrag();
-    if (verb === 'dispatch') {
-      setDispatchFor(seed);
-      return;
-    }
     setCompose({ seed, verb, column });
   }, [endDrag]);
 
@@ -284,12 +278,13 @@ export function GardenBoard({
     }
     setBusy(true);
     try {
-      if (!spec.reasonOnSeed && text) await onNote(compose.seed.id, text);
+      if (!spec.reasonOnSeed && compose.verb !== 'park' && text) await onNote(compose.seed.id, text);
       await onTransition(
         compose.seed.id,
         compose.verb,
         spec.reasonOnSeed ? text : undefined,
         heldByOther(compose.seed, liveSessions) !== '',
+        compose.verb === 'park' ? text : undefined,
       );
       setCompose(null);
       setSelected(compose.seed.id);
@@ -302,7 +297,7 @@ export function GardenBoard({
   }, [compose, busy, liveSessions, onNote, onTransition]);
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (compose || dispatchFor) return;
+    if (compose) return;
     if (menuFor) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
@@ -557,7 +552,6 @@ export function GardenBoard({
         </p>
       )}
 
-      {dispatchFor && <DispatchSheet seed={dispatchFor} crown={byID.get(crownOf(dispatchFor))} onClose={() => setDispatchFor(null)} />}
     </div>
   );
 }
@@ -571,8 +565,6 @@ function targetColumn(verb: Verb): ColumnKey {
       return 'parked';
     case 'replant':
       return 'ready';
-    case 'dispatch':
-      return 'growing';
   }
 }
 
@@ -688,7 +680,7 @@ function Card({
             verbs.map((verb) => (
               <button key={verb} type="button" role="menuitem" onClick={() => onVerb(verb)}>
                 {VERBS[verb].label}
-                {verb !== 'dispatch' && <span aria-hidden="true">…</span>}
+                <span aria-hidden="true">…</span>
               </button>
             ))
           )}
@@ -773,46 +765,11 @@ function Composer({
         <kbd>⏎</kbd>
         <kbd>esc</kbd>
       </span>
-      {/* park and replant store no reason, so theirs lands on the log — which is
-          what the daemon's own refusal tells a caller to do. */}
+      {/* Park commits this with the move; replant writes it as an ordinary log note. */}
       {!spec.reasonOnSeed && <span className="garden-compose__where">goes on the log</span>}
       {takenFrom !== '' && (
         <span className="garden-compose__taking">takes it from {takenFrom}</span>
       )}
-    </div>
-  );
-}
-
-function DispatchSheet({ seed, crown, onClose }: { seed: Seed; crown?: Seed; onClose: () => void }) {
-  return (
-    <div className="garden-sheet" role="dialog" aria-modal="true" aria-label="Dispatch an agent">
-      <div className="garden-sheet__panel">
-        <header>
-          <span className="garden-sheet__kicker">Would dispatch</span>
-          <button type="button" onClick={onClose} aria-label="Close">×</button>
-        </header>
-        <p className="garden-sheet__title">{seed.title}</p>
-        <dl className="garden-sheet__rows">
-          <div>
-            <dt>seed</dt>
-            <dd className="is-mono">{seed.id}</dd>
-          </div>
-          <div>
-            <dt>plot</dt>
-            <dd>{crown ? `${crown.title} (${crown.id})` : 'the whole garden'}</dd>
-          </div>
-          <div>
-            <dt>brief</dt>
-            <dd>the seed's body, handed over as the agent's task</dd>
-          </div>
-          <div>
-            <dt>claim</dt>
-            <dd>the agent tends {seed.id} when it starts — the board never tends for it</dd>
-          </div>
-        </dl>
-        <code className="garden-sheet__command">attn delegate --seed {seed.id}</code>
-        <p className="garden-sheet__note">Nothing was dispatched. This is the prototype's stub.</p>
-      </div>
     </div>
   );
 }

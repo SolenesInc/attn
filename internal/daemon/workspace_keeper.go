@@ -68,6 +68,9 @@ func parseKeeperCompactConfig(raw string) (keeperCompactConfig, error) {
 	if available, reason := agentdriver.HeadlessTaskAvailability(driver); !available {
 		return keeperCompactConfig{}, fmt.Errorf("agent %s cannot run headless tasks: %s", config.Agent, reason)
 	}
+	if !agentdriver.HeadlessTasksSupportTools(driver) {
+		return keeperCompactConfig{}, fmt.Errorf("agent %s supports only tool-free headless tasks", config.Agent)
+	}
 	return config, nil
 }
 
@@ -245,6 +248,16 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 		); err != nil {
 			d.logf("legacy ticket recovery: register: %v", err)
 		}
+		if err := runner.RegisterWith(
+			gardenReviewClassifyKind,
+			d.gardenReviewClassifyHandler,
+			jobs.HandlerConfig{
+				Timeout:       gardenReviewClassifyTimeout,
+				MaxConcurrent: gardenReviewClassifyConcurrency,
+			},
+		); err != nil {
+			d.logf("garden review: register classification: %v", err)
+		}
 		if err := runner.RegisterCron(
 			notebookCronKind,
 			defaultNotebookCronInterval,
@@ -293,13 +306,17 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 	// must be cheap, concurrency-safe and non-blocking.
 	runner.OnChange(func(jobID string) { d.publishFact(FactTaskChanged, jobID, nil) })
 	// OnTerminalFailure fires on the queue's goroutine; it must stay non-blocking.
-	runner.OnTerminalFailure(func(j *jobs.Job) { d.notifyTaskTerminalFailure(j) })
+	runner.OnTerminalFailure(func(j *jobs.Job) {
+		d.notifyTaskTerminalFailure(j)
+		go d.failGardenReviewJob(j)
+	})
 	if err := runner.Start(); err != nil {
 		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
 		return
 	}
 	d.setJobQueue(runner)
 	d.reconcileSnoozeWakeJobs()
+	d.resumeGardenReviews()
 }
 
 func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.WorkspaceContext) {

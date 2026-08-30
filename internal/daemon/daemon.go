@@ -320,19 +320,24 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu   sync.Mutex
-	workflowDirty         map[string]bool
-	workflowEngineMu      sync.Mutex
-	workflowEngineConn    map[string]workflowEngineSink
-	workflowBroadcastHook func(*protocol.WorkflowRunUpdatedMessage)
-	gardenBroadcastHook   func([]protocol.Seed, int)
-	appsBroadcastHook     func([]protocol.AppRegistryEntry)
-	gardenMintID          func() (string, error)
-	gardenMintNoteID      func() (string, error)
-	dispatchSeedsMu       sync.Mutex
-	dispatchSeeds         map[string]string
-	dispatchFromChief     map[string]bool
-	dispatchSeedsLoaded   bool
+	workflowBroadcastMu       sync.Mutex
+	workflowDirty             map[string]bool
+	workflowEngineMu          sync.Mutex
+	workflowEngineConn        map[string]workflowEngineSink
+	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
+	gardenBroadcastHook       func([]protocol.Seed, int)
+	appsBroadcastHook         func([]protocol.AppRegistryEntry)
+	gardenMintID              func() (string, error)
+	gardenMintNoteID          func() (string, error)
+	gardenNow                 func() time.Time
+	gardenDispatchBeforeWrite func(string)
+	gardenDispatchAfterWrite  func(string)
+	gardenReviewMu            sync.Mutex
+	dispatchSeedsMu           sync.Mutex
+	dispatchSeeds             map[string]string
+	dispatchFromChief         map[string]bool
+	dispatchProjectionRevs    map[string]int64
+	dispatchSeedsLoaded       bool
 
 	gardenNotePageSize int
 
@@ -388,6 +393,9 @@ type Daemon struct {
 		provider agentdriver.HeadlessTaskProvider,
 		request agentdriver.HeadlessTaskRequest,
 	) (agentdriver.HeadlessTaskResult, error)
+	gardenAdvisorResolve func(
+		config gardenAdvisorConfig,
+	) (agentdriver.HeadlessTaskProvider, string, error)
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun
@@ -1731,6 +1739,11 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
 	}
+	if session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
+		}
+	}
 	d.terminateSession(sessionID, sig)
 	d.forgetSession(sessionID)
 	return session
@@ -1759,6 +1772,9 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 func (d *Daemon) dropSessionRecord(sessionID string) {
 	d.stopTranscriptWatcher(sessionID)
 	if session := d.store.Get(sessionID); session != nil {
+		if _, err := d.captureGardenSessionExecution(session); err != nil {
+			d.logf("garden: preserving execution %s before dropping its record: %v", sessionID, err)
+		}
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}
 	d.clearNudgeState(sessionID)
@@ -2340,6 +2356,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage))
 	case protocol.CmdSeedReady: // wire: seed_ready
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
+	case protocol.CmdSeedReviewStart: // wire: seed_review_start
+		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
+	case protocol.CmdSeedSendToChief: // wire: seed_send_to_chief
+		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage))
+	case protocol.CmdSeedReviewShow: // wire: seed_review_show
+		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
+	case protocol.CmdSeedReviewCancel: // wire: seed_review_cancel
+		d.handleSeedReviewCancel(conn, msg.(*protocol.SeedReviewCancelMessage))
+	case protocol.CmdSeedReviewRetry: // wire: seed_review_retry
+		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
+	case protocol.CmdSeedReviewKeep: // wire: seed_review_keep
+		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewList: // wire: crew_list
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake

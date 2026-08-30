@@ -215,6 +215,7 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 	}
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	d.ensureGardenCollections()
 	d.registerCreatedWorktree(mainDir, worktreePath, "feat/dirty-force")
 	addWorktreeSession(t, d, "session-force", worktreePath, mainDir, "feat/dirty-force")
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{

@@ -1,4 +1,4 @@
-import { useEffect, useId, type Ref } from 'react';
+import { useEffect, useId, useState, type Ref } from 'react';
 import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
@@ -7,6 +7,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
 
 /** The one read model shared by the panel drill and the docked seed tile. */
@@ -21,6 +22,7 @@ export interface SeedDocumentViewProps {
   onOpenMarkdownArtifact?: (path: string) => void;
   onOpenSeed?: (seedId: string) => void;
   arrival?: 'in' | 'out';
+  ledgerInitiallyOpen?: boolean;
 }
 
 function formatTimestamp(iso: string): string {
@@ -51,6 +53,58 @@ function childSignal(seed: Seed): string {
   return '';
 }
 
+function SeedLogLedger({
+  seedId,
+  notes,
+  notesTotal,
+  initiallyOpen = false,
+}: {
+  seedId: string;
+  notes: SeedDocumentNote[];
+  notesTotal: number;
+  initiallyOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const headingId = useId();
+  const withheld = Math.max(0, notesTotal - notes.length);
+
+  return (
+    <details
+      key={seedId}
+      className="seed-document__ledger"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary id={headingId}>
+        <span>Log</span>
+        <span>{notesTotal}</span>
+      </summary>
+      <div className="seed-document__ledger-body" aria-labelledby={headingId}>
+        {notes.length > 0 ? (
+          <ol className="seed-document__notes">
+            {notes.map((note) => (
+              <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
+                <div className="seed-document__note-head">
+                  <span>{note.author_member || note.author_session || '—'}</span>
+                  {note.kind !== 'note' && <span>{note.kind}</span>}
+                  <time dateTime={note.created_at}>{formatTimestamp(note.created_at)}</time>
+                </div>
+                {note.body && <Markdown className="seed-document__note-body" breaks>{note.body}</Markdown>}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="seed-document__empty-ledger">Nothing on this seed's log yet.</p>
+        )}
+
+        {withheld > 0 && (
+          <p className="seed-document__withheld">{withheld} more {withheld === 1 ? 'entry' : 'entries'} on the log.</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
 export function SeedDocumentView({
   document,
   compact = false,
@@ -60,15 +114,14 @@ export function SeedDocumentView({
   onOpenMarkdownArtifact,
   onOpenSeed,
   arrival = 'in',
+  ledgerInitiallyOpen = false,
 }: SeedDocumentViewProps) {
   const { seed, children, notes, notes_total: notesTotal, artifacts, references } = document;
-  const withheld = Math.max(0, notesTotal - notes.length);
   const isPlot = Boolean(seed.plot_progress);
   const tender = holder(seed);
   const progress = progressWords(seed);
   const plotHeadingId = useId();
   const artifactsHeadingId = useId();
-  const ledgerHeadingId = useId();
 
   useEffect(() => {
     if (!seed.body.trim()) onAnnotationsCountChange?.(0);
@@ -157,34 +210,13 @@ export function SeedDocumentView({
         </section>
       )}
 
-      <details key={seed.id} className="seed-document__ledger">
-        <summary id={ledgerHeadingId}>
-          <span>Log</span>
-          <span>{notesTotal}</span>
-        </summary>
-        <div className="seed-document__ledger-body" aria-labelledby={ledgerHeadingId}>
-          {notes.length > 0 ? (
-            <ol className="seed-document__notes">
-              {notes.map((note) => (
-                <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
-                  <div className="seed-document__note-head">
-                    <span>{note.author_member || note.author_session || '—'}</span>
-                    {note.kind !== 'note' && <span>{note.kind}</span>}
-                    <time dateTime={note.created_at}>{formatTimestamp(note.created_at)}</time>
-                  </div>
-                  {note.body && <Markdown className="seed-document__note-body" breaks>{note.body}</Markdown>}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="seed-document__empty-ledger">Nothing on this seed’s log yet.</p>
-          )}
-
-          {withheld > 0 && (
-            <p className="seed-document__withheld">{withheld} more {withheld === 1 ? 'entry' : 'entries'} on the log.</p>
-          )}
-        </div>
-      </details>
+      <SeedLogLedger
+        key={seed.id}
+        seedId={seed.id}
+        notes={notes}
+        notesTotal={notesTotal}
+        initiallyOpen={ledgerInitiallyOpen}
+      />
     </div>
   );
 }

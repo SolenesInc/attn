@@ -8,12 +8,14 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
+import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
-const BRIEF = 'BRIEF7 the garden surfaces answer for a delegation';
+const BRIEF = 'Reply with exactly GSREOPEN_READY and then wait for the user.';
+const HANDOFF = 'Continue this same seed from the resumed conversation.';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -90,6 +92,18 @@ async function pollFor(fn, description, timeoutMs = 20_000, intervalMs = 250) {
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
 }
 
+async function waitForRenderedReply(client, sessionId, expected, timeoutMs = 120_000) {
+  const pane = await waitForFirstWorkspacePane(client, sessionId, `reply pane for ${sessionId}`, 20_000);
+  const deadline = Date.now() + timeoutMs;
+  let last = '';
+  while (Date.now() < deadline) {
+    last = flat((await client.request('read_pane_text', { sessionId, paneId: pane.paneId })).text || '');
+    if (occurrences(last, expected) >= 2 && !last.includes('Working (')) return;
+    await delay(250);
+  }
+  throw new Error(`Timed out waiting for ${JSON.stringify(expected)} from ${sessionId}:\n${last}`);
+}
+
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
@@ -109,16 +123,18 @@ async function main() {
   let delegated = null;
   let seed = null;
   let reopened = null;
+  let handedOver = null;
   try {
     await launchFreshAppAndConnect(client, observer);
     pane = await runner.step('open_session', () => openPane(client, observer, runner, 'dispatcher'));
 
     delegated = await runner.step('dispatch_a_delegation', async () => {
       const known = new Set(observer.sessionsById.keys());
+      const delegateName = `gsr-${pane.sessionId.slice(0, 8)}`;
       await client.request('write_pane', {
         ...pane,
-        text: `attn delegate --agent shell --model claude-haiku-4-5 --new-workspace --no-worktree --source-session ${pane.sessionId} ` +
-          `--name gsreopen --brief "${BRIEF}"`,
+        text: `attn delegate --agent codex --model gpt-5.4-mini --effort low --yolo --new-workspace --no-worktree ` +
+          `--source-session ${pane.sessionId} --name ${delegateName} --brief "${BRIEF}"`,
       });
       let spawned = null;
       await observer.waitFor(() => {
@@ -130,6 +146,8 @@ async function main() {
         description: 'dispatcher shell after delegation',
         timeoutMs: 30_000,
       });
+      await ensureCodexPromptReadyViaPty(client, spawned, 60_000);
+      await waitForRenderedReply(client, spawned, 'GSREOPEN_READY');
       return spawned;
     });
 
@@ -175,9 +193,9 @@ async function main() {
       await pollFor(
         async () => {
           const state = await client.request('garden_expand_seed', { seedId: seed, reopen: true });
-          return state.present ? state : null;
+          return state.resumeAvailable ? state : null;
         },
-        'the panel drill for the seed',
+        'the panel drill to verify exact Resume availability',
       );
 
       const known = new Set(observer.sessionsById.keys());
@@ -187,6 +205,7 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the tender to be reopened as a session', 60_000);
+      await ensureCodexPromptReadyViaPty(client, spawned, 60_000);
       return spawned;
     });
 
@@ -202,15 +221,52 @@ async function main() {
         'the reopened session reports to the seed it was reopened from', { chip, seed });
     });
 
-    const summary = await runner.finishSuccess({ seed, delegated, reopened });
-    console.log('[RealAppHarness] Garden seed reopen passed.');
+    handedOver = await runner.step('the_resumed_seed_is_handed_to_a_new_agent', async () => {
+      await client.request('open_dock_panel', { panelId: 'garden' });
+      await pollFor(
+        async () => {
+          const state = await client.request('garden_expand_seed', { seedId: seed, reopen: true });
+          return state.handoverAvailable ? state : null;
+        },
+        'the resumed seed to be open for Handover',
+      );
+
+      const known = new Set(observer.sessionsById.keys());
+      await client.request('garden_handover_seed', { seedId: seed, handoff: HANDOFF });
+      let spawned = null;
+      await observer.waitFor(() => {
+        spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
+        return Boolean(spawned);
+      }, 'the Handover agent to start', 120_000);
+      runner.assert(observer.sessionsById.has(reopened),
+        'the old conversation remains open after Handover', { reopened, spawned });
+      await ensureCodexPromptReadyViaPty(client, spawned, 60_000);
+      return spawned;
+    });
+
+    await runner.step('the_handover_agent_reports_to_the_same_seed', async () => {
+      const chip = await pollFor(
+        async () => {
+          const state = await client.request('session_seed_chip_get_state', { sessionId: handedOver });
+          return state.present ? state : null;
+        },
+        'the Handover pane to carry the same seed chip',
+      );
+      runner.assert(chip.hint.includes(seed),
+        'the Handover session reports to the same seed', { chip, seed });
+      const shown = await runInPane(client, pane, `attn seed show ${seed}`, HANDOFF);
+      runner.assert(saw(shown, HANDOFF), 'the confirmed handoff landed on the seed log', { shown });
+    });
+
+    const summary = await runner.finishSuccess({ seed, delegated, reopened, handedOver });
+    console.log('[RealAppHarness] Garden seed continuation passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
-    const summary = await runner.finishFailure(error, { seed, delegated, reopened });
+    const summary = await runner.finishFailure(error, { seed, delegated, reopened, handedOver });
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    for (const id of [reopened, delegated, pane?.sessionId]) {
+    for (const id of [handedOver, reopened, delegated, pane?.sessionId]) {
       if (id) await client.request('close_session', { sessionId: id }).catch(() => {});
     }
     await client.quitApp().catch(() => {});

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"errors"
-	"github.com/victorarias/attn/internal/bus"
 	"net"
 	"os"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -235,6 +235,10 @@ func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWo
 		}
 	}
 
+	// Git is the only authoritative source for the branch and repository while a
+	// worktree still exists. Preserve it before a provider or Git removes the path.
+	d.captureGardenExecutionsInDirectory(path)
+
 	branch := wt.Branch
 	mainRepo := wt.MainRepo
 
@@ -258,7 +262,9 @@ func (d *Daemon) finalizeDeletedWorktree(path, mainRepo, branch string) {
 
 	// force=true: the worktree is already gone.
 	if branch != "" {
-		if err := git.DeleteBranch(mainRepo, branch, true); err != nil {
+		if d.gardenKeepsBranch(mainRepo, branch) {
+			d.logf("Preserved branch %s because an open seed can continue from it", branch)
+		} else if err := git.DeleteBranch(mainRepo, branch, true); err != nil {
 			d.logf("Warning: worktree deleted but failed to delete branch %s: %v", branch, err)
 		} else {
 			d.logf("Deleted branch %s along with worktree", branch)
@@ -270,7 +276,7 @@ func (d *Daemon) finalizeDeletedWorktree(path, mainRepo, branch string) {
 
 func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
 	for _, session := range d.store.List("") {
-		if session.Directory != path {
+		if !pathAtOrBelow(session.Directory, path) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)

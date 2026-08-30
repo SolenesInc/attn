@@ -124,11 +124,17 @@ func (c *Codex) PrepareLaunch(opts SpawnOpts) error {
 
 func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
 	window := HeadlessContextWindowCap()
+	schemaPath, removeSchema, err := writeCodexOutputSchema(request)
+	if err != nil {
+		return HeadlessTaskResult{}, err
+	}
+	defer removeSchema()
 	if request.usesNativeToolsPath() {
 		args := codexHeadlessArgs(request, window)
 		if request.DisableTools {
 			args = codexToolFreeHeadlessArgs(request, window)
 		}
+		args = addCodexOutputSchema(args, schemaPath)
 		result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex")
 		if err != nil {
 			return result, err
@@ -146,7 +152,7 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		defer os.Remove(lastMsgPath)
 	}
 
-	args := buildCodexHeadlessArgs(request, lastMsgPath, window)
+	args := addCodexOutputSchema(buildCodexHeadlessArgs(request, lastMsgPath, window), schemaPath)
 
 	runDir := strings.TrimSpace(request.CWD)
 	if runDir == "" {
@@ -159,6 +165,37 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 	}
 	result.Text = codexFinalText(lastMsgPath, stdout)
 	return result, nil
+}
+
+func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error) {
+	if len(request.OutputSchema) == 0 {
+		return "", func() {}, nil
+	}
+	file, err := os.CreateTemp(headlessTempDir(request.WorkDir), "codex-output-schema-*.json")
+	if err != nil {
+		return "", func() {}, fmt.Errorf("create Codex output schema: %w", err)
+	}
+	path := file.Name()
+	remove := func() { _ = os.Remove(path) }
+	if _, err := file.Write(request.OutputSchema); err != nil {
+		file.Close()
+		remove()
+		return "", func() {}, fmt.Errorf("write Codex output schema: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		remove()
+		return "", func() {}, fmt.Errorf("close Codex output schema: %w", err)
+	}
+	return path, remove, nil
+}
+
+func addCodexOutputSchema(args []string, schemaPath string) []string {
+	if schemaPath == "" || len(args) == 0 {
+		return args
+	}
+	prompt := args[len(args)-1]
+	args = append(args[:len(args)-1], "--output-schema", schemaPath)
+	return append(args, prompt)
 }
 
 // SECURITY BOUNDARY: the OS sandbox, not an approval prompt, confines a headless run.

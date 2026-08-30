@@ -1,0 +1,10 @@
+kind: added
+area: garden
+change: >
+  Seeds now keep the exact agent conversation and working context needed to
+  continue after their tender stops. Resume reopens that conversation when its
+  directory still exists. Handover starts a new agent on the same seed, keeps
+  uncommitted work in a surviving directory, or recreates a removed worktree
+  from its saved branch when that is safe. Parking can include a short comment,
+  and closing a session or removing a worktree still never decides the seed's
+  outcome.

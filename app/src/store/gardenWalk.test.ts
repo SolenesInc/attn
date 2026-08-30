@@ -8,6 +8,8 @@ function seed(id: string, parent = ''): Seed {
     title: id,
     body: '',
     status: 'planted',
+    state_changed_at: '2026-08-25T08:00:00Z',
+    state_changed_at_exact: true,
     step_slug: id,
     planter_session: '',
     planter_member: '',

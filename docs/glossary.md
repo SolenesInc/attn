@@ -32,10 +32,17 @@
 - Plot: seed with children; its body is the plan. Packet: reusable plot template.
 - Plant/tend/park/harvest/wither/replant: create/claim/pause/complete/abandon/reopen.
 - Seed states: planted/open, growing/claimed, dormant/paused, harvested/done, withered/abandoned.
+- Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
 - Tender: seed claimant; one at a time.
+- Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
+- Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
+- Send to Chief: transfer a seed and its execution receipt to the Chief with optional guidance.
 - Edges: blocks orders work; part-of contains it; discovered-from records origin.
 - Ready: claimable open seed, excluding plots, parked/blocked/held work, gates, packets, and packet descendants.
 - Stale: open without recent activity; age alone never closes work.
+- Review Garden: user-started pass over growing seeds without an active agent that may need a decision.
+- Garden advisor: configurable tool-free classifier for Review Garden. It explains evidence and recommends an action; it never moves a seed.
+- Keep growing: resolve one review item without changing the seed; seven quiet days must pass before it qualifies again.
 - Artifact: owned file under `<Notebook>/seeds/<seed-id>/`, retained across session/workspace/seed lifecycles.
 - Linked artifact: reference to an external file, Notebook document, or URL.
 - Note: seed log entry. Handoff: note for the next tender. Watch: interest in change notifications.

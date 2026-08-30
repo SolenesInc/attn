@@ -1,14 +1,15 @@
 import FocusTrap from 'focus-trap-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
+import type { SeedReviewActionContext, SeedReviewOverview } from '../hooks/useDaemonSocket';
 import {
   useGardenFullscreenView,
   type GardenMode,
   type GardenOpenMode,
 } from '../hooks/useGardenPresentation';
 import { GardenBoard } from './GardenBoard';
-import type { Verb } from './gardenBoardModel';
 import { GardenPanel } from './GardenPanel';
+import { GardenReviewPanel } from './GardenReviewPanel';
 import type { SeedDocument } from './SeedDocumentView';
 import './GardenFrame.css';
 
@@ -71,11 +72,27 @@ export interface GardenFrameProps {
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
   checkArtifactPath?: (path: string) => Promise<boolean>;
-  onResumeSeed?: (seedId: string) => void;
+  onResumeSeed?: (seedId: string, review?: SeedReviewActionContext) => Promise<unknown>;
+  onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
+  onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
+  chiefAvailable?: boolean;
   liveSessions?: Set<string>;
   loaded?: boolean;
-  moveSeed?: (seedId: string, verb: Verb, reason?: string) => Promise<unknown>;
+  moveSeed?: (
+    seedId: string,
+    verb: string,
+    reason?: string,
+    force?: boolean,
+    comment?: string,
+    review?: SeedReviewActionContext,
+  ) => Promise<Seed>;
   noteSeed?: (seedId: string, body: string) => Promise<unknown>;
+  reviewOverview?: SeedReviewOverview;
+  showReview?: (reviewId?: string) => Promise<SeedReviewOverview>;
+  startReview?: () => Promise<SeedReviewOverview>;
+  retryReviewItem?: (reviewId: string, seedId: string) => Promise<unknown>;
+  keepReviewItem?: (seedId: string, review: SeedReviewActionContext) => Promise<unknown>;
+  draftReviewHandover?: (seedId: string, review: SeedReviewActionContext) => Promise<string>;
 }
 
 export function GardenFrame({
@@ -91,16 +108,28 @@ export function GardenFrame({
   onOpenMarkdownArtifact,
   checkArtifactPath,
   onResumeSeed,
+  onHandoverSeed,
+  onSendSeedToChief,
+  chiefAvailable = false,
   liveSessions,
   loaded = true,
   moveSeed,
   noteSeed,
+  reviewOverview,
+  showReview,
+  startReview,
+  retryReviewItem,
+  keepReviewItem,
+  draftReviewHandover,
 }: GardenFrameProps) {
   const [preferredView, chooseView] = useGardenFullscreenView();
   const view = mode === 'full' ? preferredView : 'list';
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [viewport, setViewport] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
   const [flying, setFlying] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewOpening, setReviewOpening] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const previousMode = useRef<GardenMode>(mode);
   const lastOpenMode = useRef<GardenOpenMode>(mode === 'full' ? 'full' : 'dock');
 
@@ -116,7 +145,35 @@ export function GardenFrame({
     return () => window.removeEventListener('resize', onResize);
   }, [mode]);
 
-  const showingBoard = mode === 'full' && view === 'board' && Boolean(moveSeed && noteSeed);
+  useEffect(() => {
+    if (mode === 'closed') {
+      setReviewOpen(false);
+      setReviewError('');
+      return;
+    }
+    if (!showReview) return;
+    void showReview().catch((error) => {
+      setReviewError(error instanceof Error ? error.message : 'Could not read Garden review');
+    });
+  }, [mode, seeds, showReview]);
+
+  const openReview = async () => {
+    if (!startReview) return;
+    setReviewError('');
+    setReviewOpening(true);
+    try {
+      if (!reviewOverview?.review || reviewOverview.review.run.status !== 'running') {
+        await startReview();
+      }
+      setReviewOpen(true);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Could not start Garden review');
+    } finally {
+      setReviewOpening(false);
+    }
+  };
+
+  const showingBoard = !reviewOpen && mode === 'full' && view === 'board' && Boolean(moveSeed && noteSeed);
 
   useLayoutEffect(() => {
     const was = previousMode.current;
@@ -182,13 +239,38 @@ export function GardenFrame({
           }}
         >
           <div className="garden-frame__body" tabIndex={-1}>
-            {showingBoard ? (
+            {reviewOpen && reviewOverview?.review && fetchSeedDocument && moveSeed && onResumeSeed
+              && onHandoverSeed && retryReviewItem && keepReviewItem && draftReviewHandover && showReview ? (
+              <GardenReviewPanel
+                review={reviewOverview.review}
+                seeds={seeds}
+                frame={mode === 'full' ? 'full' : 'dock'}
+                onExit={() => setReviewOpen(false)}
+                onClose={() => {
+                  setReviewOpen(false);
+                  onClose();
+                }}
+                onToggleFrame={onToggleFrame}
+                onEscapeFloor={onEscapeFloor}
+                fetchSeedDocument={fetchSeedDocument}
+                onMoveSeed={moveSeed}
+                onResumeSeed={(seedId, review) => onResumeSeed(seedId, review)}
+                onKeepSeed={keepReviewItem}
+                onHandoverSeed={onHandoverSeed}
+                onSendSeedToChief={onSendSeedToChief}
+                onRetry={retryReviewItem}
+                onDraft={draftReviewHandover}
+                onRefresh={showReview}
+              />
+            ) : showingBoard ? (
               <GardenBoard
                 seeds={seeds}
                 seedsTotal={seedsTotal}
                 liveSessions={liveSessions ?? new Set()}
                 loaded={loaded}
-                onTransition={moveSeed!}
+                onTransition={(seedId, verb, reason, force, comment) => (
+                  moveSeed!(seedId, verb, reason, force, comment)
+                )}
                 onNote={noteSeed!}
                 viewToggle={viewToggle}
                 onClose={onClose}
@@ -204,11 +286,19 @@ export function GardenFrame({
                 onOpenMarkdownArtifact={onOpenMarkdownArtifact}
                 checkArtifactPath={checkArtifactPath}
                 onResumeSeed={onResumeSeed}
+                onHandoverSeed={onHandoverSeed}
+                onSendSeedToChief={onSendSeedToChief}
+                chiefAvailable={chiefAvailable}
                 onClose={onClose}
                 viewToggle={viewToggle}
                 frame={mode === 'full' ? 'full' : 'dock'}
                 onToggleFrame={onToggleFrame}
                 onEscapeFloor={onEscapeFloor}
+                reviewCandidateCount={reviewOverview?.candidateCount ?? 0}
+                reviewContinues={reviewOverview?.review?.run.status === 'running'}
+                reviewOpening={reviewOpening}
+                reviewError={reviewError}
+                onOpenReview={() => void openReview()}
               />
             )}
           </div>

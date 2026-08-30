@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -141,7 +142,7 @@ func TestSeedResumeAlreadyRunningFocusesInsteadOfSpawning(t *testing.T) {
 	}
 }
 
-func TestSeedResumeFallsBackToPickerWhenTranscriptGone(t *testing.T) {
+func TestSeedResumeRefusesWhenTranscriptGoneWithoutCreatingAnything(t *testing.T) {
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "claude")
 
@@ -150,21 +151,93 @@ func TestSeedResumeFallsBackToPickerWhenTranscriptGone(t *testing.T) {
 	// An empty tool home makes claude's transcript lookup find nothing for the
 	// mirrored id, which is what leaves it unresumable.
 	t.Setenv(toolhome.EnvVar, t.TempDir())
-	since := spawnCount(backend)
+	before, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatalf("readSeed before: %v", err)
+	}
+	spawnsBefore := spawnCount(backend)
+	notesBefore := seedNoteCount(t, d, seedID)
+
+	if _, err := d.resumeSeed(seedID); err == nil || !strings.Contains(err.Error(), "original conversation is unavailable") {
+		t.Fatalf("resumeSeed error = %v, want unavailable conversation refusal", err)
+	}
+	if got := spawnCount(backend); got != spawnsBefore {
+		t.Fatalf("spawn count = %d, want unchanged %d", got, spawnsBefore)
+	}
+	if ws := d.store.GetWorkspace("workspace-" + leafID); ws != nil {
+		t.Fatalf("resume left a phantom workspace: %+v", ws)
+	}
+	after, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatalf("readSeed after: %v", err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("seed changed on refused resume:\n before=%+v\n  after=%+v", before, after)
+	}
+	if got := seedNoteCount(t, d, seedID); got != notesBefore {
+		t.Fatalf("log holds %d notes, want unchanged %d", got, notesBefore)
+	}
+}
+
+func TestSeedResumeReclaimsParkedSeedFromItsLastExecution(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-parked")
+	d.persistResumeSessionID(leafID, "codex-parked")
+
+	parked := move(t, d, leafID, seedID, garden.VerbPark, "", "")
+	if parked.Status != garden.StatusDormant || parked.TenderSession != "" {
+		t.Fatalf("parked seed = %+v", parked)
+	}
+	if protocol.Deref(parked.LastExecutionID) != leafID {
+		t.Fatalf("last_execution_id = %q, want %q", protocol.Deref(parked.LastExecutionID), leafID)
+	}
+	d.unregisterSession(leafID, syscall.SIGTERM)
 
 	outcome, err := d.resumeSeed(seedID)
 	if err != nil {
 		t.Fatalf("resumeSeed: %v", err)
 	}
-	if outcome.AlreadyRunning {
-		t.Fatalf("outcome = %+v, want a fresh spawn", outcome)
+	if outcome.SessionID != leafID || outcome.AlreadyRunning {
+		t.Fatalf("outcome = %+v, want reopened session %s", outcome, leafID)
 	}
-	spawn := resumeSpawnForSession(t, backend, leafID, since)
-	if spawn.ResumeSessionID != "" {
-		t.Fatalf("ResumeSessionID = %q, want empty (transcript gone → picker)", spawn.ResumeSessionID)
+	resumed, _, err := d.readSeed(seedID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !spawn.ResumePicker {
-		t.Fatal("ResumePicker = false, want true (fallback to cwd-scoped picker)")
+	if resumed.Status != garden.StatusGrowing || resumed.TenderSession != leafID || resumed.LastExecutionID != leafID {
+		t.Fatalf("resumed seed = %+v", resumed)
+	}
+}
+
+func TestSeedResumeBindingIsAtomicWhenTheSeedChangesDuringLaunch(t *testing.T) {
+	d := newGardenDaemon(t)
+	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "racing resume", Body: protocol.Ptr("old body")})
+	seed, doc, err := d.readSeed(seedWire.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{
+		ID: "resumed-session", Label: "resumed", Agent: protocol.SessionAgentCodex,
+		Directory: t.TempDir(), State: protocol.SessionStateIdle,
+		StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	editSeed(t, d, seed.ID, "new body")
+
+	err = d.bindResumedSeed(seed, doc, "resumed-session", d.store.Get("resumed-session").Directory, "codex", "native-resume")
+	if err == nil || !strings.Contains(err.Error(), "changed while its conversation was resuming") {
+		t.Fatalf("bindResumedSeed error = %v, want guarded conflict", err)
+	}
+	after, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Body != "new body" || after.TenderSession != "" || after.LastExecutionID != "" {
+		t.Fatalf("failed binding partially moved seed: %+v", after)
+	}
+	if _, ok := d.gardenDispatch("resumed-session"); ok {
+		t.Fatal("failed binding wrote a dispatch without moving the seed")
 	}
 }
 
@@ -233,7 +306,7 @@ func TestSeedResumeValidation(t *testing.T) {
 		},
 		{
 			name:    "tender attn never launched",
-			message: "which attn did not launch — nothing to reopen",
+			message: "original directory was not saved",
 			setup: func(t *testing.T, d *Daemon) (string, string) {
 				seed := plant(t, d, protocol.SeedPlantMessage{
 					SourceSessionID: protocol.Ptr("sess-a"), Title: "held by a ghost",

@@ -5,10 +5,26 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/toolhome"
 )
+
+func TestAttnSkillUsesTheSeedBodyAndANeutralHarvestExample(t *testing.T) {
+	contents, err := attnSkillFiles.ReadFile("attn_skill/references/delegated-agent.md")
+	if err != nil {
+		t.Fatalf("read delegated-agent reference: %v", err)
+	}
+	for _, want := range []string{
+		"Close it when its outcome and required verification are complete",
+		`attn seed harvest <seed-id> -m "<what got done>"`,
+	} {
+		if !strings.Contains(string(contents), want) {
+			t.Fatalf("delegated-agent reference dropped %q:\n%s", want, contents)
+		}
+	}
+}
 
 func assertAttnSkillTree(t *testing.T, skillDir string) {
 	t.Helper()

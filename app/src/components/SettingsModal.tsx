@@ -55,6 +55,8 @@ import {
   type KeeperDutyKey,
 } from '../utils/keeperDuties';
 import { SessionActivitySettings } from './SessionActivitySettings';
+import { GardenAdvisorSettings } from './GardenAdvisorSettings';
+import { parseGardenAdvisorSetting } from '../utils/gardenAdvisorSettings';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import './SettingsModal.css';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
@@ -382,6 +384,16 @@ export function SettingsModal({
     }
     return eligible;
   }, [actualAgentCapabilities, actualKeeperConfigs, agentAvailability, orderedAgentList]);
+  const gardenAdvisorAgents = useMemo(() => {
+    const eligible = orderedAgentList.filter((agent) => (
+      ['codex', 'claude', 'copilot'].includes(agent)
+      && isAgentAvailable(agentAvailability, agent)
+      && actualAgentCapabilities[agent]?.headless_task === true
+    ));
+    const configured = parseGardenAdvisorSetting(settings['garden.advisor']).agent;
+    if (!eligible.includes(configured)) eligible.push(configured);
+    return eligible;
+  }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const agentCapabilityOrder = useMemo(
     () => AGENT_CAPABILITY_ORDER.map((cap) => cap as string),
     [],
@@ -799,8 +811,8 @@ export function SettingsModal({
           label: 'Executables and models',
           title: 'Agents and models',
           description: 'Which binary each agent runs, which model and effort it launches with, its context caps, and how its terminal is hosted.',
-          count: orderedAgentList.length + 7,
-          keywords: 'agents executables claude codex cursor default capabilities pty backend editor model effort chief reviewer review sdk context window cap tokens compaction headless workflows auto-approve unattended',
+          count: orderedAgentList.length + 8,
+          keywords: 'agents executables claude codex copilot default capabilities pty backend editor model effort chief reviewer review garden advisor sdk context window cap tokens compaction headless workflows auto-approve unattended',
         },
         {
           id: 'keeper',
@@ -1805,6 +1817,12 @@ export function SettingsModal({
       <SessionActivitySettings
         settings={settings}
         agents={keeperAgents}
+        onSetSetting={onSetSetting}
+      />
+
+      <GardenAdvisorSettings
+        settings={settings}
+        agents={gardenAdvisorAgents}
         onSetSetting={onSetSetting}
       />
 

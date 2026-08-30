@@ -12,7 +12,6 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -178,10 +177,8 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
 	agent := string(session.Agent)
 	switch agent {
-	case "claude", "codex":
+	case "claude", "codex", "copilot":
 		return d.execSessionTitleHeadless(ctx, agent, slice)
-	case "copilot":
-		return execSessionTitleCopilot(ctx, buildSessionTitlePrompt(slice), sessionTitleModel(agent))
 	default:
 		return "", fmt.Errorf("unsupported agent for title generation: %s", agent)
 	}
@@ -235,38 +232,6 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent string, sli
 		}
 	}
 	return result.Text, nil
-}
-
-// Mirrors the command shape of classifier.ClassifyWithCopilot without importing
-// it: stop-time classification is internal/classifier's alone.
-func execSessionTitleCopilot(ctx context.Context, prompt, model string) (string, error) {
-	if !headless.Enabled() {
-		return "", headless.Refusal("session_title")
-	}
-	executable := strings.TrimSpace(os.Getenv("ATTN_COPILOT_EXECUTABLE"))
-	if executable == "" {
-		executable = "copilot"
-	}
-	workDir, err := os.MkdirTemp("", "attn-session-title-*")
-	if err != nil {
-		return "", fmt.Errorf("create title scratch dir: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
-	args := []string{
-		"-p", prompt,
-		"-s",
-		"--model", model,
-		"--no-color",
-		"--no-custom-instructions",
-	}
-	cmd := exec.CommandContext(ctx, executable, args...)
-	cmd.Dir = workDir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("copilot title run failed: %w", err)
-	}
-	return string(output), nil
 }
 
 func buildSessionTitlePrompt(slice transcript.ConversationSlice) string {

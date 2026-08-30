@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
@@ -34,8 +35,14 @@ func runSeed() {
 		runSeedList(args)
 	case "show":
 		runSeedShow(args)
+	case "review":
+		runSeedReview(args)
 	case "edit":
 		runSeedEdit(args)
+	case "handover":
+		runSeedHandover(args)
+	case "send-to-chief":
+		runSeedSendToChief(args)
 	case "set-resume":
 		runSeedSetResume(args)
 	case "export":
@@ -117,6 +124,12 @@ commands:
         every edge that touches it in both directions, its body, and the newest
         notes on its log.
 
+  review start | show [<review-id>] | cancel <review-id> | retry <review-id> <seed-id> | keep <review-id> <seed-id> [--json]
+        start an advisory Garden review, inspect its progressive results,
+		cancel unfinished classification, retry one failed or changed item, or keep
+		one seed growing and review it again after seven quiet days.
+        The review never changes a seed's state.
+
   watch <id> | unwatch <id>
         ring this session when the seed or anything in its plot moves. A watch
         survives through the session's day; unwatch is the way out.
@@ -129,15 +142,27 @@ commands:
         set or clear the seed-owned fallback used when attn has no dispatch
         record for the conversation. The three identity fields move together.
 
+  handover <id> [-m "<what the new agent should know>"] [worker flags]
+        give this seed to a new agent. The seed body remains the brief and the
+        optional handoff lands on its log only after the new agent starts. The
+        saved directory is reused; if it was removed, its verified branch is
+        recreated when safe. Use --cwd when attn asks you to choose a place.
+
+  send-to-chief <id> [-m "<optional guidance>"]
+        give this seed to the Chief to decide its next working context. The
+        saved folder, branch and placement problem are recorded automatically;
+        -m adds an exception such as a special branch or directory.
+
   tend <id> [--member <name>] [--force]
         claim the seed and start growing it. One tender at a time: tending a
         seed somebody else still holds is refused, naming them, and takes
         --force to go through anyway. The freshest handoff prints on the
         claim, so picking a seed up primes you.
 
-  park <id> [--member <name>] [--force]
+  park <id> [-m "<where you left it>"] [--member <name>] [--force]
         pause the seed deliberately — it goes dormant and lets go of its
-        tender. Tending it again picks it back up.
+        tender. An optional comment lands on the log in the same move. Tending
+        it again picks it back up.
 
   harvest <id> -m "<what got done>" [--member <name>] [--force]
         close the seed as done. The reason is the point of the record.
@@ -190,7 +215,13 @@ flags:
   --discovered-from <seed>  record the seed this work came from (plant)
   --resume-session-id <id>  agent-native conversation id (plant, set-resume)
   --cwd <path>        directory to reopen in (plant, set-resume)
-  --agent <name>      agent driver to reopen with (plant, set-resume)
+  --agent <name>      agent driver to reopen with, or the new Handover agent
+                      (plant, set-resume, handover)
+  --model <name>      model for the new agent (handover; defaults normally)
+  --effort <level>    reasoning effort for the new agent (handover)
+  --name <text>       name for the new agent (handover)
+  --request-id <id>   stable retry key (handover; generated when omitted)
+  --yolo              bypass agent approval prompts (handover)
   --clear             remove the fallback identity (set-resume)
   --plot <plot>      scope a ready answer to one plot
   --flat             print a listing without nesting
@@ -308,6 +339,11 @@ type seedFlags struct {
 	resumeID       *string
 	cwd            *string
 	agent          *string
+	model          *string
+	effort         *string
+	name           *string
+	requestID      *string
+	yolo           *bool
 	clear          *bool
 	force          *bool
 }
@@ -344,6 +380,11 @@ func newSeedFlags(verb string) *seedFlags {
 		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
 		cwd:            fs.String("cwd", "", "directory to reopen in"),
 		agent:          fs.String("agent", "", "agent driver to reopen with"),
+		model:          fs.String("model", "", "model for the new agent"),
+		effort:         fs.String("effort", "", "reasoning effort for the new agent"),
+		name:           fs.String("name", "", "name for the new agent"),
+		requestID:      fs.String("request-id", "", "stable retry key"),
+		yolo:           fs.Bool("yolo", false, "bypass agent approval prompts"),
 		clear:          fs.Bool("clear", false, "remove the seed-owned resume identity"),
 		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
 	}
@@ -513,6 +554,144 @@ func runSeedList(args []string) {
 	}
 }
 
+func runSeedReview(args []string) {
+	if len(args) == 0 {
+		seedFail("review", fmt.Errorf("needs start, show, cancel, retry, or keep"))
+	}
+	verb := args[0]
+	positionals, jsonOutput, err := parseSeedReviewArgs(args[1:])
+	if err != nil {
+		seedFail("review "+verb, err)
+	}
+
+	var result *protocol.SeedReviewResult
+	switch verb {
+	case "start":
+		if len(positionals) != 0 {
+			seedFail("review start", fmt.Errorf("takes no arguments"))
+		}
+		result, err = seedClient().SeedReviewStart()
+	case "show":
+		if len(positionals) > 1 {
+			seedFail("review show", fmt.Errorf("takes at most one review id"))
+		}
+		reviewID := ""
+		if len(positionals) == 1 {
+			reviewID = positionals[0]
+		}
+		result, err = seedClient().SeedReviewShow(reviewID)
+	case "cancel":
+		if len(positionals) != 1 {
+			seedFail("review cancel", fmt.Errorf("needs exactly one review id"))
+		}
+		result, err = seedClient().SeedReviewCancel(positionals[0])
+	case "retry":
+		if len(positionals) != 2 {
+			seedFail("review retry", fmt.Errorf("needs a review id and seed id"))
+		}
+		result, err = seedClient().SeedReviewRetry(positionals[0], positionals[1])
+	case "keep":
+		if len(positionals) != 2 {
+			seedFail("review keep", fmt.Errorf("needs a review id and seed id"))
+		}
+		shown, showErr := seedClient().SeedReviewShow(positionals[0])
+		if showErr != nil {
+			seedFail("review keep", showErr)
+		}
+		var receipt *protocol.GardenReviewItem
+		if shown.Review != nil {
+			for i := range shown.Review.Items {
+				if shown.Review.Items[i].SeedID == positionals[1] {
+					receipt = &shown.Review.Items[i]
+					break
+				}
+			}
+		}
+		if receipt == nil {
+			seedFail("review keep", fmt.Errorf("seed %s is not part of Garden review %s", positionals[1], positionals[0]))
+		}
+		result, err = seedClient().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
+			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
+		})
+	default:
+		seedFail("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
+	}
+	if err != nil {
+		seedFail("review "+verb, err)
+	}
+	if jsonOutput {
+		writeJSON(result)
+		return
+	}
+	if result.Review == nil {
+		fmt.Printf("%d seeds need review\n", result.CandidateCount)
+		return
+	}
+	fprintSeedReview(os.Stdout, *result.Review, verb == "show")
+}
+
+func parseSeedReviewArgs(args []string) ([]string, bool, error) {
+	positionals := make([]string, 0, len(args))
+	jsonOutput := false
+	for _, arg := range args {
+		switch {
+		case arg == "--json":
+			jsonOutput = true
+		case strings.HasPrefix(arg, "-"):
+			return nil, false, fmt.Errorf("unknown flag %q", arg)
+		default:
+			positionals = append(positionals, arg)
+		}
+	}
+	return positionals, jsonOutput, nil
+}
+
+func fprintSeedReview(w io.Writer, review protocol.GardenReview, detailed bool) {
+	run := review.Run
+	fmt.Fprintf(w, "review %s\t%s\t%d seeds\n", run.ID, run.Status, len(review.Items))
+	fmt.Fprintf(w, "captured %s\tadvisor %s / %s", run.CapturedAt, run.Recipe.Agent, run.Recipe.Model)
+	if effort := protocol.Deref(run.Recipe.Effort); effort != "" {
+		fmt.Fprintf(w, " / %s", effort)
+	}
+	fmt.Fprintln(w)
+	if len(review.Items) == 0 {
+		fmt.Fprintln(w, "no seeds needed review when this run started")
+		return
+	}
+
+	if !detailed {
+		fmt.Fprintln(w)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "SEED\tSTATUS\tRECOMMENDATION\tTITLE")
+		for _, item := range review.Items {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", item.SeedID, item.Status,
+				orDash(protocol.Deref(item.Recommendation)), item.Title)
+		}
+		tw.Flush()
+		return
+	}
+
+	for _, item := range review.Items {
+		fmt.Fprintf(w, "\n%s  %s\n", item.SeedID, item.Title)
+		fmt.Fprintf(w, "status\t%s\n", item.Status)
+		if recommendation := protocol.Deref(item.Recommendation); recommendation != "" {
+			fmt.Fprintf(w, "advice\t%s: %s\n", recommendation, protocol.Deref(item.Explanation))
+		}
+		if item.Resolution != garden.ReviewResolutionUnresolved {
+			fmt.Fprintf(w, "resolution\t%s\n", item.Resolution)
+		}
+		if len(item.Actions) > 0 {
+			fmt.Fprintf(w, "actions\t%s\n", strings.Join(item.Actions, ", "))
+		}
+		if itemError := protocol.Deref(item.Error); itemError != "" {
+			fmt.Fprintf(w, "error\t%s\n", itemError)
+		}
+		for _, evidence := range item.Evidence {
+			fmt.Fprintf(w, "%s\t%s\n", evidence.Label, evidence.Text)
+		}
+	}
+}
+
 func staleWindowLabel(seconds *int) string {
 	if seconds == nil || *seconds <= 0 {
 		return formatWindow(garden.DefaultStaleWindow)
@@ -667,6 +846,85 @@ func runSeedSetResume(args []string) {
 		return
 	}
 	fprintSeed(os.Stdout, result.Seed)
+}
+
+func runSeedHandover(args []string) {
+	f := newSeedFlags("handover")
+	positionals := f.parse("handover", args)
+	if len(positionals) != 1 {
+		seedFail("handover", fmt.Errorf("needs exactly one seed id, got %d: attn seed handover s-7k3f9m", len(positionals)))
+	}
+	seedID := strings.TrimSpace(positionals[0])
+	c := seedClient()
+	document, err := c.SeedShow(f.sessionID(), seedID)
+	if err != nil {
+		seedFail("handover", err)
+	}
+	requestID := strings.TrimSpace(*f.requestID)
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	handoff := strings.TrimSpace(f.text("handover"))
+	request := &protocol.SeedHandoverRequest{
+		SeedID:                document.Seed.ID,
+		ExpectedRev:           document.Seed.Rev,
+		ExpectedTenderSession: document.Seed.TenderSession,
+		ExpectedTenderMember:  document.Seed.TenderMember,
+	}
+	if handoff != "" {
+		request.Handoff = protocol.Ptr(handoff)
+	}
+
+	fmt.Fprintf(os.Stderr, "handover request: request_id=%s seed_id=%s\n", requestID, seedID)
+	operation, err := c.StartDelegation(f.sessionID(), "", client.DelegateOptions{
+		RequestID: requestID,
+		Agent:     strings.TrimSpace(*f.agent),
+		Model:     strings.TrimSpace(*f.model),
+		Effort:    strings.TrimSpace(*f.effort),
+		Label:     strings.TrimSpace(*f.name),
+		Yolo:      *f.yolo,
+		CWD:       strings.TrimSpace(*f.cwd),
+		Handover:  request,
+	})
+	if err != nil {
+		seedFail("handover", err)
+	}
+	fmt.Fprintf(os.Stderr, "handover accepted: request_id=%s operation_id=%s session_id=%s\n",
+		operation.RequestID, operation.OperationID, operation.SessionID)
+	operation, err = waitDelegationCLI(c, operation, requestID, os.Stderr)
+	if err != nil {
+		seedFail("handover", err)
+	}
+	if *f.json {
+		writeJSON(operation.Result)
+		return
+	}
+	fmt.Printf("%s handed over to session %s in %s\n", seedID, operation.Result.SessionID, operation.Result.Directory)
+}
+
+func runSeedSendToChief(args []string) {
+	f := newSeedFlags("send-to-chief")
+	positionals := f.parse("send-to-chief", args)
+	if len(positionals) != 1 {
+		seedFail("send-to-chief", fmt.Errorf(
+			"needs exactly one seed id, got %d: attn seed send-to-chief s-7k3f9m", len(positionals)))
+	}
+	seedID := strings.TrimSpace(positionals[0])
+	c := seedClient()
+	document, err := c.SeedShow(f.sessionID(), seedID)
+	if err != nil {
+		seedFail("send-to-chief", err)
+	}
+	result, err := c.SeedSendToChief(
+		f.sessionID(), document.Seed, strings.TrimSpace(f.text("send-to-chief")))
+	if err != nil {
+		seedFail("send-to-chief", err)
+	}
+	if *f.json {
+		writeJSON(result)
+		return
+	}
+	fmt.Printf("%s sent to Chief (%s)\n", seedID, result.Detail)
 }
 
 func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifact) {

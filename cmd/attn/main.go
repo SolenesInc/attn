@@ -702,28 +702,40 @@ func runDelegate() {
 	}
 	fmt.Fprintf(os.Stderr, "delegation accepted: request_id=%s operation_id=%s session_id=%s\n",
 		operation.RequestID, operation.OperationID, operation.SessionID)
-	lastProgress := ""
-	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-		if operation.Progress != "" && operation.Progress != lastProgress {
-			fmt.Fprintf(os.Stderr, "delegation progress: %s\n", operation.Progress)
-			lastProgress = operation.Progress
-		}
-		time.Sleep(250 * time.Millisecond)
-		operation, err = c.DelegationStatus(operation.OperationID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "delegate: outcome unknown; inspect or retry with --request-id %s: %v\n", args.options.RequestID, err)
-			os.Exit(1)
-		}
-	}
-	if operation.State == protocol.DelegationOperationStateFailed {
-		fmt.Fprintf(os.Stderr, "delegate: %s (request_id=%s)\n", protocol.Deref(operation.Error), operation.RequestID)
-		os.Exit(1)
-	}
-	if operation.Result == nil {
-		fmt.Fprintln(os.Stderr, "delegate: completed operation has no result")
+	operation, err = waitDelegationCLI(c, operation, args.options.RequestID, os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
 		os.Exit(1)
 	}
 	printJSON(operation.Result)
+}
+
+func waitDelegationCLI(
+	c *client.Client,
+	operation *protocol.DelegationOperation,
+	requestID string,
+	progress io.Writer,
+) (*protocol.DelegationOperation, error) {
+	lastProgress := ""
+	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
+		if operation.Progress != "" && operation.Progress != lastProgress {
+			fmt.Fprintf(progress, "delegation progress: %s\n", operation.Progress)
+			lastProgress = operation.Progress
+		}
+		time.Sleep(250 * time.Millisecond)
+		next, err := c.DelegationStatus(operation.OperationID)
+		if err != nil {
+			return nil, fmt.Errorf("outcome unknown; inspect or retry with --request-id %s: %w", requestID, err)
+		}
+		operation = next
+	}
+	if operation.State == protocol.DelegationOperationStateFailed {
+		return nil, fmt.Errorf("%s (request_id=%s)", protocol.Deref(operation.Error), operation.RequestID)
+	}
+	if operation.Result == nil {
+		return nil, errors.New("completed operation has no result")
+	}
+	return operation, nil
 }
 
 func writeDelegateHelp(w io.Writer) {

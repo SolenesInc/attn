@@ -111,6 +111,7 @@ export type {
   PullRequestProvenance,
   RepoState,
   Seed,
+  SeedContinuation,
   SeedEdge,
   SeedPlotProgress,
   SeedVar,

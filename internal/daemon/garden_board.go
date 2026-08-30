@@ -24,13 +24,26 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		return
 	}
 	ask := garden.Ask{Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
-	seed, doc, audit, err := d.applySeedTransitionDetailed(msg.SeedID, verb, ask)
+	expectedRev := int64(0)
+	if msg.Review != nil {
+		item, reviewErr := d.validateGardenReviewAction(msg.Review, msg.SeedID, string(verb))
+		if reviewErr != nil {
+			fail(reviewErr)
+			return
+		}
+		expectedRev = item.SeedRev
+	}
+	seed, doc, notes, err := d.applySeedTransitionDetailedAtRevision(
+		msg.SeedID, verb, ask, protocol.Deref(msg.Comment), expectedRev)
 	if err != nil {
 		fail(err)
 		return
 	}
-	if audit != nil {
-		d.mirrorSeedNoteOntoTicket("", seed.ID, audit.Body)
+	if err := d.resolveGardenReviewAction(msg.Review, msg.SeedID, string(verb)); err != nil {
+		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
+	}
+	for _, note := range notes.all() {
+		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
 	}
 	wire := seedToProtocol(seed, doc, false)
 	if read, err := d.readGarden(); err == nil {

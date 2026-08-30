@@ -13,10 +13,12 @@ import (
 const Surface = "the garden"
 
 const (
-	Namespace            = "core/garden"
-	CollectionSeeds      = "seeds"
-	CollectionNotes      = "notes"
-	CollectionDispatches = "dispatches"
+	Namespace             = "core/garden"
+	CollectionSeeds       = "seeds"
+	CollectionNotes       = "notes"
+	CollectionDispatches  = "dispatches"
+	CollectionReviewRuns  = "review-runs"
+	CollectionReviewItems = "review-items"
 )
 
 const (
@@ -53,6 +55,8 @@ type Seed struct {
 	PlanterMember   string `json:"planter_member"`
 	TenderSession   string `json:"tender_session"`
 	TenderMember    string `json:"tender_member"`
+	LastExecutionID string `json:"last_execution_id,omitempty"`
+	StateChangedAt  string `json:"state_changed_at,omitempty"`
 	Edges           []Edge `json:"edges"`
 	Template        bool   `json:"template"`
 	Gate            bool   `json:"gate"`
@@ -98,10 +102,23 @@ type Dispatch struct {
 	DispatcherSession string `json:"dispatcher_session,omitempty"`
 	Cwd               string `json:"cwd,omitempty"`
 	Agent             string `json:"agent,omitempty"`
+	HostKind          string `json:"host_kind,omitempty"`
+	EndpointID        string `json:"endpoint_id,omitempty"`
+	RepositoryRoot    string `json:"repository_root,omitempty"`
+	RepositorySubdir  string `json:"repository_subdir,omitempty"`
+	Branch            string `json:"branch,omitempty"`
+	CapturedAt        string `json:"captured_at,omitempty"`
+	SupersededBy      string `json:"superseded_by,omitempty"`
+	OperationID       string `json:"operation_id,omitempty"`
 	// Stays true through a role transfer: it says who dispatched, not who is chief.
 	FromChief bool   `json:"from_chief,omitempty"`
 	Resume    string `json:"resume,omitempty"`
 }
+
+const (
+	HostLocal  = "local"
+	HostRemote = "remote"
+)
 
 func DispatchesSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{

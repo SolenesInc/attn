@@ -206,12 +206,33 @@ export interface SeedVar {
   readonly required?: boolean
 }
 
+export interface SeedContinuation {
+  readonly agent: string
+  readonly branch?: string
+  readonly cwd: string
+  readonly directory_state: string
+  readonly endpoint_id?: string
+  readonly execution_id: string
+  readonly handover_placement: string
+  readonly host_kind: string
+  readonly native_conversation_id?: string
+  readonly placement_reason?: string
+  readonly repository_root?: string
+  readonly repository_subdir?: string
+  readonly resume_available: boolean
+  readonly resume_reason?: string
+  readonly session_live: boolean
+  readonly source: string
+}
+
 export interface Seed {
   readonly body: string
+  readonly continuation?: SeedContinuation
   readonly created_at: string
   readonly edges: readonly SeedEdge[]
   readonly gate: boolean
   readonly id: string
+  readonly last_execution_id?: string
   readonly planter_member: string
   readonly planter_session: string
   readonly plot_progress?: SeedPlotProgress
@@ -221,6 +242,8 @@ export interface Seed {
   readonly resume_cwd?: string
   readonly resume_session_id?: string
   readonly rev: number
+  readonly state_changed_at: string
+  readonly state_changed_at_exact: boolean
   readonly status: string
   readonly step_slug: string
   readonly template: boolean

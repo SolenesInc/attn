@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } from '../store/gardenWalk';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
 import { crewDisplayName, crewHolderName } from '../utils/crewName';
@@ -33,12 +33,20 @@ interface GardenPanelProps {
   fetchSeedDocument?: (seedId: string) => Promise<SeedDocument>;
   onOpenAsTile?: (seedId: string) => void;
   onOpenMarkdownArtifact?: (path: string) => void;
-  onResumeSeed?: (seedId: string) => void;
+  onResumeSeed?: (seedId: string) => Promise<unknown>;
+  onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
+  onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
+  chiefAvailable?: boolean;
   checkArtifactPath?: (path: string) => Promise<boolean>;
   viewToggle?: React.ReactNode;
   frame?: 'dock' | 'full';
   onToggleFrame?: () => void;
   onEscapeFloor?: () => void;
+  reviewCandidateCount?: number;
+  reviewContinues?: boolean;
+  reviewOpening?: boolean;
+  reviewError?: string;
+  onOpenReview?: () => void;
 }
 
 const COLUMNS_MIN = 1160;
@@ -407,11 +415,19 @@ export function GardenPanel({
   onOpenAsTile,
   onOpenMarkdownArtifact,
   onResumeSeed,
+  onHandoverSeed,
+  onSendSeedToChief,
+  chiefAvailable = false,
   checkArtifactPath,
   viewToggle,
   frame,
   onToggleFrame,
   onEscapeFloor,
+  reviewCandidateCount = 0,
+  reviewContinues = false,
+  reviewOpening = false,
+  reviewError = '',
+  onOpenReview,
 }: GardenPanelProps) {
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
@@ -420,6 +436,13 @@ export function GardenPanel({
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
   const [seedDocument, setSeedDocument] = useState<SeedDocument | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [continuationDraft, setContinuationDraft] = useState<{
+    seedId: string;
+    kind: 'handover' | 'chief';
+    text: string;
+    busy: boolean;
+    error: string;
+  } | null>(null);
   const [titlePinned, setTitlePinned] = useState(false);
   const [trailOpen, setTrailOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(0);
@@ -566,8 +589,10 @@ export function GardenPanel({
 
   // Keep the frame below controls that register after opening, such as a lightbox.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);
+  useEscapeStack(() => setContinuationDraft(null), continuationDraft !== null);
 
   const hereId = here?.id ?? '';
+  const hereRev = here?.rev ?? 0;
   useEffect(() => {
     if (!isOpen || !hereId || !fetchSeedDocument) {
       setSeedDocument(null);
@@ -586,7 +611,7 @@ export function GardenPanel({
     return () => {
       ignore = true;
     };
-  }, [hereId, fetchSeedDocument, isOpen, seeds]);
+  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds]);
 
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;
@@ -724,6 +749,46 @@ export function GardenPanel({
   const closedToggle = otherLens || (!closedOn && closedCount === 0) ? null : { count: closedCount, on: closedOn };
 
   const seedDoc = seedDocument && here && seedDocument.seed.id === here.id ? seedDocument : null;
+  const documentIsCurrent = Boolean(seedDoc && here && seedDoc.seed.rev === here.rev);
+  const continuation = seedDoc?.seed.continuation;
+  const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
+  const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
+  const canHandover = Boolean(
+    documentIsCurrent && onHandoverSeed && seedIsOpen && continuation
+      && continuation.handover_placement !== 'placement_required',
+  );
+  const canSendToChief = Boolean(documentIsCurrent && onSendSeedToChief && chiefAvailable && seedIsOpen);
+  const composingContinuation = continuationDraft?.seedId === here?.id;
+  const submitContinuation = async () => {
+    if (!seedDoc || !continuationDraft || continuationDraft.seedId !== seedDoc.seed.id) return;
+    setContinuationDraft((draft) => draft ? { ...draft, busy: true, error: '' } : draft);
+    try {
+      const common = {
+        seedId: seedDoc.seed.id,
+        expectedRev: seedDoc.seed.rev,
+        expectedTenderSession: seedDoc.seed.tender_session,
+        expectedTenderMember: seedDoc.seed.tender_member,
+      };
+      if (continuationDraft.kind === 'handover') {
+        if (!onHandoverSeed) throw new Error('Handover is unavailable');
+        await onHandoverSeed({ ...common, handoff: continuationDraft.text });
+      } else {
+        if (!onSendSeedToChief) throw new Error('Chief is unavailable');
+        await onSendSeedToChief({ ...common, guidance: continuationDraft.text });
+      }
+      setContinuationDraft(null);
+    } catch (error) {
+      setContinuationDraft((draft) => draft ? {
+        ...draft,
+        busy: false,
+        error: error instanceof Error
+          ? error.message
+          : continuationDraft.kind === 'handover'
+            ? 'Handover failed'
+            : 'Sending the seed to Chief failed',
+      } : draft);
+    }
+  };
   const artifacts = seedDoc?.artifacts ?? [];
   const references = seedDoc?.references ?? [];
   const notes = seedDoc?.notes ?? [];
@@ -970,9 +1035,27 @@ export function GardenPanel({
             {onOpenAsTile && (
               <button type="button" onClick={() => onOpenAsTile(here.id)}>Open as tile</button>
             )}
-            {onResumeSeed && (here.tender_session || here.resume_session_id) && (
-              <button type="button" data-testid={`seed-reopen-${here.id}`} onClick={() => onResumeSeed(here.id)}>
-                Reopen agent
+            {canResume && (
+              <button type="button" data-testid={`seed-resume-${here.id}`} onClick={() => onResumeSeed?.(here.id)}>
+                Resume
+              </button>
+            )}
+            {canHandover && !composingContinuation && (
+              <button
+                type="button"
+                data-testid={`seed-handover-${here.id}`}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'handover', text: '', busy: false, error: '' })}
+              >
+                Handover
+              </button>
+            )}
+            {canSendToChief && !composingContinuation && (
+              <button
+                type="button"
+                data-testid={`seed-send-to-chief-${here.id}`}
+                onClick={() => setContinuationDraft({ seedId: here.id, kind: 'chief', text: '', busy: false, error: '' })}
+              >
+                Send to Chief
               </button>
             )}
           </div>
@@ -995,6 +1078,44 @@ export function GardenPanel({
             <ProgressBar seed={here} />
             <span>{progressWords(here)}</span>
           </div>
+        )}
+        {composingContinuation && continuationDraft && (
+          <form
+            className="garden-handover"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitContinuation();
+            }}
+          >
+            <label htmlFor={`garden-continuation-${here.id}`}>
+              {continuationDraft.kind === 'handover' ? 'What should the new agent know?' : 'What should Chief know?'}<span>optional</span>
+            </label>
+            <textarea
+              id={`garden-continuation-${here.id}`}
+              autoFocus
+              value={continuationDraft.text}
+              onChange={(event) => setContinuationDraft({ ...continuationDraft, text: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void submitContinuation();
+                }
+              }}
+            />
+            {continuationDraft.error && <p className="garden-handover__error" role="alert">{continuationDraft.error}</p>}
+            <div className="garden-handover__actions">
+              {continuationDraft.busy ? (
+                <span aria-live="polite">
+                  {continuationDraft.kind === 'handover' ? 'Handing over…' : 'Sending to Chief…'}
+                </span>
+              ) : (
+                <>
+                  <button type="button" onClick={() => setContinuationDraft(null)}>Cancel</button>
+                  <button type="submit">{continuationDraft.kind === 'handover' ? 'Handover' : 'Send to Chief'}</button>
+                </>
+              )}
+            </div>
+          </form>
         )}
       </div>
 
@@ -1098,12 +1219,34 @@ export function GardenPanel({
     </p>
   );
 
+  const reviewPrompt = livingTrail.length === 0 && !searching && onOpenReview && reviewCandidateCount > 0 ? (
+    <div className="garden-review-prompt" data-testid="garden-review-prompt">
+      <div>
+        <strong>{reviewCandidateCount} {reviewCandidateCount === 1 ? 'seed needs' : 'seeds need'} review</strong>
+        <span>Work that may be finished, parked, or ready for another agent.</span>
+      </div>
+      {reviewOpening ? (
+        <span aria-live="polite">Starting review…</span>
+      ) : (
+        <button type="button" onClick={onOpenReview}>
+          {reviewContinues ? 'Continue review' : 'Review garden'}
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  const reviewProblem = livingTrail.length === 0 && !searching && reviewError ? (
+    <p className="garden-review-prompt__error" role="alert">{reviewError}</p>
+  ) : null;
+
   if (layout === 'columns') {
     const panes = searching ? 1 + (here ? 1 : 0) : visibleLevels.length + (here ? 1 : 0);
     return (
       <div ref={measurePanel} className="garden-panel is-columns" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
         {trailNav}
         {searchLine}
+        {reviewPrompt}
+        {reviewProblem}
         <div
           className="garden-columns"
           data-panes={panes}
@@ -1147,6 +1290,8 @@ export function GardenPanel({
     <div ref={measurePanel} className="garden-panel" role="region" aria-label="The garden" onKeyDown={onPanelKeyDown}>
       {trailNav}
       {searchLine}
+      {reviewPrompt}
+      {reviewProblem}
       <div
         className="garden-viewport"
         ref={viewportRef}

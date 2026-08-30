@@ -72,6 +72,7 @@ const (
 	SettingActivityConfig                  = "activity.config"
 	SettingActivityIntervals               = "activity.intervals"
 	SettingActivityPresenceIdleSeconds     = "activity.presence_idle_seconds"
+	SettingGardenAdvisor                   = "garden.advisor"
 	SettingCrewHeartbeatEnabled            = "crew.heartbeat_enabled"
 	SettingCrewAutoSleepEnabled            = "crew.autosleep_enabled"
 	SettingCrewContextHandoffEnabled       = "crew.context_handoff_enabled"
@@ -309,6 +310,11 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 			settings[SettingActivityIntervals] = string(encoded)
 		}
 	}
+	if advisor, err := parseGardenAdvisorConfig(stored[SettingGardenAdvisor]); err == nil {
+		if encoded, err := json.Marshal(advisor); err == nil {
+			settings[SettingGardenAdvisor] = string(encoded)
+		}
+	}
 	settings[SettingCrewHeartbeatEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewHeartbeatEnabled))
 	settings[SettingCrewAutoSleepEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewAutoSleepEnabled))
 	settings[SettingCrewContextHandoffEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewContextHandoffEnabled))
@@ -478,6 +484,8 @@ func (d *Daemon) validateSetting(key, value string) error {
 		return d.validateNotebookNarrationSetting(notebookNarrateWorkspaceKind, value)
 	case SettingActivityConfig:
 		return d.validateActivitySetting(value)
+	case SettingGardenAdvisor:
+		return d.validateGardenAdvisorSetting(value)
 	case SettingActivityIntervals:
 		_, err := parseActivityIntervals(value)
 		return err

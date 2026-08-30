@@ -3,12 +3,12 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/bus"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
@@ -41,7 +41,6 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
 	// Never resurrect during shutdown: a watcher started after Stop() closes d.done leaks a goroutine and an fd.
-	// started after that leaks a goroutine and an fd.
 	select {
 	case <-d.done:
 		return

@@ -9,6 +9,8 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   return {
     body: '',
     status: 'planted',
+    state_changed_at: '2026-08-20T09:00:00Z',
+    state_changed_at_exact: true,
     step_slug: overrides.title,
     planter_session: '',
     planter_member: '',

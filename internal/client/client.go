@@ -460,6 +460,7 @@ type DelegateOptions struct {
 	StartingFrom       string
 	NoWorktree         bool
 	AllowWorktreeReuse bool
+	Handover           *protocol.SeedHandoverRequest
 }
 
 func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOptions) (*protocol.DelegationOperation, error) {
@@ -472,6 +473,7 @@ func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOpt
 		RequestID:       requestID,
 		SourceSessionID: sourceSessionID,
 		Brief:           strings.TrimSpace(brief),
+		Handover:        opts.Handover,
 	}
 	if value := strings.TrimSpace(opts.TicketID); value != "" {
 		msg.TicketID = protocol.Ptr(value)
@@ -517,7 +519,7 @@ func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOpt
 	if opts.NoWorktree && worktreeConfigured {
 		return nil, errors.New("no worktree cannot be combined with worktree options")
 	}
-	if !opts.NoWorktree {
+	if !opts.NoWorktree && opts.Handover == nil {
 		msg.Worktree = &protocol.DelegateWorktreeRequest{
 			Branch: branch,
 		}

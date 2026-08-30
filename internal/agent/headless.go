@@ -70,7 +70,7 @@ func runHeadlessCommand(
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = headlessEnvironment(provider)
+	cmd.Env = headlessEnvironment(provider, workDir)
 	var stdout, stderr boundedHeadlessOutput
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -119,7 +119,7 @@ func headlessTempDir(workDir string) string {
 	return os.TempDir()
 }
 
-func headlessEnvironment(provider string) []string {
+func headlessEnvironment(provider, workDir string) []string {
 	allowedExact := map[string]bool{
 		"HOME":                true,
 		"PATH":                true,
@@ -153,6 +153,16 @@ func headlessEnvironment(provider string) []string {
 		allowedPrefixes = append(allowedPrefixes, "OPENAI_", "AZURE_OPENAI_", "AWS_", "GOOGLE_")
 	case "claude":
 		allowedPrefixes = append(allowedPrefixes, "ANTHROPIC_", "CLAUDE_CODE_USE_", "AWS_", "GOOGLE_", "AZURE_")
+	case "copilot":
+		for _, name := range []string{
+			"COPILOT_GH_HOST",
+			"COPILOT_GITHUB_TOKEN",
+			"GH_HOST",
+			"GH_TOKEN",
+			"GITHUB_TOKEN",
+		} {
+			allowedExact[name] = true
+		}
 	}
 	env := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
@@ -183,6 +193,12 @@ func headlessEnvironment(provider string) []string {
 		if window := HeadlessContextWindowCap(); window > 0 {
 			env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(window))
 		}
+	}
+	if provider == "copilot" {
+		if dir := strings.TrimSpace(workDir); dir != "" {
+			env = append(env, "COPILOT_HOME="+dir)
+		}
+		env = append(env, "COPILOT_MCP_TOOL_CACHE=false")
 	}
 	return launchenv.WithActiveAttnFirst(env, launchenv.ActiveAttnExecutable())
 }

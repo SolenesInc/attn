@@ -10,6 +10,8 @@ function seed(overrides: Partial<Seed> = {}): Seed {
     title: 'Make seed IDs navigable from terminals',
     body: 'Recognize **valid** seed IDs and show a compact [preview](https://example.test).',
     status: 'growing',
+    state_changed_at: new Date().toISOString(),
+    state_changed_at_exact: true,
     tender_member: 'trellis',
     tender_session: '',
     planter_member: '',
