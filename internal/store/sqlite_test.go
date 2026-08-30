@@ -132,6 +132,39 @@ func TestOpenDBRetainsMeasuredReadBurst(t *testing.T) {
 	}
 }
 
+func TestOpenDBTakesTheWriteLockWhenATransactionBegins(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "txlock.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() error = %v", err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer tx.Rollback()
+
+	// A second handle that never waits: it reports the lock the transaction
+	// holds instead of blocking this test on the busy timeout.
+	other, err := sql.Open("sqlite3", "file:"+dbPath+"?_busy_timeout=0")
+	if err != nil {
+		t.Fatalf("open second handle: %v", err)
+	}
+	defer other.Close()
+	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err == nil {
+		t.Fatal("a concurrent write succeeded; the transaction did not take the write lock at BEGIN")
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatalf("write after commit: %v", err)
+	}
+}
+
 func TestOpenDB_CreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "subdir", "nested", "test.db")
