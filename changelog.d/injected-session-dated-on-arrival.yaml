@@ -1,0 +1,12 @@
+kind: fixed
+area: daemon
+change: >
+  A session injected over the socket is dated on arrival, so startup recovery
+  cannot reap it. The daemon accepts commands while its startup PTY recovery
+  still runs, and recovery decides whether a session is a leftover of a previous
+  run by its `state_updated_at`. Every registration path stamped that field
+  except `inject_test_session`, which stored the row exactly as it arrived: a
+  session injected in that window carried no date, read as stale, and was
+  removed without a live PTY to justify it. The app then rendered no session at
+  all, which is how the e2e suite failed — roughly one run in eight on a loaded
+  Linux runner, and never on a fast machine.
