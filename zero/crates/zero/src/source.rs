@@ -38,8 +38,8 @@ pub enum ScenarioAction {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Command {
-    Prompt { id: AgentId, text: String },
-    Approval { id: AgentId, approved: bool },
+    /// Keystrokes for the agent's terminal, exactly as its PTY would receive them.
+    Input { id: AgentId, bytes: Vec<u8> },
     Resize { id: AgentId, cols: u16, rows: u16 },
     Scenario(ScenarioAction),
 }

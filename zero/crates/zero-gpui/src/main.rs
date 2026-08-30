@@ -19,7 +19,7 @@ use gpui::{
     point, prelude::*, px, size,
 };
 use libghostty_vt::terminal::ScrollViewport;
-use zero::model::{AgentId, AgentKind, AgentState, Model};
+use zero::model::{AgentId, AgentKind, Model};
 use zero::shell::{Shell, ShellOutput};
 use zero::simulator::Simulator;
 use zero::source::{Command, Event as SourceEvent, Scenario, ScenarioAction, Source};
@@ -100,20 +100,28 @@ enum Popup {
     Help,
 }
 
+enum ItemAction {
+    Source(fn(&Zero) -> ScenarioAction),
+    Motion,
+}
+
 struct ScenarioItem {
     label: &'static str,
     detail: &'static str,
-    action: fn(&Zero) -> ScenarioAction,
+    action: ItemAction,
 }
 
-const SCENARIO_ITEMS: [ScenarioItem; 7] = [
-    ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: |_| ScenarioAction::Set(Scenario::Calm) },
-    ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: |_| ScenarioAction::Set(Scenario::BusyMorning) },
-    ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: |_| ScenarioAction::Set(Scenario::AllBusy) },
-    ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: |_| ScenarioAction::ToggleSpeed },
-    ScenarioItem { label: "add an agent", detail: "on this desktop", action: |zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop } },
-    ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: |_| ScenarioAction::FinishOneNow },
-    ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: |_| ScenarioAction::MakeThreeWaitNow },
+const MOTION_STEPS: [u64; 3] = [220, 420, 650];
+
+const SCENARIO_ITEMS: [ScenarioItem; 8] = [
+    ScenarioItem { label: "calm", detail: "12 agents, one or two waiting at a time", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::Calm)) },
+    ScenarioItem { label: "busy morning", detail: "five or more waiting, a turn every ~20s", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::BusyMorning)) },
+    ScenarioItem { label: "all busy", detail: "everyone working, nobody waiting", action: ItemAction::Source(|_| ScenarioAction::Set(Scenario::AllBusy)) },
+    ScenarioItem { label: "toggle speed", detail: "x1 or x5", action: ItemAction::Source(|_| ScenarioAction::ToggleSpeed) },
+    ScenarioItem { label: "add an agent", detail: "on this desktop", action: ItemAction::Source(|zero| ScenarioAction::AddAgent { desktop: zero.model.current_desktop }) },
+    ScenarioItem { label: "finish one now", detail: "a working agent flips to waiting", action: ItemAction::Source(|_| ScenarioAction::FinishOneNow) },
+    ScenarioItem { label: "make three wait now", detail: "three turns open at once", action: ItemAction::Source(|_| ScenarioAction::MakeThreeWaitNow) },
+    ScenarioItem { label: "motion", detail: "cycle the desktop slide duration", action: ItemAction::Motion },
 ];
 
 const HELP: [(&str, &str); 12] = [
@@ -121,12 +129,12 @@ const HELP: [(&str, &str); 12] = [
     ("⌘P", "back to the previous agent"),
     ("⌘K", "switcher: fuzzy find any agent"),
     ("⌘1…9", "go to that desktop"),
-    ("⌘⇧1…9", "move the focused pane to that desktop"),
+    ("⌘⌥1…9", "move the focused pane to that desktop"),
     ("⌘←↑↓→", "focus the neighboring pane"),
     ("click", "focus a pane, a desktop badge, or a name in the bar"),
     ("wheel", "scroll a pane's scrollback"),
-    ("type + ⏎", "prompt a waiting or idle agent; the shell pane is a real shell"),
-    ("y / n", "answer an approval"),
+    ("type + ⏎", "keys go to the focused terminal; ⏎ prompts a waiting or idle agent"),
+    ("y / n", "answer an approval; focus moves on when the agent's state changes"),
     ("⌘S", "scenario menu"),
     ("⌘Q", "quit"),
 ];
@@ -145,6 +153,7 @@ struct Zero {
     previous_focus: Option<AgentId>,
     content: Bounds<Pixels>,
     slide: (i8, u64),
+    motion_ms: u64,
     ticker: Option<Task<()>>,
     _shell_pump: Task<()>,
 }
@@ -201,6 +210,7 @@ impl Zero {
             previous_focus: None,
             content: Bounds::default(),
             slide: (0, 0),
+            motion_ms: 420,
             ticker: None,
             _shell_pump: shell_pump,
         };
@@ -231,19 +241,25 @@ impl Zero {
 
     fn tick(&mut self, cx: &mut Context<Self>) {
         let events = self.source.advance(self.now());
-        self.apply(events);
-        cx.notify();
+        let settled = self.apply(events);
         self.arm_ticker(cx);
+        if settled {
+            self.auto_next(cx);
+        }
+        cx.notify();
     }
 
     fn command(&mut self, command: Command, cx: &mut Context<Self>) {
         let events = self.source.command(self.now(), command);
-        self.apply(events);
+        let settled = self.apply(events);
         self.arm_ticker(cx);
+        if settled {
+            self.auto_next(cx);
+        }
         cx.notify();
     }
 
-    fn apply(&mut self, events: Vec<SourceEvent>) {
+    fn apply(&mut self, events: Vec<SourceEvent>) -> bool {
         for event in &events {
             match event {
                 SourceEvent::AgentAdded { id, .. }
@@ -254,7 +270,10 @@ impl Zero {
                 SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
             }
         }
-        self.model.apply(events).expect("the model accepts simulator events");
+        self.model
+            .apply(events)
+            .expect("the model accepts simulator events")
+            .focused_turn_settled
     }
 
     fn on_shell_output(&mut self, batch: Vec<ShellOutput>, cx: &mut Context<Self>) {
@@ -385,9 +404,18 @@ impl Zero {
     }
 
     fn run_scenario_item(&mut self, index: usize, cx: &mut Context<Self>) {
-        let action = (SCENARIO_ITEMS[index].action)(self);
-        self.popup = Popup::None;
-        self.command(Command::Scenario(action), cx);
+        match SCENARIO_ITEMS[index].action {
+            ItemAction::Source(action) => {
+                let action = action(self);
+                self.popup = Popup::None;
+                self.command(Command::Scenario(action), cx);
+            }
+            ItemAction::Motion => {
+                let current = MOTION_STEPS.iter().position(|&ms| ms == self.motion_ms);
+                self.motion_ms = MOTION_STEPS[current.map_or(0, |i| (i + 1) % MOTION_STEPS.len())];
+                cx.notify();
+            }
+        }
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -399,7 +427,7 @@ impl Zero {
         let modifiers = keystroke.modifiers;
         if modifiers.platform {
             if let Some(desktop) = digit(keystroke) {
-                if modifiers.shift {
+                if modifiers.alt {
                     self.model.move_focused(desktop);
                     cx.notify();
                 } else {
@@ -425,52 +453,13 @@ impl Zero {
         let Some(id) = self.model.focus else {
             return;
         };
-        if self.model.agent(id).kind == AgentKind::Shell {
-            if let Some(bytes) = keys::keystroke_bytes(keystroke) {
-                self.shell.write(&bytes).ok();
-            }
+        let Some(bytes) = keys::keystroke_bytes(keystroke) else {
             return;
-        }
-        let state = self.model.agent(id).state;
-        let key = keystroke.key.as_str();
-        if state == AgentState::PendingApproval && matches!(key, "y" | "n") {
-            let approved = key == "y";
-            self.model
-                .agent_mut(id)
-                .terminal
-                .vt_write(if approved { b"y\r\n" } else { b"n\r\n" });
-            self.dirty.insert(id);
-            self.command(Command::Approval { id, approved }, cx);
-            self.auto_next(cx);
-        } else if matches!(state, AgentState::WaitingInput | AgentState::Idle) {
-            match key {
-                "enter" => {
-                    let owed = self.model.agent(id).turn_opened_at.is_some();
-                    let text = std::mem::take(&mut self.model.agent_mut(id).draft);
-                    self.model.agent_mut(id).terminal.vt_write(b"\r\n");
-                    self.dirty.insert(id);
-                    self.command(Command::Prompt { id, text }, cx);
-                    if owed {
-                        self.auto_next(cx);
-                    }
-                }
-                "backspace" => {
-                    if self.model.agent_mut(id).draft.pop().is_some() {
-                        self.model.agent_mut(id).terminal.vt_write(b"\x08 \x08");
-                        self.dirty.insert(id);
-                        cx.notify();
-                    }
-                }
-                _ => {
-                    if let Some(text) = keys::typed_text(keystroke) {
-                        let agent = self.model.agent_mut(id);
-                        agent.draft.push_str(&text);
-                        agent.terminal.vt_write(text.as_bytes());
-                        self.dirty.insert(id);
-                        cx.notify();
-                    }
-                }
-            }
+        };
+        if self.model.agent(id).kind == AgentKind::Shell {
+            self.shell.write(&bytes).ok();
+        } else {
+            self.command(Command::Input { id, bytes }, cx);
         }
     }
 
@@ -953,7 +942,10 @@ impl Zero {
                             )
                             .child(key_cap(&(index + 1).to_string()))
                             .child(div().text_color(theme::fg()).font_weight(FontWeight::MEDIUM).child(item.label))
-                            .child(div().text_color(theme::comment()).child(item.detail)),
+                            .child(div().text_color(theme::comment()).child(match item.action {
+                                ItemAction::Motion => format!("desktop slide {}ms, then {}", self.motion_ms, MOTION_STEPS[(MOTION_STEPS.iter().position(|&ms| ms == self.motion_ms).unwrap_or(0) + 1) % MOTION_STEPS.len()]),
+                                ItemAction::Source(_) => item.detail.to_string(),
+                            })),
                     );
                 }
                 panel
@@ -1024,7 +1016,7 @@ impl Render for Zero {
             .children(panes)
             .with_animation(
                 ("desktop", generation),
-                Animation::new(Duration::from_millis(220)).with_easing(ease_out_quint()),
+                Animation::new(Duration::from_millis(self.motion_ms)).with_easing(ease_out_quint()),
                 move |layer, delta| layer.left(slide_from * (1. - delta)).opacity(0.35 + 0.65 * delta),
             );
         let mut root = div()

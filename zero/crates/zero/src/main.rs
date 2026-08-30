@@ -162,7 +162,7 @@ fn run_tui(scenario: Scenario) -> Result<()> {
     loop {
         let now = started.elapsed();
         let events = source.advance(now);
-        app.apply_events(events)?;
+        app.apply_events(events, &source)?;
         if app.dirty {
             let size: Rect = terminal.size()?.into();
             app.ensure_sizes(size, &mut source, &shell)?;
@@ -208,7 +208,7 @@ fn run_tui(scenario: Scenario) -> Result<()> {
                 }
                 Ok(TerminalEvent::Paste(text)) => {
                     let key_at = Instant::now();
-                    app.handle_paste(&text, &mut shell)?;
+                    app.handle_paste(&text, started.elapsed(), &mut source, &mut shell)?;
                     pending_input = app.dirty.then_some(key_at);
                 }
                 Ok(TerminalEvent::Resize(_, _)) => app.dirty = true,
@@ -305,7 +305,7 @@ impl App {
         }
     }
 
-    fn apply_events(&mut self, events: Vec<SourceEvent>) -> Result<()> {
+    fn apply_events(&mut self, events: Vec<SourceEvent>, source: &impl Source) -> Result<()> {
         for event in &events {
             match event {
                 SourceEvent::AgentAdded { id, .. }
@@ -316,8 +316,12 @@ impl App {
                 SourceEvent::StateChanged { .. } | SourceEvent::TurnSettled { .. } => {}
             }
         }
-        if self.model.apply(events)? {
+        let applied = self.model.apply(events)?;
+        if applied.dirty {
             self.dirty = true;
+        }
+        if applied.focused_turn_settled {
+            self.auto_next(source)?;
         }
         Ok(())
     }
@@ -350,7 +354,7 @@ impl App {
                 self.dirty_terminals.insert(id);
             } else {
                 let events = source.command(Duration::ZERO, Command::Resize { id, cols, rows });
-                self.apply_events(events)?;
+                self.apply_events(events, &*source)?;
             }
         }
         Ok(())
@@ -621,7 +625,7 @@ impl App {
                     KeyCode::Enter => {
                         let action = scenario_action(*selected, self.model.current_desktop);
                         let events = source.command(now, Command::Scenario(action));
-                        self.apply_events(events)?;
+                        self.apply_events(events, &*source)?;
                         if matches!(action, ScenarioAction::AddAgent { .. })
                             && self.model.focus.is_none()
                         {
@@ -684,73 +688,34 @@ impl App {
         let Some(id) = self.model.focus else {
             return Ok(());
         };
-        if self.model.agent(id).kind == AgentKind::Shell {
-            if let Some(bytes) = shell_key_bytes(key) {
-                shell.write(&bytes)?;
-            }
+        let Some(bytes) = shell_key_bytes(key) else {
             return Ok(());
-        }
-        let state = self.model.agent(id).state;
-        if state == AgentState::PendingApproval
-            && matches!(key.code, KeyCode::Char('y' | 'Y' | 'n' | 'N'))
-        {
-            let approved = matches!(key.code, KeyCode::Char('y' | 'Y'));
-            self.model
-                .agent_mut(id)
-                .terminal
-                .vt_write(if approved { b"y\r\n" } else { b"n\r\n" });
-            self.dirty_terminals.insert(id);
-            let events = source.command(now, Command::Approval { id, approved });
-            self.apply_events(events)?;
-            self.auto_next(source)?;
-            self.dirty = true;
-        } else if matches!(state, AgentState::WaitingInput | AgentState::Idle) {
-            match key.code {
-                KeyCode::Char(character) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.model.agent_mut(id).draft.push(character);
-                    let mut bytes = [0; 4];
-                    self.model
-                        .agent_mut(id)
-                        .terminal
-                        .vt_write(character.encode_utf8(&mut bytes).as_bytes());
-                    self.dirty_terminals.insert(id);
-                    self.dirty = true;
-                }
-                KeyCode::Backspace if self.model.agent_mut(id).draft.pop().is_some() => {
-                    self.model.agent_mut(id).terminal.vt_write(b"\x08 \x08");
-                    self.dirty_terminals.insert(id);
-                    self.dirty = true;
-                }
-                KeyCode::Enter => {
-                    let owed = self.model.agent(id).turn_opened_at.is_some();
-                    let text = std::mem::take(&mut self.model.agent_mut(id).draft);
-                    self.model.agent_mut(id).terminal.vt_write(b"\r\n");
-                    self.dirty_terminals.insert(id);
-                    let events = source.command(now, Command::Prompt { id, text });
-                    self.apply_events(events)?;
-                    if owed {
-                        self.auto_next(source)?;
-                    }
-                    self.dirty = true;
-                }
-                _ => {}
-            }
+        };
+        if self.model.agent(id).kind == AgentKind::Shell {
+            shell.write(&bytes)?;
+        } else {
+            let events = source.command(now, Command::Input { id, bytes });
+            self.apply_events(events, &*source)?;
         }
         Ok(())
     }
 
-    fn handle_paste(&mut self, text: &str, shell: &mut Shell) -> Result<()> {
+    fn handle_paste(
+        &mut self,
+        text: &str,
+        now: Duration,
+        source: &mut impl Source,
+        shell: &mut Shell,
+    ) -> Result<()> {
         let Some(id) = self.model.focus else {
             return Ok(());
         };
-        let agent = self.model.agent(id);
-        if agent.kind == AgentKind::Shell {
+        if self.model.agent(id).kind == AgentKind::Shell {
             shell.write(format!("\x1b[200~{text}\x1b[201~").as_bytes())?;
-        } else if matches!(agent.state, AgentState::WaitingInput | AgentState::Idle) {
-            self.model.agent_mut(id).draft.push_str(text);
-            self.model.agent_mut(id).terminal.vt_write(text.as_bytes());
-            self.dirty_terminals.insert(id);
-            self.dirty = true;
+        } else {
+            let bytes = text.as_bytes().to_vec();
+            let events = source.command(now, Command::Input { id, bytes });
+            self.apply_events(events, &*source)?;
         }
         Ok(())
     }

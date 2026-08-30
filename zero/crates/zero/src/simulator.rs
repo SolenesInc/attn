@@ -36,9 +36,20 @@ const WORK_OUTPUT: [&str; 8] = [
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum DueKind {
+    Ack,
     Output,
     Finish,
     Wake,
+}
+
+/// Stands in for the hook round trip: attn learns about a prompt or an answer only once the
+/// harness has reacted to it. A guess, not a measurement; take a receipt against real hooks for v1.
+pub const INPUT_ACK: Duration = Duration::from_millis(150);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Submitted {
+    Prompt,
+    Answer(bool),
 }
 
 struct SimAgent {
@@ -51,6 +62,9 @@ struct SimAgent {
     wake_at: Option<Duration>,
     output_cursor: usize,
     chunks_left: usize,
+    line: Vec<u8>,
+    submitted: Option<Submitted>,
+    ack_at: Option<Duration>,
 }
 
 pub struct Simulator {
@@ -85,6 +99,9 @@ impl Simulator {
                     wake_at: None,
                     output_cursor: 0,
                     chunks_left: 0,
+                    line: Vec::new(),
+                    submitted: None,
+                    ack_at: None,
                 })
                 .collect(),
             initial_events: Vec::new(),
@@ -140,6 +157,8 @@ impl Simulator {
         agent.next_output_at = None;
         agent.wake_at = None;
         agent.chunks_left = 0;
+        agent.submitted = None;
+        agent.ack_at = None;
     }
 
     fn scaled(&self, duration: Duration) -> Duration {
@@ -174,6 +193,7 @@ impl Simulator {
             .enumerate()
             .flat_map(|(index, agent)| {
                 [
+                    agent.ack_at.map(|at| (at, index, DueKind::Ack)),
                     agent.next_output_at.map(|at| (at, index, DueKind::Output)),
                     agent.finish_at.map(|at| (at, index, DueKind::Finish)),
                     agent.wake_at.map(|at| (at, index, DueKind::Wake)),
@@ -280,73 +300,123 @@ impl Simulator {
         });
     }
 
-    fn prompt(&mut self, id: AgentId, text: String, now: Duration) -> Vec<Event> {
+    fn input(&mut self, id: AgentId, bytes: &[u8], now: Duration) -> Vec<Event> {
         let Some(index) = self.agents.iter().position(|agent| agent.id == id) else {
             return Vec::new();
         };
-        let state = self.agents[index].state;
-        if !matches!(state, AgentState::WaitingInput | AgentState::Idle) {
+        // One keystroke is one chunk; escape sequences (arrows, function keys) mean nothing here.
+        if bytes.first() == Some(&0x1b) {
             return Vec::new();
         }
+        let agent = &mut self.agents[index];
+        let mut echo = Vec::new();
+        for &byte in bytes {
+            let approval = agent.state == AgentState::PendingApproval;
+            let prompts = matches!(agent.state, AgentState::WaitingInput | AgentState::Idle);
+            match byte {
+                _ if agent.submitted.is_some() => {}
+                b'y' | b'n' if approval => {
+                    echo.extend_from_slice(&[byte, b'\r', b'\n']);
+                    agent.submitted = Some(Submitted::Answer(byte == b'y'));
+                    agent.ack_at = Some(now + INPUT_ACK);
+                }
+                _ if approval => {}
+                b'\r' | b'\n' => {
+                    let blank = agent.line.iter().all(u8::is_ascii_whitespace);
+                    agent.line.clear();
+                    echo.extend_from_slice(b"\r\n");
+                    if prompts && !blank {
+                        agent.submitted = Some(Submitted::Prompt);
+                        agent.ack_at = Some(now + INPUT_ACK);
+                    }
+                }
+                0x7f | 0x08 => {
+                    if pop_char(&mut agent.line) {
+                        echo.extend_from_slice(b"\x08 \x08");
+                    }
+                }
+                0x20.. => {
+                    agent.line.push(byte);
+                    echo.push(byte);
+                }
+                _ => {}
+            }
+        }
+        if echo.is_empty() {
+            Vec::new()
+        } else {
+            vec![Event::Output { id, bytes: echo }]
+        }
+    }
 
+    fn ack(&mut self, index: usize, at: Duration, events: &mut Vec<Event>) {
+        let agent = &mut self.agents[index];
+        agent.ack_at = None;
+        match agent.submitted.take() {
+            Some(Submitted::Prompt) => self.prompt(index, at, events),
+            Some(Submitted::Answer(approved)) => self.answer(index, approved, at, events),
+            None => {}
+        }
+    }
+
+    fn prompt(&mut self, index: usize, at: Duration, events: &mut Vec<Event>) {
+        let state = self.agents[index].state;
+        if !matches!(state, AgentState::WaitingInput | AgentState::Idle) {
+            return;
+        }
+        let id = self.agents[index].id;
         self.agents[index].state = AgentState::Working;
         self.clear_deadlines(index);
-        self.schedule_work(index, now);
-        let mut events = Vec::with_capacity(3);
+        self.schedule_work(index, at);
         if state.owes_turn() {
             events.push(Event::TurnSettled { id });
         }
         events.push(Event::Output {
             id,
-            bytes: format!("\r\n\x1b[1m› {text}\x1b[0m\r\n").into_bytes(),
+            bytes: b"\x1b[2mOn it.\x1b[0m\r\n".to_vec(),
         });
         events.push(Event::StateChanged {
             id,
             state: AgentState::Working,
-            at: now,
+            at,
         });
-        events
     }
 
-    fn approval(&mut self, id: AgentId, approved: bool, now: Duration) -> Vec<Event> {
-        let Some(index) = self.agents.iter().position(|agent| agent.id == id) else {
-            return Vec::new();
-        };
+    fn answer(&mut self, index: usize, approved: bool, at: Duration, events: &mut Vec<Event>) {
         if self.agents[index].state != AgentState::PendingApproval {
-            return Vec::new();
+            return;
         }
-
-        let mut events = vec![Event::TurnSettled { id }];
+        let id = self.agents[index].id;
+        events.push(Event::TurnSettled { id });
         if approved {
             self.agents[index].state = AgentState::Working;
-            self.schedule_work(index, now);
+            self.schedule_work(index, at);
             events.push(Event::Output {
                 id,
-                bytes: b"\r\n\x1b[32mApproved. Applying the change now.\x1b[0m\r\n".to_vec(),
+                bytes: b"\x1b[32mApproved. Applying the change now.\x1b[0m\r\n".to_vec(),
             });
             events.push(Event::StateChanged {
                 id,
                 state: AgentState::Working,
-                at: now,
+                at,
             });
         } else {
             self.agents[index].state = AgentState::WaitingInput;
             events.push(Event::StateChanged {
                 id,
                 state: AgentState::Working,
-                at: now,
+                at,
             });
             events.push(Event::Output {
                 id,
-                bytes: b"\r\nOkay, I won't apply it. What should I do instead?\r\n".to_vec(),
+                bytes: b"Okay, I won't apply it. What should I do instead?\r\n".to_vec(),
             });
             events.push(Event::StateChanged {
                 id,
                 state: AgentState::WaitingInput,
-                at: now,
+                at,
             });
         }
-        events
     }
 
     fn set_scenario(&mut self, scenario: Scenario, now: Duration) -> Vec<Event> {
@@ -426,6 +496,9 @@ impl Simulator {
             wake_at: None,
             output_cursor: 0,
             chunks_left: 0,
+            line: Vec::new(),
+            submitted: None,
+            ack_at: None,
         };
         let name = agent.name.clone();
         agent.output_cursor = self.rng.random_range(0..WORK_OUTPUT.len());
@@ -505,6 +578,7 @@ impl Source for Simulator {
                 break;
             }
             match kind {
+                DueKind::Ack => self.ack(index, at, &mut events),
                 DueKind::Output => self.emit_output_chunk(index, at, &mut events),
                 DueKind::Finish => self.finish(index, at, false, &mut events),
                 DueKind::Wake => self.wake(index, at, &mut events),
@@ -515,8 +589,7 @@ impl Source for Simulator {
 
     fn command(&mut self, now: Duration, command: Command) -> Vec<Event> {
         match command {
-            Command::Prompt { id, text } => self.prompt(id, text, now),
-            Command::Approval { id, approved } => self.approval(id, approved, now),
+            Command::Input { id, bytes } => self.input(id, &bytes, now),
             Command::Resize { id, cols, rows } => vec![Event::Resized { id, cols, rows }],
             Command::Scenario(action) => match action {
                 ScenarioAction::Set(scenario) => self.set_scenario(scenario, now),
@@ -543,6 +616,16 @@ fn initial_output(state: AgentState) -> &'static str {
     }
 }
 
+fn pop_char(line: &mut Vec<u8>) -> bool {
+    let before = line.len();
+    while let Some(byte) = line.pop() {
+        if byte & 0xC0 != 0x80 {
+            break;
+        }
+    }
+    before > line.len()
+}
+
 fn rescale_deadline(deadline: Duration, now: Duration, old_speed: u8, new_speed: u8) -> Duration {
     now + deadline.saturating_sub(now) * u32::from(old_speed) / u32::from(new_speed)
 }
@@ -556,6 +639,26 @@ mod tests {
             matches!(event, Event::StateChanged { id: event_id, state: event_state, .. }
                 if *event_id == id && *event_state == state)
         })
+    }
+
+    fn settled(events: &[Event], id: AgentId) -> bool {
+        events
+            .iter()
+            .any(|event| matches!(event, Event::TurnSettled { id: settled } if *settled == id))
+    }
+
+    fn input(id: AgentId, bytes: &[u8]) -> Command {
+        Command::Input {
+            id,
+            bytes: bytes.to_vec(),
+        }
+    }
+
+    fn output(id: AgentId, bytes: &[u8]) -> Event {
+        Event::Output {
+            id,
+            bytes: bytes.to_vec(),
+        }
     }
 
     #[test]
@@ -590,54 +693,78 @@ mod tests {
     }
 
     #[test]
-    fn prompt_settles_a_waiting_turn_and_starts_work() {
+    fn typed_text_echoes_and_enter_settles_only_after_the_ack() {
         let mut simulator = Simulator::seeded(Scenario::Calm, 2);
-        simulator.advance(Duration::ZERO);
-        let events = simulator.command(
-            Duration::from_secs(3),
-            Command::Prompt {
-                id: 1,
-                text: "check the parallel path".to_string(),
-            },
-        );
+        let now = Duration::from_secs(3);
+        simulator.advance(now);
 
-        assert!(matches!(events.first(), Some(Event::TurnSettled { id: 1 })));
+        let events = simulator.command(now, input(1, b"check the parallel path"));
+        assert_eq!(events, vec![output(1, b"check the parallel path")]);
+
+        let events = simulator.command(now, input(1, b"\r"));
+        assert_eq!(events, vec![output(1, b"\r\n")]);
+        assert_eq!(simulator.agents[0].state, AgentState::WaitingInput);
+        assert_eq!(simulator.agents[0].ack_at, Some(now + INPUT_ACK));
+
+        let events = simulator.advance(now + INPUT_ACK);
+        assert!(settled(&events, 1));
         assert!(has_state(&events, 1, AgentState::Working));
         assert_eq!(simulator.agents[0].state, AgentState::Working);
-        assert!(simulator.next_deadline().is_some());
     }
 
     #[test]
-    fn approval_yes_settles_and_starts_work() {
-        let mut simulator = Simulator::seeded(Scenario::Calm, 3);
-        simulator.advance(Duration::ZERO);
-        let events = simulator.command(
-            Duration::from_secs(5),
-            Command::Approval {
-                id: 2,
-                approved: true,
-            },
-        );
+    fn a_blank_line_and_escape_sequences_submit_nothing() {
+        let mut simulator = Simulator::seeded(Scenario::Calm, 2);
+        let now = Duration::from_secs(3);
+        simulator.advance(now);
 
-        assert!(matches!(events.first(), Some(Event::TurnSettled { id: 2 })));
+        assert!(simulator.command(now, input(1, b"\x1b[A")).is_empty());
+        assert_eq!(
+            simulator.command(now, input(1, b"  \r")),
+            vec![output(1, b"  \r\n")]
+        );
+        assert_eq!(simulator.agents[0].ack_at, None);
+        assert_eq!(simulator.agents[0].state, AgentState::WaitingInput);
+    }
+
+    #[test]
+    fn backspace_removes_one_character_however_many_bytes_it_has() {
+        let mut simulator = Simulator::seeded(Scenario::Calm, 2);
+        let now = Duration::from_secs(3);
+        simulator.advance(now);
+
+        simulator.command(now, input(1, "h東".as_bytes()));
+        let events = simulator.command(now, input(1, &[0x7f, 0x7f, 0x7f]));
+        assert_eq!(events, vec![output(1, b"\x08 \x08\x08 \x08")]);
+        assert!(simulator.agents[0].line.is_empty());
+    }
+
+    #[test]
+    fn answering_y_settles_and_starts_work_after_the_ack() {
+        let mut simulator = Simulator::seeded(Scenario::Calm, 3);
+        let now = Duration::from_secs(5);
+        simulator.advance(now);
+
+        assert!(simulator.command(now, input(2, b"x")).is_empty());
+        let events = simulator.command(now, input(2, b"y"));
+        assert_eq!(events, vec![output(2, b"y\r\n")]);
+        assert_eq!(simulator.agents[1].state, AgentState::PendingApproval);
+
+        let events = simulator.advance(now + INPUT_ACK);
+        assert!(settled(&events, 2));
         assert!(has_state(&events, 2, AgentState::Working));
         assert_eq!(simulator.agents[1].state, AgentState::Working);
     }
 
     #[test]
-    fn approval_no_settles_then_opens_a_fresh_waiting_turn() {
+    fn answering_n_settles_then_opens_a_fresh_waiting_turn() {
         let mut simulator = Simulator::seeded(Scenario::Calm, 4);
-        simulator.advance(Duration::ZERO);
         let now = Duration::from_secs(7);
-        let events = simulator.command(
-            now,
-            Command::Approval {
-                id: 2,
-                approved: false,
-            },
-        );
+        simulator.advance(now);
 
-        assert!(matches!(events.first(), Some(Event::TurnSettled { id: 2 })));
+        simulator.command(now, input(2, b"n"));
+        let events = simulator.advance(now + INPUT_ACK);
+        assert!(settled(&events, 2));
         assert!(has_state(&events, 2, AgentState::WaitingInput));
         assert!(
             events

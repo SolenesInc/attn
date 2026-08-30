@@ -52,7 +52,6 @@ pub struct Agent {
     pub state: AgentState,
     pub turn_opened_at: Option<Duration>,
     pub terminal: Terminal<'static, 'static>,
-    pub draft: String,
     pub cols: u16,
     pub rows: u16,
     pty_responses: Rc<RefCell<VecDeque<Vec<u8>>>>,
@@ -128,7 +127,6 @@ impl Agent {
             state,
             turn_opened_at: state.owes_turn().then_some(now),
             terminal,
-            draft: String::new(),
             cols: 80,
             rows: 24,
             pty_responses: responses,
@@ -138,6 +136,13 @@ impl Agent {
     pub fn take_pty_responses(&self) -> Vec<Vec<u8>> {
         self.pty_responses.borrow_mut().drain(..).collect()
     }
+}
+
+/// What a batch of events changed, for the client to react to.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Applied {
+    pub dirty: bool,
+    pub focused_turn_settled: bool,
 }
 
 pub struct Model {
@@ -186,10 +191,10 @@ impl Model {
             .map(|agent| agent.id)
     }
 
-    pub fn apply(&mut self, events: Vec<Event>) -> Result<bool> {
-        let mut dirty = false;
+    pub fn apply(&mut self, events: Vec<Event>) -> Result<Applied> {
+        let mut applied = Applied::default();
         for event in events {
-            dirty = true;
+            applied.dirty = true;
             match event {
                 Event::AgentAdded {
                     id,
@@ -218,12 +223,15 @@ impl Model {
                     }
                     agent.state = state;
                 }
-                Event::TurnSettled { id } => self.agent_mut(id).turn_opened_at = None,
+                Event::TurnSettled { id } => {
+                    self.agent_mut(id).turn_opened_at = None;
+                    applied.focused_turn_settled |= self.focus == Some(id);
+                }
                 Event::Output { id, bytes } => self.agent_mut(id).terminal.vt_write(&bytes),
                 Event::Resized { id, cols, rows } => self.resize_terminal(id, cols, rows)?,
             }
         }
-        Ok(dirty)
+        Ok(applied)
     }
 
     pub fn agent(&self, id: AgentId) -> &Agent {
@@ -447,7 +455,7 @@ mod tests {
             }])
             .unwrap();
         model.focus = Some(1);
-        model
+        let applied = model
             .apply(vec![
                 Event::TurnSettled { id: 1 },
                 Event::StateChanged {
@@ -457,6 +465,7 @@ mod tests {
                 },
             ])
             .unwrap();
+        assert!(applied.focused_turn_settled);
         assert_eq!(model.queue().first(), Some(&2));
     }
 
