@@ -1010,6 +1010,45 @@ func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *te
 	}
 }
 
+func TestDaemon_InjectTestSession_SurvivesRecoveryStartedBeforeIt(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	// The session store is the package's, so this row outlives the test and
+	// would seed the next run.
+	t.Cleanup(func() { d.store.Remove("injected-during-recovery") })
+	cutoff := time.Now()
+	stamp := time.Now().Format(time.RFC3339)
+	resp := socketRoundTrip(t, d, map[string]any{
+		"cmd": "inject_test_session",
+		"session": map[string]any{
+			"id":          "injected-during-recovery",
+			"label":       "Injected During Recovery",
+			"agent":       "claude",
+			"directory":   "/tmp/injected-during-recovery",
+			"state":       protocol.StateWorking,
+			"state_since": stamp,
+			"last_seen":   stamp,
+		},
+	})
+	if err := protocol.Deref(resp.Error); err != "" {
+		t.Fatalf("inject_test_session error: %s", err)
+	}
+
+	session := d.store.Get("injected-during-recovery")
+	if session == nil {
+		t.Fatal("session was not stored")
+	}
+	if session.StateUpdatedAt == "" {
+		t.Fatal("state_updated_at is empty; startup recovery cannot date this session")
+	}
+
+	if removed := d.pruneSessionsWithoutPTY(cutoff); removed != 0 {
+		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 0", removed)
+	}
+	if d.store.Get("injected-during-recovery") == nil {
+		t.Fatal("session was reaped; recovery started before the injection, not before a previous run")
+	}
+}
+
 func TestDaemon_PruneSessionsWithoutPTY_PreservesPluginMetadataForResume(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
