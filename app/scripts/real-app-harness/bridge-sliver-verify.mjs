@@ -149,6 +149,32 @@ async function main() {
     throw new Error('sliver changed size during a neighbor resize');
   }
 
+  // 4. Drag past C's minimum: C folds into a second sliver; clicking restores.
+  const grab2 = await boundsOf('.workspace-split-divider[data-split-grab]');
+  const rel2X = (grab2.x + grab2.width / 2) / win.logicalBounds.width;
+  const farX = (grab2.x + grab2.width / 2 + 400) / win.logicalBounds.width;
+  await inputDriver.dragWindow(rel2X, relY, farX, relY, { steps: 16 });
+  await delay(900);
+  const suspendedCount = async () => {
+    let count = 0;
+    for (const id of [paneA, paneB, paneC]) {
+      try {
+        await req('dom_text', { selector: `[data-pane-id="${id}"][data-pane-suspended="true"]` });
+        count += 1;
+      } catch {}
+    }
+    return count;
+  };
+  const afterFoldDrag = await suspendedCount();
+  console.log(`[sliver-verify] drag past min: ${afterFoldDrag} slivers (want 2)`);
+  if (afterFoldDrag !== 2) throw new Error('dragging past the minimum did not fold the pane');
+
+  await req('dom_click', { selector: `[data-pane-id="${paneC}"][data-pane-suspended="true"] .workspace-suspended-leaf` });
+  await delay(900);
+  const afterClickRestore = await suspendedCount();
+  console.log(`[sliver-verify] clicked folded pane back: ${afterClickRestore} slivers (want 1)`);
+  if (afterClickRestore !== 1) throw new Error('clicking the drag-folded sliver did not restore it');
+
   console.log('[sliver-verify] ALL CHECKS DONE');
   process.exit(0);
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { getNormalizedPaneBounds, type TerminalLayoutNode } from '../../types/workspace';
-import { releaseSuspendedLeaf, resolveWorkspaceLayout } from './attentionLayout';
+import {
+  applyDragSuspension,
+  dragRatioBounds,
+  releaseSuspendedLeaf,
+  resolveWorkspaceLayout,
+} from './attentionLayout';
 
 function twoAgentsAndDocument(direction: 'vertical' | 'horizontal' = 'vertical'): TerminalLayoutNode {
   return {
@@ -32,6 +37,8 @@ function resolve(
     activeLeafId: string;
     focusOrder?: readonly string[];
     previousSuspendedLeafIds?: ReadonlySet<string>;
+    pinnedLeafIds?: ReadonlySet<string>;
+    holdRestores?: boolean;
     pendingRatioOverrides?: ReadonlyMap<string, number>;
   },
 ) {
@@ -41,6 +48,8 @@ function resolve(
     activeLeafId: options.activeLeafId,
     focusOrder: options.focusOrder ?? [],
     previousSuspendedLeafIds: options.previousSuspendedLeafIds ?? new Set(),
+    pinnedLeafIds: options.pinnedLeafIds,
+    holdRestores: options.holdRestores,
     pendingRatioOverrides: options.pendingRatioOverrides,
   });
 }
@@ -334,6 +343,140 @@ describe('workspace attention layout', () => {
     // The grab handle sits one sliver past the target split's own boundary.
     expect(grab.grabRatio! * viewport.width).toBeCloseTo(own.ratio * viewport.width + 34, 0);
     expect(grab.ratio).toBeCloseTo(own.ratio, 5);
+  });
+
+  it('folds the smallest unfocused leaf even when it was focused more recently', () => {
+    const tree = threeAgents();
+    if (tree.type !== 'split' || tree.children[1].type !== 'split') {
+      throw new Error('expected nested split');
+    }
+    tree.children[1] = { ...tree.children[1], ratio: 0.7, ratioMode: 'preferred' };
+    tree.ratio = 0.55;
+    tree.ratioMode = 'preferred';
+    // agent-c is the most recently focused peer but by far the smallest pane.
+    const plan = resolve(tree, {
+      width: 1300,
+      height: 800,
+      activeLeafId: 'agent-a',
+      focusOrder: ['agent-c', 'agent-b'],
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
+  });
+
+  it('keeps a drag-pinned sliver folded even when the viewport has room for it', () => {
+    const plan = resolve(threeAgents(), {
+      width: 1600,
+      height: 800,
+      activeLeafId: 'agent-a',
+      focusOrder: ['agent-b', 'agent-c'],
+      previousSuspendedLeafIds: new Set(['agent-c']),
+      pinnedLeafIds: new Set(['agent-c']),
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
+  });
+
+  it('holds restores while a drag is live so freed room does not pop leaves open', () => {
+    const roomy = {
+      width: 1600,
+      height: 800,
+      activeLeafId: 'agent-a',
+      focusOrder: ['agent-b', 'agent-c'],
+      previousSuspendedLeafIds: new Set(['agent-b']),
+    };
+    expect(resolve(threeAgents(), { ...roomy, holdRestores: true }).suspendedLeafIds)
+      .toEqual(new Set(['agent-b']));
+    expect(resolve(threeAgents(), roomy).suspendedLeafIds).toEqual(new Set());
+  });
+
+  it('folds a leaf dragged below its minimum and restores it when dragged back', () => {
+    const tree = threeAgents();
+    const boxPx = { width: 733, height: 800 };
+    // Squeezing agent-c's side of the inner split under 480px folds it.
+    const squeezed = applyDragSuspension({
+      sourceTree: tree,
+      splitId: 'inner',
+      ratio: 0.6,
+      splitBoxPx: boxPx,
+      viewport: { width: 1100, height: 800 },
+      suspendedLeafIds: new Set(),
+      pinnedLeafIds: new Set(),
+      protectedLeafId: 'agent-b',
+      focusOrder: ['agent-c'],
+    });
+    expect(squeezed.suspendedLeafIds).toEqual(new Set(['agent-c']));
+    expect(squeezed.pinnedLeafIds).toEqual(new Set(['agent-c']));
+
+    const restored = applyDragSuspension({
+      sourceTree: tree,
+      splitId: 'inner',
+      ratio: 0.3,
+      splitBoxPx: boxPx,
+      viewport: { width: 1100, height: 800 },
+      suspendedLeafIds: squeezed.suspendedLeafIds,
+      pinnedLeafIds: squeezed.pinnedLeafIds,
+      protectedLeafId: 'agent-b',
+      focusOrder: ['agent-c'],
+    });
+    expect(restored.suspendedLeafIds).toEqual(new Set());
+    expect(restored.pinnedLeafIds).toEqual(new Set());
+  });
+
+  it('leaves fit-suspended leaves alone while a drag pins and releases its own', () => {
+    const tree = threeAgents();
+    // agent-b is suspended by viewport pressure, not by this drag: squeezing
+    // and releasing agent-c's side must not touch it.
+    const squeezed = applyDragSuspension({
+      sourceTree: tree,
+      splitId: 'outer',
+      ratio: 0.7,
+      splitBoxPx: { width: 980, height: 800 },
+      viewport: { width: 980, height: 800 },
+      suspendedLeafIds: new Set(['agent-b']),
+      pinnedLeafIds: new Set(),
+      protectedLeafId: 'agent-a',
+      focusOrder: ['agent-c'],
+    });
+    expect(squeezed.suspendedLeafIds).toEqual(new Set(['agent-b', 'agent-c']));
+    expect(squeezed.pinnedLeafIds).toEqual(new Set(['agent-c']));
+
+    const released = applyDragSuspension({
+      sourceTree: tree,
+      splitId: 'outer',
+      ratio: 0.4,
+      splitBoxPx: { width: 980, height: 800 },
+      viewport: { width: 980, height: 800 },
+      suspendedLeafIds: squeezed.suspendedLeafIds,
+      pinnedLeafIds: squeezed.pinnedLeafIds,
+      protectedLeafId: 'agent-a',
+      focusOrder: ['agent-c'],
+    });
+    expect(released.suspendedLeafIds).toEqual(new Set(['agent-b']));
+    expect(released.pinnedLeafIds).toEqual(new Set());
+  });
+
+  it('pins a fit-fold the drag holds down when the viewport could show it', () => {
+    const result = applyDragSuspension({
+      sourceTree: threeAgents(),
+      splitId: 'outer',
+      ratio: 0.9,
+      splitBoxPx: { width: 1600, height: 800 },
+      viewport: { width: 1600, height: 800 },
+      suspendedLeafIds: new Set(['agent-b']),
+      pinnedLeafIds: new Set(),
+      protectedLeafId: 'agent-a',
+      focusOrder: ['agent-c'],
+    });
+    expect(result.suspendedLeafIds).toEqual(new Set(['agent-b', 'agent-c']));
+    expect(result.pinnedLeafIds).toEqual(new Set(['agent-b', 'agent-c']));
+  });
+
+  it('floors a drag at slivers for unfocused leaves and minimum for the focused one', () => {
+    const bounds = dragRatioBounds(threeAgents(), 'outer', 'agent-a', 1100);
+
+    expect(bounds.min).toBeCloseTo(480 / 1100, 5);
+    expect(bounds.max).toBeCloseTo(1 - 68 / 1100, 5);
   });
 
   it('gives a boundary with only viewport edge beyond the sliver no divider', () => {

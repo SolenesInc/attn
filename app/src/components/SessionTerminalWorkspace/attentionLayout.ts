@@ -29,6 +29,12 @@ export interface ResolveWorkspaceLayoutInput {
   activeLeafId: string;
   focusOrder: readonly string[];
   previousSuspendedLeafIds: ReadonlySet<string>;
+// Leaves the user folded by dragging: they stay folded through restore
+// passes until a click, a drag freeing room, or removal releases them.
+  pinnedLeafIds?: ReadonlySet<string>;
+// While a divider drag is live, restores wait for the drag to end; a fold
+// freeing room mid-drag must not pop another leaf open under the pointer.
+  holdRestores?: boolean;
   pendingRatioOverrides?: ReadonlyMap<string, number>;
   view?: WorkspaceLayoutView;
 }
@@ -202,6 +208,49 @@ function sameIds(first: ReadonlySet<string>, second: ReadonlySet<string>): boole
   return first.size === second.size && [...first].every((id) => second.has(id));
 }
 
+// Size rank comes from user-set ratios alone (automatic splits stay
+// neutral), so untouched layouts tie exactly and fall back to staleness.
+function intentSizeScores(
+  node: TerminalLayoutNode,
+  pendingPreferredSplitIds: ReadonlySet<string>,
+): Map<string, number> {
+  const scores = new Map<string, number>();
+  const walk = (current: TerminalLayoutNode, score: number): void => {
+    if (current.type !== 'split') {
+      scores.set(leafSlotId(current), score);
+      return;
+    }
+    const intentional = current.ratioMode === 'preferred'
+      || pendingPreferredSplitIds.has(current.splitId);
+    const ratio = intentional && current.ratio > 0 && current.ratio < 1 ? current.ratio : 0.5;
+    walk(current.children[0], intentional ? score * ratio : score);
+    walk(current.children[1], intentional ? score * (1 - ratio) : score);
+  };
+  walk(node, 1);
+  return scores;
+}
+
+// Staleness breaks size ties: never-focused leaves fold before anything in
+// the focus order, and the most recently focused leaf folds last.
+function stalenessRank(leafIds: readonly string[], focusOrder: readonly string[]): Map<string, number> {
+  const focusedIds = new Set(focusOrder);
+  return new Map([
+    ...[...leafIds].reverse().filter((id) => !focusedIds.has(id)),
+    ...[...focusOrder].reverse(),
+  ].filter((id, index, all) => all.indexOf(id) === index).map((id, index) => [id, index]));
+}
+
+function smallestLeaf(
+  candidates: readonly string[],
+  scores: Map<string, number>,
+  staleness: Map<string, number>,
+): string | undefined {
+  const score = (id: string): number => scores.get(id) ?? 1;
+  return [...candidates].sort((a, b) => (
+    (score(a) - score(b)) || ((staleness.get(a) ?? 0) - (staleness.get(b) ?? 0))
+  ))[0];
+}
+
 function reconcileSuspension(
   node: TerminalLayoutNode,
   current: ReadonlySet<string>,
@@ -209,35 +258,41 @@ function reconcileSuspension(
   protectedLeafId: string,
   focusOrder: readonly string[],
   pendingPreferredSplitIds: ReadonlySet<string>,
+  pinned: ReadonlySet<string> = new Set(),
+  holdRestores = false,
 ): ReadonlySet<string> {
   const leafIds = collectLayoutLeaves(node).map(leafSlotId);
   const valid = new Set(leafIds);
-  const next = new Set([...current].filter((id) => valid.has(id) && id !== protectedLeafId));
+  const next = new Set(
+    [...current, ...pinned].filter((id) => valid.has(id) && id !== protectedLeafId),
+  );
   if (viewport.width <= 0 || viewport.height <= 0) {
     return sameIds(current, next) ? current : next;
   }
 
-// Never-focused leaves are staler than anything in the focus order, so they
-// fold first; the most recently focused leaf is the last possible victim.
-  const focusedIds = new Set(focusOrder);
-  const orderedVictims = [
-    ...[...leafIds].reverse().filter((id) => !focusedIds.has(id)),
-    ...[...focusOrder].reverse(),
-  ].filter((id, index, all) => all.indexOf(id) === index);
+  const staleness = stalenessRank(leafIds, focusOrder);
+  const scores = intentSizeScores(node, pendingPreferredSplitIds);
 
   while (!visibleLeavesFit(node, next, viewport, pendingPreferredSplitIds)) {
     const visibleCount = leafIds.filter((id) => !next.has(id)).length;
     if (visibleCount <= 1) {
       break;
     }
-    const victim = orderedVictims.find((id) => id !== protectedLeafId && !next.has(id));
+    const victim = smallestLeaf(
+      leafIds.filter((id) => id !== protectedLeafId && !next.has(id)),
+      scores,
+      staleness,
+    );
     if (!victim) {
       break;
     }
     next.add(victim);
   }
 
-  for (const candidate of [...next].reverse()) {
+  for (const candidate of holdRestores ? [] : [...next].reverse()) {
+    if (pinned.has(candidate)) {
+      continue;
+    }
     const restored = new Set(next);
     restored.delete(candidate);
     if (visibleLeavesFit(node, restored, viewport, pendingPreferredSplitIds)) {
@@ -383,6 +438,8 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     input.activeLeafId,
     input.focusOrder,
     pendingPreferredSplitIds,
+    input.pinnedLeafIds,
+    input.holdRestores,
   );
   const renderedTree = projectLayout(
     sourceTree,
@@ -397,8 +454,152 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
   };
 }
 
-// Releasing never folds a peer here: reconcileSuspension picks the
-// least-recently-focused victim, and only when space actually runs out.
+function findSplitNode(
+  node: TerminalLayoutNode,
+  splitId: string,
+): Extract<TerminalLayoutNode, { type: 'split' }> | null {
+  if (node.type !== 'split') {
+    return null;
+  }
+  if (node.splitId === splitId) {
+    return node;
+  }
+  return findSplitNode(node.children[0], splitId) || findSplitNode(node.children[1], splitId);
+}
+
+// A drag may fold any unfocused leaf past its minimum, so its floors assume
+// everything on a side folds to slivers except the focused leaf.
+export function dragRatioBounds(
+  sourceTree: TerminalLayoutNode,
+  splitId: string,
+  protectedLeafId: string,
+  spanPx: number,
+): { min: number; max: number } {
+  const split = findSplitNode(sourceTree, splitId);
+  if (!split || spanPx <= 0) {
+    return { min: 0.1, max: 0.9 };
+  }
+  const floor = (child: TerminalLayoutNode): number => {
+    const foldable = new Set(
+      collectLayoutLeaves(child).map(leafSlotId).filter((id) => id !== protectedLeafId),
+    );
+    const minimum = minimumSize(child, foldable);
+    return split.direction === 'vertical' ? minimum.width : minimum.height;
+  };
+  return {
+    min: Math.min(0.5, floor(split.children[0]) / spanPx),
+    max: Math.max(0.5, 1 - (floor(split.children[1]) / spanPx)),
+  };
+}
+
+function dragFoldsForSpan(
+  side: TerminalLayoutNode,
+  direction: 'vertical' | 'horizontal',
+  spanPx: number,
+  baselineSuspended: ReadonlySet<string>,
+  protectedLeafId: string,
+  staleness: Map<string, number>,
+): Set<string> {
+  const leafIds = collectLayoutLeaves(side).map(leafSlotId);
+  const folded = new Set(baselineSuspended);
+  const added = new Set<string>();
+  const scores = intentSizeScores(side, new Set());
+  for (;;) {
+    const minimum = minimumSize(side, folded);
+    const needed = direction === 'vertical' ? minimum.width : minimum.height;
+    if (needed <= spanPx + 0.5) {
+      break;
+    }
+    const victim = smallestLeaf(
+      leafIds.filter((id) => !folded.has(id) && id !== protectedLeafId),
+      scores,
+      staleness,
+    );
+    if (!victim) {
+      break;
+    }
+    folded.add(victim);
+    added.add(victim);
+  }
+  return added;
+}
+
+export interface DragSuspensionInput {
+  sourceTree: TerminalLayoutNode;
+  splitId: string;
+  ratio: number;
+  splitBoxPx: { width: number; height: number };
+  viewport: AttentionViewport;
+  suspendedLeafIds: ReadonlySet<string>;
+  pinnedLeafIds: ReadonlySet<string>;
+  protectedLeafId: string;
+  focusOrder: readonly string[];
+}
+
+export interface DragSuspensionResult {
+  suspendedLeafIds: ReadonlySet<string>;
+  pinnedLeafIds: ReadonlySet<string>;
+}
+
+// Each drag move re-derives the dragged split's pins from its side spans, so
+// squeezing folds a leaf live and dragging back (or freeing room) restores it.
+export function applyDragSuspension(input: DragSuspensionInput): DragSuspensionResult {
+  const split = findSplitNode(input.sourceTree, input.splitId);
+  if (!split) {
+    return { suspendedLeafIds: input.suspendedLeafIds, pinnedLeafIds: input.pinnedLeafIds };
+  }
+  const axisPx = split.direction === 'vertical' ? input.splitBoxPx.width : input.splitBoxPx.height;
+  const suspended = new Set(input.suspendedLeafIds);
+  const pinned = new Set(input.pinnedLeafIds);
+  const staleness = stalenessRank(
+    collectLayoutLeaves(split).map(leafSlotId),
+    input.focusOrder,
+  );
+  split.children.forEach((child, index) => {
+    const sideLeafIds = new Set(collectLayoutLeaves(child).map(leafSlotId));
+    for (const id of Array.from(pinned)) {
+      if (sideLeafIds.has(id)) {
+        pinned.delete(id);
+        suspended.delete(id);
+      }
+    }
+    const baseline = new Set([...suspended].filter((id) => sideLeafIds.has(id)));
+    const spanPx = index === 0 ? axisPx * input.ratio : axisPx * (1 - input.ratio);
+    const folds = dragFoldsForSpan(
+      child,
+      split.direction,
+      spanPx,
+      baseline,
+      input.protectedLeafId,
+      staleness,
+    );
+    for (const id of folds) {
+      pinned.add(id);
+      suspended.add(id);
+    }
+    // A baseline fold the dragged span cannot release, while the viewport
+    // could, is held folded by this drag: pin it so drag-end restores skip it.
+    const folded = new Set([...baseline, ...folds]);
+    for (const id of baseline) {
+      const released = new Set(folded);
+      released.delete(id);
+      const minimum = minimumSize(child, released);
+      const needed = split.direction === 'vertical' ? minimum.width : minimum.height;
+      if (needed <= spanPx + 0.5) {
+        continue;
+      }
+      const restoredAll = new Set(suspended);
+      restoredAll.delete(id);
+      if (visibleLeavesFit(input.sourceTree, restoredAll, input.viewport, new Set())) {
+        pinned.add(id);
+      }
+    }
+  });
+  return { suspendedLeafIds: suspended, pinnedLeafIds: pinned };
+}
+
+// Releasing never folds a peer here: reconcileSuspension picks the smallest
+// unfocused victim, and only when space actually runs out.
 export function releaseSuspendedLeaf(
   current: ReadonlySet<string>,
   targetLeafId: string,

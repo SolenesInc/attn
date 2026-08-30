@@ -403,7 +403,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     expect(screen.queryByRole('button', { name: 'Expand Alpha' })).toBeNull();
   });
 
-  it('resizes the visible neighbors when a sliver-side divider is dragged', async () => {
+  it('folds a pane dragged below its minimum and restores it when dragged back out', async () => {
     const onFocusPane = vi.fn();
     const boundingRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1100, bottom: 700, width: 1100, height: 700,
@@ -456,19 +456,25 @@ describe('SessionTerminalWorkspace attention ring', () => {
           .getAttribute('data-split-ratio')!,
       );
 
+      // Squeezing Alpha's side under its 480px minimum folds Alpha live.
       fireEvent.pointerDown(grab, { button: 0, pointerId: 1, clientX: 500, clientY: 350 });
       fireEvent.pointerMove(window, { pointerId: 1, clientX: 300, clientY: 350 });
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      fireEvent.pointerUp(window, { pointerId: 1, clientX: 300, clientY: 350 });
-
       await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Expand Alpha' })).toBeInTheDocument();
         const ratioAfter = Number.parseFloat(
           container.querySelector('.workspace-layout-metadata [data-split-id="outer"]')!
             .getAttribute('data-split-ratio')!,
         );
         expect(ratioAfter).toBeLessThan(ratioBefore - 0.02);
-        // Alpha bottoms out at its 480px minimum plus the 34px sliver.
-        expect(ratioAfter).toBeCloseTo(514 / 1100, 2);
+      });
+
+      // Dragging back gives the side room again, so Alpha unfolds mid-drag.
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 520, clientY: 350 });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 520, clientY: 350 });
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Expand Alpha' })).not.toBeInTheDocument();
       });
       // The sliver itself never expands from a drag.
       expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
