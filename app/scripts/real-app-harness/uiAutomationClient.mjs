@@ -202,7 +202,6 @@ export class UiAutomationClient {
   }
 
   async waitForManifest(timeoutMs = 15_000) {
-    // A caller's budget is what a healthy launch costs on its own platform.
     const budgetMs = Math.max(timeoutMs, appPlatform.manifestWaitFloorMs);
     const startedAt = Date.now();
     let lastError = null;
