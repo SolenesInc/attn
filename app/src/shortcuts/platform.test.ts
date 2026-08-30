@@ -54,6 +54,9 @@ describe('terminalClipboardChord', () => {
         .toBe('paste');
       expect(terminalClipboardChord(chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true })))
         .toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true }),
+      )).toBeNull();
     });
   });
 
@@ -69,6 +72,23 @@ describe('terminalClipboardChord', () => {
       expect(terminalClipboardChord(
         chordEvent({ key: 'V', code: 'KeyV', ctrlKey: true, shiftKey: true }),
       )).toBe('paste');
+    });
+  });
+
+  it('takes Ctrl+Alt+C for block copy off-mac', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true }),
+      )).toBe('copyCommand');
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'v', code: 'KeyV', ctrlKey: true, altKey: true }),
+      )).toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true, shiftKey: true }),
+      )).toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', altKey: true }),
+      )).toBeNull();
     });
   });
 

@@ -36,6 +36,7 @@ export interface ClipboardChordEvent extends ModifierBearingEvent {
   key: string;
   code: string;
   shiftKey: boolean;
+  altKey: boolean;
 }
 
 function clipboardLetter(e: ClipboardChordEvent): 'c' | 'v' | null {
@@ -44,8 +45,8 @@ function clipboardLetter(e: ClipboardChordEvent): 'c' | 'v' | null {
   return null;
 }
 
-// Off-mac Ctrl+C is the PTY's interrupt, so the terminal's clipboard also takes Ctrl+Shift.
-// Meta is never a PTY key, so the Mac chords answer everywhere, Ctrl+Shift as a fallback.
+// Off-mac Ctrl+C is the PTY's interrupt, so the terminal's clipboard also takes Ctrl+Shift,
+// and block copy takes Ctrl+Alt+C (GTK leaves it unclaimed). The Mac Meta chords answer everywhere.
 export function terminalClipboardChord(e: ClipboardChordEvent): TerminalClipboardChord {
   const letter = clipboardLetter(e);
   if (!letter) return null;
@@ -53,6 +54,8 @@ export function terminalClipboardChord(e: ClipboardChordEvent): TerminalClipboar
     if (letter === 'v') return 'paste';
     return e.shiftKey ? 'copyCommand' : 'copy';
   }
-  if (isMacLikePlatform() || !e.ctrlKey || !e.shiftKey) return null;
+  if (isMacLikePlatform() || !e.ctrlKey) return null;
+  if (e.altKey) return letter === 'c' && !e.shiftKey ? 'copyCommand' : null;
+  if (!e.shiftKey) return null;
   return letter === 'v' ? 'paste' : 'copy';
 }

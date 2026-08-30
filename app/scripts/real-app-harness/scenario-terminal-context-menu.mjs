@@ -10,7 +10,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { appPlatform, createWindowDriver, delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -32,17 +32,7 @@ function parseArgs(argv) {
   };
 }
 
-function readClipboard() {
-  try {
-    return execFileSync('pbpaste', { encoding: 'utf8' });
-  } catch {
-    return '';
-  }
-}
-
-function writeClipboard(text) {
-  execFileSync('pbcopy', { input: text });
-}
+const { readClipboard, writeClipboard } = appPlatform;
 
 function fishAvailable() {
   try {
@@ -270,7 +260,7 @@ async function main() {
       outputRow,
       menuItems: menuItemsSummary,
     });
-    console.log('[verify] PASS — terminal context menu: copy output and paste both matched real macOS clipboard.');
+    console.log('[verify] PASS — terminal context menu: copy output and paste both matched the real clipboard.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {
