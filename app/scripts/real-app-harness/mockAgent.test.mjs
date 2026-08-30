@@ -5,6 +5,9 @@ import { spawn } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   captureFromPrompt,
+  claudeTranscriptPath,
+  mockTranscriptPath,
+  transcriptTurns,
   createMockAgentInputParser,
   interpolateCaptures,
   markerStateForActions,
@@ -283,7 +286,13 @@ describe('mock agent turns', () => {
 
     child = spawn(process.execPath, [executablePath], {
       cwd: tmpDir,
-      env: { ...process.env, ATTN_WRAPPER_PATH: wrapper, MOCK_AGENT_LEDGER: ledger, ATTN_SESSION_ID: 'sess-marker' },
+      env: {
+        ...process.env,
+        ATTN_WRAPPER_PATH: wrapper,
+        MOCK_AGENT_LEDGER: ledger,
+        ATTN_SESSION_ID: 'sess-marker',
+        ATTN_AGENT: 'codex',
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -314,7 +323,13 @@ describe('mock agent turns', () => {
     fs.writeFileSync(ledger, '');
     return spawn(process.execPath, [MOCK_AGENT_EXECUTABLE, ...argv], {
       cwd: tmpDir,
-      env: { ...process.env, ATTN_WRAPPER_PATH: wrapper, MOCK_AGENT_LEDGER: ledger, ATTN_SESSION_ID: 'sess-argv' },
+      env: {
+        ...process.env,
+        ATTN_WRAPPER_PATH: wrapper,
+        MOCK_AGENT_LEDGER: ledger,
+        ATTN_SESSION_ID: 'sess-argv',
+        ATTN_AGENT: 'codex',
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   }
@@ -400,5 +415,190 @@ describe('mock agent turns', () => {
 
     const transcriptPath = JSON.parse(calls().find((call) => call.args[0] === '_hook-session-start').input).transcript_path;
     expect(fs.readFileSync(transcriptPath, 'utf8')).toContain('worktree removed');
+  });
+});
+
+describe('mock agent conversations', () => {
+  let child;
+  let home;
+
+  beforeEach(() => {
+    home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mock-agent-home-')));
+  });
+
+  afterEach(() => {
+    child?.kill('SIGKILL');
+    child = null;
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  const homeEnv = () => ({ ATTN_TOOL_HOME: home, CODEX_HOME: path.join(home, '.codex') });
+
+  it('places a resumable transcript where each agent driver looks for it', () => {
+    const env = homeEnv();
+    expect(mockTranscriptPath({ agent: 'claude', cwd: '/tmp/work.dir', id: 'sess-1', resumable: true, env }))
+      .toBe(path.join(home, '.claude', 'projects', '-tmp-work-dir', 'sess-1.jsonl'));
+
+    const rollout = mockTranscriptPath({
+      agent: 'codex',
+      cwd: '/tmp/work',
+      id: 'mock-9',
+      resumable: true,
+      startedAt: new Date('2026-08-30T14:05:06.789Z'),
+      env,
+    });
+    expect(rollout).toBe(path.join(home, '.codex', 'sessions', '2026', '08', '30', 'rollout-2026-08-30T14-05-06-mock-9.jsonl'));
+
+    expect(mockTranscriptPath({ agent: 'codex', cwd: '/tmp/work', id: 'mock-9', resumable: false, env }))
+      .toBe('/tmp/work/.attn-mock-agent/rollout-mock-9.jsonl');
+  });
+
+  it('reads prior turns out of either transcript shape and leaves the state marker out', () => {
+    const codex = [
+      JSON.stringify({ type: 'session_meta', payload: { id: 'mock-1', cwd: '/tmp/work' } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'ping' }] } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'pong' }] } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: stateMarker('waiting_input') }] } }),
+      'not json at all',
+    ].join('\n');
+    expect(transcriptTurns(codex)).toEqual([{ role: 'user', text: 'ping' }, { role: 'assistant', text: 'pong' }]);
+
+    const claude = [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'ping' }] } }),
+      JSON.stringify({ type: 'assistant', message: { id: 'msg_1', role: 'assistant', content: [{ type: 'text', text: 'pong' }] } }),
+    ].join('\n');
+    expect(transcriptTurns(claude)).toEqual([{ role: 'user', text: 'ping' }, { role: 'assistant', text: 'pong' }]);
+  });
+
+  async function waitFor(read, description, timeoutMs = 20_000) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const value = read();
+      if (value) return value;
+      if (Date.now() >= deadline) throw new Error(`timed out waiting for ${description}`);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  function startMock(argv, ledger, agent) {
+    const wrapper = path.join(tmpDir, 'fake-attn.mjs');
+    fs.writeFileSync(wrapper, FAKE_ATTN, { mode: 0o755 });
+    if (!fs.existsSync(ledger)) fs.writeFileSync(ledger, '');
+    const spawned = spawn(process.execPath, [MOCK_AGENT_EXECUTABLE, ...argv], {
+      cwd: tmpDir,
+      env: {
+        ...process.env,
+        ...homeEnv(),
+        ATTN_WRAPPER_PATH: wrapper,
+        MOCK_AGENT_LEDGER: ledger,
+        ATTN_SESSION_ID: 'sess-resume',
+        ATTN_AGENT: agent,
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    spawned.stdout.setEncoding('utf8');
+    return spawned;
+  }
+
+  it('resumes a codex rollout from the sessions tree and repaints what was said before', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    writeMockAgentFixture(tmpDir, {
+      name: 'resume mock',
+      resumable: true,
+      minimumWorkingMs: 0,
+      turns: [{ includes: 'say the token', actions: [{ type: 'reply', text: 'TOKEN42' }] }],
+    });
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+
+    child = startMock([], ledger, 'codex');
+    const start = await waitFor(() => calls().find((call) => call.args[0] === '_hook-session-start'), 'the session start hook');
+    const { session_id: nativeId, transcript_path: rollout } = JSON.parse(start.input);
+    expect(rollout.startsWith(path.join(home, '.codex', 'sessions'))).toBe(true);
+    expect(rollout.endsWith(`${nativeId}.jsonl`)).toBe(true);
+
+    child.stdin.write('say the token\r');
+    await waitFor(() => calls().find((call) => call.args[0] === '_hook-stop'), 'the first turn to close');
+    const recorded = fs.readFileSync(rollout, 'utf8');
+    expect(JSON.parse(recorded.split('\n')[0])).toMatchObject({ type: 'session_meta', payload: { id: nativeId } });
+    expect(recorded).toContain('"type":"token_count"');
+    child.kill('SIGKILL');
+
+    child = startMock(['resume', nativeId, '-C', tmpDir], ledger, 'codex');
+    let painted = '';
+    child.stdout.on('data', (chunk) => { painted += chunk; });
+    await waitFor(() => (painted.includes('TOKEN42') ? painted : null), 'the resumed pane to repaint the earlier reply');
+    expect(painted).toContain('say the token');
+    expect(painted).not.toContain('attn:state=');
+
+    const resumed = calls().filter((call) => call.args[0] === '_hook-session-start').at(-1);
+    expect(JSON.parse(resumed.input)).toMatchObject({ session_id: nativeId, transcript_path: rollout });
+    const metas = fs.readFileSync(rollout, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line))
+      .filter((entry) => entry.type === 'session_meta');
+    expect(metas.at(-1).payload.launch.resumeSessionId).toBe(nativeId);
+  });
+
+  it('starts a new codex conversation on /new and binds the successor rollout', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    writeMockAgentFixture(tmpDir, { name: 'new mock', resumable: true, minimumWorkingMs: 0, turns: [] });
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const starts = () => calls().filter((call) => call.args[0] === '_hook-session-start').map((call) => JSON.parse(call.input));
+
+    child = startMock([], ledger, 'codex');
+    const first = await waitFor(() => starts()[0], 'the first conversation');
+    child.stdin.write('/new\r');
+    const second = await waitFor(() => (starts().length > 1 ? starts()[1] : null), 'the successor conversation');
+
+    expect(second.session_id).not.toBe(first.session_id);
+    expect(second.transcript_path).not.toBe(first.transcript_path);
+    expect(fs.existsSync(first.transcript_path)).toBe(true);
+    expect(fs.existsSync(second.transcript_path)).toBe(true);
+  });
+
+  it('writes a claude transcript under the session id attn dictated, and only once it takes a turn', async () => {
+    const ledger = path.join(tmpDir, 'attn-calls.jsonl');
+    writeMockAgentFixture(tmpDir, {
+      name: 'claude resume mock',
+      resumable: true,
+      minimumWorkingMs: 0,
+      turns: [
+        { includes: 'hello', actions: [{ type: 'reply', text: 'hello back' }] },
+        { includes: 'again', actions: [{ type: 'reply', text: 'still here' }] },
+      ],
+    });
+    const calls = () => fs.readFileSync(ledger, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const stops = () => calls().filter((call) => call.args[0] === '_hook-stop');
+    const assistantMessages = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.type === 'assistant')
+      .map((entry) => entry.message);
+
+    child = startMock(['--session-id', 'attn-sess-7'], ledger, 'claude');
+    const start = await waitFor(() => calls().find((call) => call.args[0] === '_hook-session-start'), 'the session start hook');
+    const { session_id: nativeId, transcript_path: transcript } = JSON.parse(start.input);
+    expect(nativeId).toBe('attn-sess-7');
+    expect(transcript).toBe(claudeTranscriptPath(fs.realpathSync(tmpDir), 'attn-sess-7', homeEnv()));
+    expect(fs.existsSync(transcript)).toBe(false);
+
+    child.stdin.write('hello\r');
+    await waitFor(() => stops()[0], 'the first turn to close');
+    const first = assistantMessages(transcript);
+    expect(first[0].content[0].text).toBe('hello back');
+    expect(first[0].usage.input_tokens).toBeGreaterThan(0);
+    child.kill('SIGKILL');
+
+    child = startMock(['-r', 'attn-sess-7'], ledger, 'claude');
+    let painted = '';
+    child.stdout.on('data', (chunk) => { painted += chunk; });
+    await waitFor(() => (painted.includes('hello back') ? painted : null), 'the resumed pane to repaint the earlier reply');
+
+    child.stdin.write('again\r');
+    await waitFor(() => (stops().length > 1 ? stops()[1] : null), 'the turn after the resume to close');
+    const answered = assistantMessages(transcript).filter((message) => !message.content[0].text.startsWith('<!-- attn:state='));
+    expect(answered.map((message) => message.content[0].text)).toEqual(['hello back', 'still here']);
+    // attn keys a claude cost observation on the message id and drops a repeated
+    // usage value, so a resumed turn that reuses either overwrites the earlier one.
+    expect(new Set(assistantMessages(transcript).map((message) => message.id)).size)
+      .toBe(assistantMessages(transcript).length);
+    expect(answered[1].usage.input_tokens).toBeGreaterThan(answered[0].usage.input_tokens);
   });
 });
