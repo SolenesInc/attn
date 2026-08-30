@@ -1465,6 +1465,20 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 	}
 }
 
+// Startup recovery dates a session by state_updated_at and runs concurrently with the
+// socket: an unstamped row reads as a leftover of a previous run and is reaped.
+func stampSessionTimestamps(session *protocol.Session, now string) {
+	if strings.TrimSpace(session.StateSince) == "" {
+		session.StateSince = now
+	}
+	if strings.TrimSpace(session.StateUpdatedAt) == "" {
+		session.StateUpdatedAt = now
+	}
+	if strings.TrimSpace(session.LastSeen) == "" {
+		session.LastSeen = now
+	}
+}
+
 func sessionUpdatedAfter(session *protocol.Session, cutoff time.Time) bool {
 	if session == nil || cutoff.IsZero() {
 		return false
@@ -3399,6 +3413,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 
 	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
+	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	workspaceID := strings.TrimSpace(msg.Session.WorkspaceID)
 	if workspaceID == "" {
 		workspaceID = "workspace-" + msg.Session.ID
