@@ -1012,9 +1012,6 @@ func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *te
 
 func TestDaemon_InjectTestSession_SurvivesRecoveryStartedBeforeIt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	// The session store is the package's, so this row outlives the test and
-	// would seed the next run.
-	t.Cleanup(func() { d.store.Remove("injected-during-recovery") })
 	cutoff := time.Now()
 	stamp := time.Now().Format(time.RFC3339)
 	resp := socketRoundTrip(t, d, map[string]any{
