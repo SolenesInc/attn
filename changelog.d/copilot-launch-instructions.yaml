@@ -1,0 +1,12 @@
+kind: added
+area: sessions
+change: >
+  Copilot sessions now receive attn's launch guidance, which they never had
+  before: the garden, a crew member's charter, and the instruction to report a
+  pull request they open with `attn pr record <url>` so it shows on the session
+  header. Harnesses without hooks, Copilot and plugin harnesses, get that last
+  one; Claude Code and Codex already report a `gh pr create` on their own.
+notes: >
+  Copilot has no flag for extra system-prompt text, so attn writes the guidance
+  to a per-session file and points COPILOT_CUSTOM_INSTRUCTIONS_DIRS at it,
+  keeping any directories the user already listed.

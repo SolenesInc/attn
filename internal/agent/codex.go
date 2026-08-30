@@ -410,13 +410,7 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 		opts.SessionID,
 		opts.SocketPath,
 		opts.WrapperPath,
-		hooks.Launch{
-			NotebookRoot:         opts.NotebookRoot,
-			WorkspaceContextPath: opts.WorkspaceContextPath,
-			InjectWorkflow:       opts.InjectWorkflowGuidance,
-			Garden:               opts.Garden,
-			Crew:                 opts.CrewPriming,
-		},
+		opts.launchSpec(),
 	)
 	if opts.TrustWorkingDirectory {
 		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))

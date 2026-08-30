@@ -2412,6 +2412,7 @@ func runAgentDirectly(requestedAgent string) {
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
 	}
+	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
 		opts.AwarenessDirs = prime.AwarenessDirs
@@ -2445,6 +2446,19 @@ func runAgentDirectly(requestedAgent string) {
 		opts.SettingsPath = settingsPath
 		hasHooks = true
 		cleanupFns = append(cleanupFns, func() { wrapper.CleanupHooksConfig(settingsPath) })
+	}
+	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
+		name, content := ip.GenerateInstructionsFile(opts)
+		if strings.TrimSpace(content) != "" {
+			dir, err := wrapper.WriteInstructionsDir(os.TempDir(), sessionID, name, content)
+			if err != nil {
+				cleanup()
+				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
+				os.Exit(1)
+			}
+			opts.InstructionsDir = dir
+			cleanupFns = append(cleanupFns, func() { wrapper.CleanupInstructionsDir(dir) })
+		}
 	}
 
 	cmd := driver.BuildCommand(opts)

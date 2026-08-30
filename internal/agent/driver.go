@@ -183,6 +183,10 @@ type SpawnOpts struct {
 	CrewPriming string
 
 	AwarenessDirs []string
+
+	SelfReportPullRequests bool
+
+	InstructionsDir string
 }
 
 func (o SpawnOpts) addDirArgs() []string {
@@ -195,14 +199,19 @@ func (o SpawnOpts) addDirArgs() []string {
 	return args
 }
 
-func (o SpawnOpts) launchGuidance() string {
+func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
-		NotebookRoot:         o.NotebookRoot,
-		WorkspaceContextPath: o.WorkspaceContextPath,
-		InjectWorkflow:       o.InjectWorkflowGuidance,
-		Garden:               o.Garden,
-		Crew:                 o.CrewPriming,
-	}.Instructions()
+		NotebookRoot:           o.NotebookRoot,
+		WorkspaceContextPath:   o.WorkspaceContextPath,
+		InjectWorkflow:         o.InjectWorkflowGuidance,
+		Garden:                 o.Garden,
+		Crew:                   o.CrewPriming,
+		SelfReportPullRequests: o.SelfReportPullRequests,
+	}
+}
+
+func (o SpawnOpts) launchGuidance() string {
+	return o.launchSpec().Instructions()
 }
 
 type HookProvider interface {
@@ -211,6 +220,10 @@ type HookProvider interface {
 
 type ConfigOverrideProvider interface {
 	GenerateConfigOverrides(opts SpawnOpts) []string
+}
+
+type InstructionsFileProvider interface {
+	GenerateInstructionsFile(opts SpawnOpts) (name, content string)
 }
 
 type HeadlessTaskRequest struct {
@@ -381,6 +394,14 @@ func GetConfigOverrideProvider(d Driver) (ConfigOverrideProvider, bool) {
 	}
 	cp, ok := d.(ConfigOverrideProvider)
 	return cp, ok
+}
+
+func GetInstructionsFileProvider(d Driver) (InstructionsFileProvider, bool) {
+	if d == nil {
+		return nil, false
+	}
+	ip, ok := d.(InstructionsFileProvider)
+	return ip, ok
 }
 
 func GetTranscriptFinder(d Driver) (TranscriptFinder, bool) {

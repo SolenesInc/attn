@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 type Copilot struct{}
 
 var _ Driver = (*Copilot)(nil)
+var _ InstructionsFileProvider = (*Copilot)(nil)
 var _ TranscriptFinder = (*Copilot)(nil)
 var _ TranscriptWatcherBehaviorProvider = (*Copilot)(nil)
 var _ ClassifierProvider = (*Copilot)(nil)
@@ -25,6 +27,8 @@ var _ ToolFreeOnlyHeadlessTaskProvider = (*Copilot)(nil)
 func init() {
 	Register(&Copilot{})
 }
+
+const copilotInstructionsDirsEnv = "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"
 
 func (c *Copilot) Name() string              { return "copilot" }
 func (c *Copilot) DisplayName() string       { return "Copilot" }
@@ -67,10 +71,37 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	var env []string
+	// copilot carries no hook to pass it down, and a bare `attn copilot` generates a fresh one.
+	if id := strings.TrimSpace(opts.SessionID); id != "" {
+		env = append(env, "ATTN_SESSION_ID="+id)
+	}
 	if opts.Executable != "" && opts.Executable != c.DefaultExecutable() {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)
 	}
+	if dirs := copilotInstructionsDirs(os.Getenv(copilotInstructionsDirsEnv), opts.InstructionsDir); dirs != "" {
+		env = append(env, copilotInstructionsDirsEnv+"="+dirs)
+	}
 	return env
+}
+
+func (c *Copilot) GenerateInstructionsFile(opts SpawnOpts) (string, string) {
+	// Measured on 1.0.81: an extra dir yields only *.instructions.md, and one file past 256 KB
+	// silently drops every custom instruction, the user's own included. Guidance is ~10 KB.
+	return "attn.instructions.md", opts.launchGuidance()
+}
+
+func copilotInstructionsDirs(inherited, dir string) string {
+	dir = strings.TrimSpace(dir)
+	entries := make([]string, 0, 4)
+	for _, entry := range strings.Split(inherited, ",") {
+		if entry = strings.TrimSpace(entry); entry != "" && entry != dir {
+			entries = append(entries, entry)
+		}
+	}
+	if dir != "" {
+		entries = append(entries, dir)
+	}
+	return strings.Join(entries, ",")
 }
 
 func (c *Copilot) FindTranscript(sessionID, cwd string, startedAt time.Time) string {
