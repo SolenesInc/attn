@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   createSessionAndWaitForInitialPane,
-  assertCommonTargetAllowed,
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
@@ -18,41 +16,20 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   captureSessionArtifacts,
+  waitForPaneText,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
+import { agentHomeRoots, writeMockAgentFixture, MOCK_AGENT_NEW_CONVERSATION } from './mockAgent.mjs';
 import { currentHarnessProfile, dataDirForProfile } from './harnessProfile.mjs';
 
 const execFileAsync = promisify(execFile);
 
 function parseArgs(argv) {
   const args = [...argv];
-  if (args[0] === '--') {
-    args.shift();
-  }
-
-  const options = {
-    ...parseCommonArgs([]),
-    codexExecutable: process.env.ATTN_REAL_CODEX_EXECUTABLE || '',
-  };
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === '--ws-url') options.wsUrl = args[++index];
-    else if (arg === '--app-path') options.appPath = args[++index];
-    else if (arg === '--artifacts-dir') options.artifactsDir = args[++index];
-    else if (arg === '--session-root-dir') options.sessionRootDir = args[++index];
-    else if (arg === '--codex-executable') options.codexExecutable = args[++index] || '';
-    else if (arg === '--run-against-prod') options.runAgainstProd = true;
-    else if (arg === '--help' || arg === '-h') options.help = true;
-    else throw new Error(`Unknown argument: ${arg}`);
-  }
-
-  if (!options.help) assertCommonTargetAllowed(options, args);
-  return {
-    options,
-    help: Boolean(options.help),
-  };
+  if (args[0] === '--') args.shift();
+  const options = parseCommonArgs(args);
+  return { options, help: Boolean(options.help) };
 }
 
 function delay(ms) {
@@ -60,66 +37,9 @@ function delay(ms) {
 }
 
 async function submitCodexPromptViaUi(client, sessionId, paneId, text) {
-  await client.request('write_pane', {
-    sessionId,
-    paneId,
-    text: '\u0015',
-    submit: false,
-  });
-  await client.request('type_pane_via_ui', {
-    sessionId,
-    paneId,
-    text,
-  });
-  // Codex treats fast character streams as paste bursts and makes a following
-  // Enter insert a newline; wait past that suppression window.
+  await client.request('type_pane_via_ui', { sessionId, paneId, text });
   await delay(250);
-  await client.request('type_pane_via_ui', {
-    sessionId,
-    paneId,
-    text: '\n',
-  });
-}
-
-async function resolveCodexExecutable(configured) {
-  const trimmed = String(configured || '').trim();
-  if (trimmed) {
-    return trimmed;
-  }
-  const { stdout } = await execFileAsync('/bin/sh', ['-lc', 'command -v codex']);
-  const resolved = stdout.trim();
-  if (!resolved) {
-    throw new Error('codex executable not found in PATH');
-  }
-  return resolved;
-}
-
-function shellQuote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-
-function prepareIsolatedCodexExecutable(realExecutable) {
-  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-real-codex-home-'));
-  const sourceHome = path.join(os.homedir(), '.codex');
-  const authFile = path.join(sourceHome, 'auth.json');
-  const isolatedAuthFile = path.join(codexHome, 'auth.json');
-  if (fs.existsSync(authFile)) {
-    fs.copyFileSync(authFile, isolatedAuthFile);
-    fs.chmodSync(isolatedAuthFile, 0o600);
-  }
-
-  const wrapperPath = path.join(codexHome, 'codex-real-wrapper.sh');
-  fs.writeFileSync(
-    wrapperPath,
-    [
-      '#!/bin/sh',
-      `export CODEX_HOME=${shellQuote(codexHome)}`,
-      `exec ${shellQuote(realExecutable)} -c features.apps=false -c features.enable_mcp_apps=false "$@"`,
-      '',
-    ].join('\n'),
-    { mode: 0o700 }
-  );
-  return { codexHome, executable: wrapperPath, realExecutable };
+  await client.request('type_pane_via_ui', { sessionId, paneId, text: '\n' });
 }
 
 function dbPathForHarnessProfile() {
@@ -246,8 +166,8 @@ async function waitForSessionNotWorking(observer, sessionId, timeoutMs = 20_000)
   }, `session ${sessionId} to leave working state`, timeoutMs);
 }
 
-function codexSessionsRoot(codexHome) {
-  return path.join(codexHome, 'sessions');
+function codexSessionsRoot() {
+  return agentHomeRoots().codexSessions;
 }
 
 function walkJsonlFiles(rootDir) {
@@ -308,9 +228,12 @@ function normalizeExistingPath(value) {
   }
 }
 
-function findCodexTranscript({ codexHome, sessionId, cwd }) {
+function findCodexTranscript({ sessionId, cwd }) {
   const expectedCwd = normalizeExistingPath(cwd);
-  for (const filePath of walkJsonlFiles(codexSessionsRoot(codexHome))) {
+  // Same narrowing internal/transcript/discovery.go does: the sessions tree holds
+  // every rollout this machine ever wrote, and only one file name can match.
+  for (const filePath of walkJsonlFiles(codexSessionsRoot())) {
+    if (!path.basename(filePath).endsWith(`${sessionId}.jsonl`)) continue;
     const meta = readCodexSessionMeta(filePath);
     if (meta?.id === sessionId && normalizeExistingPath(meta.cwd) === expectedCwd) {
       return { filePath, meta };
@@ -319,11 +242,11 @@ function findCodexTranscript({ codexHome, sessionId, cwd }) {
   return null;
 }
 
-async function waitForCodexTranscript({ codexHome, sessionId, cwd, timeoutMs = 30_000 }) {
+async function waitForCodexTranscript({ sessionId, cwd, timeoutMs = 30_000 }) {
   const startedAt = Date.now();
   let found = null;
   while (Date.now() - startedAt < timeoutMs) {
-    found = findCodexTranscript({ codexHome, sessionId, cwd });
+    found = findCodexTranscript({ sessionId, cwd });
     if (found) {
       return found;
     }
@@ -380,41 +303,20 @@ async function waitForCodexAssistantText(filePath, expected, timeoutMs = 45_000)
   );
 }
 
-function countCodexHeaders(text) {
-  return (text.match(/>_ OpenAI Codex/g) || []).length;
-}
-
-async function waitForCodexFreshPrompt(client, sessionId, paneId, previousHeaderCount, timeoutMs = 20_000) {
-  const startedAt = Date.now();
-  let lastText = '';
-  while (Date.now() - startedAt < timeoutMs) {
-    const pane = await client.request('read_pane_text', { sessionId, paneId });
-    lastText = pane?.text || '';
-    if (countCodexHeaders(lastText) > previousHeaderCount && !lastText.includes('Working (') && lastText.includes('›')) {
-      return pane;
-    }
-    await delay(250);
-  }
-  throw new Error(`Timed out waiting for fresh Codex prompt after /new; pane=${JSON.stringify(lastText)}`);
-}
-
 async function main() {
   const { options, help } = parseArgs(process.argv.slice(2));
   if (help) {
     printCommonHelp('scripts/real-app-harness/scenario-codex-resume-mapping.mjs');
-    console.log(`Additional options:
-  --codex-executable <path>   Real Codex executable to run (default: command -v codex)
-`);
     return;
   }
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-CODEX-RESUME',
-    tier: 'tier2-local-real-agent',
+    tier: 'tier2-local-mock-agent',
     prefix: 'scenario-codex-resume-mapping',
     metadata: {
       agent: 'codex',
-      focus: 'Real Codex /new changes the native conversation binding and reload resumes the successor',
+      focus: 'Codex /new changes the native conversation binding and reload resumes the successor',
     },
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -423,10 +325,9 @@ async function main() {
   const dbPath = dbPathForHarnessProfile();
   const attnBin = path.join(options.appPath, 'Contents', 'MacOS', 'attn');
   const daemonEnv = { ...process.env, ATTN_PROFILE: currentHarnessProfile() };
+  const firstReply = 'ATTN_FIRST_TURN_COMPLETE';
+  const successorReply = 'new-ok';
   let sessionId = null;
-  let codexExecutable = null;
-  let realCodexExecutable = null;
-  let isolatedCodexHome = null;
   let initialNativeSessionId = null;
   let nativeSessionId = null;
   let transcript = null;
@@ -435,27 +336,19 @@ async function main() {
   let initialPaneId = null;
 
   try {
-    realCodexExecutable = await runner.step('resolve_real_codex_executable', async () => {
-      return resolveCodexExecutable(options.codexExecutable);
-    });
-    const isolatedCodex = await runner.step('prepare_isolated_real_codex_home', async () => {
-      return prepareIsolatedCodexExecutable(realCodexExecutable);
-    });
-    codexExecutable = isolatedCodex.executable;
-    isolatedCodexHome = isolatedCodex.codexHome;
-
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
     });
 
-    await runner.step('point_codex_setting_at_real_executable', async () => {
-      await client.request('set_setting', {
-        key: 'codex_executable',
-        value: codexExecutable,
+    sessionId = await runner.step('create_codex_session', async () => {
+      writeMockAgentFixture(runner.sessionDir, {
+        name: 'codex resume mock',
+        resumable: true,
+        turns: [
+          { includes: firstReply, actions: [{ type: 'reply', text: firstReply }] },
+          { includes: successorReply, actions: [{ type: 'reply', text: successorReply }] },
+        ],
       });
-    });
-
-    sessionId = await runner.step('create_real_codex_session', async () => {
       return createSessionAndWaitForInitialPane({
         client,
         observer,
@@ -466,12 +359,12 @@ async function main() {
       });
     });
 
-    initialNativeSessionId = await runner.step('assert_real_codex_hook_records_native_id', async () => {
+    initialNativeSessionId = await runner.step('assert_the_codex_hook_records_the_native_id', async () => {
       const readiness = await ensureCodexInitialPanePromptReady(client, sessionId, 60_000);
       initialPaneId = readiness.paneId;
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       runner.writeJson('codex-readiness.json', readiness);
-      await submitCodexPromptViaUi(client, sessionId, initialPaneId, 'Reply with exactly: ATTN_FIRST_TURN_COMPLETE');
+      await submitCodexPromptViaUi(client, sessionId, initialPaneId, `Reply with exactly: ${firstReply}`);
       await delay(1000);
       runner.writeJson('codex-after-submit.json', await client.request('read_pane_text', {
         sessionId,
@@ -487,20 +380,19 @@ async function main() {
 
     nativeSessionId = initialNativeSessionId;
 
-    transcript = await runner.step('assert_resume_id_matches_real_codex_transcript', async () => {
+    transcript = await runner.step('assert_the_resume_id_matches_the_rollout_on_disk', async () => {
       const found = await waitForCodexTranscript({
-        codexHome: isolatedCodexHome,
         sessionId: nativeSessionId,
         cwd: runner.sessionDir,
         timeoutMs: 45_000,
       });
-      await waitForCodexAssistantText(found.filePath, 'ATTN_FIRST_TURN_COMPLETE', 45_000);
+      await waitForCodexAssistantText(found.filePath, firstReply, 45_000);
       await waitForStoredTranscriptPath(dbPath, sessionId, found.filePath, 30_000);
       initialCost = await waitForSessionCostAdvance(dbPath, sessionId, null, 30_000);
       runner.writeJson('codex-transcript.json', found);
       runner.writeJson('codex-cost-before-new.json', initialCost);
       const stoppedSession = await waitForSessionNotWorking(observer, sessionId, 20_000);
-      runner.assert(stoppedSession.state !== 'working', 'real Codex session is not green after the turn stops', {
+      runner.assert(stoppedSession.state !== 'working', 'the Codex session is not green after the turn stops', {
         state: stoppedSession.state,
       });
       await captureSessionArtifacts(client, runner.runDir, '01-first-launch', sessionId);
@@ -508,28 +400,17 @@ async function main() {
     });
 
     await runner.step('start_successor_with_codex_new', async () => {
-      const beforeNew = await client.request('read_pane_text', { sessionId, paneId: initialPaneId });
-      const previousHeaderCount = countCodexHeaders(beforeNew?.text || '');
-      await submitCodexPromptViaUi(client, sessionId, initialPaneId, '/new');
-
-      await delay(1000);
-      const afterFirstEnter = await client.request('read_pane_text', { sessionId, paneId: initialPaneId });
-      if (countCodexHeaders(afterFirstEnter?.text || '') <= previousHeaderCount) {
-        await client.request('type_pane_via_ui', {
-          sessionId,
-          paneId: initialPaneId,
-          text: '\n',
-        });
-      }
-      const freshPrompt = await waitForCodexFreshPrompt(
+      await submitCodexPromptViaUi(client, sessionId, initialPaneId, MOCK_AGENT_NEW_CONVERSATION);
+      const freshPrompt = await waitForPaneText(
         client,
         sessionId,
         initialPaneId,
-        previousHeaderCount,
-        20_000
+        (text) => text.includes('started a new conversation'),
+        'the pane to come back on a new conversation',
+        20_000,
       );
       runner.writeJson('codex-after-new.json', freshPrompt);
-      await submitCodexPromptViaUi(client, sessionId, initialPaneId, 'Reply with exactly: new-ok');
+      await submitCodexPromptViaUi(client, sessionId, initialPaneId, `Reply with exactly: ${successorReply}`);
     });
 
     const initialTranscript = transcript;
@@ -550,7 +431,6 @@ async function main() {
 
     transcript = await runner.step('assert_codex_new_rebinds_transcript_while_old_rollout_exists', async () => {
       const successor = await waitForCodexTranscript({
-        codexHome: isolatedCodexHome,
         sessionId: nativeSessionId,
         cwd: runner.sessionDir,
         timeoutMs: 45_000,
@@ -562,7 +442,7 @@ async function main() {
       runner.assert(fs.existsSync(initialTranscript.filePath), 'the old rollout still exists during rebinding', {
         initial: initialTranscript.filePath,
       });
-      await waitForCodexAssistantText(successor.filePath, 'new-ok', 45_000);
+      await waitForCodexAssistantText(successor.filePath, successorReply, 45_000);
       await waitForStoredTranscriptPath(dbPath, sessionId, successor.filePath, 30_000);
       successorCost = await waitForSessionCostAdvance(dbPath, sessionId, initialCost, 30_000);
       for (const [observationId, observation] of Object.entries(initialCost?.observations || {})) {
@@ -574,7 +454,7 @@ async function main() {
       }
       runner.writeJson('codex-cost-after-new.json', successorCost);
       const stoppedSession = await waitForSessionNotWorking(observer, sessionId, 20_000);
-      runner.assert(stoppedSession.state !== 'working', 'successor Codex turn settles normally', {
+      runner.assert(stoppedSession.state !== 'working', 'the successor Codex turn settles normally', {
         state: stoppedSession.state,
       });
       await captureSessionArtifacts(client, runner.runDir, '02-after-new', sessionId);
@@ -633,7 +513,6 @@ async function main() {
         state: reloadedSession.state,
       });
       const transcriptAfterReload = await waitForCodexTranscript({
-        codexHome: isolatedCodexHome,
         sessionId: nativeSessionId,
         cwd: runner.sessionDir,
         timeoutMs: 30_000,
@@ -661,7 +540,7 @@ async function main() {
         env: daemonEnv,
         timeout: 20_000,
       });
-      runner.assert(stdout.includes('new-ok'), 'the restarted daemon reads the successor transcript through its public CLI', {
+      runner.assert(stdout.includes(successorReply), 'the restarted daemon reads the successor transcript through its public CLI', {
         transcriptPath: transcript.filePath,
         output: stdout,
       });
@@ -671,7 +550,6 @@ async function main() {
     const summary = await runner.finishSuccess({
       sessionId,
       initialPaneId,
-      codexExecutable: realCodexExecutable,
       dbPath,
       initialNativeSessionId,
       nativeSessionId,
@@ -686,7 +564,6 @@ async function main() {
     const summary = await runner.finishFailure(error, {
       sessionId,
       initialPaneId,
-      codexExecutable: realCodexExecutable,
       dbPath,
       initialNativeSessionId,
       nativeSessionId,
@@ -696,18 +573,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     try {
-      await client.request('set_setting', {
-        key: 'codex_executable',
-        value: '',
-      }, { timeoutMs: 10_000 });
-    } catch {}
-    try {
       await cleanupSessionViaAppClose(client, observer, sessionId);
-    } catch {}
-    try {
-      if (isolatedCodexHome) {
-        fs.rmSync(isolatedCodexHome, { recursive: true, force: true });
-      }
     } catch {}
     try {
       await client.quitApp();

@@ -305,7 +305,6 @@ export const scenarioCatalog = [
   {
     id: 'codex-resume',
     runnerId: 'TR-CODEX-RESUME',
-    allowRealAgents: true,
     label: 'Codex native resume id mapping',
     command: ['pnpm', 'run', 'real-app:scenario-codex-resume'],
   },

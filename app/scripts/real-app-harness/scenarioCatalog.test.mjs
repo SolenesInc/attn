@@ -45,6 +45,12 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(allowRealAgentsForRunner('ORDINARY-DELEGATION-TICKET')).toBe(true);
   });
 
+  it('keeps the resume family armed on the mock agent', () => {
+    for (const runnerId of ['CRASH-REC', 'RECOVERABLE-AUTO-REVIVE', 'TR-CODEX-RESUME']) {
+      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
+    }
+  });
+
   it('refuses a runner outside the catalog rather than allowing every binary', () => {
     expect(() => allowRealAgentsForRunner('SOME-UNLISTED-PROBE'))
       .toThrow(/"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/);
