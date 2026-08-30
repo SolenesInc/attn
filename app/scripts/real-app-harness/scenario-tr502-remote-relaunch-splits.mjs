@@ -388,6 +388,7 @@ async function main() {
         agentExecutables: { [options.remoteAgent]: REMOTE_MOCK_AGENT_COMMAND },
       });
       await waitForEndpointConnected(observer, endpoint.name, 45_000);
+      await client.request('select_session', { sessionId });
       await waitForSessionWorkspace(
         client,
         sessionId,
@@ -398,7 +399,6 @@ async function main() {
         `frontend workspace after relaunch for ${sessionId}`,
         45_000,
       );
-      await client.request('select_session', { sessionId });
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {

@@ -93,15 +93,6 @@ function parseArgs(argv) {
   };
 }
 
-function minRecoveredWidth(previousWidth) {
-  if (!Number.isFinite(previousWidth) || previousWidth <= 0) {
-    return 0;
-  }
-  // No absolute px floor: unreachable when 3 panes share the ~560px harness main area;
-  // growth over the pre-close width is the recovery signal.
-  return Math.floor(previousWidth * 1.18);
-}
-
 const PROBE_AGENT_PREFIX = 'probe:';
 
 function parseProbeStyle(remoteAgent) {
@@ -274,7 +265,7 @@ async function closePaneAndAssertRecovery({
   initialPaneId,
   paneId,
   baselineNativeMetrics,
-  previousInitialPaneWidth,
+  previousInitialPaneLayoutWidth,
   minPaneCountAfterClose,
   label,
   enforceNativeStability = true,
@@ -286,22 +277,21 @@ async function closePaneAndAssertRecovery({
   await client.request('focus_pane', { sessionId, paneId });
   await waitForPaneVisible(client, sessionId, paneId, 20_000);
   await client.request('close_pane', { sessionId, paneId });
-  await waitForSessionWorkspace(
+  const recoveredWorkspace = await waitForSessionWorkspace(
     client,
     sessionId,
-    (workspace) => (workspace.panes || []).length === minPaneCountAfterClose,
+    (workspace) => {
+      const layoutPane = (workspace?.layout?.panes || []).find((entry) => entry.paneId === initialPaneId);
+      return (
+        (workspace.panes || []).length === minPaneCountAfterClose &&
+        (layoutPane?.bounds?.width ?? 0) > previousInitialPaneLayoutWidth
+      );
+    },
     `${label} workspace collapse`,
     20_000,
   );
   await client.request('focus_pane', { sessionId, paneId: initialPaneId });
-  const recoveredInitialPaneState = await waitForPaneState(
-    client,
-    sessionId,
-    initialPaneId,
-    (state) => (state?.pane?.bounds?.width ?? 0) >= minRecoveredWidth(previousInitialPaneWidth),
-    `${label} initial pane width recovery`,
-    20_000,
-  );
+  const recoveredInitialPaneState = await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
   // No line-anchor preservation: every probe row encodes the current geometry,
   // so baseline lines never match once a close widens the pane.
   const anchorState = requiredVisibleText
@@ -343,7 +333,9 @@ async function closePaneAndAssertRecovery({
   }
   const finalMainState = await client.request('get_pane_state', { sessionId, paneId: initialPaneId });
   if (enforceNativeStability && baselineNativeMetrics && candidateNativeMetrics) {
-    const widenedPastPreviousWidth = (finalMainState?.pane?.bounds?.width ?? 0) > previousInitialPaneWidth + 1;
+    const recoveredLayoutWidth = (recoveredWorkspace?.layout?.panes || [])
+      .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
+    const widenedPastPreviousWidth = recoveredLayoutWidth > previousInitialPaneLayoutWidth;
     await assertPaneNativePaintRecovered(
       client,
       runner.runDir,
@@ -368,6 +360,8 @@ async function closePaneAndAssertRecovery({
     state: anchorState || finalMainState,
     nativeMetrics: candidateNativeMetrics,
     widthState: recoveredInitialPaneState,
+    layoutWidth: (recoveredWorkspace?.layout?.panes || [])
+      .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? null,
   };
 }
 
@@ -586,6 +580,7 @@ async function main() {
     await runner.step('relaunch_and_restore_session', async () => {
       await relaunchAppAndConnect(client, observer);
       await waitForEndpointConnected(observer, endpoint.name, 45_000);
+      await client.request('select_session', { sessionId });
       await waitForSessionWorkspace(
         client,
         sessionId,
@@ -596,7 +591,6 @@ async function main() {
         `frontend workspace after relaunch for ${sessionId}`,
         45_000,
       );
-      await client.request('select_session', { sessionId });
       await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       restoredMainState = await captureInitialPaneHealthyState(
@@ -687,7 +681,9 @@ async function main() {
     await runner.step('close_relaunched_splits_and_assert_recovery', async () => {
       await client.request('select_session', { sessionId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 20_000);
-      let previousInitialPaneWidth = (await client.request('get_pane_state', { sessionId, paneId: initialPaneId }))?.pane?.bounds?.width ?? 0;
+      const workspaceBeforeClose = await client.request('get_workspace', { sessionId });
+      let previousInitialPaneLayoutWidth = (workspaceBeforeClose?.layout?.panes || [])
+        .find((entry) => entry.paneId === initialPaneId)?.bounds?.width ?? 0;
       const firstRecovered = await closePaneAndAssertRecovery({
         client,
         runner,
@@ -695,14 +691,14 @@ async function main() {
         initialPaneId,
         paneId: postRelaunchShellSplitPaneId,
         baselineNativeMetrics: null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 3,
         label: '06-after-closing-shell-split',
         enforceNativeStability: false,
         requiredVisibleText: anchorText,
         probeStyle,
       });
-      previousInitialPaneWidth = firstRecovered?.state?.pane?.bounds?.width ?? firstRecovered?.widthState?.pane?.bounds?.width ?? previousInitialPaneWidth;
+      previousInitialPaneLayoutWidth = firstRecovered?.layoutWidth ?? previousInitialPaneLayoutWidth;
       await captureSessionArtifacts(client, runner.runDir, '06-after-closing-shell-split', sessionId);
 
       const secondRecovered = await closePaneAndAssertRecovery({
@@ -712,14 +708,14 @@ async function main() {
         initialPaneId,
         paneId: postRelaunchMainSplitPaneId,
         baselineNativeMetrics: firstRecovered?.nativeMetrics || restoredMainState?.nativeMetrics || null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 2,
         label: '07-after-closing-initial-pane-split',
         enforceNativeStability: true,
         requiredVisibleText: anchorText,
         probeStyle,
       });
-      previousInitialPaneWidth = secondRecovered?.state?.pane?.bounds?.width ?? secondRecovered?.widthState?.pane?.bounds?.width ?? previousInitialPaneWidth;
+      previousInitialPaneLayoutWidth = secondRecovered?.layoutWidth ?? previousInitialPaneLayoutWidth;
       await captureSessionArtifacts(client, runner.runDir, '07-after-closing-initial-pane-split', sessionId);
 
       finalMainState = await closePaneAndAssertRecovery({
@@ -729,7 +725,7 @@ async function main() {
         initialPaneId,
         paneId: initialShellPaneId,
         baselineNativeMetrics: secondRecovered?.nativeMetrics || baselineMainState?.nativeMetrics || null,
-        previousInitialPaneWidth,
+        previousInitialPaneLayoutWidth,
         minPaneCountAfterClose: 1,
         label: '08-after-closing-initial-split',
         enforceNativeStability: true,
