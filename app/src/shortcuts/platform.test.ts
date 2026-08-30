@@ -99,7 +99,6 @@ describe('terminalClipboardChord', () => {
       expect(terminalClipboardChord(
         chordEvent({ key: 'c', code: 'KeyC', altKey: true }),
       )).toBeNull();
-      // AltGr layouts report Ctrl+Alt: that press is the user's character, never the chord.
       expect(terminalClipboardChord(
         chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true, modifierAltGraph: true }),
       )).toBeNull();
