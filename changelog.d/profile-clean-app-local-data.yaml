@@ -1,0 +1,13 @@
+kind: fixed
+area: cli
+change: >
+  `attn profile clean` now also removes the app's local data dir — Tauri's
+  `app_local_data_dir` (`~/Library/Application Support/<bundle id>` on macOS,
+  `$XDG_DATA_HOME/<bundle id>` on Linux), which holds the harness automation
+  manifest, the frontend's debug JSONL, and WebKit state. It survived clean on
+  both platforms, so a cleaned profile left its app state behind and a rebuilt
+  profile of the same name inherited it. The dir is removed after the app is
+  stopped, `attn profile resolve` reports it as `appLocalDataDir`, and `attn
+  profile` / `profile list` show whether it is present — including for a profile
+  whose data dir and app are already gone, so the leftovers can be cleaned. The
+  default (production) profile is still refused without `--force`.

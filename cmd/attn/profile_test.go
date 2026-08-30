@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -49,6 +50,55 @@ func TestCleanPlan(t *testing.T) {
 				t.Fatalf("cleanPlan(%q) = (%q,%v), want (%q,%v)", tc.args, gotName, gotForce, tc.wantName, tc.wantForce)
 			}
 		})
+	}
+}
+
+func TestCleanRefusesProductionAndNamesItsAppLocalDataDir(t *testing.T) {
+	_, _, err := cleanPlan([]string{"default"})
+	if err == nil {
+		t.Fatal("cleanPlan(default) succeeded, want a refusal")
+	}
+	prodLocalData := config.AppLocalDataDirForProfile("")
+	if !strings.Contains(err.Error(), prodLocalData) {
+		t.Fatalf("cleanPlan(default) refusal = %q, want it to name %s", err, prodLocalData)
+	}
+}
+
+func TestRemoveAppLocalDataRemovesTheResolvedDir(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+
+	r := resolveProfile("lx")
+	if runtime.GOOS != "darwin" {
+		if want := filepath.Join(dataHome, "com.attn.manager.lx"); r.AppLocalData != want {
+			t.Fatalf("resolveProfile(lx).AppLocalData = %q, want %q", r.AppLocalData, want)
+		}
+	} else {
+		// Never point a test at the real ~/Library/Application Support.
+		r.AppLocalData = filepath.Join(dataHome, "com.attn.manager.lx")
+	}
+
+	if msg, err := removeAppLocalData(r); err != nil || !strings.HasPrefix(msg, "none (") {
+		t.Fatalf("removeAppLocalData (absent) = (%q, %v), want a 'none' note", msg, err)
+	}
+
+	manifest := filepath.Join(r.AppLocalData, "debug", "ui-automation.json")
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	msg, err := removeAppLocalData(r)
+	if err != nil {
+		t.Fatalf("removeAppLocalData: %v", err)
+	}
+	if !strings.HasPrefix(msg, "removed ") {
+		t.Fatalf("removeAppLocalData = %q, want a 'removed' note", msg)
+	}
+	if _, err := os.Stat(r.AppLocalData); !os.IsNotExist(err) {
+		t.Fatalf("stat %s after removal = %v, want it gone", r.AppLocalData, err)
 	}
 }
 

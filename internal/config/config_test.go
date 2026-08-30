@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -492,14 +493,17 @@ func TestE2EPorts_NeverCollideWithRealDaemon(t *testing.T) {
 	}
 }
 
-func TestAppSupportDirForProfile_MatchesBundleIdentifier(t *testing.T) {
+func TestAppLocalDataDirForProfile_FollowsThePlatformLayout(t *testing.T) {
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("UserHomeDir: %v", err)
 	}
+	macRoot := filepath.Join(home, "Library", "Application Support")
 	cases := []struct {
-		profile string
-		want    string
+		profile  string
+		bundleID string
 	}{
 		{"", "com.attn.manager"},
 		{"default", "com.attn.manager"},
@@ -507,19 +511,36 @@ func TestAppSupportDirForProfile_MatchesBundleIdentifier(t *testing.T) {
 		{"agent7", "com.attn.manager.agent7"},
 	}
 	for _, c := range cases {
-		got := AppSupportDirForProfile(c.profile)
-		want := filepath.Join(home, "Library", "Application Support", c.want)
-		if got != want {
-			t.Errorf("AppSupportDirForProfile(%q) = %q, want %q", c.profile, got, want)
+		want := filepath.Join(dataHome, c.bundleID)
+		if runtime.GOOS == "darwin" {
+			want = filepath.Join(macRoot, c.bundleID)
+		}
+		if got := AppLocalDataDirForProfile(c.profile); got != want {
+			t.Errorf("AppLocalDataDirForProfile(%q) = %q, want %q", c.profile, got, want)
 		}
 	}
 }
 
-func TestAppSupportDir_UsesActiveProfile(t *testing.T) {
+func TestAppLocalDataDirFallsBackToTheXDGDefaultOffDarwin(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("darwin resolves under ~/Library/Application Support, XDG plays no part")
+	}
+	t.Setenv("XDG_DATA_HOME", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	want := filepath.Join(home, ".local", "share", "com.attn.manager.agent7")
+	if got := AppLocalDataDirForProfile("agent7"); got != want {
+		t.Errorf("AppLocalDataDirForProfile with no XDG_DATA_HOME = %q, want %q", got, want)
+	}
+}
+
+func TestAppLocalDataDir_UsesActiveProfile(t *testing.T) {
 	t.Setenv("ATTN_PROFILE", "dev")
-	got := AppSupportDir()
-	want := AppSupportDirForProfile("dev")
+	got := AppLocalDataDir()
+	want := AppLocalDataDirForProfile("dev")
 	if got != want {
-		t.Errorf("AppSupportDir() = %q, want %q", got, want)
+		t.Errorf("AppLocalDataDir() = %q, want %q", got, want)
 	}
 }

@@ -68,6 +68,7 @@ type profileResolved struct {
 	AppPath        string `json:"appPath"`
 	AppExecutable  string `json:"appExecutable"`
 	AppDaemon      string `json:"appDaemon"`
+	AppLocalData   string `json:"appLocalDataDir"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
 	DesktopEntry   string `json:"desktopEntry,omitempty"`
 	E2EDaemonPort  string `json:"e2eDaemonPort"`
@@ -91,6 +92,7 @@ func resolveProfile(profile string) profileResolved {
 		AppPath:        config.AppPathForProfile(profile),
 		AppExecutable:  config.AppExecutableForProfile(profile),
 		AppDaemon:      config.AppDaemonBinaryForProfile(profile),
+		AppLocalData:   config.AppLocalDataDirForProfile(profile),
 		DeepLinkScheme: config.DeepLinkSchemeForProfile(profile),
 		DesktopEntry:   desktopEntryPath(config.AppNameForProfile(profile)),
 		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
@@ -122,6 +124,8 @@ func (r profileResolved) field(key string) (string, bool) {
 		return r.AppExecutable, true
 	case "appDaemon":
 		return r.AppDaemon, true
+	case "appLocalDataDir":
+		return r.AppLocalData, true
 	case "deepLinkScheme":
 		return r.DeepLinkScheme, true
 	case "desktopEntry":
@@ -145,6 +149,7 @@ func runProfileStatus() {
 	fmt.Printf("  ws port    %s\n", r.WSPort)
 	fmt.Printf("  bundle id  %s\n", r.BundleID)
 	fmt.Printf("  app        %s  (%s)\n", r.AppPath, ynLabel(appInstalled, "installed", "not installed"))
+	fmt.Printf("  app data   %s  (%s)\n", r.AppLocalData, ynLabel(fileExists(r.AppLocalData), "present", "none"))
 	fmt.Printf("  scheme     %s\n", r.DeepLinkScheme)
 	if r.DesktopEntry != "" {
 		fmt.Printf("  handler    %s  (%s)\n", r.DesktopEntry, ynLabel(fileExists(r.DesktopEntry), "registered", "not registered"))
@@ -194,7 +199,7 @@ func runProfileResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
+			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
 		}
 		fmt.Println(v)
 		return
@@ -280,8 +285,8 @@ func cleanPlan(args []string) (normalized string, force bool, err error) {
 		return "", false, err
 	}
 	if normalized == "" && !force {
-		return "", false, fmt.Errorf("refusing to clean the default (production) profile without --force; this removes %s and %s",
-			config.DataDirForProfile(""), config.AppPathForProfile(""))
+		return "", false, fmt.Errorf("refusing to clean the default (production) profile without --force; this removes %s, %s and %s",
+			config.DataDirForProfile(""), config.AppPathForProfile(""), config.AppLocalDataDirForProfile(""))
 	}
 	return normalized, force, nil
 }
@@ -345,6 +350,12 @@ func runProfileClean(args []string) {
 		}
 	}
 
+	msg, err := removeAppLocalData(r)
+	if err != nil {
+		profileFatal(err.Error())
+	}
+	fmt.Printf("  app data %s\n", msg)
+
 	if fileExists(r.DataDir) {
 		if err := os.RemoveAll(r.DataDir); err != nil {
 			profileFatal(fmt.Sprintf("remove data dir %s: %v", r.DataDir, err))
@@ -355,6 +366,18 @@ func runProfileClean(args []string) {
 	}
 
 	fmt.Printf("Cleaned profile %s.\n", r.Label)
+}
+
+// Tauri's app_local_data_dir, outside the data dir and outside the install tree:
+// the automation manifest, the frontend's debug JSONL, and WebKit's state live here.
+func removeAppLocalData(r profileResolved) (string, error) {
+	if !fileExists(r.AppLocalData) {
+		return fmt.Sprintf("none (%s)", r.AppLocalData), nil
+	}
+	if err := os.RemoveAll(r.AppLocalData); err != nil {
+		return "", fmt.Errorf("remove app local data dir %s: %w", r.AppLocalData, err)
+	}
+	return "removed " + r.AppLocalData, nil
 }
 
 func reportWorkerReap(results []ptyworker.ReapResult) {
@@ -620,6 +643,10 @@ func runProfileList(args []string) {
 		known[p] = true
 	}
 
+	for _, p := range appLocalDataProfiles() {
+		known[p] = true
+	}
+
 	names := make([]string, 0, len(known))
 	for p := range known {
 		names = append(names, p)
@@ -641,7 +668,7 @@ func runProfileList(args []string) {
 		return
 	}
 
-	fmt.Printf("%-3s %-16s %-7s %-9s %-11s %s\n", "", "PROFILE", "PORT", "DATA", "APP", "ORIGIN")
+	fmt.Printf("%-3s %-16s %-7s %-9s %-9s %-11s %s\n", "", "PROFILE", "PORT", "DATA", "APPDATA", "APP", "ORIGIN")
 	for _, p := range names {
 		r := resolveProfile(p)
 		marker := "  "
@@ -652,11 +679,12 @@ func runProfileList(args []string) {
 		if o := readProfileOrigin(r.DataDir); o != nil {
 			origin = filepath.Base(o.Worktree)
 		}
-		fmt.Printf("%-3s %-16s %-7s %-9s %-11s %s\n",
+		fmt.Printf("%-3s %-16s %-7s %-9s %-9s %-11s %s\n",
 			marker,
 			r.Label,
 			r.WSPort,
 			ynLabel(fileExists(r.DataDir), "yes", "—"),
+			ynLabel(fileExists(r.AppLocalData), "yes", "—"),
 			ynLabel(fileExists(r.AppPath), "installed", "—"),
 			origin,
 		)
@@ -696,12 +724,38 @@ func installedAppProfiles(home string) []string {
 	return found
 }
 
+// A profile whose app and data dir are already gone is still listed while its app
+// local data dir lingers, so `clean` can be pointed at it.
+func appLocalDataProfiles() []string {
+	root := filepath.Dir(config.AppLocalDataDirForProfile(""))
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	prodBundleID := config.BundleIdentifierForProfile("")
+	found := []string{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if e.Name() == prodBundleID {
+			found = append(found, "")
+			continue
+		}
+		if p, ok := strings.CutPrefix(e.Name(), prodBundleID+"."); ok && config.ValidateProfileName(p) == nil {
+			found = append(found, strings.ToLower(p))
+		}
+	}
+	return found
+}
+
 func printProfileHelp(w *os.File) {
 	fmt.Fprintln(w, `attn profile — inspect and resolve attn profiles
 
 A profile fully isolates attn's runtime: data dir, socket, websocket port,
-installed app (a macOS bundle, a directory tree elsewhere), and bundle identifier. ATTN_PROFILE selects it for every
-entrypoint (CLI, daemon, e2e, real-app harness, build).
+installed app (a macOS bundle, a directory tree elsewhere), the app's local data
+dir (Tauri's app_local_data_dir), and bundle identifier. ATTN_PROFILE selects it
+for every entrypoint (CLI, daemon, e2e, real-app harness, build).
 
 Usage:
   attn profile                 status of the active profile (ATTN_PROFILE)
@@ -711,7 +765,7 @@ Usage:
   attn profile resolve --profile agent7    resolve a different profile
   attn profile tauri-config    Tauri --config overlay for the profile's build
   attn profile register-scheme Linux only: claim <scheme>:// for this profile's app in the desktop database
-  attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app + data dir + scheme handler
+  attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
   attn profile stop-app        quit the active profile's app (--profile <name> for another)
   attn profile list            every profile with data and/or an installed app
   attn profile list --json     same, machine-readable, with origin and what is running

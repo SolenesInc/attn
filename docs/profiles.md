@@ -92,11 +92,15 @@ Go and frontend e2e suites may run concurrently in distinct worktree profiles.
 
 Clean temporary profiles when finished with `attn profile clean <name>`.
 It stops workers, conversation hosts, plugins, daemon, and app before removing
-the bundle/data. Never delete the data directory first: the worker registry
-is needed for cleanup. Inspect any unconfirmed PIDs the command leaves running.
+the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
+automation manifest, frontend debug logs, WebKit state). Never delete the data
+directory first: the worker registry is needed for cleanup. Inspect any
+unconfirmed PIDs the command leaves running.
 
 Use `attn profile stop-app --profile <name>` to stop only the app.
-`attn profile list --json` reports the install's origin worktree and live workers.
+`attn profile list --json` reports the install's origin worktree and live workers,
+and `appLocalDataDir`/`hasAppLocalData` so a profile whose data dir and app are
+already gone still shows up while its app local data lingers.
 Installs record `<data-dir>/origin.json`; manual installs can use
 `attn profile set-origin <name> --worktree <dir>`.
 
