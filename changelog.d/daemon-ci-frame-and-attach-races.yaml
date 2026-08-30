@@ -1,0 +1,9 @@
+kind: internal
+area: tests
+change: >
+  Daemon WebSocket tests now accept the same unbounded server messages as the
+  browser client, with a session-state fixture pinned above coder/websocket's
+  hidden 32 KiB default. PTY handoff tests read the attach snapshot before
+  waiting for live output, so a child that prints before the subscriber joins
+  no longer looks silent under CI load. Daemon end-to-end fixtures also keep
+  their Unix sockets under macOS's path limit.

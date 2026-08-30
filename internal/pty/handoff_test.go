@@ -82,7 +82,9 @@ func spawnEchoSession(t *testing.T, id string) (*Manager, *collector) {
 	if _, err := m.Attach(id, "before", c.send, nil); err != nil {
 		t.Fatalf("Attach() error: %v", err)
 	}
-	c.waitFor(t, "banner one")
+	if !strings.Contains(screenOf(t, m, id), "banner one") {
+		c.waitFor(t, "banner one")
+	}
 	return m, c
 }
 
