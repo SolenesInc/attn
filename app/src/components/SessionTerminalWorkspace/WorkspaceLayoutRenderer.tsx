@@ -51,15 +51,16 @@ function renderLayoutMetadata(node: TerminalLayoutNode, path = 'root'): ReactNod
 
 function dividerStyle(divider: SplitDivider): React.CSSProperties {
   const pct = (value: number) => `${value * 100}%`;
+  const at = divider.grabRatio ?? divider.ratio;
   if (divider.direction === 'vertical') {
-    const x = divider.left + (divider.right - divider.left) * divider.ratio;
+    const x = divider.left + (divider.right - divider.left) * at;
     return {
       left: pct(x),
       top: pct(divider.top),
       height: pct(divider.bottom - divider.top),
     };
   }
-  const y = divider.top + (divider.bottom - divider.top) * divider.ratio;
+  const y = divider.top + (divider.bottom - divider.top) * at;
   return {
     top: pct(y),
     left: pct(divider.left),
@@ -95,10 +96,11 @@ export function WorkspaceLayoutRenderer({
       {paneIds.map((paneId) => renderPane(paneId))}
       {onDividerPointerDown && dividers.map((divider) => (
         <div
-          key={divider.splitId}
+          key={divider.grabRatio != null ? `${divider.splitId}:${divider.grabRatio}` : divider.splitId}
           className={`workspace-split-divider workspace-split-divider--${divider.direction}`}
           style={dividerStyle(divider)}
           data-split-id={divider.splitId}
+          data-split-grab={divider.grabRatio != null ? '1' : undefined}
           role="separator"
           aria-orientation={divider.direction === 'vertical' ? 'vertical' : 'horizontal'}
           onPointerDown={(event) => onDividerPointerDown(divider, event)}

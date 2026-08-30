@@ -2,7 +2,6 @@ import {
   applyRatioOverrides,
   collectLayoutLeaves,
   getNormalizedPaneBounds,
-  getSplitDividers,
   hasLeaf,
   leafSlotId,
   type SplitDivider,
@@ -12,9 +11,6 @@ import {
 export const ATTENTION_MIN_WIDTH = 480;
 export const ATTENTION_MIN_HEIGHT = 320;
 export const ATTENTION_SLIVER_SIZE = 34;
-// Restore hysteresis for viewport-driven reconciliation only: it stops
-// resize flicker at the fit boundary. A tree change restores with zero slack.
-const RESTORE_GUTTER = 24;
 const ZOOM_PATH_RATIO = 0.76;
 
 export interface AttentionViewport {
@@ -33,9 +29,6 @@ export interface ResolveWorkspaceLayoutInput {
   activeLeafId: string;
   focusOrder: readonly string[];
   previousSuspendedLeafIds: ReadonlySet<string>;
-  // Leaf ids of the previously rendered tree; a leaf gone from the current
-  // tree means it shrank, and restore then runs without hysteresis slack.
-  previousLeafIds?: ReadonlySet<string>;
   pendingRatioOverrides?: ReadonlyMap<string, number>;
   view?: WorkspaceLayoutView;
 }
@@ -216,7 +209,6 @@ function reconcileSuspension(
   protectedLeafId: string,
   focusOrder: readonly string[],
   pendingPreferredSplitIds: ReadonlySet<string>,
-  restoreSlack: number,
 ): ReadonlySet<string> {
   const leafIds = collectLayoutLeaves(node).map(leafSlotId);
   const valid = new Set(leafIds);
@@ -248,7 +240,7 @@ function reconcileSuspension(
   for (const candidate of [...next].reverse()) {
     const restored = new Set(next);
     restored.delete(candidate);
-    if (visibleLeavesFit(node, restored, viewport, pendingPreferredSplitIds, restoreSlack)) {
+    if (visibleLeavesFit(node, restored, viewport, pendingPreferredSplitIds)) {
       next.delete(candidate);
     }
   }
@@ -256,24 +248,83 @@ function reconcileSuspension(
   return sameIds(current, next) ? current : next;
 }
 
-type SuspendedSide = 'first' | 'second' | 'both';
+interface DividerAncestor {
+  node: Extract<TerminalLayoutNode, { type: 'split' }>;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  ratio: number;
+  childIndex: 0 | 1;
+}
 
-function suspendedSidesBySplit(
+// A boundary beside a sliver re-aims (grabRatio) at the nearest same-axis
+// split separating its visible sides; only viewport edge beyond means no divider.
+function buildDividers(
   node: TerminalLayoutNode,
   suspended: ReadonlySet<string>,
-  result = new Map<string, SuspendedSide>(),
-): ReadonlyMap<string, SuspendedSide> {
-  if (node.type !== 'split') {
-    return result;
-  }
-  const first = allLeavesSuspended(node.children[0], suspended);
-  const second = allLeavesSuspended(node.children[1], suspended);
-  if (first || second) {
-    result.set(node.splitId, first && second ? 'both' : first ? 'first' : 'second');
-  }
-  suspendedSidesBySplit(node.children[0], suspended, result);
-  suspendedSidesBySplit(node.children[1], suspended, result);
-  return result;
+): SplitDivider[] {
+  const dividers: SplitDivider[] = [];
+  const walk = (
+    current: TerminalLayoutNode,
+    left: number,
+    top: number,
+    right: number,
+    bottom: number,
+    ancestors: readonly DividerAncestor[],
+  ): void => {
+    if (current.type !== 'split') {
+      return;
+    }
+    const ratio = current.ratio > 0 && current.ratio < 1 ? current.ratio : 0.5;
+    const firstSuspended = allLeavesSuspended(current.children[0], suspended);
+    const secondSuspended = allLeavesSuspended(current.children[1], suspended);
+    if (!firstSuspended && !secondSuspended) {
+      dividers.push({ splitId: current.splitId, direction: current.direction, ratio, left, top, right, bottom });
+    } else if (firstSuspended !== secondSuspended) {
+      const descentIndex = firstSuspended ? 1 : 0;
+      const target = [...ancestors].reverse().find((ancestor) => (
+        ancestor.node.direction === current.direction
+        && ancestor.childIndex === descentIndex
+        && !allLeavesSuspended(ancestor.node.children[1 - descentIndex], suspended)
+      ));
+      if (target) {
+        const grabAbs = current.direction === 'vertical'
+          ? left + (right - left) * ratio
+          : top + (bottom - top) * ratio;
+        const start = current.direction === 'vertical' ? target.left : target.top;
+        const span = current.direction === 'vertical'
+          ? target.right - target.left
+          : target.bottom - target.top;
+        if (span > 0) {
+          dividers.push({
+            splitId: target.node.splitId,
+            direction: current.direction,
+            ratio: target.ratio,
+            left: target.left,
+            top: target.top,
+            right: target.right,
+            bottom: target.bottom,
+            grabRatio: (grabAbs - start) / span,
+          });
+        }
+      }
+    }
+    const splitX = left + (right - left) * ratio;
+    const splitY = top + (bottom - top) * ratio;
+    const self = (childIndex: 0 | 1): DividerAncestor => (
+      { node: current, left, top, right, bottom, ratio, childIndex }
+    );
+    if (current.direction === 'vertical') {
+      walk(current.children[0], left, top, splitX, bottom, [...ancestors, self(0)]);
+      walk(current.children[1], splitX, top, right, bottom, [...ancestors, self(1)]);
+    } else {
+      walk(current.children[0], left, top, right, splitY, [...ancestors, self(0)]);
+      walk(current.children[1], left, splitY, right, bottom, [...ancestors, self(1)]);
+    }
+  };
+  walk(node, 0, 0, 1, 1, []);
+  return dividers;
 }
 
 function findLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode | null {
@@ -325,9 +376,6 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     };
   }
 
-  const leafIdSet = new Set(collectLayoutLeaves(sourceTree).map(leafSlotId));
-  const treeShrank = input.previousLeafIds != null
-    && [...input.previousLeafIds].some((id) => !leafIdSet.has(id));
   const suspendedLeafIds = reconcileSuspension(
     sourceTree,
     input.previousSuspendedLeafIds,
@@ -335,7 +383,6 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     input.activeLeafId,
     input.focusOrder,
     pendingPreferredSplitIds,
-    treeShrank ? 0 : RESTORE_GUTTER,
   );
   const renderedTree = projectLayout(
     sourceTree,
@@ -343,18 +390,10 @@ export function resolveWorkspaceLayout(input: ResolveWorkspaceLayoutInput): Work
     input.viewport,
     pendingPreferredSplitIds,
   );
-  const suspendedSides = suspendedSidesBySplit(sourceTree, suspendedLeafIds);
-
   return {
     renderedTree,
     suspendedLeafIds,
-    dividers: getSplitDividers(renderedTree).flatMap((divider) => {
-      const side = suspendedSides.get(divider.splitId);
-      if (side === 'both') {
-        return [];
-      }
-      return [side ? { ...divider, suspendedSide: side } : divider];
-    }),
+    dividers: buildDividers(renderedTree, suspendedLeafIds),
   };
 }
 
@@ -372,29 +411,3 @@ export function releaseSuspendedLeaf(
   return next;
 }
 
-function findSplit(
-  node: TerminalLayoutNode,
-  splitId: string,
-): Extract<TerminalLayoutNode, { type: 'split' }> | null {
-  if (node.type !== 'split') {
-    return null;
-  }
-  if (node.splitId === splitId) {
-    return node;
-  }
-  return findSplit(node.children[0], splitId) || findSplit(node.children[1], splitId);
-}
-
-export function suspendedLeafIdsWithinSplitSide(
-  tree: TerminalLayoutNode,
-  splitId: string,
-  side: 'first' | 'second',
-  suspended: ReadonlySet<string>,
-): string[] {
-  const split = findSplit(tree, splitId);
-  if (!split) {
-    return [];
-  }
-  const child = split.children[side === 'first' ? 0 : 1];
-  return collectLayoutLeaves(child).map(leafSlotId).filter((id) => suspended.has(id));
-}

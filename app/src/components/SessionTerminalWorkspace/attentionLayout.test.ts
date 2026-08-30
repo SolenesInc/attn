@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getNormalizedPaneBounds, type TerminalLayoutNode } from '../../types/workspace';
-import {
-  releaseSuspendedLeaf,
-  resolveWorkspaceLayout,
-  suspendedLeafIdsWithinSplitSide,
-} from './attentionLayout';
+import { releaseSuspendedLeaf, resolveWorkspaceLayout } from './attentionLayout';
 
 function twoAgentsAndDocument(direction: 'vertical' | 'horizontal' = 'vertical'): TerminalLayoutNode {
   return {
@@ -36,7 +32,6 @@ function resolve(
     activeLeafId: string;
     focusOrder?: readonly string[];
     previousSuspendedLeafIds?: ReadonlySet<string>;
-    previousLeafIds?: ReadonlySet<string>;
     pendingRatioOverrides?: ReadonlyMap<string, number>;
   },
 ) {
@@ -46,7 +41,6 @@ function resolve(
     activeLeafId: options.activeLeafId,
     focusOrder: options.focusOrder ?? [],
     previousSuspendedLeafIds: options.previousSuspendedLeafIds ?? new Set(),
-    previousLeafIds: options.previousLeafIds,
     pendingRatioOverrides: options.pendingRatioOverrides,
   });
 }
@@ -297,32 +291,18 @@ describe('workspace attention layout', () => {
     };
   }
 
-  it('restores a suspended leaf without slack when the tree shrinks', () => {
-    // 1470px fits three 480px agents but not three 504px ones, so viewport
-    // hysteresis alone would leave the third agent suspended forever.
+  it('restores a suspended leaf the moment the viewport fits it again', () => {
+    // 1470px fits three 480px agents; whatever suspended one earlier (a tile
+    // since closed, a window since grown) must not keep it collapsed.
     const plan = resolve(threeAgents(), {
       width: 1470,
       height: 800,
       activeLeafId: 'agent-b',
       focusOrder: ['agent-a', 'agent-c'],
       previousSuspendedLeafIds: new Set(['agent-c']),
-      previousLeafIds: new Set(['agent-a', 'agent-b', 'agent-c', 'seed-tile']),
     });
 
     expect(plan.suspendedLeafIds).toEqual(new Set());
-  });
-
-  it('keeps restore hysteresis when only the viewport changed', () => {
-    const plan = resolve(threeAgents(), {
-      width: 1470,
-      height: 800,
-      activeLeafId: 'agent-b',
-      focusOrder: ['agent-a', 'agent-c'],
-      previousSuspendedLeafIds: new Set(['agent-c']),
-      previousLeafIds: new Set(['agent-a', 'agent-b', 'agent-c']),
-    });
-
-    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
   });
 
   it('folds never-focused leaves before anything in the focus order', () => {
@@ -336,28 +316,38 @@ describe('workspace attention layout', () => {
     expect(plan.suspendedLeafIds).toEqual(new Set(['agent-b']));
   });
 
-  it('marks a sliver-adjacent divider instead of dropping it', () => {
+  it('re-aims the boundary beside a middle sliver at the split of its visible neighbors', () => {
+    // agent-b collapses in the middle: [agent-a | sliver | agent-c].
+    const viewport = { width: 1100, height: 800 };
+    const plan = resolve(threeAgents(), {
+      ...viewport,
+      activeLeafId: 'agent-c',
+      focusOrder: ['agent-a'],
+    });
+
+    expect(plan.suspendedLeafIds).toEqual(new Set(['agent-b']));
+    const outerDividers = plan.dividers.filter((divider) => divider.splitId === 'outer');
+    expect(plan.dividers).toHaveLength(2);
+    expect(outerDividers).toHaveLength(2);
+    const grab = outerDividers.find((divider) => divider.grabRatio != null)!;
+    const own = outerDividers.find((divider) => divider.grabRatio == null)!;
+    // The grab handle sits one sliver past the target split's own boundary.
+    expect(grab.grabRatio! * viewport.width).toBeCloseTo(own.ratio * viewport.width + 34, 0);
+    expect(grab.ratio).toBeCloseTo(own.ratio, 5);
+  });
+
+  it('gives a boundary with only viewport edge beyond the sliver no divider', () => {
+    // agent-c collapses at the far right: nothing visible beyond it to trade.
     const plan = resolve(threeAgents(), {
       width: 1100,
       height: 800,
       activeLeafId: 'agent-a',
       focusOrder: ['agent-b'],
-      previousSuspendedLeafIds: new Set(['agent-c']),
     });
 
     expect(plan.suspendedLeafIds).toEqual(new Set(['agent-c']));
-    const byId = new Map(plan.dividers.map((divider) => [divider.splitId, divider]));
-    expect(byId.get('inner')?.suspendedSide).toBe('second');
-    expect(byId.get('outer')?.suspendedSide).toBeUndefined();
-  });
-
-  it('finds the suspended leaves behind one side of a split', () => {
-    const suspended = new Set(['agent-c']);
-    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'inner', 'second', suspended))
-      .toEqual(['agent-c']);
-    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'inner', 'first', suspended))
-      .toEqual([]);
-    expect(suspendedLeafIdsWithinSplitSide(threeAgents(), 'missing', 'first', suspended))
-      .toEqual([]);
+    expect(plan.dividers).toHaveLength(1);
+    expect(plan.dividers[0].splitId).toBe('outer');
+    expect(plan.dividers[0].grabRatio).toBeUndefined();
   });
 });

@@ -204,9 +204,9 @@ export interface SplitDivider {
   top: number;
   right: number;
   bottom: number;
-  // Set when one child of the split is a suspended sliver: dragging past the
-  // sliver's edge expands it instead of resizing a pinned ratio.
-  suspendedSide?: 'first' | 'second';
+  // A divider re-aimed from a boundary beside a sliver: it renders at
+  // grabRatio but drags this split's ratio, offset by the pinned slivers.
+  grabRatio?: number;
 }
 
 export function getSplitDividers(node: TerminalLayoutNode): SplitDivider[] {

@@ -403,7 +403,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     expect(screen.queryByRole('button', { name: 'Expand Alpha' })).toBeNull();
   });
 
-  it('expands a sliver dragged open by its adjacent divider', async () => {
+  it('resizes the visible neighbors when a sliver-side divider is dragged', async () => {
     const onFocusPane = vi.fn();
     const boundingRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0, y: 0, left: 0, top: 0, right: 1100, bottom: 700, width: 1100, height: 700,
@@ -439,26 +439,39 @@ describe('SessionTerminalWorkspace attention ring', () => {
         { wrapper: Wrapper },
       );
 
-      await screen.findByRole('button', { name: 'Expand Beta' });
-      // Beta is the second child of the outer split, pinned to a 34px sliver.
-      const divider = container.querySelector('.workspace-split-divider[data-split-id="outer"]') as HTMLElement;
-      expect(divider).not.toBeNull();
-
-      fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 1066, clientY: 350 });
-      // First move stays inside the sliver's 34px: nothing may change yet.
-      fireEvent.pointerMove(window, { pointerId: 1, clientX: 1080, clientY: 350 });
-      expect(screen.getByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
-      // Crossing the sliver's edge expands and focuses it.
-      fireEvent.pointerMove(window, { pointerId: 1, clientX: 500, clientY: 350 });
-      fireEvent.pointerUp(window, { pointerId: 1, clientX: 500, clientY: 350 });
-
-      expect(onFocusPane).toHaveBeenCalledWith('agent-b');
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Expand Beta' })).toBeNull();
-      });
+      // Fold the middle document so the layout is [Alpha | sliver | Beta].
+      const beta = await screen.findByRole('button', { name: 'Expand Beta' });
+      fireEvent.click(beta);
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
       });
+
+      // The boundary beside the sliver re-aims at the outer split, so both
+      // of the sliver's edges resize Alpha against Beta.
+      const grab = container.querySelector('.workspace-split-divider[data-split-grab]') as HTMLElement;
+      expect(grab).not.toBeNull();
+      expect(grab.dataset.splitId).toBe('outer');
+      const ratioBefore = Number.parseFloat(
+        container.querySelector('.workspace-layout-metadata [data-split-id="outer"]')!
+          .getAttribute('data-split-ratio')!,
+      );
+
+      fireEvent.pointerDown(grab, { button: 0, pointerId: 1, clientX: 500, clientY: 350 });
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 300, clientY: 350 });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 300, clientY: 350 });
+
+      await waitFor(() => {
+        const ratioAfter = Number.parseFloat(
+          container.querySelector('.workspace-layout-metadata [data-split-id="outer"]')!
+            .getAttribute('data-split-ratio')!,
+        );
+        expect(ratioAfter).toBeLessThan(ratioBefore - 0.02);
+        // Alpha bottoms out at its 480px minimum plus the 34px sliver.
+        expect(ratioAfter).toBeCloseTo(514 / 1100, 2);
+      });
+      // The sliver itself never expands from a drag.
+      expect(screen.getByRole('button', { name: 'Expand review.md' })).toBeInTheDocument();
     } finally {
       boundingRect.mockRestore();
     }

@@ -1,10 +1,11 @@
 kind: fixed
 area: app
 change: >
-  A workspace tile collapsed into a sliver for lack of room comes back on its
-  own when the tile that crowded it out closes; before, a window in a ~70px
-  band could collapse a tile and never restore it. Clicking a sliver now folds
-  the least-recently-focused tile instead of the one the user was just working
-  in, and only when space actually runs out. The divider beside a sliver is
-  draggable again: pulling it past the sliver's edge expands the tile to the
-  dragged width.
+  A workspace tile collapsed into a sliver for lack of room now expands again
+  the moment room returns, whether the crowding tile closed or the window
+  grew; before, a window in a ~70px band could collapse a tile and never
+  restore it. Clicking a sliver folds the least-recently-focused tile instead
+  of the one the user was just working in, and only when space actually runs
+  out. The boundary beside a sliver is draggable again from both of its
+  edges: it resizes the visible tiles around the sliver, which rides along
+  at its pinned width.

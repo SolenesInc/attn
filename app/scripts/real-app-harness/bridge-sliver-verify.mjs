@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Live repro for workspace sliver behavior: dead-zone restore on tree
-// shrink, LRU victim on sliver click, and drag-to-expand on the divider.
+
+// Live sliver checks: auto-restore when room returns, LRU click victim,
+// and neighbor resize beside a sliver.
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRunContext, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+import { MacOSDriver } from './macosDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,6 +17,8 @@ async function main() {
   const { runDir, sessionDir } = createRunContext(options, 'bridge-sliver-verify');
   console.log(`[sliver-verify] runDir=${runDir}`);
   const client = new UiAutomationClient({ appPath: options.appPath });
+  const bundleId = (await execFileAsync('defaults', ['read', `${options.appPath}/Contents/Info`, 'CFBundleIdentifier'])).stdout.trim();
+  const inputDriver = new MacOSDriver({ bundleId, appPath: options.appPath });
 
   const req = (cmd, payload) => client.request(cmd, payload);
   const suspendedTitle = async () => {
@@ -26,12 +30,11 @@ async function main() {
     }
   };
   const boundsOf = async (selector) => (await req('dom_scroll_into_view', { selector })).bounds;
-  const bundleId = (await execFileAsync('defaults', ['read', `${options.appPath}/Contents/Info`, 'CFBundleIdentifier'])).stdout.trim();
   const osa = (script) => execFileAsync('osascript', ['-e', `tell application "System Events" to tell (first process whose bundle identifier is "${bundleId}") to ${script}`]);
   const panesSelector = '.terminal-wrapper.active .session-terminal-panes';
   const sizePanesTo = async (targetPx) => {
     await osa('set position of front window to {20, 40}');
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       const panes = await boundsOf(panesSelector);
       const delta = targetPx - panes.width;
       if (Math.abs(delta) < 4) return panes.width;
@@ -51,7 +54,6 @@ async function main() {
   await delay(1500);
   let ws = await req('get_workspace', { sessionId });
   const paneA = ws.activePaneId || ws.panes[0].paneId;
-
   const paneIds = () => ws.panes.map((p) => p.paneId);
   const newPaneAfter = async (before) => {
     for (let i = 0; i < 40; i++) {
@@ -71,86 +73,81 @@ async function main() {
   const paneC = await newPaneAfter(before);
   console.log(`[sliver-verify] panes A=${paneA} B=${paneB} C=${paneC}`);
 
-  // Size the panes container into the dead zone: fits 3x480 but not 3x504.
-  const panesWidth = await sizePanesTo(1470);
-  console.log(`[sliver-verify] panes width=${panesWidth} (dead zone target 1470)`);
+  // 1a. Room exists (1470 > 3x480): nothing may stay suspended, however we got here.
+  let width = await sizePanesTo(1470);
+  await delay(600);
+  const atRoomy = await suspendedTitle();
+  console.log(`[sliver-verify] width=${width} suspended=${atRoomy} => ${atRoomy === null ? 'AUTO-RESTORED' : 'BUG: stuck sliver'}`);
+  if (atRoomy !== null) throw new Error('sliver survived a viewport with room');
 
-  console.log(`[sliver-verify] 3 panes, suspended=${await suspendedTitle()}`);
+  // 1b. Shrink until one folds, grow again: it must come back on its own.
+  width = await sizePanesTo(1200);
+  await delay(600);
+  const atTight = await suspendedTitle();
+  console.log(`[sliver-verify] width=${width} suspended=${atTight}`);
+  if (atTight === null) throw new Error('expected a sliver at 1200px');
+  width = await sizePanesTo(1470);
+  await delay(600);
+  const regrown = await suspendedTitle();
+  console.log(`[sliver-verify] width=${width} suspended=${regrown} => ${regrown === null ? 'AUTO-EXPANDED on clearance' : 'BUG'}`);
+  if (regrown !== null) throw new Error('sliver did not auto-expand when the window grew');
 
-  // Change 1: a 4th pane suspends someone; closing it must restore.
+  // 1c. A 4th pane folds someone; closing it restores.
   before = paneIds();
   await req('split_pane', { sessionId, targetPaneId: paneC, direction: 'vertical' });
   const paneD = await newPaneAfter(before);
   await delay(600);
   const during = await suspendedTitle();
   console.log(`[sliver-verify] 4 panes, suspended=${during}`);
-  if (during === null) throw new Error('expected a suspended sliver with 4 panes in the dead zone');
+  if (during === null) throw new Error('expected a sliver with 4 panes at 1470');
   await req('close_pane', { sessionId, paneId: paneD });
   await delay(1000);
-  const after = await suspendedTitle();
-  console.log(`[sliver-verify] closed 4th, suspended=${after} => ${after === null ? 'RESTORED (fix works)' : 'STILL COLLAPSED (bug)'}`);
+  const afterClose = await suspendedTitle();
+  console.log(`[sliver-verify] closed 4th, suspended=${afterClose} => ${afterClose === null ? 'RESTORED' : 'BUG'}`);
+  if (afterClose !== null) throw new Error('sliver did not restore after the tile closed');
 
-  // Change 2: click a sliver; the victim must be the LRU pane, not the focused one.
-  before = paneIds();
-  await req('split_pane', { sessionId, targetPaneId: paneC, direction: 'vertical' });
-  const paneE = await newPaneAfter(before);
-  await delay(600);
+  // 2. Click: focus A, then click the sliver; the LRU pane folds, A stays.
+  width = await sizePanesTo(1200);
+  await req('focus_pane', { sessionId, paneId: paneC });
+  await delay(300);
   await req('focus_pane', { sessionId, paneId: paneA });
   await delay(300);
-  const sliverBefore = await suspendedTitle();
-  console.log(`[sliver-verify] before click: suspended=${sliverBefore} focused=A`);
+  const clickBefore = await suspendedTitle();
   await req('dom_click', { selector: '[data-pane-suspended="true"] .workspace-suspended-leaf' });
   await delay(800);
-  const sliverAfterClick = await suspendedTitle();
   ws = await req('get_workspace', { sessionId });
-  console.log(`[sliver-verify] after click: suspended=${sliverAfterClick} activePane=${ws.activePaneId}`);
+  const clickAfter = await suspendedTitle();
+  console.log(`[sliver-verify] click: before=${clickBefore} after=${clickAfter} activePane=${ws.activePaneId}`);
 
-  // Change 3: drag the sliver-adjacent divider away from the sliver.
-  ws = await req('get_workspace', { sessionId });
-  const suspendedSet = new Set();
-  for (const id of paneIds()) {
-    try {
-      await req('dom_text', { selector: `[data-pane-id="${id}"][data-pane-suspended="true"]` });
-      suspendedSet.add(id);
-    } catch {}
-  }
-  if (suspendedSet.size === 0) throw new Error('no suspended pane before drag test');
-  console.log(`[sliver-verify] suspended set=${[...suspendedSet].join(', ')}`);
-  const leavesOf = (n) => (n.type === 'split'
-    ? [...leavesOf(n.children[0]), ...leavesOf(n.children[1])]
-    : [n.paneId ?? n.tileId]);
-  // The draggable divider sits where a fully suspended subtree meets a visible one.
-  const findNode = (node, splitId) => {
-    if (!node || node.type !== 'split') return null;
-    if (node.splitId === splitId) return node;
-    return findNode(node.children[0], splitId) || findNode(node.children[1], splitId);
-  };
-  const findSplitFor = (node) => {
-    if (!node || node.type !== 'split') return null;
-    const fully = node.children.map((child) => leavesOf(child).every((id) => suspendedSet.has(id)));
-    if (fully[0] !== fully[1]) {
-      return { splitId: node.splitId, side: fully[0] ? 'first' : 'second' };
-    }
-    return findSplitFor(node.children[0]) || findSplitFor(node.children[1]);
-  };
-  const found = findSplitFor(ws.workspace.layoutTree);
-  if (!found) throw new Error('no split beside the suspended pane');
-  const releasedLeafIds = leavesOf(found.side === 'first'
-    ? findNode(ws.workspace.layoutTree, found.splitId).children[0]
-    : findNode(ws.workspace.layoutTree, found.splitId).children[1]);
-  const watchPaneId = releasedLeafIds[0];
-  const delta = found.side === 'first' ? 420 : -420;
-  console.log(`[sliver-verify] dragging ${found.splitId} (sliver on ${found.side}) by ${delta}px`);
-  await req('drag_split', { sessionId, splitId: found.splitId, deltaPx: delta, steps: 12 });
+  // 3. Drag beside the sliver: neighbors resize, the sliver stays 34px.
+  // Focus C then A so the middle pane (B) is the LRU that folds.
+  await req('focus_pane', { sessionId, paneId: paneC });
+  await delay(300);
+  await req('focus_pane', { sessionId, paneId: paneA });
+  await delay(600);
+  const middle = await suspendedTitle();
+  console.log(`[sliver-verify] middle sliver=${middle}`);
+  const grab = await boundsOf('.workspace-split-divider[data-split-grab]');
+  const win = await req('get_window_bounds', {});
+  const aBefore = await boundsOf(`[data-pane-id="${paneA}"]`);
+  const cBefore = await boundsOf(`[data-pane-id="${paneC}"]`);
+  const sBefore = await boundsOf('[data-pane-suspended="true"]');
+  const relX = (grab.x + grab.width / 2) / win.logicalBounds.width;
+  const relY = (grab.y + grab.height / 2) / win.logicalBounds.height;
+  // A sits at its 480 floor here, so drag right: C shrinks, A grows.
+  const toRelX = (grab.x + grab.width / 2 + 150) / win.logicalBounds.width;
+  await inputDriver.dragWindow(relX, relY, toRelX, relY, { steps: 12 });
   await delay(900);
-  let dragExpanded = true;
-  try {
-    await req('dom_text', { selector: `[data-pane-id="${watchPaneId}"][data-pane-suspended="true"]` });
-    dragExpanded = false;
-  } catch {}
-  const expandedBounds = await boundsOf(`[data-pane-id="${watchPaneId}"]`);
-  console.log(`[sliver-verify] after drag: expanded=${dragExpanded} width=${expandedBounds.width} suspendedNow=${await suspendedTitle()}`);
-  if (!dragExpanded || expandedBounds.width < 300) throw new Error('drag did not expand the sliver');
+  const aAfter = await boundsOf(`[data-pane-id="${paneA}"]`);
+  const cAfter = await boundsOf(`[data-pane-id="${paneC}"]`);
+  const sAfter = await boundsOf('[data-pane-suspended="true"]');
+  console.log(`[sliver-verify] drag right 150px: A ${aBefore.width}->${aAfter.width} C ${cBefore.width}->${cAfter.width} sliver ${sBefore.width}->${sAfter.width}`);
+  if (!(aAfter.width > aBefore.width + 40 && cAfter.width < cBefore.width - 40)) {
+    throw new Error('sliver-side drag did not resize the visible neighbors');
+  }
+  if (Math.abs(sAfter.width - sBefore.width) > 2) {
+    throw new Error('sliver changed size during a neighbor resize');
+  }
 
   console.log('[sliver-verify] ALL CHECKS DONE');
   process.exit(0);
