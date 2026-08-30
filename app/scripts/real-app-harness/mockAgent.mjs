@@ -15,12 +15,30 @@ function resolveFixturePath(cwd, value) {
   return path.isAbsolute(value) ? value : path.join(cwd, value);
 }
 
+// Mirrors internal/statemarker.States(); the two must not drift.
+export const MOCK_AGENT_STATES = ['waiting_input', 'idle'];
+const REPLYING_ACTIONS = ['reply', 'attn'];
+
+export function stateMarker(state) {
+  return `<!-- attn:state=${state} -->`;
+}
+
+export function markerStateForActions(actions) {
+  const list = Array.isArray(actions) ? actions : [];
+  const named = list.filter((action) => action?.state);
+  if (named.length > 0) return named[named.length - 1].state;
+  return list.some((action) => REPLYING_ACTIONS.includes(action?.type)) ? 'waiting_input' : 'idle';
+}
+
 function validateActions(actions, label) {
   if (!Array.isArray(actions)) throw new Error(`${label} must be an array`);
   for (const action of actions) {
     if (!action || typeof action.type !== 'string') throw new Error(`${label} has an action without a type`);
     if (!['reply', 'delay', 'touch', 'wait_for_file', 'attn'].includes(action.type)) {
       throw new Error(`${label} has unsupported action type ${JSON.stringify(action.type)}`);
+    }
+    if (action.state !== undefined && !MOCK_AGENT_STATES.includes(action.state)) {
+      throw new Error(`${label} has state ${JSON.stringify(action.state)}, want one of ${MOCK_AGENT_STATES.join(', ')}`);
     }
   }
 }
@@ -103,24 +121,30 @@ export function writeMockAgentFixture(cwd, config) {
   return { configPath, executablePath };
 }
 
+export const HEADLESS_TASKS_SETTING = 'headless_tasks.enabled';
+
+async function setSettingAndWait(client, observer, key, value, description) {
+  await client.request('set_setting', { key, value });
+  await observer.waitFor(() => (observer.getSetting(key) === value ? true : null), description, 20_000);
+}
+
 export async function configureMockAgent({ client, observer, runner, agent = 'codex' }) {
   const key = `${agent}_executable`;
   const previous = observer.getSetting(key) || '';
-  await client.request('set_setting', { key, value: executablePath });
-  await observer.waitFor(
-    () => (observer.getSetting(key) === executablePath ? true : null),
-    `${key} to point at the shared mock agent`,
-    20_000,
-  );
+  await setSettingAndWait(client, observer, key, executablePath, `${key} to point at the shared mock agent`);
+
+  const previousHeadless = observer.getSetting(HEADLESS_TASKS_SETTING) || 'true';
+  await setSettingAndWait(client, observer, HEADLESS_TASKS_SETTING, 'false', 'headless tasks to be off');
 
   let restored = false;
   const restore = async () => {
     if (restored) return;
     restored = true;
     await client.request('set_setting', { key, value: previous });
+    await client.request('set_setting', { key: HEADLESS_TASKS_SETTING, value: previousHeadless });
   };
   runner?.registerCleanup(`restore_${key}`, restore);
-  return { executablePath, previous, restore };
+  return { executablePath, previous, previousHeadless, restore };
 }
 
 function runAttn(args, input = '') {
@@ -212,6 +236,15 @@ async function runMockAgent() {
     }
   };
 
+  const stop = (state) => {
+    appendMessage('assistant', stateMarker(state));
+    requireAttn(['_hook-stop'], JSON.stringify({
+      session_id: nativeId,
+      transcript_path: transcriptPath,
+      cwd,
+    }));
+  };
+
   const answer = async (raw) => {
     const input = raw.trim();
     if (!input) {
@@ -222,9 +255,10 @@ async function runMockAgent() {
     setTitle(mockAgentTitle(config.name, 'working'));
     requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
     const workingSince = Date.now();
-    for (const action of selectMockAgentActions(config, input)) await runAction(action);
+    const actions = selectMockAgentActions(config, input);
+    for (const action of actions) await runAction(action);
     await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
-    requireAttn(['_hook-state', 'idle']);
+    stop(markerStateForActions(actions));
     prompt();
   };
 
@@ -234,7 +268,7 @@ async function runMockAgent() {
   const parseInput = createMockAgentInputParser((input) => {
     turns = turns.then(() => answer(input)).catch((error) => {
       process.stdout.write(`\n• mock agent error: ${error.message}\n`);
-      try { requireAttn(['_hook-state', 'idle']); } catch { /* the daemon may be closing */ }
+      try { stop('idle'); } catch { /* the daemon may be closing */ }
       prompt();
     });
   });

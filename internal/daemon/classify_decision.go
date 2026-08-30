@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/statemarker"
 )
 
 type classifyAction int
@@ -199,11 +200,9 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 	apply(decision)
 }
 
-// A refusal takes the classifier-error route on purpose: an unknown verdict
-// files no classifier claim, so the hook evidence already recorded settles the turn.
 func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout time.Duration) (string, error) {
 	if d.headlessTaskRefused("classifier") {
-		return protocol.StateUnknown, headless.Refusal("classifier")
+		return d.classifyFromMarker(session, text)
 	}
 	if d.classifier != nil {
 		return d.classifier.Classify(text, timeout)
@@ -231,4 +230,23 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 		return state, err
 	}
 	return protocol.StateUnknown, errors.New("no classifier backend available")
+}
+
+// With headless tasks off no model may run, so a message naming its own state is
+// believed; without one the unknown verdict files no claim and hook evidence settles.
+func (d *Daemon) classifyFromMarker(session *protocol.Session, text string) (string, error) {
+	sessionID := ""
+	if session != nil {
+		sessionID = session.ID
+	}
+	state, err := statemarker.Parse(text)
+	switch {
+	case err != nil:
+		d.logf("classifySessionState: session=%s state marker unusable: %v", sessionID, err)
+		return protocol.StateUnknown, err
+	case state == "":
+		return protocol.StateUnknown, headless.Refusal("classifier")
+	}
+	d.logf("classifySessionState: session=%s state marker verdict=%s (headless tasks off)", sessionID, state)
+	return state, nil
 }

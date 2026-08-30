@@ -5,3 +5,7 @@ This package decides an agent's state after a turn (`idle`, `waiting_input`,
 an LLM and the parser of its reply. No keyword lists, no regex over the
 assistant text, no fallback heuristics: when the LLM output is missing or
 unparseable, return `unknown`.
+
+The deterministic route lives outside this package for that reason:
+`internal/statemarker` reads a state an agent wrote into its own message, and
+the daemon uses it only while headless tasks are off.
