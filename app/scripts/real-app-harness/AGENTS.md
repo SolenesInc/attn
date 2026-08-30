@@ -28,6 +28,13 @@ Run commands from the repository root.
 - Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
   session starts. No fixture is a silent agent, not a broken one: the pane paints
   the splash and every prompt closes its turn with no reply.
+- A brief delivered on argv (`-- <prompt>`, how every delegation, crew wake and
+  automation launch starts an agent) is the mock's first turn, matched against the
+  same fixture. Its resume flags land in the transcript's `session_meta`.
+- Actions beyond `reply`/`delay`/`touch`/`wait_for_file`/`attn`: `capture` lifts a
+  value out of the prompt (`pattern`, `name`) for `{{name}}` in a later `attn` or
+  `exec` argument, and `exec` runs a command into the pane and the transcript,
+  failing the turn on a non-zero exit unless `allowFailure`.
 - The mock ends every turn with the real Stop hook and a `<!-- attn:state=… -->`
   marker; an action's `state` sets it (default: `waiting_input` after a reply,
   `idle` when the turn was silent). Arming turns headless tasks off, which is what
