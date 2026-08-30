@@ -38,14 +38,22 @@ describe('app tree layout', () => {
   });
 });
 
-describe('manifest wait floor', () => {
-  it('leaves a caller budget alone on macOS and raises it on Linux', () => {
-    expect(darwin.manifestWaitFloorMs).toBe(0);
-    expect(linux.manifestWaitFloorMs).toBeGreaterThan(30_400);
-  });
-});
-
 describe('linux app control', () => {
+  it('keeps WebKitGTK off desktop buses unless the scenario supplies its own', () => {
+    expect(linux.launchEnvironment({ DISPLAY: ':99' })).toEqual({
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/dev/null',
+      AT_SPI_BUS_ADDRESS: 'unix:path=/dev/null',
+      DISPLAY: ':99',
+    });
+    expect(linux.launchEnvironment({
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/tmp/session-bus',
+      AT_SPI_BUS_ADDRESS: 'unix:path=/tmp/accessibility-bus',
+    })).toEqual({
+      DBUS_SESSION_BUS_ADDRESS: 'unix:path=/tmp/session-bus',
+      AT_SPI_BUS_ADDRESS: 'unix:path=/tmp/accessibility-bus',
+    });
+  });
+
   it('quits by signalling the pids it was handed', async () => {
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
     await linux.requestQuit({ bundleId: 'com.attn.manager.dev', pids: [4242, 4243] });

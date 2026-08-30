@@ -7,6 +7,10 @@ import { MacOSDriver } from './macosDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 
+// The harness uses its own bridges; a broken desktop bus blocked WebKitGTK
+// before Tauri setup for over 45 seconds.
+const UNAVAILABLE_DESKTOP_BUS_ADDRESS = 'unix:path=/dev/null';
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -82,7 +86,6 @@ function spawnedOwnedPid(launch) {
 
 const darwinPlatform = {
   os: 'darwin',
-  manifestWaitFloorMs: 0,
 
   appExecutableInTree(appPath) {
     return appPath.endsWith('.app') ? path.join(appPath, 'Contents', 'MacOS', 'app') : appPath;
@@ -140,9 +143,6 @@ const darwinPlatform = {
 
 const linuxPlatform = {
   os: 'linux',
-  // 8 cold launches under Xvfb wrote the manifest in 6.7s-30.4s, the slow mode
-  // pinned near 30.2s by a stall inside WebKitGTK window creation.
-  manifestWaitFloorMs: 90_000,
 
   appExecutableInTree(appPath) {
     return path.join(appPath, 'bin', 'attn-app');
@@ -160,8 +160,16 @@ const linuxPlatform = {
     return new LinuxDriver(options);
   },
 
+  launchEnvironment(env = null) {
+    return {
+      DBUS_SESSION_BUS_ADDRESS: UNAVAILABLE_DESKTOP_BUS_ADDRESS,
+      AT_SPI_BUS_ADDRESS: UNAVAILABLE_DESKTOP_BUS_ADDRESS,
+      ...env,
+    };
+  },
+
   async launchApp({ appPath, env = null }) {
-    return spawnDetached(this.appExecutableInTree(appPath), env);
+    return spawnDetached(this.appExecutableInTree(appPath), this.launchEnvironment(env));
   },
 
   async requestQuit({ pids = [] }) {
