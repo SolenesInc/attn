@@ -26,7 +26,7 @@ type pluginLaunchInstructions struct {
 
 // The rollback removes only a checkout that this call created; an existing or
 // locally modified checkout is never removed.
-func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief bool) (*pluginLaunchInstructions, func(), error) {
+func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, func(), error) {
 	rollback := func() {}
 	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
@@ -40,11 +40,10 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 		return &pluginLaunchInstructions{
 			Kind: pluginInstructionKindChief,
 			Content: hooks.Launch{
-				NotebookRoot: root,
-				Garden:       gardenHome,
-				Crew:         d.crewPrimeForLaunch(sessionID),
-				// No plugin harness reports tool calls through attn's hooks.
-				SelfReportPullRequests: true,
+				NotebookRoot:           root,
+				Garden:                 gardenHome,
+				Crew:                   d.crewPrimeForLaunch(sessionID),
+				SelfReportPullRequests: selfReportPullRequests,
 			}.Instructions(),
 			WorkspaceID:  workspaceID,
 			NotebookRoot: root,
@@ -73,7 +72,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 			InjectWorkflow:         parseBooleanSetting(d.store.GetSetting(SettingWorkflowsEnabled)),
 			Garden:                 gardenHome,
 			Crew:                   d.crewPrimeForLaunch(sessionID),
-			SelfReportPullRequests: true,
+			SelfReportPullRequests: selfReportPullRequests,
 		}.Instructions(),
 		WorkspaceID:     workspaceID,
 		ContextPath:     result.Path,

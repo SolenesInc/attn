@@ -299,7 +299,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, rollback, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief)
+			instructions, rollback, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
+				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				d.finishPluginSessionLaunch(msg.ID, false)
 				plan.rollback(d, msg.ID)

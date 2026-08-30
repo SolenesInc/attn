@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"nhooyr.io/websocket"
@@ -145,6 +146,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	if records[0].Method != "driver.spawn" || !records[0].Params.Yolo || records[0].Params.Model != "spotify-glm/zai-org/GLM-5.2-FP8" || records[0].Params.Effort != "max" {
 		t.Fatalf("first plugin request=%+v, want yolo driver.spawn", records[0])
 	}
+	assertPluginFixtureInstructionsSkipSelfReport(t, records[0])
 
 	terminatePluginFixturePTY(t, d, sessionID)
 	firstClose := waitForPluginFixtureCloseRecords(t, fixture, 1)[0]
@@ -167,6 +169,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	if string(resume.Params.Metadata) != `{"native_id":"driver.spawn-native"}` {
 		t.Fatalf("resume metadata=%s, want previous plugin metadata", resume.Params.Metadata)
 	}
+	assertPluginFixtureInstructionsSkipSelfReport(t, resume)
 
 	terminatePluginFixturePTY(t, d, sessionID)
 	secondClose := waitForPluginFixtureCloseRecords(t, fixture, 2)[1]
@@ -469,11 +472,13 @@ func TestPluginDriverFixtureProcess(t *testing.T) {
 	peer.callOK("driver.register", pluginDriverRegisterParams{
 		Agent: "fixture",
 		Capabilities: map[string]bool{
-			"resume":          true,
-			"yolo":            true,
-			"state_reporting": true,
-			"model_pin":       true,
-			"effort_pin":      true,
+			"resume":                 true,
+			"yolo":                   true,
+			"state_reporting":        true,
+			"model_pin":              true,
+			"effort_pin":             true,
+			"launch_instructions":    true,
+			"pull_request_reporting": true,
 		},
 	})
 	if err := os.WriteFile(os.Getenv("ATTN_DRIVER_FIXTURE_READY"), []byte("ready"), 0o644); err != nil {
@@ -518,4 +523,18 @@ func waitForPluginFixtureStateTrigger(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for live-state trigger at %s", path)
+}
+
+func assertPluginFixtureInstructionsSkipSelfReport(t *testing.T, record pluginDriverFixtureRecord) {
+	t.Helper()
+	if record.Params.Instructions == nil {
+		t.Fatalf("%s carried no launch instructions, so the capability proves nothing", record.Method)
+	}
+	content := record.Params.Instructions.Content
+	if strings.TrimSpace(content) == "" {
+		t.Fatalf("%s carried empty launch instructions", record.Method)
+	}
+	if strings.Contains(content, hooks.PullRequestSelfReportGuidance) {
+		t.Fatalf("%s told a reporting driver to record its own pull requests", record.Method)
+	}
 }

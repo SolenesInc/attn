@@ -118,6 +118,12 @@ type pluginReportInputTakenParams struct {
 	InputID   string `json:"input_id"`
 }
 
+type pluginReportPullRequestParams struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	URL       string `json:"url"`
+}
+
 type pluginReportAutoModeDenialParams struct {
 	SessionID string `json:"session_id"`
 	RunID     string `json:"run_id"`
@@ -212,18 +218,19 @@ func normalizePluginAgent(value string) string {
 
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
-		"resume":              {},
-		"yolo":                {},
-		"initial_prompt":      {},
-		"classifier":          {},
-		"state_reporting":     {},
-		"pending_approval":    {},
-		"message_delivery":    {},
-		"model_pin":           {},
-		"effort_pin":          {},
-		"launch_instructions": {},
-		"conversation":        {},
-		"auto_mode":           {},
+		"resume":                 {},
+		"yolo":                   {},
+		"initial_prompt":         {},
+		"classifier":             {},
+		"state_reporting":        {},
+		"pending_approval":       {},
+		"message_delivery":       {},
+		"model_pin":              {},
+		"effort_pin":             {},
+		"launch_instructions":    {},
+		"conversation":           {},
+		"auto_mode":              {},
+		"pull_request_reporting": {},
 	}
 	out := make(map[string]bool, len(values))
 	for name, enabled := range values {
@@ -322,6 +329,23 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		d.notePluginDriverReport(params.SessionID)
 		d.observeStructuredInputTaken(params.SessionID, strings.TrimSpace(params.InputID), time.Now())
+		return struct{}{}, true, nil
+	case "session.report_pull_request":
+		var params pluginReportPullRequestParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return nil, true, fmt.Errorf("decode session.report_pull_request params: %w", err)
+		}
+		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+			return nil, true, err
+		}
+		d.notePluginDriverReport(params.SessionID)
+		rec, err := d.sessionPullRequestIdentity(params.SessionID, params.URL)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := d.recordSessionPullRequest(rec); err != nil {
+			return nil, true, err
+		}
 		return struct{}{}, true, nil
 	case "session.report_automode_denial":
 		var params pluginReportAutoModeDenialParams

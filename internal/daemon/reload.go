@@ -418,7 +418,8 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 	}
 	runID := uuid.NewString()
 	d.beginPluginSessionLaunch(session.ID, reg.PluginName, runID)
-	instructions, rollback, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief)
+	instructions, rollback, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
+		!reg.Capabilities["pull_request_reporting"])
 	if err != nil {
 		d.finishPluginSessionLaunch(session.ID, false)
 		return nil, err

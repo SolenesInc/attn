@@ -11,6 +11,7 @@ import type {
   RelayHelloResult,
   RelayReportDenialParams,
   RelayReportInputTakenParams,
+  RelayReportPullRequestParams,
   RelayReportStateParams,
   RelayReportStopParams,
 } from "./relay-protocol";
@@ -109,6 +110,7 @@ export class PiDriver {
         state_reporting: true,
         message_delivery: true,
         auto_mode: true,
+        pull_request_reporting: true,
       },
     });
     if (!result.ok) throw new Error("attn rejected pi driver registration");
@@ -293,6 +295,16 @@ export class PiDriver {
       run_id: run.runID,
       seq: this.nextSeq(run),
       input_id: params.input_id,
+    });
+  }
+
+  async suiteReportPullRequest(rawParams: unknown): Promise<void> {
+    const params = parseRelayReportPullRequest(rawParams);
+    const run = this.requireRunByToken(params.token);
+    await this.rpc.request("session.report_pull_request", {
+      session_id: run.sessionID,
+      run_id: run.runID,
+      url: params.url,
     });
   }
 
@@ -559,6 +571,16 @@ function parseRelayReportDenial(value: unknown): RelayReportDenialParams {
     rule: textField(record.rule),
     at: textField(record.at),
   };
+}
+
+function parseRelayReportPullRequest(value: unknown): RelayReportPullRequestParams {
+  if (typeof value !== "object" || value === null) throw new Error("suite.report_pull_request params must be an object");
+  const record = value as Record<string, unknown>;
+  const token = record.token;
+  const url = record.url;
+  if (typeof token !== "string" || token.trim() === "") throw new Error("suite.report_pull_request is missing token");
+  if (typeof url !== "string" || url.trim() === "") throw new Error("suite.report_pull_request is missing url");
+  return { token: token.trim(), url: url.trim() };
 }
 
 function textField(value: unknown): string {

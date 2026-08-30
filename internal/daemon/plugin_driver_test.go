@@ -979,3 +979,64 @@ func respondPluginRequest(t *testing.T, conn net.Conn, request jsonRPCMessage, r
 		t.Fatalf("respond plugin request: %v", err)
 	}
 }
+
+func TestHandleSpawnSession_PullRequestReportingSuppressesSelfReportGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		reports  bool
+		wantSeen bool
+	}{
+		{name: "a driver that reports its pull requests is not told to record them", reports: true, wantSeen: false},
+		{name: "a driver that reports nothing is still told to record them", reports: false, wantSeen: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newEnrolledDaemon(t, "")
+			d.ptyBackend = &fakeSpawnBackend{}
+			client, done := startPluginPipe(t, d, "snipe-plugin", nil)
+			defer func() {
+				_ = client.Close()
+				<-done
+			}()
+			capabilities := map[string]bool{"launch_instructions": true}
+			if tc.reports {
+				capabilities["pull_request_reporting"] = true
+			}
+			registerTestPluginDriver(t, client, "snipe", capabilities)
+
+			requestDone := make(chan struct{})
+			go func() {
+				defer close(requestDone)
+				request := decodeJSONRPCMessage(t, client)
+				if request.Method != "driver.spawn" {
+					t.Errorf("method=%q, want driver.spawn", request.Method)
+					return
+				}
+				var params pluginDriverSpawnParams
+				if err := json.Unmarshal(request.Params, &params); err != nil {
+					t.Errorf("decode spawn params: %v", err)
+					return
+				}
+				if params.Instructions == nil {
+					t.Error("spawn carried no launch instructions")
+					return
+				}
+				if got := strings.Contains(params.Instructions.Content, hooks.PullRequestSelfReportGuidance); got != tc.wantSeen {
+					t.Errorf("self-report guidance present=%v, want %v", got, tc.wantSeen)
+				}
+				respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
+			}()
+
+			addTestWorkspace(d, "workspace-snipe", t.TempDir())
+			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
+			d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
+				ID:          "snipe-session",
+				Cwd:         t.TempDir(),
+				WorkspaceID: "workspace-snipe",
+				Agent:       "snipe",
+				Cols:        80,
+				Rows:        24,
+			})
+			<-requestDone
+		})
+	}
+}
