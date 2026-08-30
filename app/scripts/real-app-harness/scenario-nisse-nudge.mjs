@@ -107,7 +107,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
+      await world.launch({ client, observer, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('create_conversation_session', async () => {

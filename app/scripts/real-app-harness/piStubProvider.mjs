@@ -7,6 +7,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { socketPathForProfile } from './harnessProfile.mjs';
+import { queueDaemonSettingRestore } from './common.mjs';
 
 const CLASSIFIER_MARKER = 'You are a security monitor for an autonomous coding agent';
 
@@ -176,8 +177,6 @@ export function writeStubAgentDir(dir, baseUrl) {
   return dir;
 }
 
-// The first rule whose `when` (substring or RegExp) matches the latest user message
-// wins; its `tools` go out one per model call until every result is in, then `text`.
 export function scriptedAgent(rules) {
   return (request) => {
     const rule = rules.find(({ when }) => (when instanceof RegExp ? when.test(request.prompt) : request.prompt.includes(when)));
@@ -191,8 +190,6 @@ export function scriptedAgent(rules) {
 
 export const bash = (command) => ({ name: 'bash', args: { command } });
 
-// The word an earlier prompt asked the agent to remember; only a request carrying
-// that history can answer it, which is what the revive and resume scenarios test.
 export function rememberedWord(request) {
   for (const prompt of [...request.prompts].reverse()) {
     const match = /Remember this word: (\w+)/.exec(prompt);
@@ -244,8 +241,6 @@ export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {
   }
 }
 
-// The stub, its agent dir, and the launch env: build the runner with
-// `preflightLaunchEnv: launchEnv`, the client with `launchEnv`, then call `launch` from a step.
 export async function startStubWorld({ scenario, appPath, profile, agent, judge = allowEverything }) {
   const stub = await startPiStubProvider({ agent, judge });
   const agentDir = writeStubAgentDir(path.join(os.tmpdir(), `attn-${scenario}-${process.pid}`), stub.baseUrl);
@@ -254,12 +249,12 @@ export async function startStubWorld({ scenario, appPath, profile, agent, judge 
     stub,
     agentDir,
     launchEnv,
-    async launch({ client, runner, launchApp, pinModelFor }) {
+    async launch({ client, observer, runner, launchApp, pinModelFor }) {
       await restartDaemonWithStubEnv({ appPath, profile, agentDir });
       await launchApp();
       const key = `default_model_${pinModelFor}`;
+      queueDaemonSettingRestore(observer, key);
       await client.request('set_setting', { key, value: stubAgentModel });
-      runner.registerCleanup(`restore_${key}`, () => client.request('set_setting', { key, value: '' }).catch(() => {}));
       runner.log(`stub provider on ${stub.baseUrl}`, { agentDir, model: stubAgentModel });
     },
     async close() {

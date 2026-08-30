@@ -106,7 +106,6 @@ function waitForHost(known, description, timeoutMs = 90_000) {
   return pollFor(async () => hostProcesses().find((entry) => !known.includes(entry.pid)) ?? null, description, timeoutMs);
 }
 
-// `<seed>` is the id attn appends to the brief when it launches the delegate.
 function briefFor(token) {
   return [
     'Do these things, in order, using your bash tool. Do not ask for',
@@ -123,8 +122,6 @@ function briefFor(token) {
   ].join('\n');
 }
 
-// The stub's script for both briefs: every `attn seed` line in the brief, in order,
-// `<seed>` from the footer and `<codename>` from what `cat AGENTS.md` returned.
 function seedCommands(request) {
   const seed = /Your work is seed `(s-[a-z0-9]+)`/.exec(request.prompt)?.[1] ?? 'unknown-seed';
   const brief = request.prompt.split('Your work is seed')[0];
@@ -212,7 +209,7 @@ async function main() {
     });
 
     await runner.step('launch_app', async () => {
-      await world.launch({ client, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
+      await world.launch({ client, observer, runner, launchApp: () => launchFreshAppAndConnect(client, observer), pinModelFor: 'nisse' });
     });
 
     await runner.step('boot_delegator', async () => {

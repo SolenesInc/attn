@@ -179,11 +179,17 @@ async function pinMockAgentExecutables(client, observer, executableOverrides = {
     if (previous === executable) {
       continue;
     }
+    queueDaemonSettingRestore(observer, key);
     await client.request('set_setting', { key, value: executable });
     console.log(`[harness] pinned ${key} at the mock agent (was ${previous ? previous : 'unconfigured'})`);
-    if (!pendingSettingRestores.some((restore) => restore.key === key)) {
-      pendingSettingRestores.push({ key, value: previous });
-    }
+  }
+}
+
+// Records a setting's current value so restoreHarnessSettings puts it back on exit;
+// the beforeExit hook covers a normal run, the runner's signal path covers a kill.
+export function queueDaemonSettingRestore(observer, key) {
+  if (!pendingSettingRestores.some((restore) => restore.key === key)) {
+    pendingSettingRestores.push({ key, value: observer.getSetting(key) || '' });
   }
   installSettingRestoreHook();
 }
