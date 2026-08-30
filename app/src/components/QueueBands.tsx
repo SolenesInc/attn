@@ -11,7 +11,7 @@ import { formatWakeTime } from '../utils/snoozeDurations';
 import { crewDisplayName } from '../utils/crewName';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
-import { AutomationProvenance } from './AutomationProvenance';
+import { SessionProvenance } from './SessionProvenance';
 
 export interface QueueBandSessionView {
   id: string;
@@ -104,7 +104,7 @@ function QueueRowView({
       {/* No workspace name in a band row: the label needs every column, and the pin button's tooltip names the workspace. */}
       <span className="sidebar-session-identity">
         <SessionLabel label={session.label} />
-        <AutomationProvenance provenance={session.automation} density="compact" />
+        <SessionProvenance automation={session.automation} density="compact" />
       </span>
       {session.chiefOfStaff && <ChiefOfStaffBadge />}
       {age && <span className="queue-row-age">{age}</span>}

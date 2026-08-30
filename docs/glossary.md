@@ -23,6 +23,7 @@
 - Resume: copies history into a new session. Reload: reopens a recoverable session's own history.
 - Launch prompt: opening message replayed only if a replacement host finds empty history.
 - Session pull request: a pull request an agent opened from inside a session, reported by the tool-use hook or `attn pr record`. Distinct from the PR inbox, which tracks pull requests waiting on the user. The daemon refreshes its status on the PR heat cadence and stops once it merges or closes.
+- Provenance line: the small line under a session's name saying where the session came from and what it produced. Carries the automation that launched it and the session pull request it opened, side by side.
 - nisse: attn's conversation agent, powered by pi.
 
 ## Garden and crew

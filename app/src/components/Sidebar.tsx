@@ -23,7 +23,7 @@ import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
 import type { QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
-import { AutomationProvenance } from './AutomationProvenance';
+import { SessionProvenance } from './SessionProvenance';
 import { keyCombo } from '../shortcuts/formatShortcut';
 
 interface LocalSession {
@@ -1105,7 +1105,7 @@ export function Sidebar({
                     <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                     <span className="sidebar-session-identity">
                       <SessionLabel label={session.label} />
-                      <AutomationProvenance provenance={session.automation} density="compact" />
+                      <SessionProvenance automation={session.automation} density="compact" />
                     </span>
                     {session.endpointName && (
                       <span className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}>
@@ -1288,7 +1288,7 @@ export function Sidebar({
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                           <span className="sidebar-session-identity">
                             <SessionLabel label={session.label} />
-                            <AutomationProvenance provenance={session.automation} density="compact" />
+                            <SessionProvenance automation={session.automation} density="compact" />
                           </span>
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}
                           {session.delegatedFromChief && <DelegatedFromChiefBadge />}

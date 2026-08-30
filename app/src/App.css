@@ -24,6 +24,8 @@
   --color-accent: #5b8cff;
   --color-error: #ef4444;
   --color-warning: #f59e0b;
+  --color-success: #3fb950;
+  --color-merged: #a371f7;
 
   /* Notification severity. Aliases rather than new colors, so the feed cannot
      drift from the status colors above; named separately because the panel and
@@ -75,6 +77,12 @@
   --syntax-property: #e06c75;
   --syntax-function: #61afef;
 }
+
+[data-tone='ok'] { --pr-tone: var(--color-success); }
+[data-tone='warn'] { --pr-tone: var(--color-warning); }
+[data-tone='bad'] { --pr-tone: var(--color-error); }
+[data-tone='merged'] { --pr-tone: var(--color-merged); }
+[data-tone='neutral'] { --pr-tone: var(--color-text-tertiary); }
 
 /* Garden surfaces re-derive the font tokens from the garden's own scale, so a
    wall of seeds can be read at a different size than the rest of the app. */

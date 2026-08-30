@@ -13,7 +13,7 @@ import { formatWakeTime, isSnoozed } from '../utils/snoozeDurations';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import appIcon from '../assets/icon.png';
 import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
-import { AutomationProvenance } from './AutomationProvenance';
+import { SessionProvenance } from './SessionProvenance';
 import './Dashboard.css';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 
@@ -190,7 +190,7 @@ export function Dashboard({
       <StateIndicator state={s.state} size="sm" seed={s.id} />
       <div className="session-row-main">
         <span className="session-name">{s.label}</span>
-        <AutomationProvenance provenance={s.automation} interactive />
+        <SessionProvenance automation={s.automation} interactive />
         {renderActivityLine(s)}
       </div>
       {s.chiefOfStaff && <ChiefOfStaffBadge compact />}

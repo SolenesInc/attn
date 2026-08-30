@@ -484,7 +484,7 @@
   flex: initial;
 }
 
-.sidebar-session-identity > .automation-provenance {
+.sidebar-session-identity > .session-provenance {
   max-width: 100%;
 }
 
