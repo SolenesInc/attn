@@ -520,6 +520,7 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'LEGACY-TICKET-RECOVERY',
+    allowRealAgents: false,
     tier: 'tier2-local-packaged-default-profile',
     prefix: 'legacy-ticket-recovery',
     metadata: {

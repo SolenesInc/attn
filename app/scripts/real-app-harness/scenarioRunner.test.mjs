@@ -9,6 +9,7 @@ let tmpDir;
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scenario-runner-test-'));
   vi.stubEnv('ATTN_REAL_APP_SCENARIO_LOCK_PATH', path.join(tmpDir, 'scenario.lock'));
+  vi.stubEnv('ATTN_REAL_APP_ARTIFACTS_DIR', tmpDir);
 });
 
 afterEach(() => {
@@ -26,6 +27,193 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+function runnerWithTripwire({
+  scenarioId = 'tripwire-contract',
+  ledger = [],
+  verdicts = [],
+  allowRealAgents = false,
+  receipt = { headlessTasks: 'off', carriesMarker: true },
+  ensureDaemonArmed = vi.fn(),
+} = {}) {
+  let ledgerPath = null;
+  const runner = createScenarioRunner({
+    appPath: '/tmp/test-attn.app',
+    artifactsDir: path.join(tmpDir, 'artifacts'),
+    sessionRootDir: path.join(tmpDir, 'sessions'),
+  }, {
+    scenarioId,
+    tier: 'test',
+    allowRealAgents,
+  }, {
+    assertBuildMatches: vi.fn(),
+    armTripwire: vi.fn(({ runDir, allowRealAgents: declared }) => {
+      ledgerPath = path.join(runDir, 'agent-tripwire.ledger');
+      return {
+        marker: 'test-marker',
+        ledgerPath,
+        armed: declared !== true,
+        pidPath: path.join(tmpDir, 'attn.pid'),
+        read: () => ledger,
+        readReceipt: () => (declared === true ? null : receipt),
+      };
+    }),
+    ensureDaemonArmed,
+    emitRunnerVerdict: (verdict) => verdicts.push(verdict),
+    isRecordingEnabled: () => false,
+  });
+  return { runner, verdicts, ledgerPath: () => ledgerPath };
+}
+
+describe('createScenarioRunner agent tripwire', () => {
+  it('turns a clean ledger into the ordinary green verdict', async () => {
+    const { runner, verdicts } = runnerWithTripwire();
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary.ok).toBe(true);
+    expect(verdicts[0]).toMatchObject({ ok: true });
+  });
+
+  it('refuses to pass a scenario whose ledger caught a real agent exec', async () => {
+    const ledger = ['AGENT-QUEUE\tclaude --print hi', 'AGENT-QUEUE\tcodex exec'];
+    const { runner, verdicts } = runnerWithTripwire({ scenarioId: 'AGENT-QUEUE', ledger });
+
+    await expect(runner.finishSuccess()).rejects.toThrow('2 real agent exec(s) during AGENT-QUEUE');
+    expect(verdicts).toEqual([]);
+
+    const failure = await runner.finishFailure(new Error('agent tripwire tripped'));
+
+    expect(failure.ok).toBe(false);
+    expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+    expect(fs.readFileSync(runner.tracePath, 'utf8')).toContain('agent_tripwire:tripped');
+  });
+
+  it('names the tripwire before the step the killed session failed', async () => {
+    const ledger = ['TR-201\tclaude --session-id 93678622'];
+    const { runner } = runnerWithTripwire({ scenarioId: 'TR-201', ledger });
+
+    await runner.step('create_session', async () => {
+      throw new Error('session not found: 93678622');
+    }).catch(() => {});
+    const failure = await runner.finishFailure(new Error('session not found: 93678622'));
+
+    const digest = fs.readFileSync(path.join(runner.runDir, 'failure-digest.txt'), 'utf8');
+    expect(digest.split('\n')[0]).toContain('1 real agent exec(s) during TR-201');
+    expect(digest).toContain('TR-201\tclaude --session-id 93678622');
+    expect(digest.indexOf('agent tripwire:')).toBeLessThan(digest.indexOf('failing step: create_session'));
+    expect(failure.agentTripwire).toMatchObject({ count: 1, lines: ledger });
+  });
+
+  it('records that the daemon it ran against had headless tasks off', async () => {
+    const { runner } = runnerWithTripwire();
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary.headlessTasks).toBe('off');
+    expect(JSON.parse(fs.readFileSync(path.join(runner.runDir, 'summary.json'), 'utf8')).headlessTasks).toBe('off');
+  });
+
+  it('omits the switch for a scenario that may run a real agent', async () => {
+    const { runner } = runnerWithTripwire({ allowRealAgents: true });
+
+    const summary = await runner.finishSuccess();
+
+    expect(summary).not.toHaveProperty('headlessTasks');
+  });
+
+  it('refuses a green verdict when the daemon it ran against never carried the switch', async () => {
+    for (const mode of ['on', 'no daemon', 'unreadable']) {
+      const { runner } = runnerWithTripwire({
+        scenarioId: 'NUDGE-TRIGGER',
+        receipt: { headlessTasks: mode, carriesMarker: true },
+      });
+
+      await expect(runner.finishSuccess()).rejects.toThrow(`ATTN_HEADLESS_TASKS reads ${JSON.stringify(mode)}`);
+      expect(fs.existsSync(path.join(runner.runDir, 'summary.json'))).toBe(false);
+    }
+  });
+
+  it('refuses a green verdict when the daemon carried another run\'s shims', async () => {
+    const { runner } = runnerWithTripwire({
+      scenarioId: 'NUDGE-TRIGGER',
+      receipt: { headlessTasks: 'off', carriesMarker: false },
+    });
+
+    await expect(runner.finishSuccess()).rejects.toThrow(/ATTN_AGENT_TRIPWIRE is not test-marker/);
+  });
+
+  it('names the failed receipt in the digest of the run it fails', async () => {
+    const { runner } = runnerWithTripwire({
+      scenarioId: 'NUDGE-TRIGGER',
+      receipt: { headlessTasks: 'on', carriesMarker: true },
+    });
+
+    const error = await runner.finishSuccess().catch((thrown) => thrown);
+    const failure = await runner.finishFailure(error);
+
+    expect(failure.headlessTasks).toBe('on');
+    const digest = fs.readFileSync(path.join(runner.runDir, 'failure-digest.txt'), 'utf8');
+    expect(digest).toContain('ATTN_HEADLESS_TASKS reads "on"');
+  });
+
+  it('stops an armed scenario at construction when the daemon cannot be proved armed', () => {
+    const unprovable = new Error('agent tripwire: the daemon it would run against cannot be proved armed');
+    const ensureDaemonArmed = vi.fn(() => { throw unprovable; });
+
+    expect(() => runnerWithTripwire({ scenarioId: 'NUDGE-TRIGGER', ensureDaemonArmed })).toThrow(unprovable);
+
+    // The refusal has to hand back the single-tenant lock, or the next run is
+    // blocked by a scenario that never started.
+    const { runner } = runnerWithTripwire({ scenarioId: 'NUDGE-TRIGGER' });
+    expect(runner.runDir).toBeTruthy();
+  });
+
+  it('lets a scenario that may run real agents continue past an unreadable daemon', () => {
+    const ensureDaemonArmed = vi.fn(() => { throw new Error('daemon environment unreadable'); });
+
+    const { runner } = runnerWithTripwire({ allowRealAgents: true, ensureDaemonArmed });
+
+    expect(runner.runDir).toBeTruthy();
+  });
+
+  it('refuses to build a runner no catalog entry and no allowance covers', () => {
+    expect(() => createScenarioRunner({
+      appPath: '/tmp/test-attn.app',
+      artifactsDir: path.join(tmpDir, 'artifacts'),
+      sessionRootDir: path.join(tmpDir, 'sessions'),
+    }, {
+      scenarioId: 'UNLISTED-PROBE',
+      tier: 'test',
+    }, {
+      assertBuildMatches: vi.fn(),
+      armTripwire: vi.fn(),
+      ensureDaemonArmed: vi.fn(),
+      emitRunnerVerdict: vi.fn(),
+      isRecordingEnabled: () => false,
+    })).toThrow(/UNLISTED-PROBE.*no scenarioCatalog\.mjs entry/s);
+  });
+
+  it('arms what the catalog says the scenario may still run for real', () => {
+    const armTripwire = vi.fn(() => ({ marker: 'm', ledgerPath: '/dev/null', read: () => [], readReceipt: () => null }));
+    createScenarioRunner({
+      appPath: '/tmp/test-attn.app',
+      artifactsDir: path.join(tmpDir, 'artifacts'),
+      sessionRootDir: path.join(tmpDir, 'sessions'),
+    }, {
+      scenarioId: 'PI-AUTOMODE',
+      tier: 'test',
+    }, {
+      assertBuildMatches: vi.fn(),
+      armTripwire,
+      ensureDaemonArmed: vi.fn(),
+      emitRunnerVerdict: vi.fn(),
+      isRecordingEnabled: () => false,
+    });
+
+    expect(armTripwire.mock.calls[0][0]).toMatchObject({ scenarioId: 'PI-AUTOMODE', allowRealAgents: ['pi'] });
+  });
+});
+
 describe('createScenarioRunner recording contract', () => {
   it('emits no green verdict and turns recorder finalization failure into the run failure', async () => {
     const stopped = deferred();
@@ -41,8 +229,11 @@ describe('createScenarioRunner recording contract', () => {
     }, {
       scenarioId: 'recording-contract',
       tier: 'test',
+      allowRealAgents: false,
     }, {
       assertBuildMatches: vi.fn(),
+      armTripwire: () => ({ marker: 'test-marker', ledgerPath: path.join(tmpDir, 'ledger'), armed: true, read: () => [], readReceipt: () => ({ headlessTasks: 'off', carriesMarker: true }) }),
+      ensureDaemonArmed: vi.fn(),
       createRecorder: () => recorder,
       createRecordingDriver: () => ({ mainWindowId: async () => 1 }),
       emitRunnerVerdict: (verdict) => verdicts.push(verdict),

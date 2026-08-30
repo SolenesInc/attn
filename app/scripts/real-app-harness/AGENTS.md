@@ -28,6 +28,54 @@ Run commands from the repository root.
   `platform.mjs`. Use automation-manifest or spawned PIDs; verify manifest PIDs
   still run the installed executable before signalling them.
 
+## Agent tripwire
+
+`agentTripwire.mjs` shims `claude`, `codex`, `copilot` and `pi` so a scenario
+that must call no model fails when a real agent binary is exec'd. A shim appends
+`<scenario>\t<argv>` to `<run-dir>/agent-tripwire.ledger` and exits 97; the runner
+fails the scenario on a non-empty ledger and prints the lines.
+
+- The shims reach the app, the daemon it spawns, and the harness's own `attn`
+  calls two ways: the shim dir first on `PATH`, and `ATTN_<AGENT>_EXECUTABLE`
+  pins. Sessions need the pins — the login shell rebuilds `PATH` (see
+  `internal/pty/manager.go`), so only the pins survive that hop.
+- A command a scenario types by hand into a shell pane resolves on the login
+  `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
+  covers every agent attn itself launches, not that.
+- The daemon outlives a scenario, so the shim dir is stable and a `current-run`
+  pointer file attributes execs to the scenario running now.
+  `ensureDaemonCarriesTripwire` stops a daemon that predates the tripwire
+  (never on a production target) so the app relaunch brings up an armed one.
+- Every `createScenarioRunner` caller declares what it may run: a
+  `scenarioCatalog.mjs` entry carrying its `runnerId`, or `allowRealAgents` in
+  the runner options, which wins over the catalog. `false` arms everything,
+  `true` allows all four, an array names the ones the scenario needs. A runner
+  id neither covers fails at construction rather than defaulting to permissive.
+  Every arming logs what it allowed. The pi scenarios carry `['pi']` — they exec
+  the real `pi` binary against a stub provider or a recording, and keep
+  claude/codex/copilot armed.
+- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses narration,
+  classification, titling and every other headless LLM task (`internal/headless`)
+  instead of enqueueing one. Without it the ledger check races the daemon:
+  `narrate_workspace` debounces two minutes and retries, so its `claude --print`
+  lands after `summary.json`, and the single `current-run` pointer stamps it with
+  whichever scenario is armed by then. A scenario that allows real agents keeps
+  headless tasks on.
+- `summary.json` carries `headlessTasks`, read from the environment of the
+  daemon the scenario ran against, so a green run states the switch was in force
+  rather than leaving it assumed. Counting `headless task refused` lines instead
+  does not work: the daemon logs them as a scenario tears its sessions down, in
+  the same second `summary.json` is written.
+- An armed scenario fails closed on both ends. At arm time, a running daemon
+  whose environment cannot be read, or one this harness may not stop (a
+  production target is never restarted), fails the scenario before it starts,
+  naming the pid, what was read and what was expected. At the end, `ok: true`
+  requires the daemon's environment to carry both this run's
+  `ATTN_AGENT_TRIPWIRE` marker and `ATTN_HEADLESS_TASKS=off`; a switch reading
+  `on`, `no daemon` or `unreadable`, or a marker from another run, fails the
+  scenario with the value in the digest. A scenario allowing real agents keeps
+  the old warn-and-continue: it has nothing to prove.
+
 ## Reading results
 
 - Read the last `ATTN_VERDICT ` stdout line; hand-rolled `main()` scenarios omit it.

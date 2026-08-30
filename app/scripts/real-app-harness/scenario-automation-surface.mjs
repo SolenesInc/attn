@@ -171,6 +171,7 @@ async function main() {
   const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SURFACE',
+    allowRealAgents: false,
     tier: 'tier2-local-fake-agent',
     prefix: 'automation-surface',
     metadata: { profile, panel: 'profile-level Automations dock panel' },
