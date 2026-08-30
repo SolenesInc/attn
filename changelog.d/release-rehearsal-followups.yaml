@@ -1,0 +1,3 @@
+kind: fixed
+area: release
+change: Release candidates no longer fail script tests after consuming every changelog fragment, and their PR descriptions stay within GitHub's size limit.

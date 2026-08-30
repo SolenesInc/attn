@@ -211,9 +211,12 @@ done
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-candidate.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-facts="$work/fragments.md"
 body="$work/pr-body.md"
-go run ./cmd/release-train fragments render >"$facts"
+fragment_count="$(find changelog.d -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
+fragment_noun=fragments
+if [[ "$fragment_count" == 1 ]]; then
+  fragment_noun=fragment
+fi
 
 if [[ "$kind" == promotion ]]; then
   echo "Creating frozen candidate ${release_branch} from ${source_sha}..."
@@ -314,7 +317,7 @@ ${movement_note}
 
 ## What changed
 
-- compiled the frozen source's changelog fragments into \`CHANGELOG.md\`
+- compiled ${fragment_count} frozen changelog ${fragment_noun} into \`CHANGELOG.md\`
 - updated every committed app version to \`${manifest_version}\`
 - recorded the accepted source and main baseline in \`.github/release-candidate.yml\`
 
@@ -353,18 +356,6 @@ Do not merge until \`PR gate\` and \`App acceptance\` are green on \`${candidate
 
 EOF
 fi
-
-cat >>"$body" <<EOF
-
-<details>
-<summary>Frozen changelog inputs</summary>
-
-EOF
-sed 's/^/    /' "$facts" >>"$body"
-cat >>"$body" <<'EOF'
-
-</details>
-EOF
 
 echo "Pushing ${release_branch}..."
 git push -u "$remote" "$release_branch"
