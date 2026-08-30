@@ -63,7 +63,7 @@ function processExists(pid) {
   }
 }
 
-function packagedAppScenarioLockPath() {
+export function packagedAppScenarioLockPath() {
   return process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH || path.join(os.tmpdir(), 'attn-real-app-harness-scenario.lock');
 }
 
@@ -78,8 +78,7 @@ function removeDirIfPresent(dirPath) {
   } catch {}
 }
 
-function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }) {
-  const lockDir = packagedAppScenarioLockPath();
+export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }, lockDir = packagedAppScenarioLockPath()) {
   const ownerPath = path.join(lockDir, 'owner.json');
   const owner = {
     pid: process.pid,

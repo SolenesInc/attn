@@ -275,6 +275,42 @@ func TestManagerStampsEndpointIDOnIngest(t *testing.T) {
 	}
 }
 
+func TestManagerWorkspaceMetadataUpdatePreservesLayout(t *testing.T) {
+	endpointStore := store.New()
+	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
+	if err != nil {
+		t.Fatalf("AddEndpoint() error = %v", err)
+	}
+
+	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
+	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{ID: "ws-1", Directory: "/srv/repo"}); !changed {
+		t.Fatal("upsertRemoteWorkspace() reported no change")
+	}
+	if changed := manager.upsertRemoteWorkspaceLayout(record.ID, protocol.WorkspaceLayout{
+		WorkspaceID:  "ws-1",
+		ActivePaneID: "pane-session",
+		LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
+	}); !changed {
+		t.Fatal("upsertRemoteWorkspaceLayout() reported no change")
+	}
+	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{
+		ID:        "ws-1",
+		Title:     "Updated title",
+		Directory: "/srv/repo",
+		Status:    protocol.WorkspaceStatusWorking,
+	}); !changed {
+		t.Fatal("upsertRemoteWorkspace() metadata update reported no change")
+	}
+
+	got := manager.RemoteWorkspace("ws-1")
+	if got == nil || got.Layout == nil || got.Layout.ActivePaneID != "pane-session" {
+		t.Fatalf("RemoteWorkspace(ws-1) = %+v, want preserved layout", got)
+	}
+	if got.Title != "Updated title" || got.Status != protocol.WorkspaceStatusWorking {
+		t.Fatalf("RemoteWorkspace(ws-1) metadata = (%q, %q), want updated", got.Title, got.Status)
+	}
+}
+
 func TestManagerIgnoresLayoutUpdatesForRemovedRemoteWorkspaces(t *testing.T) {
 	endpointStore := store.New()
 	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")

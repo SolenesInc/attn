@@ -15,6 +15,7 @@ import {
 } from './harnessProfile.mjs';
 import { formatResultTable, selectFailedScenarios } from './matrixDigest.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
+import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
 // Must run before any import that reads ATTN_HARNESS_PROFILE at module load.
 // An unset ATTN_PROFILE falls back to dev, never to prod.
@@ -118,6 +119,11 @@ const signalExitCode = {
 };
 let activeChild = null;
 let interruptHandled = false;
+let releaseMatrixLock = null;
+
+process.once('exit', () => {
+  releaseMatrixLock?.();
+});
 
 function terminateActiveChild(signal) {
   if (!activeChild || activeChild.killed) {
@@ -262,10 +268,21 @@ async function main() {
     { appPath, wsUrl },
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
   );
+  const matrixLockPath = packagedAppScenarioLockPath();
+  const matrixRunId = `serial-matrix-${process.pid}-${Date.now()}`;
+  releaseMatrixLock = acquireScenarioLock({
+    scenarioId: 'SERIAL-MATRIX',
+    tier: 'matrix',
+    runId: matrixRunId,
+    runDir: harnessArtifactsRoot(),
+    appPath,
+  }, matrixLockPath);
+  process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH = `${matrixLockPath}.children-${process.pid}`;
   console.log(`Matrix target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
   reportRealAgentAllowances(scenarios);
 
-  if (isProductionHarnessTarget({ appPath, wsUrl, profile })) {
+  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, profile });
+  if (productionTarget) {
     console.log('[fresh-world] skipped (production target)');
   } else if (noFreshWorld) {
     console.log('[fresh-world] skipped (--no-fresh-world)');
@@ -293,6 +310,9 @@ async function main() {
     results.push(result);
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
     console.log(`--- ${scenario.id}: ${status} (${result.durationMs}ms) ---`);
+    if (scenario.freshWorldAfter && !productionTarget && !noFreshWorld) {
+      await ensureFreshWorld({ profile, appPath });
+    }
     if (failFast && result.code !== 0) {
       break;
     }
@@ -341,6 +361,8 @@ async function main() {
     summaryPath: '',
     durationMs: Date.now() - matrixStartedAt,
   });
+  releaseMatrixLock();
+  releaseMatrixLock = null;
   if (failed.length > 0) {
     process.exitCode = 1;
   }

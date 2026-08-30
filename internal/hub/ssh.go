@@ -32,21 +32,34 @@ func remoteBinaryName(profile string) string {
 }
 
 func remoteShellEnvScript(profile string) string {
-	assignments := make([]string, 0, 5)
+	var assignments []string
 	if p := strings.TrimSpace(profile); p != "" {
 		assignments = append(assignments, "export ATTN_PROFILE="+shellQuote(p))
 	}
-	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_ATTN_BIN")); value != "" {
-		assignments = append(assignments, "export ATTN_REMOTE_ATTN_BIN="+shellQuote(value))
+	for _, forwarded := range []struct {
+		local  string
+		remote string
+	}{
+		{"ATTN_REMOTE_ATTN_BIN", "ATTN_REMOTE_ATTN_BIN"},
+		{"ATTN_REMOTE_DATA_DIR", "ATTN_DATA_DIR"},
+		{"ATTN_REMOTE_SOCKET_PATH", "ATTN_SOCKET_PATH"},
+		{"ATTN_REMOTE_WS_PORT", "ATTN_WS_PORT"},
+		{"ATTN_REMOTE_DB_PATH", "ATTN_DB_PATH"},
+		{"ATTN_REMOTE_HEADLESS_TASKS", "ATTN_HEADLESS_TASKS"},
+		{"ATTN_REMOTE_AGENT_TRIPWIRE", "ATTN_AGENT_TRIPWIRE"},
+		{"ATTN_REMOTE_AGENT_TRIPWIRE_LEDGER", "ATTN_AGENT_TRIPWIRE_LEDGER"},
+		{"ATTN_REMOTE_AGENT_TRIPWIRE_SCENARIO", "ATTN_AGENT_TRIPWIRE_SCENARIO"},
+		{"ATTN_REMOTE_CLAUDE_EXECUTABLE", "ATTN_CLAUDE_EXECUTABLE"},
+		{"ATTN_REMOTE_CODEX_EXECUTABLE", "ATTN_CODEX_EXECUTABLE"},
+		{"ATTN_REMOTE_COPILOT_EXECUTABLE", "ATTN_COPILOT_EXECUTABLE"},
+		{"ATTN_REMOTE_PI_EXECUTABLE", "ATTN_PI_EXECUTABLE"},
+	} {
+		if value := strings.TrimSpace(os.Getenv(forwarded.local)); value != "" {
+			assignments = append(assignments, "export "+forwarded.remote+"="+shellQuote(value))
+		}
 	}
-	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_SOCKET_PATH")); value != "" {
-		assignments = append(assignments, "export ATTN_SOCKET_PATH="+shellQuote(value))
-	}
-	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_WS_PORT")); value != "" {
-		assignments = append(assignments, "export ATTN_WS_PORT="+shellQuote(value))
-	}
-	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_DB_PATH")); value != "" {
-		assignments = append(assignments, "export ATTN_DB_PATH="+shellQuote(value))
+	if value := strings.TrimSpace(os.Getenv("ATTN_REMOTE_PATH_PREFIX")); value != "" {
+		assignments = append(assignments, "export PATH="+shellQuote(value)+`:"$PATH"`)
 	}
 	// Deliberately not an ATTN_REMOTE_ name: one export governs both ends, "0"
 	// included, which disables the protocol on the remote as it does locally.

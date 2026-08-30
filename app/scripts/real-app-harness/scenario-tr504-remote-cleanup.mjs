@@ -27,10 +27,17 @@ import {
   listRemoteProcessesByHarnessRoot,
   removeStaleHarnessEndpoints,
   removeStaleHarnessScenarioSessions,
-  runSSH,
   waitForEndpointConnected,
   waitForRemoteProcessesByHarnessRoot,
 } from './scenarioRemote.mjs';
+import {
+  armRemoteAgentTripwire,
+  buildRemoteAgentTripwire,
+  collectRemoteAgentTripwire,
+  REMOTE_MOCK_AGENT_COMMAND,
+  verifyRemoteDaemonTripwire,
+  writeRemoteMockAgentFixture,
+} from './remoteAgentTripwire.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -82,14 +89,17 @@ async function main() {
     console.log(`Additional options:
   --ssh-target <target>          SSH target for the remote endpoint (default: attn-remote@orb — the provisioned OrbStack VM)
   --remote-directory <path>      Remote cwd for the spawned session (default: unique harness workdir)
-  --remote-agent <agent>         Agent for the remote session (default: codex)
+  --remote-agent <agent>         Agent vocabulary for the mock session (default: codex)
 `);
     return;
+  }
+  if (options.remoteAgent !== 'codex') {
+    throw new Error(`--remote-agent must be codex for the remote mock (got ${JSON.stringify(options.remoteAgent)})`);
   }
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-504',
-    tier: 'tier3-remote-real-agent',
+    tier: 'tier3-remote-mock-agent',
     prefix: 'scenario-tr504-remote-cleanup',
     metadata: {
       sshTarget: options.sshTarget,
@@ -102,10 +112,16 @@ async function main() {
   const remoteHarnessBase = path.posix.join(remoteHome, '.attn', 'harness');
   const remoteDirectory = options.remoteDirectory || path.posix.join(remoteHome, '.attn', 'harness', runner.runId, 'workspace');
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
+  const remoteTripwire = buildRemoteAgentTripwire({
+    remoteHome,
+    remotePaths,
+    scenarioId: runner.scenarioId,
+  });
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
     appPath: options.appPath,
     launchEnv: {
+      ...remoteTripwire.launchEnv,
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
       ATTN_REMOTE_SOCKET_PATH: remotePaths.remoteHarnessSocket,
       ATTN_REMOTE_DB_PATH: remotePaths.remoteHarnessDB,
@@ -125,6 +141,8 @@ async function main() {
   let cleanedProcessSnapshot = [];
   let postEndpointRemovalProcessSnapshot = [];
   let endpointRemoved = false;
+  let remoteTripwireReceipt = null;
+  let remoteTripwireLedger = null;
   let cleanupStarted = false;
 
   const runFinalCleanup = async () => {
@@ -164,14 +182,28 @@ async function main() {
       });
     });
 
+    await runner.step('arm_remote_agent_tripwire', async () => {
+      await armRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner });
+    });
+
     await runner.step('launch_app_and_connect_daemon', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await launchFreshAppAndConnect(client, observer, {
+        agentExecutables: { [options.remoteAgent]: REMOTE_MOCK_AGENT_COMMAND },
+      });
       await removeStaleHarnessEndpoints(observer, 20_000);
       await removeStaleHarnessScenarioSessions(observer, 30_000);
     });
 
     await runner.step('prepare_remote_workspace', async () => {
-      await runSSH(options.sshTarget, `mkdir -p '${remoteDirectory.replace(/'/g, `'\\''`)}'`, 30_000);
+      await writeRemoteMockAgentFixture({
+        target: options.sshTarget,
+        cwd: remoteDirectory,
+        config: {
+          name: 'remote cleanup mock',
+          turns: [],
+          defaultActions: [],
+        },
+      });
       const initialProcesses = await listRemoteProcessesByHarnessRoot(options.sshTarget, remotePaths.remoteHarnessRoot, 30_000);
       runner.writeJson('00-initial-processes.json', initialProcesses);
       runner.assert(initialProcesses.length === 0, 'remote harness root starts without leaked descendant processes', {
@@ -187,6 +219,10 @@ async function main() {
       runner.writeJson('endpoint.json', connected);
       return connected;
     });
+
+    remoteTripwireReceipt = await runner.step('verify_remote_daemon_tripwire', async () => (
+      verifyRemoteDaemonTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
 
     sessionId = await runner.step('create_remote_session', async () => {
       const resultSessionId = await createSessionAndWaitForInitialPane({
@@ -278,6 +314,10 @@ async function main() {
       runner.writeJson('03-cleaned-processes.json', cleanedProcessSnapshot);
     });
 
+    remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
+      collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
+
     await runner.step('remove_endpoint_and_verify_harness_root_cleanup', async () => {
       observer.removeEndpoint(endpoint.id);
       await observer.waitFor(() => !observer.getEndpoint(endpoint.id), `remove endpoint ${endpoint.id}`, 20_000);
@@ -300,6 +340,10 @@ async function main() {
       sshTarget: options.sshTarget,
       remoteDirectory,
       remoteAgent: options.remoteAgent,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
       activeProcessCount: activeProcessSnapshot.length,
       shellClosedProcessCount: shellClosedProcessSnapshot.length,
       postCloseProcessCount: postCloseProcessSnapshot.length,
@@ -312,6 +356,12 @@ async function main() {
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
+    remoteTripwireLedger ??= await collectRemoteAgentTripwire({
+      target: options.sshTarget,
+      fixture: remoteTripwire,
+      runner,
+      assertClean: false,
+    }).catch(() => null);
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId).catch(() => {});
     }
@@ -333,6 +383,10 @@ async function main() {
       postCloseProcessCount: postCloseProcessSnapshot.length,
       cleanedProcessCount: cleanedProcessSnapshot.length,
       postEndpointRemovalProcessCount: postEndpointRemovalProcessSnapshot.length,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
     });
     console.error(summary.error);
     process.exitCode = 1;

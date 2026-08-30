@@ -65,6 +65,20 @@ describe('mock agent pinning', () => {
     ]);
   });
 
+  it('pins a PATH command when the same session launches on a remote host', async () => {
+    armTripwireEnv();
+    const client = fakeClient();
+    await launchFreshAppAndConnect(client, fakeObserver(), {
+      sweepStaleSessions: false,
+      agentExecutables: { codex: 'attn-harness-mock-agent' },
+    });
+
+    expect(client.settingWrites()).toEqual([
+      { key: 'claude_executable', value: MOCK_AGENT_EXECUTABLE },
+      { key: 'codex_executable', value: 'attn-harness-mock-agent' },
+    ]);
+  });
+
   it('writes nothing for an agent already pinned at the mock', async () => {
     armTripwireEnv();
     const client = fakeClient();

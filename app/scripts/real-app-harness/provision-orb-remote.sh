@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Provision (or re-provision) the local OrbStack VM that remote-endpoint
 # harness scenarios target as attn-remote@orb. Idempotent; safe to re-run.
-# One manual step remains after first provisioning: `claude /login` inside
-# the VM (macOS keeps Claude credentials in the Keychain, so they cannot be
-# copied in).
 set -euo pipefail
 
 VM_NAME="${ATTN_ORB_REMOTE_NAME:-attn-remote}"
 SSH_TARGET="${VM_NAME}@orb"
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_FIXTURE_ROOT=".attn/real-app-harness/agent-fixtures"
 
 echo "==> Checking for orbctl"
 if ! command -v orbctl >/dev/null 2>&1; then
@@ -42,9 +41,6 @@ echo "==> SSH is ready on ${SSH_TARGET}"
 echo "==> Installing base packages (git, nodejs, npm)"
 ssh -o BatchMode=yes "${SSH_TARGET}" 'sudo apt-get update -qq && sudo apt-get install -y -qq git nodejs npm'
 
-echo "==> Installing codex and claude CLIs"
-ssh -o BatchMode=yes "${SSH_TARGET}" 'sudo npm install -g @openai/codex @anthropic-ai/claude-code'
-
 # `attn app apply` bundles with bun and typechecks with the TypeScript it
 # installs itself, so a remote that cannot run bun cannot install an app at all
 # — apps are a daemon surface, and the daemon is supported on Linux.
@@ -55,14 +51,30 @@ ssh -o BatchMode=yes "${SSH_TARGET}" '
   curl -fsSL https://bun.sh/install | bash
 '
 
-echo "==> Verifying required tools are on PATH in the VM"
+echo "==> Installing the no-model agent fixture"
+ssh -o BatchMode=yes "${SSH_TARGET}" "mkdir -p '${REMOTE_FIXTURE_ROOT}/bin'"
+scp -q -o BatchMode=yes \
+  "${HARNESS_DIR}/mockAgent.mjs" \
+  "${HARNESS_DIR}/remote-agent-tripwire-shim.sh" \
+  "${SSH_TARGET}:${REMOTE_FIXTURE_ROOT}/"
+ssh -o BatchMode=yes "${SSH_TARGET}" "
+  install -m 0755 '${REMOTE_FIXTURE_ROOT}/mockAgent.mjs' '${REMOTE_FIXTURE_ROOT}/bin/attn-harness-mock-agent'
+  for name in claude codex copilot pi; do
+    install -m 0755 '${REMOTE_FIXTURE_ROOT}/remote-agent-tripwire-shim.sh' \"${REMOTE_FIXTURE_ROOT}/bin/\${name}\"
+  done
+"
+
+echo "==> Verifying required tools and fixtures in the VM"
 missing_tools="$(ssh -o BatchMode=yes "${SSH_TARGET}" '
   missing=""
   # bun installs into ~/.bun/bin, which a non-interactive shell does not have
   # on PATH until .bashrc runs — check it where it lands.
   PATH="$HOME/.bun/bin:$PATH"
-  for tool in git python3 ss codex claude bun; do
+  for tool in git node python3 ss bun; do
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+  done
+  for fixture in attn-harness-mock-agent claude codex copilot pi; do
+    test -x "$HOME/.attn/real-app-harness/agent-fixtures/bin/$fixture" || missing="$missing fixture:$fixture"
   done
   echo "$missing"
 ')"
@@ -70,42 +82,10 @@ if [[ -n "${missing_tools// /}" ]]; then
   echo "Missing required tools in VM:${missing_tools}" >&2
   exit 1
 fi
-echo "==> All required tools present: git python3 ss codex claude bun"
-
-echo "==> Checking codex auth"
-codex_auth_present=0
-if ssh -o BatchMode=yes "${SSH_TARGET}" 'test -f ~/.codex/auth.json' 2>/dev/null; then
-  codex_auth_present=1
-  echo "==> Codex auth already present in VM"
-elif [[ -f "${HOME}/.codex/auth.json" ]]; then
-  echo "==> Copying host codex auth into VM"
-  ssh -o BatchMode=yes "${SSH_TARGET}" 'mkdir -p ~/.codex'
-  ssh -o BatchMode=yes "${SSH_TARGET}" 'cat > ~/.codex/auth.json' < "${HOME}/.codex/auth.json"
-  ssh -o BatchMode=yes "${SSH_TARGET}" 'chmod 600 ~/.codex/auth.json'
-  codex_auth_present=1
-else
-  echo "WARNING: no host ~/.codex/auth.json found; log codex in inside the VM (ssh -t ${SSH_TARGET} codex login)" >&2
-fi
-
-echo "==> Checking claude auth"
-claude_auth_present=0
-if ssh -o BatchMode=yes "${SSH_TARGET}" 'test -f ~/.claude/.credentials.json' 2>/dev/null; then
-  claude_auth_present=1
-  echo "==> Claude auth already present in VM"
-else
-  echo "Claude needs a one-time interactive login inside the VM: ssh -t ${SSH_TARGET} claude /login"
-fi
+echo "==> All required tools and no-model fixtures are present"
 
 echo "==> Provisioning summary"
 echo "    VM name:     ${VM_NAME}"
 echo "    SSH target:  ${SSH_TARGET}"
-if [[ "${codex_auth_present}" -eq 1 ]]; then
-  echo "    codex auth:  present"
-else
-  echo "    codex auth:  MISSING"
-fi
-if [[ "${claude_auth_present}" -eq 1 ]]; then
-  echo "    claude auth: present"
-else
-  echo "    claude auth: MISSING (run: ssh -t ${SSH_TARGET} claude /login)"
-fi
+echo "    agent fixture: ~/${REMOTE_FIXTURE_ROOT}/bin"
+echo "    model auth:    not required"

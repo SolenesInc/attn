@@ -128,6 +128,14 @@ describe('scenarioCatalog soakOnly handling', () => {
   });
 });
 
+describe('scenarioCatalog daemon isolation', () => {
+  it('stops the daemon after scenarios whose remote routing changes per run', () => {
+    for (const id of ['tr205-probe-codex', 'tr205-probe-claude', 'tr502', 'tr504']) {
+      expect(resolveScenario(id).freshWorldAfter, id).toBe(true);
+    }
+  });
+});
+
 // A hand-rolled main() that never builds a runner arms no tripwire at all and
 // is out of this net; every createScenarioRunner caller is in it.
 describe('every scenario built on the scenario runner', () => {

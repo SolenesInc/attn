@@ -171,14 +171,15 @@ const pendingSettingRestores = [];
 
 // The tripwire pins the mock in the environment the daemon inherits; the app
 // sends this setting with every spawn, so both halves have to name it.
-async function pinMockAgentExecutables(client, observer) {
+async function pinMockAgentExecutables(client, observer, executableOverrides = {}) {
   for (const agent of mockPinnedAgents()) {
     const key = `${agent}_executable`;
+    const executable = executableOverrides[agent] || MOCK_AGENT_EXECUTABLE;
     const previous = observer.getSetting(key) || '';
-    if (previous === MOCK_AGENT_EXECUTABLE) {
+    if (previous === executable) {
       continue;
     }
-    await client.request('set_setting', { key, value: MOCK_AGENT_EXECUTABLE });
+    await client.request('set_setting', { key, value: executable });
     console.log(`[harness] pinned ${key} at the mock agent (was ${previous ? previous : 'unconfigured'})`);
     if (!pendingSettingRestores.some((restore) => restore.key === key)) {
       pendingSettingRestores.push({ key, value: previous });
@@ -257,7 +258,10 @@ async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), 
   }
 }
 
-export async function launchFreshAppAndConnect(client, observer, { sweepStaleSessions = true } = {}) {
+export async function launchFreshAppAndConnect(client, observer, {
+  sweepStaleSessions = true,
+  agentExecutables = {},
+} = {}) {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
@@ -266,17 +270,17 @@ export async function launchFreshAppAndConnect(client, observer, { sweepStaleSes
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();
-  await pinMockAgentExecutables(client, observer);
+  await pinMockAgentExecutables(client, observer, agentExecutables);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
   }
 }
 
-export async function relaunchAppAndConnect(client, observer) {
+export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
   await client.quitApp();
   // Relaunch scenarios (e.g. tr205) depend on sessions surviving the
   // relaunch, so the stale-session sweep must not run here.
-  await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
+  await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false, agentExecutables });
 }
 
 export async function createSessionAndWaitForInitialPane({

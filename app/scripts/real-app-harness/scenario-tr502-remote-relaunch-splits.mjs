@@ -35,6 +35,14 @@ import {
   removeStaleHarnessEndpoints,
   waitForEndpointConnected,
 } from './scenarioRemote.mjs';
+import {
+  armRemoteAgentTripwire,
+  buildRemoteAgentTripwire,
+  collectRemoteAgentTripwire,
+  REMOTE_MOCK_AGENT_COMMAND,
+  verifyRemoteDaemonTripwire,
+  writeRemoteMockAgentFixture,
+} from './remoteAgentTripwire.mjs';
 
 // One character at a time with a pause: twelve back-to-back single-byte inputs
 // (~1ms apart) make remote zsh+Starship mis-echo a rotated/mangled token.
@@ -90,33 +98,41 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-tr502-remote-relaunch-splits.mjs');
     console.log(`Additional options:
   --ssh-target <target>          SSH target for the remote endpoint (default: attn-remote@orb — the provisioned OrbStack VM)
-  --remote-directory <path>      Remote cwd for the spawned session (default: remote $HOME)
-  --remote-agent <agent>         Agent for the remote session (default: codex)
+  --remote-directory <path>      Remote cwd for the spawned session (default: unique harness workdir)
+  --remote-agent <agent>         Agent vocabulary for the mock session (default: codex)
   --echo-threshold-ms <ms>       Max acceptable shell echo latency per typed token (default: 2500)
 `);
     return;
   }
+  if (options.remoteAgent !== 'codex') {
+    throw new Error(`--remote-agent must be codex for the remote mock (got ${JSON.stringify(options.remoteAgent)})`);
+  }
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TR-502',
-    tier: 'tier3-remote-real-agent',
+    tier: 'tier3-remote-mock-agent',
     prefix: 'scenario-tr502-remote-relaunch-splits',
     metadata: {
       sshTarget: options.sshTarget,
       agent: options.remoteAgent,
       focus: 'remote relaunch split persistence',
-      note: 'visible agent-content proof is still partial in this first automation slice',
     },
   });
 
   const remoteHome = await getRemoteHome(options.sshTarget);
   const remoteHarnessBase = `${remoteHome}/.attn/harness`;
-  const remoteDirectory = options.remoteDirectory || remoteHome;
   const remotePaths = buildRemoteHarnessPaths(remoteHome, runner.runId);
+  const remoteDirectory = options.remoteDirectory || `${remotePaths.remoteHarnessRoot}/workspace`;
+  const remoteTripwire = buildRemoteAgentTripwire({
+    remoteHome,
+    remotePaths,
+    scenarioId: runner.scenarioId,
+  });
   const remoteHarnessWSPort = String(chooseRemoteWSPort());
   const client = new UiAutomationClient({
     appPath: options.appPath,
     launchEnv: {
+      ...remoteTripwire.launchEnv,
       ATTN_REMOTE_ATTN_BIN: remotePaths.remoteHarnessBinary,
       ATTN_REMOTE_SOCKET_PATH: remotePaths.remoteHarnessSocket,
       ATTN_REMOTE_DB_PATH: remotePaths.remoteHarnessDB,
@@ -131,6 +147,8 @@ async function main() {
   let initialShellPaneId = null;
   let postRelaunchMainSplitPaneId = null;
   let postRelaunchShellSplitPaneId = null;
+  let remoteTripwireReceipt = null;
+  let remoteTripwireLedger = null;
   const timings = {
     initialShellEchoMs: null,
     postRelaunchMainSplitEchoMs: null,
@@ -197,8 +215,23 @@ async function main() {
       });
     });
 
+    await runner.step('prepare_remote_mock_and_tripwire', async () => {
+      await armRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner });
+      await writeRemoteMockAgentFixture({
+        target: options.sshTarget,
+        cwd: remoteDirectory,
+        config: {
+          name: 'remote relaunch mock',
+          turns: [],
+          defaultActions: [],
+        },
+      });
+    });
+
     await runner.step('launch_app_and_connect_daemon', async () => {
-      await launchFreshAppAndConnect(client, observer);
+      await launchFreshAppAndConnect(client, observer, {
+        agentExecutables: { [options.remoteAgent]: REMOTE_MOCK_AGENT_COMMAND },
+      });
       await removeStaleHarnessEndpoints(observer, 20_000);
     });
 
@@ -209,6 +242,10 @@ async function main() {
       runner.writeJson('endpoint.json', connected);
       return connected;
     });
+
+    remoteTripwireReceipt = await runner.step('verify_remote_daemon_tripwire', async () => (
+      verifyRemoteDaemonTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
 
     sessionId = await runner.step('create_remote_session', async () => {
       const resultSessionId = await createSessionAndWaitForInitialPane({
@@ -284,6 +321,7 @@ async function main() {
       if (!initialPane?.paneId) {
         throw new Error('Initial remote split pane missing');
       }
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -346,7 +384,11 @@ async function main() {
     });
 
     await runner.step('relaunch_and_restore_session', async () => {
-      await relaunchAppAndConnect(client, observer);
+      await relaunchAppAndConnect(client, observer, {
+        agentExecutables: { [options.remoteAgent]: REMOTE_MOCK_AGENT_COMMAND },
+      });
+      await waitForEndpointConnected(observer, endpoint.name, 45_000);
+      await client.request('select_session', { sessionId });
       await waitForSessionWorkspace(
         client,
         sessionId,
@@ -357,9 +399,8 @@ async function main() {
         `frontend workspace after relaunch for ${sessionId}`,
         45_000,
       );
-      await client.request('select_session', { sessionId });
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
-      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -382,6 +423,8 @@ async function main() {
         minBBoxHeightRatio: 0.12,
         description: 'remote initial pane native paint coverage after relaunch',
       });
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
+      await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       await waitForPaneText(
         client,
         sessionId,
@@ -402,6 +445,7 @@ async function main() {
     });
 
     postRelaunchMainSplitPaneId = await runner.step('split_from_main_after_relaunch', async () => {
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
@@ -416,6 +460,7 @@ async function main() {
         'new remote shell after relaunch split from initial pane',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         minNonEmptyLines: 2,
         minDenseLines: 0,
@@ -484,6 +529,7 @@ async function main() {
     });
 
     postRelaunchShellSplitPaneId = await runner.step('split_from_existing_shell_after_relaunch', async () => {
+      await client.request('focus_pane', { sessionId, paneId: initialShellPaneId });
       const workspaceBefore = await client.request('get_workspace', { sessionId });
       const existingPaneIds = new Set((workspaceBefore.panes || []).map((pane) => pane.paneId));
       await client.request('split_pane', {
@@ -557,6 +603,9 @@ async function main() {
       await captureSessionArtifacts(client, runner.runDir, '04-after-shell-split', sessionId);
     });
 
+    remoteTripwireLedger = await runner.step('verify_remote_agent_ledger', async () => (
+      collectRemoteAgentTripwire({ target: options.sshTarget, fixture: remoteTripwire, runner })
+    ));
     const finalWorkspace = await client.request('get_workspace', { sessionId });
     const summary = await runner.finishSuccess({
       sessionId,
@@ -564,6 +613,10 @@ async function main() {
       sshTarget: options.sshTarget,
       remoteDirectory,
       remoteAgent: options.remoteAgent,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
       panes: {
         initialShellPaneId,
         postRelaunchMainSplitPaneId,
@@ -593,6 +646,12 @@ async function main() {
     });
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
+    remoteTripwireLedger ??= await collectRemoteAgentTripwire({
+      target: options.sshTarget,
+      fixture: remoteTripwire,
+      runner,
+      assertClean: false,
+    }).catch(() => null);
     if (sessionId) {
       await captureSessionArtifacts(client, runner.runDir, 'failure', sessionId);
     }
@@ -614,6 +673,10 @@ async function main() {
       },
       timings,
       shellTypingReadiness,
+      remoteAgentTripwire: {
+        receipt: remoteTripwireReceipt,
+        ledger: remoteTripwireLedger,
+      },
     });
     console.error(summary.error);
     process.exitCode = 1;

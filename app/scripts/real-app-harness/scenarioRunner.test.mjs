@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { acquireScenarioLock, createScenarioRunner } from './scenarioRunner.mjs';
 
 let tmpDir;
 
@@ -26,6 +26,35 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+
+describe('packaged app scenario lock', () => {
+  it('lets a matrix reserve the shared lock while its child uses a private lock', () => {
+    const matrixLock = path.join(tmpDir, 'matrix.lock');
+    const childLock = path.join(tmpDir, 'child.lock');
+    const releaseMatrix = acquireScenarioLock({
+      scenarioId: 'SERIAL-MATRIX',
+      tier: 'matrix',
+      runId: 'matrix-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, matrixLock);
+    const releaseChild = acquireScenarioLock({
+      scenarioId: 'TR-205',
+      tier: 'test',
+      runId: 'child-run',
+      runDir: tmpDir,
+      appPath: '/tmp/test-attn.app',
+    }, childLock);
+
+    expect(JSON.parse(fs.readFileSync(path.join(matrixLock, 'owner.json'), 'utf8')).scenarioId).toBe('SERIAL-MATRIX');
+    expect(JSON.parse(fs.readFileSync(path.join(childLock, 'owner.json'), 'utf8')).scenarioId).toBe('TR-205');
+
+    releaseChild();
+    releaseMatrix();
+    expect(fs.existsSync(childLock)).toBe(false);
+    expect(fs.existsSync(matrixLock)).toBe(false);
+  });
+});
 
 function runnerWithTripwire({
   scenarioId = 'tripwire-contract',
