@@ -65,7 +65,7 @@ class MockGitHubServer {
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.server.listen(9999, '127.0.0.1', () => {
+      this.server.listen(0, '127.0.0.1', () => {
         const addr = this.server.address() as net.AddressInfo;
         this.url = `http://127.0.0.1:${addr.port}`;
         console.log(`Mock GitHub server started at ${this.url}`);
@@ -172,6 +172,8 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       // shell's profile: mismatched routing is refused (ValidateProfileRouting).
       ATTN_PROFILE: '',
       ATTN_DATA_DIR: tempDir,
+      ATTN_TOOL_HOME: tempDir,
+      CODEX_HOME: path.join(tempDir, '.codex'),
       ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
       ATTN_WS_PORT: TEST_DAEMON_PORT,
       ATTN_SOCKET_PATH: socketPath,
@@ -261,6 +263,8 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
         ATTN_PROFILE: '',
         ATTN_DATA_DIR: tempDir,
+        ATTN_TOOL_HOME: tempDir,
+        CODEX_HOME: path.join(tempDir, '.codex'),
         ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
         ATTN_WS_PORT: TEST_DAEMON_PORT,
         ATTN_SOCKET_PATH: socketPath,
