@@ -1,0 +1,7 @@
+kind: fixed
+area: daemon
+change: >
+  Daemon writes no longer fail with "database is locked" when another write
+  is in flight. A scheduled automation's catch-up claim after a daemon restart
+  used to hit this every tick and never run; write transactions now take the
+  SQLite write lock up front and wait their turn.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1123,13 +1124,26 @@ func applyMigration99(tx *sql.Tx) error {
 	return err
 }
 
+// A deferred transaction that reads before it writes cannot wait for another
+// pool connection's write lock: SQLite reports BUSY at once to avoid a deadlock.
+func fileDSN(dbPath string) string {
+	if dbPath == ":memory:" {
+		return dbPath
+	}
+	u := &url.URL{Scheme: "file", Path: dbPath}
+	query := u.Query()
+	query.Set("_txlock", "immediate")
+	u.RawQuery = query.Encode()
+	return u.String()
+}
+
 func OpenDB(dbPath string) (*sql.DB, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", fileDSN(dbPath))
 	if err != nil {
 		return nil, err
 	}
