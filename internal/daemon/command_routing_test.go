@@ -123,11 +123,6 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdSetTicketStatus:     "arrives from the agent process over the unix socket",
 	protocol.CmdOpenSentFiles:       "arrives from the agent process over the unix socket",
 
-	// The hook and `attn pr record` both run on the machine hosting the session, so
-	// they reach its owner; a hub asked about a session it does not own says so.
-	protocol.CmdPullRequestCreated: "arrives from the agent process over the unix socket",
-	protocol.CmdPullRequestForget:  "arrives from the agent process over the unix socket",
-
 	protocol.CmdUnregister: "handleUnregisterWS forwards to the endpoint itself",
 
 	protocol.CmdTicketAttach:   "the ticket board is the hub's own store",

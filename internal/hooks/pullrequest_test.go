@@ -25,8 +25,6 @@ func TestPullRequestCreated(t *testing.T) {
 			want:         []string{"https://github.com/victorarias/attn/pull/71"},
 		},
 		{
-			// Codex 0.151.0 sends the output as a plain string, trailing newline kept,
-			// under the same tool name Claude uses. Captured in the spike on s-4dd1wk.
 			name:         "codex sends the tool output as a plain string",
 			toolName:     "Bash",
 			toolInput:    `{"command":"gh pr create --fill"}`,
@@ -41,8 +39,6 @@ func TestPullRequestCreated(t *testing.T) {
 			want:         nil,
 		},
 		{
-			// Not Codex's shape today, but a shell tool under another name costs
-			// nothing to accept and a missed pull request costs a wrong header.
 			name:         "an argv-form command under another shell tool name",
 			toolName:     "exec_command",
 			toolInput:    `{"cmd":["bash","-lc","gh pr create --title x --body y"]}`,
@@ -117,8 +113,6 @@ func TestPullRequestCreated(t *testing.T) {
 	}
 }
 
-// Verbatim Codex 0.151.0 captures. The command is `gh pr view` because the spike
-// sandbox had no network, so the create case is that envelope with the command swapped.
 func TestPullRequestCreatedAgainstCapturedCodexPayloads(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "codex-post-tool-use.jsonl"))
 	if err != nil {
@@ -145,7 +139,6 @@ func TestPullRequestCreatedAgainstCapturedCodexPayloads(t *testing.T) {
 			t.Errorf("`gh pr view` reported %v, want nothing", got)
 		}
 
-		// Same envelope, the command Codex would run to open one.
 		created := PullRequestCreated(payload.ToolName, json.RawMessage(`{"command":"gh pr create --fill"}`), payload.ToolResponse)
 		want := strings.Contains(string(payload.ToolResponse), "/pull/71")
 		if want && (len(created) != 1 || created[0] != "https://github.com/victorarias/attn/pull/71") {

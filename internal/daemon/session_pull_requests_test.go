@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -67,8 +68,6 @@ func newPRDaemonForTest(t *testing.T, sessionID string) *Daemon {
 	return d
 }
 
-// Registration broadcasts land on their own goroutine, so only this session's
-// state updates count here.
 func sessionUpdates(cap *broadcastCapture, sessionID string) []protocol.WebSocketEvent {
 	var out []protocol.WebSocketEvent
 	for _, event := range cap.snapshot() {
@@ -123,7 +122,6 @@ func TestPullRequestCreatedLandsOnTheSessionAndBroadcastsOnce(t *testing.T) {
 		t.Fatalf("broadcast carried %+v, want the session with its pull request", events[0].Session.PullRequests)
 	}
 
-	// The hook and a manual `attn pr record` both firing is the normal case.
 	if resp := sendPRCommand(t, d, protocol.PullRequestCreatedMessage{
 		Cmd: protocol.CmdPullRequestCreated,
 		ID:  "s1",
@@ -184,8 +182,6 @@ func TestPullRequestCreatedNamesWhatItRejected(t *testing.T) {
 	}
 }
 
-// The hook fires once and never retries, so a host attn has no client for — an
-// enterprise one, or any host during the seconds before gh discovery lands — still counts.
 func TestPullRequestCreatedRecordsHostsAttnCannotPoll(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 
@@ -200,6 +196,51 @@ func TestPullRequestCreatedRecordsHostsAttnCannotPoll(t *testing.T) {
 	prs := sessionPullRequests(t, d, "s1")
 	if len(prs) != 1 || prs[0].Repository != "ghe.example.test/acme/widget" {
 		t.Fatalf("pull requests = %+v, want the enterprise one recorded", prs)
+	}
+}
+
+func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
+	endpoint, err := d.hubManager.AddEndpoint("remote", "remote.example.test", "")
+	if err != nil {
+		t.Fatalf("add endpoint: %v", err)
+	}
+	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
+
+	for _, msg := range []any{
+		protocol.PullRequestCreatedMessage{
+			Cmd: protocol.CmdPullRequestCreated, ID: "s-remote", URL: "https://github.com/victorarias/attn/pull/71",
+		},
+		protocol.PullRequestForgetMessage{
+			Cmd: protocol.CmdPullRequestForget, ID: "s-remote", URL: "https://github.com/victorarias/attn/pull/71",
+		},
+	} {
+		resp := sendPRCommand(t, d, msg)
+		if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "endpoint owning session s-remote") {
+			t.Fatalf("response = %+v, want it routed to the owning endpoint", resp)
+		}
+	}
+	if prs := sessionPullRequests(t, d, "s1"); len(prs) != 0 {
+		t.Fatalf("local pull requests = %+v, want the hub's own store untouched", prs)
+	}
+}
+
+func TestForwardedPullRequestCommandsLandOnTheOwner(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	client := &wsClient{send: make(chan outboundMessage, 16)}
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+
+	d.handleClientMessage(client, []byte(
+		`{"cmd":"pull_request_created","id":"s1","url":"https://github.com/victorarias/attn/pull/71"}`))
+	if prs := sessionPullRequests(t, d, "s1"); len(prs) != 1 {
+		t.Fatalf("pull requests = %+v, want the forwarded report recorded", prs)
+	}
+
+	d.handleClientMessage(client, []byte(
+		`{"cmd":"pull_request_forget","id":"s1","url":"https://github.com/victorarias/attn/pull/71"}`))
+	if prs := sessionPullRequests(t, d, "s1"); len(prs) != 0 {
+		t.Fatalf("pull requests = %+v, want the forwarded forget applied", prs)
 	}
 }
 

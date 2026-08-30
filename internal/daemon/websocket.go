@@ -1094,6 +1094,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage))
 	case protocol.CmdWakeTurn: // wire: wake_turn
 		d.handleWakeTurn(msg.(*protocol.WakeTurnMessage))
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		d.handlePullRequestCreatedWS(msg.(*protocol.PullRequestCreatedMessage))
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		d.handlePullRequestForgetWS(msg.(*protocol.PullRequestForgetMessage))
 	case protocol.CmdCancelCountdown: // wire: cancel_countdown
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge: // wire: trigger_nudge
@@ -1474,6 +1478,14 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		// the endpoint's next snapshot would put the row straight back.
 		if typed, ok := msg.(*protocol.SettleTurnMessage); ok {
 			return typed.SessionID
+		}
+	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+		if typed, ok := msg.(*protocol.PullRequestCreatedMessage); ok {
+			return typed.ID
+		}
+	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+		if typed, ok := msg.(*protocol.PullRequestForgetMessage); ok {
+			return typed.ID
 		}
 	case protocol.CmdCancelCountdown: // wire: cancel_countdown
 		if typed, ok := msg.(*protocol.CancelCountdownMessage); ok {

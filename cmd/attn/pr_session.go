@@ -31,8 +31,7 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 
-	// flag stops at the first positional, and `pr record <url> --session x` is how
-	// anyone would type it, so keep parsing past each one.
+	// flag stops at the first positional, so keep parsing past each one.
 	var positional []string
 	for rest := args; ; {
 		if err := fs.Parse(rest); err != nil {

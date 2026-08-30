@@ -30,8 +30,8 @@ type SessionPullRequestRecord struct {
 const sessionPullRequestColumns = `session_id, pr_id, repository, number, url, created_at, title, draft,
 	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at`
 
-// Reporting the same pull request twice is normal: a hook and a manual `attn pr
-// record` both fire. The second keeps the first row, and returns false to say so.
+// Reports false when the row was already there; a hook and a manual `attn pr
+// record` reporting the same pull request is normal.
 func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,8 +73,7 @@ func (s *Store) ListSessionPullRequests(sessionID string) []SessionPullRequestRe
 	return records
 }
 
-// One query for every session, so a broadcast decorating hundreds of sessions
-// costs the same as decorating one.
+// One query for every session, so decorating a whole broadcast costs one round trip.
 func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

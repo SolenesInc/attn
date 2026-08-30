@@ -2804,8 +2804,6 @@ func runHookToolUse() {
 		}
 	}
 
-	// Same again: an unknown host or a daemon that never heard of this session is
-	// the daemon's answer to give, and neither is the agent's problem.
 	for _, url := range hooks.PullRequestCreated(input.ToolName, input.ToolInput, input.ToolResponse) {
 		if err := c.RecordPullRequestCreated(sessionID, url); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not record pull request %s: %v\n", url, err)

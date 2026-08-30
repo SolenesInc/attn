@@ -18,8 +18,6 @@ func TestPRHelpNamesTheSessionCommands(t *testing.T) {
 	}
 }
 
-// The url comes first the way anyone would type it, and flag stops parsing there
-// unless the loop keeps going.
 func TestSessionPRArgsTakeTheUrlBeforeOrAfterTheFlags(t *testing.T) {
 	t.Setenv("ATTN_SESSION_ID", "")
 	url := "https://github.com/victorarias/attn/pull/71"

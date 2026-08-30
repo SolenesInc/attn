@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func newSessionPRStore(t *testing.T) *Store {
@@ -31,8 +33,6 @@ func recordPR(t *testing.T, s *Store, sessionID, prID string, number int, at tim
 	return recorded
 }
 
-// The app puts the newest open pull request on the pane header's line, so the
-// store's order is the answer to "which one".
 func TestSessionPullRequestsComeBackNewestFirst(t *testing.T) {
 	s := newSessionPRStore(t)
 	base := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
@@ -65,7 +65,6 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 	if recordPR(t, s, "s1", "github.com:victorarias/attn#1", 1, now.Add(time.Minute)) {
 		t.Fatal("second record of the same pull request reported a new row")
 	}
-	// Two sessions can each open the same pull request; the row is per session.
 	if !recordPR(t, s, "s2", "github.com:victorarias/attn#1", 1, now) {
 		t.Fatal("another session recording the same pull request reported nothing new")
 	}
@@ -80,4 +79,54 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 	if got := s.ListSessionPullRequests("s2"); len(got) != 1 {
 		t.Errorf("s2 = %+v, want its row untouched", got)
 	}
+}
+
+func TestEverySessionRemovalPathDropsItsPullRequests(t *testing.T) {
+	at := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		remove  func(*Store)
+		survive []string
+	}{
+		{name: "Remove", remove: func(s *Store) { s.Remove("s1") }, survive: []string{"s2"}},
+		{name: "ClearSessions", remove: func(s *Store) { s.ClearSessions() }},
+		{
+			name:   "RemoveSessionsInDirectory",
+			remove: func(s *Store) { s.RemoveSessionsInDirectory("/tmp/one") },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newSessionPRStore(t)
+			addPRSession(t, s, "s1", "/tmp/one")
+			addPRSession(t, s, "s2", "/tmp/two")
+			recordPR(t, s, "s1", "github.com:victorarias/attn#1", 1, at)
+			recordPR(t, s, "s2", "github.com:victorarias/attn#2", 2, at)
+
+			tc.remove(s)
+
+			if prs := s.ListSessionPullRequests("s1"); len(prs) != 0 {
+				t.Errorf("s1 pull requests after %s = %+v, want nothing left behind", tc.name, prs)
+			}
+			for _, id := range tc.survive {
+				if prs := s.ListSessionPullRequests(id); len(prs) != 1 {
+					t.Errorf("%s pull requests after %s = %+v, want its own untouched", id, tc.name, prs)
+				}
+			}
+		})
+	}
+}
+
+func addPRSession(t *testing.T, s *Store, id, directory string) {
+	t.Helper()
+	s.Add(&protocol.Session{
+		ID:         id,
+		Label:      id,
+		Directory:  directory,
+		State:      protocol.SessionStateIdle,
+		StateSince: protocol.TimestampNow().String(),
+		LastSeen:   protocol.TimestampNow().String(),
+	})
 }

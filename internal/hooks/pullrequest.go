@@ -10,8 +10,7 @@ var ghPRCreatePattern = regexp.MustCompile(`\bgh\s+pr\s+create\b`)
 
 var pullRequestURLPattern = regexp.MustCompile(`https://[A-Za-z0-9][A-Za-z0-9.-]*/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[0-9]+`)
 
-// PullRequestCreated returns the URLs a `gh pr create` printed, in order. The
-// daemon owns validating and deduping them; the command match is the whole filter.
+// PullRequestCreated returns the URLs a `gh pr create` printed, in order.
 func PullRequestCreated(toolName string, toolInput, toolResponse json.RawMessage) []string {
 	if !isShellTool(toolName) {
 		return nil
@@ -34,8 +33,6 @@ func PullRequestCreated(toolName string, toolInput, toolResponse json.RawMessage
 	return urls
 }
 
-// Claude Code and Codex both call the shell tool Bash; the rest are what a
-// plugged harness might name it, and cost nothing to accept.
 func isShellTool(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	return name == "bash" || name == "shell" || name == "exec_command" || strings.HasSuffix(name, ".exec_command")
