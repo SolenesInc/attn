@@ -179,12 +179,12 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   sessions: TSession[],
   options: WorkspaceViewModelOptions,
 ): WorkspaceWithSessions<TSession> {
-  const firstSessionId = sessions[0]?.id ?? null;
+  const children = workspaceChildren(workspace, sessions);
+  const firstSessionId = children.find((child) => child.kind === 'session')?.session.id ?? null;
   const requestedFocus = options.focusedSessionIdByWorkspace?.[workspace.id] || null;
   const focusedSessionId = requestedFocus && sessions.some((session) => session.id === requestedFocus)
     ? requestedFocus
     : firstSessionId;
-  const children = workspaceChildren(workspace, sessions);
 
   return {
     id: workspace.id,
