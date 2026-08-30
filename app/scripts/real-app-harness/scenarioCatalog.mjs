@@ -120,15 +120,6 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'ordinary-delegation-ticket',
-    runnerId: 'ORDINARY-DELEGATION-TICKET',
-    // Asserts a ticket binding the garden era retired, so it cannot pass at all.
-    allowRealAgents: true,
-    label: 'Ordinary delegation: a non-chief session delegates, and the bound ticket routes to worker, delegator, and chief',
-    command: ['pnpm', 'run', 'real-app:scenario-ordinary-delegation-ticket'],
-    timeoutMs: 360_000,
-  },
-  {
     id: 'nudge-trigger',
     runnerId: 'NUDGE-TRIGGER',
     label: 'Ticket nudge: paused gate holds, then the real "deliver now" button doorbells the agent',

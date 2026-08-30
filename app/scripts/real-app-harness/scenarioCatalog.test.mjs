@@ -41,10 +41,6 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(allowRealAgentsForRunner('NISSE-MARKDOWN-STREAM')).toEqual(['pi']);
   });
 
-  it('allows every binary for a scenario that still launches a real agent', () => {
-    expect(allowRealAgentsForRunner('ORDINARY-DELEGATION-TICKET')).toBe(true);
-  });
-
   it('keeps the resume family armed on the mock agent', () => {
     for (const runnerId of ['CRASH-REC', 'RECOVERABLE-AUTO-REVIVE', 'TR-CODEX-RESUME']) {
       expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();

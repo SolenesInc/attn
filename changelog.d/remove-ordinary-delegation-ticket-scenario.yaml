@@ -1,0 +1,6 @@
+kind: internal
+area: harness
+change: >
+  Deleted the ordinary-delegation-ticket scenario: it asserted the ticket
+  binding the garden era retired, and seed binding is covered live by
+  garden-delegation-reporting and garden-seed-reopen.
