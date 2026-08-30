@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "273"
+const ProtocolVersion = "274"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -142,6 +142,10 @@ const (
 	CmdSeedLink                              = "seed_link"
 	CmdSeedReady                             = "seed_ready"
 	CmdSeedResume                            = "seed_resume"
+	CmdSeedReviewStart                       = "seed_review_start"
+	CmdSeedReviewShow                        = "seed_review_show"
+	CmdSeedReviewCancel                      = "seed_review_cancel"
+	CmdSeedReviewRetry                       = "seed_review_retry"
 	CmdCrewList                              = "crew_list"
 	CmdCrewWake                              = "crew_wake"
 	CmdCrewSleep                             = "crew_sleep"
@@ -329,6 +333,7 @@ const (
 	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
+	EventGardenReviewUpdated             = "garden_review_updated"
 	EventAppsUpdated                     = "apps_updated"
 	EventAppCommandResult                = "app_command_result"
 	EventDocSubscriptionDelivery         = "doc_subscription_delivery"
@@ -427,6 +432,7 @@ const (
 	EventOpenSeedResult                  = "open_seed_result"
 	EventSeedDocumentGetResult           = "seed_document_get_result"
 	EventSeedResumeResult                = "seed_resume_result"
+	EventSeedReviewResult                = "seed_review_result"
 	EventSeedTransitionResult            = "seed_transition_result"
 	EventSeedNoteResult                  = "seed_note_result"
 	EventSessionMessagesGetResult        = "session_messages_get_result"
@@ -1305,6 +1311,34 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdSeedResume:
 		var msg SeedResumeMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedReviewStart:
+		var msg SeedReviewStartMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedReviewShow:
+		var msg SeedReviewShowMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedReviewCancel:
+		var msg SeedReviewCancelMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdSeedReviewRetry:
+		var msg SeedReviewRetryMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

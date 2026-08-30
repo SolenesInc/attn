@@ -260,6 +260,21 @@ func TestGardenAdvisorRejectsMalformedOutputs(t *testing.T) {
 	}
 }
 
+func TestGardenAdvisorRejectsUnavailableRecommendation(t *testing.T) {
+	provider := gardenAdvisorProviderFunc(func(context.Context, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
+		return agentdriver.HeadlessTaskResult{
+			Text: `{"recommendation":"resume","explanation":"Continue it.","evidence":["saved conversation"]}`,
+		}, nil
+	})
+	d := gardenAdvisorTestDaemon(t, provider)
+	_, err := d.adviseGardenSeed(context.Background(), gardenAdvisorInput{
+		SeedID: "s-test", AvailableActions: []string{"handover", "park", "harvest", "wither"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "unavailable action") {
+		t.Fatalf("unavailable recommendation error = %v", err)
+	}
+}
+
 func TestGardenAdvisorDraftsEditableHandoff(t *testing.T) {
 	provider := gardenAdvisorProviderFunc(func(context.Context, agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
 		return agentdriver.HeadlessTaskResult{Text: `{"handoff":"  Continue from the failing integration test.  "}`}, nil

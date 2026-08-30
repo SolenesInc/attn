@@ -23,7 +23,13 @@ func (d *Daemon) ensureGardenCollections() {
 	if d.store == nil {
 		return
 	}
-	for _, schema := range []docstore.CollectionSchema{garden.SeedsSchema(), garden.NotesSchema(), garden.DispatchesSchema()} {
+	for _, schema := range []docstore.CollectionSchema{
+		garden.SeedsSchema(),
+		garden.NotesSchema(),
+		garden.DispatchesSchema(),
+		garden.ReviewRunsSchema(),
+		garden.ReviewItemsSchema(),
+	} {
 		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
 		if err != nil {
 			d.logf("garden: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)

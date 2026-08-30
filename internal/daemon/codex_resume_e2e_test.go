@@ -23,7 +23,7 @@ func TestCodexResumeMappingEndToEnd(t *testing.T) {
 		t.Skip("skipping PTY end-to-end test in short mode")
 	}
 
-	tmpDir := t.TempDir()
+	tmpDir := shortTempDir(t)
 	attnBin := attnBinaryForE2ETest(t, tmpDir)
 
 	fakeCodexLog := filepath.Join(tmpDir, "fake-codex.log")

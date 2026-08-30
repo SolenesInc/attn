@@ -130,6 +130,7 @@ const (
 	FactGardenNoted                 = "garden.noted"
 	FactGardenLinked                = "garden.linked"
 	FactGardenUnlinked              = "garden.unlinked"
+	FactGardenReviewChanged         = "garden.review.changed"
 
 	FactCrewRegistered = "crew.registered"
 	FactCrewBound      = "crew.bound"
@@ -282,8 +283,16 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceContextChanged(ev) },
 		},
 		{
-			filter: bus.Filter{"garden.*"},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+			filter: bus.Filter{
+				FactGardenPlanted, FactGardenBodyEdited, FactGardenResumeIdentityChanged,
+				FactGardenTended, FactGardenParked, FactGardenHarvested, FactGardenWithered,
+				FactGardenReplanted, FactGardenNoted, FactGardenLinked, FactGardenUnlinked,
+			},
+			apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+		},
+		{
+			filter: bus.Filter{FactGardenReviewChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectGardenReview(ev.Subject) },
 		},
 		{
 			filter: bus.Filter{"crew.*"},

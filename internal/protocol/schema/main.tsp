@@ -4841,6 +4841,103 @@ model GardenSeedsUpdatedMessage {
   total: int32;
 }
 
+model GardenReviewRecipe {
+  "agent": string;
+  "model": string;
+  "effort"?: string;
+}
+
+model GardenReviewEvidence {
+  "label": string;
+  "text": string;
+}
+
+model GardenReviewItem {
+  "id": string;
+  "run_id": string;
+  "seed_id": string;
+  "seed_rev": safeint;
+  "evidence_version": string;
+  "title": string;
+  "body": string;
+  "evidence": GardenReviewEvidence[];
+  // Actions that apply to this captured seed. Unavailable actions are absent.
+  "actions": string[];
+  // queued | running | ready | failed | invalidated.
+  "status": string;
+  // unresolved | resolved | no_longer_applicable.
+  "resolution": string;
+  "recommendation"?: string;
+  "explanation"?: string;
+  "cited_evidence"?: string[];
+  "error"?: string;
+  "started_at"?: string;
+  "completed_at"?: string;
+}
+
+model GardenReviewRun {
+  "id": string;
+  "candidate_ids": string[];
+  "recipe": GardenReviewRecipe;
+  // running includes classified items awaiting a decision; complete means every item was resolved.
+  "status": string;
+  "captured_at": string;
+  "completed_at"?: string;
+}
+
+model GardenReview {
+  "run": GardenReviewRun;
+  "items": GardenReviewItem[];
+}
+
+model SeedReviewStartMessage {
+  "cmd": "seed_review_start";
+  "request_id"?: string;
+}
+
+model SeedReviewShowMessage {
+  "cmd": "seed_review_show";
+  "request_id"?: string;
+  // Omitted reads the newest run.
+  "review_id"?: string;
+}
+
+model SeedReviewCancelMessage {
+  "cmd": "seed_review_cancel";
+  "request_id"?: string;
+  "review_id": string;
+}
+
+model SeedReviewRetryMessage {
+  "cmd": "seed_review_retry";
+  "request_id"?: string;
+  "review_id": string;
+  "seed_id": string;
+}
+
+model SeedReviewResult {
+  "candidate_count": int32;
+  "review"?: GardenReview;
+}
+
+// Correlated answer for every app-origin Review garden operation.
+model SeedReviewResultMessage {
+  "event": "seed_review_result";
+  "request_id": string;
+  "operation": string;
+  "success": boolean;
+  "candidate_count": int32;
+  "error"?: string;
+  "review"?: GardenReview;
+}
+
+// Progressive run/item snapshots. They are advisory records; this event never
+// implies that a seed changed state.
+model GardenReviewUpdatedMessage {
+  "event": "garden_review_updated";
+  "review": GardenReview;
+}
+
 // ============================================================================
 // App registry
 // ============================================================================
@@ -5629,6 +5726,7 @@ model Response {
   seed_watch_result?: SeedWatchResult;
   seed_link_result?: SeedLinkResult;
   seed_ready_result?: SeedReadyResult;
+  seed_review_result?: SeedReviewResult;
   doc_define_result?: DocDefineResult;
   doc_undefine_result?: DocUndefineResult;
   doc_collections_result?: DocCollectionsResult;
@@ -6549,6 +6647,8 @@ alias DaemonEvent =
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
+  | GardenReviewUpdatedMessage
+  | SeedReviewResultMessage
   | SeedResumeResultMessage
   | SeedDocumentGetResultMessage
   | SeedTransitionResultMessage

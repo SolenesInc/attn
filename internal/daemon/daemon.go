@@ -325,6 +325,7 @@ type Daemon struct {
 	gardenNow                 func() time.Time
 	gardenDispatchBeforeWrite func(string)
 	gardenDispatchAfterWrite  func(string)
+	gardenReviewMu            sync.Mutex
 	dispatchSeedsMu           sync.Mutex
 	dispatchSeeds             map[string]string
 	dispatchFromChief         map[string]bool
@@ -2330,6 +2331,14 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage))
 	case protocol.CmdSeedReady: // wire: seed_ready
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
+	case protocol.CmdSeedReviewStart: // wire: seed_review_start
+		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
+	case protocol.CmdSeedReviewShow: // wire: seed_review_show
+		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
+	case protocol.CmdSeedReviewCancel: // wire: seed_review_cancel
+		d.handleSeedReviewCancel(conn, msg.(*protocol.SeedReviewCancelMessage))
+	case protocol.CmdSeedReviewRetry: // wire: seed_review_retry
+		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
 	case protocol.CmdCrewList: // wire: crew_list
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake

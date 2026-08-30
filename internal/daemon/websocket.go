@@ -1022,6 +1022,14 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleTicketAttachWS(client, msg.(*protocol.TicketAttachMessage))
 	case protocol.CmdSeedResume: // wire: seed_resume
 		go d.handleSeedResume(client, msg.(*protocol.SeedResumeMessage))
+	case protocol.CmdSeedReviewStart: // wire: seed_review_start
+		go d.handleSeedReviewStartWS(client, msg.(*protocol.SeedReviewStartMessage))
+	case protocol.CmdSeedReviewShow: // wire: seed_review_show
+		go d.handleSeedReviewShowWS(client, msg.(*protocol.SeedReviewShowMessage))
+	case protocol.CmdSeedReviewCancel: // wire: seed_review_cancel
+		go d.handleSeedReviewCancelWS(client, msg.(*protocol.SeedReviewCancelMessage))
+	case protocol.CmdSeedReviewRetry: // wire: seed_review_retry
+		go d.handleSeedReviewRetryWS(client, msg.(*protocol.SeedReviewRetryMessage))
 	case protocol.CmdCrewWake: // wire: crew_wake
 		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep: // wire: crew_sleep

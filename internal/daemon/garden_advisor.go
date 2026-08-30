@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,10 +65,11 @@ type gardenAdvisorEvidence struct {
 }
 
 type gardenAdvisorInput struct {
-	SeedID   string                  `json:"seed_id"`
-	Title    string                  `json:"title"`
-	Body     string                  `json:"body"`
-	Evidence []gardenAdvisorEvidence `json:"evidence"`
+	SeedID           string                  `json:"seed_id"`
+	Title            string                  `json:"title"`
+	Body             string                  `json:"body"`
+	Evidence         []gardenAdvisorEvidence `json:"evidence"`
+	AvailableActions []string                `json:"available_actions,omitempty"`
 }
 
 type gardenAdvice struct {
@@ -90,7 +92,7 @@ var (
 	gardenAdviceTask = gardenAdvisorTask{
 		name:   "advice",
 		schema: gardenAdviceOutputSchema,
-		prompt: `Recommend one next action:
+		prompt: `Recommend one action from available_actions:
 - resume: continue the saved conversation
 - handover: give this seed to a new agent
 - park: keep the work without starting an agent now
@@ -107,13 +109,28 @@ Explain the recommendation and cite the supplied evidence.`,
 )
 
 func (d *Daemon) adviseGardenSeed(ctx context.Context, input gardenAdvisorInput) (gardenAdvice, error) {
-	raw, err := d.runGardenAdvisor(ctx, gardenAdviceTask, input)
+	config, err := d.gardenAdvisorConfig()
+	if err != nil {
+		return gardenAdvice{}, err
+	}
+	return d.adviseGardenSeedWithConfig(ctx, input, config)
+}
+
+func (d *Daemon) adviseGardenSeedWithConfig(
+	ctx context.Context,
+	input gardenAdvisorInput,
+	config gardenAdvisorConfig,
+) (gardenAdvice, error) {
+	raw, err := d.runGardenAdvisorWithConfig(ctx, gardenAdviceTask, input, config)
 	if err != nil {
 		return gardenAdvice{}, err
 	}
 	var advice gardenAdvice
 	if err := validateGardenAdvisorOutput(compiledGardenAdviceSchema, raw, &advice); err != nil {
 		return gardenAdvice{}, fmt.Errorf("garden advisor returned invalid advice: %w", err)
+	}
+	if len(input.AvailableActions) > 0 && !slices.Contains(input.AvailableActions, advice.Recommendation) {
+		return gardenAdvice{}, fmt.Errorf("garden advisor recommended unavailable action %q", advice.Recommendation)
 	}
 	advice.Explanation = strings.TrimSpace(advice.Explanation)
 	for i := range advice.Evidence {
@@ -150,6 +167,15 @@ func (d *Daemon) runGardenAdvisor(
 	if err != nil {
 		return nil, err
 	}
+	return d.runGardenAdvisorWithConfig(ctx, task, input, config)
+}
+
+func (d *Daemon) runGardenAdvisorWithConfig(
+	ctx context.Context,
+	task gardenAdvisorTask,
+	input gardenAdvisorInput,
+	config gardenAdvisorConfig,
+) ([]byte, error) {
 	resolve := d.resolveGardenAdvisor
 	if d.gardenAdvisorResolve != nil {
 		resolve = d.gardenAdvisorResolve
@@ -219,9 +245,10 @@ func executeGardenAdvisor(
 
 func boundGardenAdvisorInput(input gardenAdvisorInput) gardenAdvisorInput {
 	bounded := gardenAdvisorInput{
-		SeedID: truncateGardenAdvisorText(input.SeedID, gardenAdvisorIDMaxChars),
-		Title:  truncateGardenAdvisorText(input.Title, gardenAdvisorTitleMaxChars),
-		Body:   truncateGardenAdvisorText(input.Body, gardenAdvisorBodyMaxChars),
+		SeedID:           truncateGardenAdvisorText(input.SeedID, gardenAdvisorIDMaxChars),
+		Title:            truncateGardenAdvisorText(input.Title, gardenAdvisorTitleMaxChars),
+		Body:             truncateGardenAdvisorText(input.Body, gardenAdvisorBodyMaxChars),
+		AvailableActions: slices.Clone(input.AvailableActions),
 	}
 	limit := len(input.Evidence)
 	if limit > gardenAdvisorEvidenceMaxItems {

@@ -241,6 +241,16 @@ func (d *Daemon) startJobQueue() {
 		); err != nil {
 			d.logf("legacy ticket recovery: register: %v", err)
 		}
+		if err := runner.RegisterWith(
+			gardenReviewClassifyKind,
+			d.gardenReviewClassifyHandler,
+			jobs.HandlerConfig{
+				Timeout:       gardenReviewClassifyTimeout,
+				MaxConcurrent: gardenReviewClassifyConcurrency,
+			},
+		); err != nil {
+			d.logf("garden review: register classification: %v", err)
+		}
 		if err := runner.RegisterCron(
 			notebookCronKind,
 			defaultNotebookCronInterval,
@@ -289,12 +299,16 @@ func (d *Daemon) startJobQueue() {
 	// must be cheap, concurrency-safe and non-blocking.
 	runner.OnChange(func(jobID string) { d.publishFact(FactTaskChanged, jobID, nil) })
 	// OnTerminalFailure fires on the queue's goroutine; it must stay non-blocking.
-	runner.OnTerminalFailure(func(j *jobs.Job) { d.notifyTaskTerminalFailure(j) })
+	runner.OnTerminalFailure(func(j *jobs.Job) {
+		d.notifyTaskTerminalFailure(j)
+		go d.failGardenReviewJob(j)
+	})
 	d.setJobQueue(runner)
 	if err := runner.Start(); err != nil {
 		// A queue that failed to start still accepts Enqueue and dispatches nothing.
 		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
 	}
+	d.resumeGardenReviews()
 }
 
 func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.WorkspaceContext) {
