@@ -30,6 +30,7 @@ interface TestSession {
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
   automation?: import('../types/generated').AutomationProvenance;
+  pullRequests?: import('../types/generated').SessionPullRequest[];
 }
 
 function buildSidebarData(sessions: TestSession[]) {
@@ -159,6 +160,89 @@ describe('Sidebar', () => {
     expect(row).toHaveTextContent('feed-nexus-web');
     expect(row).toHaveTextContent('GPT Sol medium');
     expect(row).toHaveTextContent('#101');
+  });
+
+  describe('session pull request', () => {
+    const pr = (
+      number: number,
+      state: string,
+      extra: Partial<import('../types/generated').SessionPullRequest> = {},
+    ): import('../types/generated').SessionPullRequest => ({
+      repository: 'github.com/victorarias/attn',
+      number,
+      url: `https://github.com/victorarias/attn/pull/${number}`,
+      created_at: '2026-08-30T10:00:00Z',
+      state,
+      ...extra,
+    });
+
+    function renderRow(pullRequests: import('../types/generated').SessionPullRequest[], label = 'ledger sweep') {
+      const sessions: TestSession[] = [{ id: 's1', label, state: 'working', agent: 'claude', pullRequests }];
+      render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
+      return screen.getByTestId('sidebar-session-s1');
+    }
+
+    it('shows the newest open pull request beside the name, not under it', () => {
+      const row = renderRow([pr(71, 'open', { ci_status: 'failure' })]);
+
+      const headline = row.querySelector('.sidebar-session-headline');
+      const entry = headline?.querySelector('.sidebar-session-pr');
+      expect(entry).toBeTruthy();
+      expect(headline?.querySelector('.session-label')).toBeTruthy();
+      expect(entry).toHaveTextContent('#71');
+      expect(entry).toHaveAttribute('data-tone', 'bad');
+      expect(entry).toHaveAttribute('title', 'github.com/victorarias/attn#71 · checks failed');
+    });
+
+    it('keeps the status out of the row and in the tooltip, so the name keeps its width', () => {
+      const row = renderRow([pr(71, 'open', { review_status: 'changes_requested' })]);
+
+      const entry = row.querySelector('.sidebar-session-pr');
+      expect(entry?.textContent).toBe('#71');
+      expect(entry).toHaveAttribute('aria-label', 'github.com/victorarias/attn#71 · changes requested');
+    });
+
+    it('prefers an open pull request over a merged one', () => {
+      const row = renderRow([pr(72, 'open'), pr(71, 'merged')]);
+
+      const entries = row.querySelectorAll('.sidebar-session-pr');
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toHaveTextContent('#72');
+    });
+
+    it('keeps a merged pull request when no open one is left', () => {
+      const row = renderRow([pr(71, 'merged')]);
+
+      const entry = row.querySelector('.sidebar-session-pr');
+      expect(entry).toHaveTextContent('#71');
+      expect(entry).toHaveAttribute('data-tone', 'merged');
+      expect(entry).toHaveAttribute('title', 'github.com/victorarias/attn#71 · merged');
+    });
+
+    it('shows nothing for a session whose only pull request is closed', () => {
+      const row = renderRow([pr(71, 'closed')]);
+
+      expect(row.querySelector('.sidebar-session-pr')).toBeNull();
+    });
+
+    it('shows nothing for a session that opened no pull request', () => {
+      const row = renderRow([]);
+
+      expect(row.querySelector('.sidebar-session-pr')).toBeNull();
+    });
+
+    it('keeps the whole number beside a long name, which is the half that truncates', () => {
+      const row = renderRow(
+        [pr(71, 'open', { ci_status: 'pending' })],
+        'delegate: rebuild the entire attention ledger projection pipeline',
+      );
+
+      const label = row.querySelector('.sidebar-session-headline > .session-label');
+      const entry = row.querySelector('.sidebar-session-pr');
+      expect(label).toHaveTextContent('delegate: rebuild the entire attention ledger projection pipeline');
+      expect(entry?.textContent).toBe('#71');
+      expect(entry?.getAttribute('title')).toBe('github.com/victorarias/attn#71 · checks running');
+    });
   });
 
   it('shows waiting badge in collapsed sidebar', () => {

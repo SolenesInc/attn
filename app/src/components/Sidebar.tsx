@@ -22,8 +22,12 @@ import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
 import type { QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
-import type { AutomationProvenance as AutomationProvenanceValue } from '../types/generated';
+import type {
+  AutomationProvenance as AutomationProvenanceValue,
+  SessionPullRequest,
+} from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
+import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import { keyCombo } from '../shortcuts/formatShortcut';
 
 interface LocalSession {
@@ -48,6 +52,7 @@ interface LocalSession {
   turnOpenedAt?: string;
   crewMember?: string;
   automation?: AutomationProvenanceValue;
+  pullRequests?: SessionPullRequest[];
 }
 
 type SidebarWorkspace = WorkspaceWithSessions<LocalSession>;
@@ -59,6 +64,24 @@ interface SelectedTile {
 
 function isSessionless(workspace: SidebarWorkspace): boolean {
   return workspace.sessions.length === 0;
+}
+
+function SidebarSessionPullRequest({ pullRequests }: { pullRequests?: SessionPullRequest[] }) {
+  const pr = pickSessionPullRequest(pullRequests);
+  if (!pr) return null;
+  const { label, tone } = describeSessionPullRequest(pr);
+  const description = [`${pr.repository}#${pr.number}`, label, pr.title].filter(Boolean).join(' · ');
+  return (
+    <span
+      className="sidebar-session-pr"
+      data-tone={tone}
+      title={description}
+      aria-label={description}
+    >
+      <span className="sidebar-session-pr__dot" aria-hidden="true" />
+      <span className="sidebar-session-pr__number">#{pr.number}</span>
+    </span>
+  );
 }
 
 function TileSidebarRow({
@@ -1104,7 +1127,10 @@ export function Sidebar({
                   >
                     <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                     <span className="sidebar-session-identity">
-                      <SessionLabel label={session.label} />
+                      <span className="sidebar-session-headline">
+                        <SessionLabel label={session.label} />
+                        <SidebarSessionPullRequest pullRequests={session.pullRequests} />
+                      </span>
                       <SessionProvenance automation={session.automation} density="compact" />
                     </span>
                     {session.endpointName && (
@@ -1287,7 +1313,10 @@ export function Sidebar({
                         >
                           <StateIndicator state={session.state} size="md" seed={session.id} reason={session.state_reason} />
                           <span className="sidebar-session-identity">
-                            <SessionLabel label={session.label} />
+                            <span className="sidebar-session-headline">
+                              <SessionLabel label={session.label} />
+                              <SidebarSessionPullRequest pullRequests={session.pullRequests} />
+                            </span>
                             <SessionProvenance automation={session.automation} density="compact" />
                           </span>
                           {session.chiefOfStaff && <ChiefOfStaffBadge />}

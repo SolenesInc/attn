@@ -579,6 +579,7 @@ function collectSessionUiState(
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
           automation: sidebarItem.querySelector('.automation-provenance')?.textContent?.trim() || '',
+          pullRequest: sidebarItem.querySelector('.sidebar-session-pr')?.textContent?.trim() || '',
         }
       : null,
     workspaceBounds: workspaceDom.workspaceRoot?.bounds ?? null,

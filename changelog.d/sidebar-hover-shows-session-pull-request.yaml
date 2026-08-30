@@ -1,0 +1,4 @@
+kind: added
+area: sidebar
+change: Hovering a session row shows the number and status colour of its newest pull request beside the name.
+notes: The full status reads in the tooltip and in the pane header entry; the row keeps its height and shows nothing at rest.
