@@ -101,6 +101,13 @@ describe('mock agent fixture', () => {
     expect(mockAgentTitle('annotation mock', 'ready')).toBe('annotation mock ready');
   });
 
+  it('rests under the glyph claude reports being at its prompt with', () => {
+    expect(mockAgentFlavor('claude').resting).toBe('\u2733 ');
+    expect(mockAgentFlavor('codex').resting).toBe('');
+    expect(mockAgentTitle('queue mock', 'ready', mockAgentFlavor('claude').resting))
+      .toBe('\u2733 queue mock ready');
+  });
+
   it('stands in for the agent attn launched it as', () => {
     expect(MOCK_AGENT_AGENTS).toEqual(['claude', 'codex']);
     expect(mockAgentFlavor('claude').prompt).toBe('\u276f ');

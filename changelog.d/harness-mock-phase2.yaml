@@ -1,0 +1,13 @@
+kind: internal
+area: testing
+change: >
+  Eight more real-app scenarios run on the mock agent instead of a real
+  provider: focus-probe, ghostty-scroll, snapshot-scrollback-restore and
+  delegate-workspace-placement never prompt their agent at all, and
+  agent-queue, agent-queue-snooze, countdown-cancel and settle-typing-hold
+  get their turns from a fixture. Their scenario budgets drop with the model
+  latency they were sized for, and delegate-workspace-placement joins the
+  serial matrix. The steps that watch an auto-settle countdown now type on
+  the user's input path, which is the only path auto-settle arms behind, and
+  countdown-cancel reaches its legacy ticket through the daemon commands the
+  retired `attn ticket new` used to call.

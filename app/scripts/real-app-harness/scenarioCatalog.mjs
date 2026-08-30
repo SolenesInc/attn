@@ -123,6 +123,7 @@ export const scenarioCatalog = [
   {
     id: 'ordinary-delegation-ticket',
     runnerId: 'ORDINARY-DELEGATION-TICKET',
+    // Asserts a ticket binding the garden era retired, so it cannot pass at all.
     allowRealAgents: true,
     label: 'Ordinary delegation: a non-chief session delegates, and the bound ticket routes to worker, delegator, and chief',
     command: ['pnpm', 'run', 'real-app:scenario-ordinary-delegation-ticket'],
@@ -138,15 +139,13 @@ export const scenarioCatalog = [
   {
     id: 'countdown-cancel',
     runnerId: 'COUNTDOWN-CANCEL',
-    allowRealAgents: true,
     label: 'Countdown cancel: a real Cmd+. stops the auto-settle and nudge countdowns on screen',
     command: ['pnpm', 'run', 'real-app:scenario-countdown-cancel'],
-    timeoutMs: 420_000,
+    timeoutMs: 300_000,
   },
   {
     id: 'settle-typing-hold',
     runnerId: 'SETTLE-TYPING-HOLD',
-    allowRealAgents: true,
     label: 'Settle typing hold: typing to an agent freezes its settling countdown, and going quiet hands back a whole one',
     command: ['pnpm', 'run', 'real-app:scenario-settle-typing-hold'],
     timeoutMs: 300_000,
@@ -154,18 +153,16 @@ export const scenarioCatalog = [
   {
     id: 'agent-queue',
     runnerId: 'AGENT-QUEUE',
-    allowRealAgents: true,
     label: 'Agent queue: a turn opens on a state and closes only when the user settles it',
     command: ['pnpm', 'run', 'real-app:scenario-agent-queue'],
-    timeoutMs: 900_000,
+    timeoutMs: 400_000,
   },
   {
     id: 'agent-queue-snooze',
     runnerId: 'AGENT-QUEUE-SNOOZE',
-    allowRealAgents: true,
     label: 'Agent queue snooze: a deferral closes the turn, suppresses the next one, and wakes to the tail',
     command: ['pnpm', 'run', 'real-app:scenario-agent-queue-snooze'],
-    timeoutMs: 900_000,
+    timeoutMs: 300_000,
   },
   {
     id: 'automation-lifecycle',

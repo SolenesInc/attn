@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
+  legacyTicketRequest,
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
@@ -38,32 +38,6 @@ async function pollFor(fn, description, timeoutMs = 30_000, intervalMs = 250) {
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error(`Timed out waiting for: ${description}. Last value: ${JSON.stringify(last)}`);
-}
-
-async function legacyTicketRequest(socketPath, message, timeoutMs = 10_000) {
-  return new Promise((resolve, reject) => {
-    const socket = net.createConnection(socketPath);
-    let raw = '';
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(new Error(`timed out waiting for ${message.cmd}`));
-    }, timeoutMs);
-    socket.setEncoding('utf8');
-    socket.once('connect', () => socket.write(`${JSON.stringify(message)}\n`));
-    socket.on('data', (chunk) => {
-      raw += chunk;
-      if (!raw.includes('\n')) return;
-      clearTimeout(timer);
-      socket.end();
-      const value = JSON.parse(raw.split('\n', 1)[0]);
-      if (!value.ok) reject(new Error(value.error || `${message.cmd} failed`));
-      else resolve(value);
-    });
-    socket.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
 }
 
 const IDLE_STATES = new Set(['idle', 'waiting_input']);

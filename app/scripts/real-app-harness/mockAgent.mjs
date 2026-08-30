@@ -22,8 +22,10 @@ const REPLYING_ACTIONS = ['reply', 'attn'];
 // Header and prompt glyph are what scenarioAgents.mjs reads to call a pane
 // ready, so an agent the mock stands in for must be recognisable by both.
 const MOCK_AGENT_FLAVORS = {
-  claude: { header: 'Claude Code mock agent', prompt: '❯ ' },
-  codex: { header: 'OpenAI Codex mock agent', prompt: '› ' },
+  // harness_signals.go reads claude's resting title by its ✳; any other leading
+  // rune is unclassified, and an unsettled heartbeat never reaches idle.
+  claude: { header: 'Claude Code mock agent', prompt: '❯ ', resting: '✳ ' },
+  codex: { header: 'OpenAI Codex mock agent', prompt: '› ', resting: '' },
 };
 
 export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
@@ -101,9 +103,9 @@ export function selectMockAgentActions(config, input) {
   return turn?.actions ?? config.defaultActions ?? [];
 }
 
-export function mockAgentTitle(name, state) {
+export function mockAgentTitle(name, state, resting = '') {
   const label = name || 'mock agent';
-  return state === 'working' ? `\u2838 ${label} working` : `${label} ready`;
+  return state === 'working' ? `\u2838 ${label} working` : `${resting}${label} ready`;
 }
 
 export function createMockAgentInputParser(onPrompt) {
@@ -222,7 +224,7 @@ async function runMockAgent() {
   const blocks = [];
   let phase = 'ready';
 
-  const setTitle = () => process.stdout.write(`\u001b]0;${mockAgentTitle(config.name, phase)}\u0007`);
+  const setTitle = () => process.stdout.write(`\u001b]0;${mockAgentTitle(config.name, phase, flavor.resting)}\u0007`);
   const prompt = () => {
     setTitle();
     process.stdout.write(`\n${flavor.prompt}`);
@@ -293,10 +295,16 @@ async function runMockAgent() {
     setTitle();
     requireAttn(['_hook-state', 'working', 'user_prompt_submit'], JSON.stringify({ prompt: input }));
     const workingSince = Date.now();
-    const actions = selectMockAgentActions(config, input);
-    for (const action of actions) await runAction(action);
-    await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
-    stop(markerStateForActions(actions));
+    // A turn silent for StaleAfter (60s) settles under the daemon.
+    const beating = setInterval(setTitle, 500);
+    try {
+      const actions = selectMockAgentActions(config, input);
+      for (const action of actions) await runAction(action);
+      await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - workingSince)));
+      stop(markerStateForActions(actions));
+    } finally {
+      clearInterval(beating);
+    }
     phase = 'ready';
     prompt();
   };
