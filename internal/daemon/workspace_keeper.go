@@ -309,10 +309,6 @@ func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.Workspace
 	if !d.notebookTasksEnabled() {
 		return
 	}
-	// Ahead of the queue lookup: a down queue compacts inline, which also spawns.
-	if d.headlessTaskRefused(compactContextKind) {
-		return
-	}
 	config, err := d.keeperCompactConfig()
 	if err != nil {
 		d.logf("keeper compact: configuration: %v", err)
@@ -322,6 +318,10 @@ func (d *Daemon) enqueueWorkspaceContextCompaction(canonical *protocol.Workspace
 		return
 	}
 	if len([]byte(canonical.Content)) <= d.keeperCompactSizeThreshold() {
+		return
+	}
+	// Ahead of the queue lookup: a down queue compacts inline, which also spawns.
+	if d.headlessTaskRefused(compactContextKind) {
 		return
 	}
 	runner := d.jobQueueRef()

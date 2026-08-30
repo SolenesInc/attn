@@ -281,13 +281,14 @@ func (d *Daemon) reconcileJobHandler(ctx context.Context, job *jobs.Job) (_ any,
 	if d.ticketReconcileDone != nil {
 		defer d.ticketReconcileDone(jobSubject(job))
 	}
-	if d.headlessTaskRefused(reconcileKind) {
-		return nil, nil
-	}
 	in, err := reconcileInputsFromJob(job)
 	if err != nil {
 		// Garbled inputs can never run into health; retire (nil) to avoid a hot loop.
 		d.logf("ticket reconcile %s: %v", jobSubject(job), err)
+		return nil, nil
+	}
+	willClassify := d.ticketReconcileExec != nil && strings.TrimSpace(in.TranscriptPath) != ""
+	if willClassify && d.headlessTaskRefused(reconcileKind) {
 		return nil, nil
 	}
 	// The replant into the garden waits for this: a replant mid-classification would move
@@ -497,13 +498,12 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 	if len(candidates) == 0 {
 		return
 	}
-	runner := d.headlessJobQueue(reconcileKind)
-	if runner == nil {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
 		return
 	}
-	claims := 0
+	var claimable []*store.Ticket
 	for _, ticket := range candidates {
-		assignee := strings.TrimSpace(ticket.Assignee)
 		if existing, err := runner.GetByKey(reconcileKind, ticket.ID); err != nil {
 			d.logf("ticket reconcile sweep: lookup job for %s: %v", ticket.ID, err)
 			continue
@@ -515,8 +515,19 @@ func (d *Daemon) ticketReconcileSweepPass(now time.Time) {
 		if now.Sub(firstSeen) < ticketReconcileGrace() {
 			continue
 		}
+		claimable = append(claimable, ticket)
+	}
+	if len(claimable) == 0 {
+		return
+	}
+	if d.headlessTaskRefused(reconcileKind) {
+		return
+	}
+	claims := 0
+	for _, ticket := range claimable {
+		assignee := strings.TrimSpace(ticket.Assignee)
 		if claims >= ticketReconcileSweepClaimCap {
-			continue
+			break
 		}
 		claims++
 		d.clearOrphanFirstSeen(ticket.ID)

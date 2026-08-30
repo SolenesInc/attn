@@ -7,7 +7,9 @@ change: >
   workspace-context compaction, and session instructions. Set
   `ATTN_HEADLESS_TASKS=off` or the `headless_tasks.enabled` setting (the
   environment wins), and each duty refuses before it enqueues or spawns, logging
-  `headless task refused (<duty>)`. A refused stop classifier falls back to the
+  `headless task refused (<duty>)`. Each duty checks its own eligibility first, so
+  that line only appears when a model run was actually next and a daemon with
+  nothing to do stays quiet. A refused stop classifier falls back to the
   hook evidence already recorded, so sessions still settle. The daemon logs the
   mode at startup, reports it in `/health`, and `attn preflight` shows it as
   `headless.tasks`.

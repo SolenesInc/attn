@@ -35,9 +35,6 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
 		return
 	}
-	if d.headlessTaskRefused("session_title") {
-		return
-	}
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return
@@ -66,6 +63,11 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 	if err != nil || slice.Empty() || slice.Brief == "" {
 		// Leave the attempted-guard unmarked so a later Stop retries rather than
 		// permanently skipping this session.
+		return
+	}
+
+	// Ahead of the attempted-mark: a refused title must stay retryable.
+	if d.headlessTaskRefused("session_title") {
 		return
 	}
 

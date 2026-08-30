@@ -52,9 +52,6 @@ func (d *Daemon) summarizeSessionHandler(ctx context.Context, job *jobs.Job) (an
 	if !d.notebookTasksEnabled() || !d.notebookSummariesEnabled() {
 		return nil, nil
 	}
-	if d.headlessTaskRefused(notebookSummarizeSessionKind) {
-		return nil, nil
-	}
 	sessionID := strings.TrimSpace(jobSubject(job))
 	if sessionID == "" {
 		return nil, errors.New("summarize_session requires a session id")
@@ -108,6 +105,9 @@ func (d *Daemon) summarizeSessionHandler(ctx context.Context, job *jobs.Job) (an
 	digestPath, err := notebookSessionDigestPath(root, workspaceID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("summarize_session: %w", err)
+	}
+	if d.headlessTaskRefused(notebookSummarizeSessionKind) {
+		return nil, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(digestPath), 0o755); err != nil {
 		return nil, fmt.Errorf("summarize_session: create raw sessions dir: %w", err)
@@ -187,9 +187,6 @@ func (d *Daemon) narrateWorkspaceHandler(ctx context.Context, job *jobs.Job) (an
 	if !d.notebookTasksEnabled() || !d.notebookWorkspaceNarrationEnabled() {
 		return nil, nil
 	}
-	if d.headlessTaskRefused(notebookNarrateWorkspaceKind) {
-		return nil, nil
-	}
 	workspaceID := strings.TrimSpace(jobSubject(job))
 	if workspaceID == "" {
 		return nil, errors.New("narrate_workspace requires a workspace id")
@@ -221,6 +218,9 @@ func (d *Daemon) narrateWorkspaceHandler(ctx context.Context, job *jobs.Job) (an
 		return nil, err
 	}
 
+	if d.headlessTaskRefused(notebookNarrateWorkspaceKind) {
+		return nil, nil
+	}
 	if err := os.MkdirAll(inputs.JournalDir, 0o755); err != nil {
 		return nil, fmt.Errorf("narrate_workspace: create journal dir: %w", err)
 	}

@@ -11,10 +11,12 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessioninstructions"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -301,4 +303,187 @@ func TestHeadlessTasksSettingMirrorsIntoTheSwitchAndEnvWins(t *testing.T) {
 	if !headless.Enabled() {
 		t.Fatal("clearing the setting did not turn headless tasks back on")
 	}
+}
+
+func countRefusals(log, caller string) int {
+	return strings.Count(log, "headless task refused ("+caller+")")
+}
+
+// The receipt the reviewer asked for: with the switch off, an idle daemon must
+// stay silent, and a daemon with work must say so exactly once per run.
+func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
+	cases := []struct {
+		name   string
+		caller string
+		idle   func(*testing.T, *Daemon)
+		work   func(*testing.T, *Daemon)
+	}{
+		{
+			name:   "session_activity_scan",
+			caller: sessionActivityKind,
+			idle: func(t *testing.T, d *Daemon) {
+				installActivityRunner(t, d)
+				watchingClient(d)
+				runActivityScan(t, d)
+			},
+			work: func(t *testing.T, d *Daemon) {
+				installActivityRunner(t, d)
+				watchingClient(d)
+				addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
+				touchFile(t, discoverableTranscript(t, d, "session-1", "session-1", "first"), time.Now())
+				runActivityScan(t, d)
+			},
+		},
+		{
+			name:   "session_activity_job",
+			caller: sessionActivityKind,
+			idle: func(t *testing.T, d *Daemon) {
+				installActivityRunner(t, d)
+				watchingClient(d)
+				runActivityJob(t, d, "session-gone")
+			},
+			work: func(t *testing.T, d *Daemon) {
+				installActivityRunner(t, d)
+				watchingClient(d)
+				addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
+				touchFile(t, discoverableTranscript(t, d, "session-1", "session-1", "first"), time.Now())
+				runActivityJob(t, d, "session-1")
+			},
+		},
+		{
+			name:   "compact_context",
+			caller: compactContextKind,
+			idle: func(t *testing.T, d *Daemon) {
+				compactWorkspaceOfSize(t, d, 1<<20)
+			},
+			work: func(t *testing.T, d *Daemon) {
+				compactWorkspaceOfSize(t, d, 1)
+			},
+		},
+		{
+			name:   "session_title",
+			caller: "session_title",
+			idle: func(t *testing.T, d *Daemon) {
+				seedSessionTitleSession(t, d, "sess-1", t.TempDir(), "a name the user already chose")
+				d.sessionTitleExec = refusingTitleExec(t)
+				d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+			},
+			work: func(t *testing.T, d *Daemon) {
+				seedSessionTitleSession(t, d, "sess-1", t.TempDir(), "")
+				d.sessionTitleExec = refusingTitleExec(t)
+				d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+			},
+		},
+		{
+			name:   "reconcile_sweep",
+			caller: reconcileKind,
+			idle: func(t *testing.T, d *Daemon) {
+				installReconcileRunner(t, d)
+				d.ticketReconcileSweepPass(time.Now())
+			},
+			work: func(t *testing.T, d *Daemon) {
+				installReconcileRunner(t, d)
+				if _, err := d.store.CreateTicket(store.Ticket{
+					ID: "orphaned", Title: "t", Assignee: "sess-dead", Status: store.TicketStatusInReview,
+				}, "chief", time.Now().Add(-time.Hour)); err != nil {
+					t.Fatalf("CreateTicket: %v", err)
+				}
+				t0 := time.Now()
+				d.ticketReconcileSweepPass(t0)
+				d.ticketReconcileSweepPass(t0.Add(ticketReconcileGrace() + time.Minute))
+			},
+		},
+		{
+			name:   "summarize_session",
+			caller: notebookSummarizeSessionKind,
+			idle: func(t *testing.T, d *Daemon) {
+				installNotebookNarrationRunner(t, d)
+				runNotebookJob(t, d, d.summarizeSessionHandler, notebookSummarizeSessionKind, "sess-gone")
+			},
+			work: func(t *testing.T, d *Daemon) {
+				installNotebookNarrationRunner(t, d)
+				addActivitySession(t, d, "sess-1", protocol.SessionStateWorking)
+				runNotebookJob(t, d, d.summarizeSessionHandler, notebookSummarizeSessionKind, "sess-1")
+			},
+		},
+		{
+			name:   "narrate_workspace",
+			caller: notebookNarrateWorkspaceKind,
+			idle: func(t *testing.T, d *Daemon) {
+				installNotebookNarrationRunner(t, d)
+				runNotebookJob(t, d, d.narrateWorkspaceHandler, notebookNarrateWorkspaceKind, "")
+			},
+			work: func(t *testing.T, d *Daemon) {
+				installNotebookNarrationRunner(t, d)
+				runNotebookJob(t, d, d.narrateWorkspaceHandler, notebookNarrateWorkspaceKind, "workspace-1")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+"/idle", func(t *testing.T) {
+			t.Setenv(headless.EnvVar, "off")
+			d, readLog := newHeadlessDaemon(t)
+			tc.idle(t, d)
+			if log := readLog(); countRefusals(log, tc.caller) != 0 {
+				t.Fatalf("an idle daemon refused %s %d times, want 0:\n%s",
+					tc.caller, countRefusals(log, tc.caller), log)
+			}
+		})
+		t.Run(tc.name+"/work", func(t *testing.T) {
+			t.Setenv(headless.EnvVar, "off")
+			d, readLog := newHeadlessDaemon(t)
+			tc.work(t, d)
+			if log := readLog(); countRefusals(log, tc.caller) != 1 {
+				t.Fatalf("a daemon with work refused %s %d times, want 1:\n%s",
+					tc.caller, countRefusals(log, tc.caller), log)
+			}
+		})
+	}
+}
+
+func runActivityScan(t *testing.T, d *Daemon) {
+	t.Helper()
+	if _, err := d.sessionActivityScanHandler(context.Background(), nil); err != nil {
+		t.Fatalf("session activity scan: %v", err)
+	}
+}
+
+func runActivityJob(t *testing.T, d *Daemon, sessionID string) {
+	t.Helper()
+	job := &jobs.Job{Kind: sessionActivityKind, UniqueKey: sessionID}
+	if _, err := d.sessionActivityHandler(context.Background(), job); err != nil {
+		t.Fatalf("session activity job: %v", err)
+	}
+}
+
+// The error is discarded on purpose: a handler that bails on ineligibility is
+// exactly the idle case, and the refusal count is the assertion.
+func runNotebookJob(t *testing.T, d *Daemon, handler func(context.Context, *jobs.Job) (any, error), kind, subject string) {
+	t.Helper()
+	_, _ = handler(context.Background(), &jobs.Job{Kind: kind, UniqueKey: subject})
+}
+
+func refusingTitleExec(t *testing.T) func(context.Context, *protocol.Session, transcript.ConversationSlice) (string, error) {
+	t.Helper()
+	return func(context.Context, *protocol.Session, transcript.ConversationSlice) (string, error) {
+		t.Error("a refused duty called the title model")
+		return "", nil
+	}
+}
+
+func compactWorkspaceOfSize(t *testing.T, d *Daemon, threshold int) {
+	t.Helper()
+	setupWorkspaceContextSession(t, d, "session-1", "workspace-1")
+	d.store.SetSetting(SettingKeeperCompact, `{"agent":"codex","model":"gpt-test"}`)
+	d.keeperCompactThreshold = threshold
+	d.workspaceContextCompactionExecution = fakeCompaction(keeperCandidate)
+	if _, _, err := d.store.UpdateWorkspaceContext("workspace-1", keeperSource, "session-1", 0); err != nil {
+		t.Fatalf("seed context: %v", err)
+	}
+	canonical, err := d.store.GetWorkspaceContext("workspace-1")
+	if err != nil {
+		t.Fatalf("get canonical: %v", err)
+	}
+	d.enqueueWorkspaceContextCompaction(canonical)
 }
