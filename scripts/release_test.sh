@@ -182,7 +182,7 @@ expect_failure() {
     echo "expected release preparation failure: $*" >&2
     exit 1
   fi
-  if ! grep -Fq "$expected" "$work/failure.out"; then
+  if ! grep -Fq -- "$expected" "$work/failure.out"; then
     echo "failure did not contain '$expected':" >&2
     cat "$work/failure.out" >&2
     exit 1
@@ -243,6 +243,7 @@ main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
 
 run_release v99.98.97 --dry-run >"$work/dry-run.out"
 grep -Fq "$source_sha" "$work/dry-run.out"
+grep -Fq 'publication: automatic' "$work/dry-run.out"
 grep -q 'would not merge, tag, or dispatch a release' "$work/dry-run.out"
 
 run_release v99.98.97 >"$work/success.out"
@@ -251,6 +252,7 @@ candidate_sha="$(git --git-dir="$fixture_origin" rev-parse "$candidate_ref")"
 manifest="$(git --git-dir="$fixture_origin" show "$candidate_ref:.github/release-candidate.yml")"
 grep -Fq "source_sha: ${source_sha}" <<<"$manifest"
 grep -Fq "main_sha: ${main_sha}" <<<"$manifest"
+grep -Fq 'publication: automatic' <<<"$manifest"
 if git --git-dir="$fixture_origin" ls-tree -r --name-only "$candidate_ref" \
   -- changelog.d | grep -q '\.yaml$'; then
   echo "candidate retained changelog fragments" >&2
@@ -270,8 +272,29 @@ if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   exit 1
 fi
 
+setup_fixture held
+: >"$FAKE_GH_LOG"
+held_source_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
+run_release v99.98.97 --hold --dry-run >"$work/held-dry-run.out"
+grep -Fq 'publication: held' "$work/held-dry-run.out"
+run_release v99.98.97 --hold >"$work/held-success.out"
+held_ref='refs/heads/release/v99.98.97'
+held_manifest="$(git --git-dir="$fixture_origin" show "$held_ref:.github/release-candidate.yml")"
+grep -Fq 'publication: held' <<<"$held_manifest"
+grep -Fq "source_sha: ${held_source_sha}" <<<"$held_manifest"
+for value in '| Publication | `held` |' '## Publication hold' \
+  'does not claim packaged-app verification' 'stop before App acceptance'; do
+  grep -Fq -- "$value" "$FAKE_PR_BODY"
+done
+if grep -Fq '## Manual app verification' "$FAKE_PR_BODY"; then
+  echo "held candidate requested manual App acceptance" >&2
+  exit 1
+fi
+
 setup_hotfix_fixture
 : >"$FAKE_GH_LOG"
+
+expect_failure '--hold is only supported for promotions' run_hotfix v99.98.98 --hold
 
 git clone -q --branch main "$fixture_origin" "$work/hotfix-main-updater"
 git -C "$work/hotfix-main-updater" config user.name 'Release Test'

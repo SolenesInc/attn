@@ -40,6 +40,12 @@ if [[ "$tag_sha" != "$main_sha" ]]; then
   exit 1
 fi
 
+publication="$(go run ./cmd/release-train accepted-main publication --head "$tag_sha")"
+if [[ "$publication" != automatic ]]; then
+  echo "release tag gate: publication is $publication for $tag; refusing release" >&2
+  exit 1
+fi
+
 validated_tag="$(go run ./cmd/release-train accepted-main validate --head "$tag_sha")"
 if [[ "$validated_tag" != "$tag" ]]; then
   echo "release tag gate: manifest authorizes $validated_tag, not $tag" >&2

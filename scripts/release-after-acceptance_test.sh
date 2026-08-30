@@ -168,7 +168,9 @@ setup_fixture() {
 	  git clone -q --depth 1 "file://$root" "$fixture_repo"
 	  git -C "$fixture_repo" config user.name 'Release Test'
 	  git -C "$fixture_repo" config user.email 'release@example.com'
+	  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
 	  git -C "$fixture_repo" switch -q -C main
+	  git -C "$fixture_repo" add cmd/release-train/main.go
 	  find "$fixture_repo/changelog.d" -type f -name '*.yaml' -delete
 	  git -C "$fixture_repo" add -A changelog.d
 	  git -C "$fixture_repo" commit -q -m 'release fixture baseline'
@@ -237,6 +239,28 @@ run_release_after_acceptance >"$work/stale.out"
 grep -q 'ignoring stale result' "$work/stale.out"
 if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
   echo "stale Acceptance created a tag" >&2
+  exit 1
+fi
+
+setup_fixture held
+(cd "$fixture_repo" && go run ./cmd/release-train manifest write \
+  --version "$candidate_tag" --kind promotion --publication held \
+  --source "$baseline_sha" --main "$baseline_sha" >/dev/null)
+git -C "$fixture_repo" add .github/release-candidate.yml
+git -C "$fixture_repo" commit -q -m 'chore(release): hold publication'
+held_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+git -C "$fixture_repo" push -q origin main
+export FAKE_EXPECTED_SHA="$held_sha"
+: >"$FAKE_GH_LOG"
+run_release_after_acceptance >"$work/held.out"
+grep -Fq "publication is held for $candidate_tag at accepted main $held_sha" "$work/held.out"
+if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
+  echo "held publication created a tag" >&2
+  exit 1
+fi
+if grep -Eq 'updateRefs|app-acceptance.yml|/pulls|repos/example/attn/dispatches' "$FAKE_GH_LOG"; then
+  echo "held publication crossed the App acceptance, tag, or dispatch boundary" >&2
+  cat "$FAKE_GH_LOG" >&2
   exit 1
 fi
 
