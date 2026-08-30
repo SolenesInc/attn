@@ -449,3 +449,27 @@ func TestLaunchInstructionsCarryTheCrewPrimingLast(t *testing.T) {
 		t.Fatalf("a launch that woke nobody carried a crew block:\n%s", bare)
 	}
 }
+
+func TestLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
+	off := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true}.Instructions()
+	if strings.Contains(off, "attn pr record") {
+		t.Fatalf("a hooked harness was told to record its own pull requests:\n%s", off)
+	}
+
+	on := Launch{WorkspaceContextPath: "/tmp/context.md", Garden: true, SelfReportPullRequests: true}.Instructions()
+	if !strings.Contains(on, PullRequestSelfReportGuidance) {
+		t.Fatalf("a hookless harness missed the pull request block:\n%s", on)
+	}
+
+	// The way in, the way to see, and the way out all have to be named.
+	for _, want := range []string{"attn pr record <url>", "attn pr ls", "attn pr forget <url>"} {
+		if !strings.Contains(PullRequestSelfReportGuidance, want) {
+			t.Fatalf("pull request guidance never mentions %q:\n%s", want, PullRequestSelfReportGuidance)
+		}
+	}
+
+	crewed := Launch{Garden: true, SelfReportPullRequests: true, Crew: "You are **Trellis**."}.Instructions()
+	if !strings.HasSuffix(strings.TrimSpace(crewed), "You are **Trellis**.") {
+		t.Fatalf("the pull request block displaced the crew block from last:\n%s", crewed)
+	}
+}

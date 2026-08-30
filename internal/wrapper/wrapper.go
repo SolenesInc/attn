@@ -42,3 +42,19 @@ func CleanupHooksConfig(configPath string) {
 	os.Remove(configPath)
 	os.Remove(filepath.Dir(configPath))
 }
+
+// Its own directory because a harness reads every instruction file it finds there.
+func WriteInstructionsDir(tmpDir, sessionID, name, content string) (string, error) {
+	dir := filepath.Join(tmpDir, "attn-instructions-"+sessionID)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func CleanupInstructionsDir(dir string) {
+	os.RemoveAll(dir)
+}
