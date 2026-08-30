@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { appPlatformFor, LinuxWindowDriver } from './platform.mjs';
@@ -43,15 +45,15 @@ describe('manifest wait floor', () => {
 });
 
 describe('linux app control', () => {
-  it('quits by signalling the pid it was handed', async () => {
+  it('quits by signalling the pids it was handed', async () => {
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-    await linux.requestQuit({ bundleId: 'com.attn.manager.dev', pid: 4242 });
-    expect(kill).toHaveBeenCalledWith(4242, 'SIGTERM');
+    await linux.requestQuit({ bundleId: 'com.attn.manager.dev', pids: [4242, 4243] });
+    expect(kill.mock.calls).toEqual([[4242, 'SIGTERM'], [4243, 'SIGTERM']]);
   });
 
-  it('signals nothing without a pid', async () => {
+  it('signals nothing without an owned pid', async () => {
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-    await linux.requestQuit({ bundleId: 'com.attn.manager.dev', pid: null });
+    await linux.requestQuit({ bundleId: 'com.attn.manager.dev', pids: [] });
     expect(kill).not.toHaveBeenCalled();
   });
 
@@ -91,5 +93,133 @@ describe('LinuxWindowDriver.waitForMainWindow', () => {
 
     await expect(driver.waitForMainWindow(1_000, 10, {})).resolves.toBeNull();
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+const procTreeRoots = [];
+
+afterEach(() => {
+  while (procTreeRoots.length > 0) {
+    fs.rmSync(procTreeRoots.pop(), { recursive: true, force: true });
+  }
+});
+
+function procTree() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-platform-'));
+  procTreeRoots.push(root);
+  const procRoot = path.join(root, 'proc');
+  fs.mkdirSync(procRoot);
+  return {
+    root,
+    procRoot,
+    installTree(name) {
+      const appPath = path.join(root, name);
+      fs.mkdirSync(path.join(appPath, 'bin'), { recursive: true });
+      fs.writeFileSync(path.join(appPath, 'bin', 'attn-app'), '#!/bin/sh\n');
+      return appPath;
+    },
+    runs(pid, executablePath) {
+      fs.mkdirSync(path.join(procRoot, String(pid)));
+      fs.symlinkSync(executablePath, path.join(procRoot, String(pid), 'exe'));
+    },
+  };
+}
+
+const aliveChild = { exitCode: null, signalCode: null };
+
+describe('linux pid ownership', () => {
+  it('owns the pid it spawned even when no manifest ever appeared', () => {
+    expect(linux.ownedPids({
+      appPath: '/home/someone/.local/share/attn-dev',
+      manifestPid: null,
+      launch: { spawned: true, pid: 4242, child: aliveChild },
+    })).toEqual({ pids: [4242], staleManifest: false });
+  });
+
+  it('drops a spawn pid whose child handle already exited', () => {
+    expect(linux.ownedPids({
+      appPath: '/home/someone/.local/share/attn-dev',
+      launch: { spawned: true, pid: 4242, child: { exitCode: 0, signalCode: null } },
+    })).toEqual({ pids: [], staleManifest: false });
+  });
+
+  it('owns a manifest pid that still runs the install tree executable', () => {
+    const tree = procTree();
+    const appPath = tree.installTree('attn-dev');
+    tree.runs(4242, path.join(appPath, 'bin', 'attn-app'));
+
+    expect(linux.ownedPids({ appPath, manifestPid: 4242, procRoot: tree.procRoot })).toEqual({
+      pids: [4242],
+      staleManifest: false,
+    });
+  });
+
+  it('leaves a reused manifest pid running something else alone', () => {
+    const tree = procTree();
+    const appPath = tree.installTree('attn-dev');
+    const stranger = tree.installTree('someone-else');
+    tree.runs(4242, path.join(stranger, 'bin', 'attn-app'));
+
+    expect(linux.ownedPids({ appPath, manifestPid: 4242, procRoot: tree.procRoot })).toEqual({
+      pids: [],
+      staleManifest: true,
+    });
+  });
+
+  it('leaves a manifest pid that is gone alone', () => {
+    const tree = procTree();
+    const appPath = tree.installTree('attn-dev');
+
+    expect(linux.ownedPids({ appPath, manifestPid: 4242, procRoot: tree.procRoot })).toEqual({
+      pids: [],
+      staleManifest: true,
+    });
+  });
+
+  it('still owns an app running out of a replaced install tree', () => {
+    const tree = procTree();
+    const appPath = tree.installTree('attn-dev');
+    tree.runs(4242, `${path.join(appPath, 'bin', 'attn-app')} (deleted)`);
+
+    expect(linux.ownedPids({ appPath, manifestPid: 4242, procRoot: tree.procRoot })).toEqual({
+      pids: [4242],
+      staleManifest: false,
+    });
+  });
+
+  it('matches an install tree reached through a symlink', () => {
+    const tree = procTree();
+    const realPath = tree.installTree('attn-dev-real');
+    const linkedPath = path.join(tree.root, 'attn-dev-link');
+    fs.symlinkSync(realPath, linkedPath);
+    tree.runs(4242, path.join(realPath, 'bin', 'attn-app'));
+
+    expect(linux.ownedPids({ appPath: linkedPath, manifestPid: 4242, procRoot: tree.procRoot })).toEqual({
+      pids: [4242],
+      staleManifest: false,
+    });
+  });
+
+  it('keeps a spawn pid alongside a fenced-out manifest pid', () => {
+    const tree = procTree();
+    const appPath = tree.installTree('attn-dev');
+
+    expect(linux.ownedPids({
+      appPath,
+      manifestPid: 4242,
+      launch: { spawned: true, pid: 909, child: aliveChild },
+      procRoot: tree.procRoot,
+    })).toEqual({ pids: [909], staleManifest: true });
+  });
+});
+
+describe('darwin pid ownership', () => {
+  it('addresses the bundle, so only the manifest pid feeds the wait loop', () => {
+    expect(darwin.ownedPids({
+      appPath: '/Users/someone/Applications/attn-dev.app',
+      manifestPid: 4242,
+      launch: { spawned: true, pid: 909, child: aliveChild },
+    })).toEqual({ pids: [4242], staleManifest: false });
+    expect(darwin.ownedPids({ manifestPid: null })).toEqual({ pids: [], staleManifest: false });
   });
 });

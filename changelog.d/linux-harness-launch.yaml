@@ -8,6 +8,9 @@ change: >
   branches on the OS: it knows where the app executable, the bundled daemon, and
   build-identity.json sit in each install shape, spawns `<appPath>/bin/attn-app`
   on Linux, waits for a window with `xdotool search --pid` when xdotool is
-  present, and quits by signalling the pid from the automation manifest.
+  present, and quits by signalling the pid it spawned. A pid read from the
+  automation manifest outlives the app that wrote it, so it is signalled only
+  while `/proc/<pid>/exe` still resolves to the install tree's executable;
+  otherwise the stale manifest is deleted and the pid is left alone.
   Scenarios that need native input, native screenshots, or an `attn-dev://` deep
   link are still macOS-only. macOS behavior is unchanged.

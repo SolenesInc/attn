@@ -101,6 +101,7 @@ export class UiAutomationClient {
     launchEnv = null,
     backgroundLaunch = false,
     bundleId = null,
+    platform = appPlatform,
   } = {}) {
     const appProfile = profileForAppPath(appPath);
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
@@ -110,6 +111,8 @@ export class UiAutomationClient {
     this.launchEnv = launchEnv;
     this.backgroundLaunch = backgroundLaunch;
     this.bundleId = resolvedBundleId;
+    this.platform = platform;
+    this.launch = null;
     this.currentSourceIdentityPromise = null;
     this.verifiedBuildIdentityKey = null;
   }
@@ -131,11 +134,12 @@ export class UiAutomationClient {
       : this.launchEnv;
 
     const focusDriver = this.#focusDriver();
-    const launched = await appPlatform.launchApp({
+    const launched = await this.platform.launchApp({
       appPath: this.appPath,
       env: effectiveLaunchEnv,
       background: this.backgroundLaunch,
     });
+    this.launch = launched;
     if (!launched.spawned) {
       return;
     }
@@ -153,56 +157,71 @@ export class UiAutomationClient {
 
   #focusDriver() {
     if (!this._focusDriver) {
-      this._focusDriver = appPlatform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath });
+      this._focusDriver = this.platform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath });
     }
     return this._focusDriver;
   }
 
 
   async quitApp(timeoutMs = 10_000) {
-    let existingPid = null;
+    let manifestPid = null;
 
     try {
-      existingPid = this.readManifest()?.pid ?? null;
+      manifestPid = this.readManifest()?.pid ?? null;
     } catch {
-      existingPid = null;
+      manifestPid = null;
     }
 
-    await appPlatform.requestQuit({ bundleId: this.bundleId, pid: existingPid });
+    const { pids: ownedPids, staleManifest } = this.platform.ownedPids({
+      appPath: this.appPath,
+      manifestPid,
+      launch: this.launch,
+    });
+    if (staleManifest) {
+      this.#removeManifest();
+    }
+
+    await this.platform.requestQuit({ bundleId: this.bundleId, pids: ownedPids });
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
       const appPids = await this.listAppPids();
-      if ((!existingPid || !processExists(existingPid)) && appPids.length === 0) {
+      if (!ownedPids.some(processExists) && appPids.length === 0) {
+        this.launch = null;
         return;
       }
       await delay(200);
     }
 
     const remainingPids = await this.listAppPids();
-    for (const pid of livePids([existingPid, ...remainingPids])) {
+    for (const pid of livePids([...ownedPids, ...remainingPids])) {
       try {
         process.kill(pid, 'SIGTERM');
       } catch {}
     }
     await delay(500);
-    for (const pid of livePids([existingPid, ...await this.listAppPids()])) {
+    for (const pid of livePids([...ownedPids, ...await this.listAppPids()])) {
       try {
         process.kill(pid, 'SIGKILL');
       } catch {}
     }
+    this.launch = null;
+  }
+
+  #removeManifest() {
+    try {
+      fs.unlinkSync(this.manifestPath);
+    } catch {}
   }
 
   async launchFreshApp() {
     await this.quitApp();
-    try {
-      fs.unlinkSync(this.manifestPath);
-    } catch {}
+    this.#removeManifest();
     await this.launchApp();
   }
 
   async waitForManifest(timeoutMs = 15_000) {
-    const budgetMs = Math.max(timeoutMs, appPlatform.manifestWaitFloorMs);
+    const budgetMs = Math.max(timeoutMs, this.platform.manifestWaitFloorMs);
     const startedAt = Date.now();
     let lastError = null;
 
@@ -228,7 +247,7 @@ export class UiAutomationClient {
   }
 
   async listAppPids() {
-    return appPlatform.listAppPids({ appPath: this.appPath });
+    return this.platform.listAppPids({ appPath: this.appPath });
   }
 
   async request(action, payload = {}, options = {}) {

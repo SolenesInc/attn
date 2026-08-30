@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appPlatformFor } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 function xdgDataHome() {
@@ -9,6 +10,7 @@ function xdgDataHome() {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('UiAutomationClient.request', () => {
@@ -134,5 +136,28 @@ describe('UiAutomationClient.ensureBuildMatchesCurrentSource', () => {
     })).rejects.toThrow(
       'daemon source mismatch: /tmp/attn reports git:stale-daemon, current source is tree:current; rebuild the resolved daemon binary before running real-app scenarios',
     );
+  });
+});
+
+describe('UiAutomationClient.quitApp ownership', () => {
+  it('reaps the pid it spawned on Linux even when no manifest ever appeared', async () => {
+    const client = new UiAutomationClient({
+      manifestPath: path.join(os.tmpdir(), 'attn-harness-manifest-that-never-appeared.json'),
+      platform: appPlatformFor('linux'),
+    });
+    client.launch = { spawned: true, pid: 4242, child: { exitCode: null, signalCode: null } };
+    const signals = [];
+    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (signal === 0) {
+        throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+      }
+      signals.push([pid, signal]);
+      return true;
+    });
+
+    await client.quitApp(5_000);
+
+    expect(signals).toEqual([[4242, 'SIGTERM']]);
+    expect(client.launch).toBeNull();
   });
 });

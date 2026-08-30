@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -23,7 +24,59 @@ function spawnDetached(executablePath, env) {
     env: { ...process.env, ...env },
   });
   child.unref();
-  return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null };
+  return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null, child };
+}
+
+function positivePid(value) {
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function resolvedPath(candidate) {
+  try {
+    return fs.realpathSync(candidate);
+  } catch {
+    return candidate;
+  }
+}
+
+// Mirrors sameExecutable in cmd/attn/profile.go: /proc/<pid>/exe is already
+// resolved, so a symlinked install root matches only once both sides are.
+function sameExecutable(a, b) {
+  return a === b || resolvedPath(a) === resolvedPath(b);
+}
+
+const DELETED_IMAGE_SUFFIX = ' (deleted)';
+
+function executableOfPid(pid, procRoot) {
+  const exeLink = path.join(procRoot, String(pid), 'exe');
+  try {
+    return fs.realpathSync(exeLink);
+  } catch {}
+  try {
+    // An app running out of a replaced install tree is still ours: Linux marks
+    // the unlinked image and realpath fails, the path stays the one we spawned.
+    const raw = fs.readlinkSync(exeLink);
+    return raw.endsWith(DELETED_IMAGE_SUFFIX) ? raw.slice(0, -DELETED_IMAGE_SUFFIX.length) : raw;
+  } catch {
+    return null;
+  }
+}
+
+// Node reaps the child it spawned, so an unexited handle proves the pid still
+// names that process rather than a stranger that reused the number.
+function spawnedOwnedPid(launch) {
+  if (!launch?.spawned) {
+    return null;
+  }
+  const pid = positivePid(launch.pid);
+  if (!pid) {
+    return null;
+  }
+  const child = launch.child;
+  if (child && (child.exitCode !== null || child.signalCode !== null)) {
+    return null;
+  }
+  return pid;
 }
 
 export class LinuxWindowDriver {
@@ -102,6 +155,13 @@ const darwinPlatform = {
     }
   },
 
+  // `open`, osascript, and pgrep address the bundle, so the spawn pid adds
+  // nothing here and the manifest pid is only ever a hint for the wait loop.
+  ownedPids({ manifestPid = null }) {
+    const pid = positivePid(manifestPid);
+    return { pids: pid ? [pid] : [], staleManifest: false };
+  },
+
   async listAppPids({ appPath }) {
     try {
       const { stdout } = await execFileAsync('pgrep', ['-f', this.appExecutableInTree(appPath)]);
@@ -138,14 +198,33 @@ const linuxPlatform = {
     return spawnDetached(this.appExecutableInTree(appPath), env);
   },
 
-  async requestQuit({ pid }) {
-    if (!Number.isInteger(pid) || pid <= 0) {
-      return;
+  async requestQuit({ pids = [] }) {
+    for (const pid of pids) {
+      if (!positivePid(pid)) {
+        continue;
+      }
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {
+      }
     }
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {
+  },
+
+  // The spawn is this run's own evidence; a manifest pid outlives the app that
+  // wrote it, so it is signalled only while it still runs our executable.
+  ownedPids({ appPath, manifestPid = null, launch = null, procRoot = '/proc' }) {
+    const spawned = spawnedOwnedPid(launch);
+    const pids = spawned ? [spawned] : [];
+    const claimed = positivePid(manifestPid);
+    if (!claimed || claimed === spawned) {
+      return { pids, staleManifest: false };
     }
+    const exe = executableOfPid(claimed, procRoot);
+    if (exe && sameExecutable(exe, this.appExecutableInTree(appPath))) {
+      pids.push(claimed);
+      return { pids, staleManifest: false };
+    }
+    return { pids, staleManifest: true };
   },
 
   // A pid comes from the manifest or from spawn, never from a command-line
