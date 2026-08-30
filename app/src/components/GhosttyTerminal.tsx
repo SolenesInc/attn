@@ -3558,7 +3558,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           const chord = terminalClipboardChord(event);
           if (chord === null) return;
           if (chord === 'paste') {
-            // Off-mac the chord is Ctrl+Shift+V, which no WebView paste stands behind.
             if (!isMacLikePlatform()) {
               void pasteFromClipboard();
               event.preventDefault();

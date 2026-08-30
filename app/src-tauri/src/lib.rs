@@ -1162,8 +1162,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init());
-    // Off-mac Tauri attaches no menu unless asked, and a default one would claim Ctrl+C, Ctrl+V,
-    // Ctrl+W and Ctrl+Z — the keys the app and the PTY need — so only macOS gets a menu.
+    // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
+    // so only macOS gets a menu.
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_menu);
     builder

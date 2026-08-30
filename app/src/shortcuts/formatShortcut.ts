@@ -1,6 +1,3 @@
-// Render shortcut definitions as human-readable key tokens. Modifier names come from the
-// platform (⌘⌥⇧ on macOS, Ctrl/Alt/Shift elsewhere); matching lives in registry.ts.
-
 import { ShortcutId, Binding, Combo, isChord } from './registry';
 import { resolveBinding } from './resolver';
 import { ModifierName, keyJoiner, modifierGlyphs } from './platform';
@@ -67,7 +64,6 @@ export function formatShortcut(idOrBinding: ShortcutId | Binding): string {
   return comboTokens(binding).join(join);
 }
 
-/** A combo written out for prose, e.g. keyCombo('accel', 'shift', 'T') → ⌘⇧T or Ctrl+Shift+T. */
 export function keyCombo(...parts: Array<ModifierName | string>): string {
   const glyphs = modifierGlyphs();
   return parts
@@ -75,7 +71,6 @@ export function keyCombo(...parts: Array<ModifierName | string>): string {
     .join(keyJoiner());
 }
 
-/** The tokens of `keyCombo`, for callers that render one keycap per token. */
 export function keyComboTokens(...parts: Array<ModifierName | string>): string[] {
   const glyphs = modifierGlyphs();
   return parts.map((part) => glyphs[part as ModifierName] ?? part);
