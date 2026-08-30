@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -71,17 +72,20 @@ func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, o
 	d.generateSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}, "prompt")
 }
 
+// A fingerprint, not the prompt: the body can be 1 MiB and the marker may
+// outlive the attempt on durable sessions that never settle a title.
 func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return
-	}
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
-	if d.sessionTitleInitialPrompt == nil {
-		d.sessionTitleInitialPrompt = make(map[string]string)
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		delete(d.sessionTitleInitialPrompt, sessionID)
+		return
 	}
-	d.sessionTitleInitialPrompt[sessionID] = prompt
+	if d.sessionTitleInitialPrompt == nil {
+		d.sessionTitleInitialPrompt = make(map[string][sha256.Size]byte)
+	}
+	d.sessionTitleInitialPrompt[sessionID] = sha256.Sum256([]byte(prompt))
 }
 
 func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID string) {
@@ -94,7 +98,7 @@ func (d *Daemon) matchSessionTitleInitialPrompt(sessionID, prompt string) bool {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
 	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
-	if !ok || remembered != prompt {
+	if !ok || remembered != sha256.Sum256([]byte(prompt)) {
 		return false
 	}
 	delete(d.sessionTitleInitialPrompt, sessionID)
@@ -132,6 +136,7 @@ func (d *Daemon) generateSessionTitle(sessionID string, slice transcript.Convers
 		d.sessionTitleAttempted = make(map[string]struct{})
 	}
 	d.sessionTitleAttempted[sessionID] = struct{}{}
+	delete(d.sessionTitleInitialPrompt, sessionID)
 	d.sessionTitleMu.Unlock()
 
 	session := d.store.Get(sessionID)

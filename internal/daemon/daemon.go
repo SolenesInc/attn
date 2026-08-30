@@ -3,6 +3,7 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -165,7 +166,7 @@ type Daemon struct {
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error)
 	sessionTitleAttempted             map[string]struct{}
-	sessionTitleInitialPrompt         map[string]string
+	sessionTitleInitialPrompt         map[string][sha256.Size]byte
 	ticketArtifactMu                  sync.Mutex
 	seedArtifactMu                    sync.Mutex
 	delegationMu                      sync.Mutex

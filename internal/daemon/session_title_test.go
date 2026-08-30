@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -473,5 +474,89 @@ func TestMaybeGenerateSessionTitleFromPrompt_InitialPromptTitlesWithoutCorrelati
 	}
 	if got := d.store.Get("sess-1"); got == nil || got.Label != "Investigate retry queue" {
 		t.Fatalf("session label = %+v, want %q", got, "Investigate retry queue")
+	}
+}
+
+// The initial UserPromptSubmit can land between executeSpawn and commitSpawn;
+// the marker must already exist at backend-spawn time.
+func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+
+	titled := make(chan string, 1)
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		titled <- slice.Brief
+		return "One-shot investigation", nil
+	}
+	backend := &fakeSpawnBackend{}
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		d.maybeGenerateSessionTitleFromPrompt(opts.ID, "investigate the retry queue", sessionInputOrigin{})
+	}
+	d.ptyBackend = backend
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-oneshot",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	select {
+	case brief := <-titled:
+		if brief != "investigate the retry queue" {
+			t.Fatalf("titled from brief %q, want the initial prompt", brief)
+		}
+	default:
+		t.Fatal("the early prompt hook did not reach the title exec; marker missing at backend-spawn time")
+	}
+	if got := d.store.Get("sess-oneshot"); got == nil || got.Label != "One-shot investigation" {
+		t.Fatalf("session label = %+v, want %q", got, "One-shot investigation")
+	}
+}
+
+func TestSpawnPipeline_FailedLaunchRollsBackInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	addTestWorkspace(d, "workspace-title", t.TempDir())
+	d.ptyBackend = &fakeSpawnBackend{spawnErr: errors.New("boom")}
+
+	client := &wsClient{send: make(chan outboundMessage, 8), attachedStreams: make(map[string]ptybackend.Stream)}
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		ID:            "sess-failed",
+		Cwd:           t.TempDir(),
+		WorkspaceID:   "workspace-title",
+		Agent:         "claude",
+		Cols:          80,
+		Rows:          24,
+		InitialPrompt: protocol.Ptr("investigate the retry queue"),
+	})
+
+	d.sessionTitleMu.Lock()
+	_, held := d.sessionTitleInitialPrompt["sess-failed"]
+	d.sessionTitleMu.Unlock()
+	if held {
+		t.Fatal("failed launch left the initial-prompt marker behind")
+	}
+}
+
+func TestMaybeGenerateSessionTitle_StopPathClearsInitialPromptMarker(t *testing.T) {
+	d := newDaemonForTest(t)
+	directory := t.TempDir()
+	seedSessionTitleSession(t, d, "sess-1", directory, "")
+	d.rememberSessionTitleInitialPrompt("sess-1", "a prompt the hook never carried")
+	d.sessionTitleExec = func(ctx context.Context, session *protocol.Session, slice transcript.ConversationSlice) (string, error) {
+		return "Fix login flow", nil
+	}
+
+	d.maybeGenerateSessionTitle("sess-1", writeSessionTitleTranscript(t))
+
+	d.sessionTitleMu.Lock()
+	_, held := d.sessionTitleInitialPrompt["sess-1"]
+	d.sessionTitleMu.Unlock()
+	if held {
+		t.Fatal("Stop-path title left the initial-prompt marker behind")
 	}
 }
