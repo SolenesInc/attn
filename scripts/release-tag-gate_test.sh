@@ -69,8 +69,8 @@ git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Release Tag Gate Test'
 git -C "$repo" config user.email 'release-tag-gate@example.com'
 git -C "$repo" switch -q -C main
-git -C "$repo" rm -q -- 'changelog.d/*.yaml'
-git -C "$repo" commit -q -m 'release fixture baseline'
+git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
+git -C "$repo" commit -q --allow-empty -m 'release fixture baseline'
 baseline_sha="$(git -C "$repo" rev-parse HEAD)"
 (cd "$repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
 cat >"$repo/.github/release-candidate.yml" <<EOF
