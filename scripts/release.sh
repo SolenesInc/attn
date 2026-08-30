@@ -59,6 +59,7 @@ done
 
 root="$(git rev-parse --show-toplevel)"
 script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$script_root/lib/release-tag.sh"
 cd "$root"
 
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -91,24 +92,6 @@ if [[ -z "$repo_name" || -z "$repo_url" ]]; then
   echo "prepare release: could not resolve the GitHub repository" >&2
   exit 1
 fi
-
-remote_tag_absent() {
-  local existing_message="$1"
-  local status=0
-  git ls-remote --exit-code "$remote" "refs/tags/${version_tag}" \
-    >/dev/null 2>&1 || status=$?
-  case "$status" in
-    0)
-      echo "prepare release: ${existing_message}" >&2
-      exit 1
-      ;;
-    2) ;;
-    *)
-      echo "prepare release: could not check remote tag ${version_tag}" >&2
-      exit 1
-      ;;
-  esac
-}
 
 echo "Fetching ${remote}/main..."
 git fetch --no-tags "$remote" main
@@ -144,7 +127,8 @@ if ! git merge-base --is-ancestor "$main_sha" "$source_sha"; then
   fi
   exit 1
 fi
-remote_tag_absent "tag ${version_tag} already exists"
+require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
+  "tag ${version_tag} already exists"
 if [[ "$kind" == promotion ]]; then
   if git show-ref --verify --quiet "refs/heads/${release_branch}"; then
     echo "prepare release: local branch ${release_branch} already exists" >&2
@@ -262,7 +246,8 @@ if [[ "$current_main_sha" != "$main_sha" ]]; then
   echo "current:  ${current_main_sha}" >&2
   exit 1
 fi
-remote_tag_absent "tag ${version_tag} appeared during preparation"
+require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
+  "tag ${version_tag} appeared during preparation"
 candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
 if [[ -n "$candidate_prs" ]]; then
   echo "prepare release: another candidate opened during preparation:" >&2
@@ -273,6 +258,7 @@ fi
 candidate_args=(
   --current-main "$main_sha"
   --head "$candidate_sha"
+  --tag-status absent
   --other-open-candidates 0
 )
 if [[ "$kind" == promotion ]]; then

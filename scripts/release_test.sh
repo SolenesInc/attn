@@ -247,6 +247,7 @@ main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
 # preparation reads the requested remote tag and leaves local history alone.
 git --git-dir="$fixture_origin" update-ref refs/tags/v90.0.0 "$main_sha"
 git -C "$fixture_repo" tag -f v90.0.0 "$source_sha"
+git -C "$fixture_repo" tag -f v99.98.97 "$source_sha"
 
 run_release v99.98.97 --dry-run >"$work/dry-run.out"
 grep -Fq "$source_sha" "$work/dry-run.out"
