@@ -108,7 +108,7 @@ describe('every scenario built on the scenario runner', () => {
     for (const file of fs.readdirSync(harnessDir).filter((name) => name.startsWith('scenario-') && name.endsWith('.mjs'))) {
       const source = fs.readFileSync(path.join(harnessDir, file), 'utf8');
       if (!source.includes('createScenarioRunner(')) {
-        return;
+        continue;
       }
       const lines = source.split('\n');
       lines.forEach((line, index) => {
