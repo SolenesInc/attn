@@ -71,8 +71,7 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	var env []string
-	// A bare `attn copilot` generates the session id rather than inheriting it, and copilot
-	// has no hooks carrying it, so every attn command the agent runs needs it from here.
+	// copilot carries no hook to pass it down, and a bare `attn copilot` generates a fresh one.
 	if id := strings.TrimSpace(opts.SessionID); id != "" {
 		env = append(env, "ATTN_SESSION_ID="+id)
 	}
@@ -85,15 +84,12 @@ func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	return env
 }
 
-// Copilot reads every *.instructions.md under a COPILOT_CUSTOM_INSTRUCTIONS_DIRS entry and
-// inlines it; AGENTS.md and copilot-instructions.md are only read from the git root and cwd.
 func (c *Copilot) GenerateInstructionsFile(opts SpawnOpts) (string, string) {
-	// Measured on 1.0.81: 256 KB of instructions load, 512 KB silently drops every custom
-	// instruction including the user's own. The guidance is ~10 KB today.
+	// Measured on 1.0.81: an extra dir yields only *.instructions.md, and one file past 256 KB
+	// silently drops every custom instruction, the user's own included. Guidance is ~10 KB.
 	return "attn.instructions.md", opts.launchGuidance()
 }
 
-// The user's own entries stay first and keep their order; attn appends its own.
 func copilotInstructionsDirs(inherited, dir string) string {
 	dir = strings.TrimSpace(dir)
 	entries := make([]string, 0, 4)

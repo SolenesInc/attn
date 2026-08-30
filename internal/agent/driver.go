@@ -199,7 +199,6 @@ func (o SpawnOpts) addDirArgs() []string {
 	return args
 }
 
-// The one place a launch turns into guidance, so a new field reaches every harness.
 func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
 		NotebookRoot:           o.NotebookRoot,
@@ -223,8 +222,6 @@ type ConfigOverrideProvider interface {
 	GenerateConfigOverrides(opts SpawnOpts) []string
 }
 
-// A harness with no flag for extra system-prompt text takes its launch guidance from a
-// file the launcher writes; the directory comes back on SpawnOpts.InstructionsDir.
 type InstructionsFileProvider interface {
 	GenerateInstructionsFile(opts SpawnOpts) (name, content string)
 }

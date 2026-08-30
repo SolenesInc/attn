@@ -24,7 +24,6 @@ func TestCopilotGenerateInstructionsFileCarriesLaunchGuidance(t *testing.T) {
 		SelfReportPullRequests: true,
 	})
 
-	// Copilot reads *.instructions.md from an extra dir and nothing else.
 	if !strings.HasSuffix(name, ".instructions.md") {
 		t.Fatalf("instructions file %q is not a name copilot loads", name)
 	}
@@ -50,7 +49,6 @@ func TestCopilotBuildEnvPointsCopilotAtTheInstructionsDir(t *testing.T) {
 	if got := copilotEnvValue(env, copilotInstructionsDirsEnv); got != "/tmp/attn-instructions-sess-1" {
 		t.Fatalf("%s = %q", copilotInstructionsDirsEnv, got)
 	}
-	// `attn pr record` resolves the session from the environment; copilot has no hooks.
 	if got := copilotEnvValue(env, "ATTN_SESSION_ID"); got != "sess-1" {
 		t.Fatalf("ATTN_SESSION_ID = %q", got)
 	}
@@ -100,7 +98,6 @@ func TestEveryDriverCarriesThePullRequestFlag(t *testing.T) {
 	_, copilotOff := (&Copilot{}).GenerateInstructionsFile(off)
 	guidance["copilot"] = [2]string{copilotOn, copilotOff}
 
-	// Each driver assembles its own guidance, so the flag has to survive every route.
 	for name, pair := range guidance {
 		if !strings.Contains(pair[0], "attn pr record") {
 			t.Fatalf("%s dropped the pull request block on the way to its guidance:\n%s", name, pair[0])

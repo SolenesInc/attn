@@ -461,7 +461,6 @@ func TestLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
 		t.Fatalf("a hookless harness missed the pull request block:\n%s", on)
 	}
 
-	// The way in, the way to see, and the way out all have to be named.
 	for _, want := range []string{"attn pr record <url>", "attn pr ls", "attn pr forget <url>"} {
 		if !strings.Contains(PullRequestSelfReportGuidance, want) {
 			t.Fatalf("pull request guidance never mentions %q:\n%s", want, PullRequestSelfReportGuidance)
