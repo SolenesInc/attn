@@ -232,24 +232,28 @@ export const scenarioCatalog = [
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (codex vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:codex'],
+    freshWorldAfter: true,
   },
   {
     id: 'tr205-probe-claude',
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (claude vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:claude'],
+    freshWorldAfter: true,
   },
   {
     id: 'tr502',
     runnerId: 'TR-502',
     label: 'TR-502 remote relaunch splits',
     command: ['pnpm', 'run', 'real-app:scenario-tr502'],
+    freshWorldAfter: true,
   },
   {
     id: 'tr504',
     runnerId: 'TR-504',
     label: 'TR-504 remote cleanup',
     command: ['pnpm', 'run', 'real-app:scenario-tr504'],
+    freshWorldAfter: true,
   },
   {
     id: 'tr402-local-codex',

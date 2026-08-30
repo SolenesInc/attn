@@ -265,7 +265,8 @@ async function main() {
   console.log(`Matrix target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
   reportRealAgentAllowances(scenarios);
 
-  if (isProductionHarnessTarget({ appPath, wsUrl, profile })) {
+  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, profile });
+  if (productionTarget) {
     console.log('[fresh-world] skipped (production target)');
   } else if (noFreshWorld) {
     console.log('[fresh-world] skipped (--no-fresh-world)');
@@ -293,6 +294,9 @@ async function main() {
     results.push(result);
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
     console.log(`--- ${scenario.id}: ${status} (${result.durationMs}ms) ---`);
+    if (scenario.freshWorldAfter && !productionTarget && !noFreshWorld) {
+      await ensureFreshWorld({ profile, appPath });
+    }
     if (failFast && result.code !== 0) {
       break;
     }

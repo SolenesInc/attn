@@ -293,6 +293,7 @@ async function closePaneAndAssertRecovery({
     `${label} workspace collapse`,
     20_000,
   );
+  await client.request('focus_pane', { sessionId, paneId: initialPaneId });
   const recoveredInitialPaneState = await waitForPaneState(
     client,
     sessionId,
@@ -553,6 +554,7 @@ async function main() {
         'initial split before relaunch',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: anchorText,
         allowWrappedContains: true,
@@ -584,6 +586,7 @@ async function main() {
     await runner.step('relaunch_and_restore_session', async () => {
       await relaunchAppAndConnect(client, observer);
       await client.request('select_session', { sessionId });
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await waitForPaneVisible(client, sessionId, initialPaneId, 30_000);
       await waitForPaneVisible(client, sessionId, initialShellPaneId, 30_000);
       restoredMainState = await captureInitialPaneHealthyState(
@@ -631,6 +634,7 @@ async function main() {
         'new shell after relaunch split from initial pane',
         30_000,
       );
+      await client.request('focus_pane', { sessionId, paneId: initialPaneId });
       await assertPaneVisibleContent(client, sessionId, initialPaneId, {
         contains: anchorText,
         allowWrappedContains: true,
