@@ -146,6 +146,14 @@ export function bundleIdentifierForAppPath(appPath, fallbackProfile = currentHar
   return bundleIdentifierForProfile(profileForAppPath(appPath, fallbackProfile));
 }
 
+export function appExecutableForProfile(profile = currentHarnessProfile()) {
+  return resolveHarnessResources(profile).appExecutable;
+}
+
+export function appExecutableForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
+  return appExecutableForProfile(profileForAppPath(appPath, fallbackProfile));
+}
+
 export function defaultAppPathForProfile(profile = currentHarnessProfile()) {
   return resolveHarnessResources(profile).appPath;
 }

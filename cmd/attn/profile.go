@@ -16,6 +16,7 @@ import (
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
+	"github.com/victorarias/attn/internal/desktopentry"
 	"github.com/victorarias/attn/internal/hostsession"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
@@ -38,6 +39,8 @@ func runProfile() {
 		runProfileClean(os.Args[3:])
 	case "stop-app":
 		runProfileStopApp(os.Args[3:])
+	case "register-scheme":
+		runProfileRegisterScheme(os.Args[3:])
 	case "set-origin":
 		runProfileSetOrigin(os.Args[3:])
 	case "list":
@@ -66,6 +69,7 @@ type profileResolved struct {
 	AppExecutable  string `json:"appExecutable"`
 	AppDaemon      string `json:"appDaemon"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
+	DesktopEntry   string `json:"desktopEntry,omitempty"`
 	E2EDaemonPort  string `json:"e2eDaemonPort"`
 	E2EVitePort    string `json:"e2eVitePort"`
 }
@@ -88,6 +92,7 @@ func resolveProfile(profile string) profileResolved {
 		AppExecutable:  config.AppExecutableForProfile(profile),
 		AppDaemon:      config.AppDaemonBinaryForProfile(profile),
 		DeepLinkScheme: config.DeepLinkSchemeForProfile(profile),
+		DesktopEntry:   desktopEntryPath(config.AppNameForProfile(profile)),
 		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
 		E2EVitePort:    config.E2EVitePortForProfile(profile),
 	}
@@ -119,6 +124,8 @@ func (r profileResolved) field(key string) (string, bool) {
 		return r.AppDaemon, true
 	case "deepLinkScheme":
 		return r.DeepLinkScheme, true
+	case "desktopEntry":
+		return r.DesktopEntry, true
 	case "e2eDaemonPort":
 		return r.E2EDaemonPort, true
 	case "e2eVitePort":
@@ -139,6 +146,9 @@ func runProfileStatus() {
 	fmt.Printf("  bundle id  %s\n", r.BundleID)
 	fmt.Printf("  app        %s  (%s)\n", r.AppPath, ynLabel(appInstalled, "installed", "not installed"))
 	fmt.Printf("  scheme     %s\n", r.DeepLinkScheme)
+	if r.DesktopEntry != "" {
+		fmt.Printf("  handler    %s  (%s)\n", r.DesktopEntry, ynLabel(fileExists(r.DesktopEntry), "registered", "not registered"))
+	}
 	fmt.Printf("  e2e ports  daemon %s · vite %s\n\n", r.E2EDaemonPort, r.E2EVitePort)
 
 	if err := config.ValidateProfileRouting(); err != nil {
@@ -184,7 +194,7 @@ func runProfileResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,deepLinkScheme,e2eDaemonPort,e2eVitePort)", field))
+			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort)", field))
 		}
 		fmt.Println(v)
 		return
@@ -322,6 +332,17 @@ func runProfileClean(args []string) {
 		fmt.Printf("  app      removed %s\n", r.AppPath)
 	} else {
 		fmt.Printf("  app      not installed (%s)\n", r.AppPath)
+	}
+
+	if r.DesktopEntry != "" {
+		removed, err := desktopentry.Remove(r.AppName)
+		if err != nil {
+			fmt.Printf("  scheme   %v\n", err)
+		} else if removed {
+			fmt.Printf("  scheme   removed %s\n", r.DesktopEntry)
+		} else {
+			fmt.Printf("  scheme   not registered (%s)\n", r.DesktopEntry)
+		}
 	}
 
 	if fileExists(r.DataDir) {
@@ -689,7 +710,8 @@ Usage:
   attn profile resolve --field wsPort      print one resolved value
   attn profile resolve --profile agent7    resolve a different profile
   attn profile tauri-config    Tauri --config overlay for the profile's build
-  attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app + data dir
+  attn profile register-scheme Linux only: claim <scheme>:// for this profile's app in the desktop database
+  attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app + data dir + scheme handler
   attn profile stop-app        quit the active profile's app (--profile <name> for another)
   attn profile list            every profile with data and/or an installed app
   attn profile list --json     same, machine-readable, with origin and what is running

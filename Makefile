@@ -290,6 +290,9 @@ install: build-app
 	"$$attn" profile stop-app --profile "$$profile" >/dev/null; \
 	rm -rf "$$app_bundle"; \
 	cp -r "$$staged" "$$app_bundle"; \
+	if [ "$(UNAME_S)" != "Darwin" ]; then \
+		"$$attn" profile register-scheme --profile "$$profile"; \
+	fi; \
 	if [ -n "$$profile" ]; then \
 		$(WARN_LEAKED_ROUTING); \
 		env $(PROFILE_DAEMON_UNSET) ATTN_PROFILE="$$profile" "$$app_binary" daemon ensure >/dev/null; \

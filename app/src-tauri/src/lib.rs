@@ -784,19 +784,45 @@ fn canonical_safe_markdown_target(path: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-#[cfg(target_os = "macos")]
-fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
-    Command::new("/usr/bin/open")
-        .arg("--")
-        .arg(path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to open Markdown target {}: {}", path.display(), e))
+#[cfg(target_os = "linux")]
+fn linux_session_bus_available() -> bool {
+    // Same call the plugin makes: it unwraps a malformed address and swallows a
+    // failed connect, so only a live connection proves it can own its name.
+    zbus::blocking::Connection::session().is_ok()
 }
 
-#[cfg(not(target_os = "macos"))]
-fn launch_safe_markdown_target(_path: &Path) -> Result<(), String> {
-    Err("Opening Markdown panel links is only supported on macOS.".to_string())
+#[cfg(all(test, target_os = "linux"))]
+mod linux_session_bus_tests {
+    use super::*;
+
+    static BUS_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_bus_address(value: &str) -> bool {
+        let _guard = BUS_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = env::var_os("DBUS_SESSION_BUS_ADDRESS");
+        env::set_var("DBUS_SESSION_BUS_ADDRESS", value);
+        let available = linux_session_bus_available();
+        match previous {
+            Some(value) => env::set_var("DBUS_SESSION_BUS_ADDRESS", value),
+            None => env::remove_var("DBUS_SESSION_BUS_ADDRESS"),
+        }
+        available
+    }
+
+    #[test]
+    fn malformed_inherited_address_is_no_bus() {
+        assert!(!with_bus_address("not-an-address"));
+    }
+
+    #[test]
+    fn well_formed_but_unreachable_address_is_no_bus() {
+        assert!(!with_bus_address("unix:path=/nonexistent/bus"));
+    }
+}
+
+fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open Markdown target {}: {}", path.display(), e))
 }
 
 #[tauri::command]
@@ -838,23 +864,18 @@ fn validate_seed_artifact_launch(path: &Path, reveal: bool) -> Result<(), String
     Err("This managed artifact can only be revealed in Finder.".to_string())
 }
 
-#[cfg(target_os = "macos")]
 fn launch_seed_artifact(path: &Path, reveal: bool) -> Result<(), String> {
-    let mut command = Command::new("/usr/bin/open");
     if reveal {
-        command.arg("-R");
+        return tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| {
+            format!(
+                "Failed to reveal managed artifact {}: {}",
+                path.display(),
+                e
+            )
+        });
     }
-    command
-        .arg("--")
-        .arg(path)
-        .spawn()
-        .map(|_| ())
+    tauri_plugin_opener::open_path(path, None::<&str>)
         .map_err(|e| format!("Failed to open managed artifact {}: {}", path.display(), e))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn launch_seed_artifact(_path: &Path, _reveal: bool) -> Result<(), String> {
-    Err("Opening managed seed artifacts is only supported on macOS.".to_string())
 }
 
 #[tauri::command]
@@ -1154,7 +1175,28 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
 });
 "#;
 
-    let builder = tauri::Builder::default()
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(target_os = "linux")]
+    {
+        // zbus panics without a session bus, so a headless launch without one keeps
+        // the old behaviour (a deep link opens a second window) instead of aborting.
+        if linux_session_bus_available() {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
+        } else {
+            eprintln!("[attn] no reachable session D-Bus (DBUS_SESSION_BUS_ADDRESS); a deep link will open a second app instance");
+        }
+    }
+
+    let builder = builder
         .append_invoke_initialization_script(automation_init_script)
         .append_invoke_initialization_script(native_dialog_capture_script)
         .plugin(tauri_plugin_deep_link::init())
