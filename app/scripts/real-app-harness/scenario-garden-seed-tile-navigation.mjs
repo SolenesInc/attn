@@ -120,6 +120,7 @@ async function main() {
   const driver = new MacOSDriver({ appPath: options.appPath });
   const runner = createScenarioRunner(options, {
     scenarioId: 'GardenSeedTileNavigation',
+    allowRealAgents: false,
     tier: 'local',
     prefix: 'garden-seed-tile-navigation',
   });

@@ -11,6 +11,7 @@ import {
   ensureDaemonCarriesTripwire,
   HEADLESS_TASKS_VAR,
   readDaemonHeadlessSwitch,
+  readDaemonTripwireReceipt,
   readTripwireLedger,
   TRIPWIRE_BINARIES,
   TRIPWIRE_EXIT_CODE,
@@ -193,19 +194,28 @@ describe('the receipt that the switch was in force', () => {
     return file;
   };
 
-  it('reads the switch off the daemon the scenario ran against', () => {
+  it('reads the switch and this run\'s shims off the daemon the scenario ran against', () => {
     const tripwire = armAgentTripwire({
       scenarioId: 'NUDGE-TRIGGER',
       runDir,
       env: freshEnv(),
-      readSwitch: () => readDaemonHeadlessSwitch({
+      readReceipt: ({ marker }) => readDaemonTripwireReceipt({
+        marker,
         pidPath: pidPath(),
-        readEnvironment: () => `PATH=/usr/bin ${HEADLESS_TASKS_VAR}=off`,
+        readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=${marker} ${HEADLESS_TASKS_VAR}=off`,
       }),
       log: () => {},
     });
 
-    expect(tripwire.readHeadlessSwitch()).toBe('off');
+    expect(tripwire.readReceipt()).toEqual({ headlessTasks: 'off', carriesMarker: true });
+  });
+
+  it('says the daemon carries another run\'s shims when the marker differs', () => {
+    expect(readDaemonTripwireReceipt({
+      marker: 'shims|claude',
+      pidPath: pidPath(),
+      readEnvironment: () => `${TRIPWIRE_MARKER_VAR}=shims|pi ${HEADLESS_TASKS_VAR}=off`,
+    })).toEqual({ headlessTasks: 'off', carriesMarker: false });
   });
 
   it('says on when the daemon never got the switch', () => {
@@ -231,7 +241,7 @@ describe('the receipt that the switch was in force', () => {
       log: () => {},
     });
 
-    expect(tripwire.readHeadlessSwitch()).toBeNull();
+    expect(tripwire.readReceipt()).toBeNull();
   });
 });
 
@@ -264,7 +274,7 @@ describe('the daemon a scenario inherits', () => {
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
-      headlessOff: true,
+      armed: true,
       pidPath: pidFileFor(process.pid),
       readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude`,
       run,
@@ -280,7 +290,7 @@ describe('the daemon a scenario inherits', () => {
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
-      headlessOff: true,
+      armed: true,
       pidPath: pidFileFor(process.pid),
       readEnvironment: () => `PATH=/usr/bin ${TRIPWIRE_MARKER_VAR}=shims|claude ${HEADLESS_TASKS_VAR}=off`,
       run,
@@ -320,6 +330,57 @@ describe('the daemon a scenario inherits', () => {
     });
 
     expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('refuses an armed scenario when the daemon environment cannot be read', () => {
+    const run = vi.fn();
+
+    expect(() => ensureDaemonCarriesTripwire({
+      ...target,
+      scenarioId: 'NUDGE-TRIGGER',
+      marker: 'shims|claude',
+      armed: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => { throw new Error('ps: permission denied'); },
+      run,
+      log: () => {},
+    })).toThrow(/NUDGE-TRIGGER[\s\S]*pid \d+[\s\S]*unreadable \(ps: permission denied\)[\s\S]*ATTN_HEADLESS_TASKS=off/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('refuses an armed scenario rather than restarting a production daemon', () => {
+    const run = vi.fn();
+
+    expect(() => ensureDaemonCarriesTripwire({
+      profile: '',
+      appPath: '/Applications/attn.app',
+      scenarioId: 'NUDGE-TRIGGER',
+      marker: 'shims|claude',
+      armed: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: () => {},
+    })).toThrow(/a production daemon is never restarted/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('still only warns for a scenario that may run a real agent', () => {
+    const run = vi.fn();
+    const logged = [];
+    const result = ensureDaemonCarriesTripwire({
+      profile: '',
+      appPath: '/Applications/attn.app',
+      marker: 'shims|',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: (message) => logged.push(message),
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
+    expect(logged.join('\n')).toContain('WARNING');
     expect(run).not.toHaveBeenCalled();
   });
 

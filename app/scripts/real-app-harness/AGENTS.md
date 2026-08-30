@@ -46,11 +46,14 @@ fails the scenario on a non-empty ledger and prints the lines.
   pointer file attributes execs to the scenario running now.
   `ensureDaemonCarriesTripwire` stops a daemon that predates the tripwire
   (never on a production target) so the app relaunch brings up an armed one.
-- A scenario that legitimately runs a real agent declares `allowRealAgents` in
-  `scenarioCatalog.mjs`: `true` for all four, or an array naming the ones it
-  needs. Every arming logs what it allowed. The pi scenarios carry
-  `['pi']` — they exec the real `pi` binary against a stub provider or a
-  recording, and keep claude/codex/copilot armed.
+- Every `createScenarioRunner` caller declares what it may run: a
+  `scenarioCatalog.mjs` entry carrying its `runnerId`, or `allowRealAgents` in
+  the runner options, which wins over the catalog. `false` arms everything,
+  `true` allows all four, an array names the ones the scenario needs. A runner
+  id neither covers fails at construction rather than defaulting to permissive.
+  Every arming logs what it allowed. The pi scenarios carry `['pi']` — they exec
+  the real `pi` binary against a stub provider or a recording, and keep
+  claude/codex/copilot armed.
 - Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses narration,
   classification, titling and every other headless LLM task (`internal/headless`)
   instead of enqueueing one. Without it the ledger check races the daemon:
@@ -63,6 +66,15 @@ fails the scenario on a non-empty ledger and prints the lines.
   rather than leaving it assumed. Counting `headless task refused` lines instead
   does not work: the daemon logs them as a scenario tears its sessions down, in
   the same second `summary.json` is written.
+- An armed scenario fails closed on both ends. At arm time, a running daemon
+  whose environment cannot be read, or one this harness may not stop (a
+  production target is never restarted), fails the scenario before it starts,
+  naming the pid, what was read and what was expected. At the end, `ok: true`
+  requires the daemon's environment to carry both this run's
+  `ATTN_AGENT_TRIPWIRE` marker and `ATTN_HEADLESS_TASKS=off`; a switch reading
+  `on`, `no daemon` or `unreadable`, or a marker from another run, fails the
+  scenario with the value in the digest. A scenario allowing real agents keeps
+  the old warn-and-continue: it has nothing to prove.
 
 ## Reading results
 

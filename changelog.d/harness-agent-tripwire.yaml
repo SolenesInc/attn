@@ -9,9 +9,14 @@ change: >
   `agent-tripwire.ledger` and refuses to run; the scenario runner, the serial
   matrix, the soak and the bridge smoke fail on a non-empty ledger and print
   what ran. A scenario that legitimately drives a real agent binary says so with
-  `allowRealAgents` in the catalog, and every run logs which binaries it allowed.
+  `allowRealAgents`, in the catalog or on the runner, and every run logs which
+  binaries it allowed; a runner id neither covers fails at construction instead
+  of quietly disarming.
   Arming also runs the scenario's daemon with `ATTN_HEADLESS_TASKS=off`, so no
   debounced narration or classification can exec an agent after the run has been
-  scored, and `summary.json` records the switch it read off that daemon.
+  scored, and `summary.json` records the switch it read off that daemon. That
+  receipt fails closed: an armed scenario stops before it starts when the daemon
+  it would run against cannot be proved armed, and turns green only when that
+  daemon's environment carries both this run's tripwire marker and the switch.
   A failure digest that follows a tripped tripwire names it before the step the
   killed session failed.

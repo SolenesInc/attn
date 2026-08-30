@@ -170,6 +170,7 @@ async function main() {
   const binary = path.join(resources.appPath, 'Contents', 'MacOS', 'attn');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-FORM',
+    allowRealAgents: false,
     tier: 'tier2-local',
     prefix: 'automation-form',
     metadata: { profile },

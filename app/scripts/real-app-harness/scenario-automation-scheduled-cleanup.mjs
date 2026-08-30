@@ -209,6 +209,9 @@ async function main() {
   const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SCHEDULED-CLEANUP',
+    // The cleanup automation is the proof: a real codex agent removing merged
+    // worktrees with real git. Everything else in this scenario is a test double.
+    allowRealAgents: ['codex'],
     tier: 'tier2-local-real-agent',
     prefix: 'automation-scheduled-cleanup',
     metadata: { profile, provider: 'local fixture repo', legFour: 'storm-guard re-assertion (fresh continuity); skip-discard-beyond-grace covered by unit tests' },

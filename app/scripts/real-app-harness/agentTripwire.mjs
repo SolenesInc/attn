@@ -165,6 +165,26 @@ export function readTripwireLedger(ledgerPath) {
   return raw.split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
+const RECEIPT_DIAGNOSIS = {
+  on: 'the daemon came up without the switch, so narration, classification or titling could still have exec\'d an agent',
+  'no daemon': 'no daemon was running when the scenario finished, so nothing proves what it was carrying',
+  unreadable: 'the daemon environment could not be read, so nothing proves what it was carrying',
+};
+
+export function formatReceiptFailure({ scenarioId, receipt, marker, pidPath = null }) {
+  const mode = receipt?.headlessTasks ?? null;
+  const faults = [
+    ...(mode === 'off' ? [] : [`${HEADLESS_TASKS_VAR} reads ${JSON.stringify(mode)} — ${RECEIPT_DIAGNOSIS[mode] || 'the harness never read a daemon'}`]),
+    ...(receipt?.carriesMarker ? [] : [`${TRIPWIRE_MARKER_VAR} is not ${marker} — the daemon was armed by another run, or not at all`]),
+  ];
+  return [
+    `agent tripwire: ${scenarioId} ran armed, so the daemon it ran against has to prove it carried the shims and the switch.`,
+    ...faults.map((fault) => `  ${fault}`),
+    ...(pidPath ? [`daemon pid file: ${pidPath}`] : []),
+    'a scenario that must run a real agent declares it instead: a scenarioCatalog.mjs entry, or allowRealAgents on createScenarioRunner.',
+  ].join('\n');
+}
+
 export function formatTripwireFailure({ scenarioId, ledgerPath, lines }) {
   return [
     `agent tripwire: ${lines.length} real agent exec(s) during ${scenarioId}; this run calls no model.`,
@@ -179,13 +199,15 @@ export function armAgentTripwire({
   allowRealAgents,
   env = process.env,
   profile = currentHarnessProfile(),
-  readSwitch = readDaemonHeadlessSwitch,
+  readReceipt = readDaemonTripwireReceipt,
   log = (message) => console.log(`[agent-tripwire] ${message}`),
 }) {
   const dir = tripwireDir(env);
   const binaries = armedBinaries(allowRealAgents);
-  const headlessOff = headlessTasksOff(binaries);
+  const armed = headlessTasksOff(binaries);
   const ledgerPath = path.join(runDir, TRIPWIRE_LEDGER_NAME);
+  const pidPath = daemonPidFilePathForProfile(profile);
+  const marker = tripwireMarker({ dir, binaries });
 
   writeTripwireShims({ dir, binaries });
   fs.writeFileSync(ledgerPath, '', 'utf8');
@@ -197,7 +219,7 @@ export function armAgentTripwire({
     log(`REAL AGENTS ALLOWED for ${scenarioId}: ${allowed.join(', ')} — this scenario still runs a real agent binary.`);
   }
   log(`armed for ${scenarioId}: ${binaries.length > 0 ? binaries.join(', ') : '(nothing)'} — ledger ${ledgerPath}`);
-  if (headlessOff) {
+  if (armed) {
     log(`${HEADLESS_TASKS_VAR}=off for ${scenarioId}: the daemon refuses narration, classification and every other headless task.`);
   }
 
@@ -207,10 +229,11 @@ export function armAgentTripwire({
     binaries,
     allowed,
     ledgerPath,
-    headlessOff,
-    marker: tripwireMarker({ dir, binaries }),
+    armed,
+    pidPath,
+    marker,
     read: () => readTripwireLedger(ledgerPath),
-    readHeadlessSwitch: () => (headlessOff ? readSwitch({ profile }) : null),
+    readReceipt: () => (armed ? readReceipt({ profile, marker }) : null),
   };
 }
 
@@ -239,29 +262,50 @@ function livingDaemonPid(pidPath) {
   return pid;
 }
 
-// The daemon reads ATTN_HEADLESS_TASKS from its own environment, so that
-// environment is the receipt that the switch was in force for the whole run.
-export function readDaemonHeadlessSwitch({
+// The daemon reads both variables out of its own environment, so that
+// environment is the receipt that they were in force for the whole run.
+export function readDaemonTripwireReceipt({
+  marker = null,
   profile = currentHarnessProfile(),
   pidPath = daemonPidFilePathForProfile(profile),
   readEnvironment = readProcessEnvironment,
 } = {}) {
   const pid = livingDaemonPid(pidPath);
   if (!pid) {
-    return 'no daemon';
+    return { headlessTasks: 'no daemon', carriesMarker: false };
   }
+  let environment;
   try {
-    return readEnvironment(pid).includes(`${HEADLESS_TASKS_VAR}=off`) ? 'off' : 'on';
+    environment = readEnvironment(pid);
   } catch {
-    return 'unreadable';
+    return { headlessTasks: 'unreadable', carriesMarker: false };
   }
+  return {
+    headlessTasks: environment.includes(`${HEADLESS_TASKS_VAR}=off`) ? 'off' : 'on',
+    carriesMarker: Boolean(marker) && environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`),
+  };
+}
+
+export function readDaemonHeadlessSwitch(options = {}) {
+  return readDaemonTripwireReceipt(options).headlessTasks;
+}
+
+export function formatUnarmedDaemonFailure({ scenarioId, pid, pidPath, marker, read }) {
+  return [
+    `agent tripwire: ${scenarioId} must call no model, and the daemon it would run against cannot be proved armed.`,
+    `daemon: pid ${pid} (${pidPath})`,
+    `read: ${read}`,
+    `expected: ${TRIPWIRE_MARKER_VAR}=${marker} and ${HEADLESS_TASKS_VAR}=off, or a non-production target this harness may stop so the app brings up an armed daemon.`,
+    `a scenario that must run a real agent declares it instead: a scenarioCatalog.mjs entry, or allowRealAgents on createScenarioRunner.`,
+  ].join('\n');
 }
 
 // A daemon started before this scenario carries another run's PATH and agent
 // overrides, so the tripwire would watch a door the daemon never uses.
 export function ensureDaemonCarriesTripwire({
+  scenarioId = 'this scenario',
   marker,
-  headlessOff = false,
+  armed = false,
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
   pidPath = daemonPidFilePathForProfile(profile),
@@ -273,16 +317,22 @@ export function ensureDaemonCarriesTripwire({
   if (!pid) {
     return { restarted: false, reason: 'no daemon running' };
   }
+  const refuse = (read) => {
+    throw new Error(formatUnarmedDaemonFailure({ scenarioId, pid, pidPath, marker, read }));
+  };
 
   let environment = '';
   try {
     environment = readEnvironment(pid);
   } catch (error) {
+    if (armed) {
+      refuse(`the daemon environment is unreadable (${error?.message || error})`);
+    }
     log(`could not read the environment of daemon pid ${pid}: ${error?.message || error}`);
     return { restarted: false, reason: 'daemon environment unreadable' };
   }
   const carriesMarker = environment.includes(`${TRIPWIRE_MARKER_VAR}=${marker}`);
-  const carriesSwitch = !headlessOff || environment.includes(`${HEADLESS_TASKS_VAR}=off`);
+  const carriesSwitch = !armed || environment.includes(`${HEADLESS_TASKS_VAR}=off`);
   if (carriesMarker && carriesSwitch) {
     return { restarted: false, reason: 'daemon already armed' };
   }
@@ -290,6 +340,9 @@ export function ensureDaemonCarriesTripwire({
   try {
     assertFreshWorldTargetSafe({ profile, appPath });
   } catch (error) {
+    if (armed) {
+      refuse(`the daemon predates this tripwire and the target refuses a restart (${error?.message || error}); a production daemon is never restarted`);
+    }
     log(`WARNING: daemon pid ${pid} predates this tripwire and the target refuses a restart (${error?.message || error}); session and headless execs may go unseen.`);
     return { restarted: false, reason: 'target refuses a daemon restart' };
   }

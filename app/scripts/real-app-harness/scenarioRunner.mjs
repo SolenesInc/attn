@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { armAgentTripwire, ensureDaemonCarriesTripwire, formatTripwireFailure } from './agentTripwire.mjs';
+import { armAgentTripwire, ensureDaemonCarriesTripwire, formatReceiptFailure, formatTripwireFailure } from './agentTripwire.mjs';
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
@@ -151,7 +151,7 @@ export function createScenarioRunner(options, {
   prefix,
   metadata = {},
   preflightLaunchEnv = null,
-  allowRealAgents = allowRealAgentsForRunner(scenarioId),
+  allowRealAgents,
 } = {}, {
   assertBuildMatches = assertPackagedAppBuildMatchesCurrentSource,
   armTripwire = armAgentTripwire,
@@ -162,6 +162,9 @@ export function createScenarioRunner(options, {
   isRecordingEnabled = recordingEnabled,
 } = {}) {
   const runnerCreatedAt = Date.now();
+  const declaredAllowRealAgents = allowRealAgents === undefined
+    ? allowRealAgentsForRunner(scenarioId)
+    : allowRealAgents;
   assertBuildMatches({
     appPath: options?.appPath,
     launchEnv: preflightLaunchEnv,
@@ -181,10 +184,16 @@ export function createScenarioRunner(options, {
     removeDirIfPresent(sessionDir);
     throw error;
   }
-  const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents });
+  const tripwire = armTripwire({ scenarioId, runDir, allowRealAgents: declaredAllowRealAgents });
   try {
-    ensureDaemonArmed({ marker: tripwire.marker, headlessOff: tripwire.headlessOff, appPath: options?.appPath });
+    ensureDaemonArmed({ scenarioId, marker: tripwire.marker, armed: tripwire.armed, appPath: options?.appPath });
   } catch (error) {
+    if (tripwire.armed) {
+      releaseScenarioLock();
+      removeDirIfPresent(runDir);
+      removeDirIfPresent(sessionDir);
+      throw error;
+    }
     console.warn(`[agent-tripwire] could not check the running daemon: ${error?.message || error}`);
   }
   const tracePath = path.join(runDir, 'trace.log');
@@ -210,10 +219,8 @@ export function createScenarioRunner(options, {
     return lines;
   };
 
-  const headlessSwitchField = () => {
-    const mode = tripwire.readHeadlessSwitch?.();
-    return mode ? { headlessTasks: mode } : {};
-  };
+  const readDaemonReceipt = () => tripwire.readReceipt?.() || null;
+  const headlessSwitchField = (receipt) => (receipt ? { headlessTasks: receipt.headlessTasks } : {});
 
   let recorder = null;
   if (isRecordingEnabled()) {
@@ -405,6 +412,17 @@ export function createScenarioRunner(options, {
         process.stdout.write(`${digest}\n`);
         throw new Error(digest);
       }
+      const receipt = readDaemonReceipt();
+      if (tripwire.armed && !(receipt?.headlessTasks === 'off' && receipt?.carriesMarker)) {
+        const digest = formatReceiptFailure({
+          scenarioId,
+          receipt,
+          marker: tripwire.marker,
+          pidPath: tripwire.pidPath,
+        });
+        process.stdout.write(`${digest}\n`);
+        throw new Error(digest);
+      }
       const finalSummary = {
         ok: true,
         scenarioId,
@@ -415,7 +433,7 @@ export function createScenarioRunner(options, {
         metadata,
         steps,
         assertions,
-        ...headlessSwitchField(),
+        ...headlessSwitchField(receipt),
         ...summary,
       };
       const summaryPath = path.join(runDir, 'summary.json');
@@ -449,7 +467,7 @@ export function createScenarioRunner(options, {
         ...(recorderError && recorderError !== error
           ? { recordingError: normalizeError(recorderError) }
           : {}),
-        ...headlessSwitchField(),
+        ...headlessSwitchField(readDaemonReceipt()),
         ...(ledger.length > 0
           ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
           : {}),

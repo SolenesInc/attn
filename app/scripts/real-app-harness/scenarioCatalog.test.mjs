@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import url from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { TRIPWIRE_BINARIES } from './agentTripwire.mjs';
 import {
@@ -42,9 +45,10 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(allowRealAgentsForRunner('AGENT-QUEUE')).toBe(true);
   });
 
-  it('allows every binary for a runner outside the catalog', () => {
-    expect(allowRealAgentsForRunner('SOME-UNLISTED-PROBE')).toBe(true);
-    expect(allowRealAgentsForRunner(undefined)).toBe(true);
+  it('refuses a runner outside the catalog rather than allowing every binary', () => {
+    expect(() => allowRealAgentsForRunner('SOME-UNLISTED-PROBE'))
+      .toThrow(/"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/);
+    expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
   });
 
   it('takes the permissive flag when one runner id serves several entries', () => {
@@ -90,5 +94,34 @@ describe('scenarioCatalog soakOnly handling', () => {
 
   it('throws on an unknown id in direct single-scenario resolution', () => {
     expect(() => resolveScenario('does-not-exist')).toThrow('Unknown scenario id: does-not-exist');
+  });
+});
+
+// A hand-rolled main() that never builds a runner arms no tripwire at all and
+// is out of this net; every createScenarioRunner caller is in it.
+describe('every scenario built on the scenario runner', () => {
+  const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
+  const runnerIds = new Set(scenarioCatalog.map((scenario) => scenario.runnerId).filter(Boolean));
+
+  it('declares its tripwire in the catalog or on the runner', () => {
+    const undeclared = [];
+    for (const file of fs.readdirSync(harnessDir).filter((name) => name.startsWith('scenario-') && name.endsWith('.mjs'))) {
+      const source = fs.readFileSync(path.join(harnessDir, file), 'utf8');
+      if (!source.includes('createScenarioRunner(')) {
+        return;
+      }
+      const lines = source.split('\n');
+      lines.forEach((line, index) => {
+        const match = /scenarioId: '([^']+)'/.exec(line);
+        if (!match || runnerIds.has(match[1])) {
+          return;
+        }
+        if (!lines.slice(index, index + 12).some((option) => option.includes('allowRealAgents:'))) {
+          undeclared.push(`${file}: ${match[1]}`);
+        }
+      });
+    }
+
+    expect(undeclared, 'add a scenarioCatalog entry or pass allowRealAgents to createScenarioRunner').toEqual([]);
   });
 });

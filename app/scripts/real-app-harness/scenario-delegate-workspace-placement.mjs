@@ -79,6 +79,9 @@ async function main() {
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'DELEGATE-WORKSPACE-PLACEMENT',
+    // The delegated pane must render a real codex session for the placement
+    // assertions to mean anything.
+    allowRealAgents: ['codex'],
     tier: 'tier2-local-real-agent',
     prefix: 'delegate-workspace-placement',
     metadata: {

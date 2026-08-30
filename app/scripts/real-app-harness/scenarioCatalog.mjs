@@ -479,7 +479,11 @@ export function allowRealAgentsForRunner(runnerId, catalog = scenarioCatalog) {
     ? catalog.filter((scenario) => scenario.runnerId === runnerId)
     : [];
   if (entries.length === 0) {
-    return true;
+    throw new Error([
+      `agent tripwire: runner ${JSON.stringify(runnerId)} has no scenarioCatalog.mjs entry, so nothing declares whether it may run a real agent.`,
+      `declare it: add a catalog entry carrying runnerId ${JSON.stringify(runnerId)}, or pass allowRealAgents to createScenarioRunner —`,
+      '  false to arm the tripwire, true for every binary, or an array naming the agent binaries the scenario needs.',
+    ].join('\n'));
   }
   if (entries.some((scenario) => scenario.allowRealAgents === true)) {
     return true;
