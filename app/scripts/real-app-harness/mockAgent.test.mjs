@@ -19,21 +19,23 @@ import {
   writeMockAgentFixture,
 } from './mockAgent.mjs';
 
-function fakeWorld({ settings = {}, failWaitFor = null } = {}) {
+function fakeWorld({ settings = {}, failWaitFor = null, daemonObserves = () => true } = {}) {
   const writes = [];
   const cleanups = [];
   const client = {
     request: async (verb, payload) => {
       expect(verb).toBe('set_setting');
       writes.push(payload);
-      settings[payload.key] = payload.value;
+      if (daemonObserves(payload, writes.length - 1)) settings[payload.key] = payload.value;
     },
   };
   const observer = {
     getSetting: (key) => settings[key] || '',
     waitFor: async (fn, description) => {
       if (failWaitFor && description.includes(failWaitFor)) throw new Error(`timed out waiting for ${description}`);
-      expect(fn()).toBe(true);
+      const value = fn();
+      if (!value) throw new Error(`timed out waiting for ${description}`);
+      return value;
     },
   };
   return { settings, writes, cleanups, client, observer, runner: { registerCleanup: (name, fn) => cleanups.push({ name, fn }) } };
@@ -171,6 +173,24 @@ describe('mock agent fixture', () => {
     await configured.restore();
     expect(world.writes.at(-1)).toEqual({ key: HEADLESS_TASKS_SETTING, value: 'true' });
     expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('true');
+  });
+
+  it('leaves the cleanup armed when a restore dispatch is accepted but never observed', async () => {
+    const world = fakeWorld({
+      settings: { codex_executable: '/usr/local/bin/codex', [HEADLESS_TASKS_SETTING]: 'true', [HEADLESS_TASKS_STORED_SETTING]: 'true' },
+      daemonObserves: (_payload, index) => index < 2,
+    });
+
+    const configured = await configureMockAgent(world);
+    await expect(configured.restore()).rejects.toThrow(
+      'the daemon never confirmed codex_executable back to "/usr/local/bin/codex"',
+    );
+    expect(world.writes).toHaveLength(4);
+    expect(world.settings.codex_executable).toBe(configured.executablePath);
+    expect(world.settings[HEADLESS_TASKS_SETTING]).toBe('false');
+
+    await expect(world.cleanups[0].fn()).rejects.toThrow('codex_executable back to "/usr/local/bin/codex"');
+    expect(world.writes).toHaveLength(6);
   });
 
   it('refuses by name before writing anything when the environment forces headless tasks on', async () => {

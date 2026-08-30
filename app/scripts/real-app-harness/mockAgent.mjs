@@ -158,10 +158,11 @@ export async function configureMockAgent({ client, observer, runner, agent = 'co
     if (restored) return;
     let failure = null;
     for (const write of [{ key, value: previous }, { key: HEADLESS_TASKS_SETTING, value: previousHeadless }]) {
+      const target = `${write.key} back to ${JSON.stringify(write.value)}`;
       try {
-        await client.request('set_setting', write);
+        await setSettingAndWait(client, observer, write.key, write.value, target);
       } catch (err) {
-        failure ??= err;
+        failure ??= new Error(`the daemon never confirmed ${target}: ${err.message}`, { cause: err });
       }
     }
     if (failure) throw failure;
