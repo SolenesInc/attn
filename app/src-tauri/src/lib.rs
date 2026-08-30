@@ -786,13 +786,38 @@ fn canonical_safe_markdown_target(path: &Path) -> Result<PathBuf, String> {
 
 #[cfg(target_os = "linux")]
 fn linux_session_bus_available() -> bool {
-    if env::var("DBUS_SESSION_BUS_ADDRESS").is_ok_and(|value| !value.trim().is_empty()) {
-        return true;
+    // Same call the plugin makes: it unwraps a malformed address and swallows a
+    // failed connect, so only a live connection proves it can own its name.
+    zbus::blocking::Connection::session().is_ok()
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_session_bus_tests {
+    use super::*;
+
+    static BUS_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_bus_address(value: &str) -> bool {
+        let _guard = BUS_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = env::var_os("DBUS_SESSION_BUS_ADDRESS");
+        env::set_var("DBUS_SESSION_BUS_ADDRESS", value);
+        let available = linux_session_bus_available();
+        match previous {
+            Some(value) => env::set_var("DBUS_SESSION_BUS_ADDRESS", value),
+            None => env::remove_var("DBUS_SESSION_BUS_ADDRESS"),
+        }
+        available
     }
-    env::var("XDG_RUNTIME_DIR")
-        .ok()
-        .filter(|dir| !dir.trim().is_empty())
-        .is_some_and(|dir| Path::new(&dir).join("bus").exists())
+
+    #[test]
+    fn malformed_inherited_address_is_no_bus() {
+        assert!(!with_bus_address("not-an-address"));
+    }
+
+    #[test]
+    fn well_formed_but_unreachable_address_is_no_bus() {
+        assert!(!with_bus_address("unix:path=/nonexistent/bus"));
+    }
 }
 
 fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
@@ -1167,7 +1192,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 }
             }));
         } else {
-            eprintln!("[attn] no session D-Bus (DBUS_SESSION_BUS_ADDRESS or $XDG_RUNTIME_DIR/bus); a deep link will open a second app instance");
+            eprintln!("[attn] no reachable session D-Bus (DBUS_SESSION_BUS_ADDRESS); a deep link will open a second app instance");
         }
     }
 
