@@ -268,7 +268,9 @@ export function GardenFrame({
                 seedsTotal={seedsTotal}
                 liveSessions={liveSessions ?? new Set()}
                 loaded={loaded}
-                onTransition={(seedId, verb, reason) => moveSeed!(seedId, verb, reason)}
+                onTransition={(seedId, verb, reason, force, comment) => (
+                  moveSeed!(seedId, verb, reason, force, comment)
+                )}
                 onNote={noteSeed!}
                 viewToggle={viewToggle}
                 onClose={onClose}
