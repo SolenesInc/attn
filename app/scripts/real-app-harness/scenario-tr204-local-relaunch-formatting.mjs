@@ -10,6 +10,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { widenWindowForSplitPanes } from './nativeWindowCapture.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   assertPaneStyleSummaryPreserved,
@@ -79,6 +80,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
     });
 
     sessionId = await runner.step('create_session', async () => {
@@ -162,6 +164,7 @@ async function main() {
 
     await runner.step('relaunch_and_verify_formatting_restore', async () => {
       await relaunchAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
       await client.request('select_session', { sessionId });
       await waitForSessionWorkspace(
         client,

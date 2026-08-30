@@ -94,6 +94,23 @@ end tell
   return parseWindowBoundsOutput(output, bundleId);
 }
 
+// A split half under ATTENTION_MIN_WIDTH (480px) plus its 24px restore gutter
+// collapses; behind the 240px sidebar that floor is a 1248px window.
+export const SPLIT_FRIENDLY_WINDOW = { width: 1440, height: 900 };
+
+export async function widenWindowForSplitPanes(client, target = SPLIT_FRIENDLY_WINDOW) {
+  const current = await getFrontWindowBounds(client.bundleId, { client });
+  if ((current?.width || 0) >= target.width && (current?.height || 0) >= target.height) {
+    return current;
+  }
+  return setFrontWindowBounds({
+    x: 80,
+    y: 80,
+    width: Math.max(current?.width || 0, target.width),
+    height: Math.max(current?.height || 0, target.height),
+  }, { client });
+}
+
 export async function getFrontWindowBounds(bundleId = null, options = {}) {
   const targetBundleId = bundleId || options.client?.bundleId || bundleIdentifierForProfile();
   assertProductionRunAllowed({ bundleId: targetBundleId });

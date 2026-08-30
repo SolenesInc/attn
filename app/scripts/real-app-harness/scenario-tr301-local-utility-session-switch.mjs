@@ -9,6 +9,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { widenWindowForSplitPanes } from './nativeWindowCapture.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import {
   assertPaneVisibleContent,
@@ -64,6 +65,7 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      await widenWindowForSplitPanes(client);
     });
 
     primarySessionId = await runner.step('create_primary_session', async () => {

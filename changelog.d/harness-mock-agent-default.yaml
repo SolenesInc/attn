@@ -7,4 +7,6 @@ change: >
   deterministic agent instead of a dead session. The turn-accounting
   scenarios (TR-201, TR-204, TR-301, TR-401, TR-401-CODEX-MAIN, TR-402)
   no longer allow real agents, and the cheap launch-model pinning they
-  needed is gone with them.
+  needed is gone with them. Those scenarios also size the app window
+  above the workspace's split floor, which the attention layout needs to
+  keep both panes painted instead of collapsing one into a sliver.

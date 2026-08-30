@@ -66,18 +66,23 @@ function parseArgs(argv) {
   };
 }
 
+// The shrunk window still has to clear the workspace's 1248px split floor (see
+// widenWindowForSplitPanes), which 1560 at 0.82 does with 31px to spare.
+const BASELINE_WINDOW = { width: 1_560, height: 900 };
+const SHRINK_RATIO = { width: 0.82, height: 0.82 };
+
 function normalizeBaselineWindowBounds(bounds) {
   return {
     x: 80,
     y: 80,
-    width: Math.max(bounds.width, 1_280),
-    height: Math.max(bounds.height, 800),
+    width: Math.max(bounds.width, BASELINE_WINDOW.width),
+    height: Math.max(bounds.height, BASELINE_WINDOW.height),
   };
 }
 
 function shrunkWindowBounds(bounds) {
-  const width = Math.floor(bounds.width * 0.78);
-  const height = Math.floor(bounds.height * 0.82);
+  const width = Math.floor(bounds.width * SHRINK_RATIO.width);
+  const height = Math.floor(bounds.height * SHRINK_RATIO.height);
   if (width >= bounds.width || height >= bounds.height) {
     throw new Error(`Computed shrink target does not reduce bounds: ${JSON.stringify(bounds)}`);
   }
