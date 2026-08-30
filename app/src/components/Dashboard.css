@@ -507,7 +507,7 @@
   min-width: 0;
 }
 
-.session-row-main > .automation-provenance {
+.session-row-main > .session-provenance {
   max-width: 100%;
 }
 

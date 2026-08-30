@@ -1170,6 +1170,7 @@ function AppContent({
       costUsd: daemonSession?.cost_usd,
       costUnknown: daemonSession?.cost_unknown ?? false,
       automation: daemonSession?.automation ?? s.automation,
+      pullRequests: daemonSession?.pull_requests ?? s.pullRequests,
       state_reason: paneState ? undefined : daemonSession?.state_reason,
     };
   });
@@ -3615,6 +3616,7 @@ function AppContent({
                       presentation: presentationBySessionId.get(entry.id),
                       seedId: entry.seedId,
                       automation: entry.automation,
+                      pullRequests: entry.pullRequests,
                     }))}
                     seedTargetSessions={daemonSessions.map((session) => ({
                       sessionId: session.id,

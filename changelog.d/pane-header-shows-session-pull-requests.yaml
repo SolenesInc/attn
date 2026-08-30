@@ -1,0 +1,10 @@
+kind: added
+area: sessions
+change: >
+  The pane header now shows the pull request its agent opened, on the same small
+  line the automation provenance already used: `⎇ PR attn#71 ↗ checks failed`
+  beside `⚡ Automation …`, with the newest open PR on the line and a merged one
+  kept there, muted, once nothing is open. Hovering or clicking the entry opens
+  a popover with state, checks, review, mergeability, and when the session
+  opened several, the list — newest open first — with ↑↓ to pick, ↵ to open on
+  GitHub, and c to copy the URL. Closed pull requests appear only in that list.

@@ -45,8 +45,11 @@ import { startLeafDrag, type LeafDropSnapshot } from './leafDrag';
 import type { DockTarget } from './dockTarget';
 import type { WorkspaceSelectionStyle } from '../../utils/workspaceSelectionStyle';
 import { HeaderSessionCost } from './SessionCost';
-import type { AutomationProvenance as AutomationProvenanceValue } from '../../types/generated';
-import { AutomationProvenance } from '../AutomationProvenance';
+import type {
+  AutomationProvenance as AutomationProvenanceValue,
+  SessionPullRequest,
+} from '../../types/generated';
+import { SessionProvenance } from '../SessionProvenance';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import {
   resolveWorkspaceLayout,
@@ -114,6 +117,7 @@ interface SessionTerminalWorkspaceProps {
     presentation?: Presentation;
     seedId?: string;
     automation?: AutomationProvenanceValue;
+    pullRequests?: SessionPullRequest[];
   }>;
   seedTargetSessions?: WorkspaceTileSessionOption[];
   gardenSeeds?: Seed[];
@@ -1042,7 +1046,11 @@ export const SessionTerminalWorkspace = forwardRef<SessionTerminalWorkspaceHandl
                     unknown={paneSession?.costUnknown}
                   />
                 </span>
-                <AutomationProvenance provenance={paneSession?.automation} interactive />
+                <SessionProvenance
+                  automation={paneSession?.automation}
+                  pullRequests={paneSession?.pullRequests}
+                  interactive
+                />
               </span>
               {onRenameSession ? (
                 <button

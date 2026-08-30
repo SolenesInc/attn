@@ -4,7 +4,7 @@ import { normalizeSessionState } from '../types/sessionState';
 import type { SessionAgent } from '../types/sessionAgent';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
-import type { AutomationProvenance } from '../types/generated';
+import type { AutomationProvenance, SessionPullRequest } from '../types/generated';
 import { listenPtyEvents, ptyReload, type PtySpawnArgs } from '../pty/bridge';
 import {
   createDefaultWorkspaceState,
@@ -38,6 +38,7 @@ export interface Session {
   branch?: string;
   isWorktree?: boolean;
   automation?: AutomationProvenance;
+  pullRequests?: SessionPullRequest[];
   workspace: TerminalWorkspaceState;
   daemonActivePaneId: string;
 }
@@ -53,6 +54,7 @@ export interface DaemonSessionSnapshot {
   branch?: string;
   is_worktree?: boolean;
   automation?: AutomationProvenance;
+  pull_requests?: SessionPullRequest[];
 }
 
 interface LauncherConfig {
@@ -109,6 +111,26 @@ declare global {
     __TEST_UPDATE_SESSION_STATE?: (id: string, state: UISessionState) => void;
     __TEST_SET_SESSION_WORKSPACE?: (sessionId: string, workspace: TerminalWorkspaceState, daemonActivePaneId?: string) => void;
   }
+}
+
+// Identity plus every field the surfaces render, so a status refresh repaints
+// but an unrelated broadcast does not churn the session list.
+function samePullRequests(
+  a: readonly SessionPullRequest[] | undefined,
+  b: readonly SessionPullRequest[] | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return (a?.length ?? 0) === 0 && (b?.length ?? 0) === 0;
+  return a.every((pr, index) => {
+    const other = b[index];
+    return pr.url === other.url
+      && pr.state === other.state
+      && pr.title === other.title
+      && pr.ci_status === other.ci_status
+      && pr.review_status === other.review_status
+      && pr.mergeable_state === other.mergeable_state
+      && pr.status_fetched_at === other.status_fetched_at;
+  });
 }
 
 function pushRecent(recent: string[], id: string | null): string[] {
@@ -345,6 +367,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           existing.branch === nextBranch &&
           existing.isWorktree === nextIsWorktree &&
           existing.automation?.run_id === daemonSession.automation?.run_id
+          && samePullRequests(existing.pullRequests, daemonSession.pull_requests)
         ) {
           return existing;
         }
@@ -362,6 +385,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           branch: nextBranch,
           isWorktree: nextIsWorktree,
           automation: daemonSession.automation,
+          pullRequests: daemonSession.pull_requests,
           workspace: existing?.workspace ?? createDefaultWorkspaceState(),
           daemonActivePaneId: existing?.daemonActivePaneId ?? '',
         } satisfies Session;

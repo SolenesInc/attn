@@ -282,7 +282,7 @@ button.automations-panel__run-row-main {
   font-size: var(--font-size-xs);
 }
 
-.automations-panel__run-row-main > .automation-provenance {
+.automations-panel__run-row-main > .session-provenance {
   width: 100%;
 }
 
