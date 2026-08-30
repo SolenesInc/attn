@@ -1,0 +1,8 @@
+kind: added
+area: app
+change: >
+  Terminal block copy (copy the command of a selected block, or the markdown
+  selection) gets a keyboard chord off macOS: Ctrl+Alt+C. It was Shift+Cmd+C
+  on macOS with only the context menu elsewhere; the context menu now names
+  the chord on every platform. Ctrl+Shift+C stays selection copy and Ctrl+C
+  stays the shell's interrupt.

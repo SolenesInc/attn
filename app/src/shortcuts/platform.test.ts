@@ -8,8 +8,18 @@ import {
 } from './platform';
 import { withNavigatorPlatform } from '../test/platformStub';
 
+// Not a real KeyboardEvent: jsdom reports AltGraph pressed whenever altKey is set,
+// so the AltGr distinction only exists on a hand-built event.
 function chordEvent(init: Partial<KeyboardEventInit> & { key: string; code: string }) {
-  return new KeyboardEvent('keydown', init);
+  return {
+    key: init.key,
+    code: init.code,
+    metaKey: !!init.metaKey,
+    ctrlKey: !!init.ctrlKey,
+    altKey: !!init.altKey,
+    shiftKey: !!init.shiftKey,
+    getModifierState: (name: string) => name === 'AltGraph' && !!init.modifierAltGraph,
+  };
 }
 
 describe('modifier glyphs', () => {
@@ -54,6 +64,9 @@ describe('terminalClipboardChord', () => {
         .toBe('paste');
       expect(terminalClipboardChord(chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true })))
         .toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true }),
+      )).toBeNull();
     });
   });
 
@@ -69,6 +82,26 @@ describe('terminalClipboardChord', () => {
       expect(terminalClipboardChord(
         chordEvent({ key: 'V', code: 'KeyV', ctrlKey: true, shiftKey: true }),
       )).toBe('paste');
+    });
+  });
+
+  it('takes Ctrl+Alt+C for block copy off-mac', () => {
+    withNavigatorPlatform('Linux aarch64', () => {
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true }),
+      )).toBe('copyCommand');
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'v', code: 'KeyV', ctrlKey: true, altKey: true }),
+      )).toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true, shiftKey: true }),
+      )).toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', altKey: true }),
+      )).toBeNull();
+      expect(terminalClipboardChord(
+        chordEvent({ key: 'c', code: 'KeyC', ctrlKey: true, altKey: true, modifierAltGraph: true }),
+      )).toBeNull();
     });
   });
 

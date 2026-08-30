@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
@@ -107,6 +107,18 @@ const darwinPlatform = {
     return new MacOSDriver(options);
   },
 
+  readClipboard() {
+    try {
+      return execFileSync('pbpaste', { encoding: 'utf8' });
+    } catch {
+      return '';
+    }
+  },
+
+  writeClipboard(text) {
+    execFileSync('pbcopy', { input: text });
+  },
+
   async launchApp({ appPath, env = null, background = false }) {
     if (env && Object.keys(env).length > 0) {
       // LaunchServices and `open` do not reliably propagate env into Tauri's
@@ -158,6 +170,19 @@ const linuxPlatform = {
 
   createWindowDriver(options) {
     return new LinuxDriver(options);
+  },
+
+  readClipboard() {
+    try {
+      return execFileSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf8' });
+    } catch {
+      return '';
+    }
+  },
+
+  writeClipboard(text) {
+    // xclip forks a holder child that inherits stdio; ignoring it keeps execFileSync from hanging.
+    execFileSync('xclip', ['-selection', 'clipboard', '-in'], { input: text, stdio: ['pipe', 'ignore', 'ignore'] });
   },
 
   launchEnvironment(env = null) {

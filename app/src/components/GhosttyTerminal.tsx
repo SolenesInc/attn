@@ -3239,7 +3239,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const onMac = isMacLikePlatform();
     const clipboardCopyHint = onMac ? keyCombo('accel', 'C') : keyCombo('ctrl', 'shift', 'C');
     const clipboardPasteHint = onMac ? keyCombo('accel', 'V') : keyCombo('ctrl', 'shift', 'V');
-    const clipboardCopyCommandHint = onMac ? keyCombo('shift', 'accel', 'C') : undefined;
+    const clipboardCopyCommandHint = onMac ? keyCombo('shift', 'accel', 'C') : keyCombo('ctrl', 'alt', 'C');
     const contextMenuItems: TerminalContextMenuItem[] = contextMenu ? [
       { id: 'copy', label: 'Copy', shortcut: clipboardCopyHint, disabled: !selectedTextRef.current && !contextMenuBlock },
       { id: 'copy-command', label: 'Copy command', shortcut: clipboardCopyCommandHint, disabled: !contextMenuBlock?.command },

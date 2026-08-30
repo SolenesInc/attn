@@ -9,7 +9,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { appPlatform, createWindowDriver, delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -31,24 +31,25 @@ function parseArgs(argv) {
   };
 }
 
-function readClipboard() {
+const { readClipboard, writeClipboard } = appPlatform;
+
+const copyChord = appPlatform.os === 'darwin'
+  ? { label: 'Cmd+C', modifiers: { command: true } }
+  : { label: 'Ctrl+Shift+C', modifiers: { control: true, shift: true } };
+const copyCommandChord = appPlatform.os === 'darwin'
+  ? { label: 'Cmd+Shift+C', modifiers: { command: true, shift: true } }
+  : { label: 'Ctrl+Alt+C', modifiers: { control: true, option: true } };
+
+function requireFish4() {
+  let version = '';
   try {
-    return execFileSync('pbpaste', { encoding: 'utf8' });
+    version = execFileSync('fish', ['--version'], { encoding: 'utf8' }).trim();
   } catch {
-    return '';
+    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
   }
-}
-
-function writeClipboard(text) {
-  execFileSync('pbcopy', { input: text });
-}
-
-function fishAvailable() {
-  try {
-    execFileSync('/bin/sh', ['-c', 'command -v fish'], { encoding: 'utf8' });
-    return true;
-  } catch {
-    return false;
+  const major = Number.parseInt(version.match(/version (\d+)/)?.[1] ?? '', 10);
+  if (!(major >= 4)) {
+    throw new Error(`fish >= 4 is required for this scenario (OSC 133 markers); found: ${version}`);
   }
 }
 
@@ -71,9 +72,7 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-terminal-block-copy.mjs');
     return;
   }
-  if (!fishAvailable()) {
-    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
-  }
+  requireFish4();
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-BLOCK-COPY',
@@ -81,7 +80,7 @@ async function main() {
     prefix: 'terminal-block-copy',
     metadata: {
       shell: 'fish',
-      focus: 'command-block click-select then Cmd+C / Cmd+Shift+C real clipboard copy',
+      focus: `command-block click-select then ${copyChord.label} / ${copyCommandChord.label} real clipboard copy`,
     },
   });
 
@@ -167,12 +166,12 @@ async function main() {
     await runner.step('copy_command_and_output', async () => {
       await driver.activateApp();
       writeClipboard('block-copy-sentinel');
-      await driver.pressKey('c', { command: true, shift: true });
-      await waitForClipboard(`echo ${token}`, 'Cmd+Shift+C copies the command');
+      await driver.pressKey('c', copyCommandChord.modifiers);
+      await waitForClipboard(`echo ${token}`, `${copyCommandChord.label} copies the command`);
 
       writeClipboard('block-copy-sentinel');
-      await driver.pressKey('c', { command: true });
-      await waitForClipboard(`echo ${token}\n${token}`, 'Cmd+C copies command+output');
+      await driver.pressKey('c', copyChord.modifiers);
+      await waitForClipboard(`echo ${token}\n${token}`, `${copyChord.label} copies command+output`);
     });
 
     const result = await runner.finishSuccess({
@@ -182,7 +181,7 @@ async function main() {
       outputRow,
       paneRows: paneState?.size?.rows ?? null,
     });
-    console.log('[verify] PASS — terminal block copy: Cmd+Shift+C and Cmd+C matched the real clipboard.');
+    console.log(`[verify] PASS — terminal block copy: ${copyCommandChord.label} and ${copyChord.label} matched the real clipboard.`);
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {

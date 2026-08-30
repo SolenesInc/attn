@@ -107,6 +107,23 @@ test.describe('Ghostty terminal command blocks', () => {
       .toBe('echo hello');
   });
 
+  test('off-mac, ctrl+alt+c copies the command', async ({ page, context, daemon }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (X11; Linux x86_64)', configurable: true });
+    });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const terminal = await openTerminalSession(page, daemon, 's-block-copy-linux');
+    const rows = await writeBlockStream(page, terminal, 's-block-copy-linux');
+    await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
+
+    await terminal.click({ position: { x: 30, y: rows.outputRowY } });
+    await page.keyboard.press('Control+Alt+c');
+    await expect
+      .poll(async () => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe('echo hello');
+  });
+
   test('clicking the command line arms cmd+c with exactly the command text', async ({ page, context, daemon }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const terminal = await openTerminalSession(page, daemon, 's-block-command');

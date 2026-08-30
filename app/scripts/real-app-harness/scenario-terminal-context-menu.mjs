@@ -10,7 +10,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { appPlatform, createWindowDriver, delay } from './platform.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -32,24 +32,18 @@ function parseArgs(argv) {
   };
 }
 
-function readClipboard() {
+const { readClipboard, writeClipboard } = appPlatform;
+
+function requireFish4() {
+  let version = '';
   try {
-    return execFileSync('pbpaste', { encoding: 'utf8' });
+    version = execFileSync('fish', ['--version'], { encoding: 'utf8' }).trim();
   } catch {
-    return '';
+    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
   }
-}
-
-function writeClipboard(text) {
-  execFileSync('pbcopy', { input: text });
-}
-
-function fishAvailable() {
-  try {
-    execFileSync('/bin/sh', ['-c', 'command -v fish'], { encoding: 'utf8' });
-    return true;
-  } catch {
-    return false;
+  const major = Number.parseInt(version.match(/version (\d+)/)?.[1] ?? '', 10);
+  if (!(major >= 4)) {
+    throw new Error(`fish >= 4 is required for this scenario (OSC 133 markers); found: ${version}`);
   }
 }
 
@@ -96,9 +90,7 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-terminal-context-menu.mjs');
     return;
   }
-  if (!fishAvailable()) {
-    throw new Error('fish is required for this scenario (it emits the OSC 133 markers natively).');
-  }
+  requireFish4();
 
   // HID clicks land at absolute screen positions, so the default 20px-visible
   // window park would put every click off-window.
@@ -270,7 +262,7 @@ async function main() {
       outputRow,
       menuItems: menuItemsSummary,
     });
-    console.log('[verify] PASS — terminal context menu: copy output and paste both matched real macOS clipboard.');
+    console.log('[verify] PASS — terminal context menu: copy output and paste both matched the real clipboard.');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     if (sessionId) {
