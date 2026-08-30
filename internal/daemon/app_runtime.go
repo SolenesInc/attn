@@ -63,11 +63,9 @@ func resolveAppRuntimeHost() (string, error) {
 
 func appRuntimeHostCandidates(executable, profile string) []string {
 	candidates := []string{}
-	// Inside a .app the daemon is Contents/MacOS/attn and Tauri stages resources under Contents/Resources.
 	binDir := filepath.Dir(executable)
-	contentsDir := filepath.Dir(binDir)
-	if filepath.Base(binDir) == "MacOS" && filepath.Base(contentsDir) == "Contents" {
-		candidates = append(candidates, filepath.Join(contentsDir, "Resources", "app-runtime", appRuntimeBinaryName))
+	if resources := config.InstallResourcesDir(executable); resources != "" {
+		candidates = append(candidates, filepath.Join(resources, "app-runtime", appRuntimeBinaryName))
 	}
 	// A named profile looks for its own copy first — profile-isolated daemons on a
 	// remote share one `~/.local/bin`; the unsuffixed name stays last.

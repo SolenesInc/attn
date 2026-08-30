@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,7 +145,53 @@ func AppPathForProfile(profile string) string {
 	if err != nil {
 		home = "/tmp"
 	}
-	return filepath.Join(home, "Applications", AppNameForProfile(profile)+".app")
+	name := AppNameForProfile(profile)
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Applications", name+".app")
+	}
+	if dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); dataHome != "" {
+		return filepath.Join(dataHome, name)
+	}
+	return filepath.Join(home, ".local", "share", name)
+}
+
+func AppExecutableForProfile(profile string) string {
+	return AppExecutableInTree(AppPathForProfile(profile))
+}
+
+func AppExecutableInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "app")
+	}
+	return filepath.Join(appPath, "bin", "attn-app")
+}
+
+func AppDaemonBinaryForProfile(profile string) string {
+	return AppDaemonBinaryInTree(AppPathForProfile(profile))
+}
+
+func AppDaemonBinaryInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "MacOS", "attn")
+	}
+	return filepath.Join(appPath, "bin", "attn")
+}
+
+// ~/.local/bin/attn has a bin/ and no install tree, so resources/ must exist
+// before a tree counts as one.
+func InstallResourcesDir(executable string) string {
+	binDir := filepath.Dir(executable)
+	parent := filepath.Dir(binDir)
+	if filepath.Base(binDir) == "MacOS" && filepath.Base(parent) == "Contents" {
+		return filepath.Join(parent, "Resources")
+	}
+	if filepath.Base(binDir) == "bin" {
+		resources := filepath.Join(parent, "resources")
+		if info, err := os.Stat(resources); err == nil && info.IsDir() {
+			return resources
+		}
+	}
+	return ""
 }
 
 // A distinct scheme per bundle, so macOS never cross-routes a spawn deep link

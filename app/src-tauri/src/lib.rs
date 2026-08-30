@@ -1214,6 +1214,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             use tauri::Manager;
+            profile::write_app_pid_file();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
             // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.
@@ -1268,6 +1269,11 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 let _ = webview.window().set_focus();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                profile::remove_app_pid_file();
+            }
+        });
 }

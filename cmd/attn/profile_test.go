@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/config"
 )
 
 func TestCleanPlan(t *testing.T) {
@@ -68,5 +70,44 @@ func TestStopProfileDaemonStalePidNotSignaled(t *testing.T) {
 	msg := stopProfileDaemon(profileResolved{DataDir: dir})
 	if !strings.Contains(msg, "stale") {
 		t.Fatalf("stopProfileDaemon (unlocked pid file naming live pid 1) = %q, want a 'stale' skip (it must not signal pid 1)", msg)
+	}
+}
+
+func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
+	realRoot := t.TempDir()
+	linkRoot := filepath.Join(t.TempDir(), "share")
+	if err := os.Symlink(realRoot, linkRoot); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	t.Setenv("XDG_DATA_HOME", linkRoot)
+
+	configured := config.AppExecutableInTree(filepath.Join(linkRoot, "attn-lx"))
+	running := config.AppExecutableInTree(filepath.Join(realRoot, "attn-lx"))
+	if err := os.MkdirAll(filepath.Dir(running), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(running, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if !sameExecutable(running, configured) {
+		t.Fatalf("sameExecutable(%s, %s) = false, want true", running, configured)
+	}
+	if sameExecutable(config.AppExecutableInTree(filepath.Join(realRoot, "attn-other")), configured) {
+		t.Fatal("sameExecutable() matched another profile's install tree")
+	}
+}
+
+func TestStopProfileAppByPIDFileExitStatus(t *testing.T) {
+	if msg, err := stopProfileAppByPIDFile(profileResolved{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("stopProfileAppByPIDFile (no pid file) = %v, want a 'not running' success: %q", err, msg)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.pid"), []byte("not-a-pid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if msg, err := stopProfileAppByPIDFile(profileResolved{DataDir: dir}); err == nil {
+		t.Fatalf("stopProfileAppByPIDFile (unreadable pid) = %q, want an error", msg)
 	}
 }

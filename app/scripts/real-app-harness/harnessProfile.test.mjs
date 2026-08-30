@@ -17,6 +17,7 @@ import {
   deepLinkSchemeForProfile,
   hasRunAgainstProdFlag,
   isProductionHarnessTarget,
+  manifestPathForProfile,
   profileCliEnv,
   profileForAppPath,
   resolveHarnessResources,
@@ -26,6 +27,16 @@ import { MacOSDriver } from './macosDriver.mjs';
 import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
+
+function installedAppPath(appName) {
+  return process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Applications', `${appName}.app`)
+    : path.join(xdgDataHome(), appName);
+}
 
 function attnBinary() {
   const candidates = [process.env.ATTN_HARNESS_BIN, path.resolve(TEST_DIR, '../../../attn')]
@@ -58,7 +69,7 @@ afterEach(() => {
 describe('currentHarnessProfile (one-knob precedence)', () => {
   it('defaults to the safe dev sibling when neither knob is set', () => {
     expect(currentHarnessProfile()).toBe('dev');
-    expect(defaultAppPathForProfile()).toBe(path.join(os.homedir(), 'Applications', 'attn-dev.app'));
+    expect(defaultAppPathForProfile()).toBe(installedAppPath('attn-dev'));
     expect(defaultDaemonPortForProfile()).toBe(29849);
   });
 
@@ -140,6 +151,24 @@ describe('real-app harness production safety', () => {
     expect(profileForAppPath(namedAppPath, '')).toBe('agent7');
   });
 
+  it('derives the profile from a Linux install tree, which has no .app suffix', () => {
+    const treeRoot = path.join(os.homedir(), '.local', 'share');
+    expect(profileForAppPath(path.join(treeRoot, 'attn'), 'dev')).toBe('');
+    expect(profileForAppPath(path.join(treeRoot, 'attn-lx'), '')).toBe('lx');
+    expect(profileForAppPath(path.join(treeRoot, 'attn-agent7'), '')).toBe('agent7');
+    expect(profileForAppPath(path.join(treeRoot, 'something-else'), 'dev')).toBe('dev');
+  });
+
+  it('detects production from a suffixless install tree too', () => {
+    const treeRoot = path.join(os.homedir(), '.local', 'share');
+    expect(isProductionHarnessTarget({ profile: 'dev', appPath: path.join(treeRoot, 'attn') })).toBe(true);
+    expect(isProductionHarnessTarget({
+      profile: 'dev',
+      appPath: path.join(treeRoot, 'attn-dev'),
+      bundleId: 'com.attn.manager.dev',
+    })).toBe(false);
+  });
+
   it('requires the explicit production acknowledgement flag', () => {
     expect(() => assertProductionRunAllowed({ profile: '' }, [])).toThrow(
       'Refusing to run the real-app harness against production',
@@ -175,6 +204,15 @@ describe('real-app harness production safety', () => {
   });
 });
 
+describe('ui automation manifest', () => {
+  it('follows the platform app_local_data_dir', () => {
+    const expected = process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager.dev', 'debug', 'ui-automation.json')
+      : path.join(xdgDataHome(), 'com.attn.manager.dev', 'debug', 'ui-automation.json');
+    expect(manifestPathForProfile('dev')).toBe(expected);
+  });
+});
+
 describe('daemon pid file resolution', () => {
   it('maps the dev profile to ~/.attn-dev/attn.pid and prod to ~/.attn/attn.pid', () => {
     expect(daemonPidFilePathForProfile('dev')).toBe(path.join(os.homedir(), '.attn-dev', 'attn.pid'));
@@ -198,6 +236,8 @@ describeWithBinary('single authority (attn profile resolve)', () => {
       expect(resources.bundleId).toBe(r.bundleId);
       expect(resources.appName).toBe(r.appName);
       expect(resources.appPath).toBe(r.appPath);
+      expect(resources.appExecutable).toBe(r.appExecutable);
+      expect(resources.appDaemon).toBe(r.appDaemon);
       expect(resources.wsPort).toBe(Number(r.wsPort));
       expect(resources.socket).toBe(r.socket);
       expect(resources.dataDir).toBe(r.dataDir);
@@ -218,7 +258,7 @@ describeWithBinary('single authority (attn profile resolve)', () => {
   it('resolves an arbitrary named profile from the authority', () => {
     const r = resolve('agent7');
     expect(bundleIdentifierForProfile('agent7')).toBe('com.attn.manager.agent7');
-    expect(defaultAppPathForProfile('agent7')).toBe(path.join(os.homedir(), 'Applications', 'attn-agent7.app'));
+    expect(defaultAppPathForProfile('agent7')).toBe(installedAppPath('attn-agent7'));
     expect(deepLinkSchemeForProfile('agent7')).toBe('attn-agent7');
     expect(dataDirForProfile('agent7')).toBe(path.join(os.homedir(), '.attn-agent7'));
     expect(defaultDaemonPortForProfile('agent7')).toBe(Number(r.wsPort));

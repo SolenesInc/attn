@@ -3,6 +3,10 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
+function xdgDataHome() {
+  return (process.env.XDG_DATA_HOME ?? '').trim() || path.join(os.homedir(), '.local', 'share');
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -49,8 +53,12 @@ describe('UiAutomationClient production safety', () => {
         appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
       });
 
+      const expectedManifestPath = process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support', 'com.attn.manager', 'debug', 'ui-automation.json')
+        : path.join(xdgDataHome(), 'com.attn.manager', 'debug', 'ui-automation.json');
+
       expect(client.bundleId).toBe('com.attn.manager');
-      expect(client.manifestPath).toContain('Application Support/com.attn.manager/debug/ui-automation.json');
+      expect(client.manifestPath).toBe(expectedManifestPath);
     } finally {
       process.argv = originalArgv;
     }

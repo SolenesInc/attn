@@ -18,6 +18,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -368,19 +369,42 @@ func TestWorkerBackend_ResolveBinaryPath_ReResolvesImplicitPath(t *testing.T) {
 	}
 }
 
-func TestDarwinBundledAttnCandidates(t *testing.T) {
-	got := darwinBundledAttnCandidates("/Users/tester")
-	want := []string{
-		"/Users/tester/Applications/attn.app/Contents/MacOS/attn",
-		"/Applications/attn.app/Contents/MacOS/attn",
+func TestBundledAttnCandidatesLeadWithTheRunningProfilesInstall(t *testing.T) {
+	t.Setenv("ATTN_PROFILE", "lx")
+	t.Setenv("XDG_DATA_HOME", "/xdg")
+	got := bundledAttnCandidates("/Users/tester")
+
+	want := []string{config.AppDaemonBinaryForProfile("lx")}
+	if runtime.GOOS == "darwin" {
+		want = append(want,
+			"/Users/tester/Applications/attn.app/Contents/MacOS/attn",
+			"/Applications/attn.app/Contents/MacOS/attn",
+		)
+	} else if want[0] != "/xdg/attn-lx/bin/attn" {
+		t.Fatalf("profile install candidate = %q, want /xdg/attn-lx/bin/attn", want[0])
 	}
 	if len(got) != len(want) {
-		t.Fatalf("len(darwinBundledAttnCandidates()) = %d, want %d", len(got), len(want))
+		t.Fatalf("bundledAttnCandidates() = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("darwinBundledAttnCandidates()[%d] = %q, want %q", i, got[i], want[i])
+			t.Fatalf("bundledAttnCandidates()[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestBundledAttnCandidatesDoNotRepeatTheProdBundle(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("only darwin resolves the default profile to ~/Applications/attn.app")
+	}
+	t.Setenv("ATTN_PROFILE", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	got := bundledAttnCandidates(home)
+	if len(got) != 2 {
+		t.Fatalf("bundledAttnCandidates() = %v, want the home and system bundles once each", got)
 	}
 }
 

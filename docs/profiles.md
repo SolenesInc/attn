@@ -1,7 +1,7 @@
 # attn profiles
 
 A **profile** fully isolates an attn install: its own data directory, socket,
-websocket port, macOS app bundle, and bundle identifier. Profiles let several
+websocket port, installed app, and bundle identifier. Profiles let several
 agents run attn — and its tests — side by side without colliding.
 
 **One knob: `ATTN_PROFILE`.** Set it once in a shell and every entrypoint (CLI,
@@ -85,7 +85,8 @@ attn profile resolve --profile dev --field bundleId
 ```
 
 Resolved keys: `profile, label, dataDir, socket, dbPath, wsPort, bundleId,
-appName, appPath, deepLinkScheme, e2eDaemonPort, e2eVitePort`.
+appName, appPath, appExecutable, appDaemon, deepLinkScheme, e2eDaemonPort,
+e2eVitePort`.
 
 ## What maps to what
 
@@ -94,7 +95,8 @@ appName, appPath, deepLinkScheme, e2eDaemonPort, e2eVitePort`.
 | Data dir | `~/.attn` | `~/.attn-dev` | `~/.attn-agent7` |
 | WS port | 9849 | 29849 | hash → `[20000,29848]` |
 | Bundle id | `com.attn.manager` | `…​.dev` | `…​.agent7` |
-| App | `attn.app` | `attn-dev.app` | `attn-agent7.app` |
+| App (macOS) | `~/Applications/attn.app` | `attn-dev.app` | `attn-agent7.app` |
+| App (Linux) | `~/.local/share/attn` | `attn-dev` | `attn-agent7` |
 | Deep-link scheme | `attn` | `attn-dev` | `attn-agent7` |
 | e2e daemon port | 19849 | hash → `[30000,30999]` | hash → `[30000,30999]` |
 | e2e Vite port | 1421 | hash → `[31000,31999]` | hash → `[31000,31999]` |
@@ -140,6 +142,7 @@ the Go and (soon) e2e suites concurrently with no cross-talk.
 | Inspect | `attn profile` / `attn profile list` / `attn profile list --json` |
 | Build + install app | `make install PROFILE=<name>` (opens it: `make run PROFILE=<name>`) |
 | Sign | uniform stable identity via `scripts/macos-codesign-identity.sh`; macOS grants persist per bundle id |
+| Stop the app | `attn profile stop-app --profile <name>` — by bundle id on macOS, by the app's own `app.pid` (confirmed against `/proc`) elsewhere. Nothing to stop is success; a refusal exits non-zero, and `make install` stops with it |
 | Clean | `attn profile clean <name>` — reap pty-workers, stop daemon, quit app, remove data dir + app, forget the bundle |
 
 ### Cleaning up after yourself

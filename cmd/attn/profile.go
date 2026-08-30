@@ -2,12 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
@@ -31,6 +36,8 @@ func runProfile() {
 		runProfileTauriConfig(os.Args[3:])
 	case "clean":
 		runProfileClean(os.Args[3:])
+	case "stop-app":
+		runProfileStopApp(os.Args[3:])
 	case "set-origin":
 		runProfileSetOrigin(os.Args[3:])
 	case "list":
@@ -56,6 +63,8 @@ type profileResolved struct {
 	BundleID       string `json:"bundleId"`
 	AppName        string `json:"appName"`
 	AppPath        string `json:"appPath"`
+	AppExecutable  string `json:"appExecutable"`
+	AppDaemon      string `json:"appDaemon"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
 	E2EDaemonPort  string `json:"e2eDaemonPort"`
 	E2EVitePort    string `json:"e2eVitePort"`
@@ -76,6 +85,8 @@ func resolveProfile(profile string) profileResolved {
 		BundleID:       config.BundleIdentifierForProfile(profile),
 		AppName:        config.AppNameForProfile(profile),
 		AppPath:        config.AppPathForProfile(profile),
+		AppExecutable:  config.AppExecutableForProfile(profile),
+		AppDaemon:      config.AppDaemonBinaryForProfile(profile),
 		DeepLinkScheme: config.DeepLinkSchemeForProfile(profile),
 		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
 		E2EVitePort:    config.E2EVitePortForProfile(profile),
@@ -102,6 +113,10 @@ func (r profileResolved) field(key string) (string, bool) {
 		return r.AppName, true
 	case "appPath":
 		return r.AppPath, true
+	case "appExecutable":
+		return r.AppExecutable, true
+	case "appDaemon":
+		return r.AppDaemon, true
 	case "deepLinkScheme":
 		return r.DeepLinkScheme, true
 	case "e2eDaemonPort":
@@ -169,7 +184,7 @@ func runProfileResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,deepLinkScheme,e2eDaemonPort,e2eVitePort)", field))
+			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,deepLinkScheme,e2eDaemonPort,e2eVitePort)", field))
 		}
 		fmt.Println(v)
 		return
@@ -277,7 +292,11 @@ func runProfileClean(args []string) {
 	fmt.Printf(">>> Cleaning profile %s\n", r.Label)
 
 	// The daemon outlives the app by design, so quit the app first.
-	quitProfileApp(r.BundleID)
+	if msg, err := stopProfileApp(r); err != nil {
+		fmt.Printf("  app      %v\n", err)
+	} else {
+		fmt.Printf("  app      %s\n", msg)
+	}
 	if msg := stopProfileDaemon(r); msg != "" {
 		fmt.Printf("  daemon   %s\n", msg)
 	} else {
@@ -411,14 +430,130 @@ func stopProfileDaemon(r profileResolved) string {
 	return ""
 }
 
-func quitProfileApp(bundleID string) {
-	_ = exec.Command("osascript", "-e", fmt.Sprintf("tell application id %q to quit", bundleID)).Run()
+func runProfileStopApp(args []string) {
+	profile := config.Profile()
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--profile":
+			if i+1 >= len(args) {
+				profileFatal("--profile requires a value")
+			}
+			i++
+			p, err := config.NormalizeProfileName(args[i])
+			if err != nil {
+				profileFatal(err.Error())
+			}
+			profile = p
+		case "-h", "--help":
+			printProfileHelp(os.Stdout)
+			return
+		default:
+			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+		}
+	}
+	msg, err := stopProfileApp(resolveProfile(profile))
+	if err != nil {
+		profileFatal(err.Error())
+	}
+	fmt.Printf("  app      %s\n", msg)
+}
+
+func stopProfileApp(r profileResolved) (string, error) {
+	if runtime.GOOS == "darwin" {
+		_ = exec.Command("osascript", "-e", fmt.Sprintf("tell application id %q to quit", r.BundleID)).Run()
+		return "asked " + r.BundleID + " to quit", nil
+	}
+	return stopProfileAppByPIDFile(r)
+}
+
+// The daemon's own stop waits, for a process that tears down less: measured at
+// 72ms from SIGTERM to gone (2026-08-30, attn-linux VM under Xvfb).
+const (
+	appStopSigtermWait = 5 * time.Second
+	appStopSigkillWait = 2 * time.Second
+)
+
+func stopProfileAppByPIDFile(r profileResolved) (string, error) {
+	pidPath := appPIDFilePath(r.DataDir)
+	raw, err := os.ReadFile(pidPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "not running (no " + pidPath + ")", nil
+		}
+		return "", fmt.Errorf("could not read %s: %w", pidPath, err)
+	}
+	text := strings.TrimSpace(string(raw))
+	pid, err := strconv.Atoi(text)
+	if err != nil || pid <= 0 {
+		return "", fmt.Errorf("%s holds %q, not a pid; left alone", pidPath, text)
+	}
+	if pid == os.Getpid() || pid == os.Getppid() {
+		return "", fmt.Errorf("refusing to signal pid %d: it is this command's own process tree", pid)
+	}
+	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if err != nil {
+		_ = os.Remove(pidPath)
+		return fmt.Sprintf("not running (pid %d is gone; removed stale %s)", pid, pidPath), nil
+	}
+	// An app still running out of a replaced install tree is exactly what we
+	// must stop; Linux marks its unlinked image, the path is still ours.
+	exe = strings.TrimSuffix(exe, " (deleted)")
+	if !sameExecutable(exe, r.AppExecutable) {
+		return "", fmt.Errorf("pid %d is %s, not %s; left running", pid, exe, r.AppExecutable)
+	}
+	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+		if errors.Is(err, syscall.ESRCH) {
+			_ = os.Remove(pidPath)
+			return fmt.Sprintf("not running (stale %s)", pidPath), nil
+		}
+		return "", fmt.Errorf("SIGTERM pid %d failed: %w", pid, err)
+	}
+	if appProcessGoneWithin(pid, appStopSigtermWait) {
+		_ = os.Remove(pidPath)
+		return fmt.Sprintf("stopped pid %d", pid), nil
+	}
+	_ = syscall.Kill(pid, syscall.SIGKILL)
+	if appProcessGoneWithin(pid, appStopSigkillWait) {
+		_ = os.Remove(pidPath)
+		return fmt.Sprintf("force-killed pid %d (did not exit on SIGTERM)", pid), nil
+	}
+	return "", fmt.Errorf("pid %d survived SIGKILL; check it with ps -p %d", pid, pid)
+}
+
+// /proc/<pid>/exe is already resolved, so an install root behind a symlink
+// (a symlinked XDG_DATA_HOME) only matches once both sides are.
+func sameExecutable(a, b string) bool {
+	return a == b || resolvedPath(a) == resolvedPath(b)
+}
+
+func resolvedPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
+func appPIDFilePath(dataDir string) string {
+	return filepath.Join(dataDir, "app.pid")
+}
+
+func appProcessGoneWithin(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 const lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 func lsregisterForget(appPath string) {
-	if !fileExists(lsregisterPath) {
+	if runtime.GOOS != "darwin" || !fileExists(lsregisterPath) {
 		return
 	}
 	_ = exec.Command(lsregisterPath, "-u", appPath).Run()
@@ -460,22 +595,8 @@ func runProfileList(args []string) {
 		}
 	}
 
-	appsDir := filepath.Join(home, "Applications")
-	if entries, err := os.ReadDir(appsDir); err == nil {
-		for _, e := range entries {
-			name := e.Name()
-			if name == "attn.app" {
-				known[""] = true
-				continue
-			}
-			if base, ok := strings.CutSuffix(name, ".app"); ok {
-				if p, ok := strings.CutPrefix(base, "attn-"); ok {
-					if config.ValidateProfileName(p) == nil {
-						known[strings.ToLower(p)] = true
-					}
-				}
-			}
-		}
+	for _, p := range installedAppProfiles(home) {
+		known[p] = true
 	}
 
 	names := make([]string, 0, len(known))
@@ -522,11 +643,43 @@ func runProfileList(args []string) {
 	fmt.Println("\n* = active (ATTN_PROFILE)")
 }
 
+func installedAppProfiles(home string) []string {
+	root := filepath.Dir(config.AppPathForProfile(""))
+	if runtime.GOOS == "darwin" {
+		root = filepath.Join(home, "Applications")
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	found := []string{}
+	for _, e := range entries {
+		name := e.Name()
+		if runtime.GOOS == "darwin" {
+			base, ok := strings.CutSuffix(name, ".app")
+			if !ok {
+				continue
+			}
+			name = base
+		} else if !fileExists(config.AppExecutableInTree(filepath.Join(root, name))) {
+			continue
+		}
+		if strings.EqualFold(name, config.AppNameForProfile("")) {
+			found = append(found, "")
+			continue
+		}
+		if p, ok := strings.CutPrefix(strings.ToLower(name), "attn-"); ok && config.ValidateProfileName(p) == nil {
+			found = append(found, p)
+		}
+	}
+	return found
+}
+
 func printProfileHelp(w *os.File) {
 	fmt.Fprintln(w, `attn profile — inspect and resolve attn profiles
 
 A profile fully isolates attn's runtime: data dir, socket, websocket port,
-macOS app bundle, and bundle identifier. ATTN_PROFILE selects it for every
+installed app (a macOS bundle, a directory tree elsewhere), and bundle identifier. ATTN_PROFILE selects it for every
 entrypoint (CLI, daemon, e2e, real-app harness, build).
 
 Usage:
@@ -537,6 +690,7 @@ Usage:
   attn profile resolve --profile agent7    resolve a different profile
   attn profile tauri-config    Tauri --config overlay for the profile's build
   attn profile clean <name>    reap workers + hosts + plugin drivers, stop daemon, quit app, remove its app + data dir
+  attn profile stop-app        quit the active profile's app (--profile <name> for another)
   attn profile list            every profile with data and/or an installed app
   attn profile list --json     same, machine-readable, with origin and what is running
   attn profile set-origin <name> [--worktree <dir>]
